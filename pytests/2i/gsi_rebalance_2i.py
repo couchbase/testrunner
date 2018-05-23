@@ -207,7 +207,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
                 server=self.n1ql_node)
         except Exception, ex:
             log.info(str(ex))
-            if "Indexer Cannot Process Create Index - Rebalance In Progress" not in str(ex):
+            if "Create index cannot proceed due to rebalance in progress" not in str(ex):
                 self.fail("index creation did not fail with expected error : {0}".format(str(ex)))
         else:
             self.fail("index creation did not fail as expected")
@@ -879,7 +879,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         failover_task.result()
         for failover_node in failover_nodes:
             self.rest.add_back_node("ns_1@" + failover_node.ip)
-            self.rest.set_recovery_type(otpNode=failover_node.id, recoveryType="full")
+            self.rest.set_recovery_type(otpNode="ns_1@" + failover_node.ip, recoveryType="full")
         # rebalance out a node
         try:
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [index_server])

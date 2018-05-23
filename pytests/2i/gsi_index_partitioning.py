@@ -379,7 +379,10 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
 
             index_details = {}
             index_details["index_name"] = indexname
-            index_details["num_partitions"] = int(value)
+            if (not isinstance(value, str)) and int(value) > 0:
+                index_details["num_partitions"] = int(value)
+            else:
+                index_details["num_partitions"] = 8
             index_details["defer_build"] = False
 
             self.assertTrue(
@@ -2245,7 +2248,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
 
         with_statement = "with {{'num_partition':{0}".format(self.num_index_partitions)
         if self.num_index_replicas > 0:
-            with_statement += ", num_replica':{0}".format(self.num_index_replicas)
+            with_statement += ", 'num_replica':{0}".format(self.num_index_replicas)
         if self.defer_build:
             with_statement += ", 'defer_build': true"
         with_statement += " }"
@@ -2447,7 +2450,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         with_statement = "with {{'num_partition':{0}".format(
             self.num_index_partitions)
         if self.num_index_replicas > 0:
-            with_statement += ", num_replica':{0}".format(
+            with_statement += ", 'num_replica':{0}".format(
                 self.num_index_replicas)
         if self.defer_build:
             with_statement += ", 'defer_build': true"
@@ -2542,7 +2545,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         with_statement = "with {{'num_partition':{0}".format(
             self.num_index_partitions)
         if self.num_index_replicas > 0:
-            with_statement += ", num_replica':{0}".format(
+            with_statement += ", 'num_replica':{0}".format(
                 self.num_index_replicas)
         if self.defer_build:
             with_statement += ", 'defer_build': true"
@@ -3050,7 +3053,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
                 remote_client.reboot_node()
             remote_client.disconnect()
             # wait for restart and warmup on all node
-            self.sleep(self.wait_timeout)
+            self.sleep(self.wait_timeout*2)
             # wait till node is ready after warmup
             ClusterOperationHelper.wait_for_ns_servers_or_assert([node_to_fail],
                                                                  self,
