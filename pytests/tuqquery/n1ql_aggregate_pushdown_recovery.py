@@ -19,6 +19,7 @@ class AggregatePushdownClass(QueryTests):
         self.n1ql_helper = N1QLHelper(master=self.master)
         self.n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
         self.aggr_distinct = self.input.param("aggr_distinct", False)
+        self.graceful = self.input.param("graceful", False)
 
     def tearDown(self):
         super(AggregatePushdownClass, self).tearDown()
