@@ -100,6 +100,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
         except Exception, ex:
             msg = "No such prepared statement"
             self.assertIn(msg, str(ex), str(ex))
+        self._verify_index_partitioning()
 
     def test_online_upgrade(self):
         services_in = []
@@ -551,6 +552,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
         self.multi_create_index(buckets=buckets,query_definitions=self.query_definitions)
         self.multi_query_using_index(buckets=buckets, query_definitions=self.query_definitions)
         self._verify_gsi_rebalance()
+        self._verify_index_partitioning()
 
     def kv_mutations(self, docs=None):
         if not docs:
@@ -818,9 +820,80 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
 
         indexname = map_after_rebalance[self.buckets[0].name][0]
 
-        alter_index_query = "ALTER INDEX {0} with {{'action':'move','nodes':'{1}:{2}'}}".format(indexname, nodes_out_list.ip, nodes_out_list.port)
+        alter_index_query = "ALTER INDEX {0} with {{'action':'move','nodes':'{1}:{2}'}}".format(indexname , nodes_out_list.ip, nodes_out_list.port)
         result = self.n1ql_helper.run_cbq_query(query=alter_index_query, server=self.n1ql_node)
-        self.assertEqual(result['status'], 'success', 'Query was not run successfully')
+        self.assertEqual(result['status'], 'success',
+                         'Query was not run successfully')
+
+    def _verify_index_partitioning(self):
+        node_map = self._get_nodes_with_version()
+        for node, vals in node_map.iteritems():
+            if vals["version"] < "5.5":
+                return
+        indexer_node = self.get_nodes_from_services_map(service_type="index")
+        # Set indexer storage mode
+        rest = RestConnection(indexer_node)
+        rest.set_index_settings({"indexer.numPartitions": 2})
+
+        create_partitioned_index1_query = "CREATE INDEX partitioned_idx1 ON default(name, age, join_yr) partition by hash(name, age, join_yr) USING GSI;"
+        create_index1_query = "CREATE INDEX non_partitioned_idx1 ON default(name, age, join_yr) USING GSI;"
+
+        try:
+            self.n1ql_helper.run_cbq_query(query=create_partitioned_index1_query, server=self.n1ql_node)
+            self.n1ql_helper.run_cbq_query(query=create_index1_query, server=self.n1ql_node)
+        except Exception, ex:
+            self.log.info(str(ex))
+            self.fail(
+                "index creation failed with error : {0}".format(str(ex)))
+
+        # Scans
+        queries = []
+
+        # 1. Small lookup query with equality predicate on the partition key
+        query_details = {}
+        query_details["query"] = "select name, age, join_yr from default USE INDEX ({0}) where name='Kala'"
+        query_details["partitioned_idx_name"] = "partitioned_idx1"
+        query_details["non_partitioned_idx_name"] = "non_partitioned_idx1"
+        queries.append(query_details)
+
+        # 2. Pagination query with equality predicate on the partition key
+        query_details = {}
+        query_details["query"] = "select name, age, join_yr from default USE INDEX ({0}) where name is not missing AND age=50 offset 0 limit 10"
+        query_details["partitioned_idx_name"] = "partitioned_idx1"
+        query_details["non_partitioned_idx_name"] = "non_partitioned_idx1"
+        queries.append(query_details)
+
+        # 3. Large aggregated query
+        query_details = {}
+        query_details["query"] = "select count(name), age from default USE INDEX ({0}) where name is not missing group by age"
+        query_details["partitioned_idx_name"] = "partitioned_idx1"
+        query_details["non_partitioned_idx_name"] = "non_partitioned_idx1"
+        queries.append(query_details)
+
+        # 4. Scan with large result sets
+        query_details = {}
+        query_details[
+            "query"] = "select name, age, join_yr from default USE INDEX ({0}) where name is not missing AND age > 50"
+        query_details["partitioned_idx_name"] = "partitioned_idx1"
+        query_details["non_partitioned_idx_name"] = "non_partitioned_idx1"
+        queries.append(query_details)
+
+        failed_queries = []
+        for query_details in queries:
+            try:
+                query_partitioned_index = query_details["query"].format(query_details["partitioned_idx_name"])
+                query_non_partitioned_index = query_details["query"].format(query_details["non_partitioned_idx_name"])
+
+                result_partitioned_index = self.n1ql_helper.run_cbq_query(query=query_partitioned_index,server=self.n1ql_node)["results"]
+                result_non_partitioned_index = self.n1ql_helper.run_cbq_query(query=query_non_partitioned_index,server=self.n1ql_node)["results"]
+
+                if sorted(result_partitioned_index) != sorted(result_non_partitioned_index):
+                    failed_queries.append(query_partitioned_index)
+                    log.warning("*** This query does not return same results for partitioned and non-partitioned indexes.")
+            except Exception, ex:
+                log.info(str(ex))
+        msg = "Some scans did not yield the same results for partitioned index and non-partitioned indexes"
+        self.assertEqual(len(failed_queries), 0, msg)
 
     def _return_maps(self):
         index_map = self.get_index_map()
