@@ -224,9 +224,12 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
             upgrade_thread.join()
 
     def online_upgrade(self, upgrade_servers=[]):
+        self.log.info("online upgrade servers: {0}".format(str(upgrade_servers)))
         for server in upgrade_servers:
-            participating_servers = [server for server in self.servers]
+            self.log.info("upgrading: {0}".format(str(server)))
+            participating_servers = [s for s in self.servers]
             participating_servers.remove(server)
+            self.log.info("participating servers: {0}".format(str(participating_servers)))
             rebalance = self.cluster.async_rebalance(participating_servers, [], [server])
             rebalance.result()
             upgrade_th = self._async_update(self.upgrade_versions[0], [server])
@@ -238,33 +241,41 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
             rebalance.result()
 
     def online_upgrade_with_failover(self, upgrade_servers):
-        for node in upgrade_servers:
-            all_servers = [server for server in self.servers]
-            failover_task = self.cluster.async_failover([self.master], failover_nodes=[node], graceful=True)
+        self.log.info("online upgrade servers: {0}".format(str(upgrade_servers)))
+        for server in upgrade_servers:
+            self.log.info("upgrading: {0}".format(str(server)))
+            participating_servers = [s for s in self.servers]
+            failover_task = self.cluster.async_failover([self.master], failover_nodes=[server], graceful=False)
             failover_task.result()
-            upgrade_th = self._async_update(self.upgrade_versions[0], [node])
+            upgrade_th = self._async_update(self.upgrade_versions[0], [server])
             for th in upgrade_th:
                 th.join()
             rest = RestConnection(self.master)
             nodes_all = rest.node_statuses()
             for cluster_node in nodes_all:
-                if cluster_node.ip == node.ip:
+                if cluster_node.ip == server.ip:
                     rest.add_back_node(cluster_node.id)
                     rest.set_recovery_type(otpNode=cluster_node.id, recoveryType="full")
-            participating_servers = all_servers.remove(node)
+            participating_servers.remove(server)
+            self.log.info("participating servers: {0}".format(str(participating_servers)))
             rebalance = self.cluster.async_rebalance(participating_servers, [], [])
             rebalance.result()
 
     def online_upgrade_with_swap_rebalance(self, out_server, upgrade_servers):
+        self.log.info("online upgrade servers: {0}".format(str(upgrade_servers)))
         for server in upgrade_servers:
-            all_servers = [server for server in self.servers]
-            participating_servers = all_servers.remove(server)
+            self.log.info("upgrading: {0}".format(str(out_server)))
+            participating_servers = [s for s in self.servers]
+            participating_servers.remove(out_server)
+            participating_servers.remove(server)
+            self.log.info("participating servers: {0}".format(str(participating_servers)))
             upgrade_th = self._async_update(self.upgrade_versions[0], [out_server])
             for th in upgrade_th:
                 th.join()
             rebalance = self.cluster.async_rebalance(participating_servers,
                                                      [out_server], [server],
                                                      services=["kv", "index", "n1ql"])
+            rebalance.result()
             out_server = server
 
     def run_upgrade_test_for_feature(self, feature, phase):
