@@ -16,7 +16,6 @@ class UpgradeSecondaryIndexAggrPushdown(UpgradeSecondaryIndexInt64):
         self.queries = []
         super(UpgradeSecondaryIndexAggrPushdown, self).setUp()
 
-
     def tearDown(self):
         super(UpgradeSecondaryIndexAggrPushdown, self).tearDown()
 
@@ -28,7 +27,8 @@ class UpgradeSecondaryIndexAggrPushdown(UpgradeSecondaryIndexInt64):
                       "CREATE INDEX index_int_arr_name on %s(ALL ARRAY t for t in int_arr END, name)",
                       "CREATE INDEX index_name_int_arr on %s(name, ALL ARRAY t for t in int_arr END)",
                       "CREATE INDEX index_long_arr_name on %s(ALL ARRAY t for t in long_arr END, name)",
-                      "CREATE INDEX index_name_long_arr on %s(name, ALL ARRAY t for t in long_arr END)"]
+                      "CREATE INDEX index_name_long_arr on %s(name, ALL ARRAY t for t in long_arr END)",
+                      "CREATE INDEX index_int_num_int_arr_name on %s(int_num, ALL ARRAY t for t in int_arr END, name)",]
         for index in index_defn:
             for bucket in self.buckets:
                 query = index % bucket.name
@@ -64,8 +64,9 @@ class UpgradeSecondaryIndexAggrPushdown(UpgradeSecondaryIndexInt64):
                 self.queries.append("SELECT " + aggr_fun + "(name) from default where " + where_clause + " group by name")
                 self.queries.append("SELECT " + aggr_fun + "(name) from default where " + where_clause + " group by int_num")
             for where_clause in where_clause_int_arr:
-                for group_by in ["d.name", "t"]:
+                for group_by in ["d.name", "t", "d.int_num"]:
                     self.queries.append("SELECT " + aggr_fun + "(t) from default d " + where_clause + " group by " + group_by)
+                    self.queries.append("SELECT " + aggr_fun + "(d.int_num) from default d " + where_clause + " group by " + group_by)
         for query in self.queries:
             res = {}
             res["query"] = query
@@ -85,7 +86,7 @@ class UpgradeSecondaryIndexAggrPushdown(UpgradeSecondaryIndexInt64):
                 wrong_explain_results.append(self.query_results["post_upgrade"][i]["query"])
         self.assertEqual(len(wrong_results), 0, str(wrong_results))
         if len(wrong_explain_results) != 0:
-            log.warning("EXplain failed for following queries: {0}".format(wrong_explain_results))
+            log.warning("Explain failed for following queries: {0}".format(wrong_explain_results))
 
     def _query_for_long_num(self):
         for num in INT64_VALUES:
@@ -167,6 +168,3 @@ class UpgradeSecondaryIndexAggrPushdown(UpgradeSecondaryIndexInt64):
         if actual_result != expected_result:
             return False
         return True
-
-
-
