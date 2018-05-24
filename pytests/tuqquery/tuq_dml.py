@@ -919,7 +919,7 @@ class DMLQueryTests(QueryTests):
     def test_prepared_merge_delete_match(self):
         self.assertTrue(len(self.buckets) >=2, 'Test needs at least 2 buckets')
         keys, _ = self._insert_gen_keys(self.num_items, prefix='merge_delete')
-        self.query = 'MERGE INTO %s USING %s on key meta().id when matched then delete where meta(%s).id = "%s"' % (self.buckets[0].name, self.buckets[1].name, self.buckets[1].name, keys[0])
+        query = 'MERGE INTO %s USING %s on key meta().id when matched then delete where meta(%s).id = "%s"' % (self.buckets[0].name, self.buckets[1].name, self.buckets[1].name, keys[0])
         prepared = self.run_cbq_query(query='PREPARE %s' % query)['results'][0]
         actual_result = self.run_cbq_query(query=prepared, is_prepared=True)
         self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
