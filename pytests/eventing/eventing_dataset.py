@@ -11,6 +11,7 @@ from lib.testconstants import STANDARD_BUCKET_PORT
 from pytests.eventing.eventing_base import EventingBaseTest
 from pytests.eventing.eventing_constants import HANDLER_CODE
 import couchbase.subdocument as SD
+from threading import Thread
 
 log = logging.getLogger()
 
@@ -253,6 +254,8 @@ class EventingDataset(EventingBaseTest):
                   batch_size=10)
         body = self.create_save_function_body(self.function_name, self.handler_code,
                                               data_chan_size=data_chan_size, worker_queue_cap=worker_queue_cap)
+        thread = Thread(target=self._change_eventing_quota, args=())
+        thread.start()
         self.deploy_function(body)
         # Wait for eventing to catch up with all the update mutations and verify results
         self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
@@ -261,6 +264,7 @@ class EventingDataset(EventingBaseTest):
         # Wait for eventing to catch up with all the delete mutations and verify results
         self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
+        thread.join()
 
     def test_eventing_with_unicode_character_in_handler_code(self):
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
@@ -275,3 +279,7 @@ class EventingDataset(EventingBaseTest):
         self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
 
+    def _change_eventing_quota(self):
+        for quota in range(256, 512, 4):
+            self.rest.set_service_memoryQuota(service='eventingMemoryQuota', memoryQuota=quota)
+            self.sleep(10)
