@@ -1265,9 +1265,10 @@ class QueryHelper(object):
                         field_that_occur.append(field)
 
                 index_name_with_occur_fields_where = "{0}_where_based_fields_occur_{1}".format(table_name, self._random_int())
-                index_name_fields_only = "{0}_index_name_fields_only_{1}".format(table_name, "_".join(field_that_occur), self._random_int())
-                index_name_with_expression = "{0}_expression_based_{1}".format(table_name, self._random_int())
-
+                index_name_fields_only = "{0}_index_name_fields_only_{1}_{2}".format(table_name, "_".join(field_that_occur), self._random_int())
+                # need to modify index on expression. index should be created on fields and functions on fields in where
+                # clause and not on whole where clause
+                # index_name_with_expression = "{0}_expression_based_{1}".format(table_name, self._random_int())
                 if not partitioned_indexes:
                     create_index_fields_occur_with_where = \
                     "CREATE INDEX {0} ON {1}({2}) WHERE {3} USING GSI".format(index_name_with_occur_fields_where,
