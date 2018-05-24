@@ -816,14 +816,11 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
         rebalance.result()
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
 
+        indexname = map_after_rebalance[self.buckets[0].name][0]
 
-        indexname = map_after_rebalance[self.buckets[0]][0]
-
-        alter_index_query = "ALTER INDEX {0} with {{'action':'move','nodes':'{1}:{2}'}}".format(indexname , nodes_out_list.ip, nodes_out_list.port)
-        result = self.n1ql_helper.run_cbq_query(query=alter_index_query,
-                                                server=self.n1ql_node)
-        self.assertEqual(result['status'], 'success',
-                         'Query was not run successfully')
+        alter_index_query = "ALTER INDEX {0} with {{'action':'move','nodes':'{1}:{2}'}}".format(indexname, nodes_out_list.ip, nodes_out_list.port)
+        result = self.n1ql_helper.run_cbq_query(query=alter_index_query, server=self.n1ql_node)
+        self.assertEqual(result['status'], 'success', 'Query was not run successfully')
 
     def _return_maps(self):
         index_map = self.get_index_map()

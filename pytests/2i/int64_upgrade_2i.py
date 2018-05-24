@@ -36,8 +36,7 @@ class UpgradeSecondaryIndexInt64(UpgradeSecondaryIndex):
         self._query_index("pre_upgrade")
 
     def tearDown(self):
-        pass
-        #super(UpgradeSecondaryIndexInt64, self).tearDown()
+        super(UpgradeSecondaryIndexInt64, self).tearDown()
 
     def test_offline_upgrade(self):
         upgrade_nodes = self.nodes_out_list
