@@ -55,7 +55,6 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
             self.unauditedID = self.input.param("unauditedID", "")
             self.audit_url = "http://%s:%s/settings/audit" % (self.master.ip, self.master.port)
             self.filter = self.input.param("filter", False)
-            self.set_audit()
         self.log.info("==============  QueriesUpgradeTests setup has completed ==============")
 
     def suite_setUp(self):
@@ -320,6 +319,7 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
             self.log.info("running mixed-mode test for auditing")
         elif phase == "post-upgrade":
             self.log.info("running post-upgrade test for auditing")
+            self.set_audit()
             self.eventID = 28676
             self.op_type = "insert"
             self.run_test_queryEvents()
@@ -372,7 +372,6 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
         queries_to_run = []
         index = "CREATE INDEX idx1 on `travel-sample`(id)"
         idx_list.append((index, ("`travel-sample`", "idx1")))
-        import pdb;pdb.set_trace()
         query = "select * from default d1 INNER JOIN `travel-sample` t on (d1.join_day == t.id)"
         queries_to_run.append((query, 1728))
         self.run_common_body(index_list=idx_list, queries_to_run=queries_to_run)
@@ -522,6 +521,8 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
     ###############################
 
     def run_test_queryEvents(self):
+        # required for local testing: uncomment below
+        # self.ipAddress = self.master.ip
         self.ipAddress = self.getLocalIPAddress()
         # self.eventID = self.input.param('id', None)
         auditTemp = audit(host=self.master)
@@ -539,7 +540,7 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
         if query_type == 'select':
             if self.filter:
                 self.execute_filtered_query()
-            self.run_cbq_query(query="SELECT * FROM default LIMIT 100")
+            self.run_cbq_query(server=self.master, query="SELECT * FROM default LIMIT 100")
             expectedResults = {'node':'%s:%s' % (self.master.ip, self.master.port), 'status': 'success', 'isAdHoc': True,
                                'name': 'SELECT statement', 'real_userid': {'source': source, 'user': user},
                                'statement': 'SELECT * FROM default LIMIT 100',
@@ -548,7 +549,7 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
         elif query_type == 'insert':
             if self.filter:
                 self.execute_filtered_query()
-            self.run_cbq_query(query='INSERT INTO default ( KEY, VALUE ) VALUES ("1",{ "order_id": "1", "type": '
+            self.run_cbq_query(server=self.master, query='INSERT INTO default ( KEY, VALUE ) VALUES ("1",{ "order_id": "1", "type": '
                                      '"order", "customer_id":"24601", "total_price": 30.3, "lineitems": '
                                      '[ "11", "12", "13" ] })')
             expectedResults = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success', 'isAdHoc': True,
@@ -573,7 +574,7 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
         s.connect(('couchbase.com', 0))
         return s.getsockname()[0]
 
-    def setupLDAPSettings (self,rest):
+    def setupLDAPSettings (self, rest):
         api = rest.baseUrl + 'settings/saslauthdAuth'
         params = urllib.urlencode({"enabled":'true',"admins":[],"roAdmins":[]})
         status, content, header = rest._http_request(api, 'POST', params)
