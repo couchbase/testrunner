@@ -1315,7 +1315,7 @@ class RQGTests(BaseTestCase):
 
     def _initialize_n1ql_helper(self):
         self.n1ql_helper = N1QLHelper(version="sherlock", shell=None, max_verify=self.max_verify,
-                                      buckets=self.buckets, item_flag=None, n1ql_port=self.n1ql_server.n1ql_port,
+                                      buckets=self.buckets, item_flag=None, n1ql_port=getattr(self.n1ql_server, 'n1ql_port', 8903),
                                       full_docs_list=[], log=self.log, input=self.input, master=self.master,
                                       database=self.database, use_rest=self.use_rest)
 
