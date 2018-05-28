@@ -652,65 +652,74 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
                                            server=self.n1ql_node)
 
     def _recreate_equivalent_indexes(self, index_node):
-        rest = RestConnection(self.master)
-        index_map = rest.get_index_status()
-        log.info(index_map)
-        lost_indexes = {}
-        for bucket, index in index_map.iteritems():
-            for index, vals in index.iteritems():
-                if "_replica" in index:
-                    if not index in lost_indexes.keys():
-                        lost_indexes[index] = []
-                    lost_indexes[index].append(bucket)
-        deploy_node_info = ["{0}:{1}".format(index_node.ip, index_node.port)]
-        for index, buckets in lost_indexes.iteritems():
-            for query_definition in self.query_definitions:
-                if query_definition.index_name == index:
-                    query_definition.index_name = query_definition.index_name.split("_replica")[0]
-                    for bucket in buckets:
-                        bucket = filter(lambda x: x.name == bucket, self.buckets)[0]
-                        self.create_index(bucket=bucket,
-                                      query_definition=query_definition,
-                                      deploy_node_info=deploy_node_info)
-                        self.sleep(20)
-                    query_definition.index_name = index
-                    for bucket in buckets:
-                        bucket = filter(lambda x: x.name == bucket, self.buckets)[0]
-                        self.drop_index(bucket, query_definition)
-                        self.sleep(20)
-                    query_definition.index_name = query_definition.index_name.split("_replica")[0]
-
-    def _remove_equivalent_indexes(self, index_node):
-        rest = RestConnection(self.master)
-        index_map = rest.get_index_status()
-        log.info(index_map)
-        for query_definition in self.query_definitions:
-            if "_replica" in query_definition.index_name:
-                for bucket in self.buckets:
-                    self.drop_index(bucket, query_definition)
-                    self.sleep(20)
-                query_definition.index_name = query_definition.index_name.split("_replica")[0]
-
-    def _create_equivalent_indexes(self, index_node):
-        index_nodes = self.get_nodes_from_services_map(service_type="index",
-                                                       get_all_nodes=True)
-        index_nodes = [x for x in index_nodes if x.ip != index_node.ip]
-        if index_nodes:
-            ops_map = self.generate_operation_map("in_between")
-            if "create_index" not in ops_map:
-                lost_indexes = self._find_index_lost_when_indexer_down(index_node)
-                deploy_node_info = ["{0}:{1}".format(index_nodes[0].ip,
-                                                     index_nodes[0].port)]
+        node_map = self._get_nodes_with_version()
+        for node, vals in node_map.iteritems():
+            if vals["version"] < "5":
+                rest = RestConnection(self.master)
+                index_map = rest.get_index_status()
+                log.info(index_map)
+                lost_indexes = {}
+                for bucket, index in index_map.iteritems():
+                    for index, vals in index.iteritems():
+                        if "_replica" in index:
+                            if not index in lost_indexes.keys():
+                                lost_indexes[index] = []
+                            lost_indexes[index].append(bucket)
+                deploy_node_info = ["{0}:{1}".format(index_node.ip, index_node.port)]
                 for index, buckets in lost_indexes.iteritems():
                     for query_definition in self.query_definitions:
                         if query_definition.index_name == index:
-                            query_definition.index_name = query_definition.index_name + "_replica"
+                            query_definition.index_name = query_definition.index_name.split("_replica")[0]
                             for bucket in buckets:
                                 bucket = filter(lambda x: x.name == bucket, self.buckets)[0]
                                 self.create_index(bucket=bucket,
-                                                  query_definition=query_definition,
-                                                  deploy_node_info=deploy_node_info)
+                                              query_definition=query_definition,
+                                              deploy_node_info=deploy_node_info)
                                 self.sleep(20)
+                            query_definition.index_name = index
+                            for bucket in buckets:
+                                bucket = filter(lambda x: x.name == bucket, self.buckets)[0]
+                                self.drop_index(bucket, query_definition)
+                                self.sleep(20)
+                            query_definition.index_name = query_definition.index_name.split("_replica")[0]
+
+    def _remove_equivalent_indexes(self, index_node):
+        node_map = self._get_nodes_with_version()
+        for node, vals in node_map.iteritems():
+            if vals["version"] < "5":
+                rest = RestConnection(self.master)
+                index_map = rest.get_index_status()
+                log.info(index_map)
+                for query_definition in self.query_definitions:
+                    if "_replica" in query_definition.index_name:
+                        for bucket in self.buckets:
+                            self.drop_index(bucket, query_definition)
+                            self.sleep(20)
+                        query_definition.index_name = query_definition.index_name.split("_replica")[0]
+
+    def _create_equivalent_indexes(self, index_node):
+        node_map = self._get_nodes_with_version()
+        for node, vals in node_map.iteritems():
+            if vals["version"] < "5":
+                index_nodes = self.get_nodes_from_services_map(service_type="index",
+                                                               get_all_nodes=True)
+                index_nodes = [x for x in index_nodes if x.ip != index_node.ip]
+                if index_nodes:
+                    ops_map = self.generate_operation_map("in_between")
+                    if "create_index" not in ops_map:
+                        lost_indexes = self._find_index_lost_when_indexer_down(index_node)
+                        deploy_node_info = ["{0}:{1}".format(index_nodes[0].ip,
+                                                             index_nodes[0].port)]
+                        for index, buckets in lost_indexes.iteritems():
+                            for query_definition in self.query_definitions:
+                                if query_definition.index_name == index:
+                                    query_definition.index_name = query_definition.index_name + "_replica"
+                                    for bucket in buckets:
+                                        bucket = filter(lambda x: x.name == bucket, self.buckets)[0]
+                                        self.create_index(bucket=bucket,
+                                                          query_definition=query_definition,
+                                                          deploy_node_info=deploy_node_info)
+                                        self.sleep(20)
 
     def _find_index_lost_when_indexer_down(self, index_node):
         lost_indexes = {}
@@ -805,7 +814,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
         rebalance.result()
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
 
-        self.sleep(30)
+        self.wait_until_indexes_online()
         map_after_rebalance, stats_map_after_rebalance = self._return_maps()
         self.n1ql_helper.verify_indexes_redistributed(
             map_before_rebalance, map_after_rebalance, stats_map_before_rebalance,
@@ -817,13 +826,24 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
         reached = RestHelper(self.rest).rebalance_reached()
         rebalance.result()
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        self._verify_alter_index()
 
-        indexname = map_after_rebalance[self.buckets[0].name][0]
-
-        alter_index_query = "ALTER INDEX {0} with {{'action':'move','nodes':'{1}:{2}'}}".format(indexname , nodes_out_list.ip, nodes_out_list.port)
-        result = self.n1ql_helper.run_cbq_query(query=alter_index_query, server=self.n1ql_node)
-        self.assertEqual(result['status'], 'success',
-                         'Query was not run successfully')
+    def _verify_alter_index(self):
+        index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        rest = RestConnection(self.master)
+        index_map = rest.get_index_status()
+        log.info("index_map: {0}".format(index_map))
+        index_info = index_map[self.buckets[0].name]
+        for index_name, index_vals in index_info.iteritems():
+            host = index_vals["hosts"]
+            for index_node in index_nodes:
+                ip_str = index_node.ip + ":" + index_node.port
+                if host != ip_str:
+                    alter_index_query = "ALTER INDEX {0}.{1} with {{'action':'move','nodes':['{2}:{3}']}}".format(
+                        self.buckets[0].name, index_name, index_node.ip, index_node.port)
+                    result = self.n1ql_helper.run_cbq_query(query=alter_index_query, server=self.n1ql_node)
+                    self.assertEqual(result['status'], 'success', 'Query was not run successfully')
+                    return
 
     def _verify_index_partitioning(self):
         node_map = self._get_nodes_with_version()
