@@ -160,9 +160,11 @@ class CollectinfoTests(CliBaseTest):
                 for node, services in nodes_services.iteritems():
                     for service in services:
                         if service.encode("ascii") == "fts" and \
+                                     self.master.ip in node and \
                                     "fts_diag.json" not in LOG_FILE_NAMES:
                             LOG_FILE_NAMES.append("fts_diag.json")
-                        if service.encode("ascii") == "index":
+                        if service.encode("ascii") == "index" and \
+                                            self.master.ip in node:
                             if "indexer_mprof.log" not in LOG_FILE_NAMES:
                                 LOG_FILE_NAMES.append("indexer_mprof.log")
                             if "indexer_pprof.log" not in LOG_FILE_NAMES:
