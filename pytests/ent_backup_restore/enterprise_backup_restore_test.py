@@ -3274,6 +3274,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             rest_src.add_remote_cluster(self.servers[1].ip, self.servers[1].port, self.backupset.cluster_host_username,
                                         self.backupset.cluster_host_password, "C2")
             rest_dest.create_bucket(bucket='default', ramQuotaMB=512)
+            self.sleep(10)
             repl_id = rest_src.start_replication('continuous', 'default', "C2")
             if repl_id is not None:
                 self.log.info("Replication created successfully")
