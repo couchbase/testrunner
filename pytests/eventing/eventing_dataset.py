@@ -258,11 +258,12 @@ class EventingDataset(EventingBaseTest):
         thread.start()
         self.deploy_function(body)
         # Wait for eventing to catch up with all the update mutations and verify results
-        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True,
+                                     timeout=1200)
         self.load(gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=10, op_type='delete')
         # Wait for eventing to catch up with all the delete mutations and verify results
-        self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+        self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True, timeout=1200)
         self.undeploy_and_delete_function(body)
         thread.join()
 
