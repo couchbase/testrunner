@@ -59,6 +59,7 @@ class QueryTests(BaseTestCase):
         self.buckets = RestConnection(self.master).get_buckets()
         self.docs_per_day = self.input.param("doc-per-day", 49)
         self.item_flag = self.input.param("item_flag", 4042322160)
+        self.ipv6 = self.input.param("ipv6", False)
         self.n1ql_port = self.input.param("n1ql_port", 8093)
         self.analytics = self.input.param("analytics", False)
         self.dataset = getattr(self, 'dataset',  self.input.param("dataset", "default"))
@@ -787,9 +788,12 @@ class QueryTests(BaseTestCase):
                 if not (self.isprepared):
                     query = query.replace('"', '\\"')
                     query = query.replace('`', '\\`')
-
-                    cmd = "%scbq  -engine=http://%s:%s/ -q -u %s -p %s" % (
-                    self.path, server.ip, server.port, username, password)
+                    if self.ipv6:
+                        cmd = "%scbq  -engine=http://%s:%s/ -q -u %s -p %s" % (
+                        self.path, server.ip, self.n1ql_port, username, password)
+                    else:
+                        cmd = "%scbq  -engine=http://%s:%s/ -q -u %s -p %s" % (
+                        self.path, server.ip, server.port, username, password)
 
                     output = self.shell.execute_commands_inside(cmd, query, "", "", "", "", "")
                     if not (output[0] == '{'):
