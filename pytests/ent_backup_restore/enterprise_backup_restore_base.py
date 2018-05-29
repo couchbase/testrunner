@@ -548,7 +548,10 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                 ram_size = int(ram_size) - INDEX_QUOTA
             if "fts" in self.master_services[0]:
                 ram_size = int(ram_size) - FTS_QUOTA
-            bucket_size = self._get_bucket_size(ram_size, len(self.buckets))
+            all_buckets = self.total_buckets
+            if len(self.buckets) > 0:
+                all_buckets = len(self.buckets)
+            bucket_size = self._get_bucket_size(ram_size, all_buckets)
             if self.dgm_run:
                 bucket_size = 256
 
