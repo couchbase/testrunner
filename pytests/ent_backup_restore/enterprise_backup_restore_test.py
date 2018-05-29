@@ -3248,6 +3248,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         rebalance.result()
         self.backup_restore_validate(compare_uuid=False, seqno_compare_function=">=")
         rest_target_fts = RestConnection(self.input.clusters[0][1])
+        status = False
         try:
             status, content = rest_target_fts.get_fts_index_definition(index_name)
             self.assertTrue(status and content['status'] == 'ok',
