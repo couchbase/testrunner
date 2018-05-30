@@ -15,7 +15,7 @@ import json
 
 class MySQLClient(object):
     """Python MySQLClient Client Implementation for testrunner"""
-    def __init__(self, database=None, host="localhost", user_id="root", password=""):
+    def __init__(self, database=None, host="127.0.0.1", user_id="root", password=""):
         self.database = database
         self.host = host
         self.user_id = user_id
@@ -58,7 +58,7 @@ class MySQLClient(object):
             raise
 
     def _execute_query(self, query=""):
-        cur = self.mysql_connector_client.cursor()
+        cur = self.mysql_connector_client.cursor(buffered=True)
         cur.execute(query)
         rows = cur.fetchall()
         desc = cur.description

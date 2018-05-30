@@ -660,7 +660,7 @@ class RQGTests(BaseTestCase):
                 sql_query = sql_query.replace("sum(t_1.productId)", "sum(t_1.qty)")
             n1ql_query = n1ql_query.replace("t_5.simple_table_2 t_1.price", "t_1.price")
             sql_query = sql_query.replace("simple_table_2 t_1.price", "t_1.price")
-            n1ql_query = n1ql_query + " order by meta().id limit 5"
+            n1ql_query = n1ql_query + " order by primary_key_id limit 5"
             sql_query = sql_query + " order by t_5.primary_key_id limit 5"
 
             if "sum" in n1ql_query or "min" in n1ql_query or "max" in n1ql_query or "count" in n1ql_query:
