@@ -90,15 +90,19 @@ class UpgradeTests(NewUpgradeBaseTest, EventingBaseTest):
         self._log_start(self)
         if len(self.servers[:self.nodes_init]) > 1:
             if initial_services_setting is None:
-                self.cluster.rebalance([self.servers[0]], self.servers[1:], [],
-                                       use_hostnames=self.use_hostnames)
+                self.cluster.rebalance(self.servers[:1], self.servers[1:self.nodes_init],
+                                                   [], use_hostnames=self.use_hostnames)
             else:
                 set_services = self.initial_services(initial_services_setting)
                 for i in range(1, len(set_services)):
                     self.cluster.rebalance([self.servers[0]], [self.servers[i]], [],
-                                           use_hostnames=self.use_hostnames,
-                                           services=[set_services[i]])
+                                                   use_hostnames=self.use_hostnames,
+                                                         services=[set_services[i]])
                     self.sleep(10)
+        else:
+            self.cluster.rebalance([self.servers[0]], self.servers[1:], [],
+                                         use_hostnames=self.use_hostnames)
+        self.sleep(10)
         """ sometimes, when upgrade failed and node does not install couchbase
             server yet, we could not set quota at beginning of the test.  We
             have to wait to install new couchbase server to set it properly here """
@@ -130,7 +134,7 @@ class UpgradeTests(NewUpgradeBaseTest, EventingBaseTest):
         self.event_threads = []
         self.after_event_threads = []
         try:
-            self.log.info("*** Start init operations before upgrade begins ***")
+            self.log.info("\n*** Start init operations before upgrade begins ***")
             if self.initialize_events:
                 initialize_events = self.run_event(self.initialize_events)
             self.finish_events(initialize_events)
@@ -139,14 +143,14 @@ class UpgradeTests(NewUpgradeBaseTest, EventingBaseTest):
             self.cluster_stats(self.servers[:self.nodes_init])
             if self.before_events:
                 self.event_threads += self.run_event(self.before_events)
-            self.log.info("*** Start upgrade cluster ***")
+            self.log.info("\n*** Start upgrade cluster ***")
             self.event_threads += self.upgrade_event()
             if self.in_between_events:
                 self.event_threads += self.run_event(self.in_between_events)
             self.finish_events(self.event_threads)
             if self.upgrade_type == "online":
                 self.monitor_dcp_rebalance()
-            self.log.info("Will install upgrade version to any free nodes")
+            self.log.info("\nWill install upgrade version to any free nodes")
             out_nodes = self._get_free_nodes()
             self.log.info("Here is free nodes {0}".format(out_nodes))
             """ only install nodes out when there is cluster operation """
@@ -814,21 +818,26 @@ class UpgradeTests(NewUpgradeBaseTest, EventingBaseTest):
             servicesNodeOut = rest.get_nodes_services()
             servicesNodeOut = ",".join(servicesNodeOut[servers_out.keys()[0]] )
             self._install(servers_in.values())
+            self.sleep(10, "Wait for ns server is ready")
             old_vbucket_map = self._record_vbuckets(self.master, servers.values())
-            if self.upgrade_services_in == "same":
-                self.cluster.rebalance(servers.values(), servers_in.values(),\
-                                                         servers_out.values(),
-                                    services=[servicesNodeOut])
-            elif self.upgrade_services_in != None and len(self.upgrade_services_in) > 0:
-                self.cluster.rebalance(servers.values(),
-                                    servers_in.values(),
-                      servers_out.values(), services = \
-                   self.upgrade_services_in[start_services_num:start_services_num+\
-                                                         len(servers_in.values())])
-                start_services_num += len(servers_in.values())
-            else:
-                self.cluster.rebalance(servers.values(), servers_in.values(),\
-                                                         servers_out.values())
+            try:
+                if self.upgrade_services_in == "same":
+                    self.cluster.rebalance(servers.values(), servers_in.values(),\
+                                                             servers_out.values(),
+                                        services=[servicesNodeOut])
+                elif self.upgrade_services_in != None and len(self.upgrade_services_in) > 0:
+                    self.cluster.rebalance(servers.values(),
+                                        servers_in.values(),
+                          servers_out.values(), services = \
+                       self.upgrade_services_in[start_services_num:start_services_num+\
+                                                             len(servers_in.values())])
+                    start_services_num += len(servers_in.values())
+                else:
+                    self.cluster.rebalance(servers.values(), servers_in.values(),\
+                                                             servers_out.values())
+            except Exception, ex:
+                self.log.info(ex)
+                raise
             self.out_servers_pool = servers_out
             self.in_servers_pool = new_servers
             servers = new_servers
