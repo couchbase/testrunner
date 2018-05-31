@@ -2950,7 +2950,7 @@ class XdcrCLITest(CliBaseTest):
         xdcr_hostname = self.input.param("xdcr-hostname", None)
         xdcr_username = self.input.param("xdcr-username", None)
         xdcr_password = self.input.param("xdcr-password", None)
-        demand_encyrption = self.input.param("demand-encryption", 0)
+        secure_connection = self.input.param("secure-connection", "none")
         xdcr_cert = self.input.param("xdcr-certificate", None)
         wrong_cert = self.input.param("wrong-certificate", None)
 
@@ -2962,9 +2962,9 @@ class XdcrCLITest(CliBaseTest):
             options += " --xdcr-hostname={0}".format(self.dest_nodes[0].ip)
         options += (" --xdcr-username={0}".format(xdcr_username), "")[xdcr_username is None]
         options += (" --xdcr-password={0}".format(xdcr_password), "")[xdcr_password is None]
-        options += (" --xdcr-demand-encryption={0}".format(demand_encyrption))
+        options += (" --xdcr-secure-connection={0}".format(secure_connection))
 
-        if demand_encyrption and xdcr_hostname is not None and xdcr_cert:
+        if secure_connection != 'none' and xdcr_hostname is not None and xdcr_cert:
             if wrong_cert:
                 cluster_host = "localhost"
             else:
