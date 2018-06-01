@@ -63,6 +63,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             conn = RemoteMachineShellConnection(server)
             conn.extract_remote_info()
             conn.terminate_processes(conn.info, ["cbbackupmgr"])
+            conn.disconnect()
         self.bucket_helper = BucketOperationHelper()
 
     def tearDown(self):

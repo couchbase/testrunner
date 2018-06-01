@@ -243,6 +243,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.per_node = self.input.param("per_node", True)
         if not os.path.exists(self.backup_validation_files_location):
             os.mkdir(self.backup_validation_files_location)
+        shell.disconnect()
 
     def tearDown(self):
         super(EnterpriseBackupRestoreBase, self).tearDown()
@@ -280,6 +281,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             if os.path.exists(validation_files_location):
                 self.log.info("delete dir %s" % validation_files_location)
                 shutil.rmtree(validation_files_location)
+            remote_client.disconnect()
 
     @property
     def cluster_to_backup(self):
@@ -338,6 +340,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             remote_client.execute_command("rm -rf %s" % self.backupset.directory)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
+        remote_client.disconnect()
         return output, error
 
     def backup_create_validate(self):
@@ -425,6 +428,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             self.backups.append(o[0])
         self.number_of_backups_taken += 1
         self.log.info("Finished taking backup  with args: {0}".format(args))
+        remote_client.disconnect()
         return output, error
 
     def backup_cluster_validate(self, skip_backup=False, repeats=1,
@@ -760,6 +764,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             if not status:
                 self.fail(info)
             self.log.info(info)
+        remote_client.disconnect()
 
     def backup_list(self):
         args = "list --archive {0}".format(self.backupset.directory)
@@ -773,6 +778,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, args)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
+        remote_client.disconnect()
         if error:
             return False, error, "Getting backup list failed."
         else:
@@ -796,6 +802,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, args)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
+        remote_client.disconnect()
         self.verify_cluster_stats()
         if error:
             return False, error, "Removing backup failed."
@@ -898,6 +905,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.log.info("backups after merge: " + str(self.backups))
         self.log.info("number_of_backups_taken after merge: "
                                                    + str(self.number_of_backups_taken))
+        remote_client.disconnect()
         return True, output, "Merging backup succeeded"
 
     def backup_merge_validate(self, repeats=1, skip_validation=False):
