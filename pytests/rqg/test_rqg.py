@@ -121,6 +121,13 @@ class RQGTests(BaseTestCase):
             if self.use_mysql and self.reset_database and (not self.skip_cleanup):
                 try:
                     client = MySQLClient(database=self.database, host=self.mysql_url, user_id=self.user_id, password=self.password)
+                    columns, rows = client._execute_query(query="select concat('KILL ',id,';') from information_schema.processlist where user='root' and time > 0;")
+                    sql_result = client._gen_json_from_results(columns, rows)
+                    for result in sql_result:
+                        for key in result.keys():
+                            query = result[key]
+                            print(query)
+                            client._db_execute_query(query=query)
                     client.drop_database(self.database)
                 except Exception, ex:
                     self.log.info(ex)

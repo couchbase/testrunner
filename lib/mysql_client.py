@@ -56,6 +56,9 @@ class MySQLClient(object):
         except Exception, ex:
             print ex
             raise
+        finally:
+            cur.close()
+
 
     def _execute_query(self, query=""):
         cur = self.mysql_connector_client.cursor(buffered=True)
