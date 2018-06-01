@@ -12,6 +12,7 @@ class EnterpriseBackupMergeTest(EnterpriseBackupMergeBase):
             conn = RemoteMachineShellConnection(server)
             conn.extract_remote_info()
             conn.terminate_processes(conn.info, ["cbbackupmgr"])
+            conn.disconnect()
 
     def tearDown(self):
         super(EnterpriseBackupMergeTest, self).tearDown()

@@ -537,6 +537,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
 
         if output and "SUCCESSFULLY COMPLETED" not in output[1]:
             self.fail("Failed to backup as the fix in MB-25727")
+        shell.disconnect()
 
 
     def test_cbrestoremgr_should_not_change_replica_count_in_restore_bucket(self):
@@ -783,6 +784,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                 output, _ = shell.execute_command(kill_cmd)
                 if output and "SUCCESS" not in output[0]:
                     self.fail("Failed to kill cbbackupmgr on windows")
+        shell.disconnect()
 
     def test_merge_backup_with_purge_deleted_keys(self):
         """
@@ -822,6 +824,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             if found:
                 shell = RemoteMachineShellConnection(self.backupset.cluster_host)
                 shell.compact_vbuckets(len(bucket.vbuckets), cluster_nodes, upto_seq)
+                shell.disconnect()
             found = self.get_info_in_database(self.backupset.cluster_host, bucket, "deleted")
             if not found:
                 self.log.info("Load another docs to bucket %s " % bucket.name)
@@ -909,6 +912,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                               % (self.cli_command_location, self.cmd_ext, server.ip,
                                  "cbadminbucket", "password", self.cmd_ext)
                         output, error = shell.execute_command(cmd)
+                        shell.disconnect()
                         if output:
                             self.log.info("number failover logs entries reached. %s " % output)
                             reach_num_entries = True
@@ -1197,6 +1201,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                      self.backupset.cluster_host.ip,
                      self.cluster_new_user)
             output, error = shell.execute_command(cmd)
+            shell.disconnect()
 
     def test_restore_with_rbac(self):
         """
@@ -1396,6 +1401,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             self.log.info("Disabling firewall on cluster host to take backup")
             conn = RemoteMachineShellConnection(self.backupset.cluster_host)
             conn.disable_firewall()
+            conn.disconnect()
             self.enable_firewall = False
         self.log.info("Trying backup now")
         self.backup_cluster_validate()
@@ -1414,6 +1420,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             self.log.info("Disabling firewall on restore host to restore")
             conn = RemoteMachineShellConnection(self.backupset.restore_cluster_host)
             conn.disable_firewall()
+            conn.disconnect()
             self.enable_firewall = False
         self.log.info("Trying restore now")
         self.skip_buckets = False
@@ -1535,6 +1542,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                         "Expected error message not thrown by backup when disk is full")
         self.log.info("Expected error thrown by backup command")
         conn.execute_command("rm -rf /cbqe3043/file")
+        conn.disconnect()
 
     def test_backup_and_restore_with_map_buckets(self):
         """
@@ -1591,6 +1599,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.assertTrue(self._check_output("Backup successfully completed", output),
                         "Backup failed with erlang crash and restart within 180 seconds")
         self.log.info("Backup succeeded with erlang crash and restart within 180 seconds")
+        conn.disconnect()
 
     def test_backup_with_couchbase_stop_and_start(self):
         """
@@ -1613,6 +1622,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         conn = RemoteMachineShellConnection(self.backupset.cluster_host)
         conn.stop_couchbase()
         conn.start_couchbase()
+        conn.disconnect()
         output = backup_result.result(timeout=200)
         self.assertTrue(self._check_output("Backup successfully completed", output),
                         "Backup failed with couchbase stop and start within 180 seconds")
@@ -1642,6 +1652,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         conn = RemoteMachineShellConnection(self.backupset.cluster_host)
         conn.pause_memcached()
         conn.unpause_memcached()
+        conn.disconnect()
         output = backup_result.result(timeout=200)
         self.assertTrue(self._check_output("Backup successfully completed", output),
                         "Backup failed with memcached crash and restart within 180 seconds")
@@ -1687,6 +1698,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             self.fail(str(ex))
         finally:
             conn.start_couchbase()
+            conn.disconnect()
             self.sleep(30)
 
     def test_backup_with_couchbase_stop(self):
@@ -1720,6 +1732,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             self.fail(str(ex))
         finally:
             conn.start_couchbase()
+            conn.disconnect()
             self.sleep(30)
 
     def test_backup_with_memcached_crash(self):
@@ -1788,6 +1801,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         conn = RemoteMachineShellConnection(self.backupset.restore_cluster_host)
         conn.kill_erlang(self.os_name)
         conn.start_couchbase()
+        conn.disconnect()
         timeout_now = 400
         if self.os_name == "windows":
             timeout_now = 600
@@ -1825,6 +1839,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         conn.stop_couchbase()
         self.sleep(10)
         conn.start_couchbase()
+        conn.disconnect()
         output = restore_result.result(timeout=500)
         self.assertTrue(self._check_output("Restore completed successfully", output),
                         "Restore failed with couchbase stop and start within 180 seconds")
@@ -1856,6 +1871,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         conn = RemoteMachineShellConnection(self.backupset.restore_cluster_host)
         conn.pause_memcached(self.os_name)
         conn.unpause_memcached(self.os_name)
+        conn.disconnect()
         output = restore_result.result(timeout=600)
         self.assertTrue(self._check_output("Restore completed successfully", output),
                         "Restore failed with memcached crash and restart within 400 seconds")
@@ -1898,6 +1914,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             self.fail(str(ex))
         finally:
             conn.start_couchbase()
+            conn.disconnect()
             self.sleep(30)
 
     def test_restore_with_couchbase_stop(self):
@@ -1936,6 +1953,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             self.fail(str(ex))
         finally:
             conn.start_couchbase()
+            conn.disconnect()
             self.sleep(30)
 
     def test_restore_with_memcached_crash(self):
@@ -1975,6 +1993,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             self.fail(str(ex))
         finally:
             conn.unpause_memcached(self.os_name)
+            conn.disconnect()
             self.sleep(30)
 
     def test_backup_merge(self):
@@ -2161,6 +2180,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                 old_backup_name = re.search("\d{4}-\d{2}-\d{2}T\d{2}_\d{2}_\d{2}.\d+-\d{2}_\d{2}", line).group()
                 self.log.info("Backup name before purge: " + old_backup_name)
         conn.start_couchbase()
+        conn.disconnect()
         self.sleep(30)
         output, error = self.backup_cluster()
         if error or not self._check_output("Backup successfully completed", output):
@@ -2216,6 +2236,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                                             "_\d{2}.\d+-\d{2}_\d{2}", line).group()
                 self.log.info("Backup name before resume: " + old_backup_name)
         conn.start_couchbase()
+        conn.disconnect()
         self.sleep(30)
         output, error = self.backup_cluster()
         if error or not self._check_output("Backup successfully completed", output):
@@ -2647,6 +2668,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
+        remote_client.disconnect()
         self.assertEqual(output[0], "Backup repository creation failed: Backup Repository `backup` exists",
                          "Expected error message not thrown")
 
@@ -2790,6 +2812,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
+        remote_client.disconnect()
         self.assertTrue("check username and password" in output[-1], "Expected error message not thrown")
 
     def test_backup_list_negative_args(self):
@@ -2812,6 +2835,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
+        remote_client.disconnect()
         self.assertTrue("Error: Archive directory `abc` doesn't exist" in output[-1],
                         "Expected error message not thrown")
 
@@ -2880,6 +2904,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
+        remote_client.disconnect()
         self.assertTrue("Compacting incr backup `abc` of backup `backup` failed:" in output[-1],
                         "Expected error message not thrown")
 
@@ -2974,6 +2999,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
+        remote_client.disconnect()
         self.assertTrue("Error merging data: start point `{0}` is after end point `{1}`".format
                         (self.backups[1], self.backups[0]) in output[-1],
                         "Expected error message not thrown")
@@ -3015,6 +3041,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
+        remote_client.disconnect()
         self.assertTrue("Backup Repository `abc` not found" in output[-1],
                         "Expected error message not thrown")
 
@@ -3173,6 +3200,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         command = "{0}/{1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
+        remote_client.disconnect()
         if error or "Index created" not in output[-1]:
             self.fail("GSI index cannot be created")
         self.backup_cluster_validate()
@@ -3183,6 +3211,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         command = "{0}/{1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
+        remote_client.disconnect()
         if error or "Index created" not in output[-1]:
             self.fail("GSI index cannot be created")
         self.backup_cluster_validate()
@@ -3208,6 +3237,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         command = "{0}/{1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
+        remote_client.disconnect()
         if len(output) > 1:
             self.assertTrue("Index:default/Num1" in output[1],
                             "GSI index not created in restore cluster as expected")
@@ -3405,7 +3435,6 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                                                             name=self.backupset.name,
                                                             cli_command_location=self.cli_command_location)
             self.sleep(10)
-            conn = RemoteMachineShellConnection(self.backupset.backup_host)
             self._kill_cbbackupmgr()
             merge_result.result(timeout=400)
         except TimeoutError:
@@ -3438,7 +3467,6 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                                                                 name=self.backupset.name,
                                                                 cli_command_location=self.cli_command_location)
             self.sleep(10)
-            conn = RemoteMachineShellConnection(self.backupset.backup_host)
             self._kill_cbbackupmgr()
             compact_result.result(timeout=400)
         except TimeoutError:
@@ -3479,6 +3507,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                         "Expected error not thrown when file is corrupt")
         self.log.info("Expected error thrown when file is corrupted")
         conn.execute_command("mv /tmp/entbackup/backup /tmp/entbackup/backup2")
+        conn.disconnect()
         output, error = self.backup_restore()
         self.assertTrue("Backup Repository `backup` not found" in output[-1], "Expected error message not thrown")
         self.log.info("Expected error message thrown")

@@ -19,6 +19,7 @@ class BackupRestoreFilesValidations(BackupRestoreValidationBase):
         remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
         backup_meta_file_path = "{0}/{1}/backup-meta.json".format(self.backupset.directory, self.backupset.name)
         remote_client.copy_file_remote_to_local(backup_meta_file_path, "/tmp/backup-meta.json")
+        remote_client.disconnect()
         backup_meta = json.load(open("/tmp/backup-meta.json"))
         return backup_meta
 

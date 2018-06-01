@@ -795,6 +795,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             return False, output, "Compacting backup failed."
         else:
             return True, output, "Compaction of backup success"
+        remote_client.disconnect()
 
     def backup_remove(self):
         args = "remove --archive {0} --repo {1}".format(self.backupset.directory, self.backupset.name)
@@ -863,6 +864,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                 raise Exception("backup compaction failed to keep delete docs in file")
         else:
             raise Exception("file shard_0.fdb did not created ")
+        conn.disconnect()
         return deleted_key_status
 
     def backup_merge(self):
@@ -1232,6 +1234,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                             self.log.info(mesg)
             if index_found < len(self.gsi_names):
                 self.fail("GSI indexes are not restored in bucket {0}".format(bucket.name))
+        shell.disconnect()
 
     def _check_output(self, word_check, output):
         found = False
@@ -1359,6 +1362,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         output, _ = shell.execute_command("ls {0}".format(logs_path + "/logs"))
         if output and "backup.log" not in output[0]:
             self.fail("Missing file 'backup.log' in backup logs dir")
+        shell.disconnect()
 
     def _validate_restore_vbucket_filter(self):
         data_collector = DataCollector()
@@ -1414,6 +1418,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                     self.log.info("No keys with vbucket filter {0} restored".format(vbucket_filter))
             else:
                 raise Exception("file shard_0.fdb did not created ")
+        shell.disconnect()
 
     def _validate_restore_replace_ttl_with(self, ttl_set):
         data_collector = DataCollector()
@@ -1478,6 +1483,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                     if self.replace_ttl == "expired" and self.bk_with_ttl is not None:
                         if sleep_time < 600:
                             self.fail("Key did not expire after wait more than 10 seconds of ttl")
+        shell.disconnect()
 
     def _verify_bucket_compression_mode(self, restore_bucket_compression_mode):
         if self.enable_firewall:
@@ -1571,6 +1577,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.log.info("remove tmp file in slave")
         if os.path.exists(bk_file_events_dir):
             shutil.rmtree(bk_file_events_dir)
+        shell.disconnect()
 
     def _verify_restore_events_definition(self, bk_fxn):
         backup_path = self.backupset.directory + "/backup/{0}/".format(self.backups[0])
@@ -1849,6 +1856,7 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
                                             self.backup_validation_files_location)
         self.validation_helper.store_range_json(self.buckets, self.number_of_backups_taken,
                                          self.backup_validation_files_location, merge=True)
+        conn.disconnect()
 
     def _check_output(self, word_check, output):
         found = False
@@ -1877,6 +1885,7 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
                         "Backup failed with erlang crash and restart within 180 seconds")
         self.log.info("Backup succeeded with erlang crash and restart within 180 seconds")
         self.sleep(30)
+        conn.disconnect()
         conn = RemoteMachineShellConnection(self.backupset.backup_host)
         command = "ls -tr {0}/{1} | tail -1".format(self.backupset.directory, self.backupset.name)
         o, e = conn.execute_command(command)
@@ -1891,6 +1900,7 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
                                             self.backup_validation_files_location)
         self.validation_helper.store_range_json(self.buckets, self.number_of_backups_taken,
                                                 self.backup_validation_files_location)
+        conn.disconnect()
 
     def backup_with_cb_server_stop_and_restart(self):
         backup_result = self.cluster.async_backup_cluster(cluster_host=self.backupset.cluster_host,
@@ -1909,6 +1919,7 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
                         "Backup failed with couchbase stop and start within 180 seconds")
         self.log.info("Backup succeeded with couchbase stop and start within 180 seconds")
         self.sleep(30)
+        conn.disconnect()
         conn = RemoteMachineShellConnection(self.backupset.backup_host)
         command = "ls -tr {0}/{1} | tail -1".format(self.backupset.directory, self.backupset.name)
         o, e = conn.execute_command(command)
@@ -1923,6 +1934,7 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
                                             self.backup_validation_files_location)
         self.validation_helper.store_range_json(self.buckets, self.number_of_backups_taken,
                                                 self.backup_validation_files_location)
+        conn.disconnect()
 
     def merge(self):
         """
@@ -1977,6 +1989,7 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
             self.validation_helper.store_range_json(self.buckets, self.number_of_backups_taken,
                                                     self.backup_validation_files_location)
             self.validation_helper.validate_merge(self.backup_validation_files_location)
+        conn.disconnect()
 
     def merge_with_erlang_crash_and_restart(self):
         self.log.info("backups before merge: " + str(self.backups))
@@ -2013,6 +2026,7 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
             self.validation_helper.store_range_json(self.buckets, self.number_of_backups_taken,
                                                     self.backup_validation_files_location)
             self.validation_helper.validate_merge(self.backup_validation_files_location)
+        conn.disconnect()
 
     def merge_with_cb_server_stop_and_restart(self):
         self.log.info("backups before merge: " + str(self.backups))
@@ -2049,6 +2063,7 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
             self.validation_helper.store_range_json(self.buckets, self.number_of_backups_taken,
                                                     self.backup_validation_files_location)
             self.validation_helper.validate_merge(self.backup_validation_files_location)
+        conn.disconnect()
 
     def compact_backup(self):
         """
@@ -2381,6 +2396,7 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         conn.log_command_output(o, e)
         self.backupset.deleted_backups.append(backup_to_delete)
         self.number_of_backups_taken -= 1
+        conn.disconnect()
 
     def corrupt_backup(self):
         """
@@ -2399,6 +2415,7 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
                                     backup_to_corrupt + "/" + data_dir + "/data/shard_0.fdb" +
                                     " bs=1024 count=100 seek=10 conv=notrunc")
         conn.log_command_output(o, e)
+        conn.disconnect()
 
     def _flush_bucket(self, bucket_to_flush):
         """
@@ -2496,6 +2513,7 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
             shell.start_couchbase()
 
             self.sleep(60)
+            shell.disconnect()
 
     def create_indexes(self):
         rest_src = RestConnection(self.backupset.cluster_host)
@@ -2517,6 +2535,7 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         cmd = "cbindex -type create -bucket default -using plasma -index " \
               "name_idx -fields=name -auth {0}:{1}".format(self.servers[0].rest_username,
                                                            self.servers[0].rest_password,)
+        remote_client.disconnect()
         remote_client = RemoteMachineShellConnection(
             self.backupset.cluster_host)
         command = "{0}/{1}".format(self.cli_command_location, cmd)
@@ -2587,6 +2606,7 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
                     rest_fts.create_fts_index(index_name, index_definition)
                 except Exception, ex:
                     self.fail(ex)
+        remote_client.disconnect()
 
     def update_indexes(self):
         index_definition = INDEX_DEFINITION
