@@ -119,17 +119,18 @@ class AggregatePushdownClass(QueryTests):
             failover_task.result()
             nodes_all = rest.node_statuses()
             nodes = []
-            if self.nodes_out_list[0].ip == "127.0.0.1":
-                for failover_node in self.nodes_out_list:
-                    nodes.extend([node for node in nodes_all if (str(node.port) == failover_node.port)])
-            else:
-                for failover_node in self.nodes_out_list:
-                    nodes.extend([node for node in nodes_all
-                        if node.ip == failover_node.ip])
-                for node in nodes:
-                    log.info("Adding back {0} with recovery type Full...".format(node.ip))
-                    rest.add_back_node(node.id)
-                    rest.set_recovery_type(otpNode=node.id, recoveryType="full")
+            if self.nodes_out_list:
+                if self.nodes_out_list[0].ip == "127.0.0.1":
+                    for failover_node in self.nodes_out_list:
+                        nodes.extend([node for node in nodes_all if (str(node.port) == failover_node.port)])
+                else:
+                    for failover_node in self.nodes_out_list:
+                        nodes.extend([node for node in nodes_all
+                            if node.ip == failover_node.ip])
+                    for node in nodes:
+                        log.info("Adding back {0} with recovery type Full...".format(node.ip))
+                        rest.add_back_node(node.id)
+                        rest.set_recovery_type(otpNode=node.id, recoveryType="full")
             log.info("Rebalancing nodes in...")
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [])
             mid_recovery_tasks = threading.Thread(target=self._aggregate_query_using_index, args=(index_names_defn,))
@@ -138,7 +139,7 @@ class AggregatePushdownClass(QueryTests):
             mid_recovery_tasks.join()
             #check if the nodes in cluster are healthy
             msg = "Cluster not in Healthy state"
-            self.assertTrue(self.wait_until_cluster_is_healthy(), msg)
+            self.assertTrue(self._wait_until_cluster_is_healthy(), msg)
             log.info("==== Cluster in healthy state ====")
             self.sleep(60)
         except Exception, ex:
@@ -211,3 +212,29 @@ class AggregatePushdownClass(QueryTests):
                 else:
                     is_cluster_healthy = True
         return is_cluster_healthy
+
+    def _verify_aggregate_query_results(self, result, query, bucket):
+        def _gen_dict(res):
+            result_set = []
+            if res is not None and len(res) > 0:
+                for val in res:
+                    for key in val.keys():
+                        result_set.append(val[key])
+            return result_set
+
+        self.restServer = self.get_nodes_from_services_map(service_type="n1ql")
+        self.rest = RestConnection(self.restServer)
+        self.rest.set_query_index_api_mode(1)
+        query = query % bucket
+        primary_result = self.run_cbq_query(query)
+        self.rest.set_query_index_api_mode(3)
+        self.log.info(" Analyzing Actual Result")
+
+        actual_result = _gen_dict(sorted(primary_result["results"]))
+        self.log.info(" Analyzing Expected Result")
+        expected_result = _gen_dict(sorted(result["results"]))
+        if len(actual_result) != len(expected_result):
+            return False
+        if actual_result != expected_result:
+            return False
+        return True
