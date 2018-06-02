@@ -95,11 +95,15 @@ class compression(XDCRNewBaseTest):
         self.sleep(60)
         compression_type = self._input.param("compression_type", "Snappy")
         self._set_compression_type(self.src_cluster, bucket_prefix + "1", compression_type)
+        self._set_compression_type(self.src_cluster, bucket_prefix + "2")
         if self.chain_length > 2 and self.topology == TOPOLOGY.CHAIN:
             self._set_compression_type(self.dest_cluster, bucket_prefix + "1", compression_type)
+            self._set_compression_type(self.dest_cluster, bucket_prefix + "2")
         if self.chain_length > 2 and self.topology == TOPOLOGY.RING:
             self._set_compression_type(self.dest_cluster, bucket_prefix + "1", compression_type)
+            self._set_compression_type(self.dest_cluster, bucket_prefix + "2")
             self._set_compression_type(self.c3_cluster, bucket_prefix + "1", compression_type)
+            self._set_compression_type(self.c3_cluster, bucket_prefix + "2")
 
         gen_create = BlobGenerator('comprOne-', 'comprOne-', self._value_size, end=self._num_items)
         self.src_cluster.load_all_buckets_from_generator(kv_gen=gen_create)
@@ -138,6 +142,7 @@ class compression(XDCRNewBaseTest):
         self.sleep(60)
         compression_type = self._input.param("compression_type", "Snappy")
         self._set_compression_type(self.src_cluster, "standard_bucket_1", compression_type)
+        self._set_compression_type(self.src_cluster, "standard_bucket_2")
 
         self.src_cluster.pause_all_replications()
 
@@ -163,7 +168,9 @@ class compression(XDCRNewBaseTest):
         self.sleep(60)
         compression_type = self._input.param("compression_type", "Snappy")
         self._set_compression_type(self.src_cluster, "standard_bucket_1", compression_type)
+        self._set_compression_type(self.src_cluster, "standard_bucket_2")
         self._set_compression_type(self.dest_cluster, "standard_bucket_1", compression_type)
+        self._set_compression_type(self.dest_cluster, "standard_bucket_2")
 
         gen_create = BlobGenerator('comprOne-', 'comprOne-', self._value_size, end=self._num_items)
         self.src_cluster.load_all_buckets_from_generator(kv_gen=gen_create)
@@ -192,7 +199,9 @@ class compression(XDCRNewBaseTest):
         self.sleep(60)
         compression_type = self._input.param("compression_type", "Snappy")
         self._set_compression_type(self.src_cluster, "standard_bucket_1", compression_type)
+        self._set_compression_type(self.src_cluster, "standard_bucket_2")
         self._set_compression_type(self.dest_cluster, "standard_bucket_1", compression_type)
+        self._set_compression_type(self.dest_cluster, "standard_bucket_2")
 
         self.src_cluster.pause_all_replications()
         self.dest_cluster.pause_all_replications()
@@ -228,6 +237,7 @@ class compression(XDCRNewBaseTest):
         self.sleep(60)
         compression_type = self._input.param("compression_type", "Snappy")
         self._set_compression_type(self.src_cluster, "standard_bucket_1", compression_type)
+        self._set_compression_type(self.src_cluster, "standard_bucket_2")
 
         gen_create = BlobGenerator('comprOne-', 'comprOne-', self._value_size, end=self._num_items)
         self.src_cluster.load_all_buckets_from_generator(kv_gen=gen_create)
@@ -254,6 +264,7 @@ class compression(XDCRNewBaseTest):
         self.sleep(60)
         compression_type = self._input.param("compression_type", "Snappy")
         self._set_compression_type(self.src_cluster, "standard_bucket_1", compression_type)
+        self._set_compression_type(self.src_cluster, "standard_bucket_2")
 
         src_conn = RestConnection(self.src_cluster.get_master_node())
         src_conn.set_xdcr_param('standard_bucket_1', 'standard_bucket_1', 'optimisticReplicationThreshold',
@@ -290,6 +301,7 @@ class compression(XDCRNewBaseTest):
         self.sleep(60)
         compression_type = self._input.param("compression_type", "Snappy")
         self._set_compression_type(self.src_cluster, "standard_bucket_1", compression_type)
+        self._set_compression_type(self.src_cluster, "standard_bucket_2")
 
         src_conn = RestConnection(self.src_cluster.get_master_node())
         src_conn.set_xdcr_param('standard_bucket_1', 'standard_bucket_1', 'workerBatchSize', batch_count)
@@ -333,6 +345,7 @@ class compression(XDCRNewBaseTest):
         self.sleep(60)
         compression_type = self._input.param("compression_type", "Snappy")
         self._set_compression_type(self.src_cluster, "standard_bucket_1", compression_type)
+        self._set_compression_type(self.src_cluster, "standard_bucket_2")
 
         self.src_cluster.pause_all_replications()
 
@@ -360,6 +373,7 @@ class compression(XDCRNewBaseTest):
         self.sleep(60)
         compression_type = self._input.param("compression_type", "Snappy")
         self._set_compression_type(self.src_cluster, "standard_bucket_1", compression_type)
+        self._set_compression_type(self.src_cluster, "standard_bucket_2")
 
         self.src_cluster.pause_all_replications()
 
@@ -387,6 +401,7 @@ class compression(XDCRNewBaseTest):
         self.sleep(60)
         compression_type = self._input.param("compression_type", "Snappy")
         self._set_compression_type(self.src_cluster, "standard_bucket_1", compression_type)
+        self._set_compression_type(self.src_cluster, "standard_bucket_2")
 
         self.src_cluster.pause_all_replications()
 
@@ -414,6 +429,7 @@ class compression(XDCRNewBaseTest):
         self.sleep(60)
         compression_type = self._input.param("compression_type", "Snappy")
         self._set_compression_type(self.src_cluster, "standard_bucket_1", compression_type)
+        self._set_compression_type(self.src_cluster, "standard_bucket_2")
 
         self.src_cluster.pause_all_replications()
 
@@ -471,6 +487,7 @@ class compression(XDCRNewBaseTest):
 
         compression_type = self._input.param("compression_type", "Snappy")
         self._set_compression_type(self.src_cluster, "standard_bucket_1", compression_type)
+        self._set_compression_type(self.src_cluster, "standard_bucket_2")
 
         self._wait_for_replication_to_catchup()
 
