@@ -630,9 +630,19 @@ class RQGTests(BaseTestCase):
                             table_map=map,
                             n1ql_queries=data_info)
             verification_query = "SELECT * from {0} ORDER by primary_key_id".format(table_name)
-            self.sleep(2)
+
             self._run_basic_crud_test(data_info[0], verification_query,  test_case_number, result_queue, failure_record_queue=failure_record_queue, table_name=table_name)
             self._populate_delta_buckets(table_name)
+            self.wait_for_num_items(table_name, 1000)
+
+    def wait_for_num_items(self,table, num_items):
+        num_items_reached = False
+        while not num_items_reached:
+            self.sleep(1)
+            query = "SELECT COUNT(*) from {0}".format(self.database+"_"+table)
+            result = self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_server)
+            if result["results"][0]["$1"] == num_items:
+                num_items_reached = True
 
     def _run_basic_test(self, test_data, test_case_number, result_queue, failure_record_queue=None):
         data = test_data
