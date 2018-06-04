@@ -1,8 +1,7 @@
-import time, os
+import time
 
 from threading import Thread
 import threading
-from basetestcase import BaseTestCase
 from rebalance.rebalance_base import RebalanceBaseTest
 from membase.api.exception import RebalanceFailedException
 from membase.api.rest_client import RestConnection, RestHelper
@@ -155,7 +154,7 @@ class RebalanceInTests(RebalanceBaseTest):
     Once all nodes have been rebalanced in the test is finished."""
     def rebalance_in_with_ops(self):
         gen_delete = BlobGenerator('mike', 'mike-', self.value_size, start=self.num_items / 2, end=self.num_items)
-        gen_create = BlobGenerator('mike', 'mike-', self.value_size, start=self.num_items + 1, end=self.num_items * 3/2)
+        gen_create = BlobGenerator('mike', 'mike-', self.value_size, start=self.num_items + 1, end=self.num_items * 3 / 2)
         servs_in = [self.servers[i + self.nodes_init] for i in range(self.nodes_in)]
         tasks = [self.cluster.async_rebalance(self.servers[:self.nodes_init], servs_in, [])]
         if(self.doc_ops is not None):
@@ -704,82 +703,3 @@ class RebalanceInTests(RebalanceBaseTest):
                                                      user=self.master.rest_username, password=self.master.rest_password)
         self.assertTrue('\n'.join(output).find('SUCCESS') != -1, 'RAM wasn\'t chnged')
         rebalance.result()
-
-
-class RebalanceWithPillowFight(BaseTestCase):
-
-    def load(self, server, items, batch=1000):
-        import subprocess
-        from lib.testconstants import COUCHBASE_FROM_SPOCK
-        rest = RestConnection(server)
-        cmd = "cbc version"
-        rc = subprocess.call(cmd, shell=True)
-        if rc != 0:
-            self.fail("Exception running cbc-version: subprocess module returned non-zero response!")
-        cmd = "cbc-pillowfight -U couchbase://{0}/default -I {1} -M 50 -B 1000 --populate-only --json" \
-            .format(server.ip, items, batch)
-        if rest.get_nodes_version()[:5] in COUCHBASE_FROM_SPOCK:
-            cmd += " -u Administrator -P password"
-        self.log.info("Executing '{0}'...".format(cmd))
-        rc = subprocess.call(cmd, shell=True)
-        if rc != 0:
-            self.fail("Exception running cbc-pillowfight: subprocess module returned non-zero response!")
-
-    def check_dataloss(self, server, bucket):
-        from couchbase.bucket import Bucket
-        from couchbase.exceptions import NotFoundError
-        from lib.memcached.helper.data_helper import VBucketAwareMemcached
-        bkt = Bucket('couchbase://{0}/{1}'.format(server.ip, bucket.name))
-        rest = RestConnection(self.master)
-        VBucketAware = VBucketAwareMemcached(rest, bucket.name)
-        _, _, _ = VBucketAware.request_map(rest, bucket.name)
-        batch_start = 0
-        batch_end = 0
-        batch_size = 10000
-        errors = []
-        while self.num_items > batch_end:
-            batch_end = batch_start + batch_size
-            keys = []
-            for i in xrange(batch_start, batch_end, 1):
-                keys.append(str(i).rjust(20, '0'))
-            try:
-                bkt.get_multi(keys)
-                self.log.info("Able to fetch keys starting from {0} to {1}".format(keys[0], keys[len(keys)-1]))
-            except Exception as e:
-                self.log.error(e)
-                self.log.info("Now trying keys in the batch one at a time...")
-                key = ''
-                try:
-                    for key in keys:
-                        bkt.get(key)
-                except NotFoundError:
-                    vBucketId = VBucketAware._get_vBucket_id(key)
-                    errors.append("Missing key: {0}, VBucketId: {1}".
-                                  format(key, vBucketId))
-            batch_start += batch_size
-        return errors
-
-    def test_dataloss_rebalance_in(self):
-        rest = RestConnection(self.master)
-        bucket = rest.get_buckets()[0]
-        load_thread = Thread(target=self.load,
-                               name="pillowfight_load",
-                               args=(self.master, self.num_items))
-
-        self.log.info('starting the load thread...')
-        load_thread.start()
-        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
-                                                 self.servers[self.nodes_init:self.nodes_init + self.nodes_in],
-                                                 [])
-        rebalance.result()
-        load_thread.join()
-        errors = self.check_dataloss(self.master, bucket)
-        if errors:
-            self.log.info("Printing missing keys:")
-        for error in errors:
-            print error
-        if self.num_items != rest.get_active_key_count(bucket):
-            self.fail("FATAL: Data loss detected!! Docs loaded : {0}, docs present: {1}".
-                          format(self.num_items, rest.get_active_key_count(bucket) ))
-
-
