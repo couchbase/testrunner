@@ -184,9 +184,9 @@ class BackupRestoreValidationBase:
                 to_file_name = "{0}-{1}-{2}.json".format(bucket, "range", backup_num)
             to_file_path = os.path.join(backup_validation_path, to_file_name)
             output, error = shell.execute_command("cat " + from_file_name)
-            shell.disconnect()
             output = [x.strip(' ') for x in output]
             if output:
                 output = " ".join(output)
             with open(to_file_path, 'w') as f:
                 json.dump(output, f)
+        shell.disconnect()
