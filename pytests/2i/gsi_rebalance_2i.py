@@ -3013,3 +3013,176 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
             self.assertEqual(expected['metrics']['resultCount'], actual_results['metrics']['resultCount'])
         else:
             self.n1ql_helper.run_cbq_query(query="DROP INDEX `travel-sample`.idx", server=self.n1ql_node)
+
+    def test_kv_and_gsi_rebalance_with_high_ops(self):
+        self.rate_limit = self.input.param("rate_limit", 100000)
+        self.batch_size = self.input.param("batch_size", 1000)
+        self.doc_size = self.input.param("doc_size", 100)
+        self.instances = self.input.param("instances", 1)
+        self.threads = self.input.param("threads", 1)
+        self.use_replica_to = self.input.param("use_replica_to", False)
+        self.kv_node_out = self.input.param("kv_node_out")
+        self.index_node_out = self.input.param("index_node_out")
+        self.num_docs = self.input.param("num_docs", 30000)
+        # self.run_operation(phase="before")
+        create_index_queries = ["CREATE INDEX idx_body ON default(body) USING GSI",
+                              "CREATE INDEX idx_update ON default(`update`) USING GSI",
+                              "CREATE INDEX idx_val ON default(val) USING GSI",
+                              "CREATE INDEX idx_body1 ON default(body) USING GSI",
+                              "CREATE INDEX idx_update1 ON default(`update`) USING GSI",
+                              "CREATE INDEX idx_val1 ON default(val) USING GSI"]
+        for create_index_query in create_index_queries:
+            self._create_replica_index(create_index_query)
+        load_thread = threading.Thread(target=self.load_buckets_with_high_ops,
+                             name="gen_high_ops_load",
+                             args=(self.master, self.buckets[0], self.num_docs,
+                                   self.batch_size,
+                                   self.threads, 0,
+                                   self.instances, 0))
+        load_thread.start()
+        self.sleep(30)
+        map_before_rebalance, stats_map_before_rebalance = self._return_maps()
+        services_in = ["kv"]
+        # do a swap rebalance of kv
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]],
+                                                 [self.servers[self.kv_node_out]], services=services_in)
+        reached = RestHelper(self.rest).rebalance_reached()
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        rebalance.result()
+        load_thread.join()
+        errors = self.check_dataloss_for_high_ops_loader(self.master, self.buckets[0],
+                                                         self.num_docs ,
+                                                         self.batch_size,
+                                                         self.threads,
+                                                         0,
+                                                         False, 0, 0,
+                                                         False, 0)
+        if errors:
+            self.log.info("Printing missing keys:")
+        for error in errors:
+            print error
+        if self.num_docs + self.docs_per_day != self.rest.get_active_key_count(self.buckets[0]):
+            self.fail("FATAL: Data loss detected!! Docs loaded : {0}, docs present: {1}".
+                      format(self.num_docs + self.docs_per_day, self.rest.get_active_key_count(self.buckets[0])))
+        load_thread1 = threading.Thread(target=self.load_buckets_with_high_ops,
+                             name="gen_high_ops_load",
+                             args=(self.master, self.buckets[0], self.num_docs * 2,
+                                   self.batch_size,
+                                   self.threads, 0,
+                                   self.instances, 0))
+        load_thread1.start()
+        # do a swap rebalance of index
+        services_in = ["index"]
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init + 1], [self.servers[self.nodes_init+1]]
+                                                 , [self.servers[self.index_node_out]], services=services_in)
+        reached = RestHelper(self.rest).rebalance_reached()
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        rebalance.result()
+        self.sleep(30)
+        load_thread1.join()
+        errors = self.check_dataloss_for_high_ops_loader(self.master, self.buckets[0],
+                                                         self.num_docs * 2 ,
+                                                         self.batch_size,
+                                                         self.threads,
+                                                         0,
+                                                         False, 0, 0,
+                                                         False, 0)
+        if errors:
+            self.log.info("Printing missing keys:")
+        for error in errors:
+            print error
+        if self.num_docs * 2 +  self.docs_per_day != self.rest.get_active_key_count(self.buckets[0]):
+            self.fail("FATAL: Data loss detected!! Docs loaded : {0}, docs present: {1}".
+                      format(self.num_docs * 2 +  self.docs_per_day, self.rest.get_active_key_count(self.buckets[0])))
+        map_after_rebalance, stats_map_after_rebalance = self._return_maps()
+        # validate the results
+        self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance, map_after_rebalance,
+                                                      stats_map_before_rebalance, stats_map_after_rebalance,
+                                                      [self.servers[self.nodes_init + 1]],
+                                                      [self.servers[self.index_node_out]], swap_rebalance=True)
+
+    def load_buckets_with_high_ops(self, server, bucket, items, batch=20000,
+                                   threads=5, start_document=0, instances=1, ttl=0):
+        import subprocess
+        cmd_format = "python scripts/high_ops_doc_gen.py  --node {0} --bucket {1} --user {2} --password {3} " \
+                     "--count {4} --batch_size {5} --threads {6} --start_document {7} --cb_version {8} --instances {9} --ttl {10}"
+        cb_version = RestConnection(server).get_nodes_version()[:3]
+        if self.num_replicas > 0 and self.use_replica_to:
+            cmd_format = "{} --replicate_to 1".format(cmd_format)
+        cmd = cmd_format.format(server.ip, bucket.name, server.rest_username,
+                                server.rest_password,
+                                items, batch, threads, start_document,
+                                cb_version, instances, ttl)
+        self.log.info("Running {}".format(cmd))
+        result = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE,
+                                  stderr=subprocess.PIPE)
+        output = result.stdout.read()
+        error = result.stderr.read()
+        if error:
+            self.log.error(error)
+            self.fail("Failed to run the loadgen.")
+        if output:
+            loaded = output.split('\n')[:-1]
+            total_loaded = 0
+            for load in loaded:
+                total_loaded += int(load.split(':')[1].strip())
+            self.assertEqual(total_loaded, items,
+                             "Failed to load {} items. Loaded only {} items".format(
+                                 items,
+                                 total_loaded))
+
+    def check_dataloss_for_high_ops_loader(self, server, bucket, items,
+                                           batch=20000, threads=5,
+                                           start_document=0,
+                                           updated=False, ops=0, ttl=0, deleted=False, deleted_items=0):
+        import subprocess
+        from lib.memcached.helper.data_helper import VBucketAwareMemcached
+
+        cmd_format = "python scripts/high_ops_doc_gen.py  --node {0} --bucket {1} --user {2} --password {3} " \
+                     "--count {4} " \
+                     "--batch_size {5} --threads {6} --start_document {7} --cb_version {8} --validate"
+        cb_version = RestConnection(server).get_nodes_version()[:3]
+        if updated:
+            cmd_format = "{} --updated --ops {}".format(cmd_format, ops)
+        if deleted:
+            cmd_format = "{} --deleted --deleted_items {}".format(cmd_format, deleted_items)
+        if ttl > 0:
+            cmd_format = "{} --ttl {}".format(cmd_format, ttl)
+        cmd = cmd_format.format(server.ip, bucket.name, server.rest_username,
+                                server.rest_password,
+                                int(items), batch, threads, start_document, cb_version)
+        self.log.info("Running {}".format(cmd))
+        result = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE,
+                                  stderr=subprocess.PIPE)
+        output = result.stdout.read()
+        error = result.stderr.read()
+        errors = []
+        rest = RestConnection(self.master)
+        VBucketAware = VBucketAwareMemcached(rest, bucket.name)
+        _, _, _ = VBucketAware.request_map(rest, bucket.name)
+        if error:
+            self.log.error(error)
+            self.fail("Failed to run the loadgen validator.")
+        if output:
+            loaded = output.split('\n')[:-1]
+            for load in loaded:
+                if "Missing keys:" in load:
+                    keys = load.split(":")[1].strip().replace('[', '').replace(']', '')
+                    keys = keys.split(',')
+                    for key in keys:
+                        key = key.strip()
+                        key = key.replace('\'', '').replace('\\', '')
+                        vBucketId = VBucketAware._get_vBucket_id(key)
+                        errors.append(
+                            ("Missing key: {0}, VBucketId: {1}".format(key, vBucketId)))
+                if "Mismatch keys: " in load:
+                    keys = load.split(":")[1].strip().replace('[', '').replace(']', '')
+                    keys = keys.split(',')
+                    for key in keys:
+                        key = key.strip()
+                        key = key.replace('\'', '').replace('\\', '')
+                        vBucketId = VBucketAware._get_vBucket_id(key)
+                        errors.append((
+                            "Wrong value for key: {0}, VBucketId: {1}".format(
+                                key, vBucketId)))
+        return errors
