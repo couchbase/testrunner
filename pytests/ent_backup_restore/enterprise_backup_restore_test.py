@@ -3263,11 +3263,16 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                                 end=self.num_items)
         self._load_all_buckets(self.master, gen, "create", 0)
         self.backup_create()
-        index_definition = INDEX_DEFINITION
-        index_name = index_definition['name'] = "age"
+
         rest_src_fts = RestConnection(self.servers[1])
         try:
-            rest_src_fts.create_fts_index(index_name, index_definition)
+            from pytests.fts.fts_callable import FTSCallable
+            fts_obj = FTSCallable(nodes=self.servers, es_validate=False)
+            index = fts_obj.create_default_index(
+                index_name="index_default",
+                bucket_name="default")
+            fts_obj.wait_for_indexing_complete()
+            alias = fts_obj.create_alias(target_indexes=[index])
         except Exception, ex:
             self.fail(ex)
         self.backup_cluster_validate()
@@ -3281,14 +3286,20 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         rest_target_fts = RestConnection(self.input.clusters[0][1])
         status = False
         try:
-            status, content = rest_target_fts.get_fts_index_definition(index_name)
+            status, content = rest_target_fts.get_fts_index_definition(index.name)
             self.assertTrue(status and content['status'] == 'ok',
                             "FTS index not found in restore cluster as expected")
             self.log.info("FTS index found in restore cluster as expected")
+            status, content = rest_target_fts.get_fts_index_definition(alias.name)
+            self.assertTrue(status and content['status'] == 'ok',
+                            "FTS alias not found in restore cluster as expected")
+            self.log.info("FTS alias found in restore cluster as expected")
         finally:
-            rest_src_fts.delete_fts_index(index_name)
+            rest_src_fts.delete_fts_index(index.name)
+            rest_src_fts.delete_fts_index(alias.name)
             if status:
-                rest_target_fts.delete_fts_index(index_name)
+                rest_target_fts.delete_fts_index(index.name)
+                rest_target_fts.delete_fts_index(alias.name)
 
     def test_backup_restore_with_xdcr(self):
         """
