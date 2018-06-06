@@ -1678,7 +1678,7 @@ class StableTopFTS(FTSBaseTest):
         f.write(cert)
         f.close()
 
-        cmd = "curl -g -k -E cert.pem "+\
+        cmd = "curl -g -k "+\
               "-XPUT -H \"Content-Type: application/json\" "+\
               "-u Administrator:password "+\
               "https://{0}:{1}/api/index/default_idx -d ".\
@@ -1688,7 +1688,7 @@ class StableTopFTS(FTSBaseTest):
         self.log.info("Running command : {0}".format(cmd))
         output = subprocess.check_output(cmd, shell=True)
         if json.loads(output) == {"status":"ok"}:
-            query = "curl -g -k -E cert.pem " + \
+            query = "curl -g -k " + \
                     "-XPOST -H \"Content-Type: application/json\" " + \
                     "-u Administrator:password " + \
                     "https://{0}:18094/api/index/default_idx/query -d ". \
