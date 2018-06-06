@@ -4695,7 +4695,8 @@ class RestParser(object):
         bucket.name = parsed['name']
         bucket.uuid = parsed['uuid']
         bucket.type = parsed['bucketType']
-        bucket.port = parsed['proxyPort']
+        if 'proxyPort' in parsed:
+            bucket.port = parsed['proxyPort']
         bucket.authType = parsed["authType"]
         bucket.saslPassword = parsed["saslPassword"]
         bucket.nodes = list()
