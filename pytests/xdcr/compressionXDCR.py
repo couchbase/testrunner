@@ -251,11 +251,6 @@ class compression(XDCRNewBaseTest):
 
         self._wait_for_replication_to_catchup()
 
-        self._verify_compression(cluster=self.src_cluster,
-                                 compr_bucket_name="standard_bucket_1",
-                                 uncompr_bucket_name="standard_bucket_2",
-                                 compression_type=compression_type,
-                                 repl_time=repl_time)
         self.verify_results()
 
     def test_compression_with_optimistic_threshold_change(self):
@@ -360,11 +355,6 @@ class compression(XDCRNewBaseTest):
 
         self._wait_for_replication_to_catchup()
 
-        self._verify_compression(cluster=self.src_cluster,
-                                 compr_bucket_name="standard_bucket_1",
-                                 uncompr_bucket_name="standard_bucket_2",
-                                 compression_type=compression_type,
-                                 repl_time=repl_time)
         self.verify_results()
 
     def test_compression_with_rebalance_out(self):
@@ -491,11 +481,6 @@ class compression(XDCRNewBaseTest):
 
         self._wait_for_replication_to_catchup()
 
-        self._verify_compression(cluster=self.src_cluster,
-                                 compr_bucket_name="standard_bucket_1",
-                                 uncompr_bucket_name="standard_bucket_2",
-                                 compression_type=compression_type,
-                                 repl_time=repl_time)
         self.verify_results()
 
     def test_compression_with_bixdcr_and_compression_one_way(self):
