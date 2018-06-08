@@ -12,34 +12,33 @@ select_from:
 	OUTER_BUCKET_NAME.* ;
 
 from_bucket:
-	(SELECT from_select FROM BUCKET_NAME WHERE complex_condition ORDER BY field LIMIT 30) ALIAS |
-	(SELECT from_select FROM BUCKET_NAME WHERE complex_condition LIMIT 30) ALIAS |
+	#(SELECT from_select FROM BUCKET_NAME WHERE complex_condition LIMIT 30) ALIAS |
 	BUCKET_NAME | BUCKET_NAME | BUCKET_NAME | BUCKET_NAME |
 	BUCKET_NAME | BUCKET_NAME ;
-
-from_select:-
-	*  | field_list ;
 
 #JOIN RULES
 
 joins:
-	join_type BUCKET_NAME ON ( ansi_joins_complex_condition ) | joins join_type BUCKET_NAME ON ( ansi_joins_complex_condition ) |  join_type BUCKET_NAME ON ( ansi_joins_complex_condition ) joins ;
+	join_type BUCKET_NAME ON ( ansi_joins_complex_condition ) | join_type BUCKET_NAME ON ( ansi_joins_complex_condition ) |
+	join_type BUCKET_NAME ON ( ansi_joins_complex_condition ) | join_type BUCKET_NAME ON ( ansi_joins_complex_condition )
+	joins join_type BUCKET_NAME ON ( ansi_joins_complex_condition ) |  join_type BUCKET_NAME ON ( ansi_joins_complex_condition ) joins ;
 
 join_type:
-	LEFT JOIN | INNER JOIN;
+	LEFT JOIN | INNER JOIN | INNER JOIN | INNER JOIN | INNER JOIN | INNER JOIN | INNER JOIN | INNER JOIN | INNER JOIN |
+	INNER JOIN | INNER JOIN | INNER JOIN | INNER JOIN | INNER JOIN | INNER JOIN ;
 
 ansi_joins_complex_condition:
 	NOT (join_condition) | join_condition | join_condition | join_condition | join_condition | join_condition;
 
 join_condition:
 	join_numeric_condition | join_string_condition | (join_string_condition AND join_numeric_condition) |
-	(join_numeric_condition OR join_string_condition) | (join_string_condition AND join_numeric_condition) |  (join_string_condition OR join_numeric_condition) |
+	(join_numeric_condition OR join_string_condition) | (join_string_condition AND join_numeric_condition) |
 	 (join_string_condition AND join_numeric_condition) | (join_numeric_condition OR join_string_condition) |
 	 (join_numeric_condition AND join_string_condition) | (join_numeric_condition AND join_string_condition AND join_numeric_condition) |
-	 (join_numeric_condition AND join_string_condition) | (join_numeric_condition AND join_string_condition AND join_numeric_condition) |
+	 (join_numeric_condition AND join_string_condition) |
 	 (join_string_condition AND join_numeric_condition) | (join_string_condition AND join_numeric_condition) |
-	 (join_numeric_condition AND join_string_condition) | (join_numeric_condition AND join_string_condition AND join_string_condition) |
-	 (join_numeric_condition AND join_string_condition) | (join_numeric_condition AND join_string_condition AND join_string_condition) |
+	 (join_numeric_condition AND join_string_condition) |
+	 (join_numeric_condition AND join_string_condition) |
 	 (join_string_condition AND join_numeric_condition) | (join_string_condition AND join_numeric_condition) | (join_string_condition AND join_string_condition) |
 	 (join_numeric_condition AND join_numeric_condition);
 
@@ -111,21 +110,11 @@ join_numeric_condition:
 	previous_numeric_field > current_numeric_field |
 	previous_numeric_field  >= current_numeric_field |
 	previous_numeric_field  <= current_numeric_field |
-	(join_numeric_condition) AND (join_numeric_condition)|
-	(join_numeric_condition) OR (join_numeric_condition)|
 	NOT (join_numeric_condition) |
-	join_numeric_is_not_null |
-	join_numeric_not_equals_condition |
-	join_numeric_is_null ;
+	join_numeric_not_equals_condition;
 
 join_numeric_not_equals_condition:
 	previous_numeric_field != current_numeric_field ;
-
-join_numeric_is_not_null:
-	CURRENT_TABLE.NUMERIC_FIELD IS NOT NULL;
-
-join_numeric_is_null:
-	CURRENT_TABLE.NUMERIC_FIELD IS NULL;
 
 previous_numeric_field:
 	PREVIOUS_TABLE.NUMERIC_FIELD;
@@ -216,21 +205,12 @@ join_string_condition:
 	previous_string_field > current_string_field |
 	previous_string_field  >= current_string_field |
 	previous_string_field  <= current_string_field |
-	(join_string_condition) AND (join_string_condition) |
-	(join_string_condition) OR (join_string_condition) |
 	NOT (join_string_condition) |
-	join_string_is_not_null |
-	join_string_is_null |
 	join_string_not_equals_condition;
 
 join_string_not_equals_condition:
 	previous_string_field != current_string_field | previous_string_field <> current_string_field ;
 
-join_string_is_not_null:
-	current_string_field IS NOT NULL;
-
-join_string_is_null:
-	current_string_field IS NULL;
 
 previous_string_field:
 	PREVIOUS_TABLE.STRING_FIELD;
@@ -265,14 +245,22 @@ current_bool_field:
 	CURRENT_TABLE.BOOL_FIELD;
 
 complex_condition:
-	NOT (condition) | (condition) AND (condition) | (condition) OR (condition) | (condition) AND (condition) OR (condition) AND (condition) | condition | condition | condition | condition | condition | condition |
+	NOT (condition) | (condition) AND (condition) | (condition) OR (condition) | condition | condition | condition | condition | condition | condition |
 	condition | condition | condition | condition | condition | condition  | condition | condition | condition ;
 
 condition:
-	numeric_condition | string_condition | bool_condition | (string_condition AND numeric_condition) |
+	numeric_condition | string_condition | bool_condition | numeric_condition | string_condition | bool_condition |
+	numeric_condition | string_condition | bool_condition | numeric_condition | string_condition | bool_condition |
+	numeric_condition | string_condition | bool_condition | numeric_condition | string_condition | bool_condition |
+	numeric_condition | string_condition | bool_condition | numeric_condition | string_condition | bool_condition |
+	numeric_condition | string_condition | bool_condition | numeric_condition | string_condition | bool_condition |
+	numeric_condition | string_condition | bool_condition | numeric_condition | string_condition | bool_condition |
+	numeric_condition | string_condition | bool_condition | numeric_condition | string_condition | bool_condition |
+	numeric_condition | string_condition | bool_condition | numeric_condition | string_condition | bool_condition |
+	numeric_condition | string_condition | bool_condition | numeric_condition | string_condition | bool_condition |
+	(string_condition AND numeric_condition) |
 	(numeric_condition OR string_condition) | (bool_condition AND numeric_condition) |  (bool_condition OR numeric_condition) |
-	 (bool_condition AND numeric_condition) | (bool_condition OR string_condition) |
-	 (bool_condition AND string_condition) | (numeric_condition AND string_condition AND bool_condition);
+	(bool_condition AND numeric_condition) | (bool_condition OR string_condition) | (bool_condition AND string_condition);
 
 field:
 	NUMERIC_FIELD | STRING_FIELD;
@@ -288,8 +276,6 @@ numeric_condition:
 	numeric_field > numeric_value |
 	numeric_field  >= numeric_value |
 	numeric_field  <= numeric_value |
-	(numeric_condition) AND (numeric_condition)|
-	(numeric_condition) OR (numeric_condition)|
 	NOT (numeric_condition) |
 	numeric_between_condition |
 	numeric_is_not_null |
@@ -328,7 +314,7 @@ numeric_is_not_valued:
 	NUMERIC_FIELD IS NOT VALUED;
 
 numeric_is_null:
-	NUMERIC_FIELD IS NULL;
+	NULL_NUM_FIELD IS NULL or NULL_NUM_FIELD IS MISSING;
 
 numeric_field_list:
 	LIST;
@@ -346,8 +332,6 @@ string_condition:
 	string_field > string_values |
 	string_field  >= string_values |
 	string_field  <= string_values |
-	(string_condition) AND (string_condition) |
-	(string_condition) OR (string_condition) |
 	string_not_between_condition |
 	NOT (string_condition) |
 	string_is_not_null |
@@ -377,7 +361,7 @@ string_in_conidtion:
 	string_field IN ( string_field_list );
 
 string_is_null:
-	string_field IS NULL;
+	NULL_STR_FIELD IS NULL OR NULL_STR_FIELD IS MISSING;
 
 string_like_condition:
 	string_field LIKE 'STRING_VALUES%' | string_field LIKE '%STRING_VALUES' | string_field LIKE STRING_VALUES | string_field LIKE '%STRING_VALUES%';

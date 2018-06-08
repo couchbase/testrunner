@@ -448,7 +448,7 @@ class QueryHelper(object):
         new_n1ql = new_n1ql.replace("AND_OUTER_INNER_TABLE_PRIMARY_KEY_COMPARISON", "")
         return {"sql": new_sql, "n1ql": new_n1ql}, outer_table_map
 
-    def _gen_select_tables_info(self, sql="", table_map={}):
+    def _gen_select_tables_info(self, sql="", table_map={}, ansi_joins=False):
         table_name_list = table_map.keys()
         prev_table_list = []
         standard_tokens = ["INNER JOIN", "LEFT JOIN"]
@@ -491,7 +491,11 @@ class QueryHelper(object):
                         data = data.replace("CURRENT_TABLE.BOOL_FIELD", (table_name_alias + "." + table_field)) + " "
                         data = data.replace("PREVIOUS_TABLE.BOOL_FIELD", (previous_table_name_alias+"."+table_field))
                     if "STRING_FIELD" in token:
-                        field_name, values = self._search_field(["varchar", "text", "tinytext", "char"], table_map)
+                        if ansi_joins:
+                            field_name, values = self._search_field(["text", "tinytext", "char"], table_map)
+                        else:
+                            field_name, values = self._search_field(["varchar", "text", "tinytext", "char"], table_map)
+
                         table_field = field_name.split(".")[1]
                         if rewrite_table_name_alias:
                             data = data.replace("PREVIOUS_TABLE.STRING_FIELD",
@@ -517,7 +521,10 @@ class QueryHelper(object):
                         table_field = field_name.split(".")[1]
                         data = data.replace("CURRENT_TABLE.BOOL_FIELD", (table_name_alias + "." + table_field)) + " "
                     if "STRING_FIELD" in token:
-                        field_name, values = self._search_field(["varchar", "text", "tinytext", "char"], table_map)
+                        if ansi_joins:
+                            field_name, values = self._search_field(["text", "tinytext", "char"], table_map)
+                        else:
+                            field_name, values = self._search_field(["varchar", "text", "tinytext", "char"], table_map)
                         table_field = field_name.split(".")[1]
                         data = data.replace("CURRENT_TABLE.STRING_FIELD", (table_name_alias + "." + table_field)) + " "
                     if "NUMERIC_FIELD" in token:
@@ -1231,10 +1238,12 @@ class QueryHelper(object):
         index_name_with_expression = None
         index_name_fields_only = None
         aggregate_pushdown_index_name = None
-        sql, table_map = self._convert_sql_template_to_value(sql=n1ql_template, table_map=table_map, table_name=table_name, aggregate_pushdown=aggregate_pushdown,ansi_joins=ansi_joins)
+        sql, table_map = self._convert_sql_template_to_value(sql=n1ql_template, table_map=table_map, table_name=table_name, aggregate_pushdown=aggregate_pushdown, ansi_joins=ansi_joins)
         n1ql = self._gen_sql_to_nql(sql, ansi_joins)
         sql = self._convert_condition_template_to_value_datetime(sql, table_map, sql_type="sql")
         n1ql = self._convert_condition_template_to_value_datetime(n1ql, table_map, sql_type="n1ql")
+        if "IS MISSING" in sql:
+            sql = sql.replace("IS MISSING", "IS NULL")
         map = { "n1ql": n1ql,
                 "sql": sql,
                 "bucket": str(",".join(table_map.keys())),
@@ -1470,7 +1479,7 @@ class QueryHelper(object):
                 i += 1
             i = 0
             for fields in from_fields:
-                from_fields[i], table_map = self._gen_select_tables_info(fields, table_map)
+                from_fields[i], table_map = self._gen_select_tables_info(fields, table_map, ansi_joins)
                 i += 1
             i = 0
             for fields in where_condition:
@@ -1493,7 +1502,7 @@ class QueryHelper(object):
             new_sql = "SELECT " + select_from[1] + "FROM (SELECT" + select_from[2] + "FROM " + from_fields[1] + "WHERE " \
                       + where_condition[0] + from_fields[0] + "WHERE " + where_condition[1]
         else:
-            from_fields, table_map = self._gen_select_tables_info(from_fields, table_map)
+            from_fields, table_map = self._gen_select_tables_info(from_fields, table_map, ansi_joins)
             aggregate_groupby_orderby_fields = None
             new_sql = "SELECT "
             if "(SELECT" in sql or "( SELECT" in sql:
@@ -1650,6 +1659,12 @@ class QueryHelper(object):
         return map
 
     def _convert_condition_template_to_value(self, sql="", table_map={}):
+        if "NULL_STR_FIELD" in sql:
+            field_name, values = self._search_field(["text", "tinytext", "char"], table_map)
+            sql = sql.replace("NULL_STR_FIELD", field_name)
+        if "NULL_NUM_FIELD" in sql:
+            field_name, values = self._search_field(["int", "mediumint", "double", "float", "decimal"], table_map)
+            sql = sql.replace("NULL_NUM_FIELD", field_name)
         tokens = sql.split(" ")
         string_check = False
         numeric_check = False

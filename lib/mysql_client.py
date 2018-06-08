@@ -138,7 +138,6 @@ class MySQLClient(object):
             elif value == 1:
                 return True
             else:
-                print("********* " + str(value))
                 return None
         if "int" in str(type):
             return value
