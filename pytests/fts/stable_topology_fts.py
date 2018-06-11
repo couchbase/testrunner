@@ -172,6 +172,7 @@ class StableTopFTS(FTSBaseTest):
             finally:
                 NodeHelper.start_couchbase(fts_node)
                 NodeHelper.wait_service_started(fts_node)
+                self.sleep(10)
 
             # "status":"remote consistency error" => expected_hits=-1
             hits, _, _, _ = index.execute_query(query,
@@ -441,7 +442,7 @@ class StableTopFTS(FTSBaseTest):
             index.build_custom_plan_params(new_plan_param)
         index.index_definition['uuid'] = index.get_uuid()
         index.update()
-        self.sleep(5, "Wait for index to get updated...")
+        self.sleep(10, "Wait for index to get updated...")
         self.is_index_partitioned_balanced(index=index)
         _, defn = index.get_index_defn()
         self.log.info(defn['indexDef'])
