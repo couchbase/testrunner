@@ -242,12 +242,12 @@ class CommunityTests(CommunityBaseTest):
         output, error = self.remote.execute_command("ls -lh {0}*/"
                                         .format(self.backup_location))
         self.remote.log_command_output(output, error)
-        o, e = self.remote.execute_command("{0}cbtransfer -u Administrator "\
+        output, error = self.remote.execute_command("{0}cbtransfer -u Administrator "\
                                            "-p password {1}*/*-full/ " \
                                            "stdout: | grep set | uniq | wc -l"\
                                            .format(self.bin_path,
                                                    self.backup_c_location))
-        self.remote.log_command_output(o, e)
+        self.remote.log_command_output(output, error)
         if int(output[0]) != 1000:
             self.fail("full backup did not work in CE. "
                       "Expected 1000, actual: {0}".format(output[0]))
@@ -264,13 +264,13 @@ class CommunityTests(CommunityBaseTest):
         output, error = self.remote.execute_command("ls -lh {0}"
                                                      .format(self.backup_location))
         self.remote.log_command_output(output, error)
-        o, e = self.remote.execute_command("{0}cbtransfer -u Administrator "\
+        output, error = self.remote.execute_command("{0}cbtransfer -u Administrator "\
                                            "-p password {1}*/*-{2}/ stdout: "\
                                            "| grep set | uniq | wc -l"\
                                            .format(self.bin_path,
                                                    self.backup_c_location,
                                                    self.backup_option))
-        self.remote.log_command_output(o, e)
+        self.remote.log_command_output(output, error)
         if int(output[0]) == 2000:
             self.log.info("backup option 'diff' is enforced in CE")
         elif int(output[0]) == 1000:
