@@ -3,6 +3,7 @@ from TestInput import TestInputSingleton
 from security.rbac_base import RbacBase
 from lib.membase.api.rest_client import RestConnection
 import json
+import httplib2
 
 class RbacFTS(FTSBaseTest):
 
@@ -81,6 +82,87 @@ class RbacFTS(FTSBaseTest):
         rest.username = user
         rest.password = password
         return rest
+
+    def create_index_with_no_credentials(self):
+        server = self._cb_cluster.get_random_fts_node()
+        self.load_sample_buckets(server=server,bucketName="travel-sample")
+
+        api = "http://{0}:8094/api/index/travel?sourceType=couchbase&" \
+              "indexType=fulltext-index&sourceName=travel-sample".\
+            format(server.ip)
+        response, content = httplib2.Http(timeout=120).request(api,
+                                                               "PUT",
+                                                               headers=None)
+        self.log.info("Creating index returned : {0}".format(str(response)+ content))
+        if response['status'] in ['200', '201', '202']:
+            self.log.error(content)
+            self.fail("FAIL: Index creation passed without credentials!")
+        else:
+            self.log.info("Index creation without credentials failed as expected!")
+
+    def delete_index_with_no_credentials(self):
+        server = self._cb_cluster.get_random_fts_node()
+        self.load_sample_buckets(server=server, bucketName="travel-sample")
+        index = FTSIndex(self._cb_cluster,
+                         name="travel",
+                         source_name="travel-sample")
+        rest = self.get_rest_handle_for_credentials("Administrator", "password")
+        index.create(rest)
+
+        api = "http://{0}:8094/api/index/travel".format(server.ip)
+        response, content = httplib2.Http(timeout=120).request(api,
+                                                              "DELETE",
+                                                              headers=None)
+        self.log.info("Deleting index definition returned : {0}".format(str(response)+content))
+        if response['status'] in ['200', '201', '202']:
+            self.log.error(content)
+            self.fail("FAIL: Index deletion passed without credentials!")
+        else:
+            self.log.info("Index deletion without credentials failed as expected!")
+
+    def get_index_with_no_credentials(self):
+        server = self._cb_cluster.get_random_fts_node()
+        self.load_sample_buckets(server=server, bucketName="travel-sample")
+        index = FTSIndex(self._cb_cluster,
+                         name="travel",
+                         source_name="travel-sample")
+        rest = self.get_rest_handle_for_credentials("Administrator", "password")
+        index.create(rest)
+
+        api = "http://{0}:8094/api/index/travel".format(server.ip)
+        response, content = httplib2.Http(timeout=120).request(api,
+                                                               "GET",
+                                                               headers=None)
+        self.log.info("Getting index definition returned : {0}".format(str(response)+content))
+        if response['status'] in ['200', '201', '202']:
+            self.log.error(content)
+            self.fail("FAIL: Get index definition passed without credentials!")
+        else:
+            self.log.info("Get index definition without credentials failed as expected!")
+
+    def query_index_with_no_credentials(self):
+        server = self._cb_cluster.get_random_fts_node()
+        self.load_sample_buckets(server=server, bucketName="travel-sample")
+        index = FTSIndex(self._cb_cluster,
+                         name="travel",
+                         source_name="travel-sample")
+        rest = self.get_rest_handle_for_credentials("Administrator", "password")
+        index.create(rest)
+        self.wait_for_indexing_complete()
+
+        api = "http://{0}:8094/api/index/travel/query?".format(server.ip)
+        query = {"match": "Wick", "field": "city"}
+        import urllib
+        api = api + urllib.urlencode(query)
+        response, content = httplib2.Http(timeout=120).request(api,
+                                                               "POST",
+                                                               headers=None)
+        self.log.info("Querying returned : {0}".format(str(response) + content))
+        if response['status'] in ['200', '201', '202']:
+            self.log.error(content)
+            self.fail("FAIL: Querying possible without credentials!")
+        else:
+            self.log.info("Querying without credentials failed as expected!")
 
     def create_index_with_credentials(self, username, password, index_name,
                                       bucket_name="default"):
