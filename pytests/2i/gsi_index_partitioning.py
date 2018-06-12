@@ -30,7 +30,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
             self.node_list.append(server.ip + ":" + server.port)
 
         self.num_queries = self.input.param("num_queries", 100)
-        self.num_index_partitions = self.input.param("num_index_partitions", 16)
+        self.num_index_partitions = self.input.param("num_index_partitions", 8)
         self.recover_failed_node = self.input.param("recover_failed_node",
                                                     False)
         self.op_type = self.input.param("op_type", "create")

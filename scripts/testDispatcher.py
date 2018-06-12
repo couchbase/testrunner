@@ -251,7 +251,7 @@ def main():
                         'version_number={0}&confFile={1}&descriptor={2}&component={3}&subcomponent={4}&' + \
                          'iniFile={5}&parameters={6}&os={7}&initNodes={' \
                          '8}&installParameters={9}&branch={10}&slave={' \
-                         '11}&owners={12}&mailing_list={13}&mode={14}'
+                         '11}&owners={12}&mailing_list={13}&mode={14},timeout={15}'
     if options.url is not None:
         launchString = launchString + '&url=' + options.url
 
@@ -410,7 +410,8 @@ def main():
                                                   urllib.quote(testsToLaunch[i]['owner']),
                                                   urllib.quote(
                                                       testsToLaunch[i]['mailing_list']),
-                                                  testsToLaunch[i]['mode'])
+                                                  testsToLaunch[i]['mode'],
+                                                  testsToLaunch[i]['timeLimit'])
 
 
                         if options.serverType.lower() != 'docker':
