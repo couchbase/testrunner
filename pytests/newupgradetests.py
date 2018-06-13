@@ -2302,6 +2302,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
 
         # Install initial version on the specified nodes
         nodes_init = 2
+        fts_obj = None
         if 5 <= int(self.initial_version[:1]):
             nodes_init = 3
             if initial_services_setting is not None:
@@ -2417,7 +2418,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         elif self.is_fts_in_pre_upgrade:
             self.log.info("Query fts after upgrade to verify")
             for index in fts_obj.fts_indexes:
-               fts_obj.run_query_and_compare(index=index, num_queries=20)
+                fts_obj.run_query_and_compare(index=index, num_queries=20)
             fts_obj.delete_all()
         if 5 > int(self.upgrade_versions[0][:1]) and after_upgrade_services_in:
             if "cbas" in after_upgrade_services_in:

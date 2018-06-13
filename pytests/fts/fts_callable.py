@@ -31,7 +31,7 @@ class FTSCallable:
         fts_obj.delete_all()
     """
 
-    def __init__(self, nodes, es_validate=False):
+    def __init__(self, nodes, es_validate=False, es_reset=True):
         self.log = logger.Logger.get_logger()
         self.cb_cluster = CouchbaseCluster(name="C1", nodes= nodes, log=self.log)
         self.cb_cluster.get_buckets()
@@ -51,9 +51,10 @@ class FTSCallable:
                       " else set \"compare_es\" as False")
         elif self.compare_es:
             self.es = ElasticSearchBase(self.elastic_node, self.log)
-            self.es.delete_index("es_index")
-            self.es.create_empty_index_with_bleve_equivalent_std_analyzer("es_index")
-            self.log.info("Created empty index \'es_index\' on Elastic Search node with "
+            if es_reset:
+                self.es.delete_index("es_index")
+                self.es.create_empty_index_with_bleve_equivalent_std_analyzer("es_index")
+                self.log.info("Created empty index \'es_index\' on Elastic Search node with "
                               "custom standard analyzer(default)")
 
     def create_default_index(self, index_name, bucket_name):
