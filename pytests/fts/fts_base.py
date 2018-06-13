@@ -3583,6 +3583,7 @@ class FTSBaseTest(unittest.TestCase):
                 self.sleep(10, "pIndexes not distributed across %s nodes yet"
                            % num_fts_nodes)
                 nodes_partitions = self.populate_node_partition_map(index)
+                nodes_with_pindexes = len(nodes_partitions.keys())
             else:
                 self.log.info("Validated: pIndexes are distributed across %s "
                               % nodes_partitions.keys())
