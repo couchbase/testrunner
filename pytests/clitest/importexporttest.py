@@ -873,7 +873,7 @@ class ImportExportTests(CliBaseTest):
                     if self.localhost:
                         server.ip = "localhost"
                     exe_cmd_str = "%s%s%s %s -c http%s://%s:%s8091 -u %s -p '%s' " \
-                                  " -b %s -f %s %s -o %s"\
+                                  " -b %s -f %s %s -o %s -t 4"\
                                   % (self.cli_command_path, cmd, self.cmd_ext,
                                      self.imex_type, url_format, server.ip,
                                      secure_port, username, password, bucket.name,
@@ -1093,6 +1093,7 @@ class ImportExportTests(CliBaseTest):
                         self._verify_import_data(options)
 
     def _verify_import_data(self, options):
+        self.buckets = RestConnection(self.master).get_buckets()
         for bucket in self.buckets:
             keys = RestConnection(self.master).get_active_key_count(bucket.name)
         skip_lines = 0
