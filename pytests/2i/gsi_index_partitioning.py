@@ -2254,8 +2254,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         with_statement += " }"
 
         create_index_statement = "CREATE INDEX idx1 on default(name,dept,salary) partition by hash(name) " + with_statement
-        create_primary_index_statement = "CREATE PRIMARY INDEX pidx1 on default partition by hash(meta().id) with {{'num_partition':{0}}}".format(
-                self.num_index_partitions)
+        create_primary_index_statement = "CREATE PRIMARY INDEX pidx1 on default partition by hash(meta().id) " + with_statement
 
         try:
             self.n1ql_helper.run_cbq_query(
@@ -2311,13 +2310,17 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         self.log.info(node_list)
 
         index_data_after = {}
+
         for index in index_names:
+            self.index_servers = self.get_nodes_from_services_map(
+                service_type="index", get_all_nodes=True)
             _, total_item_count_after, _ = self.get_stats_for_partitioned_indexes(
                 index_name=index, node_list=node_list)
             index_data_after[index] = {}
             index_data_after[index]["item_count"] = total_item_count_after
             index_data_after[index][
-                "index_metadata"] = self.rest.get_indexer_metadata()
+                "index_metadata"] = RestConnection(
+                self.index_servers[0]).get_indexer_metadata()
 
         for index in index_names:
             # Validate index item count before and after
@@ -2422,12 +2425,14 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
 
         index_data_after = {}
         for index in index_names:
+            self.index_servers = self.get_nodes_from_services_map(
+                service_type="index", get_all_nodes=True)
             _, total_item_count_after, _ = self.get_stats_for_partitioned_indexes(
                 index_name=index, node_list=node_list)
             index_data_after[index] = {}
             index_data_after[index]["item_count"] = total_item_count_after
             index_data_after[index][
-                "index_metadata"] = self.rest.get_indexer_metadata()
+                "index_metadata"] = RestConnection(self.index_servers[0]).get_indexer_metadata()
 
         for index in index_names:
             # Validate index item count before and after
@@ -2457,8 +2462,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         with_statement += " }"
 
         create_index_statement = "CREATE INDEX idx1 on default(name,dept,salary) partition by hash(name) " + with_statement
-        create_primary_index_statement = "CREATE PRIMARY INDEX pidx1 on default partition by hash(meta().id) with {{'num_partition':{0}}}".format(
-                self.num_index_partitions)
+        create_primary_index_statement = "CREATE PRIMARY INDEX pidx1 on default partition by hash(meta().id) " + with_statement
 
         try:
             self.n1ql_helper.run_cbq_query(
@@ -2517,12 +2521,14 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
 
         index_data_after = {}
         for index in index_names:
+            self.index_servers = self.get_nodes_from_services_map(
+                service_type="index", get_all_nodes=True)
             _, total_item_count_after, _ = self.get_stats_for_partitioned_indexes(
                 index_name=index, node_list=node_list)
             index_data_after[index] = {}
             index_data_after[index]["item_count"] = total_item_count_after
             index_data_after[index][
-                "index_metadata"] = self.rest.get_indexer_metadata()
+                "index_metadata"] = RestConnection(self.index_servers[0]).get_indexer_metadata()
 
         for index in index_names:
             # Validate index item count before and after
@@ -2552,8 +2558,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         with_statement += " }"
 
         create_index_statement = "CREATE INDEX idx1 on default(name,dept,salary) partition by hash(name) " + with_statement
-        create_primary_index_statement = "CREATE PRIMARY INDEX pidx1 on default partition by hash(meta().id) with {{'num_partition':{0}}}".format(
-                self.num_index_partitions)
+        create_primary_index_statement = "CREATE PRIMARY INDEX pidx1 on default partition by hash(meta().id) " + with_statement
 
         try:
             self.n1ql_helper.run_cbq_query(
@@ -2618,12 +2623,14 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
 
         index_data_after = {}
         for index in index_names:
+            self.index_servers = self.get_nodes_from_services_map(
+                service_type="index", get_all_nodes=True)
             _, total_item_count_after, _ = self.get_stats_for_partitioned_indexes(
                 index_name=index, node_list=node_list)
             index_data_after[index] = {}
             index_data_after[index]["item_count"] = total_item_count_after
             index_data_after[index][
-                "index_metadata"] = self.rest.get_indexer_metadata()
+                "index_metadata"] = RestConnection(self.index_servers[0]).get_indexer_metadata()
 
         for index in index_names:
             # Validate index item count before and after
@@ -2718,12 +2725,14 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
 
         index_data_after = {}
         for index in index_names:
+            self.index_servers = self.get_nodes_from_services_map(
+                service_type="index", get_all_nodes=True)
             _, total_item_count_after, _ = self.get_stats_for_partitioned_indexes(
                 index_name=index, node_list=node_list)
             index_data_after[index] = {}
             index_data_after[index]["item_count"] = total_item_count_after
             index_data_after[index][
-                "index_metadata"] = self.rest.get_indexer_metadata()
+                "index_metadata"] = RestConnection(self.index_servers[0]).get_indexer_metadata()
 
         for index in index_names:
             # Validate index item count before and after
@@ -2823,12 +2832,14 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         # Get Stats and index partition map after rebalance
         index_data_after = {}
         for index in index_names:
+            self.index_servers = self.get_nodes_from_services_map(
+                service_type="index", get_all_nodes=True)
             _, total_item_count_after, _ = self.get_stats_for_partitioned_indexes(
                 index_name=index)
             index_data_after[index] = {}
             index_data_after[index]["item_count"] = total_item_count_after
             index_data_after[index][
-                "index_metadata"] = self.rest.get_indexer_metadata()
+                "index_metadata"] = RestConnection(self.index_servers[0]).get_indexer_metadata()
 
         for index in index_names:
             # Validate index item count before and after
@@ -2912,12 +2923,14 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
 
         index_data_after = {}
         for index in index_names:
+            self.index_servers = self.get_nodes_from_services_map(
+                service_type="index", get_all_nodes=True)
             _, total_item_count_after, _ = self.get_stats_for_partitioned_indexes(
                 index_name=index)
             index_data_after[index] = {}
             index_data_after[index]["item_count"] = total_item_count_after
             index_data_after[index][
-                "index_metadata"] = self.rest.get_indexer_metadata()
+                "index_metadata"] = RestConnection(self.index_servers[0]).get_indexer_metadata()
 
         for index in index_names:
             # Validate index item count before and after
@@ -2983,13 +2996,15 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         for index in index_names:
             bucket_item_count, total_item_count_after, _ = self.get_stats_for_partitioned_indexes(
                 index_name=index, node_list=node_list)
+            self.index_servers = self.get_nodes_from_services_map(
+                service_type="index", get_all_nodes=True)
             index_data_after[index] = {}
             index_data_after[index]["item_count"] = total_item_count_after
             index_data_after[index][
-                "index_metadata"] = self.rest.get_indexer_metadata()
+                "index_metadata"] = RestConnection(self.index_servers[0]).get_indexer_metadata()
             total_index_item_count += total_item_count_after
             total_partition_count += self.get_num_partitions_for_index(
-                self.rest.get_indexer_metadata(), index)
+                RestConnection(self.index_servers[0]).get_indexer_metadata(), index)
 
         self.assertEqual(total_index_item_count, bucket_item_count,
                          "Item count in index do not match after cluster ops.")
@@ -3080,12 +3095,14 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
 
         index_data_after = {}
         for index in index_names:
+            self.index_servers = self.get_nodes_from_services_map(
+                service_type="index", get_all_nodes=True)
             _, total_item_count_after, _ = self.get_stats_for_partitioned_indexes(
                 index_name=index, node_list=node_list)
             index_data_after[index] = {}
             index_data_after[index]["item_count"] = total_item_count_after
             index_data_after[index][
-                "index_metadata"] = self.rest.get_indexer_metadata()
+                "index_metadata"] = RestConnection(self.index_servers[0]).get_indexer_metadata()
             self.log.info(index_data_after[index]["index_metadata"])
 
         for index in index_names:
@@ -3187,12 +3204,14 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
 
         index_data_after = {}
         for index in index_names:
+            self.index_servers = self.get_nodes_from_services_map(
+                service_type="index", get_all_nodes=True)
             _, total_item_count_after, _ = self.get_stats_for_partitioned_indexes(
                 index_name=index, node_list=node_list)
             index_data_after[index] = {}
             index_data_after[index]["item_count"] = total_item_count_after
             index_data_after[index][
-                "index_metadata"] = self.rest.get_indexer_metadata()
+                "index_metadata"] = RestConnection(self.index_servers[0]).get_indexer_metadata()
 
         for index in index_names:
             # Validate index item count before and after
@@ -3287,12 +3306,14 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         bucket_item_count = 0
         total_partition_count = 0
         for index in index_names:
+            self.index_servers = self.get_nodes_from_services_map(
+                service_type="index", get_all_nodes=True)
             bucket_item_count, total_item_count_after, _ = self.get_stats_for_partitioned_indexes(
                 index_name=index, node_list=node_list)
             index_data_after[index] = {}
             index_data_after[index]["item_count"] = total_item_count_after
             index_data_after[index][
-                "index_metadata"] = self.rest.get_indexer_metadata()
+                "index_metadata"] = RestConnection(self.index_servers[0]).get_indexer_metadata()
             total_index_item_count += total_item_count_after
             total_partition_count += self.get_num_partitions_for_index(
                 self.rest.get_indexer_metadata(), index)
@@ -4282,7 +4303,8 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
 
         for node in nodes_out:
             node_str = node.ip + ":" + str(node.port)
-            expected_host_list_after.remove(node_str)
+            if node_str in expected_host_list_after:
+                expected_host_list_after.remove(node_str)
 
         is_node_list_correct = False
         if (expected_host_list_after.sort() == host_list_after.sort()):
