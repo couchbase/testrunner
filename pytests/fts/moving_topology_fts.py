@@ -960,6 +960,7 @@ class MovingTopFTS(FTSBaseTest):
         """
             Perform indexing + rebalance + bucket delete in parallel
         """
+        from lib.membase.api.rest_client import RestConnection
         self.load_data()
         self.create_fts_indexes_all_buckets()
         self.sleep(10)
@@ -973,14 +974,14 @@ class MovingTopFTS(FTSBaseTest):
                             name="rebalance",
                             args=())
         reb_thread.start()
-        try:
-            for bucket in self._cb_cluster.get_buckets():
-                self._cb_cluster.delete_bucket(bucket.name)
-        except Exception as e:
-            # deleting buckets during rebalance is not allowed
-            self.log.info("Expected exception: {0}".format(e))
-        else:
-            self.fail("Able to delete buckets during rebalance!")
+        self.sleep(1)
+        for bucket in self._cb_cluster.get_buckets():
+            self.log.info("Deleting bucket {0}".format(bucket.name))
+            if not RestConnection(self._cb_cluster.get_master_node()).delete_bucket(bucket.name):
+                self.log.info("Expected error - cannot delete buckets during rebalance!")
+            else:
+                self.fail("Able to delete buckets during rebalance!")
+
 
     def update_index_during_failover(self):
         """
