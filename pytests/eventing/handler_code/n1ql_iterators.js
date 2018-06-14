@@ -66,7 +66,7 @@ function OnDelete(meta) {
                                                         LIMIT
                                                                 10
                                                         ;
-    res1 = test_try_catch_throw(query_result);
+    var res1 = test_try_catch_throw(query_result);
     if (res1){
         delete dst_bucket[meta.id];
     }
