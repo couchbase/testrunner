@@ -814,6 +814,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         rest = RestConnection(self.master)
         init_time = time.time()
         check = False
+        next_time = init_time
         while not check:
             index_status = rest.get_index_status()
             log.info(index_status)

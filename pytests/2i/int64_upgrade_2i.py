@@ -26,6 +26,7 @@ class UpgradeSecondaryIndexInt64(UpgradeSecondaryIndex):
         self.initial_version = self.input.param('initial_version', '4.6.0-3653')
         self.post_upgrade_gsi_type = self.input.param('post_upgrade_gsi_type', 'memory_optimized')
         self.upgrade_to = self.input.param("upgrade_to")
+        self.int64_verify_results = self.input.param("int64_verify_results", False)
         self.index_batch_size = self.input.param("index_batch_size", -1)
         self.query_results = {}
         self._create_int64_dataset()
@@ -285,7 +286,8 @@ class UpgradeSecondaryIndexInt64(UpgradeSecondaryIndex):
                     msg, check = self.n1ql_helper.run_query_and_verify_result(query=query, server=self.n1ql_node,
                                                                               timeout=500,
                                                                               expected_result=expected_result,
-                                                                              scan_consistency="request_plus")
+                                                                              scan_consistency="request_plus",
+                                                                              verify_results=self.int64_verify_results)
                     if not check:
                         wrong_results.append(query)
                     self.assertEqual(len(wrong_results), 0, str(wrong_results))
