@@ -17,6 +17,8 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
 
     def setUp(self):
         super(QueriesUpgradeTests, self).setUp()
+        if self._testMethodName == 'suite_setUp':
+            return
         self.log.info("==============  QueriesUpgradeTests setup has started ==============")
 
         # general setup
@@ -24,10 +26,12 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
         self.upgrade_type = self.input.param('upgrade_type', None)
         self._all_buckets_flush()
         self.load(self.gens_load, flag=self.item_flag)
+        self.bucket_doc_map = {"default": 2016, "standard_bucket0": 2016}
 
         # feature specific setup
         if self.feature == "ansi-joins":
             self.rest.load_sample("travel-sample")
+            self.bucket_doc_map["travel-sample"] = 31591
         if self.feature == "backfill":
             self.directory_path = self.input.param("directory_path", "/opt/couchbase/var/lib/couchbase/tmp")
             self.create_directory = self.input.param("create_directory", True)
@@ -127,7 +131,13 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
         # Perform pre_upgrade operations on cluster
         # install version defined in self.initial_version (newupgradebasetest)
         self.log.info("Begin n1ql upgrade test: {0}".format(self.upgrade_type))
+        self.log_config_info()
+        self.sleep(60)
+        self.wait_for_bucket_docs(self.bucket_doc_map, 1, 120)
+        self.log_config_info()
         self.ensure_primary_indexes_exist()
+
+        self.log.info("UPGRADE_VERSIONS = " + str(self.upgrade_versions))
 
         # run pre upgrade test
         self.log.info("running pre upgrade test")
@@ -170,8 +180,6 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
         self.log.info("upgraded {0} servers: {1}".format(str(len(mixed_servers)), str(mixed_servers)))
         self.log.info("cluster is now in mixed mode")
 
-        self.sleep(10)
-
         # run mixed mode test
         self.log.info("running mixed mode test")
         self.run_upgrade_test_for_feature(self.feature, "mixed-mode")
@@ -179,6 +187,7 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
 
         # upgrade remaining servers
         self.log.info("upgrading remaining servers")
+
         if self.upgrade_type == "offline":
             # stop server, upgrade, rebalance in
             self.offline_upgrade(remaining_servers)
@@ -198,16 +207,15 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
 
         self.log.info("successfully upgraded {0} remaining servers: {1}".format(str(len(remaining_servers)), str(remaining_servers)))
 
-        self.sleep(10)
+        self.log_config_info()
+        self.sleep(300)
+        self.wait_for_bucket_docs(self.bucket_doc_map, 1, 120)
+        self.log_config_info()
 
         # run post upgrade test
         self.log.info("running post upgrade test")
         self.run_upgrade_test_for_feature(self.feature, "post-upgrade")
         self.log.info("completed post upgrade test")
-
-        self._kill_all_processes_cbq()
-        self._start_command_line_query(self.master)
-        self.create_primary_index_for_3_0_and_greater()
 
     def stop_cb_servers(self, server_list):
         for server in server_list:
@@ -373,7 +381,7 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
         index = "CREATE INDEX idx1 on `travel-sample`(id)"
         idx_list.append((index, ("`travel-sample`", "idx1")))
         query = "select * from default d1 INNER JOIN `travel-sample` t on (d1.join_day == t.id)"
-        queries_to_run.append((query, 1728))
+        queries_to_run.append((query, 288)) # 288 for doc-per-day=1
         self.run_common_body(index_list=idx_list, queries_to_run=queries_to_run)
 
     ###############################
@@ -522,8 +530,8 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
 
     def run_test_queryEvents(self):
         # required for local testing: uncomment below
-        # self.ipAddress = self.master.ip
-        self.ipAddress = self.getLocalIPAddress()
+        self.ipAddress = self.master.ip
+        #self.ipAddress = self.getLocalIPAddress()
         # self.eventID = self.input.param('id', None)
         auditTemp = audit(host=self.master)
         currentState = auditTemp.getAuditStatus()

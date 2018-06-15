@@ -203,16 +203,17 @@ class QueryTests(BaseTestCase):
         except Exception as e:
             pass
 
-        for bucket in self.buckets:
-            docs = 0
+        # get all buckets
+        query_response = self.run_cbq_query("SELECT * FROM system:keyspaces")
+        buckets = [i['keyspaces']['name'] for i in query_response['results']]
+        for bucket in buckets:
+            query_response = self.run_cbq_query("SELECT COUNT(*) FROM `"+bucket+"`")
+            docs = query_response['results'][0]['$1']
             bucket_indexes = []
             for index in current_indexes:
-                if index[1] == bucket.name:
+                if index[1] == bucket:
                     bucket_indexes.append(index[0])
-                    if index[0] == '#primary':
-                        query_response = self.run_cbq_query("SELECT COUNT(*) FROM "+bucket.name)
-                        docs = query_response['results'][0]['$1']
-            self.log.info("Bucket: "+bucket.name)
+            self.log.info("Bucket: "+bucket)
             self.log.info("Indexes: "+str(bucket_indexes))
             self.log.info("Docs: "+str(docs)+"\n")
         self.log.info("=============================================")
@@ -539,7 +540,7 @@ class QueryTests(BaseTestCase):
                     name, keyspace, fields, joined_fields, using, is_primary, where = self.get_index_vars(desired_index)
                     self.log.info("creating index: %s %s %s" % (keyspace, name, using))
                     if is_primary:
-                        self.run_cbq_query("CREATE PRIMARY INDEX ON %s USING %s" % (keyspace, using))
+                        self.run_cbq_query("CREATE PRIMARY INDEX ON `%s` USING %s" % (keyspace, using))
                     else:
                         if where != '':
                             self.run_cbq_query("CREATE INDEX %s ON %s(%s) WHERE %s  USING %s" % (name, keyspace, joined_fields, where, using))
@@ -669,7 +670,19 @@ class QueryTests(BaseTestCase):
             generators.append(DocumentGenerator(name, template, names, jira_tickets, start=index + index, end=end))
         return generators
 
-    def with_retry(self, func, eval=True, delay=5, tries=10):
+    def buckets_docs_ready(self, bucket_docs_map):
+        for bucket in bucket_docs_map.keys():
+            query_response = self.run_cbq_query("SELECT COUNT(*) FROM `"+bucket+"`")
+            docs = query_response['results'][0]['$1']
+            if docs != bucket_docs_map[bucket]:
+                self.log.info("still waiting for bucket: " + bucket + " with docs: " + str(docs) + " to have " + str(bucket_docs_map[bucket]) + " docs")
+                return False
+        return True
+
+    def wait_for_bucket_docs(self, bucket_doc_map, delay, retries):
+        self.with_retry(lambda: self.buckets_docs_ready(bucket_doc_map), delay=delay, tries=retries)
+
+    def with_retry(self, func, eval=True, delay=5, tries=10, func_params=None):
         attempts = 0
         while attempts < tries:
             attempts = attempts + 1
@@ -1055,13 +1068,15 @@ class QueryTests(BaseTestCase):
                         self.log.info(str(ex))
 
     def ensure_primary_indexes_exist(self):
+        query_response = self.run_cbq_query("SELECT * FROM system:keyspaces")
+        buckets = [i['keyspaces']['name'] for i in query_response['results']]
         current_indexes = self.get_parsed_indexes()
         index_list = [{'name': '#primary',
-                       'bucket': bucket.name,
+                       'bucket': bucket,
                        'fields': [],
                        'state': 'online',
                        'using': self.index_type.lower(),
-                       'is_primary': True} for bucket in self.buckets]
+                       'is_primary': True} for bucket in buckets]
         desired_indexes = self.parse_desired_indexes(index_list)
         desired_index_set = self.make_hashable_index_set(desired_indexes)
         current_index_set = self.make_hashable_index_set(current_indexes)
