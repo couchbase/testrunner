@@ -671,13 +671,29 @@ class QueryTests(BaseTestCase):
         return generators
 
     def buckets_docs_ready(self, bucket_docs_map):
+        ready = True
+        rest_conn = RestConnection(self.master)
+        bucket_docs_rest = rest_conn.get_buckets_itemCount()
         for bucket in bucket_docs_map.keys():
             query_response = self.run_cbq_query("SELECT COUNT(*) FROM `"+bucket+"`")
             docs = query_response['results'][0]['$1']
-            if docs != bucket_docs_map[bucket]:
-                self.log.info("still waiting for bucket: " + bucket + " with docs: " + str(docs) + " to have " + str(bucket_docs_map[bucket]) + " docs")
-                return False
-        return True
+            if docs != bucket_docs_map[bucket] or bucket_docs_rest[bucket] != bucket_docs_map[bucket]:
+                self.log.info("Bucket Docs Not Ready For Bucket: " + str(bucket) + "... \n Expected: " + str(bucket_docs_map[bucket]) + "\n Query: " + str(docs) + "\n Rest: " + str(bucket_docs_rest[bucket]))
+                ready = False
+        return ready
+
+    def buckets_status_ready(self, bucket_status_map):
+        ready = True
+        rest_conn = RestConnection(self.master)
+        for bucket in bucket_status_map.keys():
+            status = rest_conn.get_bucket_status(bucket)
+            if status != bucket_status_map[bucket]:
+                self.log.info("still waiting for bucket: " + bucket + " with status: " + str(status) + " to have " + str(bucket_status_map[bucket]) + " status")
+                ready = False
+        return ready
+
+    def wait_for_buckets_status(self, bucket_status_map, delay, retries):
+        self.with_retry(lambda: self.buckets_status_ready(bucket_status_map), delay=delay, tries=retries)
 
     def wait_for_bucket_docs(self, bucket_doc_map, delay, retries):
         self.with_retry(lambda: self.buckets_docs_ready(bucket_doc_map), delay=delay, tries=retries)

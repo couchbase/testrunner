@@ -27,11 +27,13 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
         self._all_buckets_flush()
         self.load(self.gens_load, flag=self.item_flag)
         self.bucket_doc_map = {"default": 2016, "standard_bucket0": 2016}
+        self.bucket_status_map = {"default": "healthy", "standard_bucket0": "healthy"}
 
         # feature specific setup
         if self.feature == "ansi-joins":
             self.rest.load_sample("travel-sample")
             self.bucket_doc_map["travel-sample"] = 31591
+            self.bucket_status_map["travel-sample"] = "healthy"
         if self.feature == "backfill":
             self.directory_path = self.input.param("directory_path", "/opt/couchbase/var/lib/couchbase/tmp")
             self.create_directory = self.input.param("create_directory", True)
@@ -132,13 +134,12 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
         # install version defined in self.initial_version (newupgradebasetest)
         self.log.info("Begin n1ql upgrade test: {0}".format(self.upgrade_type))
         self.log_config_info()
-        self.sleep(60)
-        self.wait_for_bucket_docs(self.bucket_doc_map, 1, 120)
+        self.wait_for_buckets_status(self.bucket_status_map, 5, 120)
+        self.wait_for_bucket_docs(self.bucket_doc_map, 5, 120)
         self.log_config_info()
         self.ensure_primary_indexes_exist()
 
         self.log.info("UPGRADE_VERSIONS = " + str(self.upgrade_versions))
-
         # run pre upgrade test
         self.log.info("running pre upgrade test")
         self.run_upgrade_test_for_feature(self.feature, "pre-upgrade")
@@ -180,6 +181,11 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
         self.log.info("upgraded {0} servers: {1}".format(str(len(mixed_servers)), str(mixed_servers)))
         self.log.info("cluster is now in mixed mode")
 
+        self.log_config_info()
+        self.wait_for_buckets_status(self.bucket_status_map, 5, 120)
+        self.wait_for_bucket_docs(self.bucket_doc_map, 5, 120)
+        self.log_config_info()
+
         # run mixed mode test
         self.log.info("running mixed mode test")
         self.run_upgrade_test_for_feature(self.feature, "mixed-mode")
@@ -208,8 +214,8 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
         self.log.info("successfully upgraded {0} remaining servers: {1}".format(str(len(remaining_servers)), str(remaining_servers)))
 
         self.log_config_info()
-        self.sleep(300)
-        self.wait_for_bucket_docs(self.bucket_doc_map, 1, 120)
+        self.wait_for_buckets_status(self.bucket_status_map, 5, 120)
+        self.wait_for_bucket_docs(self.bucket_doc_map, 5, 120)
         self.log_config_info()
 
         # run post upgrade test
