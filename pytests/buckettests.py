@@ -325,7 +325,6 @@ class CreateBucketTests(BaseTestCase):
             bucket_type = self.input.param("bucket_type", "couchbase")
             options = ' --bucket=default \
                             --bucket-type={0} \
-                            --bucket-port=11222 \
                             --bucket-ramsize=200 \
                             --max-ttl=400 \
                             --wait '.format(bucket_type)
