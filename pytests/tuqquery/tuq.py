@@ -190,9 +190,8 @@ class QueryTests(BaseTestCase):
 ##############################################################################################
 
     def log_config_info(self):
-        self.log.info("==============  System Config: ==============\n")
-        current_indexes = []
         try:
+            current_indexes = []
             query_response = self.run_cbq_query("SELECT * FROM system:indexes")
             current_indexes = [(i['indexes']['name'],
                                 i['indexes']['keyspace_id'],
@@ -200,23 +199,23 @@ class QueryTests(BaseTestCase):
                                            for key in i['indexes']['index_key']]),
                                 i['indexes']['state'],
                                 i['indexes']['using']) for i in query_response['results']]
+            # get all buckets
+            query_response = self.run_cbq_query("SELECT * FROM system:keyspaces")
+            buckets = [i['keyspaces']['name'] for i in query_response['results']]
+            self.log.info("==============  System Config: ==============\n")
+            for bucket in buckets:
+                query_response = self.run_cbq_query("SELECT COUNT(*) FROM `" + bucket + "`")
+                docs = query_response['results'][0]['$1']
+                bucket_indexes = []
+                for index in current_indexes:
+                    if index[1] == bucket:
+                        bucket_indexes.append(index[0])
+                self.log.info("Bucket: " + bucket)
+                self.log.info("Indexes: " + str(bucket_indexes))
+                self.log.info("Docs: " + str(docs) + "\n")
+            self.log.info("=============================================")
         except Exception as e:
             pass
-
-        # get all buckets
-        query_response = self.run_cbq_query("SELECT * FROM system:keyspaces")
-        buckets = [i['keyspaces']['name'] for i in query_response['results']]
-        for bucket in buckets:
-            query_response = self.run_cbq_query("SELECT COUNT(*) FROM `"+bucket+"`")
-            docs = query_response['results'][0]['$1']
-            bucket_indexes = []
-            for index in current_indexes:
-                if index[1] == bucket:
-                    bucket_indexes.append(index[0])
-            self.log.info("Bucket: "+bucket)
-            self.log.info("Indexes: "+str(bucket_indexes))
-            self.log.info("Docs: "+str(docs)+"\n")
-        self.log.info("=============================================")
 
     def fail_if_no_buckets(self):
         buckets = False
