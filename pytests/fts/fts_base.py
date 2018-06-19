@@ -2068,6 +2068,36 @@ class CouchbaseCluster:
                 bucket))
         [task.result() for task in tasks]
 
+    def load_from_high_ops_loader(self, bucket):
+        input = TestInputSingleton.input
+        batch_size = input.param("batch_size", 1000)
+        instances = input.param("instances", 8)
+        threads = input.param("threads", 8)
+        items = input.param("items", 6000000)
+        self.__clusterop.load_buckets_with_high_ops(
+            server=self.__master_node,
+            bucket=bucket,
+            items=items,
+            batch=batch_size,
+            threads=threads,
+            start_document=0,
+            instances=instances,
+            ttl=0)
+
+    def check_dataloss_with_high_ops_loader(self, bucket):
+        self.__clusterop.check_dataloss_for_high_ops_loader(
+            self.__master_node,
+            bucket,
+            TestInputSingleton.input.param("items", 6000000),
+            batch=20000,
+            threads=5,
+            start_document=0,
+            updated=False,
+            ops=0,
+            ttl=0,
+            deleted=False,
+            deleted_items=0)
+
     def async_load_bucket(self, bucket, num_items, exp=0,
                           kv_store=1, flag=0, only_store_hash=True,
                           batch_size=1000, pause_secs=1, timeout_secs=30):

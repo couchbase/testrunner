@@ -1298,3 +1298,79 @@ class MovingTopFTS(FTSBaseTest):
                           % (index.name, index.get_indexed_doc_count()))
         self.wait_for_indexing_complete()
         self.validate_index_count(equal_bucket_doc_count=True)
+
+    def test_kv_and_fts_rebalance_with_high_ops(self):
+        from lib.membase.api.rest_client import RestConnection
+        rest = RestConnection(self._cb_cluster.get_master_node())
+
+        # start loading
+        default_bucket = self._cb_cluster.get_bucket_by_name("default")
+        load_thread = Thread(target=self._cb_cluster.load_from_high_ops_loader,
+                                       name="gen_high_ops_load",
+                                       args=[default_bucket])
+        load_thread.start()
+
+        # create index and query
+        index = self.create_index(
+            self._cb_cluster.get_bucket_by_name('default'),
+            "default_index")
+        load_thread.join()
+        self.wait_for_indexing_complete()
+        
+        # check for dataloss
+        errors = self._cb_cluster.check_dataloss_with_high_ops_loader(default_bucket)
+        if errors:
+            self.log.info("Printing missing keys:")
+            for error in errors:
+                print error
+
+        if self._num_items != rest.get_active_key_count(default_bucket):
+            self.fail("FATAL: Data loss detected!! Docs loaded : {0}, docs present: {1}".
+                      format(self._num_items, rest.get_active_key_count(default_bucket)))
+        else:
+            self.log.info("SUCCESS: No traces of data loss upon verification")
+
+        # load again
+        load_thread = Thread(target=self._cb_cluster.load_from_high_ops_loader,
+                                       name="gen_high_ops_load",
+                                       args=[default_bucket])
+        load_thread.start()
+
+
+        # do a rebalance-out of kv+fts node
+        self._cb_cluster.rebalance_out_master()
+        load_thread.join()
+
+        # check for dataloss
+        errors = self._cb_cluster.check_dataloss_with_high_ops_loader(default_bucket)
+        if errors:
+            self.log.info("Printing missing keys:")
+            for error in errors:
+                print error
+        if self._num_items != rest.get_active_key_count(default_bucket):
+            self.fail("FATAL: Data loss detected!! Docs loaded : {0}, docs present: {1}".
+                      format(self._num_items, rest.get_active_key_count(default_bucket)))
+        else:
+            self.log.info("SUCCESS: No traces of data loss upon verification")
+
+        # load again
+        load_thread = Thread(target=self._cb_cluster.load_from_high_ops_loader,
+                                       name="gen_high_ops_load",
+                                       args=[default_bucket])
+        load_thread.start()
+
+        # do a rebalance-out of fts node
+        self._cb_cluster.rebalance_out()
+        load_thread.join()
+
+        # check for dataloss
+        errors = self._cb_cluster.check_dataloss_with_high_ops_loader(default_bucket)
+        if errors:
+            self.log.info("Printing missing keys:")
+            for error in errors:
+                print error
+        if self._num_items != rest.get_active_key_count(default_bucket):
+            self.fail("FATAL: Data loss detected!! Docs loaded : {0}, docs present: {1}".
+                      format(self._num_items, rest.get_active_key_count(default_bucket)))
+        else:
+            self.log.info("SUCCESS: No traces of data loss upon verification")
