@@ -175,7 +175,14 @@ class NodeInitializeTask(Task):
 
         rest.init_cluster_memoryQuota(username, password, self.quota)
         if rest.is_cluster_compat_mode_greater_than(4.0):
-            rest.set_indexer_storage_mode(username, password, self.gsi_type)
+            if self.gsi_type == "plasma":
+                if not rest.is_cluster_compat_mode_greater_than(5.0):
+                    rest.set_indexer_storage_mode(username, password, "forestdb")
+                else:
+                    rest.set_indexer_storage_mode(username, password, self.gsi_type)
+            else:
+                rest.set_indexer_storage_mode(username, password, self.gsi_type)
+
 
         if self.services:
             status = rest.init_node_services(username= username, password = password,\

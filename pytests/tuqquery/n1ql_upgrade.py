@@ -138,6 +138,7 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
         self.wait_for_bucket_docs(self.bucket_doc_map, 5, 120)
         self.log_config_info()
         self.ensure_primary_indexes_exist()
+        self.wait_for_all_indexes_online()
 
         self.log.info("UPGRADE_VERSIONS = " + str(self.upgrade_versions))
         # run pre upgrade test
@@ -184,6 +185,7 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
         self.log_config_info()
         self.wait_for_buckets_status(self.bucket_status_map, 5, 120)
         self.wait_for_bucket_docs(self.bucket_doc_map, 5, 120)
+        self.wait_for_all_indexes_online()
         self.log_config_info()
 
         # run mixed mode test
@@ -216,6 +218,7 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
         self.log_config_info()
         self.wait_for_buckets_status(self.bucket_status_map, 5, 120)
         self.wait_for_bucket_docs(self.bucket_doc_map, 5, 120)
+        self.wait_for_all_indexes_online()
         self.log_config_info()
 
         # run post upgrade test

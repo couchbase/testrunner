@@ -478,6 +478,11 @@ class QueryTests(BaseTestCase):
         else:
             return False
 
+    def wait_for_all_indexes_online(self):
+        cur_indexes = self.get_parsed_indexes()
+        for index in cur_indexes:
+            self._wait_for_index_online(index['bucket'], index['name'])
+
     def wait_for_index_present(self, bucket_name, index_name, fields_set, using):
         self.with_retry(lambda: self.is_index_present(bucket_name, index_name, fields_set, using), eval=True, delay=1, tries=30)
 
