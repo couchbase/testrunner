@@ -28,7 +28,7 @@ join_type:
 	INNER JOIN | INNER JOIN | INNER JOIN | INNER JOIN | INNER JOIN | INNER JOIN ;
 
 ansi_joins_complex_condition:
-	NOT (join_condition) | join_condition | join_condition | join_condition | join_condition | join_condition;
+    join_condition | join_condition | join_condition | join_condition | join_condition;
 
 join_condition:
 	join_numeric_condition | join_string_condition | (join_string_condition AND join_numeric_condition) |
@@ -110,7 +110,6 @@ join_numeric_condition:
 	previous_numeric_field > current_numeric_field |
 	previous_numeric_field  >= current_numeric_field |
 	previous_numeric_field  <= current_numeric_field |
-	NOT (join_numeric_condition) |
 	join_numeric_not_equals_condition;
 
 join_numeric_not_equals_condition:
@@ -205,7 +204,6 @@ join_string_condition:
 	previous_string_field > current_string_field |
 	previous_string_field  >= current_string_field |
 	previous_string_field  <= current_string_field |
-	NOT (join_string_condition) |
 	join_string_not_equals_condition;
 
 join_string_not_equals_condition:
@@ -259,7 +257,7 @@ condition:
 	numeric_condition | string_condition | bool_condition | numeric_condition | string_condition | bool_condition |
 	numeric_condition | string_condition | bool_condition | numeric_condition | string_condition | bool_condition |
 	(string_condition AND numeric_condition) |
-	(numeric_condition OR string_condition) | (bool_condition AND numeric_condition) |  (bool_condition OR numeric_condition) |
+	(numeric_condition OR string_condition) | (bool_condition AND numeric_condition) |
 	(bool_condition AND numeric_condition) | (bool_condition OR string_condition) | (bool_condition AND string_condition);
 
 field:
