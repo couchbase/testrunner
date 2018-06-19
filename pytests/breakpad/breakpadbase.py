@@ -87,6 +87,7 @@ class BreakpadBase(BaseTestCase):
         err=err.rstrip()
         if err == '':
             killed = True
+            time.sleep(5)
         return killed
 
     def mc_pid(self, index):
