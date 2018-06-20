@@ -138,7 +138,7 @@ class QueryAutoPrepareTests(QueryTests):
     '''Alter the node the index is present on to trigger a re-prepare'''
     def test_alter_index(self):
         try:
-            self.run_cbq_query(query="CREATE INDEX idx on default(join_day)")
+            self.run_cbq_query(query="CREATE INDEX idx on default(join_day) WITH {'nodes':['%s:%s']}" % (self.servers[0].ip, self.servers[0].port))
             self.run_cbq_query(query="PREPARE P1 FROM select * from default WHERE join_day = 10 limit 5",
                                server=self.servers[0])
             self.sleep(2)
@@ -149,7 +149,7 @@ class QueryAutoPrepareTests(QueryTests):
             query_results2 = self.run_cbq_query(query="execute P1", server=self.servers[1])
             self.assertEqual(query_results2['metrics']['resultCount'], 5)
 
-            self.run_cbq_query(query="ALTER INDEX default.idx WITH {'action':'move','nodes':['%s:%s']}" % (self.servers[0].ip, self.servers[0].port))
+            self.run_cbq_query(query="ALTER INDEX default.idx WITH {'action':'move','nodes':['%s:%s']}" % (self.servers[1].ip, self.servers[1].port))
             self.sleep(5)
 
             query_results = self.run_cbq_query(query="execute P1", server=self.servers[0])
@@ -157,6 +157,7 @@ class QueryAutoPrepareTests(QueryTests):
             query_results2 = self.run_cbq_query(query="execute P1", server=self.servers[1])
             self.assertEqual(query_results2['metrics']['resultCount'], 5)
         finally:
+            self.sleep(5)
             self.run_cbq_query(query="DROP INDEX default.idx")
 
     def test_delete_recreate_bucket(self):
@@ -213,7 +214,7 @@ class QueryAutoPrepareTests(QueryTests):
         self.sleep(30)
 
         try:
-            self.run_cbq_query(query="PREPARE p1 from select * from default limit 5", server=self.servers[1])
+            self.run_cbq_query(query="PREPARE p1 from select * from default limit 5", server=self.servers[0])
             self.sleep(5)
         finally:
             remote.start_server()
