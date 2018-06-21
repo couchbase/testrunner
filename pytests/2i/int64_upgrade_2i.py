@@ -112,6 +112,7 @@ class UpgradeSecondaryIndexInt64(UpgradeSecondaryIndex):
         msg = "Cluster is not healthy after upgrade"
         self.assertTrue(self.wait_until_cluster_is_healthy(), msg)
         log.info("Cluster is healthy")
+        self.add_built_in_server_user()
         if self.initial_version.split("-")[0] in UPGRADE_VERS:
             self.multi_drop_index()
             self.sleep(100)
@@ -134,8 +135,6 @@ class UpgradeSecondaryIndexInt64(UpgradeSecondaryIndex):
             node_info = "{0}:{1}".format(node.ip, node.port)
             node_services_list = node_rest.get_nodes_services()[node_info]
             node_services = [",".join(node_services_list)]
-            if "index" in node_services_list:
-                self._create_equivalent_indexes(node)
             log.info("Rebalancing the node out...")
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],[], [node])
             rebalance.result()
@@ -154,12 +153,10 @@ class UpgradeSecondaryIndexInt64(UpgradeSecondaryIndex):
             self.sleep(100)
             node_version = RestConnection(node).get_nodes_versions()
             log.info("{0} node Upgraded to: {1}".format(node.ip, node_version))
-            if "index" in node_services_list:
-                self._recreate_equivalent_indexes(node)
-            self.sleep(30)
         msg = "Cluster is not healthy after upgrade"
         self.assertTrue(self.wait_until_cluster_is_healthy(), msg)
         log.info("Cluster is healthy")
+        self.add_built_in_server_user()
         self.assertTrue(self.wait_until_indexes_online(), "Some indexes are not online")
         log.info("All indexes are online")
         self._query_index("post_upgrade")
@@ -190,6 +187,7 @@ class UpgradeSecondaryIndexInt64(UpgradeSecondaryIndex):
         msg = "Cluster is not healthy after upgrade"
         self.assertTrue(self.wait_until_cluster_is_healthy(), msg)
         log.info("Cluster is healthy")
+        self.add_built_in_server_user()
         self.assertTrue(self.wait_until_indexes_online(), "Some indexes are not online")
         log.info("All indexes are online")
         self._query_index("post_upgrade")
@@ -219,6 +217,7 @@ class UpgradeSecondaryIndexInt64(UpgradeSecondaryIndex):
             msg = "Cluster is not healthy after upgrade"
             self.assertTrue(self.wait_until_cluster_is_healthy(), msg)
             log.info("Cluster is healthy")
+            self.add_built_in_server_user()
             self.assertTrue(self.wait_until_indexes_online(), "Some indexes are not online")
             log.info("All indexes are online")
             self._query_index("post_upgrade")
@@ -229,15 +228,18 @@ class UpgradeSecondaryIndexInt64(UpgradeSecondaryIndex):
 
     def _create_int64_dataset(self):
         generators = []
-        document_template = '{{"name":"{0}", "int_num": {1}, "long_num":{2}, "long_num_partial":{3}, "long_arr": {4}}}'
+        document_template = '{{"name":"{0}", "int_num": {1}, "long_num":{2}, "long_num_partial":{3}, "long_arr": {4},' \
+                            '"int_arr": {5}}}'
         num_items = len(self.full_docs_list)
         for i in range(num_items):
             name = random.choice(FIRST_NAMES)
             int_num = random.randint(-100, 100)
             long_num = random.choice(INT64_VALUES)
             long_arr = [random.choice(INT64_VALUES) for i in range(10)]
+            int_arr = [random.randint(-100, 100) for i in range(10)]
             doc_id = "int64_" + str(random.random()*100000)
-            generators.append(DocumentGenerator(doc_id, document_template, [name], [int_num], [long_num], [long_num], [long_arr], start=0, end=1))
+            generators.append(DocumentGenerator(doc_id, document_template, [name], [int_num], [long_num], [long_num],
+                                                [long_arr], [int_arr], start=0, end=1))
         self.load(generators, buckets=self.buckets, flag=self.item_flag,
                   verify_data=False, batch_size=self.batch_size)
         self.full_docs_list = self.generate_full_docs_list(generators)
