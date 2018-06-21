@@ -21,11 +21,14 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         info = shell.extract_remote_info().type.lower()
         if info == 'linux':
             self.cli_command_location = testconstants.LINUX_COUCHBASE_BIN_PATH
+            self.backup_path = testconstants.LINUX_BACKUP_PATH
         elif info == 'windows':
             self.cmd_ext = ".exe"
             self.cli_command_location = testconstants.WIN_COUCHBASE_BIN_PATH
+            self.backup_path = testconstants.WIN_BACKUP_PATH
         elif info == 'mac':
             self.cli_command_location = testconstants.MAC_COUCHBASE_BIN_PATH
+            self.backup_path = testconstants.LINUX_BACKUP_PATH
         else:
             raise Exception("OS not supported.")
 
@@ -3370,19 +3373,20 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
     def _create_backup(self, server, username="Administrator",
                        password="password"):
         remote_client = RemoteMachineShellConnection(server)
-        command = "rm -rf /tmp/backups"
+
+        command = "rm -rf {0}".format(self.backup_path)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
 
-        command = self.cli_command_location + "cbbackupmgr config --archive /tmp/backups --repo example{0}".format(
-            self.rand)
+        command = self.cli_command_location + "cbbackupmgr config --archive {0} --repo example{1}".format(
+            self.backup_path, self.rand)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
         if error and not filter(
                 lambda x: 'created successfully in archive' in x, output):
             self.fail("cbbackupmgr config failed")
-        cmd = "cbbackupmgr backup --archive /tmp/backups --repo example{0} --cluster couchbase://127.0.0.1 --username {1} --password {2}".format(
-            self.rand, username, password)
+        cmd = "cbbackupmgr backup --archive {0} --repo example{1} --cluster couchbase://127.0.0.1 --username {2} --password {3}".format(
+            self.backup_path, self.rand, username, password)
         command = "{0}{1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
@@ -3396,8 +3400,8 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
     def _create_restore(self, server, username="Administrator",
                         password="password"):
         remote_client = RemoteMachineShellConnection(server)
-        cmd = "cbbackupmgr restore --archive /tmp/backups --repo example{0} --cluster couchbase://127.0.0.1 --username {1} --password {2}".format(
-            self.rand, username, password)
+        cmd = "cbbackupmgr restore --archive {0} --repo example{1} --cluster couchbase://127.0.0.1 --username {2} --password {3}".format(
+            self.backup_path, self.rand, username, password)
         command = "{0}{1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
@@ -3409,7 +3413,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
                                 output):
             self.fail("cbbackupmgr restore failed")
         else:
-            command = "rm -rf /tmp/backups"
+            command = "rm -rf {0}".format(self.backup_path)
             output, error = remote_client.execute_command(command)
             remote_client.log_command_output(output, error)
 

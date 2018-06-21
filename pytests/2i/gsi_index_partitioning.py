@@ -1775,7 +1775,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
                                               index_metadata),
             "Partitioned index created not as expected")
 
-        self.assertTrue(self.validate_partition_map(index_metadata, "idx1",
+        self.assertTrue(self.validate_partition_map(index_metadata, index_name_prefix,
                                                     self.num_index_replicas,
                                                     self.num_index_partitions),
                         "Partition map validation failed")
@@ -1786,7 +1786,6 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
                                            server=self.n1ql_node)
 
         index_stats = self.get_index_stats(perNode=True)
-
         load_balanced = True
         for i in range(0, self.num_index_replicas + 1):
             if i == 0:
@@ -1794,14 +1793,15 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
             else:
                 index_name = index_name_prefix + " (replica {0})".format(str(i))
 
-            hostname, _ = self.n1ql_helper.get_index_details_using_index_name(
+            hosts, _ = self.n1ql_helper.get_index_details_using_index_name(
                 index_name, index_map)
-            num_request_served = index_stats[hostname]['default'][index_name][
-                "num_completed_requests"]
-            self.log.info("# Requests served by %s = %s" % (
-                index_name, num_request_served))
-            if num_request_served == 0:
-                load_balanced = False
+            for hostname in hosts:
+                num_request_served = index_stats[hostname]['default'][index_name][
+                    "num_completed_requests"]
+                self.log.info("# Requests served by %s on %s = %s" % (
+                    index_name, hostname, num_request_served))
+                if num_request_served == 0:
+                    load_balanced = False
 
         if not load_balanced:
             self.fail("Load is not balanced amongst index replicas")
@@ -4236,7 +4236,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
             pmap_host = []
             for idx_name in index_names:
                 for index in index_metadata["status"]:
-                    if index["name"] == idx_name:
+                    if (index["name"] == idx_name) and (host in index["hosts"]):
                         pmap_host += index["partitionMap"][host]
 
             self.log.info(
@@ -4530,7 +4530,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
             index_detail = {}
             index_detail["index_name"] = index_name
             if num_partitions == 0:
-                num_partitions = 16
+                num_partitions = 8
             index_detail["num_partitions"] = num_partitions
             index_detail["num_replica"] = num_replica
             index_detail["defer_build"] = defer_build
