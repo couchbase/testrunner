@@ -267,5 +267,5 @@ class QueryAutoPrepareTests(QueryTests):
         self.sleep(30)
         for i in range(self.nodes_init):
             if not self.servers[i] == self.servers[1]:
-                self.n1ql_helper.run_cbq_query(query="execute '[%s:%s]p1'" % (self.servers[2].ip, self.servers[2].port),
+                self.run_cbq_query(query="execute '[%s:%s]p1'" % (self.servers[2].ip, self.servers[2].port),
                                                server=self.servers[i])
