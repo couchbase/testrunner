@@ -253,7 +253,7 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                 th.join()
             rebalance = self.cluster.async_rebalance(participating_servers,
                                                      [server], [],
-                                                     services=["kv", "index", "n1ql"])
+                                                     services=['kv,n1ql,index'])
             rebalance.result()
 
     def online_upgrade_with_failover(self, upgrade_servers):
@@ -290,7 +290,7 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                 th.join()
             rebalance = self.cluster.async_rebalance(participating_servers,
                                                      [out_server], [server],
-                                                     services=["kv", "index", "n1ql"])
+                                                     services=["kv,index,n1ql"])
             rebalance.result()
             out_server = server
 
@@ -637,7 +637,6 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
         #self.reload_data()
         self.fail_if_no_buckets()
         self.system_xattr_data = self.create_xattr_data(type='system')
-
         # full path query non-leading
         index_statement = "CREATE INDEX idx1 ON default(meta().id, meta().xattrs._system1, join_day) USING " + self.index_type
         query = "SELECT meta().xattrs._system1 FROM default where meta().id is not missing"

@@ -388,7 +388,7 @@ class BucketDeleteTask(Task):
 
 class RebalanceTask(Task):
     def __init__(self, servers, to_add=[], to_remove=[], do_stop=False, progress=30,
-                 use_hostnames=False, services = None):
+                 use_hostnames=False, services=None):
         Task.__init__(self, "rebalance_task")
         self.servers = servers
         self.to_add = to_add
