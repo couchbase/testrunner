@@ -344,9 +344,14 @@ class RebalanceHelper():
         vbucket_active_sum = 0
         vbucket_replica_sum = 0
         vbucket_pending_sum = 0
+        kv_nodes = 0
         all_server_stats = []
         stats_received = True
         nodes = rest.get_nodes()
+        nodes_services = rest.get_nodes_services()
+        for node in nodes_services:
+            if 'kv' in nodes_services[node]:
+                kv_nodes += 1
         for server in nodes:
             #get the stats
             server_stats = rest.get_bucket_stats_for_node(bucket, server)
@@ -387,10 +392,10 @@ class RebalanceHelper():
         if "curr_items_tot" in master_stats:
             log.info('curr_items_tot from master: {0}'.format(master_stats["curr_items_tot"]))
         else:
-           raise Exception("bucket {O} stats doesnt contain 'curr_items_tot':".format(bucket))
-        if replica_factor >= len(nodes):
+           raise Exception("bucket {0} stats doesnt contain 'curr_items_tot':".format(bucket))
+        if replica_factor >= kv_nodes:
             log.warn("the number of nodes is less than replica requires")
-            delta = sum * (len(nodes)) - master_stats["curr_items_tot"]
+            delta = sum * (kv_nodes) - master_stats["curr_items_tot"]
         else:
             delta = sum * (replica_factor + 1) - master_stats["curr_items_tot"]
         delta = abs(delta)
@@ -406,6 +411,7 @@ class RebalanceHelper():
         log.info("delta : {0} missing_percentage : {1} replica_factor : {2}".format(delta, \
             missing_percentage, replica_factor))
         # If no items missing then, return True
+        kv_nodes = 0
         if not delta:
             return True
         return False
