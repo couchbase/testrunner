@@ -12,6 +12,7 @@ import mc_bin_client
 import threading
 from random import randrange, randint
 from fts.fts_base import FTSIndex
+from pytests.fts.fts_callable import FTSCallable
 from memcached.helper.data_helper import  VBucketAwareMemcached
 from remote.remote_util import RemoteMachineShellConnection, RemoteUtilHelper
 from membase.api.rest_client import RestConnection, Bucket
@@ -125,7 +126,6 @@ class UpgradeTests(NewUpgradeBaseTest, EventingBaseTest):
                                           self.upgrade_services_in, start_node = 0)
         self.after_upgrade_services_in = self.get_services(self.out_servers_pool.values(),
                                            self.after_upgrade_services_in, start_node = 0)
-        self.fts_obj = None
 
     def tearDown(self):
         super(UpgradeTests, self).tearDown()
@@ -133,9 +133,14 @@ class UpgradeTests(NewUpgradeBaseTest, EventingBaseTest):
     def test_upgrade(self):
         self.event_threads = []
         self.after_event_threads = []
+        self.fts_obj = None
         try:
-            self.log.info("\n*** Start init operations before upgrade begins ***")
             if self.initialize_events:
+                self.log.info("\n*** Start init operations {0} before upgrade begins ***"\
+                                                          .format(self.initialize_events))
+                if "create_fts_index_query_compare" in self.initialize_events[0]:
+                    self.fts_obj = FTSCallable(nodes=self.servers, es_validate=True)
+                    self.call_ftsCallable = False
                 initialize_events = self.run_event(self.initialize_events)
             self.finish_events(initialize_events)
             if not self.success_run and self.failed_thread is not None:

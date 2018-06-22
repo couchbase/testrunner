@@ -49,6 +49,7 @@ class NewUpgradeBaseTest(BaseTestCase):
         self.initial_version = self.input.param('initial_version', '2.5.1-1083')
         self.initial_vbuckets = self.input.param('initial_vbuckets', 1024)
         self.upgrade_versions = self.input.param('upgrade_version', '2.0.1-170-rel')
+        self.call_ftsCallable = True
         self.upgrade_versions = self.upgrade_versions.split(";")
         self.skip_cleanup = self.input.param("skip_cleanup", False)
         self.init_nodes = self.input.param('init_nodes', True)
@@ -132,7 +133,6 @@ class NewUpgradeBaseTest(BaseTestCase):
         self.partitions_per_pindex = \
             self.input.param("max_partitions_pindex", 32)
         self.index_kv_store = self.input.param("kvstore", None)
-        self.fts_obj = None
         self.log.info("==============  NewUpgradeBaseTest setup has completed ==============")
 
 
@@ -967,7 +967,8 @@ class NewUpgradeBaseTest(BaseTestCase):
         3. Runs queries and compares the results against ElasticSearch
         """
         try:
-            self.fts_obj = FTSCallable(nodes=self.servers, es_validate=True)
+            if self.call_ftsCallable:
+                self.fts_obj = FTSCallable(nodes=self.servers, es_validate=True)
             for bucket in self.buckets:
                 self.fts_obj.create_default_index(
                     index_name="index_{0}".format(bucket.name),
@@ -984,26 +985,26 @@ class NewUpgradeBaseTest(BaseTestCase):
         if queue is not None:
             queue.put(True)
 
-    def update_delete_fts_data_run_queries(self, fts_obj):
+    def update_delete_fts_data_run_queries(self):
         """
         To call after (preferably) upgrade
         :param fts_obj: the FTS object created in create_fts_index_query_compare()
         """
-        fts_obj.async_perform_update_delete()
-        for index in fts_obj.fts_indexes:
-            fts_obj.run_query_and_compare(index)
+        self.fts_obj.async_perform_update_delete()
+        for index in self.fts_obj.fts_indexes:
+            self.fts_obj.run_query_and_compare(index)
 
-    def delete_all_fts_artifacts(self, fts_obj):
+    def delete_all_fts_artifacts(self):
         """
         Call during teardown of upgrade test
         :param fts_obj: he FTS object created in create_fts_index_query_compare()
         """
-        fts_obj.delete_all()
+        self.fts_obj.delete_all()
 
     def run_fts_query_and_compare(self, queue=None):
         try:
             self.log.info("Verify fts via queries again")
-            self.update_delete_fts_data_run_queries(self.fts_obj)
+            self.update_delete_fts_data_run_queries()
         except Exception, ex:
             print ex
             if queue is not None:
