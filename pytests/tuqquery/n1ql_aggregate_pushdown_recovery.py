@@ -13,16 +13,16 @@ log = logging.getLogger(__name__)
 AGGREGATE_FUNCTIONS = ["SUM", "MIN", "MAX", "COUNT", "COUNTN", "AVG"]
 DISTINCT_AGGREGATE_FUNCTIONS = ["SUM", "COUNT", "AVG"]
 
-class AggregatePushdownClass(QueryTests):
+class AggregatePushdownRecoveryClass(QueryTests):
     def setUp(self):
-        super(AggregatePushdownClass, self).setUp()
+        super(AggregatePushdownRecoveryClass, self).setUp()
         self.n1ql_helper = N1QLHelper(master=self.master)
         self.n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
         self.aggr_distinct = self.input.param("aggr_distinct", False)
         self.graceful = self.input.param("graceful", False)
 
     def tearDown(self):
-        super(AggregatePushdownClass, self).tearDown()
+        super(AggregatePushdownRecoveryClass, self).tearDown()
 
     def test_indexer_rebalance_in(self):
         self.find_nodes_in_list()
