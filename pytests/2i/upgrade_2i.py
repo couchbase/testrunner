@@ -248,7 +248,8 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
                                                          phase="in_between")
             kv_ops = self.kv_mutations()
             if "index" in node_services_list:
-                self._create_equivalent_indexes(node)
+                if self.initial_version < "5":
+                    self._create_equivalent_indexes(node)
             if "n1ql" in node_services_list:
                 n1ql_nodes = self.get_nodes_from_services_map(service_type="n1ql",
                                                               get_all_nodes=True)
@@ -282,20 +283,12 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
             self._run_tasks([kv_ops, in_between_tasks])
             ops_map = self.generate_operation_map("before")
             if "index" in node_services:
-                self._remove_equivalent_indexes(node)
-                self.sleep(60)
+                if self.initial_version < "5":
+                    self._remove_equivalent_indexes(node)
+                    self.sleep(60)
                 self._verify_indexer_storage_mode(node)
                 self._verify_throttling(node)
-            if "create_index" in ops_map and not self.build_index_after_create:
-                index_name_list = []
-                for query_definition in self.query_definitions:
-                    index_name_list.append(query_definition.index_name)
-                build_index_tasks = []
-                for bucket in self.buckets:
-                    build_index_tasks.append(self.async_build_index(
-                    bucket, index_name_list))
-                self._run_tasks([build_index_tasks])
-            self.sleep(20)
+            self.wait_until_indexes_online()
             if self.index_batch_size != 0:
                 count = 0
                 verify_items = False
@@ -686,7 +679,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
     def _remove_equivalent_indexes(self, index_node):
         node_map = self._get_nodes_with_version()
         for node, vals in node_map.iteritems():
-            if vals["version"] < "5":
+            if vals["version"] > "5":
                 rest = RestConnection(self.master)
                 index_map = rest.get_index_status()
                 log.info(index_map)
@@ -814,7 +807,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
         rebalance.result()
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
 
-        self.wait_until_indexes_online()
+        self.sleep(30)
         map_after_rebalance, stats_map_after_rebalance = self._return_maps()
         self.n1ql_helper.verify_indexes_redistributed(
             map_before_rebalance, map_after_rebalance, stats_map_before_rebalance,
