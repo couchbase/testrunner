@@ -24,6 +24,8 @@ from couchbase_helper.documentgenerator import JSONNonDocGenerator
 from couchbase.cluster import Cluster
 from couchbase.cluster import PasswordAuthenticator
 import couchbase.subdocument as SD
+from couchbase.n1ql import N1QLQuery, STATEMENT_PLUS,CONSISTENCY_REQUEST, MutationState
+import ast
 
 
 JOIN_INNER = "INNER"
@@ -781,7 +783,38 @@ class QueryTests(BaseTestCase):
             if bucket.saslPassword:
                 cred_params['creds'].append({'user': 'local:%s' % bucket.name, 'pass': bucket.saslPassword})
         query_params.update(cred_params)
-        if self.use_rest:
+        if self.testrunner_client == 'python_sdk' and not is_prepared:
+            sdk_cluster = Cluster('couchbase://' + str(server.ip))
+            authenticator = PasswordAuthenticator(username, password)
+            sdk_cluster.authenticate(authenticator)
+            for bucket in self.buckets:
+                cb = sdk_cluster.open_bucket(bucket.name)
+
+            sdk_query = N1QLQuery(query)
+
+            # if is_prepared:
+            #     sdk_query.adhoc = False
+
+            if 'scan_consistency' in query_params:
+                if query_params['scan_consistency'] == 'REQUEST_PLUS':
+                    sdk_query.consistency = CONSISTENCY_REQUEST  # request_plus is currently mapped to the CONSISTENT_REQUEST constant in the Python SDK
+                elif query_params['scan_consistency'] == 'STATEMENT_PLUS':
+                    sdk_query.consistency = STATEMENT_PLUS
+                else:
+                    raise ValueError('Unknown consistency')
+            # Python SDK returns results row by row, so we need to iterate through all the results
+            row_iterator = cb.n1ql_query(sdk_query)
+            content = []
+            try:
+                for row in row_iterator:
+                    content.append(row)
+                row_iterator.meta['results'] = content
+                result = row_iterator.meta
+            except Exception, e:
+                #This will parse the resulting HTTP error and return only the dictionary containing the query results
+                result = ast.literal_eval(str(e).split("value=")[1].split(", http_status")[0])
+
+        elif self.use_rest:
             query_params.update({'scan_consistency': self.scan_consistency})
             if hasattr(self, 'query_params') and self.query_params:
                 query_params = self.query_params
