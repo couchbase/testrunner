@@ -688,6 +688,7 @@ class rbacPermissionList():
         rest.remove_all_remote_clusters()
 
         remote_id = rest.add_remote_cluster(remote_server01.ip,8091,'Administrator','password',remote_cluster_name)
+        time.sleep(20)
         replication_id = rest.start_replication('continuous',fromBucket='default',toCluster=remote_cluster_name,toBucket='default1')
         replication_id = replication_id.replace("/","%2F")
 
@@ -697,6 +698,7 @@ class rbacPermissionList():
         rest.remove_all_replications()
         rest.remove_all_remote_clusters()
         remote_id = rest.add_remote_cluster(remote_server01.ip,8091,'Administrator','password',remote_cluster_name)
+        time.sleep(20)
         replication_id = rest.start_replication('continuous',fromBucket='default',toCluster=remote_cluster_name,toBucket='default1')
         replication_id = replication_id.replace("/","%2F")
 
@@ -726,6 +728,7 @@ class rbacPermissionList():
         rest_remote01.create_bucket(bucket='default', ramQuotaMB=100)
         rest_remote02 = RestConnection(remote_server02)
         remote_id = rest.add_remote_cluster(remote_server01.ip,8091,'Administrator','password',remote_cluster_name)
+        time.sleep(20)
         replication_id = rest.start_replication('continuous','default',remote_cluster_name)
         replication_id = replication_id.replace("/","%2F")
 
@@ -755,6 +758,7 @@ class rbacPermissionList():
         rest_remote01.create_bucket(bucket='default', ramQuotaMB=100)
         rest_remote02 = RestConnection(remote_server02)
         remote_id = rest.add_remote_cluster(remote_server01.ip,8091,'Administrator','password',remote_cluster_name)
+        time.sleep(20)
         replication_id = rest.start_replication('continuous','default',remote_cluster_name)
         replication_id = replication_id.replace("/","%2F")
 
