@@ -676,6 +676,7 @@ class rbacPermissionList():
         rest_remote01.create_bucket(bucket='default1', ramQuotaMB=100,proxyPort=11252)
         rest_remote02 = RestConnection(remote_server02)
         remote_id = rest.add_remote_cluster(remote_server01.ip,8091,'Administrator','password',remote_cluster_name)
+        time.sleep(10)
         #replication_id = rest.start_replication('continuous','default',remote_cluster_name)
 
         param_map = {'replicationType': 'continuous','toBucket': 'default1','fromBucket': 'default','toCluster': remote_cluster_name,
@@ -805,6 +806,7 @@ class rbacPermissionList():
 
         #Add remote cluster reference and replications
         rest.add_remote_cluster(remote_server01.ip,8091,'Administrator','password',remote_cluster_name)
+        time.sleep(20)
         replication_id = rest.start_replication('continuous','default',remote_cluster_name)
 
         _cluster_xdcr_remote_clusters_read ={
@@ -895,6 +897,7 @@ class rbacPermissionList():
         rest_remote02 = RestConnection(remote_server02)
         rest_remote02.delete_bucket()
         remote_id = rest.add_remote_cluster(remote_server01.ip,8091,'Administrator','password',remote_cluster_name)
+        time.sleep(20)
         replication_id = rest.start_replication('continuous','default',remote_cluster_name)
 
         result = self._return_http_code(_cluster_xdcr_settings_read,username,password,host=host,port=port, httpCode=httpCode, user_role=user_role)
