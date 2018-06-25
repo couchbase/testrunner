@@ -198,7 +198,7 @@ class auditTest(BaseTestCase):
             type = self.input.param('type', None)
             self.cluster.failover(self.servers, servs_inout)
             self.cluster.rebalance(self.servers, [], [])
-            expectedResults = {'source':source, 'user':self.master.rest_username, "ip":self.ipAddress, "port":57457, 'type':type, 'node':'ns_1@' + servs_inout[0].ip}
+            expectedResults = {'source':source, 'user':self.master.rest_username, "ip":self.ipAddress, "port":57457, 'type':type, 'nodes':'ns_1@' + servs_inout[0].ip}
 
         if (ops == 'nodeRecovery'):
             expectedResults = {'node':'ns_1@' + servs_inout[0].ip, 'type':'delta', 'source':source, 'user':self.master.rest_username, "ip":self.ipAddress, "port":57457}
@@ -386,7 +386,8 @@ class auditTest(BaseTestCase):
             try:
                 expectedResults = {'node': 'ns_1@' + self.master.ip, 'source':source,
                                 'user':user, 'ip':self.ipAddress, 'port':1234,
-                                'index_path':newPath, 'db_path':currentPath}
+                                'index_path':newPath, 'db_path':currentPath,
+                                'cbas_dirs':currentPath}
 
                 rest.set_data_path(index_path=newPath)
                 self.checkConfig(self.eventID, self.master, expectedResults)

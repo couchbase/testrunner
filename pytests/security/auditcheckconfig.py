@@ -138,13 +138,14 @@ class auditcheckconfig(BaseTestCase):
                 result = shell.file_exists(auditIns.getAuditLogPath(), auditIns.AUDITLOGFILENAME)
             finally:
                 shell.disconnect()
-            self.assertFalse(result, 'Issue with file getting create in new directory')
+            self.assertTrue(result, 'Issue with file getting create in new directory')
         else:
             auditIns = audit(host=self.master)
             expectedResults = {"auditd_enabled":auditIns.getAuditStatus(),
                                "descriptors_path":self.changePathWindows(auditIns.getAuditConfigElement('descriptors_path')),
                                "log_path":self.changePathWindows((auditIns.getAuditLogPath())[:-1]), "source":"internal",
-                               "user":"couchbase", "rotate_interval":86400, "version":1, 'hostname':self.getHostName(self.master)}
+                               "user":"couchbase", "rotate_interval":86400, "version":2, 'hostname':self.getHostName(self.master),
+                               "uuid":"64333612"}
             self.checkConfig(self.AUDITCONFIGRELOAD, self.master, expectedResults)
 
     #Test error on setting of Invalid Log file path
@@ -400,7 +401,7 @@ class auditcheckconfig(BaseTestCase):
         originalInt = auditIns.getAuditRotateInterval()
         status, content = auditIns.setAuditRotateInterval(intervalSec)
         self.assertFalse(status, "Audit log interval setting is <900 or > 604800")
-        self.assertEqual(content['errors']['rotateInterval'], 'The value of rotateInterval must be in range from 15 minutes to 7 days')
+        self.assertEqual(content['errors']['rotateInterval'], 'The value must be in range from 15 minutes to 7 days')
 
     #Add test case where folder update does not exist in 2nd node - MB-13442
     def test_folderMisMatchCluster(self):
@@ -521,8 +522,8 @@ class auditCLITest(CliBaseTest):
         self.source = self.input.param('source', None)
         self.shell = RemoteMachineShellConnection(self.master)
         info = self.shell.extract_remote_info()
-        type = info.type.lower()
-        if type == 'windows' and self.source == 'saslauthd':
+        self.os_type = info.type.lower()
+        if self.os_type == 'windows' and self.source == 'saslauthd':
             raise Exception(" Ldap Tests cannot run on windows");
         elif self.source == 'saslauthd':
                 rest = RestConnection(self.master)
@@ -568,7 +569,11 @@ class auditCLITest(CliBaseTest):
                         options=options, cluster_host="localhost", user=self.ldapUser, password=self.ldapPass)
             tempEnable = auditIns.getAuditStatus()
             self.assertFalse(tempEnable, "Issues enable/disable via CLI")
-            options = "--audit-enable=1"
+            if self.os_type == 'windows':
+                log_path = audit.WINLOGFILEPATH
+            else:
+                log_path = audit.LINLOGFILEPATH
+            options = "--audit-enable=1 --audit-log-path=" + log_path
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
                         options=options, cluster_host="localhost", user=self.ldapUser, password=self.ldapPass)
             tempEnable = auditIns.getAuditStatus()

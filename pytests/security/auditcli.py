@@ -129,7 +129,7 @@ class auditcli(BaseTestCase):
 
         if (cli_command == "server-add"):
             expectedResults = {"services":['kv'], 'port':8091, 'hostname':self.servers[num + 1].ip,
-                                   'groupUUID':"0", 'node':'ns_1@' + self.servers[num + 1].ip, 'source':source,
+                                   'groupUUID':"0", 'nodes':'ns_1@' + self.servers[num + 1].ip, 'source':source,
                                    'user':self.master.rest_username, "real_userid:user":self.ldapUser, "ip":'127.0.0.1', "remote:port":57457}
             self.checkConfig(self.eventID, self.master, expectedResults)
             expectedResults = {"delta_recovery_buckets":"all", 'known_nodes':["ns_1@" + self.master.ip, "ns_1@" + self.servers[num + 1].ip],
