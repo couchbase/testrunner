@@ -69,7 +69,7 @@ class QueryN1QLAuditTests(auditTest,QueryTests):
         elif(query_type =='alter_index'):
             if self.filter:
                 self.execute_filtered_query()
-            self.run_cbq_query(query="CREATE INDEX idx4 on default(join_day)")
+            self.run_cbq_query(query="CREATE INDEX idx4 on default(join_day) WITH {'nodes':['%s:%s']}" % (self.servers[0].ip, self.servers[0].port))
             self.run_cbq_query(query="ALTER INDEX default.idx4 WITH {'action':'move','nodes':['%s:%s']}" % (self.servers[1].ip, self.servers[1].port))
             expectedResults = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success', 'isAdHoc': True,
                                'name': 'ALTER INDEX statement', 'real_userid': {'source': source, 'user': user},
