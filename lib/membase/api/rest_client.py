@@ -1232,6 +1232,14 @@ class RestConnection(object):
     # returns otpNode
     def add_node(self, user='', password='', remoteIp='', port='8091', zone_name='', services=None):
         otpNode = None
+
+        # if ip format is ipv6 and enclosing brackets are not found,
+        # enclose self.ip and remoteIp
+        if self.ip.count(':') and self.ip[0] != '[':
+            self.ip = '[' + self.ip + ']'
+        if remoteIp.count(':') and remoteIp[0] != '[':
+            remoteIp = '[' + remoteIp + ']'
+
         log.info('adding remote node @{0}:{1} to this cluster @{2}:{3}'\
                           .format(remoteIp, port, self.ip, self.port))
         if zone_name == '':
