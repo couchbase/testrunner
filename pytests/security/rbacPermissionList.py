@@ -846,6 +846,7 @@ class rbacPermissionList():
         rest.remove_all_replications()
         rest.remove_all_remote_clusters()
         remote_id = rest.add_remote_cluster(remote_server01.ip,8091,'Administrator','password',remote_cluster_name)
+        time.sleep(20)
         delete_remote = {"delete_remote":"pools/default/remoteClusters/" + str(remote_cluster_name) + ";DELETE"}
         result = self._return_http_code(delete_remote,username,password,host=host,port=port, httpCode=httpCode, user_role=user_role)
 
@@ -869,6 +870,7 @@ class rbacPermissionList():
         rest_remote01.create_bucket(bucket='default', ramQuotaMB=100)
         rest_remote02 = RestConnection(remote_server02)
         remote_id = rest.add_remote_cluster(remote_server01.ip,8091,'Administrator','password',remote_cluster_name)
+        time.sleep(20)
         replication_id = rest.start_replication('continuous','default',remote_cluster_name)
         result = self._return_http_code(_cluster_xdcr_settings_read,username,password,host=host,port=port, httpCode=httpCode, user_role=user_role)
         rest.remove_all_replications()
