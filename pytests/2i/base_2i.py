@@ -2,6 +2,8 @@ import logging
 import random
 import time
 
+from lib.membase.helper.cluster_helper import ClusterOperationHelper
+from lib.remote.remote_util import RemoteMachineShellConnection
 from newtuq import QueryTests
 from couchbase_helper.cluster import Cluster
 from couchbase_helper.tuq_generators import TuqGenerators
@@ -876,3 +878,20 @@ class BaseSecondaryIndexingTests(QueryTests):
             cnt += 1
             docs += 20
         return False
+
+    def reboot_node(self, node):
+        self.log.info("Rebooting node '{0}'....".format(node.ip))
+        shell = RemoteMachineShellConnection(node)
+        if shell.extract_remote_info().type.lower() == 'windows':
+            o, r = shell.execute_command("shutdown -r -f -t 0")
+        elif shell.extract_remote_info().type.lower() == 'linux':
+            o, r = shell.execute_command("reboot")
+        shell.log_command_output(o, r)
+        shell.disconnect()
+        # wait for restart and warmup on all node
+        self.sleep(self.wait_timeout * 5)
+        # disable firewall on these nodes
+        self.stop_firewall_on_node(node)
+        # wait till node is ready after warmup
+        ClusterOperationHelper.wait_for_ns_servers_or_assert([node], self,
+                                                             wait_if_warmup=True)

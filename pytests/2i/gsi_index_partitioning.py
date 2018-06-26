@@ -1390,9 +1390,10 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         remote_client = RemoteMachineShellConnection(node_out)
         if self.node_operation == "kill_indexer":
             remote_client.terminate_process(process_name="indexer")
+            remote_client.disconnect()
         else:
-            remote_client.reboot_node()
-        remote_client.disconnect()
+            self.reboot_node(node_out)
+
         # wait for restart and warmup on all node
         self.sleep(self.wait_timeout * 3)
         # disable firewall on these nodes
@@ -3065,7 +3066,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
             elif self.node_operation == "kill_kv":
                 remote_client.kill_memcached()
             else:
-                remote_client.reboot_node()
+                self.reboot_node(node_to_fail)
             remote_client.disconnect()
             # wait for restart and warmup on all node
             self.sleep(self.wait_timeout*2)
@@ -3175,7 +3176,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
             elif self.node_operation == "kill_kv":
                 remote_client.kill_memcached()
             else:
-                remote_client.reboot_node()
+                self.reboot_node(node_to_fail)
             remote_client.disconnect()
             # wait for restart and warmup on all node
             self.sleep(self.wait_timeout)
@@ -3298,7 +3299,8 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         self.sleep(30)
 
         node_list = copy.deepcopy(self.node_list[1:])
-        node_list.remove(node_out_str)
+        if node_out_str in node_list:
+            node_list.remove(node_out_str)
         self.log.info(node_list)
 
         index_data_after = {}
@@ -3405,14 +3407,6 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         reached = RestHelper(self.rest).rebalance_reached()
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
-
-        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
-                                                 [], [node_out])
-        reached = RestHelper(self.rest).rebalance_reached()
-        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
-        rebalance.result()
-
-        self.sleep(30)
 
         index_metadata = self.rest.get_indexer_metadata()
         self.log.info("Indexer Metadata :::")

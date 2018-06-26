@@ -462,7 +462,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         # failover the indexer node
         failover_task = self.cluster.async_failover([self.master], failover_nodes=[index_server], graceful=True)
         failover_task.result()
-        self.sleep(120)
+        self.sleep(240)
         # do a full recovery and rebalance
         self.rest.set_recovery_type('ns_1@' + index_server.ip, "full")
         self.rest.add_back_node('ns_1@' + index_server.ip)
@@ -599,7 +599,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         create_index_query = "CREATE INDEX " + index_name_prefix + " ON default(address) USING GSI WITH {'num_replica': 1}"
         t1 = threading.Thread(target=self._create_replica_index, args=(create_index_query,))
         t1.start()
-        self.sleep(2)
+        #self.sleep(2)
         # while create index is running ,rebalance out a indexer node
         try:
             rebalance = self.cluster.rebalance(self.servers[:self.nodes_init], [], [index_server])
@@ -707,8 +707,8 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         to_add_nodes = [self.servers[self.nodes_init]]
         services_in = ["kv"]
         # start create index and build index
-        t0 = threading.Thread(target= self.run_operation, args=("before",))
-        t0.start()
+        self.run_operation(phase="before")
+
         index_name_prefix = "random_index_" + str(
             random.randint(100000, 999999))
         create_index_query = "CREATE INDEX " + index_name_prefix + " ON default(address) USING GSI WITH {'num_replica': 1}"
@@ -727,7 +727,6 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         else:
             self.fail("indexer rebalance succeeded when it should have failed")
         t1.join()
-        t0.join()
         self.run_operation(phase="after")
         kv_nodes = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
         # kv node should succeed
@@ -1264,7 +1263,8 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         kv_server = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=False)
         index_server = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
         self.run_operation(phase="before")
-        self.sleep(30)
+        # Indexes might take more time to build, so sleep for 3 mins
+        self.sleep(180)
         services_in = ["index"]
         # rebalance in a node
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]], [],
@@ -1748,10 +1748,10 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         for index in indexes:
           threads.append(
               threading.Thread(target=self._cbindex_move, args=(index_server, self.servers[self.nodes_init], index, self.alter_index)))
-          for thread in threads:
-             thread.start()
-          for thread in threads:
-             thread.join()
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
 
         self.sleep(60)
         self.run_operation(phase="during")
@@ -2134,6 +2134,9 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
     def test_network_partitioning_between_kv_indexer_during_gsi_rebalance(self):
         index_server = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
         kv_server = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
+        kv_node_partition = kv_server[1]
+        if kv_server[1] == self.servers[0]:
+            kv_node_partition = kv_server[0]
         self.run_operation(phase="before")
         self.sleep(30)
         services_in = ["index"]
@@ -2148,7 +2151,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
             self.sleep(2)
             self.start_firewall_on_node(index_server)
             self.start_firewall_on_node(self.servers[self.nodes_init])
-            self.start_firewall_on_node(kv_server[1])
+            self.start_firewall_on_node(kv_node_partition)
             reached = RestHelper(self.rest).rebalance_reached()
             self.assertTrue(reached, "rebalance failed, stuck or did not complete")
             rebalance.result()
@@ -2922,21 +2925,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         remote_client.kill_memcached()
         remote_client.disconnect()
 
-    def reboot_node(self, node):
-        self.log.info("Rebooting node '{0}'....".format(node.ip))
-        shell = RemoteMachineShellConnection(node)
-        if shell.extract_remote_info().type.lower() == 'windows':
-            o, r = shell.execute_command("shutdown -r -f -t 0")
-        elif shell.extract_remote_info().type.lower() == 'linux':
-            o, r = shell.execute_command("reboot")
-        shell.log_command_output(o, r)
-        shell.disconnect()
-        # wait for restart and warmup on all node
-        self.sleep(self.wait_timeout * 5)
-        # disable firewall on these nodes
-        self.stop_firewall_on_node(node)
-        # wait till node is ready after warmup
-        ClusterOperationHelper.wait_for_ns_servers_or_assert([node], self, wait_if_warmup=True)
+
 
     def _create_backup(self, server, username="Administrator", password="password"):
         remote_client = RemoteMachineShellConnection(server)

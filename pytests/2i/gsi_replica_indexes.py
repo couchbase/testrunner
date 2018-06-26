@@ -719,7 +719,8 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         for thread in threads:
             thread.join()
 
-        self.sleep(240)
+        # Index building in the background can take longer, so wait for some time
+        self.sleep(360)
 
         try:
             index_map = self.get_index_map()
