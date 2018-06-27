@@ -516,8 +516,8 @@ class rbacPermissionList():
         _cluster_admin_security_write = {"audit":"settings/audit;POST;{'auditdEnabled':'true'}"}
         result = self._return_http_code(_cluster_admin_security_write,username,password,host=host,port=port, httpCode=httpCode, user_role=user_role)
 
-        _cluster_admin_security_write = {"validateCredentails":"validateCredentials;POST;{'user':'foo','password':'bar'}"}
-        result = self._return_http_code(_cluster_admin_security_write,username,password,host=host,port=port, httpCode=httpCode, user_role=user_role)
+        #_cluster_admin_security_write = {"validateCredentails":"validateCredentials;POST;{'user':'foo','password':'bar'}"}
+        #result = self._return_http_code(_cluster_admin_security_write,username,password,host=host,port=port, httpCode=httpCode, user_role=user_role)
 
         _cluster_admin_security_write = {"regenerateCert":"controller/regenerateCertificate;POST"}
         result = self._return_http_code(_cluster_admin_security_write,username,password,host=host,port=port, httpCode=httpCode, user_role=user_role)
@@ -639,7 +639,7 @@ class rbacPermissionList():
         _cluster_indexes_read = {
             "maxParalledIndexer":"settings/maxParallelIndexers;GET",
             "view_updated":"settings/viewUpdateDaemon;GET",
-            "view_index_stauts":"indexStatus;GET",
+            #"view_index_stauts":"indexStatus;GET",
             "view_index_settings":"settings/indexes;GET"
         }
 
