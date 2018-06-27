@@ -10,10 +10,11 @@ GRACEFUL = "graceful"
 
 class FailoverTests(FailoverBaseTest):
     def setUp(self):
-        super(FailoverTests, self).setUp(self)
+        super(FailoverTests, self).setUp()
+        self.server_map = self.get_server_map(self.servers)
 
     def tearDown(self):
-        super(FailoverTests, self).tearDown(self)
+        super(FailoverTests, self).tearDown()
 
     def test_failover_firewall(self):
         self.common_test_body('firewall')
@@ -189,9 +190,8 @@ class FailoverTests(FailoverBaseTest):
         """
         _servers_ = self.filter_servers(self.servers, chosen)
         self._wait_for_stats_all_buckets(_servers_, check_ep_items_remaining=True)
-        serverMap = self.get_server_map(self.servers)
         recoveryTypeMap = self.define_maps_during_failover(self.recoveryType)
-        fileMapsForVerification = self.create_file(chosen, self.buckets, serverMap)
+        fileMapsForVerification = self.create_file(chosen, self.buckets, self.server_map)
         index = 0
         for node in chosen:
             self.rest.add_back_node(node.id)
@@ -238,7 +238,7 @@ class FailoverTests(FailoverBaseTest):
         self.verify_cluster_stats(self.servers, self.master, check_bucket_stats=True, check_ep_items_remaining=True)
 
         # Verify recovery Type succeeded if we added-back nodes
-        self.verify_for_recovery_type(chosen, serverMap, self.buckets, recoveryTypeMap, fileMapsForVerification, self.deltaRecoveryBuckets)
+        self.verify_for_recovery_type(chosen, self.server_map, self.buckets, recoveryTypeMap, fileMapsForVerification, self.deltaRecoveryBuckets)
 
         # Comparison of all data if required
         if not self.withMutationOps:

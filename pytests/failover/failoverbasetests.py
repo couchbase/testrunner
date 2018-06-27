@@ -1,5 +1,6 @@
 from TestInput import TestInputSingleton
 from basetestcase import BaseTestCase
+from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
 from membase.api.rest_client import RestConnection, RestHelper
 from couchbase_helper.documentgenerator import BlobGenerator
@@ -8,7 +9,6 @@ from remote.remote_util import RemoteMachineShellConnection, RemoteUtilHelper
 
 class FailoverBaseTest(BaseTestCase):
 
-    @staticmethod
     def setUp(self):
         self._cleanup_nodes = []
         self._failed_nodes = []
@@ -66,7 +66,6 @@ class FailoverBaseTest(BaseTestCase):
         self.log.info("==============  FailoverBaseTest setup was finished for test #{0} {1} =============="\
                       .format(self.case_number, self._testMethodName))
 
-    @staticmethod
     def tearDown(self):
         if hasattr(self, '_resultForDoCleanups') and len(self._resultForDoCleanups.failures) > 0 \
                     and 'stop-on-failure' in TestInputSingleton.input.test_params and \
@@ -80,6 +79,14 @@ class FailoverBaseTest(BaseTestCase):
                 self.log.info("==============  tearDown was started for test #{0} {1} =============="\
                               .format(self.case_number, self._testMethodName))
                 RemoteUtilHelper.common_basic_setup(self.servers)
+                BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
+                for node in self.servers:
+                    master = node
+                    try:
+                        ClusterOperationHelper.cleanup_cluster(self.servers,
+                                                               master=master)
+                    except:
+                        continue
                 self.log.info("==============  tearDown was finished for test #{0} {1} =============="\
                               .format(self.case_number, self._testMethodName))
             finally:
