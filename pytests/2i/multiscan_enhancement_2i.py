@@ -223,13 +223,13 @@ class SecondaryIndexingMultiscanTests(BaseSecondaryIndexingTests):
         scan_contents.append([{"Seek": None}])
         scan_contents.append([{"Seek": [None, 30]}])
         scan_contents.append([{"Seek": [None, None]}])
-        scan_contents.append([{"Seek": ["Kacila"]}])
         scan_contents.append([{"Seek": ["Kacila", None]}])
         scan_contents.append([{"Seek": [58, "Kacila"]}])
         scan_contents.append([{"Seek": [NULL_STRING, 58]}])
         scan_contents.append([{"Seek": ["Kacila", NULL_STRING]}])
         scan_contents.append([{"Seek": [NULL_STRING, NULL_STRING]}])
         scan_contents.append([{"Seek": ["Kacila", 58, "Bangalore"]}])
+        #scan_contents.append([{"Seek": ["Kacila"]}])
         #TODO Missing Elements
         #scan_contents.append({"Seek": ["Kacila", MISSING]})
         #scan_contents.append({"Seek": [MISSING, 58]})
@@ -248,6 +248,7 @@ class SecondaryIndexingMultiscanTests(BaseSecondaryIndexingTests):
                     ["name", "age"], scan_content, multiscan_result, multiscan_count_result)
                 if not check:
                     failed_scans.append(copy.deepcopy(scan_content))
+                    log.info("** Scan {0} failed. Result : {1}".format(scan_content, multiscan_result))
         msg = "Failed Scans: {0}".format(failed_scans)
         self.assertEqual(len(failed_scans), 0, msg)
 

@@ -97,7 +97,7 @@ class QueryTests(BaseTestCase):
             if hasattr(self, 'skip_cleanup') and not self.skip_cleanup:
                 self.n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
                 self.n1ql_helper.drop_primary_index(using_gsi=self.use_gsi_for_primary, server=self.n1ql_node)
-        if hasattr(self, 'shell'):
+        if hasattr(self, 'shell') and self.shell is not None:
             if not self.skip_cleanup:
                 self.n1ql_helper._restart_indexer()
                 self.n1ql_helper.killall_tuq_process()

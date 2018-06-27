@@ -599,7 +599,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         create_index_query = "CREATE INDEX " + index_name_prefix + " ON default(address) USING GSI WITH {'num_replica': 1}"
         t1 = threading.Thread(target=self._create_replica_index, args=(create_index_query,))
         t1.start()
-        #self.sleep(2)
+        self.sleep(0.5)
         # while create index is running ,rebalance out a indexer node
         try:
             rebalance = self.cluster.rebalance(self.servers[:self.nodes_init], [], [index_server])
@@ -711,7 +711,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
 
         index_name_prefix = "random_index_" + str(
             random.randint(100000, 999999))
-        create_index_query = "CREATE INDEX " + index_name_prefix + " ON default(address) USING GSI WITH {'num_replica': 1}"
+        create_index_query = "CREATE INDEX " + index_name_prefix + " ON default(name,age,address) USING GSI WITH {'num_replica': 1}"
         t1 = threading.Thread(target=self._create_replica_index, args=(create_index_query,))
         t1.start()
         try:
@@ -855,11 +855,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         index_server = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
         kv_server = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
         self.run_operation(phase="before")
-        for i in xrange(5):
-            query_definition_generator = SQLDefinitionGenerator()
-            self.query_definitions = query_definition_generator.generate_airlines_data_query_definitions()
-            self.query_definitions = query_definition_generator.filter_by_group(self.groups, self.query_definitions)
-            self.run_operation(phase="before")
+
         self.sleep(30)
         services_in = ["index"]
         # rebalance in a node
@@ -2163,7 +2159,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         finally:
             self.stop_firewall_on_node(index_server)
             self.stop_firewall_on_node(self.servers[self.nodes_init])
-            self.stop_firewall_on_node(kv_server[1])
+            self.stop_firewall_on_node(kv_node_partition)
         self.run_operation(phase="after")
 
     def test_cbindex_move_with_index_server_being_killed(self):

@@ -342,7 +342,10 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
     def test_fail_create_kv_node_down(self):
         servr_out =[]
         servr_out = self.get_nodes_from_services_map(service_type = "kv", get_all_nodes = True)
-        remote = RemoteMachineShellConnection(servr_out[1])
+        node_out = servr_out[1]
+        if servr_out[1] == self.servers[0]:
+            node_out = servr_out[0]
+        remote = RemoteMachineShellConnection(node_out)
         remote.stop_server()
         self.sleep(10)
         index_name = self.query_definitions[0].index_name
