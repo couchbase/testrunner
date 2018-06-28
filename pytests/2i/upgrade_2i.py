@@ -815,7 +815,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
 
         # Add back the node that was removed, and use alter index to move an index to that node
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
-                                                 [nodes_out_list], [])
+                                                 [nodes_out_list], [], services=["kv,index,n1ql"])
         reached = RestHelper(self.rest).rebalance_reached()
         rebalance.result()
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
