@@ -203,8 +203,10 @@ class BaseSecondaryIndexingTests(QueryTests):
         for bucket in buckets:
             for query_definition in query_definitions:
                 index_info = query_definition.generate_index_drop_query(bucket = bucket.name)
+                index_create_info = "{0}:{1}".format(bucket.name, query_definition.index_name)
                 if index_info not in self.memory_drop_list:
                     self.memory_drop_list.append(index_info)
+                    self.memory_create_list.remove(index_create_info)
                     self.drop_index(bucket.name, query_definition)
 
     def async_multi_drop_index(self, buckets=None, query_definitions=None):
@@ -371,9 +373,8 @@ class BaseSecondaryIndexingTests(QueryTests):
                      scan_consistency = scan_consistency, scan_vector = scan_vector))
         return multi_query_tasks
 
-    def async_check_and_run_operations(self, buckets = [],
-     initial = False, before = False, after = False, in_between = False,
-     scan_consistency = None, scan_vectors = None):
+    def async_check_and_run_operations(self, buckets=[], initial=False, before=False, after=False,
+                                       in_between=False, scan_consistency=None, scan_vectors=None):
         #self.verify_query_result = True
         #self.verify_explain_result = True
         if initial:
@@ -488,7 +489,7 @@ class BaseSecondaryIndexingTests(QueryTests):
                     if "n1ql" in nodes_out and phase == "in_between":
                         tasks = []
                     else:
-                        tasks  += self.async_multi_query_using_index(buckets, query_definitions, expected_results,
+                        tasks += self.async_multi_query_using_index(buckets, query_definitions, expected_results,
                                                                  scan_consistency=scan_consistency,
                                                                  scan_vectors=scan_vectors)
                 if "drop_index" in operation_map:
