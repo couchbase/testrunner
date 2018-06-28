@@ -47,6 +47,7 @@ class UpgradeSecondaryIndexInt64(UpgradeSecondaryIndex):
                                                      [self.nodes_in_list[0]], [],
                                                      services=["index"])
             rebalance.result()
+            self.sleep(100)
             self.disable_upgrade_to_plasma(self.nodes_in_list[0])
         for server in upgrade_nodes:
             remote = RemoteMachineShellConnection(server)
@@ -56,6 +57,7 @@ class UpgradeSecondaryIndexInt64(UpgradeSecondaryIndex):
             for upgrade_thread in upgrade_threads:
                 upgrade_thread.join()
             self.upgrade_servers.append(server)
+        self.sleep(100)
         msg = "Cluster is not healthy after upgrade"
         self.assertTrue(self.wait_until_cluster_is_healthy(), msg)
         log.info("Cluster is healthy")
@@ -81,6 +83,7 @@ class UpgradeSecondaryIndexInt64(UpgradeSecondaryIndex):
                                                      [self.nodes_in_list[0]], [],
                                                      services=["index"])
             rebalance.result()
+            self.sleep(100)
             self.disable_upgrade_to_plasma(self.nodes_in_list[0])
         for node in upgrade_nodes:
             node_rest = RestConnection(node)
@@ -90,6 +93,7 @@ class UpgradeSecondaryIndexInt64(UpgradeSecondaryIndex):
                 self._create_equivalent_indexes(node)
             failover_task = self.cluster.async_failover([self.master], failover_nodes=[node], graceful=False)
             failover_task.result()
+            self.sleep(100)
             log.info("Node Failed over...")
             upgrade_th = self._async_update(self.upgrade_to, [node])
             for th in upgrade_th:
@@ -107,12 +111,14 @@ class UpgradeSecondaryIndexInt64(UpgradeSecondaryIndex):
             active_nodes = [srvr for srvr in self.servers if srvr.ip != node.ip]
             rebalance = self.cluster.async_rebalance(active_nodes, [], [])
             rebalance.result()
+            self.sleep(100)
             self._remove_equivalent_indexes(node)
             self.sleep(60)
         msg = "Cluster is not healthy after upgrade"
         self.assertTrue(self.wait_until_cluster_is_healthy(), msg)
         log.info("Cluster is healthy")
         self.add_built_in_server_user()
+        self.sleep(20)
         if self.initial_version.split("-")[0] in UPGRADE_VERS:
             self.multi_drop_index()
             self.sleep(100)
@@ -129,6 +135,7 @@ class UpgradeSecondaryIndexInt64(UpgradeSecondaryIndex):
         upgrade_nodes = self.servers[:self.nodes_init]
         if self.disable_plasma_upgrade:
             self._install(self.nodes_in_list, version=self.upgrade_to)
+            self.sleep(100)
             self.disable_upgrade_to_plasma(self.nodes_in_list[0])
         for node in upgrade_nodes:
             node_rest = RestConnection(node)
@@ -138,6 +145,7 @@ class UpgradeSecondaryIndexInt64(UpgradeSecondaryIndex):
             log.info("Rebalancing the node out...")
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],[], [node])
             rebalance.result()
+            self.sleep(100)
             active_nodes = [srvr for srvr in self.servers if srvr.ip != node.ip]
             log.info("Upgrading the node...")
             upgrade_th = self._async_update(self.upgrade_to, [node])
@@ -157,6 +165,7 @@ class UpgradeSecondaryIndexInt64(UpgradeSecondaryIndex):
         self.assertTrue(self.wait_until_cluster_is_healthy(), msg)
         log.info("Cluster is healthy")
         self.add_built_in_server_user()
+        self.sleep(20)
         self.assertTrue(self.wait_until_indexes_online(), "Some indexes are not online")
         log.info("All indexes are online")
         self._query_index("post_upgrade")
@@ -169,6 +178,7 @@ class UpgradeSecondaryIndexInt64(UpgradeSecondaryIndex):
         :return:
         """
         self._install(self.nodes_in_list, version=self.upgrade_to)
+        self.sleep(100)
         if self.disable_plasma_upgrade:
             self.disable_upgrade_to_plasma(self.nodes_in_list[0])
         log.info("Swapping servers...")
@@ -176,9 +186,9 @@ class UpgradeSecondaryIndexInt64(UpgradeSecondaryIndex):
                                                  self.nodes_in_list,
                                                  self.nodes_out_list)
         rebalance.result()
+        self.sleep(100)
         log.info("===== Nodes Swapped with Upgraded versions =====")
         self.upgrade_servers = self.nodes_in_list
-        self.sleep(60)
         if self.initial_version.split("-")[0] in UPGRADE_VERS:
             self.multi_drop_index()
             self.sleep(100)
@@ -188,6 +198,7 @@ class UpgradeSecondaryIndexInt64(UpgradeSecondaryIndex):
         self.assertTrue(self.wait_until_cluster_is_healthy(), msg)
         log.info("Cluster is healthy")
         self.add_built_in_server_user()
+        self.sleep(20)
         self.assertTrue(self.wait_until_indexes_online(), "Some indexes are not online")
         log.info("All indexes are online")
         self._query_index("post_upgrade")
@@ -218,6 +229,7 @@ class UpgradeSecondaryIndexInt64(UpgradeSecondaryIndex):
             self.assertTrue(self.wait_until_cluster_is_healthy(), msg)
             log.info("Cluster is healthy")
             self.add_built_in_server_user()
+            self.sleep(20)
             self.assertTrue(self.wait_until_indexes_online(), "Some indexes are not online")
             log.info("All indexes are online")
             self._query_index("post_upgrade")
@@ -402,7 +414,10 @@ class QueryDefs(SQLDefinitionGenerator):
         definitions_list.append(
             QueryDefinition(index_name=index_name_prefix + "_long_num_name",
                             index_fields=["long_num", "name"],
-                            query_template=["SELECT sum(long_num) as long_num, name FROM default use index ({0}) where long_num > 2147483600 group by name",
+                            query_template=[
+                                            # Commented out because of MB-30207
+                                            #"SELECT sum(long_num) as long_num, name FROM default use index ({0}) where long_num > 2147483600 group by name",
+                                            "SELECT min(long_num) as long_num, name FROM default use index ({0}) where long_num > 2147483600 group by name",
                                             "SELECT long_num, name FROM default use index ({0}) where long_num > 2147483600"],
                             groups=["all", "simple_index"]))
         return definitions_list
