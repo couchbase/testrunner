@@ -24,8 +24,8 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
             self.backup_path = testconstants.LINUX_BACKUP_PATH
         elif info == 'windows':
             self.cmd_ext = ".exe"
-            self.cli_command_location = testconstants.WIN_COUCHBASE_BIN_PATH
-            self.backup_path = testconstants.WIN_BACKUP_PATH
+            self.cli_command_location = testconstants.WIN_COUCHBASE_BIN_PATH_RAW
+            self.backup_path = testconstants.WIN_BACKUP_C_PATH
         elif info == 'mac':
             self.cli_command_location = testconstants.MAC_COUCHBASE_BIN_PATH
             self.backup_path = testconstants.LINUX_BACKUP_PATH
@@ -1570,6 +1570,8 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
             self.graceful, wait_for_pending=180)
 
         failover_task.result()
+
+        self.sleep(60)
 
         self.rest.set_recovery_type(node.id, self.recovery_type)
         self.rest.add_back_node(node.id)
