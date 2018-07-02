@@ -1694,6 +1694,8 @@ class RemoteMachineShellConnection:
                                                              fts_query_limit=None):
         server_type = None
         success = True
+        if fts_query_limit is None:
+            fts_query_limit = 10000000
         start_server_after_install = True
         track_words = ("warning", "error", "fail")
         if build.name.lower().find("membase") != -1:
@@ -1740,7 +1742,7 @@ class RemoteMachineShellConnection:
         output, error = self.execute_command(command, use_channel=True)
         self.log_command_output(output, error)
         linux = ["deb", "rpm"]
-        if fts_query_limit:
+        if float(build.product_version[:3]) >= 5.1:
             if self.info.deliverable_type in linux:
                 o, e = \
                     self.execute_command("sed -i 's/export PATH/export PATH\\n"
