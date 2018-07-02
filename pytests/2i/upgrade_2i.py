@@ -820,6 +820,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
         rebalance.result()
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         self._verify_alter_index()
+        self.sleep(120)
 
     def _verify_alter_index(self):
         index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
