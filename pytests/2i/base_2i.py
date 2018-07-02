@@ -206,8 +206,9 @@ class BaseSecondaryIndexingTests(QueryTests):
                 index_create_info = "{0}:{1}".format(bucket.name, query_definition.index_name)
                 if index_info not in self.memory_drop_list:
                     self.memory_drop_list.append(index_info)
-                    self.memory_create_list.remove(index_create_info)
                     self.drop_index(bucket.name, query_definition)
+                if index_create_info in self.memory_create_list:
+                    self.memory_create_list.remove(index_create_info)
 
     def async_multi_drop_index(self, buckets=None, query_definitions=None):
         if not buckets:
