@@ -524,11 +524,11 @@ class QueriesIndexTests(QueryTests):
                 self.query = "Explain  select * from {0} b1 left nest {0} b2 on keys b1._id where b1._id like 'query-testemployee%' limit 10 ".format(bucket.name)
                 actual_result = self.run_cbq_query()
                 plan3 = self.ExplainPlanHelper(actual_result)
-                self.assertTrue(plan3["~children"][0]["~children"][0]["limit"] == "10")
+                self.assertTrue(plan3["~children"][1]['expr'] == "10")
                 self.query = "Explain  select * from {0} b1 left nest {0} b2 on key b2._id FOR b1 where b1._id like 'query-testemployee%'  limit 10 ".format(bucket.name)
                 actual_result = self.run_cbq_query()
                 plan4 = self.ExplainPlanHelper(actual_result)
-                self.assertTrue(plan4["~children"][0]["~children"][0]["limit"] == "10")
+                self.assertTrue(plan4["~children"][1]['expr'] == "10")
 
             finally:
                 for idx in created_indexes:
@@ -953,8 +953,7 @@ class QueriesIndexTests(QueryTests):
                 self.log.info(plan)
                 self.log.info(plan['~children'][0]['~children'][0]['#operator'])
                 self.assertTrue(plan['~children'][0]['~children'][0]['#operator'] == 'IntersectScan'
-                                or plan['~children'][0]['~children'][0]['#operator'] == 'UnionScan',
-                                "Intersect Scan is not being used in and query for 2 array indexes")
+                                or plan['~children'][0]['~children'][0]['#operator'] == 'UnionScan')
                 if plan['~children'][0]['~children'][0]['#operator'] == 'UnionScan':
                     result1 = plan['~children'][0]['~children'][0]['scans'][0]['scans'][0]['scan']['index']
                     result2 = plan['~children'][0]['~children'][0]['scans'][0]['scans'][1]['scan']['index']
@@ -1057,7 +1056,7 @@ class QueriesIndexTests(QueryTests):
                              "AND (ANY x IN %s.VMs SATISFIES x.RAM between 1 and 5 END) " % (bucket.name) + \
                              "AND  NOT (department = 'Manager') ORDER BY name limit 10"
                 expected_result = self.run_cbq_query()
-                self.assertTrue(sorted(actual_result['results']),sorted(expected_result['results']))
+                self.assertTrue(sorted(actual_result['results'])==sorted(expected_result['results']))
                 self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx, self.index_type)
                 drop_result = self.run_cbq_query()
                 self._verify_results(drop_result['results'], [])
@@ -1099,8 +1098,7 @@ class QueriesIndexTests(QueryTests):
                 actual_result_within = self.run_cbq_query()
                 plan = self.ExplainPlanHelper(actual_result_within)
                 self.assertTrue(plan['~children'][0]['~children'][0]['#operator'] == 'IntersectScan'
-                                or plan['~children'][0]['~children'][0]['#operator'] == 'UnionScan',
-                                "Intersect Scan is not being used in and query for 2 array indexes")
+                                or plan['~children'][0]['~children'][0]['#operator'] == 'UnionScan')
                 if plan['~children'][0]['~children'][0]['#operator'] == 'UnionScan':
                     result1 = plan['~children'][0]['~children'][0]['scans'][0]['scans'][0]['scan']['index']
                     result2 = plan['~children'][0]['~children'][0]['scans'][0]['scans'][1]['scan']['index']
@@ -1567,8 +1565,7 @@ class QueriesIndexTests(QueryTests):
                 actual_result = self.run_cbq_query()
                 plan = self.ExplainPlanHelper(actual_result)
                 self.assertTrue(plan['~children'][0]['~children'][0]['#operator'] == 'IntersectScan'
-                                or plan['~children'][0]['~children'][0]['#operator'] == 'UnionScan',
-                                "Intersect Scan is not being used in and query for 2 array indexes")
+                                or plan['~children'][0]['~children'][0]['#operator'] == 'UnionScan')
                 if plan['~children'][0]['~children'][0]['#operator'] == 'UnionScan':
                     result1 = plan['~children'][0]['~children'][0]['scans'][0]['scans'][0]['scan']['index']
                     result2 = plan['~children'][0]['~children'][0]['scans'][0]['scans'][1]['scan']['index']
@@ -1615,8 +1612,7 @@ class QueriesIndexTests(QueryTests):
                 actual_result_within = self.run_cbq_query()
                 plan = self.ExplainPlanHelper(actual_result_within)
                 self.assertTrue(plan['~children'][0]['~children'][0]['#operator'] == 'IntersectScan'
-                                or plan['~children'][0]['~children'][0]['#operator'] == 'UnionScan',
-                                "Intersect Scan is not being used in and query for 2 array indexes")
+                                or plan['~children'][0]['~children'][0]['#operator'] == 'UnionScan')
                 if plan['~children'][0]['~children'][0]['#operator'] == 'UnionScan':
                     result1 = plan['~children'][0]['~children'][0]['scans'][0]['scans'][0]['scan']['index']
                     result2 = plan['~children'][0]['~children'][0]['scans'][0]['scans'][1]['scan']['index']
@@ -3296,7 +3292,7 @@ class QueriesIndexTests(QueryTests):
         self.run_cbq_query()
         self.query = 'select * from {0}'.format("default")
         actual_result = self.run_cbq_query()
-        self.assertEqual(actual_result['metrics']['resultCount'],24196)
+        self.assertEqual(actual_result['metrics']['resultCount'],24192)
         self.query = 'delete from {0} where meta().id in (select RAW to_string(name)|| UUID()  from {0} d)'.format("default")
         self.run_cbq_query()
 
@@ -6989,9 +6985,12 @@ class QueriesIndexTests(QueryTests):
                 actual_result = self.run_cbq_query()
                 plan = self.ExplainPlanHelper(actual_result)
                 self.assertTrue(plan['~children'][0]['~children'][0]['#operator'] == 'IntersectScan' or plan['~children'][0]['~children'][0]['#operator'] == 'UnionScan')
-
-                result1 = plan['~children'][0]['~children'][0]['scans'][0]['scan']['index']
-                result2 = plan['~children'][0]['~children'][0]['scans'][1]['scan']['index']
+                if plan['~children'][0]['~children'][0]['#operator'] == 'UnionScan':
+                    result1 = plan['~children'][0]['~children'][0]['scans'][0]['scans'][0]['scan']['index']
+                    result2 = plan['~children'][0]['~children'][0]['scans'][0]['scans'][1]['scan']['index']
+                else:
+                    result1 = plan['~children'][0]['~children'][0]['scans'][0]['scan']['index']
+                    result2 = plan['~children'][0]['~children'][0]['scans'][1]['scan']['index']
                 self.assertTrue(result1 == idx2 or result1 == idx)
                 self.assertTrue(result2 == idx or result2 == idx2)
                 self.query = 'select name from %s where any v in tokens(%s.join_yr,{"case":"lower"}) satisfies v = 2016 END ' % (
@@ -7042,11 +7041,13 @@ class QueriesIndexTests(QueryTests):
                              'AND  NOT (department = "Manager") ORDER BY name limit 10'
                 actual_result_within = self.run_cbq_query()
                 plan = self.ExplainPlanHelper(actual_result_within)
-                self.assertTrue(plan['~children'][0]['~children'][0]['#operator'] == 'IntersectScan',
-                    "Intersect Scan is not being used in and query for 2 array indexes")
-
-                result1 = plan['~children'][0]['~children'][0]['scans'][0]['scan']['index']
-                result2 = plan['~children'][0]['~children'][0]['scans'][1]['scan']['index']
+                self.assertTrue(plan['~children'][0]['~children'][0]['#operator'] == 'IntersectScan' or plan['~children'][0]['~children'][0]['#operator'] == 'UnionScan')
+                if plan['~children'][0]['~children'][0]['#operator'] == 'UnionScan':
+                    result1 = plan['~children'][0]['~children'][0]['scans'][0]['scans'][0]['scan']['index']
+                    result2 = plan['~children'][0]['~children'][0]['scans'][0]['scans'][1]['scan']['index']
+                else:
+                    result1 = plan['~children'][0]['~children'][0]['scans'][0]['scan']['index']
+                    result2 = plan['~children'][0]['~children'][0]['scans'][1]['scan']['index']
                 self.assertTrue(result1 == idx3 or result1 == idx4)
                 self.assertTrue(result2 == idx4 or result2 == idx3)
 
