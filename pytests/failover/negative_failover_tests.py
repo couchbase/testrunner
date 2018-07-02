@@ -9,10 +9,10 @@ from failoverbasetests import FailoverBaseTest
 class NegativeFailoverTests(FailoverBaseTest):
 
     def setUp(self):
-        super(NegativeFailoverTests, self).setUp(self)
+        super(NegativeFailoverTests, self).setUp()
 
     def tearDown(self):
-        super(NegativeFailoverTests, self).tearDown(self)
+        super(NegativeFailoverTests, self).tearDown()
 
     def graceful_failover_when_rebalance_running(self):
         try:
