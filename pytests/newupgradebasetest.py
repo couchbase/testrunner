@@ -1003,16 +1003,15 @@ class NewUpgradeBaseTest(QueryHelperTests,EventingBaseTest, FTSBaseTest):
         """ check for load data into travel-sample bucket """
         if total_items:
             import time
-            end_time = time.time() + 600
+            end_time = time.time() + 180
             while time.time() < end_time:
                 self.sleep(20)
                 num_actual = 0
                 if not servers:
                     num_actual = self.get_item_count(self.master,bucketName)
                 else:
-                    for server in servers:
-                        if "kv" in server.services:
-                            num_actual += self.get_item_count(server,bucketName)
+                    bucket_maps = RestConnection(servers[0]).get_buckets_itemCount()
+                    num_actual = bucket_maps[bucketName]
                 if int(num_actual) == total_items:
                     self.log.info("{0} items are loaded in the {1} bucket"\
                                             .format(num_actual, bucketName))

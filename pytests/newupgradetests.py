@@ -2420,13 +2420,6 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
             for index in fts_obj.fts_indexes:
                 fts_obj.run_query_and_compare(index=index, num_queries=20)
             fts_obj.delete_all()
-        if 5 > int(self.upgrade_versions[0][:1]) and after_upgrade_services_in:
-            if "cbas" in after_upgrade_services_in:
-                self.load_sample_buckets(servers=list(set([self.master,
-                                              self.servers[nodes_init]])),
-                                              bucketName="travel-sample",
-                                              total_items=31591)
-
         if self.upgrade_versions[0][:5] in COUCHBASE_FROM_VULCAN and \
                  after_upgrade_services_in:
             if "eventing" in after_upgrade_services_in:
@@ -2438,6 +2431,12 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                 cbas_rest = RestConnection(self.servers[nodes_init])
                 kv_nodes = self.get_nodes_from_services_map(service_type="kv")
                 self.cbas_node = cbas_node
+                all_buckets = RestConnection(self.master).get_buckets()
+                for bucket in all_buckets:
+                    if bucket.name == "travel-sample":
+                        RestConnection(self.master).delete_bucket("travel-sample")
+                        self.sleep(10)
+                        break
                 self.load_sample_buckets(servers=self.servers[:nodes_init],
                                          bucketName="travel-sample",
                                          total_items=31591, rest=cbas_rest)
