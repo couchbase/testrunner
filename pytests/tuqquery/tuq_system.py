@@ -23,7 +23,9 @@ class SysCatalogTests(QueryTests):
         else:
             host = self.master.ip
         #host = (self.master.ip, self.input.tuq_client)[self.input.tuq_client and "client" in self.input.tuq_client]
-        if self.version == 'sherlock':
+        if self.ipv6:
+            host = 'http://[::1]'
+        elif self.version == 'sherlock':
             host ='127.0.0.1'
         for res in result['results']:
             self.assertEqual(res['datastores']['id'], res['datastores']['url'],
@@ -35,11 +37,13 @@ class SysCatalogTests(QueryTests):
         self.query = "SELECT * FROM system:namespaces"
         result = self.run_cbq_query()
 
-        host = '127.0.0.1'
+        if self.ipv6:
+            host = 'http://[::1]'
+        else:
+            host = '127.0.0.1'
         if self.input.tuq_client and "client" in self.input.tuq_client:
             host = self.input.tuq_client.client
         for res in result['results']:
-            
             self.log.info(res)
             self.assertEqual(res['namespaces']['id'], res['namespaces']['name'],
                         "Id and url don't match")
@@ -76,7 +80,7 @@ class SysCatalogTests(QueryTests):
     def test_memcached_buckets(self):
         self.query = "SELECT * FROM system:keyspaces"
         result = self.run_cbq_query()
-        self.assertTrue(result['metrics']['resultCount'] ==2)
+        self.assertTrue(result['metrics']['resultCount'] == 2)
         self.query = "SELECT count(*) as count FROM system:keyspaces"
         result = self.run_cbq_query()
-        self.assertTrue(result['results'][0]['count'] ==2)
+        self.assertTrue(result['results'][0]['count'] == 2)

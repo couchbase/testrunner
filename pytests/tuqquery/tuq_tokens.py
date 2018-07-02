@@ -249,6 +249,7 @@ class TokenTests(QueryTests):
                 for idx in created_indexes:
                     self.query = "DROP INDEX `beer-sample`.%s" % ( idx)
                     self.run_cbq_query()
+                self.rest.delete_bucket("beer-sample")
 
     def test_dynamicindex_limit(self):
         self.rest.load_sample("beer-sample")

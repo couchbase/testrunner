@@ -17,7 +17,7 @@ class AdvancedQueryTests(QueryTests):
     def setUp(self):
         super(AdvancedQueryTests, self).setUp()
         self.use_rest = False
-        self.cbqpath = '%scbq -quiet -u %s -p %s' % (self.path, self.username, self.password)
+        self.cbqpath = '{0}cbq -quiet -u {1} -p {2} -e=localhost:8093 '.format(self.path, self.username, self.password)
 
     def tearDown(self):
         if self._testMethodName == 'suite_tearDown':
