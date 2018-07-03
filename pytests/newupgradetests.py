@@ -2407,6 +2407,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                     self.cluster.rebalance(self.servers[:(nodes_init + 1)],
                                             [self.servers[nodes_init]], [],
                                              services=[after_upgrade_services_in])
+                    self.sleep(15)
                 except Exception as e:
                     self.fail(e)
 
