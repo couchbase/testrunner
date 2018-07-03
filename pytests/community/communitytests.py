@@ -16,7 +16,8 @@ from remote.remote_util import RemoteMachineShellConnection
 from membase.helper.cluster_helper import ClusterOperationHelper
 from scripts.install import InstallerJob
 from testconstants import SHERLOCK_VERSION
-from testconstants import COUCHBASE_FROM_WATSON, COUCHBASE_FROM_SPOCK
+from testconstants import COUCHBASE_FROM_WATSON, COUCHBASE_FROM_SPOCK,\
+                          COUCHBASE_FROM_VULCAN
 
 
 
@@ -113,6 +114,11 @@ class CommunityTests(CommunityBaseTest):
                 self.fail("CE does not support kv and n1ql on same node")
             else:
                 self.log.info("services enforced in CE")
+        elif self.services == "kv,eventing":
+            if status:
+                self.fail("CE does not support kv and eventing on same node")
+            else:
+                self.log.info("services enforced in CE")
         elif self.services == "index,n1ql":
             if status:
                 self.fail("CE does not support index and n1ql on same node")
@@ -125,7 +131,12 @@ class CommunityTests(CommunityBaseTest):
             else:
                 self.fail("Failed to set kv, index and query services on CE")
         elif self.version[:5] in COUCHBASE_FROM_WATSON:
-            if self.services == "fts,index,kv":
+            if self.version[:5] in COUCHBASE_FROM_VULCAN and "eventing" in self.services:
+                if status:
+                    self.fail("CE does not support eventing in vulcan")
+                else:
+                    self.log.info("services enforced in CE")
+            elif self.services == "fts,index,kv":
                 if status:
                     self.fail("CE does not support fts, index and kv on same node")
                 else:
@@ -423,6 +434,44 @@ class CommunityTests(CommunityBaseTest):
                 self.log.info("cbbackupmgr is enforced in CE")
         self.remote.disconnect()
 
+    def test_max_ttl_bucket(self):
+        """
+            From vulcan, EE bucket has has an option to set --max-ttl, not it CE.
+            This test is make sure CE could not create bucket with option --max-ttl
+            This test must pass default_bucket=False
+        """
+        if self.cb_version[:5] not in COUCHBASE_FROM_VULCAN:
+            self.log.info("This test only for vulcan and later")
+            return
+        self.cli_test = self.input.param("cli_test", False)
+        cmd = 'curl -X POST -u Administrator:password \
+                                    http://{0}:8091/pools/default/buckets \
+                                 -d name=bucket0 \
+                                 -d maxTTL=100 \
+                                 -d authType=sasl \
+                                 -d ramQuotaMB=100 '.format(self.master.ip)
+        if self.cli_test:
+            cmd = "{0}couchbase-cli bucket-create -c {1}:8091 --username Administrator \
+                --password password --bucket bucket0 --bucket-type couchbase \
+                --bucket-ramsize 512 --bucket-replica 1 --bucket-priority high \
+                --bucket-eviction-policy fullEviction --enable-flush 0 \
+                --enable-index-replica 1 --max-ttl 200".format(self.bin_path,
+                                                               self.master.ip)
+        conn = RemoteMachineShellConnection(self.master)
+        output, error = conn.execute_command(cmd)
+        conn.log_command_output(output, error)
+        mesg = "Max TTL is supported in enterprise edition only"
+        if self.cli_test:
+            mesg = "Maximum TTL can only be configured on enterprise edition"
+        if output and mesg not in str(output[0]):
+            self.fail("max ttl feature should not in Community Edition")
+        buckets = RestConnection(self.master).get_buckets()
+        if buckets:
+            for bucket in buckets:
+                self.log.info("bucekt in cluser: {0}".format(bucket.name))
+                if bucket.name == "bucket0":
+                    self.fail("Failed to enforce feature max ttl in CE.")
+        conn.disconnect()
 
 class CommunityXDCRTests(CommunityXDCRBaseTest):
     def setUp(self):
