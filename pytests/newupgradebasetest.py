@@ -514,7 +514,11 @@ class NewUpgradeBaseTest(QueryHelperTests,EventingBaseTest, FTSBaseTest):
         rest = RestConnection(self.master)
         rest.add_back_node(self.failover_node.id)
 
-    def create_ddocs_and_views(self):
+    def create_ddocs_and_views(self, server=None):
+        server_in_cluster = self.master
+        if server is not None:
+            self.buckets = RestConnection(server).get_buckets()
+            server_in_cluster = server
         self.default_view = View(self.default_view_name, None, None)
         for bucket in self.buckets:
             for i in xrange(int(self.ddocs_num)):
@@ -523,7 +527,8 @@ class NewUpgradeBaseTest(QueryHelperTests,EventingBaseTest, FTSBaseTest):
                 ddoc = DesignDocument(self.default_view_name + str(i), views)
                 self.ddocs.append(ddoc)
                 for view in views:
-                    self.cluster.create_view(self.master, ddoc.name, view, bucket=bucket)
+                    self.cluster.create_view(server_in_cluster, ddoc.name,
+                                             view, bucket=bucket)
 
     def delete_data(self, servers, paths_to_delete):
         for server in servers:
@@ -678,7 +683,6 @@ class NewUpgradeBaseTest(QueryHelperTests,EventingBaseTest, FTSBaseTest):
         self.run_async_index_operations(operation_type)
 
     def during_upgrade(self, servers):
-        print("before create_ddocs_and_views")
         self.ddocs_num = 0
         self.create_ddocs_and_views()
         kv_tasks = self.async_run_doc_ops()
@@ -688,10 +692,10 @@ class NewUpgradeBaseTest(QueryHelperTests,EventingBaseTest, FTSBaseTest):
             task.result()
 
     def post_upgrade(self, servers):
-        print("before post_upgrade")
+        self.log.info(" Doing post upgrade")
         self.ddocs_num = 0
         self.add_built_in_server_user()
-        self.create_ddocs_and_views()
+        self.create_ddocs_and_views(servers[0])
         kv_tasks = self.async_run_doc_ops()
         operation_type = self.input.param("post_upgrade", "")
         self.run_async_index_operations(operation_type)

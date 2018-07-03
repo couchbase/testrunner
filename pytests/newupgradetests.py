@@ -797,8 +797,10 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         # Install initial version on the specified nodes
         self._install(self.servers[:self.nodes_init])
         # Configure the nodes with services
-        self.operations(self.servers[:self.nodes_init], services="kv,kv,index,n1ql,kv,kv,index,n1ql")
-        # get the n1ql node which will be used in pre,during and post upgrade for running n1ql commands
+        self.operations(self.servers[:self.nodes_init],
+                        services="kv,kv,index,n1ql,kv,kv,index,n1ql")
+        # get the n1ql node which will be used in pre,during and post
+        # upgrade for running n1ql commands
         self.n1ql_server = self.get_nodes_from_services_map(
             service_type="n1ql")
         # Run the pre upgrade operations, typically creating index
@@ -807,8 +809,9 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
             self.create_ddocs_and_views()
         # set the upgrade version
         self.initial_version = self.upgrade_versions[0]
-        self.sleep(self.sleep_time, "Pre-setup of old version is done. Wait for online upgrade to {0} version". \
-                   format(self.initial_version))
+        self.sleep(self.sleep_time, "Pre-setup of old version is done. "\
+                                    "Wait for online upgrade to {0} version". \
+                                    format(self.initial_version))
         upgrade_servers = self.servers[self.swap_num_servers:self.nodes_init]
         upgrade_services = ["kv", "kv", "index", "n1ql"]
         # swap out half of the servers out and rebalance
@@ -821,7 +824,8 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         self.during_upgrade(self.servers[:self.nodes_init])
         # rebalance in the swapped out servers
         for i in range(0, len(upgrade_servers)):
-            self.cluster.rebalance(self.servers, [upgrade_servers[i]], [], services=[upgrade_services[i]])
+            self.cluster.rebalance(self.servers, [upgrade_servers[i]], [],
+                                   services=[upgrade_services[i]])
 
         self._new_master(self.servers[self.swap_num_servers])
         # swap out the remaining half of the servers and rebalance
@@ -830,7 +834,8 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         # install the new version on the swapped out servers
         self._install(self.servers[:self.swap_num_servers])
         for i in range(0, len(upgrade_servers)):
-            self.cluster.rebalance(self.servers[self.swap_num_servers:self.nodes_init], [upgrade_servers[i]], [],
+            self.cluster.rebalance(self.servers[self.swap_num_servers:self.nodes_init],
+                                   [upgrade_servers[i]], [],
                                    services=[upgrade_services[i]])
         self.sleep(timeout=60)
         self.n1ql_server = self.get_nodes_from_services_map(
@@ -842,11 +847,14 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         # Add new services after the upgrade
         if after_upgrade_services_in is not False:
             for upgrade_version in self.upgrade_versions:
-                if self.initial_build_type == "community" and self.upgrade_build_type == "enterprise":
-                    upgrade_threads = self._async_update(upgrade_version, [self.servers[self.nodes_init]],
+                if self.initial_build_type == "community" and \
+                   self.upgrade_build_type == "enterprise":
+                    upgrade_threads = self._async_update(upgrade_version,
+                                                         [self.servers[self.nodes_init]],
                                                          save_upgrade_config=True)
                 else:
-                    upgrade_threads = self._async_update(upgrade_version, [self.servers[self.nodes_init]])
+                    upgrade_threads = self._async_update(upgrade_version,
+                                                         [self.servers[self.nodes_init]])
 
                 for upgrade_thread in upgrade_threads:
                     upgrade_thread.join()
@@ -856,7 +864,8 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                 if not success_upgrade:
                     self.fail("Upgrade failed. See logs above!")
                 self.sleep(self.expire_time)
-                self.cluster.rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]], [],
+                self.cluster.rebalance(self.servers[:self.nodes_init],
+                                       [self.servers[self.nodes_init]], [],
                                        services=["kv", "index", "n1ql"])
         # creating new buckets after upgrade
         if after_upgrade_buckets_in is not False:
@@ -865,8 +874,10 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
             self._create_standard_buckets(self.master, 1)
             if self.ddocs_num:
                 self.create_ddocs_and_views()
-                gen_load = BlobGenerator('upgrade', 'upgrade-', self.value_size, end=self.num_items)
-                self._load_all_buckets(self.master, gen_load, "create", self.expire_time, flag=self.item_flag)
+                gen_load = BlobGenerator('upgrade', 'upgrade-',
+                                         self.value_size, end=self.num_items)
+                self._load_all_buckets(self.master, gen_load, "create",
+                                       self.expire_time, flag=self.item_flag)
         # deleting buckets after upgrade
         if after_upgrade_buckets_out is not False:
             self._all_buckets_delete(self.master)
