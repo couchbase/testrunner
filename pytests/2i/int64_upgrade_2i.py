@@ -135,6 +135,11 @@ class UpgradeSecondaryIndexInt64(UpgradeSecondaryIndex):
         upgrade_nodes = self.servers[:self.nodes_init]
         if self.disable_plasma_upgrade:
             self._install(self.nodes_in_list, version=self.upgrade_to)
+            rebalance = self.cluster.async_rebalance(
+                self.servers[:self.nodes_init],
+                [self.nodes_in_list[0]], [],
+                services=["index"])
+            rebalance.result()
             self.sleep(100)
             self.disable_upgrade_to_plasma(self.nodes_in_list[0])
         for node in upgrade_nodes:
@@ -180,11 +185,19 @@ class UpgradeSecondaryIndexInt64(UpgradeSecondaryIndex):
         self._install(self.nodes_in_list, version=self.upgrade_to)
         self.sleep(100)
         if self.disable_plasma_upgrade:
+            self._install(self.nodes_in_list, version=self.upgrade_to)
+            rebalance = self.cluster.async_rebalance(
+                self.servers[:self.nodes_init],
+                [self.nodes_in_list[0]], [],
+                services=["index"])
+            rebalance.result()
+            self.sleep(100)
             self.disable_upgrade_to_plasma(self.nodes_in_list[0])
         log.info("Swapping servers...")
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
                                                  self.nodes_in_list,
-                                                 self.nodes_out_list)
+                                                 self.nodes_out_list,
+                                                 services=["index", "n1ql"])
         rebalance.result()
         self.sleep(100)
         log.info("===== Nodes Swapped with Upgraded versions =====")
