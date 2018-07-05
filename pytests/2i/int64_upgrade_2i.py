@@ -1,3 +1,4 @@
+import copy
 import logging
 import random
 
@@ -182,24 +183,44 @@ class UpgradeSecondaryIndexInt64(UpgradeSecondaryIndex):
         """
         :return:
         """
-        self._install(self.nodes_in_list, version=self.upgrade_to)
-        self.sleep(100)
+        old_servers = self.servers[:self.nodes_init]
         if self.disable_plasma_upgrade:
             self._install(self.nodes_in_list, version=self.upgrade_to)
             rebalance = self.cluster.async_rebalance(
                 self.servers[:self.nodes_init],
-                [self.nodes_in_list[0]], [],
+                [self.nodes_in_list[1]], [],
                 services=["index"])
             rebalance.result()
             self.sleep(100)
-            self.disable_upgrade_to_plasma(self.nodes_in_list[0])
+            self.disable_upgrade_to_plasma(self.nodes_in_list[1])
+            old_servers.append(self.nodes_in_list[1])
         log.info("Swapping servers...")
-        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
-                                                 self.nodes_in_list,
-                                                 self.nodes_out_list,
-                                                 services=["index", "n1ql"])
-        rebalance.result()
-        self.sleep(100)
+
+        service_map = self.get_nodes_services()
+        i = 0
+        swap_server = self.nodes_in_list[0]
+        upgrade_nodes_list = self.servers[:self.nodes_init]
+
+        for node in upgrade_nodes_list:
+            self._install([swap_server], version=self.upgrade_to)
+            service_on_node = service_map[node.ip]
+            log.info("Swapping %s with %s with %s services" % (node,swap_server,service_on_node))
+            servers = old_servers
+            rebalance = self.cluster.async_rebalance(servers,
+                                                     [swap_server], [node],
+                                                     services=[service_on_node])
+            rebalance.result()
+            self.sleep(30)
+            i += 1
+            old_servers.append(swap_server)
+            old_servers.remove(node)
+            if (self.master not in old_servers) and ("kv" in service_on_node):
+                self.master = swap_server
+            swap_server = node
+            self.n1ql_node = self.get_nodes_from_services_map(
+                service_type="n1ql",master=old_servers[0])
+            log.info("Master : %s",self.master)
+
         log.info("===== Nodes Swapped with Upgraded versions =====")
         self.upgrade_servers = self.nodes_in_list
         if self.initial_version.split("-")[0] in UPGRADE_VERS:
@@ -207,12 +228,16 @@ class UpgradeSecondaryIndexInt64(UpgradeSecondaryIndex):
             self.sleep(100)
             self._create_indexes()
             self.sleep(100)
+        else:
+            self._create_indexes()
+            self.sleep(100)
         msg = "Cluster is not healthy after upgrade"
         self.assertTrue(self.wait_until_cluster_is_healthy(), msg)
         log.info("Cluster is healthy")
         self.add_built_in_server_user()
         self.sleep(20)
-        self.assertTrue(self.wait_until_indexes_online(), "Some indexes are not online")
+        self.assertTrue(self.wait_until_indexes_online(),
+                        "Some indexes are not online")
         log.info("All indexes are online")
         self._query_index("post_upgrade")
         self._verify_post_upgrade_results()
@@ -283,7 +308,7 @@ class UpgradeSecondaryIndexInt64(UpgradeSecondaryIndex):
 
     def _update_document(self, key, document):
         url = 'couchbase://{ip}/default'.format(ip=self.master.ip)
-        if self.initial_version.startswith("4"):
+        if self.upgrade_to.startswith("4"):
             bucket = Bucket(url)
         else:
             bucket = Bucket(url, username="default", password="password")

@@ -359,7 +359,7 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
             self.log.info(ex)
             self.assertTrue(msg in str(ex), ex)
         finally:
-            remote = RemoteMachineShellConnection(servr_out[1])
+            remote = RemoteMachineShellConnection(node_out)
             remote.start_server()
 
     def test_fail_drop_index_node_down(self):
