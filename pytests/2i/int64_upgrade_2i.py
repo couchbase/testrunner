@@ -41,7 +41,7 @@ class UpgradeSecondaryIndexInt64(UpgradeSecondaryIndex):
         super(UpgradeSecondaryIndexInt64, self).tearDown()
 
     def test_offline_upgrade(self):
-        upgrade_nodes = self.nodes_out_list
+        upgrade_nodes = self.servers[:self.nodes_init]
         if self.disable_plasma_upgrade:
             self._install(self.nodes_in_list, version=self.upgrade_to)
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
