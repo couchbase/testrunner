@@ -77,6 +77,7 @@ class EventingRecovery(EventingBaseTest):
         self.kill_consumer(eventing_node)
         # Wait for eventing to catch up with all the delete mutations and verify results
         self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+        self.wait_for_bootstrap_to_complete(body['appname'])
         self.undeploy_and_delete_function(body)
         # intentionally added , as it requires some time for eventing-consumers to shutdown
         self.sleep(60)

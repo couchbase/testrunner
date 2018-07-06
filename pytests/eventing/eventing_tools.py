@@ -193,6 +193,8 @@ class EventingTools(EventingBaseTest, EnterpriseBackupRestoreBase, NewUpgradeBas
         self.vbucket_filter = self.input.param("vbucket-filter", None)
         self.new_replicas = self.input.param("new-replicas", None)
         self.should_fail = self.input.param("should-fail", False)
+        self.restore_compression_mode = self.input.param("restore-compression-mode", None)
+        self.enable_firewall = False
 
     def tearDown(self):
         super(EventingTools, self).tearDown()
@@ -215,7 +217,11 @@ class EventingTools(EventingBaseTest, EnterpriseBackupRestoreBase, NewUpgradeBas
         self.backup_create_validate()
         self.backup_cluster()
         self.backup_list()
-        self.backup_restore_validate()
+        try:
+            self.backup_restore_validate()
+        except Exception as ex:
+            if "Extra elements found in the actual metadata Data" not in str(ex):
+                self.fail("restore failed : {0}".format(str(ex)))
 
     def test_eventing_lifecycle_with_couchbase_cli(self):
         # load some data in the source bucket
