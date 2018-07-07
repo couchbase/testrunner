@@ -152,9 +152,30 @@ class LogRedactionTests(LogRedactionBase):
         rest = RestConnection(server)
         status = rest.set_indexer_params("logLevel", loglevel)
 
+    def set_projector_logLevel(self, loglevel="info"):
+        """
+        :param loglevel:
+        Possible Values
+            -- info
+            -- debug
+            -- warn
+            -- verbose
+            -- Silent
+            -- Fatal
+            -- Error
+            -- Timing
+            -- Trace
+        """
+        self.log.info("Setting indexer log level to {0}".format(loglevel))
+        server = self.get_nodes_from_services_map(service_type="index")
+        rest = RestConnection(server)
+        proj_settings = {"projector.settings.log_level": loglevel}
+        status = rest.set_index_settings(proj_settings)
+
     def test_gsi_with_crud_with_redaction_enabled(self):
         # load bucket and do some ops
         self.set_indexer_logLevel("trace")
+        self.set_projector_logLevel("trace")
         json_generator = JsonGenerator()
         gen_docs = json_generator.generate_all_type_documents_for_gsi(docs_per_day=self.doc_per_day, start=0)
         full_docs_list = self.generate_full_docs_list(gen_docs)
@@ -163,8 +184,9 @@ class LogRedactionTests(LogRedactionBase):
         self.load(gen_docs)
         n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
         query_definition_generator = SQLDefinitionGenerator()
+        n1ql_helper.create_primary_index(using_gsi=True, server=n1ql_node)
         query_definitions = query_definition_generator.generate_airlines_data_query_definitions()
-        query_definitions = query_definition_generator.filter_by_group("all", query_definitions)
+        query_definitions = query_definition_generator.filter_by_group(["simple"], query_definitions)
         # set log redaction level, collect logs, verify log files exist and verify them for redaction
         self.set_redaction_level()
         self.start_logs_collection()
@@ -204,6 +226,7 @@ class LogRedactionTests(LogRedactionBase):
     def test_gsi_with_flush_bucket_redaction_enabled(self):
         # load bucket and do some ops
         self.set_indexer_logLevel("trace")
+        self.set_projector_logLevel("trace")
         json_generator = JsonGenerator()
         gen_docs = json_generator.generate_all_type_documents_for_gsi(docs_per_day=self.doc_per_day, start=0)
         full_docs_list = self.generate_full_docs_list(gen_docs)
@@ -211,9 +234,10 @@ class LogRedactionTests(LogRedactionBase):
                                       log=log, input=self.input, master=self.master)
         self.load(gen_docs)
         n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
+        n1ql_helper.create_primary_index(using_gsi=True, server=n1ql_node)
         query_definition_generator = SQLDefinitionGenerator()
         query_definitions = query_definition_generator.generate_airlines_data_query_definitions()
-        query_definitions = query_definition_generator.filter_by_group("all", query_definitions)
+        query_definitions = query_definition_generator.filter_by_group(["simple"], query_definitions)
         # set log redaction level, collect logs, verify log files exist and verify them for redaction
         self.set_redaction_level()
         self.start_logs_collection()
@@ -264,6 +288,7 @@ class LogRedactionTests(LogRedactionBase):
     def test_gsi_with_index_restart_redaction_enabled(self):
         # load bucket and do some ops
         self.set_indexer_logLevel("trace")
+        self.set_projector_logLevel("trace")
         json_generator = JsonGenerator()
         gen_docs = json_generator.generate_all_type_documents_for_gsi(docs_per_day=self.doc_per_day, start=0)
         full_docs_list = self.generate_full_docs_list(gen_docs)
@@ -271,9 +296,10 @@ class LogRedactionTests(LogRedactionBase):
                                       log=log, input=self.input, master=self.master)
         self.load(gen_docs)
         n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
+        n1ql_helper.create_primary_index(using_gsi=True, server=n1ql_node)
         query_definition_generator = SQLDefinitionGenerator()
         query_definitions = query_definition_generator.generate_airlines_data_query_definitions()
-        query_definitions = query_definition_generator.filter_by_group("all", query_definitions)
+        query_definitions = query_definition_generator.filter_by_group(["simple"], query_definitions)
         # set log redaction level, collect logs, verify log files exist and verify them for redaction
         self.set_redaction_level()
         self.start_logs_collection()
@@ -324,16 +350,19 @@ class LogRedactionTests(LogRedactionBase):
     def test_gsi_with_index_rebalance_redaction_enabled(self):
         # load bucket and do some ops
         self.set_indexer_logLevel("trace")
+        self.set_projector_logLevel("trace")
         json_generator = JsonGenerator()
         gen_docs = json_generator.generate_all_type_documents_for_gsi(docs_per_day=self.doc_per_day, start=0)
         full_docs_list = self.generate_full_docs_list(gen_docs)
         n1ql_helper = N1QLHelper(use_rest=True, buckets=self.buckets, full_docs_list=full_docs_list,
                                  log=log, input=self.input, master=self.master)
         self.load(gen_docs)
+        self.find_nodes_in_list()
         n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
+        n1ql_helper.create_primary_index(using_gsi=True, server=n1ql_node)
         query_definition_generator = SQLDefinitionGenerator()
         query_definitions = query_definition_generator.generate_airlines_data_query_definitions()
-        query_definitions = query_definition_generator.filter_by_group("all", query_definitions)
+        query_definitions = query_definition_generator.filter_by_group(["simple"], query_definitions)
         # set log redaction level, collect logs, verify log files exist and verify them for redaction
         self.set_redaction_level()
         self.start_logs_collection()
@@ -347,7 +376,6 @@ class LogRedactionTests(LogRedactionBase):
             for bucket in self.buckets:
                 scan_query = query_definition.generate_query(bucket=bucket.name)
                 n1ql_helper.run_cbq_query(query=scan_query, server=n1ql_node)
-
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], self.nodes_in_list,
                                                  [], services=self.services_in)
 
