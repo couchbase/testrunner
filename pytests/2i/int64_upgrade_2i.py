@@ -172,6 +172,14 @@ class UpgradeSecondaryIndexInt64(UpgradeSecondaryIndex):
         log.info("Cluster is healthy")
         self.add_built_in_server_user()
         self.sleep(20)
+        if self.initial_version.split("-")[0] in UPGRADE_VERS:
+            self.multi_drop_index()
+            self.sleep(100)
+            self._create_indexes()
+            self.sleep(100)
+        else:
+            self._create_indexes()
+            self.sleep(100)
         self.assertTrue(self.wait_until_indexes_online(), "Some indexes are not online")
         log.info("All indexes are online")
         self._query_index("post_upgrade")
