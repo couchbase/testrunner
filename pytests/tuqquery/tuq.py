@@ -1827,7 +1827,7 @@ class QueryTests(BaseTestCase):
         rest = RestConnection(self.master)
         api = rest.baseUrl + url
         status, content, header = rest._http_request(api, 'GET')
-        self.log.info("{4} - Status - {0} -- Content - {1} -- Header - {2}".format(status, content, header, prepend))
+        self.log.info("{3} - Status - {0} -- Content - {1} -- Header - {2}".format(status, content, header, prepend))
         return status, content, header
 
     def grant_role(self, role=None):
