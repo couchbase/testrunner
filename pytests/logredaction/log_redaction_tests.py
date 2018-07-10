@@ -255,7 +255,7 @@ class LogRedactionTests(LogRedactionBase):
         rest = RestConnection(self.master)
         rest.flush_bucket(self.buckets[0].name)
 
-        self.sleep(10)
+        self.sleep(100)
         self.load(gen_docs, buckets=[self.buckets[0]])
 
         for query_definition in query_definitions:
@@ -314,12 +314,12 @@ class LogRedactionTests(LogRedactionBase):
                 scan_query = query_definition.generate_query(bucket=bucket.name)
                 n1ql_helper.run_cbq_query(query=scan_query, server=n1ql_node)
 
-        index_node = n1ql_node = self.get_nodes_from_services_map(service_type="index")
+        index_node = self.get_nodes_from_services_map(service_type="index")
         remote = RemoteMachineShellConnection(index_node)
         remote.stop_server()
         self.sleep(30)
         remote.start_server()
-
+        self.sleep(30)
         for query_definition in query_definitions:
             for bucket in self.buckets:
                 scan_query = query_definition.generate_query(bucket=bucket.name)
