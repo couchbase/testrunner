@@ -68,6 +68,7 @@ class EventingRecovery(EventingBaseTest):
                   batch_size=self.batch_size)
         # kill eventing consumer when eventing is processing mutations
         self.kill_consumer(eventing_node)
+        self.wait_for_bootstrap_to_complete(body['appname'])
         # Wait for eventing to catch up with all the update mutations and verify results
         self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         # delete all documents
@@ -93,6 +94,7 @@ class EventingRecovery(EventingBaseTest):
                   batch_size=self.batch_size)
         # kill eventing producer when eventing is processing mutations
         self.kill_producer(eventing_node)
+        self.wait_for_bootstrap_to_complete(body['appname'])
         # Wait for eventing to catch up with all the update mutations and verify results
         self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         # delete all documents
@@ -100,6 +102,7 @@ class EventingRecovery(EventingBaseTest):
                   batch_size=self.batch_size, op_type='delete')
         # kill eventing producer when eventing is processing mutations
         self.kill_producer(eventing_node)
+        self.wait_for_bootstrap_to_complete(body['appname'])
         # Wait for eventing to catch up with all the delete mutations and verify results
         self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
