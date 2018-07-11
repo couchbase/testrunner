@@ -2577,44 +2577,33 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
 
     def test_reset_admin_password(self):
         remote_client = RemoteMachineShellConnection(self.master)
-        cli_command = "reset-admin-password"
 
         options = ''
-        output, error = remote_client.execute_couchbase_cli(
-            cli_command=cli_command, options=options, cluster_host="localhost",
-            cluster_port=8091, user="Administrator", password="password")
-        self.assertTrue(self._check_output('No parameters specified', output))
+        cli_command = "{0}couchbase-cli{1} reset-admin-password ".format(self.cli_command_path,
+                                                                         self.cmd_ext)
+        output, error = remote_client.execute_command("{0} {1}".format(cli_command, options))
+        self.assertTrue(self._check_output('usage: couchbase-cli reset-admin-password', output))
 
         options = '--blabla'
-        output, error = remote_client.execute_couchbase_cli(
-            cli_command=cli_command, options=options, cluster_host="localhost",
-            cluster_port=8091, user="Administrator", password="password")
-        self.assertTrue(self._check_output("unrecognized arguments:", output))
+        output, error = remote_client.execute_command("{0} {1}".format(cli_command, options))
+        self.assertTrue(self._check_output("unrecognized arguments:", error))
 
         options = '--new-password aaa'
-        output, error = remote_client.execute_couchbase_cli(
-            cli_command=cli_command, options=options, cluster_host="127.0.0.5",
-            cluster_port=8091, user="Administrator", password="password")
+        output, error = remote_client.execute_command("{0} {1}".format(cli_command, options))
         self.assertTrue(self._check_output("The password must be at least 6 characters long",
                                            output))
 
-        output, error = remote_client.execute_couchbase_cli(
-            cli_command=cli_command, options=options, cluster_host="127.0.0.1",
-            cluster_port=8091, user="Administrator", password="password")
-        self.assertTrue(self._check_output("The password must be at least 6 characters long",
-                                            output))
         try:
             options = '--regenerate'
             outputs = []
             for i in xrange(10):
-                output, error = remote_client.execute_couchbase_cli(
-                    cli_command=cli_command, options=options, cluster_host="127.0.0.1",
-                    cluster_port=8091, user="FAKE", password="FAKE")
+                output, error = remote_client.execute_command("{0} {1}".format(cli_command,
+                                                                               options))
                 new_password = ""
                 for x in output:
-                    if not x.startswith("DEPRECATED") and len(x) == 8:
+                    if not x.startswith("DEPRECATED") and len(x) >= 8:
                         new_password = x
-                self.assertEqual(len(new_password), 8)
+                self.assertTrue(len(new_password) >= 8)
                 self.assertTrue(new_password not in outputs)
                 outputs.append(new_password)
 
@@ -2626,9 +2615,8 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
                 chars = string.letters + string.digits
                 new_password = ''.join((random.choice(chars)) for x in range(random.randint(6, 30)))
                 options = '--new-password "%s"' % new_password
-                output, _ = remote_client.execute_couchbase_cli(
-                    cli_command=cli_command, options=options, cluster_host="127.0.0.1",
-                    cluster_port=8091, user="Administrator", password="password")
+                output, _ = remote_client.execute_command("{0} {1}".format(cli_command,
+                                                                           options))
                 self.assertTrue(self._check_output('SUCCESS: Administrator password changed',
                                                    output))
                 server.rest_password = old_password
@@ -2644,12 +2632,11 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
             for i in xrange(5):
                 server = copy.deepcopy(self.servers[0])
                 options = '--regenerate'
-                output, _ = remote_client.execute_couchbase_cli(
-                    cli_command=cli_command, options=options, cluster_host="127.0.0.1",
-                    cluster_port=8091, user="Administrator", password="password")
+                output, _ = remote_client.execute_command("{0} {1}".format(cli_command,
+                                                                           options))
                 new_password = ""
                 for x in output:
-                    if not x.startswith("DEPRECATED") and len(x) == 8:
+                    if not x.startswith("DEPRECATED") and len(x) >= 8:
                         new_password = x
                 server.rest_password = old_password
                 rest = RestConnection(server)
@@ -2659,15 +2646,14 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
 
                 old_password = new_password
                 for m in apis:
-                        getattr(rest_new, m)()
+                    getattr(rest_new, m)()
                 for m in apis:
-                        self.assertRaises(Exception, getattr(rest, m))
+                    self.assertRaises(Exception, getattr(rest, m))
         finally:
             self.log.info("Inside finally block")
             options = '--new-password password'
-            remote_client.execute_couchbase_cli(
-                cli_command=cli_command, options=options, cluster_host="127.0.0.1",
-                cluster_port=8091, user="Administrator", password="password")
+            output, error = remote_client.execute_command("{0} {1}".format(cli_command,
+                                                           options))
 
     def test_cli_with_offline_upgrade(self):
         """
