@@ -223,6 +223,7 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
         self.log_config_info()
 
         # run post upgrade test
+        self.ensure_primary_indexes_exist()
         self.log.info("running post upgrade test")
         self.run_upgrade_test_for_feature(self.feature, "post-upgrade")
         self.log.info("completed post upgrade test")
