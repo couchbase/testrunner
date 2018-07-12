@@ -845,6 +845,12 @@ class ImportExportTests(CliBaseTest):
                             self.rest.disable_auto_compaction()
                             self.log.info("**** Load bucket to %s of active resident"\
                                           % self.active_resident_threshold)
+                            self.shell.execute_command("{0}{1}{2} bucket-edit -c {3}:8091 "\
+                                                       " -u Administrator -p password "\
+                                                       "--bucket {4} --bucket-ramsize 100"\
+                                                       .format(self.cli_command_path,
+                                                        "couchbase-cli", self.cmd_ext,
+                                                        server.ip, bucket.name))
                             self._load_all_buckets(self.master, kv_gen, "create", 0)
                         self.log.info("load sample data to bucket")
                         self.shell.execute_command(load_cmd)
@@ -1040,6 +1046,12 @@ class ImportExportTests(CliBaseTest):
                         RestConnection(self.master).disable_auto_compaction()
                         self.log.info("**** Load bucket to %s of active resident"\
                                           % self.active_resident_threshold)
+                        self.shell.execute_command("{0}{1}{2} bucket-edit -c {3}:8091 "\
+                                                       " -u Administrator -p password "\
+                                                       "--bucket {4} --bucket-ramsize 100"\
+                                                       .format(self.cli_command_path,
+                                                        "couchbase-cli", self.cmd_ext,
+                                                        server.ip, bucket.name))
                         self._load_all_buckets(self.master, kv_gen, "create", 0)
                     self.cluster_helper.wait_for_stats([self.master], bucket.name, "",
                                                              "ep_queue_size", "==", 0)
