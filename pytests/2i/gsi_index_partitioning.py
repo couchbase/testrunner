@@ -532,7 +532,12 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
             self.log.info(str(ex))
             self.fail("Failed to create index with one node failed")
 
-        index_metadata = self.rest.get_indexer_metadata()
+        if node_out == self.index_servers[0]:
+            rest = RestConnection(self.index_servers[1])
+        else:
+            rest = self.rest
+
+        index_metadata = rest.get_indexer_metadata()
         self.log.info("Indexer Metadata :::")
         self.log.info(index_metadata)
 
@@ -600,7 +605,12 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
 
         self.sleep(30)
 
-        index_metadata = self.rest.get_indexer_metadata()
+        if node_out == self.index_servers[0]:
+            rest = RestConnection(self.index_servers[1])
+        else:
+            rest = self.rest
+
+        index_metadata = rest.get_indexer_metadata()
         self.log.info("Indexer Metadata :::")
         self.log.info(index_metadata)
 
@@ -842,7 +852,11 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
 
         self.sleep(30)
         index_map = self.get_index_map()
-        index_metadata = self.rest.get_indexer_metadata()
+        if node_out == self.index_servers[0]:
+            rest = RestConnection(self.index_servers[1])
+        else:
+            rest = self.rest
+        index_metadata = rest.get_indexer_metadata()
         self.log.info("Indexer Metadata After Build:")
         self.log.info(index_metadata)
 
@@ -933,7 +947,11 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         self.sleep(30)
 
         index_map = self.get_index_map()
-        index_metadata = self.rest.get_indexer_metadata()
+        if node_out == self.index_servers[0]:
+            rest = RestConnection(self.index_servers[1])
+        else:
+            rest = self.rest
+        index_metadata = rest.get_indexer_metadata()
         self.log.info("Indexer Metadata After Build:")
         self.log.info(index_metadata)
 
@@ -3870,7 +3888,12 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         index_map = self.get_index_map()
         self.log.info(index_map)
 
-        index_metadata = self.rest.get_indexer_metadata()
+        if node_out == self.index_servers[0]:
+            rest = RestConnection(self.index_servers[1])
+        else:
+            rest = self.rest
+
+        index_metadata = rest.get_indexer_metadata()
         self.log.info("Indexer Metadata After Build:")
         self.log.info(index_metadata)
 
@@ -4250,9 +4273,8 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
                 if index["name"] == idx_name:
                     totalPartitions = 0
                     for host in hosts:
-                        if not index["partitionMap"][host]:
-                            partitions_distributed_for_index &= False
-                        totalPartitions += len(index["partitionMap"][host])
+                        if host in index["partitionMap"]:
+                            totalPartitions += len(index["partitionMap"][host])
 
                     partitions_distributed_for_index &= (
                         totalPartitions == num_partitions)
@@ -4486,7 +4508,10 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
                 with_statement = []
                 create_index_statement += " with {"
                 if "num_partitions" in index_variations:
-                    num_partitions = random.randint(4, 100)
+                    if self.gsi_type == "memory_optimized":
+                        num_partitions = random.randint(4, 20)
+                    else:
+                        num_partitions = random.randint(4, 100)
                     with_statement.append(
                         "'num_partition':{0}".format(num_partitions))
                 if "num_replica" in index_variations:
