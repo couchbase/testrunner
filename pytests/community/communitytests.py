@@ -473,6 +473,31 @@ class CommunityTests(CommunityBaseTest):
                     self.fail("Failed to enforce feature max ttl in CE.")
         conn.disconnect()
 
+    def test_setting_audit(self):
+        """
+           CE does not allow to set audit from vulcan 5.5.0
+        """
+        if self.cb_version[:5] not in COUCHBASE_FROM_VULCAN:
+            self.log.info("This test only for vulcan and later")
+            return
+        self.cli_test = self.input.param("cli_test", False)
+        cmd = 'curl -X POST -u Administrator:password \
+              http://{0}:8091/settings/audit \
+              -d auditdEnabled=true '.format(self.master.ip)
+        if self.cli_test:
+            cmd = "{0}couchbase-cli setting-audit -c {1}:8091 -u Administrator \
+                -p password --audit-enabled 1 --audit-log-rotate-interval 604800 \
+                --audit-log-path /opt/couchbase/var/lib/couchbase/logs "\
+                .format(self.bin_path, self.master.ip)
+
+        conn = RemoteMachineShellConnection(self.master)
+        output, error = conn.execute_command(cmd)
+        conn.log_command_output(output, error)
+        mesg = "This http API endpoint requires enterprise edition"
+        if output and mesg not in str(output[0]):
+            self.fail("setting-audit feature should not in Community Edition")
+        conn.disconnect()
+
 class CommunityXDCRTests(CommunityXDCRBaseTest):
     def setUp(self):
         super(CommunityXDCRTests, self).setUp()
