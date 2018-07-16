@@ -443,7 +443,6 @@ class CommunityTests(CommunityBaseTest):
         if self.cb_version[:5] not in COUCHBASE_FROM_VULCAN:
             self.log.info("This test only for vulcan and later")
             return
-        self.cli_test = self.input.param("cli_test", False)
         cmd = 'curl -X POST -u Administrator:password \
                                     http://{0}:8091/pools/default/buckets \
                                  -d name=bucket0 \
@@ -480,7 +479,6 @@ class CommunityTests(CommunityBaseTest):
         if self.cb_version[:5] not in COUCHBASE_FROM_VULCAN:
             self.log.info("This test only for vulcan and later")
             return
-        self.cli_test = self.input.param("cli_test", False)
         cmd = 'curl -X POST -u Administrator:password \
               http://{0}:8091/settings/audit \
               -d auditdEnabled=true '.format(self.master.ip)
@@ -497,6 +495,100 @@ class CommunityTests(CommunityBaseTest):
         if output and mesg not in str(output[0]):
             self.fail("setting-audit feature should not in Community Edition")
         conn.disconnect()
+
+    def test_setting_autofailover_enterprise_only(self):
+        """
+           CE does not allow set auto failover if disk has issue
+           and failover group from vulcan 5.5.0
+        """
+        if self.cb_version[:5] not in COUCHBASE_FROM_VULCAN:
+            self.log.info("This test only for vulcan and later")
+            return
+        self.failover_disk_period = self.input.param("failover_disk_period", False)
+        self.failover_server_group = self.input.param("failover_server_group", False)
+
+        failover_disk_period = ""
+        if self.failover_disk_period:
+            if self.cli_test:
+                failover_disk_period = "--failover-data-disk-period 300"
+            else:
+                failover_disk_period = "-d failoverOnDataDiskIssues[timePeriod]=300"
+        failover_server_group = ""
+        if self.failover_server_group and self.cli_test:
+            failover_server_group = "--enable-failover-of-server-group 1"
+
+
+        cmd = 'curl -X POST -u Administrator:password \
+              http://{0}:8091/settings/autoFailover -d enabled=true -d timeout=120 \
+              -d maxCount=1 \
+              -d failoverOnDataDiskIssues[enabled]=true {1} \
+              -d failoverServerGroup={2}'.format(self.master.ip, failover_disk_period,
+                                                 self.failover_server_group)
+        if self.cli_test:
+            cmd = "{0}couchbase-cli setting-autofailover -c {1}:8091 \
+                   -u Administrator -p password \
+                   --enable-failover-on-data-disk-issues 1 {2} {3} "\
+                  .format(self.bin_path, self.master.ip,
+                          failover_disk_period,
+                          failover_server_group)
+        conn = RemoteMachineShellConnection(self.master)
+        output, error = conn.execute_command(cmd)
+        conn.log_command_output(output, error)
+        mesg = "Auto failover on Data Service disk issues can only be " + \
+               "configured on enterprise edition"
+        if not self.cli_test:
+            if self.failover_disk_period or \
+                                   self.failover_server_group:
+                if output and not error:
+                    self.fail("setting autofailover disk issues feature\
+                               should not in Community Edition")
+        else:
+            if self.failover_server_group:
+                mesg = "--enable-failover-of-server-groups can only be " + \
+                       "configured on enterprise edition"
+
+        if output and mesg not in str(output[0]):
+            self.fail("Setting EE autofailover features \
+                       should not in Community Edition")
+        else:
+            self.log.info("EE setting autofailover are disable in CE")
+        conn.disconnect()
+
+    def test_set_bucket_compression(self):
+        """
+           CE does not allow to set bucket compression to bucket
+           from vulcan 5.5.0.   Mode compression: off,active,passive
+           Note: must set defaultbucket=False for this test
+        """
+        if self.cb_version[:5] not in COUCHBASE_FROM_VULCAN:
+            self.log.info("This test only for vulcan and later")
+            return
+        self.compression_mode = self.input.param("compression_mode", "off")
+        cmd = 'curl -X POST -u Administrator:password \
+                                    http://{0}:8091/pools/default/buckets \
+                                 -d name=bucket0 \
+                                 -d compressionMode={1} \
+                                 -d authType=sasl \
+                                 -d ramQuotaMB=100 '.format(self.master.ip,
+                                                            self.compression_mode)
+        if self.cli_test:
+            cmd = "{0}couchbase-cli bucket-create -c {1}:8091 --username Administrator \
+                --password password --bucket bucket0 --bucket-type couchbase \
+                --bucket-ramsize 512 --bucket-replica 1 --bucket-priority high \
+                --bucket-eviction-policy fullEviction --enable-flush 0 \
+                --enable-index-replica 1 --compression-mode {2}".format(self.bin_path,
+                                                                 self.master.ip,
+                                                                 self.compression_mode)
+        conn = RemoteMachineShellConnection(self.master)
+        output, error = conn.execute_command(cmd)
+        conn.log_command_output(output, error)
+        mesg = "Compression mode is supported in enterprise edition only"
+        if self.cli_test:
+            mesg = "Compression mode can only be configured on enterprise edition"
+        if output and mesg not in str(output[0]):
+            self.fail("Setting bucket compression should not in CE")
+        conn.disconnect()
+
 
 class CommunityXDCRTests(CommunityXDCRBaseTest):
     def setUp(self):

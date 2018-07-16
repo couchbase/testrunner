@@ -28,6 +28,7 @@ class CommunityBaseTest(BaseTestCase):
         self.backup_option = self.input.param("backup_option", '')
         #define the data that will be used to test
         self.blob_generator = self.input.param("blob_generator", True)
+        self.cli_test = self.input.param("cli_test", False)
         self.rest = RestConnection(self.master)
         if self.rest.is_enterprise_edition():
             raise Exception("This couchbase server is not Community Edition."
