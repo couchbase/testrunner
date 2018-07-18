@@ -229,22 +229,27 @@ class RQGASTERIXTests(BaseTestCase):
                 if bucket.name == self.database+"_"+bucket_name:
                     self._load_bulk_data_in_buckets_using_n1ql(bucket, self.record_db[bucket_name])
 
-        data = 'use Default;' + "\n"
+        data = 'use Default;'
         bucket_username = "cbadminbucket"
         bucket_password = "password"
         for bucket in self.buckets:
-            data += 'create bucket {0} with {{"name":"{0}"}} ;'.format(
-                bucket.name, self.master.ip)
-            data += 'create shadow dataset {1} on {0}; '.format(bucket.name,
+            data = 'create dataset {1} on {0}; '.format(bucket.name,
                                                                 bucket.name + "_shadow")
-            data += 'connect bucket {0};'.format(bucket.name)
-        #import pdb;pdb.set_trace()
+            filename = "file.txt"
+            f = open(filename,'w')
+            f.write(data)
+            f.close()
+            url = 'http://{0}:8095/analytics/service'.format(self.cbas_node.ip)
+            cmd = 'curl -s --data pretty=true --data-urlencode "statement@file.txt" ' + url + " -u " + bucket_username + ":" + bucket_password
+            os.system(cmd)
+            os.remove(filename)
+        data = 'connect link Local;'
         filename = "file.txt"
         f = open(filename,'w')
         f.write(data)
         f.close()
-        url = 'http://{0}:8095/analytics/service'.format(self.master.ip)
-        cmd = 'curl -s --data pretty=true --data format=CLEAN_JSON --data-urlencode "statement@file.txt" ' + url + " -u " + bucket_username + ":" + bucket_password
+        url = 'http://{0}:8095/analytics/service'.format(self.cbas_node.ip)
+        cmd = 'curl -s --data pretty=true --data-urlencode "statement@file.txt" ' + url + " -u " + bucket_username + ":" + bucket_password
         os.system(cmd)
         os.remove(filename)
 
