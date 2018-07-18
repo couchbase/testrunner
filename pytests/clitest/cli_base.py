@@ -88,7 +88,7 @@ class CliBaseTest(BaseTestCase):
         self.full_v = None
         self.short_v = None
         self.build_number = None
-        cmd =  'curl -g {0}:8091/diag/eval -u {1}:{2}'.format(self.master.ip,
+        cmd =  'curl -g {0}:8091/diag/eval -u {1}:{2} '.format(self.master.ip,
                                                               self.master.rest_username,
                                                               self.master.rest_password)
         cmd += '-d "path_config:component_path(bin)."'
