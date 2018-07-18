@@ -88,7 +88,9 @@ class CliBaseTest(BaseTestCase):
         self.full_v = None
         self.short_v = None
         self.build_number = None
-        cmd =  'curl -g %s:8091/diag/eval -u Administrator:password ' % self.master.ip
+        cmd =  'curl -g {0}:8091/diag/eval -u {1}:{2}'.format(self.master.ip,
+                                                              self.master.rest_username,
+                                                              self.master.rest_password)
         cmd += '-d "path_config:component_path(bin)."'
         bin_path  = subprocess.check_output(cmd, shell=True)
         if "bin" not in bin_path:
