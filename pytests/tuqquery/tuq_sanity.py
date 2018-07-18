@@ -1141,9 +1141,7 @@ class QuerySanityTests(QueryTests):
                                                           if doc['join_mo'] == group])}
                                for group in tmp_groups]
             expected_result = sorted(expected_result, key=lambda doc: (doc['join_mo']))
-            print actual_result['results']
-            print expected_result
-            self._verify_results(actual_result['results'], expected_result)
+            self._verify_results(sorted(actual_result['results']), expected_result)
 
             self.query = "SELECT join_mo, SUM(test_rate) as rate FROM %s " % (bucket.name) +\
                          "as employees WHERE job_title='Sales' GROUP BY join_mo " +\
