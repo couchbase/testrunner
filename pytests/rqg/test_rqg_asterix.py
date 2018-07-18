@@ -95,11 +95,8 @@ class RQGASTERIXTests(BaseTestCase):
         super(RQGASTERIXTests, self).tearDown()
         bucket_username = "cbadminbucket"
         bucket_password = "password"
-        data = 'use Default ;' + "\n"
-        for bucket in self.buckets:
-                data += 'disconnect bucket {0} if connected;'.format(bucket.name) + "\n"
-                data += 'drop dataset {0} if exists;'.format(bucket.name+"_shadow")  + "\n"
-                data += 'drop bucket {0} if exists;'.format(bucket.name) + "\n"
+        
+        data = 'disconnect link Local;'
         filename = "file.txt"
         f = open(filename,'w')
         f.write(data)
@@ -108,8 +105,19 @@ class RQGASTERIXTests(BaseTestCase):
         cmd = 'curl -s --data pretty=true --data-urlencode "statement@file.txt" ' + url + " -u " + bucket_username + ":" + bucket_password
         os.system(cmd)
         os.remove(filename)
+        
+        for bucket in self.buckets:
+            data = 'drop dataset {1}'.format(bucket.name + "_shadow")
+            filename = "file.txt"
+            f = open(filename,'w')
+            f.write(data)
+            f.close()
+            url = 'http://{0}:8095/analytics/service'.format(self.master.ip)
+            cmd = 'curl -s --data pretty=true --data-urlencode "statement@file.txt" ' + url + " -u " + bucket_username + ":" + bucket_password
+            os.system(cmd)
+            os.remove(filename)
 
-
+        
         if hasattr(self, 'reset_database'):
             #self.skip_cleanup= self.input.param("skip_cleanup",False)
             if self.use_mysql and self.reset_database and (not self.skip_cleanup):
