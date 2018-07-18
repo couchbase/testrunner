@@ -267,7 +267,7 @@ class CBASFunctionalTests(CBASBaseTest):
                                       cbas_dataset_name=self.cbas_dataset_name)
 
         # Create a dataset on the CBAS bucket with filters
-        statement_create_dataset = "create shadow dataset {0} on {1}".format(
+        statement_create_dataset = "create dataset {0} on {1}".format(
             ds_name, self.cbas_bucket_name)
         if predicates:
             statement_create_dataset += " where {0}".format(predicates) + ";"
