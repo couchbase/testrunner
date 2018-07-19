@@ -1351,8 +1351,12 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             if self.backupset.log_archive_env:
                 self.fail("Failed to pass CB_ARCHIVE_PATH")
             if self.backupset.ex_logs_path:
-                self.fail("Failed to ")
+                self.fail("Failed to run with ex log path")
+
         output, _ = shell.execute_command("ls {0}".format(logs_path))
+        if "C_" in output:
+            win_path = "/C_/tmp/entbackup"
+            output, _ = shell.execute_command("ls {0}".format(logs_path + win_path))
         dir_list =  ["backup", "logs"]
         for ele in dir_list:
             if ele not in output:
