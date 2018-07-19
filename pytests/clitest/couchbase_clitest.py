@@ -2077,33 +2077,49 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
         rest.force_eject_node()
 
         node_settings = rest.get_nodes_self()
+        if self.os == "windows":
+            self.log_path = self.log_path.replace("/cygdrive/c/", "c:/")
 
-        if data_path is not None and data_path == "valid":
-            data_path = self.log_path
+        if data_path is not None:
+            if data_path == "valid":
+                data_path = self.log_path
+            elif self.os == "windows" and data_path[:1] == "/":
+                data_path = "c:" + data_path
 
-        if index_path is not None and index_path == "valid":
-            index_path = self.log_path
+        if index_path is not None:
+            if index_path == "valid":
+                index_path = self.log_path
+            elif self.os == "windows" and index_path[:1] == "/":
+                index_path = "c:" + index_path
 
         if initialized:
             cli = CouchbaseCLI(server, server.rest_username, server.rest_password)
-            _, _, success = cli.cluster_init(256, 256, None, "data", None, None, server.rest_username,
+            _, _, success = cli.cluster_init(256, 256, None, "data", None, None,
+                                             server.rest_username,
                                              server.rest_password, None)
             self.assertTrue(success, "Cluster initialization failed during test setup")
         time.sleep(5)
         cli = CouchbaseCLI(server, username, password)
+
         stdout, _, errored = cli.node_init(data_path, index_path, hostname)
 
         if not expect_error:
             self.assertTrue(errored, "Expected command to succeed")
             if data_path is None:
                 data_path = node_settings.storage[0].path
+            elif self.os == "windows":
+                data_path = data_path.replace("\\", "")[:-1]
+
             if index_path is None:
                 index_path = node_settings.storage[0].index_path
-            self.assertTrue(self.verify_node_settings(server, data_path, index_path, hostname),
+            elif self.os == "windows":
+                index_path = index_path.replace("\\", "")[:-1]
+            self.assertTrue(self.verify_node_settings(server, data_path,
+                                                      index_path, hostname),
                             "Node settings not changed")
-        else:
+        elif self.os != "windows":
             self.assertTrue(self.verifyCommandOutput(stdout, expect_error, error_msg),
-                            "Expected error message not found")
+                                                    "Expected error message not found")
 
     def testGroupManage(self):
         username = self.input.param("username", None)
