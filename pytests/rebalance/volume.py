@@ -1246,9 +1246,12 @@ class VolumeTests(BaseTestCase):
                                      batch=20000, threads=5, start_document=0,
                                      instances=1,update_counter=1):
         import subprocess
-        cmd_format = "python scripts/high_ops_doc_loader.py  --node {0} --bucket {1} --user {2} --password {3} " \
-                     "--count {4} --batch_size {5} --threads {6} --start_document {7} --cb_version {8} --instances {" \
-                     "9} --ops {10} --updates --update_counter {11}"
+        #cmd_format = "python scripts/high_ops_doc_loader.py  --node {0} --bucket {1} --user {2} --password {3} " \
+        #             "--count {4} --batch_size {5} --threads {6} --start_document {7} --cb_version {8} --instances {" \
+        #             "9} --ops {10} --updates --update_counter {11}"
+        cmd_format = "python scripts/thanosied.py  --spec couchbase://{0} --bucket {1} --user {2} --password {3} " \
+                     "--count {4} --batch_size {5} --threads {6} --start_document {7} --cb_version {8} --workers {9} --rate_limit {10} " \
+                     "--passes 1  --update_counter {11}"
         cb_version = RestConnection(server).get_nodes_version()[:3]
         if self.num_replicas > 1:
             cmd_format = "{} --replicate_to 1".format(cmd_format)
@@ -1277,8 +1280,11 @@ class VolumeTests(BaseTestCase):
     def load_buckets_with_high_ops(self, server, bucket, items, batch=20000, threads=10, start_document=0, instances=1
                                    ,ttl=0):
         import subprocess
-        cmd_format = "python scripts/high_ops_doc_loader.py  --node {0} --bucket {1} --user {2} --password {3} " \
-                     "--count {4} --batch_size {5} --threads {6} --start_document {7} --cb_version {8} --instances {9} --ttl {10}"
+        #cmd_format = "python scripts/high_ops_doc_loader.py  --node {0} --bucket {1} --user {2} --password {3} " \
+        #             "--count {4} --batch_size {5} --threads {6} --start_document {7} --cb_version {8} --instances {9} --ttl {10}"
+        cmd_format = "python scripts/thanosied.py  --spec couchbase://{0} --bucket {1} --user {2} --password {3} " \
+                     "--count {4} --batch_size {5} --threads {6} --start_document {7} --cb_version {8} --workers {9} --ttl {10}" \
+                     "--passes 1"
         cb_version = RestConnection(server).get_nodes_version()[:3]
         if self.num_replicas > 0 and self.use_replica_to:
             cmd_format = "{} --replicate_to 1".format(cmd_format)
@@ -1326,10 +1332,12 @@ class VolumeTests(BaseTestCase):
                                            updated=False, ops=0,instances=1):
         import subprocess
         from lib.memcached.helper.data_helper import VBucketAwareMemcached
-
-        cmd_format = "python scripts/high_ops_doc_loader.py  --node {0} --bucket {1} --user {2} --password {3} " \
-                     "--count {4} " \
-                     "--batch_size {5} --instances {9} --threads {6} --start_document {7} --cb_version {8} --validate"
+        #cmd_format = "python scripts/high_ops_doc_loader.py  --node {0} --bucket {1} --user {2} --password {3} " \
+        #             "--count {4} " \
+        #             "--batch_size {5} --instances {9} --threads {6} --start_document {7} --cb_version {8} --validate"
+        cmd_format = "python scripts/thanosied.py  --spec couchbase://{0} --bucket {1} --user {2} --password {3} " \
+                     "--count {4} --batch_size {5} --threads {6} --start_document {7} --cb_version {8} --workers {9} --validation 1 " \
+                     "--passes 1"
         cb_version = RestConnection(server).get_nodes_version()[:3]
         if updated:
             cmd_format = "{} --updated --ops {}".format(cmd_format, int(ops))
@@ -1402,4 +1410,4 @@ class VolumeTests(BaseTestCase):
         for b in bucket:
             errors=self.check_dataloss_for_high_ops_loader(self.master, b, self.num_items,instances=self.instances)
             if len(errors) > 0:
-                self.fail("data is missing");
+                self.fail("data is missing")

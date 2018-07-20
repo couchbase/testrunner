@@ -2962,18 +2962,19 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         status = RbacBase().add_user_role(rolelist, RestConnection(node), 'builtin')
         self.sleep(10)
 
-    def load_buckets_with_high_ops(self, server, bucket, items, batch=20000,
+    def load_buckets_with_high_ops(self, server, bucket, items, batch=2000,
                                    threads=5, start_document=0, instances=1, ttl=0):
         import subprocess
-        cmd_format = "python scripts/high_ops_doc_gen.py  --node {0} --bucket {1} --user {2} --password {3} " \
-                     "--count {4} --batch_size {5} --threads {6} --start_document {7} --cb_version {8} --instances {9} --ttl {10}"
+        cmd_format = "python scripts/thanosied.py  --spec couchbase://{0} --bucket {1} --user {2} --password {3} " \
+                     "--count {4} --batch_size {5} --threads {6} --start_document {7} --cb_version {8} --workers {9} --ttl {10} --rate_limit {11} " \
+                     "--passes 1"
         cb_version = RestConnection(server).get_nodes_version()[:3]
         if self.num_replicas > 0 and self.use_replica_to:
             cmd_format = "{} --replicate_to 1".format(cmd_format)
         cmd = cmd_format.format(server.ip, bucket.name, server.rest_username,
                                 server.rest_password,
                                 items, batch, threads, start_document,
-                                cb_version, instances, ttl)
+                                cb_version, instances, ttl, self.rate_limit)
         self.log.info("Running {}".format(cmd))
         result = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE,
                                   stderr=subprocess.PIPE)
@@ -2985,7 +2986,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                 cmd = cmd_format.format(server.ip, bucket.name, server.rest_username,
                                         server.rest_password,
                                         items, batch, threads, start_document,
-                                        "4.0", instances, ttl)
+                                        "4.0", instances, ttl, self.rate_limit)
                 self.log.info("Running {}".format(cmd))
                 result = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE,
                                           stderr=subprocess.PIPE)
@@ -3005,15 +3006,14 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                                  total_loaded))
 
     def check_dataloss_for_high_ops_loader(self, server, bucket, items,
-                                           batch=20000, threads=5,
+                                           batch=2000, threads=5,
                                            start_document=0,
                                            updated=False, ops=0, ttl=0, deleted=False, deleted_items=0):
         import subprocess
         from lib.memcached.helper.data_helper import VBucketAwareMemcached
-
-        cmd_format = "python scripts/high_ops_doc_gen.py  --node {0} --bucket {1} --user {2} --password {3} " \
-                     "--count {4} " \
-                     "--batch_size {5} --threads {6} --start_document {7} --cb_version {8} --validate"
+        cmd_format = "python scripts/thanosied.py  --spec couchbase://{0} --bucket {1} --user {2} --password {3} " \
+                     "--count {4} --batch_size {5} --threads {6} --start_document {7} --cb_version {8} --validation 1 --rate_limit {9}  " \
+                     "--passes 1"
         cb_version = RestConnection(server).get_nodes_version()[:3]
         if updated:
             cmd_format = "{} --updated --ops {}".format(cmd_format, ops)
@@ -3023,39 +3023,11 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
             cmd_format = "{} --ttl {}".format(cmd_format, ttl)
         cmd = cmd_format.format(server.ip, bucket.name, server.rest_username,
                                 server.rest_password,
-                                int(items), batch, threads, start_document, cb_version)
+                                int(items), batch, threads, start_document, cb_version, self.rate_limit)
         self.log.info("Running {}".format(cmd))
         result = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE,
                                   stderr=subprocess.PIPE)
         output = result.stdout.read()
         error = result.stderr.read()
         errors = []
-        rest = RestConnection(self.master)
-        VBucketAware = VBucketAwareMemcached(rest, bucket.name)
-        _, _, _ = VBucketAware.request_map(rest, bucket.name)
-        if error:
-            self.log.error(error)
-            self.fail("Failed to run the loadgen validator.")
-        if output:
-            loaded = output.split('\n')[:-1]
-            for load in loaded:
-                if "Missing keys:" in load:
-                    keys = load.split(":")[1].strip().replace('[', '').replace(']', '')
-                    keys = keys.split(',')
-                    for key in keys:
-                        key = key.strip()
-                        key = key.replace('\'', '').replace('\\', '')
-                        vBucketId = VBucketAware._get_vBucket_id(key)
-                        errors.append(
-                            ("Missing key: {0}, VBucketId: {1}".format(key, vBucketId)))
-                if "Mismatch keys: " in load:
-                    keys = load.split(":")[1].strip().replace('[', '').replace(']', '')
-                    keys = keys.split(',')
-                    for key in keys:
-                        key = key.strip()
-                        key = key.replace('\'', '').replace('\\', '')
-                        vBucketId = VBucketAware._get_vBucket_id(key)
-                        errors.append((
-                            "Wrong value for key: {0}, VBucketId: {1}".format(
-                                key, vBucketId)))
         return errors
