@@ -1567,12 +1567,13 @@ class RemoteMachineShellConnection:
                 self.execute_command(cmd, debug=False)
         log.info("done compact")
 
-    def set_vbuckets_win(self, vbuckets):
+    def set_vbuckets_win(self, build, vbuckets):
         bin_path = WIN_COUCHBASE_BIN_PATH
         bin_path = bin_path.replace("\\", "")
-        src_file = bin_path + "service_register.bat"
-        des_file = "/tmp/service_register.bat_{0}".format(self.ip)
-        local_file = "/tmp/service_register.bat.tmp_{0}".format(self.ip)
+        build = build.replace('-', '.')
+        src_file = bin_path + "install/cb_winsvc_start_{0}.bat".format(build)
+        des_file = "/tmp/cb_winsvc_start_{0}_{1}.bat".format(build, self.ip)
+        local_file = "/tmp/cb_winsvc_start_{0}_{1}.bat_tmp".format(build, self.ip)
 
         self.copy_file_remote_to_local(src_file, des_file)
         f1 = open(des_file, "r")
@@ -1603,22 +1604,23 @@ class RemoteMachineShellConnection:
         self.copy_file_local_to_remote(local_file, src_file)
 
         """ re-register new setup to cb server """
-        self.execute_command(WIN_COUCHBASE_BIN_PATH + "service_stop.bat")
-        self.execute_command(WIN_COUCHBASE_BIN_PATH + "service_unregister.bat")
-        self.execute_command(WIN_COUCHBASE_BIN_PATH + "service_register.bat")
-        self.execute_command(WIN_COUCHBASE_BIN_PATH + "service_start.bat")
-        self.sleep(10, "wait for cb server start completely after reset vbuckets!")
+        o, r = self.execute_command(WIN_COUCHBASE_BIN_PATH + "install/cb_winsvc_stop_{0}.bat".format(build))
+        self.log_command_output(o, r)
+        o, r = self.execute_command(WIN_COUCHBASE_BIN_PATH + "install/cb_winsvc_start_{0}.bat".format(build))
+        self.log_command_output(o, r)
+        self.sleep(20, "wait for cb server start completely after reset vbuckets!")
 
         """ remove temporary files on slave """
         os.remove(local_file)
         os.remove(des_file)
 
-    def set_fts_query_limit_win(self, name, value):
+    def set_fts_query_limit_win(self, build, name, value):
         bin_path = WIN_COUCHBASE_BIN_PATH
         bin_path = bin_path.replace("\\", "")
-        src_file = bin_path + "service_register.bat"
-        des_file = "/tmp/service_register.bat_{0}".format(self.ip)
-        local_file = "/tmp/service_register.bat.tmp_{0}".format(self.ip)
+        build = build.replace('-', '.')
+        src_file = bin_path + "install/cb_winsvc_start_{0}.bat".format(build)
+        des_file = "/tmp/cb_winsvc_start_{0}_{1}.bat".format(build, self.ip)
+        local_file = "/tmp/cb_winsvc_start_{0}_{1}.bat_tmp".format(build, self.ip)
 
         self.copy_file_remote_to_local(src_file, des_file)
         f1 = open(des_file, "r")
@@ -1626,8 +1628,8 @@ class RemoteMachineShellConnection:
         """ when install new cb server on windows, there is not
             env CBFT_ENV_OPTIONS yet.  We need to insert this
             env to service_register.bat right after  ERL_FULLSWEEP_AFTER 512
-            like -env ERL_FULLSWEEP_AFTER 512 -env CBFT_ENV_OPTIONS vbuckets
-            where vbucket is params passed to function when run install scripts """
+            like -env ERL_FULLSWEEP_AFTER 512 -env CBFT_ENV_OPTIONS value
+            where value is params passed to function when run install scripts """
         for line in f1:
             if "-env CBFT_ENV_OPTIONS " in line:
                 tmp1 = line.split("CBFT_ENV_OPTIONS")
@@ -1649,11 +1651,11 @@ class RemoteMachineShellConnection:
         self.copy_file_local_to_remote(local_file, src_file)
 
         """ re-register new setup to cb server """
-        self.execute_command(WIN_COUCHBASE_BIN_PATH + "service_stop.bat")
-        self.execute_command(WIN_COUCHBASE_BIN_PATH + "service_unregister.bat")
-        self.execute_command(WIN_COUCHBASE_BIN_PATH + "service_register.bat")
-        self.execute_command(WIN_COUCHBASE_BIN_PATH + "service_start.bat")
-        self.sleep(10, "wait for cb server start completely after setting CBFT_ENV_OPTIONS")
+        o, r = self.execute_command(WIN_COUCHBASE_BIN_PATH + "install/cb_winsvc_stop_{0}.bat".format(build))
+        self.log_command_output(o, r)
+        o, r = self.execute_command(WIN_COUCHBASE_BIN_PATH + "install/cb_winsvc_start_{0}.bat".format(build))
+        self.log_command_output(o, r)
+        self.sleep(20, "wait for cb server start completely after setting CBFT_ENV_OPTIONS")
 
         """ remove temporary files on slave """
         os.remove(local_file)
@@ -1860,7 +1862,7 @@ class RemoteMachineShellConnection:
                 sys.exit("*****  Node %s failed to install  *****" % (self.ip))
             self.sleep(10, "wait for server to start up completely")
             if vbuckets and int(vbuckets) != 1024:
-                self.set_vbuckets_win(vbuckets)
+                self.set_vbuckets_win(build.version_number, vbuckets)
             if fts_query_limit:
                 self.set_environment_variable(
                     name="CBFT_ENV_OPTIONS",
@@ -2067,6 +2069,7 @@ class RemoteMachineShellConnection:
             self.log_command_output(output, error)
             if fts_query_limit:
                 self.set_fts_query_limit_win(
+                    build = version,
                     name="CBFT_ENV_OPTIONS",
                     value="bleveMaxResultWindow={0}".format(int(fts_query_limit))
                 )
@@ -2130,9 +2133,10 @@ class RemoteMachineShellConnection:
             output, error = self.execute_command("rm -f *-diag.zip")
             self.log_command_output(output, error, track_words)
             if vbuckets and int(vbuckets) != 1024:
-                self.set_vbuckets_win(vbuckets)
+                self.set_vbuckets_win(build.version_number, vbuckets)
             if fts_query_limit:
                 self.set_fts_query_limit_win(
+                    build = version,
                     name="CBFT_ENV_OPTIONS",
                     value="bleveMaxResultWindow={0}".format(int(fts_query_limit))
                 )
