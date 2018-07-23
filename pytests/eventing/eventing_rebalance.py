@@ -1019,6 +1019,19 @@ class EventingRebalance(EventingBaseTest):
             self.handler_code = HANDLER_CODE.BUCKET_OP_WITH_RAND
         else:
             self.handler_code = HANDLER_CODE.BUCKET_OP_WITH_RAND
+        # index is required for delete operation through n1ql
+        self.n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
+        self.n1ql_helper = N1QLHelper(shell=self.shell,
+                                      max_verify=self.max_verify,
+                                      buckets=self.buckets,
+                                      item_flag=self.item_flag,
+                                      n1ql_port=self.n1ql_port,
+                                      full_docs_list=self.full_docs_list,
+                                      log=self.log, input=self.input,
+                                      master=self.master,
+                                      use_rest=True
+                                      )
+        self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
         body_array = []
         # deploy multiple functions
         for i in range(self.num_functions):
@@ -1040,9 +1053,17 @@ class EventingRebalance(EventingBaseTest):
         task.result()
         # This needs to be skipped in case of doc timers as multiple doc timers can't process same doc
         if not self.skip_validation:
-            # Wait for eventing to catch up with all the update mutations and verify results after rebalance
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * self.num_functions,
-                                         skip_stats_validation=True)
+            try:
+                # Wait for eventing to catch up with all the update mutations and verify results after rebalance
+                self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * self.num_functions,
+                                             skip_stats_validation=True)
+            except Exception as ex:
+                log.info(str(ex))
+                stats_map = self.get_index_stats(perNode=False)
+                item_count_dst_bucket = stats_map[self.dst_bucket_name]["#primary"]["items_count"]
+                log.info("Destination item count : {0}".format(item_count_dst_bucket))
+                if item_count_dst_bucket != self.docs_per_day * 2016 * self.num_functions:
+                    raise
         else:
             self.sleep(300)
             eventing_nodes = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
