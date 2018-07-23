@@ -7,6 +7,7 @@ from membase.api.rest_client import RestConnection
 from memcached.helper.data_helper import MemcachedClientHelper
 from TestInput import TestInputSingleton
 from clitest.cli_base import CliBaseTest
+from couchbase_helper.stats_tools import StatsCommon
 from couchbase_helper.cluster import Cluster
 from remote.remote_util import RemoteMachineShellConnection
 from membase.helper.bucket_helper import BucketOperationHelper
@@ -807,6 +808,7 @@ class ImportExportTests(CliBaseTest):
             self.log.info("test with local bin path ")
             self.cli_command_path = "cd %s; ./" % self.cli_command_path
         self.buckets = RestConnection(server).get_buckets()
+        res_status = ""
         random_key = self.key_generator()
         kv_gen = BlobGenerator(random_key, "%s-" % random_key,
                                                    self.value_size,
@@ -873,6 +875,8 @@ class ImportExportTests(CliBaseTest):
                               -p password -b default -f list -o /tmp/test4.zip """
             if len(self.buckets) >= 1:
                 for bucket in self.buckets:
+                    stats_all_buckets = {}
+                    stats_all_buckets[bucket.name] = StatsCommon()
                     export_file = self.ex_path + bucket.name
                     if self.cmd_ext:
                         export_file = export_file.replace("/cygdrive/c", "c:")
@@ -884,6 +888,16 @@ class ImportExportTests(CliBaseTest):
                                      self.imex_type, url_format, server.ip,
                                      secure_port, username, password, bucket.name,
                                      self.format_type, secure_conn, export_file)
+                    if self.dgm_run:
+                        res_status = stats_all_buckets[bucket.name].get_stats([self.master],
+                                     bucket, '', 'vb_active_perc_mem_resident')[self.master]
+                        while int(res_status) > self.active_resident_threshold:
+                            self.sleep(5)
+                            res_status = stats_all_buckets[bucket.name].get_stats([self.master],
+                                         bucket, '', 'vb_active_perc_mem_resident')[self.master]
+                        if int(res_status) <= self.active_resident_threshold:
+                            self.log.info("Clear terminal")
+                            self.shell.execute_command('printf "\033c"')
                     output, error = self.shell.execute_command(exe_cmd_str)
                     data_exported = True
                     if self.secure_conn:
