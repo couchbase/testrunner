@@ -15,10 +15,11 @@ class EventingRebalance(EventingBaseTest):
     def setUp(self):
         super(EventingRebalance, self).setUp()
         if self.create_functions_buckets:
+            self.replicas = self.input.param("replicas", 0)
             self.bucket_size = 100
             log.info(self.bucket_size)
             bucket_params = self._create_bucket_params(server=self.server, size=self.bucket_size,
-                                                       replicas=self.num_replicas)
+                                                       replicas=self.replicas)
             self.cluster.create_standard_bucket(name=self.src_bucket_name, port=STANDARD_BUCKET_PORT + 1,
                                                 bucket_params=bucket_params)
             self.src_bucket = RestConnection(self.master).get_buckets()
