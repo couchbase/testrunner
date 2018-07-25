@@ -107,7 +107,7 @@ class RQGASTERIXTests(BaseTestCase):
         os.remove(filename)
         
         for bucket in self.buckets:
-            data = 'drop dataset {1}'.format(bucket.name + "_shadow")
+            data = 'drop dataset {0}'.format(bucket.name + "_shadow")
             filename = "file.txt"
             f = open(filename,'w')
             f.write(data)
