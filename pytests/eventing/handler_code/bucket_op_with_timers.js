@@ -1,14 +1,20 @@
 function OnUpdate(doc, meta) {
-    var expiry = Math.round((new Date()).getTime() / 1000) + 30;
-    docTimer(timerCallback,  expiry, meta.id);
+    var expiry = new Date();
+    expiry.setSeconds(expiry.getSeconds() + 30);
+
+    var context = {docID : meta.id};
+    createTimer(timerCallback,  expiry, meta.id, context);
 }
 function OnDelete(meta) {
-    var expiry = Math.round((new Date()).getTime() / 1000) + 30;
-    cronTimer(NDtimerCallback,  expiry, meta.id);
+    var expiry = new Date();
+    expiry.setSeconds(expiry.getSeconds() + 30);
+
+    var context = {docID : meta.id};
+    createTimer(NDtimerCallback,  expiry, meta.id, context);
 }
-function NDtimerCallback(docid) {
-    delete dst_bucket[docid];
+function NDtimerCallback(context) {
+    delete dst_bucket[context.docID];
 }
-function timerCallback(docid) {
-    dst_bucket[docid] = 'from timerCallback';
+function timerCallback(context) {
+    dst_bucket[context.docID] = 'from timerCallback';
 }

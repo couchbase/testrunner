@@ -1,8 +1,11 @@
 function OnUpdate(doc,meta) {
-    var expiry = Math.round((new Date()).getTime() / 1000) + 5;
-    cronTimer(NDtimerCallback,  expiry, meta.id);
+    var expiry = new Date();
+    expiry.setSeconds(expiry.getSeconds() + 5);
+
+    var context = {docID : meta.id};
+    createTimer(NDtimerCallback,  expiry, meta.id, context);
 }
-function NDtimerCallback(docid) {
+function NDtimerCallback(context) {
     var query = INSERT INTO dst_bucket ( KEY, VALUE ) VALUES ( UUID() ,'NDtimerCallback');
 //    query.execQuery();
 }
