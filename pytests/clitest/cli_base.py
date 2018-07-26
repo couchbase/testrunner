@@ -382,6 +382,8 @@ class CliBaseTest(BaseTestCase):
 
         if name is None:
             name = ""
+        if name == "empty":
+            name = " "
 
         if "clusterName" not in settings:
             log.info("Unable to get cluster name from server")
