@@ -8,7 +8,7 @@ from TestInput import TestInputSingleton
 from community.community_base import CommunityBaseTest
 from community.community_base import CommunityXDCRBaseTest
 from memcached.helper.data_helper import  MemcachedClientHelper
-from membase.api.rest_client import RestConnection, Bucket
+from membase.api.rest_client import RestConnection, Bucket, RestHelper
 from membase.helper.rebalance_helper import RebalanceHelper
 from membase.api.exception import RebalanceFailedException
 from couchbase_helper.documentgenerator import BlobGenerator
@@ -18,6 +18,8 @@ from scripts.install import InstallerJob
 from testconstants import SHERLOCK_VERSION
 from testconstants import COUCHBASE_FROM_WATSON, COUCHBASE_FROM_SPOCK,\
                           COUCHBASE_FROM_VULCAN
+from testconstants import WIN_BACKUP_PATH, WIN_BACKUP_C_PATH, WIN_COUCHBASE_BIN_PATH
+from testconstants import LINUX_COUCHBASE_BIN_PATH
 
 
 
@@ -593,6 +595,26 @@ class CommunityTests(CommunityBaseTest):
 class CommunityXDCRTests(CommunityXDCRBaseTest):
     def setUp(self):
         super(CommunityXDCRTests, self).setUp()
+        self.master = self._servers[0]
+        self.cli_test = self._input.param("cli_test", False)
+        self.bin_path = LINUX_COUCHBASE_BIN_PATH
+        remote = RemoteMachineShellConnection(self.master)
+        type = remote.extract_remote_info().distribution_type
+        if type.lower() == 'windows':
+            self.is_linux = False
+            self.backup_location = WIN_BACKUP_PATH
+            self.backup_c_location = WIN_BACKUP_C_PATH
+            self.bin_path = WIN_COUCHBASE_BIN_PATH
+            self.file_extension = ".exe"
+        else:
+            self.is_linux = True
+        self.cb_version = None
+        if RestHelper(RestConnection(self.master)).is_ns_server_running():
+            """ since every new couchbase version, there will be new features
+                that test code will not work on previous release.  So we need
+                to get couchbase version to filter out those tests. """
+            self.cb_version = RestConnection(self.master).get_nodes_version()
+        remote.disconnect()
 
     def tearDown(self):
         super(CommunityXDCRTests, self).tearDown()
@@ -629,7 +651,41 @@ class CommunityXDCRTests(CommunityXDCRBaseTest):
                                                     '-d authType=sasl '
                                                     '-d ramQuotaMB=100 '.format(server.ip))
         conn.log_command_output(output, error)
-        if output and "Conflict resolution type 'lww' is supported only in enterprise edition" not in str(output[0]):
+        if output and "Conflict resolution type 'lww' is supported only in enterprise edition"\
+                  not in str(output[0]):
             self.fail("XDCR LWW feature should not be available in Community Edition")
         self.log.info("XDCR LWW feature not available in Community Edition as expected")
+        conn.disconnect()
+
+    def test_xdcr_compression(self):
+        """
+           flag --enable-compression should not work in CE from vulcan
+        """
+        self.compression_mode = self._input.param("compression_mode", "Auto")
+        if self.cb_version[:5] not in COUCHBASE_FROM_VULCAN:
+            self.log.info("This test only for vulcan and later")
+            return
+        self.log.info("Remove any existing replican")
+        RestConnection(self.src_master).remove_all_replications()
+        conn = RemoteMachineShellConnection(self.src_master)
+
+        cmd = 'curl -X POST -u Administrator:password \
+                              http://{0}:8091/controller/createReplication \
+                                 -d fromBucket=default \
+                                 -d toBucket=default \
+                                 -d toCluster=cluster1 \
+                                 -d replicationType=continuous \
+                                 -d compressionType={1}'.format(self.src_master.ip,
+                                                            self.compression_mode)
+        if self.cli_test:
+            cmd = "{0}couchbase-cli setting-xdcr -c {1}:8091 -u Administrator \
+                   -p password --enable-compression 1 ".format(self.bin_path,
+                                                                 self.src_master.ip)
+        output, error = conn.execute_command(cmd)
+
+        mesg = '"compressionType":"The value can be specified only in enterprise edition"'
+        if self.cli_test:
+            mesg = "ERROR: --enable-compression can only be configured on enterprise edition"
+        if output and mesg not in str(output[0]):
+            self.fail("Setting bucket compression should not in CE")
         conn.disconnect()
