@@ -3,7 +3,7 @@ function OnUpdate(doc,meta) {
     expiry.setSeconds(expiry.getSeconds() + 5);
 
     var context = {docID : meta.id};
-    createTimer(timerCallback,  expiry, meta.id, context);
+    createTimer(NDtimerCallback,  expiry, meta.id, context);
 }
 function NDtimerCallback(context) {
     dst_bucket1[context.docID] = 'from NDtimerCallback';
