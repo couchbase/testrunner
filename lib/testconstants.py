@@ -199,8 +199,8 @@ CLI_COMMANDS = ["cbbackup", "cbbrowse_logs", "cbcollect_info", "cbcompact", "cbd
 LOG_FILE_NAMES = ['cbcollect_info.log', 'couchbase.log', 'couchstore_local.log', 'ddocs.log', 'diag.log',
                   'ini.log', 'kv_trace.json', 'master_events.log', 'memcached.log',
                   'ns_server.analytics_dcpdebug.log', 'ns_server.analytics_debug.log', 'ns_server.analytics_error.log', \
-                  'ns_server.analytics_info.log', 'ns_server.analytics_shutdown.log', 'ns_server.analytics_trace.json' \
-                  'ns_server.analytics_warn.json', 'ns_server.babysitter.log', 'ns_server.couchdb.log', 'ns_server.debug.log',
+                  'ns_server.analytics_info.log', 'ns_server.analytics_shutdown.log', 'ns_server.analytics_trace.json', \
+                  'ns_server.analytics_warn.log', 'ns_server.babysitter.log', 'ns_server.couchdb.log', 'ns_server.debug.log',
                   'ns_server.error.log', 'ns_server.eventing.log', 'ns_server.fts.log', 'ns_server.goxdcr.log',
                   'ns_server.http_access.log', 'ns_server.http_access_internal.log', 'ns_server.indexer.log',
                   'ns_server.info.log', 'ns_server.json_rpc.log', 'ns_server.mapreduce_errors.log', 'ns_server.metakv.log',
