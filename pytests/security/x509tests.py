@@ -31,6 +31,7 @@ class x509tests(BaseTestCase):
         self.prefixs = self.input.param('prefixs', 'www.cb-:us.:www.').split(":")
         self.delimeters = self.input.param('delimeter', '.:.:.') .split(":")
         self.setup_once = self.input.param("setup_once", False)
+        self.upload_json_mode = self.input.param("upload_json_mode",'rest')
         
         self.dns = self.input.param('dns', None)
         self.uri = self.input.param('uri', None)
@@ -45,7 +46,7 @@ class x509tests(BaseTestCase):
         self.log.info(" Path is {0} - Prefixs - {1} -- Delimeters - {2}".format(self.paths, self.prefixs, self.delimeters))
         
         if (self.setup_once):
-            x509main(self.master).setup_master(self.client_cert_state, self.paths, self.prefixs, self.delimeters)
+            x509main(self.master).setup_master(self.client_cert_state, self.paths, self.prefixs, self.delimeters, self.upload_json_mode)
             x509main().setup_cluster_nodes_ssl(self.servers)
 
         # reset the severs to ipv6 if there were ipv6

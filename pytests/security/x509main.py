@@ -300,8 +300,7 @@ class x509main:
         url = "settings/clientCertAuth"
         api = rest.baseUrl + url
         status, content = self._rest_upload_file(api, x509main.CACERTFILEPATH + x509main.CLIENT_CERT_AUTH_JSON, "Administrator", 'password')
-        log.info (" Status from upload of client cert settings is {0}".format(status))
-        log.info (" Content from upload of client cert settings is {0}".format(content))
+        log.info (" --- Status from upload of client cert settings is {0} and Content is {1}".format(status,content))
         return status, content
 
     '''
@@ -420,13 +419,16 @@ class x509main:
     # 2. Setup other nodes for certificates
     # 3. Create the cert.json file which contains state, path, prefixes and delimeters
     # 4. Upload the cert.json file
-    def setup_master(self, state=None, paths=None, prefixs=None, delimeters=None, user='Administrator', password='password'):
+    def setup_master(self, state=None, paths=None, prefixs=None, delimeters=None, mode='rest', user='Administrator', password='password'):
         copy_host = copy.deepcopy(self.host)
         x509main(copy_host)._upload_cluster_ca_certificate(user, password)
         x509main(copy_host)._setup_node_certificates()
         if state is not None:
             self.write_client_cert_json_new(state, paths, prefixs, delimeters)
-            x509main(copy_host)._upload_cluster_ca_settings(user, password)
+            if mode == 'rest':
+                x509main(copy_host)._upload_cluster_ca_settings(user, password)
+            elif mode == 'cli':
+                x509main(copy_host)._upload_cert_file_via_cli(user, password)
         
     # write a new config json file based on state, paths, perfixes and delimeters
     def write_client_cert_json_new(self, state, paths, prefixs, delimeters):
@@ -443,6 +445,19 @@ class x509main:
                 temp_client_cert = "{ " + line3 + " },"
                 client_cert = client_cert + temp_client_cert
         client_cert = client_cert.replace("'", '"')
+        client_cert = client_cert[:-1]
         client_cert = client_cert + " ]}" 
         log.info ("-- Log current config json file ---{0}".format(client_cert))
         target_file.write(client_cert)
+        
+    #upload new config file via commandline.
+    def _upload_cert_file_via_cli(self, user='Administrator', password='password'):
+        src_cert_file =  x509main.CACERTFILEPATH + x509main.CLIENT_CERT_AUTH_JSON
+        dest_cert_file = self.install_path + x509main.CHAINFILEPATH + "/" + x509main.CLIENT_CERT_AUTH_JSON
+        self._copy_node_key_chain_cert(self.host, src_cert_file, dest_cert_file)
+        cli_command = 'ssl-manage'
+        options = "--set-client-auth "  + dest_cert_file
+        remote_client = RemoteMachineShellConnection(self.host)
+        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
+                    options=options, cluster_host="localhost", user=user, password=password)
+        log.info (" -- Output of command ssl-manage with --set-client-auth is {0} and erorr is {1}".format(output,error))
