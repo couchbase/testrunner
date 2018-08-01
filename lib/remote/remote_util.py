@@ -1614,7 +1614,7 @@ class RemoteMachineShellConnection:
         os.remove(local_file)
         os.remove(des_file)
 
-    def set_fts_query_limit_win(self, build, name, value):
+    def set_fts_query_limit_win(self, build, name, value, ipv6=False):
         bin_path = WIN_COUCHBASE_BIN_PATH
         bin_path = bin_path.replace("\\", "")
         build = build.replace('-', '.')
@@ -1651,9 +1651,12 @@ class RemoteMachineShellConnection:
         self.copy_file_local_to_remote(local_file, src_file)
 
         """ re-register new setup to cb server """
-        o, r = self.execute_command(WIN_COUCHBASE_BIN_PATH + "install/cb_winsvc_stop_{0}.bat".format(build))
+        o, r = self.execute_command(WIN_COUCHBASE_BIN_PATH + "install/cb_winsvc_stop_{0}.bat ".format(build))
         self.log_command_output(o, r)
-        o, r = self.execute_command(WIN_COUCHBASE_BIN_PATH + "install/cb_winsvc_start_{0}.bat".format(build))
+        cmd = WIN_COUCHBASE_BIN_PATH + "install/cb_winsvc_start_{0}.bat".format(build)
+        if ipv6:
+            cmd += " true"
+        o, r = self.execute_command(cmd)
         self.log_command_output(o, r)
         self.sleep(20, "wait for cb server start completely after setting CBFT_ENV_OPTIONS")
 
@@ -2071,7 +2074,8 @@ class RemoteMachineShellConnection:
                 self.set_fts_query_limit_win(
                     build = version,
                     name="CBFT_ENV_OPTIONS",
-                    value="bleveMaxResultWindow={0}".format(int(fts_query_limit))
+                    value="bleveMaxResultWindow={0}".format(int(fts_query_limit)),
+                    ipv6=enable_ipv6
                 )
             return len(error) == 0
         remote_path = None
@@ -2138,7 +2142,8 @@ class RemoteMachineShellConnection:
                 self.set_fts_query_limit_win(
                     build = version,
                     name="CBFT_ENV_OPTIONS",
-                    value="bleveMaxResultWindow={0}".format(int(fts_query_limit))
+                    value="bleveMaxResultWindow={0}".format(int(fts_query_limit)),
+                    ipv6=enable_ipv6
                 )
 
             if "4.0" in version[:5]:
