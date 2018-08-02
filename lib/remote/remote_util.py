@@ -2683,6 +2683,11 @@ class RemoteMachineShellConnection:
                         server_ip = "\n\n**** Uninstalling on server: {0} ****".format(self.ip)
                         error.insert(0, server_ip)
                     self.log_command_output(output, error)
+                    output, error = self.execute_command("pkill -u couchbase")
+                    self.log_command_output(output, error)
+                    # This line is added for debugging purposes
+                    output, error = self.execute_command("ps -ef | grep couchbase")
+                    self.log_command_output(output, error)
             self.terminate_processes(self.info, terminate_process_list)
             if not self.nonroot:
                 self.remove_folders(linux_folders)
