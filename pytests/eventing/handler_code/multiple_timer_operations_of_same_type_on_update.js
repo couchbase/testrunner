@@ -1,14 +1,17 @@
 function OnUpdate(doc,meta) {
-    var expiry = Math.round((new Date()).getTime() / 1000) + 5;
-    cronTimer(NDtimerCallback,  expiry, meta.id);
-    cronTimer(NDtimerCallback1,  expiry, meta.id);
+    var expiry = new Date();
+    expiry.setSeconds(expiry.getSeconds() + 5);
+    var context = {docID : meta.id};
+
+    createTimer(NDtimerCallback,  expiry, meta.id, context);
+    createTimer(NDtimerCallback1,  expiry, meta.id, context);
 }
 
-function NDtimerCallback(docid) {
-    dst_bucket[docid] = 'from NDtimerCallback';
+function NDtimerCallback(context) {
+    dst_bucket[context.docid] = 'from NDtimerCallback';
 }
 
-function NDtimerCallback1(docid) {
+function NDtimerCallback1(context) {
     var query = UPSERT INTO dst_bucket1 ( KEY, VALUE ) VALUES ( UUID() ,'NDtimerCallback1');
 //    query.execQuery();
 }

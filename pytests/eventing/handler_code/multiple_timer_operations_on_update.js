@@ -1,13 +1,16 @@
 function OnUpdate(doc,meta) {
-    var expiry = Math.round((new Date()).getTime() / 1000) + 5;
-    docTimer(timerCallback,  expiry, meta.id);
-    cronTimer(NDtimerCallback,  expiry, meta.id);
+    var expiry = new Date();
+    expiry.setSeconds(expiry.getSeconds() + 5);
+    var context = {docID : meta.id};
+
+    createTimer(NDtimerCallback,  expiry, meta.id, context);
+    createTimer(timerCallback,  expiry, meta.id, context);
 }
 
-function timerCallback(docid) {
-    dst_bucket[docid] = 'from docTimerCallback';
+function timerCallback(context) {
+    dst_bucket[context.docid] = 'from docTimerCallback';
 }
 
-function NDtimerCallback(docid) {
-    dst_bucket1[docid] = 'from cronTimerCallback';
+function NDtimerCallback(context) {
+    dst_bucket1[context.docid] = 'from cronTimerCallback';
 }
