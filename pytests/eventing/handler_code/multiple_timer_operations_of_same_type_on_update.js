@@ -8,7 +8,7 @@ function OnUpdate(doc,meta) {
 }
 
 function NDtimerCallback(context) {
-    dst_bucket[context.docid] = 'from NDtimerCallback';
+    dst_bucket[context.docID] = 'from NDtimerCallback';
 }
 
 function NDtimerCallback1(context) {

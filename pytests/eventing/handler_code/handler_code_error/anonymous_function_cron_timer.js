@@ -1,6 +1,9 @@
 function OnUpdate(doc,meta) {
-    var expiry = Math.round((new Date()).getTime() / 1000) + 5;
-    cronTimer(function(docid) {
-    dst_bucket[docid] = 'from NDtimerCallback';
+    var expiry = new Date();
+    expiry.setSeconds(expiry.getSeconds() + 5);
+    var context = {docID : meta.id};
+
+    createTimer(function(context) {
+    dst_bucket[context.docID] = 'from NDtimerCallback';
     }, expiry, meta.id);
 }
