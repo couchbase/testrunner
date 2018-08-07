@@ -7,6 +7,7 @@ class HANDLER_CODE:
     BUCKET_OPS_WITH_DOC_TIMER = 'handler_code/bucket_op_with_doc_timer.js'
     BUCKET_OPS_WITH_DOC_TIMER1 = 'handler_code/bucket_op_with_doc_timer1.js'
     BUCKET_OPS_WITH_DOC_TIMER2 = 'handler_code/bucket_op_with_doc_timer2.js'
+    BUCKET_OPS_WITH_TIMER_WITHOUT_CONTEXT = 'handler_code/bucket_op_with_timer_without_context.js'
     BUCKET_OPS_WITH_CRON_TIMER = 'handler_code/bucket_op_with_cron_timer.js'
     BUCKET_OPS_WITH_CRON_TIMER_WITH_SECOND_BUCKET = 'handler_code/bucket_op_on_second_bucket_with_cron_timer.js'
     DELETE_BUCKET_OP_ON_DELETE = 'handler_code/delete_doc_bucket_op.js'

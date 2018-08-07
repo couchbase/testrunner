@@ -3,14 +3,14 @@ function OnUpdate(doc,meta) {
     expiry.setSeconds(expiry.getSeconds() + 5);
     var context = {docID : meta.id};
 
-    createTimer(NDtimerCallback,  expiry, meta.id, context);
-    createTimer(timerCallback,  expiry, meta.id, context);
+    createTimer(NDtimerCallback, expiry, meta.id, context);
+    createTimer(timerCallback, expiry, meta.id + "_aaaaaaa", context);
 }
 
 function timerCallback(context) {
-    dst_bucket[context.docid] = 'from docTimerCallback';
+    dst_bucket[context.docID] = 'from docTimerCallback';
 }
 
 function NDtimerCallback(context) {
-    dst_bucket1[context.docid] = 'from cronTimerCallback';
+    dst_bucket1[context.docID] = 'from cronTimerCallback';
 }
