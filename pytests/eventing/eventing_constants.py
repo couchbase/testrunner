@@ -23,6 +23,7 @@ class HANDLER_CODE:
     READ_BUCKET_OP_ON_DST = 'handler_code/read_bucket_on_dst_bucket.js'
     N1QL_OPS_WITH_TIMERS = 'handler_code/n1ql_op_with_timers.js'
     N1QL_OPS_WITH_TIMERS1 = 'handler_code/n1ql_op_with_timers1.js'
+    N1QL_OPS_WITHOUT_TIMERS = 'handler_code/n1ql_op_without_timers.js'
     N1QL_DELETE_UPDATE = 'handler_code/n1ql_delete_update.js'
     N1QL_PREPARE = 'handler_code/n1ql_prepare.js'
     N1QL_DDL = 'handler_code/n1ql_DDL.js'
