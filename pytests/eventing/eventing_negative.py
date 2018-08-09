@@ -134,6 +134,7 @@ class EventingNegative(EventingBaseTest):
         self.wait_for_undeployment(body['appname'])
         # Delete the function
         self.delete_function(body)
+        self.sleep(60)
         # check if all the eventing-consumers are cleaned up
         # Validation of any issues like panic will be taken care by teardown method
         self.assertTrue(self.check_if_eventing_consumers_are_cleaned_up(),

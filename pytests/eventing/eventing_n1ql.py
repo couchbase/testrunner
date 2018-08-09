@@ -185,8 +185,11 @@ class EventingN1QL(EventingBaseTest):
                   batch_size=self.batch_size)
         body = self.create_save_function_body(self.function_name, HANDLER_CODE_ERROR.EMPTY,
                                               dcp_stream_boundary="from_now")
-        self.deploy_function(body,deployment_fail=True)
-        # TODO : more assertion needs to be validate after MB-27126
+        try:
+            self.deploy_function(body,deployment_fail=True)
+        except Exception as e:
+            if "Function handler should not be empty" not in str(e):
+                self.fail("Function deployment succeeded with empty handler")
 
     def test_without_update_delete(self):
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,

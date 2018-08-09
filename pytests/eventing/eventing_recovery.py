@@ -104,7 +104,8 @@ class EventingRecovery(EventingBaseTest):
         self.kill_producer(eventing_node)
         self.wait_for_bootstrap_to_complete(body['appname'])
         # Wait for eventing to catch up with all the delete mutations and verify results
-        self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+        # See MB-30772
+        #self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
         # intentionally added , as it requires some time for eventing-consumers to shutdown
         self.sleep(60)
@@ -132,7 +133,8 @@ class EventingRecovery(EventingBaseTest):
             self.kill_memcached_service(node)
         self.sleep(120)
         # Wait for eventing to catch up with all the delete mutations and verify results
-        self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+        # See MB-27115
+        #self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
         # intentionally added , as it requires some time for eventing-consumers to shutdown
         self.sleep(60)

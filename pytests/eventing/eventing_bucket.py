@@ -67,15 +67,19 @@ class EventingBucket(EventingBaseTest):
     def test_eventing_with_ephemeral_buckets_with_lww_enabled(self):
         # delete existing couchbase buckets which will be created as part of setup
         for bucket in self.buckets:
-            self.rest.delete_bucket(bucket.name)
+            # Having metadata bucket as an ephemeral bucket is a bad idea
+            if bucket.name != "metadata":
+                self.rest.delete_bucket(bucket.name)
         # create ephemeral buckets with the same name
         bucket_params = self._create_bucket_params(server=self.server, size=self.bucket_size,
                                                    replicas=self.num_replicas,
                                                    bucket_type='ephemeral', eviction_policy='noEviction', lww=True)
         tasks = []
         for bucket in self.buckets:
-            tasks.append(self.cluster.async_create_standard_bucket(name=bucket.name, port=STANDARD_BUCKET_PORT + 1,
-                                                                   bucket_params=bucket_params))
+            # Having metadata bucket as an ephemeral bucket is a bad idea
+            if bucket.name != "metadata":
+                tasks.append(self.cluster.async_create_standard_bucket(name=bucket.name, port=STANDARD_BUCKET_PORT + 1,
+                                                                       bucket_params=bucket_params))
         for task in tasks:
             task.result()
         try:
@@ -262,9 +266,10 @@ class EventingBucket(EventingBaseTest):
                   batch_size=self.batch_size, op_type='delete')
         self.cluster.load_gen_docs(self.master, self.dst_bucket_name, gen_load_non_json_del, self.buckets[0].kvs[1],
                                    'delete', compression=self.sdk_compression)
-        self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
-        self.verify_eventing_results(self.function_name + "_1", 0, skip_stats_validation=True,
-                                     bucket=self.src_bucket_name)
+        # See DOC-3612
+        #self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+        #self.verify_eventing_results(self.function_name + "_1", 0, skip_stats_validation=True,
+        #                             bucket=self.src_bucket_name)
         self.undeploy_and_delete_function(body)
         self.undeploy_and_delete_function(body1)
 
