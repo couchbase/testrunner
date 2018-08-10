@@ -145,15 +145,15 @@ class EventingNegative(EventingBaseTest):
                   batch_size=self.batch_size)
         body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_ON_UPDATE, worker_count=3)
         self.deploy_function(body, wait_for_bootstrap=False)
+        body1 = {"count": 1}
+        # Set retry to 1
+        self.rest.set_eventing_retry(body['appname'], body1)
         try:
             # Try undeploying the function when it is still bootstrapping
             self.undeploy_function(body)
         except Exception as ex:
             if "not bootstrapped. Operation not permitted. Edit function instead" not in str(ex):
                 self.fail("Function undeploy succeeded even when function was in bootstrapping state")
-        # Wait for eventing to catch up with all the create mutations and verify results
-        self.wait_for_bootstrap_to_complete(body['appname'])
-        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016)
         self.undeploy_and_delete_function(body)
 
     def test_function_where_handler_code_takes_more_time_to_execute_than_execution_timeout(self):

@@ -4423,6 +4423,17 @@ class RestConnection(object):
             raise Exception(content)
         return content
 
+    def set_eventing_retry(self, name, body):
+        authorization = base64.encodestring('%s:%s' % (self.username, self.password))
+        url = "api/v1/functions/" + name + "/retry"
+        api = self.eventing_baseUrl + url
+        headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
+        status, content, header = self._http_request(api, 'POST', headers=headers,
+                                                     params=json.dumps(body).encode("ascii", "ignore"))
+        if not status:
+            raise Exception(content)
+        return content
+
 
 class MembaseServerVersion:
     def __init__(self, implementationVersion='', componentsVersion=''):

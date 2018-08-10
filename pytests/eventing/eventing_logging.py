@@ -60,7 +60,7 @@ class EventingLogging(EventingBaseTest, LogRedactionBase):
         # Wait for eventing to catch up with all the create mutations and verify results
         self.verify_eventing_results(self.function_name, self.docs_per_day * 2016)
         self.undeploy_and_delete_function(body)
-        expected_results_undeploy = {"real_userid:source": "builtin", "real_userid:user": "Administrator",
+        expected_results_undeploy = {"real_userid:source": "builtin", "real_userid:user": "@eventing-cbauth",
                                      "context": self.function_name, "id": 32779, "name": "Set Settings",
                                      "description": "Save settings for a given app"}
         expected_results_delete_draft = {"real_userid:source": "builtin", "real_userid:user": "Administrator",
