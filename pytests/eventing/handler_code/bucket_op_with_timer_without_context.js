@@ -5,6 +5,7 @@ function OnUpdate(doc, meta) {
 }
 
 function timerCallback() {
-    var key = Date.now()+ Math.random();
+    var rand = Math.floor(Math.random() * 20000000) * Math.floor(Math.random() * 20000000);
+    var key = Math.round((new Date()).getTime() / 1000) + rand;
     dst_bucket[key]='From timerCallback without context';
 }
