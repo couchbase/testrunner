@@ -622,6 +622,27 @@ class FTSIndex:
                 self.index_definition['params']['store'] = {}
             self.index_definition['params']['store']['kvStoreMossAllow'] = False
 
+    def is_scorch(self):
+        return self.get_index_type() == "scorch"
+
+    def is_upside_down(self):
+        return self.get_index_type() == "upside_down"
+
+    def is_type_unspecified(self):
+        return self.get_index_type() ==  None
+
+    def get_index_type(self):
+        try:
+            _, defn = self.get_index_defn()
+            index_type = defn['indexDef']['params']['store']['indexType']
+            self.__log.info("Index type of {0} is {1}".
+                          format(self.name,
+                                 defn['indexDef']['params']['store']['indexType']))
+            return index_type
+        except Exception:
+            self.__log.error("No 'indexType' present in index definition")
+            return None
+
     def generate_new_custom_map(self, seed):
         from custom_map_generator.map_generator import CustomMapGenerator
         cm_gen = CustomMapGenerator(seed=seed, dataset=self.dataset,
@@ -892,6 +913,46 @@ class FTSIndex:
             self.name,
             rest.ip))
         rest.update_fts_index(self.name, self.index_definition)
+
+    def update_index_to_upside_down(self):
+        if self.is_upside_down():
+            self.__log.info("The index {0} is already upside_down index, conversion not needed!")
+        else:
+            self.index_definition['params']['store']['indexType'] = "upside_down"
+            self.index_definition['uuid'] = self.get_uuid()
+            self.update()
+            time.sleep(5)
+            _, defn = self.get_index_defn()
+            if defn['indexDef']['params']['store']['indexType'] == "upside_down":
+                self.__log.info("SUCCESS: The index type is now upside_down!")
+            else:
+                self.__log.error("defn['indexDef']['params']['store']['indexType']")
+                raise Exception("Unable to convert index to upside_down")
+
+    def update_index_to_scorch(self):
+        if self.is_scorch():
+            self.__log.info("The index {0} is already scorch index, conversion not needed!")
+        else:
+            self.index_definition['params']['store']['indexType'] = "scorch"
+            self.index_definition['uuid'] = self.get_uuid()
+            self.update()
+            time.sleep(5)
+            _, defn = self.get_index_defn()
+            if defn['indexDef']['params']['store']['indexType'] == "scorch":
+                self.__log.info("SUCCESS: The index type is now scorch!")
+            else:
+                self.__log.error("defn['indexDef']['params']['store']['indexType']")
+                raise Exception("Unable to convert index to scorch")
+
+    def update_num_pindexes(self, new):
+        self.index_definition['planParams']['maxPartitionsPerPIndex'] = new
+        self.index_definition['uuid'] = self.get_uuid()
+        self.update()
+
+    def update_num_replicas(self, new):
+        self.index_definition['planParams']['numReplicas'] = new
+        self.index_definition['uuid'] = self.get_uuid()
+        self.update()
 
     def delete(self, rest=None):
         if not rest:

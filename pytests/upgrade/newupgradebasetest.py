@@ -133,6 +133,7 @@ class NewUpgradeBaseTest(BaseTestCase):
         self.partitions_per_pindex = \
             self.input.param("max_partitions_pindex", 32)
         self.index_kv_store = self.input.param("kvstore", None)
+        self.fts_obj = None
         self.log.info("==============  NewUpgradeBaseTest setup has completed ==============")
 
 
@@ -241,6 +242,7 @@ class NewUpgradeBaseTest(BaseTestCase):
     def operations(self, servers, services=None):
         set_services = self.initial_services(services)
 
+
         if 4.5 > float(self.initial_version[:3]):
             self.gsi_type = "forestdb"
         self.quota = self._initialize_nodes(self.cluster, servers,
@@ -339,7 +341,8 @@ class NewUpgradeBaseTest(BaseTestCase):
             appropriate_build = self._get_build(server, upgrade_version, remote, info=info)
             self.assertTrue(appropriate_build.url, msg="unable to find build {0}".format(upgrade_version))
             self.assertTrue(remote.download_build(appropriate_build), "Build wasn't downloaded!")
-            o, e = remote.couchbase_upgrade(appropriate_build, save_upgrade_config=False, forcefully=self.is_downgrade)
+            o, e = remote.couchbase_upgrade(appropriate_build, save_upgrade_config=False, forcefully=self.is_downgrade,
+                                            fts_query_limit=10000000)
             self.log.info("upgrade {0} to version {1} is completed".format(server.ip, upgrade_version))
             """ remove this line when bug MB-11807 fixed """
             if self.is_ubuntu:
@@ -967,8 +970,7 @@ class NewUpgradeBaseTest(BaseTestCase):
         3. Runs queries and compares the results against ElasticSearch
         """
         try:
-            if self.call_ftsCallable:
-                self.fts_obj = FTSCallable(nodes=self.servers, es_validate=True)
+            self.fts_obj = FTSCallable(nodes=self.servers, es_validate=True)
             for bucket in self.buckets:
                 self.fts_obj.create_default_index(
                     index_name="index_{0}".format(bucket.name),
@@ -985,7 +987,7 @@ class NewUpgradeBaseTest(BaseTestCase):
         if queue is not None:
             queue.put(True)
 
-    def update_delete_fts_data_run_queries(self):
+    def update_delete_fts_data_run_queries(self, queue=None):
         """
         To call after (preferably) upgrade
         :param fts_obj: the FTS object created in create_fts_index_query_compare()
@@ -994,7 +996,7 @@ class NewUpgradeBaseTest(BaseTestCase):
         for index in self.fts_obj.fts_indexes:
             self.fts_obj.run_query_and_compare(index)
 
-    def delete_all_fts_artifacts(self):
+    def delete_all_fts_artifacts(self, queue=None):
         """
         Call during teardown of upgrade test
         :param fts_obj: he FTS object created in create_fts_index_query_compare()
@@ -1004,7 +1006,101 @@ class NewUpgradeBaseTest(BaseTestCase):
     def run_fts_query_and_compare(self, queue=None):
         try:
             self.log.info("Verify fts via queries again")
-            self.update_delete_fts_data_run_queries()
+            self.update_delete_fts_data_run_queries(self.fts_obj)
+        except Exception, ex:
+            print ex
+            if queue is not None:
+                queue.put(False)
+        if queue is not None:
+            queue.put(True)
+
+    def update_indexes(self, queue=None):
+        pre_upgrade_index_type = self.input.param("index_type", "upside_down")
+        after_upgrade_index_type = self.input.param("after_upgrade_index_type", pre_upgrade_index_type)
+        try:
+            for index in self.fts_obj.fts_indexes:
+                if index.is_scorch() and after_upgrade_index_type == "scorch":
+                    self.log.info("Index type is scorch, now converting to upside_down... ")
+                    index.update_index_to_upside_down()
+                elif index.is_upside_down() and after_upgrade_index_type == "upside_down":
+                    self.log.info("Index type is upside_down, now converting to scorch... ")
+                    index.update_index_to_scorch()
+                else:
+                    self.fail("Index {0} which was {1} pre-upgrade is now automatically "
+                              "converted to {2} post upgrade".
+                              format(index.name,
+                                     pre_upgrade_index_type,
+                                     index.get_index_type()))
+            self.fts_obj.wait_for_indexing_complete()
+        except Exception, ex:
+            print ex
+            if queue is not None:
+                queue.put(False)
+        if queue is not None:
+            queue.put(True)
+
+    def modify_num_pindexes(self, queue=None):
+        for index in self.fts_obj.fts_indexes:
+            index.update_num_pindexes(8)
+        self.fts_obj.wait_for_indexing_complete()
+
+    def modify_num_replicas(self, queue=None):
+        for index in self.fts_obj.fts_indexes:
+            index.update_num_replicas(1)
+
+    def update_index_to_scorch(self, queue=None):
+        try:
+            for index in self.fts_obj.fts_indexes:
+                if index.is_upside_down() or index.is_type_unspecified():
+                    self.log.info("Index type is {0}, now converting to scorch... ".format(index.get_index_type()))
+                    index.update_index_to_scorch()
+                else:
+                    self.fail("FAIL: Index {0} was not meant to be of type {1}".
+                              format(index.name,
+                                     index.get_index_type()))
+            self.fts_obj.wait_for_indexing_complete()
+        except Exception, ex:
+            print ex
+            if queue is not None:
+                queue.put(False)
+        if queue is not None:
+            queue.put(True)
+
+    def delete_fts_indexes(self, queue=None):
+        rest = RestConnection(self.servers[0])
+        for index in self.fts_obj.fts_indexes:
+            rest.delete_fts_index(index.name)
+
+    def update_index_to_upside_down(self, queue=None):
+        try:
+            for index in self.fts_obj.fts_indexes:
+                if index.is_scorch() or index.is_type_unspecified():
+                    self.log.info("Index type is {0}, now converting to upside_down... ".format(index.get_index_type()))
+                    index.update_index_to_upside_down()
+                else:
+                    self.fail("FAIL: Index {0} was not meant to be of type {1}".
+                              format(index.name,
+                                     index.get_index_type()))
+            self.fts_obj.wait_for_indexing_complete()
+        except Exception, ex:
+            print ex
+            if queue is not None:
+                queue.put(False)
+        if queue is not None:
+            queue.put(True)
+
+    def check_index_type(self, queue=None):
+        check_index_type = self.input.param("check_index_type", None)
+        try:
+            for index in self.fts_obj.fts_indexes:
+                type = index.get_index_type()
+                if type == check_index_type:
+                    self.log.info("SUCCESS: Index type check returns {0}".format(type))
+                else:
+                    self.fail("FAIL: Index {0} of type {1} is expected to be of type {2}".
+                              format(index.name,
+                                     type,
+                                     check_index_type))
         except Exception, ex:
             print ex
             if queue is not None:

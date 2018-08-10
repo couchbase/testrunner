@@ -12,7 +12,6 @@ import mc_bin_client
 import threading
 from random import randrange, randint
 from fts.fts_base import FTSIndex
-from pytests.fts.fts_callable import FTSCallable
 from memcached.helper.data_helper import  VBucketAwareMemcached
 from remote.remote_util import RemoteMachineShellConnection, RemoteUtilHelper
 from membase.api.rest_client import RestConnection, Bucket
@@ -126,6 +125,7 @@ class UpgradeTests(NewUpgradeBaseTest, EventingBaseTest):
                                           self.upgrade_services_in, start_node = 0)
         self.after_upgrade_services_in = self.get_services(self.out_servers_pool.values(),
                                            self.after_upgrade_services_in, start_node = 0)
+        self.fts_obj = None
 
     def tearDown(self):
         super(UpgradeTests, self).tearDown()
@@ -133,14 +133,9 @@ class UpgradeTests(NewUpgradeBaseTest, EventingBaseTest):
     def test_upgrade(self):
         self.event_threads = []
         self.after_event_threads = []
-        self.fts_obj = None
         try:
+            self.log.info("\n*** Start init operations before upgrade begins ***")
             if self.initialize_events:
-                self.log.info("\n*** Start init operations {0} before upgrade begins ***"\
-                                                          .format(self.initialize_events))
-                if "create_fts_index_query_compare" in self.initialize_events[0]:
-                    self.fts_obj = FTSCallable(nodes=self.servers, es_validate=True)
-                    self.call_ftsCallable = False
                 initialize_events = self.run_event(self.initialize_events)
             self.finish_events(initialize_events)
             if not self.success_run and self.failed_thread is not None:
@@ -150,11 +145,9 @@ class UpgradeTests(NewUpgradeBaseTest, EventingBaseTest):
                 self.event_threads += self.run_event(self.before_events)
             self.log.info("\n*** Start upgrade cluster ***")
             self.event_threads += self.upgrade_event()
-            if self.in_between_events:
-                self.event_threads += self.run_event(self.in_between_events)
-            self.finish_events(self.event_threads)
             if self.upgrade_type == "online":
                 self.monitor_dcp_rebalance()
+            self.finish_events(self.event_threads)
             self.log.info("\nWill install upgrade version to any free nodes")
             out_nodes = self._get_free_nodes()
             self.log.info("Here is free nodes {0}".format(out_nodes))
@@ -816,9 +809,14 @@ class UpgradeTests(NewUpgradeBaseTest, EventingBaseTest):
                     servers_out[key] = servers[key]
                     new_servers.pop(key)
             out_servers.update(servers_out)
-            self.log.info("current {0}".format(servers))
-            self.log.info("will come inside {0}".format(servers_in))
-            self.log.info("will go out {0}".format(servers_out))
+            rest = RestConnection(servers.values()[0])
+            self.log.info("****************************************".format(servers))
+            self.log.info("cluster nodes = {0}".format(servers.values()))
+            self.log.info("cluster service map = {0}".format(rest.get_nodes_services()))
+            self.log.info("cluster version map = {0}".format(rest.get_nodes_version()))
+            self.log.info("to include in cluster = {0}".format(servers_in.values()))
+            self.log.info("to exclude from cluster = {0}".format(servers_out.values()))
+            self.log.info("****************************************".format(servers))
             rest = RestConnection(servers_out.values()[0])
             servicesNodeOut = rest.get_nodes_services()
             servicesNodeOut = ",".join(servicesNodeOut[servers_out.keys()[0]] )
@@ -833,7 +831,8 @@ class UpgradeTests(NewUpgradeBaseTest, EventingBaseTest):
                 elif self.upgrade_services_in != None and len(self.upgrade_services_in) > 0:
                     self.cluster.rebalance(servers.values(),
                                         servers_in.values(),
-                          servers_out.values(), services = \
+                                        servers_out.values(),
+                                        services = \
                        self.upgrade_services_in[start_services_num:start_services_num+\
                                                              len(servers_in.values())])
                     start_services_num += len(servers_in.values())
@@ -851,6 +850,12 @@ class UpgradeTests(NewUpgradeBaseTest, EventingBaseTest):
             if self.verify_vbucket_info:
                 new_vbucket_map = self._record_vbuckets(self.master, self.servers)
                 self._verify_vbuckets(old_vbucket_map, new_vbucket_map)
+            # in the middle of online upgrade events
+            if self.in_between_events:
+                self.event_threads = []
+                self.event_threads += self.run_event(self.in_between_events)
+                self.finish_events(self.event_threads)
+                self.in_between_events = None
 
     def online_upgrade_incremental(self):
         self.log.info("online_upgrade_incremental")
