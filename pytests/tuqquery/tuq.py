@@ -21,8 +21,9 @@ from security.rbac_base import RbacBase
 from couchbase_helper.tuq_generators import TuqGenerators
 #from xdcr.upgradeXDCR import UpgradeTests
 from couchbase_helper.documentgenerator import JSONNonDocGenerator
-from couchbase.cluster import Cluster
-from couchbase.cluster import PasswordAuthenticator
+if self.testrunner_client == 'python_sdk':
+    from couchbase.cluster import Cluster
+    from couchbase.cluster import PasswordAuthenticator
 import couchbase.subdocument as SD
 from couchbase.n1ql import N1QLQuery, STATEMENT_PLUS,CONSISTENCY_REQUEST, MutationState
 import ast
