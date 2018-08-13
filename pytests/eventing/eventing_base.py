@@ -45,6 +45,7 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         self.create_functions_buckets = self.input.param('create_functions_buckets', True)
         self.docs_per_day = self.input.param("doc-per-day", 1)
         self.use_memory_manager = self.input.param('use_memory_manager', True)
+        self.print_eventing_handler_code_in_logs = self.input.param('print_eventing_handler_code_in_logs', True)
         random.seed(datetime.time)
         function_name = "Function_{0}_{1}".format(random.randint(1, 1000000000), self._testMethodName)
         # See MB-28447, From now function name can only be max of 100 chars
@@ -56,14 +57,14 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         super(EventingBaseTest, self).tearDown()
 
     def create_save_function_body(self, appname, appcode, description="Sample Description",
-                                  checkpoint_interval=10000, cleanup_timers=False,
+                                  checkpoint_interval=20000, cleanup_timers=False,
                                   dcp_stream_boundary="everything", deployment_status=True,
                                   # rbacpass="password", rbacrole="admin", rbacuser="cbadminbucket",
                                   skip_timer_threshold=86400,
-                                  sock_batch_size=1, tick_duration=60000, timer_processing_tick_interval=500,
+                                  sock_batch_size=1, tick_duration=5000, timer_processing_tick_interval=500,
                                   timer_worker_pool_size=3, worker_count=3, processing_status=True,
-                                  cpp_worker_thread_count=1, multi_dst_bucket=False, execution_timeout=3,
-                                  data_chan_size=10000, worker_queue_cap=100000, deadline_timeout=6
+                                  cpp_worker_thread_count=1, multi_dst_bucket=False, execution_timeout=60,
+                                  data_chan_size=10000, worker_queue_cap=100000, deadline_timeout=62
                                   ):
         body = {}
         body['appname'] = appname
@@ -241,8 +242,9 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         # if wait_for_bootstrap:
         #     # wait for the function to come out of bootstrap state
         #     self.wait_for_bootstrap_to_complete(body['appname'])
-        log.info("Deploying the following handler code : {0}".format(body['appname']))
-        log.info("\n{0}".format(body['appcode']))
+        if self.print_eventing_handler_code_in_logs:
+            log.info("Deploying the following handler code : {0}".format(body['appname']))
+            log.info("\n{0}".format(body['appcode']))
         content1 = self.rest.create_function(body['appname'], body)
         log.info("deploy Application : {0}".format(content1))
         if deployment_fail:
