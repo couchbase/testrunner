@@ -153,6 +153,9 @@ class QueryTests(BaseTestCase):
                 self.cluster.rebalance([self.master, self.cbas_node], [self.cbas_node], [], services=['cbas'])
                 self.setup_analytics()
                 self.sleep(30, 'wait for analytics setup')
+            if self.testrunner_client == 'python_sdk':
+                from couchbase.cluster import Cluster
+                from couchbase.cluster import PasswordAuthenticator
         except Exception, ex:
             self.log.error('SUITE SETUP FAILED')
             self.log.info(ex)
