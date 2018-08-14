@@ -121,6 +121,29 @@ class CollectinfoTests(CliBaseTest):
                 self.fail("cbcollect info could not detect docker container")
         os.system("docker exec %s rm testlog.zip" % (docker_id))
 
+    def test_not_collect_stats_hash_in_cbcollectinfo(self):
+        """ this test verifies we don't collect stats hash
+            in when run cbcollectinfo
+            params: nodes_init=2
+        """
+        check_version = ["5.1.2", "5.5.1"]
+        mesg = "memcached stats ['hash', 'detail']"
+        if self.cb_version[:5] not in check_version \
+                                   or float(self.cb_version[:3]) < 6.0:
+            self.log.info("\nThis version {0} does not need to test {1}"\
+                                          .format(self.cb_version, mesg))
+            return
+        self.shell.delete_files("{0}.zip".format(self.log_filename))
+        """ This is the folder generated after unzip the log package """
+        self.shell.delete_files("cbcollect_info*")
+        output, error = self.shell.execute_cbcollect_info("%s.zip"
+                                                           % (self.log_filename))
+        if output:
+            for x in output:
+                if x.startswith(mesg):
+                    self.fail("cbcollectinfo should not collect {0}".format(mesg))
+        self.log.info("cbcollectinfo does not collect {0}".format(mesg))
+
     @staticmethod
     def verify_results(self, output_file_name):
         try:
