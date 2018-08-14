@@ -284,3 +284,25 @@ class EventingDataset(EventingBaseTest):
         for quota in range(256, 512, 4):
             self.rest.set_service_memoryQuota(service='eventingMemoryQuota', memoryQuota=quota)
             self.sleep(10)
+
+    def test_eventing_does_not_use_xattrs(self):
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_WITH_TIMERS,
+                                              dcp_stream_boundary="from_now")
+        # deploy eventing function
+        self.deploy_function(body)
+        url = 'couchbase://{ip}/{name}'.format(ip=self.master.ip, name=self.src_bucket_name)
+        bucket = Bucket(url, username="cbadminbucket", password="password")
+        for docid in ['customer123', 'customer1234', 'customer12345']:
+            bucket.upsert(docid, {'a': 1})
+        self.verify_eventing_results(self.function_name, 3, skip_stats_validation=True)
+        # add new multiple xattrs , delete old xattrs and delete the documents
+        for docid in ['customer123', 'customer1234', 'customer12345']:
+            r = bucket.mutate_in(docid, SD.get('eventing', xattr=True))
+            log.info(r)
+            if "Could not execute one or more multi lookups or mutations" not in str(r):
+                self.fail("eventing is still using xattrs for timers")
+            r = bucket.mutate_in(docid, SD.get('_eventing', xattr=True))
+            log.info(r)
+            if "Could not execute one or more multi lookups or mutations" not in str(r):
+                self.fail("eventing is still using xattrs for timers")
+        self.undeploy_and_delete_function(body)

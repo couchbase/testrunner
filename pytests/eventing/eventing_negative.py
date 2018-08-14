@@ -237,3 +237,25 @@ class EventingNegative(EventingBaseTest):
         except Exception as e:
             if "Function name can only contain characters in range A-Z, a-z, 0-9 and underscore, hyphen" not in str(e):
                 self.fail("Deployment is expected to be failed when space is present in function name")
+
+    def test_deploy_function_invalid_alias_name(self):
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_WITH_DOC_TIMER)
+        # Use an invalid alias
+        body['depcfg']['buckets'].append({"alias": "908!@#$%%^&&**", "bucket_name": self.dst_bucket_name})
+        try:
+            self.deploy_function(body, deployment_fail=True)
+        except Exception as e:
+            if "ERR_INVALID_CONFIG" not in str(e):
+                log.info(str(e))
+                self.fail("Deployment is expected to be failed but succeeded with function name more than 100 chars")
+
+    def test_deploy_function_with_prefix_length_greater_than_16_chars(self):
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_WITH_DOC_TIMER)
+        # Use an user_prefix greater than 16 chars
+        body['settings']['user_prefix'] = "eventingeventingeventingeventingeventingeventingeventingeventingeventing"
+        try:
+            self.deploy_function(body, deployment_fail=True)
+        except Exception as e:
+            if "ERR_INVALID_CONFIG" not in str(e):
+                log.info(str(e))
+                self.fail("Deployment is expected to be failed but succeeded with user_prefix greater than 16 chars")
