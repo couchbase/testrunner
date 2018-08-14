@@ -9,6 +9,7 @@ from mc_bin_client import MemcachedError
 
 from membase.api.rest_client import RestConnection, RestHelper
 from memcached.helper.data_helper import VBucketAwareMemcached, MemcachedClientHelper
+from ep_mc_bin_client import MemcachedClient, MemcachedError
 import json
 
 
@@ -90,3 +91,32 @@ class basic_ops(BaseTestCase):
         except MemcachedError as exp:
             self.fail("Exception with del_with meta - {0}".format(exp) )
 
+    # Reproduce test case for MB-28078
+    def do_setWithMeta_twice(self):
+
+        mc = MemcachedClient(self.master.ip, 11210)
+        mc.sasl_auth_plain(self.master.rest_username, self.master.rest_password)
+        mc.bucket_select('default')
+
+        try:
+            mc.setWithMeta('1', '{"Hello":"World"}', 3600, 0, 1, 0x1512a3186faa0000)
+        except MemcachedError as error:
+            self.log.info("<MemcachedError #%d ``%s''>" % (error.status, error.message))
+            self.fail("Error on First setWithMeta()")
+
+        stats = mc.stats()
+        self.log.info('curr_items: {} and curr_temp_items:{}'.format(stats['curr_items'], stats['curr_temp_items']))
+        self.log.info("Sleeping for 5 and checking stats again")
+        time.sleep(5)
+        stats = mc.stats()
+        self.log.info('curr_items: {} and curr_temp_items:{}'.format(stats['curr_items'], stats['curr_temp_items']))
+
+        try:
+            mc.setWithMeta('1', '{"Hello":"World"}', 3600, 0, 1, 0x1512a3186faa0000)
+        except MemcachedError as error:
+            stats = mc.stats()
+            self.log.info('After 2nd setWithMeta(), curr_items: {} and curr_temp_items:{}'.format(stats['curr_items'], stats['curr_temp_items']))
+            if int(stats['curr_temp_items']) == 1:
+                self.fail("Error on second setWithMeta(), expected curr_temp_items to be 0")
+            else:
+                self.log.info("<MemcachedError #%d ``%s''>" % (error.status, error.message))
