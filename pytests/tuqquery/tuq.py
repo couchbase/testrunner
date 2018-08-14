@@ -81,6 +81,7 @@ class QueryTests(BaseTestCase):
         shell.disconnect()
         self.path = testconstants.LINUX_COUCHBASE_BIN_PATH
         self.array_indexing = self.input.param("array_indexing", False)
+        self.load_sample = self.input.param("load_sample", False)
         self.gens_load = self.gen_docs(self.docs_per_day)
         self.skip_load = self.input.param("skip_load", False)
         self.skip_index = self.input.param("skip_index", False)
@@ -133,6 +134,8 @@ class QueryTests(BaseTestCase):
         if self.monitoring:
             self.run_cbq_query('delete from system:prepareds')
             self.run_cbq_query('delete from system:completed_requests')
+        if self.load_sample:
+            self.rest.load_sample("travel-sample")
         self.log.info("==============  QueryTests setup has completed ==============")
 
     def suite_setUp(self):
