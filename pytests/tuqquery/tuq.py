@@ -134,8 +134,6 @@ class QueryTests(BaseTestCase):
         if self.monitoring:
             self.run_cbq_query('delete from system:prepareds')
             self.run_cbq_query('delete from system:completed_requests')
-        if self.load_sample:
-            self.rest.load_sample("travel-sample")
         self.log.info("==============  QueryTests setup has completed ==============")
 
     def suite_setUp(self):

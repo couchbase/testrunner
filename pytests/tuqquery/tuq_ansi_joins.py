@@ -11,6 +11,8 @@ class QueryANSIJOINSTests(QueryTests):
     def setUp(self):
         super(QueryANSIJOINSTests, self).setUp()
         self.log.info("==============  QueryANSIJOINSTests setup has started ==============")
+        if self.load_sample:
+            self.rest.load_sample("travel-sample")
         self.log.info("==============  QueryANSIJOINSTests setup has completed ==============")
         self.log_config_info()
 
