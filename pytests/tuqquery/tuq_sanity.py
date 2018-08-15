@@ -2647,6 +2647,26 @@ class QuerySanityTests(QueryTests):
             expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
             self._verify_results(actual_result, expected_result)
 
+        # https://issues.couchbase.com/browse/MB-29401
+        def test_sum_large_negative_numbers(self):
+            self.fail_if_no_buckets()
+
+            self.run_cbq_query("insert into default (KEY, VALUE) VALUES ('doc1',{ 'f1' : -822337203685477580 })")
+            self.run_cbq_query("insert into default (KEY, VALUE) VALUES ('doc2',{ 'f1' : -822337203685477580 })")
+            self.query = "select SUM(f1) from default"
+            result = self.run_cbq_query()
+            found_result = result['results'][0]['$1']
+            expected_result = -1644674407370955160
+            self.assertEqual(found_result, expected_result)
+
+            self.run_cbq_query("insert into default (KEY, VALUE) VALUES ('doc3',{ 'f2' : -822337203685477580 })")
+            self.run_cbq_query("insert into default (KEY, VALUE) VALUES ('doc4',{ 'f2' : 10 })")
+            self.query = "select SUM(f2) from default"
+            result = self.run_cbq_query()
+            found_result = result['results'][0]['$1']
+            expected_result = -822337203685477570
+            self.assertEqual(found_result, expected_result)
+
 ##############################################################################################
 #
 #   EXPLAIN
