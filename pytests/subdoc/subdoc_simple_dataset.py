@@ -12,6 +12,32 @@ class SubdocSimpleDataset(SubdocBaseTest):
     def tearDown(self):
         super(SubdocSimpleDataset, self).tearDown()
 
+    # Test the fix for MB-30278
+    def test_verify_backtick(self):
+        result = True
+        dict = {}
+        self.key = "verify_backtick"
+        array = {
+            "name`": "Douglas Reynholm",
+            "place": "India",
+        }
+        jsonDump = json.dumps(array)
+        self.client.set(self.key, 0, 0, jsonDump)
+
+        # Insert double backtick(``) to refer a literal backtick(`) in key
+        for count in range(5):
+            key1 = 'name``'
+            try:
+                opaque, cas, data = self.client.get_sd(self.key, key1)
+                data = json.loads(data)
+                if data != array["name`"]:
+                    self.fail("Data does not match")
+            except Exception as e:
+                self.log("Unable to get key {} for path {} after {} tries".format(self.key, key1, count))
+                result = False
+
+        self.assertTrue(result, dict)
+
 #SD_COUNTER
     def test_counter(self):
         result = True
