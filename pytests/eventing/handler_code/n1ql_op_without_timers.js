@@ -14,8 +14,8 @@ function OnUpdate(doc, meta) {
 function OnDelete(meta) {
     var docID = meta.id;
     // Adding these extra comments to validate MB-30240
-    log('Deleting document', doc);
+    log('Deleting document', docID);
     var query = DELETE FROM dst_bucket where meta().id = $docID;
     // Adding these extra comments to validate MB-30240
-    log('Deleting document', doc);
+    log('Deleting document', docID);
 }
