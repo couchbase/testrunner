@@ -18,8 +18,6 @@ from membase.api.rest_client import RestConnection, Bucket
 from couchbase_helper.tuq_helper import N1QLHelper
 from couchbase_helper.query_helper import QueryHelper
 from TestInput import TestInputSingleton
-from couchbase_helper.tuq_helper import N1QLHelper
-from couchbase_helper.query_helper import QueryHelper
 from couchbase_helper.document import View
 from eventing.eventing_base import EventingBaseTest
 from pytests.eventing.eventing_constants import HANDLER_CODE
@@ -106,13 +104,17 @@ class UpgradeTests(NewUpgradeBaseTest, EventingBaseTest):
         """ sometimes, when upgrade failed and node does not install couchbase
             server yet, we could not set quota at beginning of the test.  We
             have to wait to install new couchbase server to set it properly here """
-        self.quota = self._initialize_nodes(self.cluster, self.servers,\
-                                         self.disabled_consistent_view,\
-                                    self.rebalanceIndexWaitingDisabled,\
-                                    self.rebalanceIndexPausingDisabled,\
-                                              self.maxParallelIndexers,\
-                                       self.maxParallelReplicaIndexers,\
-                                                             self.port)
+        servers_available = copy.deepcopy(self.servers)
+        if len(self.servers) > int(self.nodes_init):
+            servers_available = servers_available[:self.nodes_init]
+        if not self.skip_init_check_cbserver:
+            self.quota = self._initialize_nodes(self.cluster, servers_available,\
+                                             self.disabled_consistent_view,\
+                                        self.rebalanceIndexWaitingDisabled,\
+                                        self.rebalanceIndexPausingDisabled,\
+                                                  self.maxParallelIndexers,\
+                                           self.maxParallelReplicaIndexers,\
+                                                                 self.port)
         self.add_built_in_server_user(node=self.master)
         self.bucket_size = self._get_bucket_size(self.quota, self.total_buckets)
         self.create_buckets()
@@ -126,6 +128,7 @@ class UpgradeTests(NewUpgradeBaseTest, EventingBaseTest):
         self.after_upgrade_services_in = self.get_services(self.out_servers_pool.values(),
                                            self.after_upgrade_services_in, start_node = 0)
         self.fts_obj = None
+        self.index_name_prefix = None
 
     def tearDown(self):
         super(UpgradeTests, self).tearDown()
@@ -625,6 +628,41 @@ class UpgradeTests(NewUpgradeBaseTest, EventingBaseTest):
                 queue.put(False)
         if create_index and queue is not None:
             queue.put(True)
+
+    def create_index_with_replica_and_query(self, queue=None):
+        """ ,groups=simple,reset_services=True
+        """
+        self.log.info("Create index with replica and query")
+        self.n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
+        self._initialize_n1ql_helper()
+        self.index_name_prefix = "random_index_" + str(randint(100000, 999999))
+        create_index_query = "CREATE INDEX " + self.index_name_prefix + \
+              " ON default(age) USING GSI WITH {{'num_replica': {0}}};"\
+                                        .format(self.num_index_replicas)
+        try:
+            self.create_index()
+            self.n1ql_helper.run_cbq_query(query=create_index_query,
+                                           server=self.n1ql_node)
+        except Exception, e:
+            self.log.info(e)
+        self.sleep(30)
+        index_map = self.get_index_map()
+        self.log.info(index_map)
+        if not self.expected_err_msg:
+            self.n1ql_helper.verify_replica_indexes([self.index_name_prefix],
+                                                    index_map,
+                                                    self.num_index_replicas)
+
+    def verify_index_with_replica_and_query(self, queue=None):
+        index_map = self.get_index_map()
+        try:
+            self.n1ql_helper.verify_replica_indexes([self.index_name_prefix],
+                                                    index_map,
+                                                    self.num_index_replicas)
+        except Exception, e:
+            self.log.info(e)
+            if queue is not None:
+                queue.put(False)
 
     def create_views(self, queue=None):
         self.log.info("*** create_views ***")

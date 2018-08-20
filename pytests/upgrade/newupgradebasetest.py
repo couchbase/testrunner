@@ -74,6 +74,8 @@ class NewUpgradeBaseTest(BaseTestCase):
         self.cbas_dataset_name = self.input.param("cbas_dataset_name", 'travel_ds')
         self.cbas_dataset_name_invalid = self.input.param('cbas_dataset_name_invalid', self.cbas_dataset_name)
         self.cbas_bucket_name_invalid = self.input.param('cbas_bucket_name_invalid', self.cbas_bucket_name)
+        self.num_index_replicas = self.input.param("num_index_replica", 0)
+        self.expected_err_msg = self.input.param("expected_err_msg", None)
         self.rest_settings = self.input.membase_settings
         self.rest = None
         self.rest_helper = None

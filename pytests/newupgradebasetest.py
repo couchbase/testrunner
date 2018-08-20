@@ -16,6 +16,8 @@ from remote.remote_util import RemoteMachineShellConnection, RemoteUtilHelper
 from couchbase_helper.document import DesignDocument, View
 from couchbase_helper.documentgenerator import BlobGenerator
 from query_tests_helper import QueryHelperTests
+from couchbase_helper.tuq_helper import N1QLHelper
+from couchbase_helper.query_helper import QueryHelper
 from scripts.install import InstallerJob
 from builds.build_query import BuildQuery
 from eventing.eventing_base import EventingBaseTest
@@ -100,6 +102,8 @@ class NewUpgradeBaseTest(QueryHelperTests,EventingBaseTest, FTSBaseTest):
                                                                  self.cbas_bucket_name)
         self.use_memory_manager = self.input.param('use_memory_manager', True)
         self.is_fts_in_pre_upgrade = self.input.param('is_fts_in_pre_upgrade', False)
+        self.num_index_replicas = self.input.param("num_index_replica", 0)
+        self.expected_err_msg = self.input.param("expected_err_msg", None)
         self.during_ops = None
         if "during-ops" in self.input.test_params:
             self.during_ops = self.input.param("during-ops", None).split(",")
@@ -133,6 +137,8 @@ class NewUpgradeBaseTest(QueryHelperTests,EventingBaseTest, FTSBaseTest):
                 self.upgrade_versions = self.input.param('initial_version', '4.1.0-4963')
                 self.upgrade_versions = self.upgrade_versions.split(";")
         self.fts_obj = None
+        self.n1ql_helper = None
+        self.index_name_prefix = None
 
     def tearDown(self):
         test_failed = (hasattr(self, '_resultForDoCleanups') and \
@@ -1129,3 +1135,56 @@ class NewUpgradeBaseTest(QueryHelperTests,EventingBaseTest, FTSBaseTest):
             validate_error_msg=self.validate_error)
         if not result:
             self.fail("FAIL : Actual error msg does not match the expected")
+
+    def create_replica_index(self):
+        self.log.info("create_index")
+        self.index_list = {}
+        self._initialize_n1ql_helper()
+        try:
+            self.n1ql_helper.create_primary_index(using_gsi = True,
+                                               server = self.n1ql_server)
+            self.log.info("done create_index")
+        except Exception, e:
+            self.log.info(e)
+
+    def create_index_with_replica_and_query(self):
+        """ ,groups=simple,reset_services=True """
+        self.log.info("Create index with replica and query")
+        self.n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
+        self._initialize_n1ql_helper()
+        self.index_name_prefix = "random_index_" + str(randint(100000, 999999))
+        create_index_query = "CREATE INDEX " + self.index_name_prefix + \
+              " ON default(age) USING GSI WITH {{'num_replica': {0}}};"\
+                                        .format(self.num_index_replicas)
+        try:
+            self.create_replica_index()
+            self.n1ql_helper.run_cbq_query(query=create_index_query,
+                                           server=self.n1ql_node)
+        except Exception, e:
+            self.log.info(e)
+        self.sleep(30)
+        index_map = self.get_index_map()
+        self.log.info(index_map)
+        if not self.expected_err_msg:
+            self.n1ql_helper.verify_replica_indexes([self.index_name_prefix],
+                                                    index_map,
+                                                    self.num_index_replicas)
+
+    def verify_index_with_replica_and_query(self):
+        index_map = self.get_index_map()
+        try:
+            self.n1ql_helper.verify_replica_indexes([self.index_name_prefix],
+                                                    index_map,
+                                                    self.num_index_replicas)
+        except Exception, e:
+            self.log.info(e)
+
+    def _initialize_n1ql_helper(self):
+        if self.n1ql_helper == None:
+            self.n1ql_server = self.get_nodes_from_services_map(service_type = \
+                                              "n1ql",servers=self.input.servers)
+            self.n1ql_helper = N1QLHelper(version = "sherlock", shell = None,
+                use_rest = True, max_verify = self.max_verify,
+                buckets = self.buckets, item_flag = None,
+                n1ql_port = self.n1ql_server.n1ql_port, full_docs_list = [],
+                log = self.log, input = self.input, master = self.master)

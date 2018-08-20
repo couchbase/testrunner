@@ -122,6 +122,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         self.instances = self.input.param("instances", 4)
         self.threads = self.input.param("threads", 5)
         self.use_replica_to = self.input.param("use_replica_to",False)
+        self.index_name_prefix = None
 
     def tearDown(self):
         super(MultiNodesUpgradeTests, self).tearDown()
@@ -2310,14 +2311,22 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         after_upgrade_buckets_in = self.input.param("after_upgrade_buckets_in", False)
         after_upgrade_buckets_out = self.input.param("after_upgrade_buckets_out", False)
         after_upgrade_buckets_flush = self.input.param("after_upgrade_buckets_flush", False)
+        self.is_replica_index_in_pre_upgrade = False
 
         # Install initial version on the specified nodes
         nodes_init = 2
         fts_obj = None
-        if 5 <= int(self.initial_version[:1]):
+        if 5 <= int(self.initial_version[:1]) and 5.5 > float(self.initial_version[:3]):
             nodes_init = 3
             if initial_services_setting is not None:
                 initial_services_setting += "-kv,fts"
+                self.is_fts_in_pre_upgrade = True
+        if 5.5 <= float(self.initial_version[:3]) and self.num_index_replicas > 0:
+            if len(self.servers) < 5 :
+                self.fail("This test needs at least 5 servers to run")
+            nodes_init = 4
+            if initial_services_setting is not None:
+                initial_services_setting += "-kv,fts,index"
                 self.is_fts_in_pre_upgrade = True
         self._install(self.servers[:nodes_init])
         # Configure the nodes with services
@@ -2329,12 +2338,22 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         # Run the pre upgrade operations, typically creating index
         if self.initial_version[:5] in COUCHBASE_FROM_SPOCK:
             fts_obj = self.create_fts_index_query_compare()
-        self.pre_upgrade(self.servers[:3])
+
+        self.buckets = RestConnection(self.master).get_buckets()
+        if 5 <= int(self.initial_version[:1]) and 5.5 > float(self.initial_version[:3]):
+            self.pre_upgrade(self.servers[:3])
+        elif 5.5 <= float(self.initial_version[:3]) and self.num_index_replicas > 0:
+            self.pre_upgrade(self.servers[:4])
         seqno_expected = 1
         if self.ddocs_num:
             self.create_ddocs_and_views()
             if self.input.param('run_index', False):
                 self.verify_all_queries()
+        """ from 5.5 we support replica index.  Need to test this feature. """
+        if 5.5 <= float(self.initial_version[:3]) and self.num_index_replicas > 0:
+            self.create_index_with_replica_and_query()
+            self.is_replica_index_in_pre_upgrade = True
+
         if not self.initial_version.startswith("1.") and self.input.param('check_seqno', True):
             self.check_seqno(seqno_expected)
         if self.during_ops:
@@ -2432,6 +2451,9 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
             for index in fts_obj.fts_indexes:
                 fts_obj.run_query_and_compare(index=index, num_queries=20)
             fts_obj.delete_all()
+        if self.is_replica_index_in_pre_upgrade:
+            self.log.info("verify replica index after upgrade")
+            self.verify_index_with_replica_and_query()
         if self.upgrade_versions[0][:5] in COUCHBASE_FROM_VULCAN and \
                  after_upgrade_services_in:
             if "eventing" in after_upgrade_services_in:
