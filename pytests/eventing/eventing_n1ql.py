@@ -196,7 +196,8 @@ class EventingN1QL(EventingBaseTest):
                   batch_size=self.batch_size)
         body = self.create_save_function_body(self.function_name, HANDLER_CODE_ERROR.RANDOM,
                                               dcp_stream_boundary="from_now")
-        self.deploy_function(body, deployment_fail=True)
+        # MB-27126
+        self.deploy_function(body, deployment_fail=False)
         # TODO : more assertion needs to be validate after MB-27126
 
     def test_anonymous_with_cron_timer(self):

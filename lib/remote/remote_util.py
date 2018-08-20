@@ -2392,7 +2392,8 @@ class RemoteMachineShellConnection:
                          "/var/membase/data/*", "/opt/membase/var/lib/membase/*",
                          "/opt/couchbase", "/data/*"]
         terminate_process_list = ["beam.smp", "memcached", "moxi", "vbucketmigrator",
-                                  "couchdb", "epmd", "memsup", "cpu_sup", "goxdcr", "erlang", "eventing"]
+                                  "couchdb", "epmd", "memsup", "cpu_sup", "goxdcr", "erlang", "eventing", "erl", "godu",
+                                  "goport", "gosecrets", "projector"]
         self.extract_remote_info()
         log.info(self.info.distribution_type)
         type = self.info.distribution_type.lower()

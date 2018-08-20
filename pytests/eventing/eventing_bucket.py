@@ -259,9 +259,10 @@ class EventingBucket(EventingBaseTest):
         body1['depcfg']['buckets'].append({"alias": self.src_bucket_name, "bucket_name": self.src_bucket_name})
         self.deploy_function(body1)
         # Wait for eventing to catch up with all the create mutations and verify results
-        self.verify_eventing_results(self.function_name, self.docs_per_day * 4032, skip_stats_validation=True)
-        self.verify_eventing_results(self.function_name + "_1", self.docs_per_day * 4032, skip_stats_validation=True,
-                                     bucket=self.src_bucket_name)
+        # See DOC-3612
+        # self.verify_eventing_results(self.function_name, self.docs_per_day * 4032, skip_stats_validation=True)
+        # self.verify_eventing_results(self.function_name + "_1", self.docs_per_day * 4032, skip_stats_validation=True,
+        #                             bucket=self.src_bucket_name)
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size, op_type='delete')
         self.cluster.load_gen_docs(self.master, self.dst_bucket_name, gen_load_non_json_del, self.buckets[0].kvs[1],
