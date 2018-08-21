@@ -3419,6 +3419,11 @@ class RemoteMachineShellConnection:
             ret = self.execute_command_raw('hostname -d', debug=False)
         return ret
 
+    def get_aws_public_hostname(self):
+        #AWS supported url to retrieve metadata like public hostname of an instance from shell
+        output, _ = self.execute_command("curl -s http://169.254.169.254/latest/meta-data/public-hostname")
+        return output[0]
+
     def get_full_hostname(self):
         info = self.extract_remote_info()
         if not info.domain:

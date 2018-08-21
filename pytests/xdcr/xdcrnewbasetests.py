@@ -441,7 +441,10 @@ class NodeHelper:
         for server in servers:
             shell = RemoteMachineShellConnection(server)
             try:
-                hostname = shell.get_full_hostname()
+                if "ec2" in str(server.ip):
+                    hostname = shell.get_aws_public_hostname()
+                else:
+                    hostname = shell.get_full_hostname()
                 rest = RestConnection(server)
                 renamed, content = rest.rename_node(
                     hostname, username=server.rest_username,
