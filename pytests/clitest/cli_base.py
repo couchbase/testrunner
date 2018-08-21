@@ -11,7 +11,7 @@ from testconstants import LINUX_COUCHBASE_SAMPLE_PATH, \
     WIN_BACKUP_C_PATH, LINUX_BACKUP_PATH, LINUX_COUCHBASE_LOGS_PATH, \
     WIN_COUCHBASE_LOGS_PATH, WIN_TMP_PATH, WIN_TMP_PATH_RAW, \
     WIN_BACKUP_PATH, LINUX_COUCHBASE_BIN_PATH, LINUX_ROOT_PATH, LINUX_CB_PATH,\
-    MAC_COUCHBASE_BIN_PATH, WIN_COUCHBASE_BIN_PATH, WIN_ROOT_PATH
+    MAC_COUCHBASE_BIN_PATH, WIN_COUCHBASE_BIN_PATH, WIN_ROOT_PATH, WIN_CB_PATH
 
 from couchbase_helper.cluster import Cluster
 from security.rbac_base import RbacBase
@@ -132,6 +132,7 @@ class CliBaseTest(BaseTestCase):
             if win_format in self.cli_command_path:
                 self.cli_command_path = self.cli_command_path.replace(win_format,
                                                                       cygwin_format)
+            self.base_cb_path = WIN_CB_PATH
         if info.distribution_type.lower() == 'mac':
             self.os = 'mac'
         self.full_v, self.short_v, self.build_number = self.shell.get_cbversion(type)
