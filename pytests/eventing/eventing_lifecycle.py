@@ -162,12 +162,14 @@ class EventingLifeCycle(EventingBaseTest):
         # import the previously exported function
         # we don't have specific API for import, we reuse the API's
         self.function_name = "test_import_function"
+        log.info("Saving the function for UI")
         self.rest.save_function("test_import_function", body)  # we have hardcoded function name as it's imported
+        log.info("Deploy the function")
         self.rest.deploy_function("test_import_function", body)  # we have hardcoded function name as it's imported
         self.wait_for_bootstrap_to_complete("test_import_function")  # we have hardcoded function name as it's imported
         # Wait for eventing to catch up with all the create mutations and verify results
         self.verify_eventing_results("test_import_function", self.docs_per_day * 2016)
-        self.undeploy_and_delete_function(body)
+        self.undeploy_delete_all_functions()
 
     def test_eventing_debugger(self):
         count = 0

@@ -1,1 +1,29 @@
-[{"appcode":"function OnUpdate(doc,meta) {\n    var expiry = new Date();\n    expiry.setSeconds(expiry.getSeconds() + 5);\n\n    var context = {docID : meta.id};\n    createTimer(NDtimerCallback,  expiry, meta.id, context);\n}\nfunction NDtimerCallback(context) {\n    var query = UPSERT INTO dst_bucket ( KEY, VALUE ) VALUES ( UUID() ,'NDtimerCallback');\n}","depcfg":{"buckets":[{"alias":"dst_bucket","bucket_name":"dst"}],"metadata_bucket":"meta","source_bucket":"src"},"version":"evt-6.0.0-1432-ee","handleruuid":3628812571,"id":0,"appname":"test_import_function","settings":{"checkpoint_interval":10000,"cleanup_timers":false,"cpp_worker_thread_count":1,"dcp_stream_boundary":"everything","deadline_timeout":3,"deployment_status":false,"description":"test_import_function","execution_timeout":1,"log_level":"INFO","processing_status":false,"rbacpass":"password","rbacrole":"admin","rbacuser":"cbadminbucket","skip_timer_threshold":86400,"sock_batch_size":1,"tick_duration":5000,"timer_processing_tick_interval":500,"timer_worker_pool_size":3,"user_prefix":"eventing","using_doc_timer":false,"worker_count":1},"using_doc_timer":false}]
+{
+	"appcode": "function OnUpdate(doc,meta) {\n    var expiry = new Date();\n    expiry.setSeconds(expiry.getSeconds() + 5);\n\n    var context = {docID : meta.id};\n    createTimer(NDtimerCallback,  expiry, meta.id, context);\n}\nfunction NDtimerCallback(context) {\n    var query = UPSERT INTO dst_bucket ( KEY, VALUE ) VALUES ( UUID() ,'NDtimerCallback');\n}",
+	"depcfg": {
+		"buckets": [{
+			"alias": "dst_bucket",
+			"bucket_name": "dst_bucket"
+		}],
+		"metadata_bucket": "metadata",
+		"source_bucket": "src_bucket"
+	},
+	"version": "evt-6.0.0-1529-ee",
+	"handleruuid": 3733102106,
+	"id": 0,
+	"appname": "test_import_function",
+	"settings": {
+		"cleanup_timers": false,
+		"dcp_stream_boundary": "everything",
+		"deadline_timeout": 62,
+		"deployment_status": true,
+		"description": "",
+		"execution_timeout": 60,
+		"log_level": "INFO",
+		"processing_status": true,
+		"user_prefix": "eventing",
+		"using_timer": true,
+		"worker_count": 3
+	},
+	"using_timer": false
+}

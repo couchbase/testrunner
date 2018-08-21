@@ -4249,6 +4249,20 @@ class RestConnection(object):
         return json.loads(content)
 
     '''
+            Ensure that the eventing node is out of bootstrap node
+    '''
+
+    def get_running_eventing_apps(self):
+        authorization = base64.encodestring('%s:%s' % (self.username, self.password))
+        url = "getRunningApps"
+        api = self.eventing_baseUrl + url
+        headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
+        status, content, header = self._http_request(api, 'GET', headers=headers)
+        if not status:
+            raise Exception(content)
+        return json.loads(content)
+
+    '''
              Get Eventing processing stats
     '''
     def get_event_processing_stats(self, name, eventing_map=None):

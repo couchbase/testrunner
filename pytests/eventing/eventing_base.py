@@ -122,15 +122,14 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
                 'Eventing took lot of time to come out of bootstrap state or did not successfully bootstrap')
 
     def wait_for_undeployment(self, name, iterations=20):
-        result = self.rest.get_deployed_eventing_apps()
+        result = self.rest.get_running_eventing_apps()
         count = 0
         while name in result and count < iterations:
             self.sleep(30, message="Waiting for undeployment of function...")
             count += 1
             result = self.rest.get_deployed_eventing_apps()
         if count == iterations:
-            raise Exception(
-                'Eventing took lot of time to undeploy')
+            raise Exception('Eventing took lot of time to undeploy')
 
     def verify_eventing_results(self, name, expected_dcp_mutations, doc_timer_events=False, on_delete=False,
                                 skip_stats_validation=False, bucket=None, timeout=600):
@@ -203,6 +202,8 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
                                                                                  expected_dcp_mutations,
                                                                                  total_dcp_backlog,
                                                                                  timers_in_past))
+        log.info("Final docs count... Current : {0} Expected : {1}".
+                 format(stats_dst["curr_items"], expected_dcp_mutations))
         # TODO : Use the following stats in a meaningful way going forward. Just printing them for debugging.
         # print all stats from all eventing nodes
         # These are the stats that will be used by ns_server and UI
