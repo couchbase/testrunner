@@ -1101,8 +1101,12 @@ class EventingRebalance(EventingBaseTest):
                 self.undeploy_and_delete_function(body)
         except:
             pass
-        item_count_metadata = stats_map[self.metadata_bucket_name]["#primary"]["items_count"]
-        if item_count_metadata != 0:
-            log.warn("metadat bucket still has some documents after undeploying the function : {0}".
-                     format(item_count_dst_bucket))
+        try:
+            stats_map = self.get_index_stats(perNode=False)
+            item_count_metadata = stats_map[self.metadata_bucket_name]["#primary"]["items_count"]
+            if item_count_metadata != 0:
+                log.warn("metadata bucket still has some documents after undeploying the function : {0} docs are "
+                         "remaining".format(item_count_metadata))
+        except:
+            pass
 
