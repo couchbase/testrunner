@@ -12,6 +12,8 @@ from security.auditmain import audit
 from security.rbac_base import RbacBase
 import os, subprocess
 import copy
+from couchbase.cluster import Cluster
+from couchbase.cluster import PasswordAuthenticator
 
 
 class x509tests(BaseTestCase):
@@ -32,6 +34,7 @@ class x509tests(BaseTestCase):
         self.delimeters = self.input.param('delimeter', '.:.:.') .split(":")
         self.setup_once = self.input.param("setup_once", False)
         self.upload_json_mode = self.input.param("upload_json_mode",'rest')
+        self.sdk_version = self.input.param('sdk_version','pre-vulcan')
         
         self.dns = self.input.param('dns', None)
         self.uri = self.input.param('uri', None)
@@ -72,10 +75,10 @@ class x509tests(BaseTestCase):
 
     def tearDown(self):
         print "Into Teardown"
-        self._reset_original()
-        shell = RemoteMachineShellConnection(x509main.SLAVE_HOST)
-        shell.execute_command("rm " + x509main.CACERTFILEPATH)
-        super(x509tests, self).tearDown()
+        #self._reset_original()
+        #shell = RemoteMachineShellConnection(x509main.SLAVE_HOST)
+        #shell.execute_command("rm " + x509main.CACERTFILEPATH)
+        #super(x509tests, self).tearDown()
 
     def _reset_original(self):
         self.log.info ("Reverting to original state - regenerating certificate and removing inbox folder")
@@ -153,16 +156,32 @@ class x509tests(BaseTestCase):
         result = False
         self.add_built_in_server_user([{'id': bucket, 'name': bucket, 'password': 'password'}], \
                                       [{'id': bucket, 'name': bucket, 'roles': 'admin'}], self.master)
-        connection_string = 'couchbases://' + host_ip + '/' + bucket + '?certpath=' + root_ca_path
-        self.log.info("Connection string is -{0}".format(connection_string))
-        try:
-            cb = Bucket(connection_string, password='password')
-            if cb is not None:
-                result = True
-                return result, cb
-        except Exception, ex:
-            self.log.info("Expection is  -{0}".format(ex))
-            return result
+        if self.sdk_version == 'pre-vulcan':
+            connection_string = 'couchbases://' + host_ip + '/' + bucket + '?certpath=' + root_ca_path
+            self.log.info("Connection string is -{0}".format(connection_string))
+            try:
+                cb = Bucket(connection_string, password='password')
+                if cb is not None:
+                    result = True
+                    return result, cb
+            except Exception, ex:
+                self.log.info("Expection is  -{0}".format(ex))
+        elif self.sdk_version == 'vulcan':
+            self.add_built_in_server_user([{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'password': 'password'}], \
+                                      [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'roles': 'admin'}], self.master)
+            key_file = x509main.CACERTFILEPATH + self.ip_address + ".key"
+            chain_file = x509main.CACERTFILEPATH + "/long_chain" + self.ip_address + ".pem"
+            connection_string = 'couchbases://' + host_ip + '/?certpath=' + chain_file + "&keypath=" + key_file
+            self.log.info("Connection string is -{0}".format(connection_string))
+            try:
+                cluster = Cluster(connection_string);
+                cb = cluster.open_bucket(bucket)
+                if cb is not None:
+                    result = True
+                    return result, cb
+            except Exception, ex:
+                self.log.info("Expection is  -{0}".format(ex))
+        return result
 
     def test_basic_ssl_test(self):
         x509main(self.master).setup_master()
