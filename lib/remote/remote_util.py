@@ -1751,7 +1751,7 @@ class RemoteMachineShellConnection:
             if self.info.deliverable_type in linux:
                 o, e = \
                     self.execute_command("sed -i 's/export PATH/export PATH\\n"
-                            "export CBFT_ENV_OPTIONS=bleveMaxResultWindow={1},hideUI=false/'\
+                            "export CBFT_ENV_OPTIONS=bleveMaxResultWindow={1}/'\
                             {2}opt/{0}/bin/{0}-server".format(server_type, int(fts_query_limit),
                                                               nonroot_path_start))
                 success &= self.log_command_output(o, e, track_words)
@@ -1827,7 +1827,7 @@ class RemoteMachineShellConnection:
     """
     def install_server(self, build, startserver=True, path='/tmp', vbuckets=None,
                        swappiness=10, force=False, openssl='', upr=None, xdcr_upr=None,
-                       fts_query_limit=None, enable_ipv6=None):
+                       fts_query_limit=None, cbft_env_options=None, enable_ipv6=None):
 
         log.info('*****install server ***')
         server_type = None
@@ -1871,6 +1871,7 @@ class RemoteMachineShellConnection:
                     name="CBFT_ENV_OPTIONS",
                     value="bleveMaxResultWindow={0}".format(int(fts_query_limit))
                 )
+
 
             output, error = self.execute_command("rm -f \
                        /cygdrive/c/automation/*_{0}_install.iss".format(self.ip))
@@ -2002,11 +2003,24 @@ class RemoteMachineShellConnection:
                                                             nonroot_path_start))
                 success &= self.log_command_output(output, error, track_words)
             if fts_query_limit:
-                output, error = \
-                    self.execute_command("sed -i 's/export PATH/export PATH\\n"
-                            "export CBFT_ENV_OPTIONS=bleveMaxResultWindow={1},hideUI=false/'\
-                            {2}opt/{0}/bin/{0}-server".format(server_type, int(fts_query_limit),
-                                                              nonroot_path_start))
+                if cbft_env_options:
+                    output, error = \
+                        self.execute_command("sed -i 's/export PATH/export PATH\\n"
+                                             "export CBFT_ENV_OPTIONS=bleveMaxResultWindow={1},{2}/'\
+                                             {3}opt/{0}/bin/{0}-server".format(server_type,
+                                                                               int(fts_query_limit),
+                                                                               cbft_env_options.replace(':','='),
+                                                                               nonroot_path_start))
+                else:
+                    output, error = \
+                        self.execute_command("sed -i 's/export PATH/export PATH\\n"
+                                "export CBFT_ENV_OPTIONS=bleveMaxResultWindow={1}/'\
+                                {2}opt/{0}/bin/{0}-server".format(server_type, int(fts_query_limit),
+                                                                  nonroot_path_start))
+                success &= self.log_command_output(output, error, track_words)
+                startserver = True
+
+
                 success &= self.log_command_output(output, error, track_words)
                 startserver = True
 
@@ -2056,7 +2070,7 @@ class RemoteMachineShellConnection:
 
     def install_server_win(self, build, version, startserver=True,
                            vbuckets=None, fts_query_limit=None,
-                           enable_ipv6=None, windows_msi=False):
+                           enable_ipv6=None, windows_msi=False, cbft_env_options=None):
 
 
         log.info('******start install_server_win ********')

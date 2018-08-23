@@ -59,6 +59,7 @@ Available keys:
  upr=True                   Enable UPR replication
  xdcr_upr=                  Enable UPR for XDCR (temporary param until XDCR with UPR is stable), values: None | True | False
  fts_query_limit=1000000    Set a limit for the max results to be returned by fts for any query
+ cbft_env_options           Additional fts environment variables
  change_indexer_ports=false Sets indexer ports values to non-default ports
  storage_mode=plasma        Sets indexer storage mode
  enable_ipv6=False          Enable ipv6 mode in ns_server
@@ -680,6 +681,12 @@ class CouchbaseServerInstaller(Installer):
         else:
             enable_ipv6 = None
 
+        if "cbft_env_options" in params:
+            cbft_env_options = params["cbft_env_options"]
+            start_server = False
+        else:
+            cbft_env_options = None
+
         if "linux_repo" in params and params["linux_repo"].lower() == "true":
             linux_repo = True
         else:
@@ -702,6 +709,7 @@ class CouchbaseServerInstaller(Installer):
                                        params["version"].replace("-rel", ""),
                                        vbuckets=vbuckets,
                                        fts_query_limit=fts_query_limit,
+                                       cbft_env_options=cbft_env_options,
                                        enable_ipv6=enable_ipv6,
                                        windows_msi=self.msi )
             else:
@@ -716,9 +724,10 @@ class CouchbaseServerInstaller(Installer):
                     success = remote_client.install_server(build, path=path,
                                          startserver=start_server,\
                                          vbuckets=vbuckets, swappiness=swappiness,\
-                                        openssl=openssl, upr=upr, xdcr_upr=xdcr_upr,
-                                        fts_query_limit=fts_query_limit,
-                                        enable_ipv6=enable_ipv6)
+                                         openssl=openssl, upr=upr, xdcr_upr=xdcr_upr,
+                                         fts_query_limit=fts_query_limit,
+                                         cbft_env_options= cbft_env_options,
+                                         enable_ipv6=enable_ipv6)
                     log.info('wait 5 seconds for Couchbase server to start')
                     time.sleep(5)
                     if "rest_vbuckets" in params:
