@@ -46,6 +46,7 @@ class HANDLER_CODE:
     BUCKET_OP_WITH_RAND = 'handler_code/bucket_op_rand.js'
     BUCKET_OP_WITH_DOC_TIMER_RAND = 'handler_code/bucket_op_with_doc_timer_rand.js'
     BUCKET_OP_WITH_CRON_TIMER_RAND = 'handler_code/bucket_op_with_cron_timer_rand.js'
+    BUCKET_OP_WITH_TIMER_OVERWRITTEN = 'handler_code/bucket_op_with_timers_overwritten.js'
 
 class HANDLER_CODE_ERROR:
     N1QL_SYNTAX='handler_code/handler_code_error/n1ql_syntax.js'

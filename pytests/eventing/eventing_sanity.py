@@ -147,3 +147,13 @@ class EventingSanity(EventingBaseTest):
         # Wait for eventing to catch up with all the update mutations and verify results
         self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
+
+    def test_cancel_timers_with_timers_being_overwritten(self):
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OP_WITH_TIMER_OVERWRITTEN,
+                                              worker_count=3)
+        self.deploy_function(body)
+        # Wait for eventing to catch up with all the update mutations and verify results
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        self.undeploy_and_delete_function(body)
