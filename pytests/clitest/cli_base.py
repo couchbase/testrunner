@@ -82,6 +82,7 @@ class CliBaseTest(BaseTestCase):
         self.should_fail = self.input.param("should-fail", False)
         info = self.shell.extract_remote_info()
         self.os_version = info.distribution_version.lower()
+        self.deliverable_type = info.deliverable_type.lower()
         type = info.type.lower()
         self.excluded_commands = self.input.param("excluded_commands", None)
         self.os = 'linux'

@@ -94,6 +94,45 @@ class cbstatsTests(CliBaseTest):
         else:
             self.log.info("software name/version are not in running cb version")
 
+    def test_uninstall_install_server(self):
+        """
+           This test will test uninstall and install again couchbase server.
+           There was an issue that couchbase server does not start in debian
+           if we uninstall with only -r flag, not follow by --purge flag
+        """
+        self.package_type = self.input.param("package_type", "deb")
+        if len(self.servers) < 2:
+            self.log.info("This test needs 2 or more server to run.")
+            return
+        debian_systemd = ["ubuntu 16.04", "ubuntu 18.04"]
+        if self.os_version not in debian_systemd:
+            self.log.info("This test only test in/uninstall server with systemd debian server.")
+            return
+        shell = RemoteMachineShellConnection(self.servers[1])
+        try:
+            self.log.info("** Start test debian uninstall with only -r flag **")
+            shell.execute_command("dpkg -r couchbase-server")
+            shell.execute_command("rm -rf /opt/couchbase")
+            self.sleep(10)
+            shell.execute_command("dpkg -i /tmp/couchbase-server-en*")
+            output, error = shell.execute_command("systemctl list-unit-files |  grep couchbase")
+            if output:
+                self.log.info("output from list-unit-files |  grep couchbase: \n{0}"
+                                                                    .format(output))
+                if "masked" in output[0]:
+                    self.fail("couchbase server is masked in systemd server => {0}"
+                                                                .format(output[0]))
+        finally:
+            cmd1 = "dpkg -r couchbase-server; dpkg --purge couchbase-server"
+            shell.execute_command(cmd1)
+            shell.execute_command("rm -rf /opt/couchbase")
+            self.sleep(10)
+            shell.execute_command("dpkg -i /tmp/couchbase-server-*")
+            output, error = shell.execute_command("systemctl list-unit-files |  grep couchbase")
+            self.log.info("output from list-unit-files |  grep couchbase: \n{0}"
+                                                                .format(output))
+            shell.disconnect()
+
     def verify_results(self, output, error):
         if len(error) > 0 and '\n'.join(error).find("DeprecationWarning") == -1:
             raise Exception("Command throw out error message.\
