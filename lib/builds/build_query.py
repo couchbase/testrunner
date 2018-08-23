@@ -349,9 +349,9 @@ class BuildQuery(object):
                     elif "deb" in deliverable_type:
                         os_architecture = "amd64"
                         os_name = "ubuntu12.04"
-                        if  "ubuntu 14.04" in os_version:
+                        if  "ubuntu 14.04" in os_version.lower():
                             os_name = "ubuntu14.04"
-                        elif "ubuntu 16.04" in os_version:
+                        elif "ubuntu 16.04" in os_version.lower():
                             os_name = "ubuntu16.04"
                         build.url = "{6}{0}/{1}_{4}-{5}_{2}.{3}"\
                                 .format(build_version[:build_version.find('-')],
@@ -401,9 +401,9 @@ class BuildQuery(object):
                     elif "deb" in deliverable_type:
                         os_architecture = "amd64"
                         os_name = "ubuntu12.04"
-                        if  "ubuntu 14.04" in os_version:
+                        if  "ubuntu 14.04" in os_version.lower():
                             os_name = "ubuntu14.04"
-                        elif "ubuntu 16.04" in os_version:
+                        elif "ubuntu 16.04" in os_version.lower():
                             os_name = "ubuntu16.04"
                         build.url = "{6}{0}/{1}_{4}-{5}_{2}.{3}"\
                             .format(build_version, product, os_architecture,
