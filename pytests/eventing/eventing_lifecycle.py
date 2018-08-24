@@ -199,3 +199,23 @@ class EventingLifeCycle(EventingBaseTest):
         self.rest.stop_eventing_debugger(self.function_name)
         # undeploy and delete the function
         self.undeploy_and_delete_function(body)
+
+    def test_undeploying_functions_when_timers_are_getting_fired(self):
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_WITH_DOC_TIMER,
+                                              worker_count=3)
+        self.deploy_function(body)
+        # undeploy a function when timers are getting fired
+        try:
+            self.undeploy_function(body)
+        except Exception as ex:
+            # Sometimes when we undeploy, it fails with "No JSON object could be decoded"
+            pass
+        self.sleep(120)
+        self.wait_for_undeployment(self.function_name)
+        # Check to ensure metada bucket does not have any documents after undeploy
+        stats_meta = self.rest.get_bucket_stats(self.metadata_bucket_name)
+        if stats_meta["curr_items"] != 0:
+            self.fail("Metadata bucket still has some docs left after undeploy : {0}".format(stats_meta["curr_items"]))
+
