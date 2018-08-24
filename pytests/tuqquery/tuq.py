@@ -5000,7 +5000,7 @@ class QueryTests(BaseTestCase):
                     except Exception, ex:
                         self.log.info(str(ex))
 
-    def _wait_for_index_online(self, bucket, index_name, timeout=6000):
+    def _wait_for_index_online(self, bucket, index_name, timeout=12000):
         end_time = time.time() + timeout
         while time.time() < end_time:
             query = "SELECT * FROM system:indexes where name='%s'" % index_name
@@ -5009,7 +5009,12 @@ class QueryTests(BaseTestCase):
                 if 'keyspace_id' not in item['indexes']:
                     self.log.error(item)
                     continue
-                if item['indexes']['keyspace_id'] == bucket.name:
+                bucket_name = ""
+                if isinstance(bucket, str) or isinstance(bucket, unicode):
+                    bucket_name = bucket
+                else:
+                    bucket_name = bucket.name
+                if item['indexes']['keyspace_id'] == bucket_name:
                     if item['indexes']['state'] == "online":
                         return
             self.sleep(5, 'index is pending or not in the list. sleeping... (%s)' % [item['indexes'] for item in res['results']])
