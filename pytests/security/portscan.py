@@ -69,7 +69,7 @@ class portscan(BaseTestCase):
 
 
     TEST_SSL_FILENAME = '/tmp/testssl.sh'
-    ports_to_check = [11207, 18091, 18092,18093]
+    ports_to_check = [18091, 18092, 18093, 18094, 18095,18096]
 
 
 
@@ -84,7 +84,7 @@ class portscan(BaseTestCase):
         for s in self.servers:
             for i in self.ports_to_check:
                 self.log.info('{0} Testing port {1}'.format(s,i))
-                cmd  = self.TEST_SSL_FILENAME + ' -p --color 0 {0}:{1}'.format( s.ip, i)
+                cmd  = self.TEST_SSL_FILENAME + ' -p --warnings off --color 0 {0}:{1}'.format( s.ip, i)
                 self.log.info('The command is {0}'.format( cmd ) )
                 res = os.popen(cmd).read().split('\n')
                 res1 = ''.join( res )
@@ -144,7 +144,7 @@ class portscan(BaseTestCase):
         for i in self.ports_to_check:
             check_count = 0
             self.log.info('Testing port {0}'.format(i))
-            cmd  = self.TEST_SSL_FILENAME + ' --color 0 {0}:{1}'.format( self.master.ip, i)
+            cmd  = self.TEST_SSL_FILENAME + ' --warnings off --color 0 {0}:{1}'.format( self.master.ip, i)
             print 'cmd is', cmd
             res = os.popen(cmd).read().split('\n')
             for r in res:
@@ -192,10 +192,8 @@ class portscan(BaseTestCase):
                         all_passed = False
 
 
-
-
             self.assertTrue( all_passed, msg='Port {0} failed. Check logs for failures'.format(i))
             self.log.info('Testing port {0}'.format(i))
 
             # make sure all the tests were seen
-            self.assertTrue( check_count==7, msg='Port {0}. Not all checks present - saw {1} checks'.format(i, check_count))
+            self.assertTrue( check_count==9, msg='Port {0}. Not all checks present - saw {1} checks'.format(i, check_count))
