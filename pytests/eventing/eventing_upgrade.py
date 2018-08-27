@@ -19,6 +19,7 @@ from pytests.eventing.eventing_base import EventingBaseTest
 from lib.membase.api.rest_client import RestConnection
 import logging
 from pytests.eventing.eventing_constants import HANDLER_CODE, EXPORTED_FUNCTION
+from testconstants import COUCHBASE_VERSION_2
 import os
 import json
 log = logging.getLogger()
@@ -33,6 +34,7 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
         self.src_bucket_name = self.input.param('src_bucket_name', 'src_bucket')
         self.eventing_log_level = self.input.param('eventing_log_level', 'INFO')
         self.dst_bucket_name = self.input.param('dst_bucket_name', 'dst_bucket')
+        self.dst_bucket_name1 = self.input.param('dst_bucket_name', 'dst_bucket1')
         self.metadata_bucket_name = self.input.param('metadata_bucket_name', 'metadata')
         self.gens_load = self.generate_docs(self.docs_per_day)
         self.upgrade_version = self.input.param("upgrade_version")
@@ -43,20 +45,7 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
     def test_offline_upgrade_with_eventing(self):
         self._install(self.servers[:self.nodes_init])
         self.operations(self.servers[:self.nodes_init], services="kv,kv,index,n1ql")
-        self.rest.delete_bucket("default")
-        self.bucket_size = 100
-        bucket_params = self._create_bucket_params(server=self.server, size=self.bucket_size,
-                                                   replicas=self.num_replicas)
-        self.cluster.create_standard_bucket(name=self.src_bucket_name, port=STANDARD_BUCKET_PORT + 1,
-                                            bucket_params=bucket_params)
-        self.src_bucket = RestConnection(self.master).get_buckets()
-        self.sleep(60)
-        self.cluster.create_standard_bucket(name=self.dst_bucket_name, port=STANDARD_BUCKET_PORT + 2,
-                                            bucket_params=bucket_params)
-        self.sleep(60)
-        self.cluster.create_standard_bucket(name=self.metadata_bucket_name, port=STANDARD_BUCKET_PORT + 3,
-                                            bucket_params=bucket_params)
-        self.buckets = RestConnection(self.master).get_buckets()
+        self.create_buckets()
         # Load the data in older version
         self.load(self.gens_load, buckets=self.src_bucket, verify_data=False)
         # upgrade all the nodes
@@ -75,25 +64,190 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
                                services=["eventing"])
         self.restServer = self.get_nodes_from_services_map(service_type="eventing")
         self.rest = RestConnection(self.restServer)
+        self.import_function(EXPORTED_FUNCTION.BUCKET_OP)
+        self.sleep(180)
+        self.validate_eventing(self.dst_bucket_name, self.docs_per_day * 2016)
+
+    def test_online_upgrade_with_regular_rebalance_with_eventing(self):
+        self._install(self.servers[:self.nodes_init])
+        self._install(self.servers[self.nodes_init:self.num_servers])
+        self.operations(self.servers[:self.nodes_init], services="kv,eventing,index,n1ql")
+        self.create_buckets()
+        # Load the data in older version
+        log.info("Load the data in older version in the initial version")
+        self.load(self.gens_load, buckets=self.src_bucket, verify_data=False)
+        self.restServer = self.get_nodes_from_services_map(service_type="eventing")
+        self.rest = RestConnection(self.restServer)
+        log.info("Deploy the function in the initial version")
+        self.import_function(EXPORTED_FUNCTION.BUCKET_OP)
+        # Do validations
+        self.validate_eventing(self.dst_bucket_name, self.docs_per_day * 2016)
+        # swap and rebalance the servers
+        self.online_upgrade(services=["kv", "eventing", "index", "n1ql"])
+        self.restServer = self.get_nodes_from_services_map(service_type="eventing")
+        self.rest = RestConnection(self.restServer)
+        self.add_built_in_server_user()
+        self.import_function(EXPORTED_FUNCTION.BUCKET_OP_WITH_TIMER)
+        self.validate_eventing(self.dst_bucket_name1, self.docs_per_day * 2016)
+
+    def test_online_upgrade_with_swap_rebalance_with_eventing(self):
+        self._install(self.servers[:self.nodes_init])
+        self._install(self.servers[self.nodes_init:self.num_servers])
+        self.operations(self.servers[:self.nodes_init], services="kv,eventing,index,n1ql")
+        self.create_buckets()
+        # Load the data in older version
+        log.info("Load the data in older version in the initial version")
+        self.load(self.gens_load, buckets=self.src_bucket, verify_data=False)
+        self.restServer = self.get_nodes_from_services_map(service_type="eventing")
+        self.rest = RestConnection(self.restServer)
+        log.info("Deploy the function in the initial version")
+        self.import_function(EXPORTED_FUNCTION.BUCKET_OP)
+        # Do validations
+        self.validate_eventing(self.dst_bucket_name, self.docs_per_day * 2016)
+        # swap and rebalance the servers
+        self.online_upgrade_swap_rebalance(services=["kv", "eventing", "index", "n1ql"])
+        self.restServer = self.get_nodes_from_services_map(service_type="eventing")
+        self.rest = RestConnection(self.restServer)
+        self.add_built_in_server_user()
+        self.import_function(EXPORTED_FUNCTION.BUCKET_OP_WITH_TIMER)
+        self.validate_eventing(self.dst_bucket_name1, self.docs_per_day * 2016)
+
+    def test_online_upgrade_with_failover_rebalance_with_eventing(self):
+        self._install(self.servers[:self.nodes_init])
+        self._install(self.servers[self.nodes_init:self.num_servers])
+        self.operations(self.servers[:self.nodes_init], services="kv,eventing,index,n1ql")
+        self.create_buckets()
+        # Load the data in older version
+        log.info("Load the data in older version in the initial version")
+        self.load(self.gens_load, buckets=self.src_bucket, verify_data=False)
+        self.restServer = self.get_nodes_from_services_map(service_type="eventing")
+        self.rest = RestConnection(self.restServer)
+        log.info("Deploy the function in the initial version")
+        self.import_function(EXPORTED_FUNCTION.BUCKET_OP)
+        # Do validations
+        self.validate_eventing(self.dst_bucket_name, self.docs_per_day * 2016)
+        # swap and rebalance the servers
+        self.online_upgrade_with_failover(services=["kv", "eventing", "index", "n1ql"])
+        self.restServer = self.get_nodes_from_services_map(service_type="eventing")
+        self.rest = RestConnection(self.restServer)
+        self.add_built_in_server_user()
+        self.import_function(EXPORTED_FUNCTION.BUCKET_OP_WITH_TIMER)
+        self.validate_eventing(self.dst_bucket_name1, self.docs_per_day * 2016)
+
+    def import_function(self, function):
         script_dir = os.path.dirname(__file__)
-        abs_file_path = os.path.join(script_dir, EXPORTED_FUNCTION.BUCKET_OP)
+        abs_file_path = os.path.join(script_dir, function)
         fh = open(abs_file_path, "r")
         body = json.loads(fh.read())
         # import the previously exported function
-        log.info("Deploying a function after upgrade")
         self.rest.save_function("test_import_function_1", body)
         self.rest.deploy_function("test_import_function_1", body)
         self.sleep(180)
-        # Do validations
+
+    def online_upgrade(self, services=None):
+        servers_in = self.servers[self.nodes_init:self.num_servers]
+        self.cluster.rebalance(self.servers[:self.nodes_init], servers_in, [], services=services)
+        log.info("Rebalance in all {0} nodes" \
+                      .format(self.input.param("upgrade_version", "")))
+        self.sleep(self.sleep_time)
+        status, content = ClusterOperationHelper.find_orchestrator(self.master)
+        self.assertTrue(status, msg="Unable to find orchestrator: {0}:{1}". \
+                        format(status, content))
+        FIND_MASTER = False
+        for new_server in servers_in:
+            if content.find(new_server.ip) >= 0:
+                self._new_master(new_server)
+                FIND_MASTER = True
+                self.log.info("%s node %s becomes the master" \
+                              % (self.input.param("upgrade_version", ""), new_server.ip))
+                break
+        if self.input.param("initial_version", "")[:5] in COUCHBASE_VERSION_2 \
+                and not FIND_MASTER:
+            raise Exception( \
+                "After rebalance in {0} nodes, {0} node doesn't become master" \
+                    .format(self.input.param("upgrade_version", "")))
+        servers_out = self.servers[:self.nodes_init]
+        log.info("Rebalanced out all old version nodes")
+        self.cluster.rebalance(self.servers[:self.num_servers], [], servers_out)
+        self._new_master(self.servers[self.nodes_init])
+
+    def online_upgrade_swap_rebalance(self, services=None):
+        servers_in = self.servers[self.nodes_init:self.num_servers]
+        self.sleep(self.sleep_time)
+        status, content = ClusterOperationHelper.find_orchestrator(self.master)
+        self.assertTrue(status, msg="Unable to find orchestrator: {0}:{1}". \
+                        format(status, content))
+        i = 0
+        for server_in, service_in in zip(servers_in, services):
+            log.info("Swap rebalance nodes")
+            self.cluster.rebalance(self.servers[:self.nodes_init], [server_in], [self.servers[i]], [service_in])
+            self._new_master(self.servers[self.nodes_init])
+            i += 1
+
+    def online_upgrade_with_failover(self, services=None):
+        servers_in = self.servers[self.nodes_init:self.num_servers]
+        self.cluster.rebalance(self.servers[:self.nodes_init], servers_in, [], services=services)
+        log.info("Rebalance in all {0} nodes" \
+                      .format(self.input.param("upgrade_version", "")))
+        self.sleep(self.sleep_time)
+        status, content = ClusterOperationHelper.find_orchestrator(self.master)
+        self.assertTrue(status, msg="Unable to find orchestrator: {0}:{1}". \
+                        format(status, content))
+        FIND_MASTER = False
+        for new_server in servers_in:
+            if content.find(new_server.ip) >= 0:
+                self._new_master(new_server)
+                FIND_MASTER = True
+                self.log.info("%s node %s becomes the master" \
+                              % (self.input.param("upgrade_version", ""), new_server.ip))
+                break
+        if self.input.param("initial_version", "")[:5] in COUCHBASE_VERSION_2 \
+                and not FIND_MASTER:
+            raise Exception( \
+                "After rebalance in {0} nodes, {0} node doesn't become master" \
+                    .format(self.input.param("upgrade_version", "")))
+        servers_out = self.servers[:self.nodes_init]
+        self._new_master(self.servers[self.nodes_init])
+        log.info("failover and rebalance nodes")
+        self.cluster.failover(self.servers[:self.num_servers],failover_nodes=servers_out, graceful=False)
+        self.cluster.rebalance(self.servers[:self.num_servers], [], servers_out)
+
+    def _new_master(self, server):
+        self.master = server
+        self.rest = RestConnection(self.master)
+        self.rest_helper = RestHelper(self.rest)
+
+    def create_buckets(self):
+        self.rest.set_service_memoryQuota(service='memoryQuota', memoryQuota=700)
+        self.rest.delete_bucket("default")
+        self.bucket_size = 100
+        log.info("Create the required buckets in the initial version")
+        bucket_params = self._create_bucket_params(server=self.server, size=self.bucket_size,
+                                                   replicas=self.num_replicas)
+        self.cluster.create_standard_bucket(name=self.src_bucket_name, port=STANDARD_BUCKET_PORT + 1,
+                                            bucket_params=bucket_params)
+        self.src_bucket = RestConnection(self.master).get_buckets()
+        self.sleep(60)
+        self.cluster.create_standard_bucket(name=self.dst_bucket_name, port=STANDARD_BUCKET_PORT + 2,
+                                            bucket_params=bucket_params)
+        self.sleep(60)
+        self.cluster.create_standard_bucket(name=self.metadata_bucket_name, port=STANDARD_BUCKET_PORT + 3,
+                                            bucket_params=bucket_params)
+        self.sleep(60)
+        self.cluster.create_standard_bucket(name=self.dst_bucket_name1, port=STANDARD_BUCKET_PORT + 4,
+                                            bucket_params=bucket_params)
+        self.buckets = RestConnection(self.master).get_buckets()
+
+    def validate_eventing(self, bucket_name, no_of_docs):
         count = 0
-        expected_dcp_mutations = self.docs_per_day * 2016
-        stats_dst = self.rest.get_bucket_stats(self.dst_bucket_name)
-        while stats_dst["curr_items"] != expected_dcp_mutations and count < 20:
+        stats_dst = self.rest.get_bucket_stats(bucket_name)
+        while stats_dst["curr_items"] != no_of_docs and count < 20:
             self.sleep(30, message="Waiting for handler code to complete all bucket operations...")
             count += 1
-            stats_dst = self.rest.get_bucket_stats(self.dst_bucket_name)
-        if stats_dst["curr_items"] != expected_dcp_mutations:
+            stats_dst = self.rest.get_bucket_stats(bucket_name)
+        if stats_dst["curr_items"] != no_of_docs:
             log.info("Eventing is not working as expected after upgrade")
             raise Exception(
                 "Bucket operations from handler code took lot of time to complete or didn't go through. Current : {0} "
-                "Expected : {1} ".format(stats_dst["curr_items"], expected_dcp_mutations))
+                "Expected : {1} ".format(stats_dst["curr_items"], no_of_docs))
+
