@@ -61,4 +61,5 @@ class HANDLER_CODE_ERROR:
 class EXPORTED_FUNCTION:
     N1QL_INSERT_ON_UPDATE_WITH_CRON_TIMER = 'exported_functions/n1ql_insert_with_cron_timer.json'
     BUCKET_OP = 'exported_functions/bucket_op.json'
+    BUCKET_OP_WITH_TIMER = 'exported_functions/bucket_op_with_timer.json'
     NEW_BUCKET_OP ='exported_functions/Function_396275055_test_export_function.json'

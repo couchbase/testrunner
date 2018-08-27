@@ -70,6 +70,7 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
 
     def test_online_upgrade_with_regular_rebalance_with_eventing(self):
         self._install(self.servers[:self.nodes_init])
+        self.initial_version = self.upgrade_version
         self._install(self.servers[self.nodes_init:self.num_servers])
         self.operations(self.servers[:self.nodes_init], services="kv,eventing,index,n1ql")
         self.create_buckets()
@@ -92,6 +93,7 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
 
     def test_online_upgrade_with_swap_rebalance_with_eventing(self):
         self._install(self.servers[:self.nodes_init])
+        self.initial_version = self.upgrade_version
         self._install(self.servers[self.nodes_init:self.num_servers])
         self.operations(self.servers[:self.nodes_init], services="kv,eventing,index,n1ql")
         self.create_buckets()
@@ -114,6 +116,7 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
 
     def test_online_upgrade_with_failover_rebalance_with_eventing(self):
         self._install(self.servers[:self.nodes_init])
+        self.initial_version = self.upgrade_version
         self._install(self.servers[self.nodes_init:self.num_servers])
         self.operations(self.servers[:self.nodes_init], services="kv,eventing,index,n1ql")
         self.create_buckets()
@@ -140,8 +143,8 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
         fh = open(abs_file_path, "r")
         body = json.loads(fh.read())
         # import the previously exported function
-        self.rest.save_function("test_import_function_1", body)
-        self.rest.deploy_function("test_import_function_1", body)
+        self.rest.save_function(body["appname"], body)
+        self.rest.deploy_function(body["appname"], body)
         self.sleep(180)
 
     def online_upgrade(self, services=None):
