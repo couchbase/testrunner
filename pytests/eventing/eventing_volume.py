@@ -26,7 +26,7 @@ class EventingVolume(EventingBaseTest):
             bucket_params = self._create_bucket_params(server=self.server, size=self.bucket_size,
                                                        replicas=self.num_replicas)
             bucket_params_meta = self._create_bucket_params(server=self.server, size=self.meta_bucket_size,
-                                                       replicas=self.num_replicas)
+                                                            replicas=self.num_replicas)
             self.cluster.create_standard_bucket(name=self.src_bucket_name, port=STANDARD_BUCKET_PORT + 1,
                                                 bucket_params=bucket_params)
             self.src_bucket = RestConnection(self.master).get_buckets()
@@ -113,9 +113,13 @@ class EventingVolume(EventingBaseTest):
 
     def wait_for_all_boostrap_to_complete(self, functions):
         for function_name in functions:
-            self.wait_for_bootstrap_to_complete(function_name['appname'], iterations=40)
+            try:
+                self.wait_for_bootstrap_to_complete(function_name['appname'], iterations=40)
+            except:
+                # Sometimes this API might not return json, its ok move on.
+                pass
 
-    def verify_eventing_results_of_all_functions(self, docs_expected, verify_results=True,  timeout=600):
+    def verify_eventing_results_of_all_functions(self, docs_expected, verify_results=True, timeout=600):
         if verify_results:
             # Verify the results of all the buckets
             self.verify_eventing_results(self.function_name, docs_expected, skip_stats_validation=True, timeout=timeout)
@@ -137,6 +141,3 @@ class EventingVolume(EventingBaseTest):
                 log.info("Number of docs in {0} bucket actual : {1} expected : {2} ".format(bucket,
                                                                                             stats_dst["curr_items"],
                                                                                             docs_expected))
-
-
-

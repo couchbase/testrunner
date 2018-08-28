@@ -95,7 +95,7 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
         self._install(self.servers[:self.nodes_init])
         self.initial_version = self.upgrade_version
         self._install(self.servers[self.nodes_init:self.num_servers])
-        self.operations(self.servers[:self.nodes_init], services="kv,eventing,index,n1ql")
+        self.operations(self.servers[:self.nodes_init], services="kv,kv,eventing,eventing")
         self.create_buckets()
         # Load the data in older version
         log.info("Load the data in older version in the initial version")
@@ -107,7 +107,7 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
         # Do validations
         self.validate_eventing(self.dst_bucket_name, self.docs_per_day * 2016)
         # swap and rebalance the servers
-        self.online_upgrade_swap_rebalance(services=["kv", "eventing", "index", "n1ql"])
+        self.online_upgrade_swap_rebalance(services=["kv", "kv", "eventing", "eventing"])
         self.restServer = self.get_nodes_from_services_map(service_type="eventing")
         self.rest = RestConnection(self.restServer)
         self.add_built_in_server_user()
@@ -151,7 +151,7 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
         servers_in = self.servers[self.nodes_init:self.num_servers]
         self.cluster.rebalance(self.servers[:self.nodes_init], servers_in, [], services=services)
         log.info("Rebalance in all {0} nodes" \
-                      .format(self.input.param("upgrade_version", "")))
+                 .format(self.input.param("upgrade_version", "")))
         self.sleep(self.sleep_time)
         status, content = ClusterOperationHelper.find_orchestrator(self.master)
         self.assertTrue(status, msg="Unable to find orchestrator: {0}:{1}". \
@@ -180,18 +180,22 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
         status, content = ClusterOperationHelper.find_orchestrator(self.master)
         self.assertTrue(status, msg="Unable to find orchestrator: {0}:{1}". \
                         format(status, content))
-        i = 0
-        for server_in, service_in in zip(servers_in, services):
-            log.info("Swap rebalance nodes")
-            self.cluster.rebalance(self.servers[:self.nodes_init], [server_in], [self.servers[i]], [service_in])
-            self._new_master(self.servers[self.nodes_init])
+        i = 1
+        for server_in, service_in in zip(servers_in[1:], services[1:]):
+            log.info("Swap rebalance nodes : server_in: {0} service_in:{1} service_out:{2}".format(server_in, service_in,
+                                                                                              self.servers[i]))
+            self.cluster.rebalance(self.servers[:self.nodes_init], [server_in], [self.servers[i]],
+                                   services=[service_in])
             i += 1
+        self._new_master(self.servers[self.nodes_init])
+        self.cluster.rebalance(self.servers[:self.num_servers], [servers_in[0]], [self.servers[0]],
+                               services=[services[0]])
 
     def online_upgrade_with_failover(self, services=None):
         servers_in = self.servers[self.nodes_init:self.num_servers]
         self.cluster.rebalance(self.servers[:self.nodes_init], servers_in, [], services=services)
         log.info("Rebalance in all {0} nodes" \
-                      .format(self.input.param("upgrade_version", "")))
+                 .format(self.input.param("upgrade_version", "")))
         self.sleep(self.sleep_time)
         status, content = ClusterOperationHelper.find_orchestrator(self.master)
         self.assertTrue(status, msg="Unable to find orchestrator: {0}:{1}". \
@@ -253,4 +257,3 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
             raise Exception(
                 "Bucket operations from handler code took lot of time to complete or didn't go through. Current : {0} "
                 "Expected : {1} ".format(stats_dst["curr_items"], no_of_docs))
-
