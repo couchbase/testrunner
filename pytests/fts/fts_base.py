@@ -3579,7 +3579,7 @@ class FTSBaseTest(unittest.TestCase):
                     num_mutations_to_index = index.get_num_mutations_to_index()
                     if num_mutations_to_index > 0:
                         self.sleep(5, "num_mutations_to_index: {0} > 0".format(num_mutations_to_index))
-                        retry_mut_count -= 1
+                        retry_count -= 1
                     else:
                         break
 
