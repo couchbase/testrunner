@@ -492,17 +492,13 @@ class RQGTests(BaseTestCase):
         for key in table_map.keys():
             if "alias_name" in table_map[key]:
                 table_map[key].pop("alias_name")
-        failure_map = {}
-        batch = []
-        test_case_number = 1
-        count = 1
-        inserted_count = 0
+
         # Load All the templates
-        self.test_file_path= self.unzip_template(self.test_file_path)
+        self.test_file_path = self.unzip_template(self.test_file_path)
         table_list.remove("copy_simple_table")
         with open(self.test_file_path) as f:
             query_list = f.readlines()
-        if self.total_queries  == None:
+        if self.total_queries is None:
             self.total_queries = len(query_list)
         batches = {}
         for table_name in table_list:
@@ -510,18 +506,18 @@ class RQGTests(BaseTestCase):
         test_case_number = 0
         for n1ql_query_info in query_list:
             data = n1ql_query_info
-            batches[table_list[test_case_number%(len(table_list))]].append({str(test_case_number):data})
+            batches[table_list[test_case_number % (len(table_list))]].append({str(test_case_number): data})
             test_case_number += 1
             if test_case_number >= self.total_queries:
                 break
         result_queue = Queue.Queue()
         failure_record_queue = Queue.Queue()
+
         # Build all required secondary Indexes
-        thread_list =[]
+        thread_list = []
         for table_name in table_list:
             if len(batches[table_name]) > 0:
-                test_batch = batches[table_name]
-                t = threading.Thread(target=self._testrun_crud_worker, args = (batches[table_name], table_name, table_map, result_queue, failure_record_queue))
+                t = threading.Thread(target=self._testrun_crud_worker, args=(batches[table_name], table_name, table_map, result_queue, failure_record_queue))
                 t.daemon = True
                 t.start()
                 thread_list.append(t)
@@ -607,34 +603,45 @@ class RQGTests(BaseTestCase):
             self._drop_secondary_indexes_in_batches(list_info)
 
     def _testrun_crud_worker(self, list_info, table_name, table_map, result_queue = None, failure_record_queue = None):
-        map = {table_name:table_map[table_name]}
+        map = {table_name: table_map[table_name]}
         for test_data in list_info:
             test_case_number = test_data.keys()[0]
             test_data = test_data[test_case_number]
             data_info = [test_data]
             if self.crud_type == "update":
                 data_info = self.client_map[table_name]._convert_update_template_query_info(
-                            table_map = map,
-                            n1ql_queries = data_info)
+                    table_map=map,
+                    n1ql_queries=data_info)
             elif self.crud_type == "delete":
                 data_info = self.client_map[table_name]._convert_delete_template_query_info(
-                            table_map = map,
-                            n1ql_queries = data_info)
+                    table_map=map,
+                    n1ql_queries=data_info)
             elif self.crud_type == "merge_update":
                 data_info = self.client_map[table_name]._convert_update_template_query_info_with_merge(
-                            source_table = self.database+"_"+"copy_simple_table",
-                            target_table = table_name,
-                            table_map = map,
-                            n1ql_queries = data_info)
+                    source_table=self.database+"_"+"copy_simple_table",
+                    target_table=table_name,
+                    table_map=map,
+                    n1ql_queries=data_info)
             elif self.crud_type == "merge_delete":
                 data_info = self.client_map[table_name]._convert_delete_template_query_info_with_merge(
-                            source_table = self.database+"_"+"copy_simple_table",
-                            target_table = table_name,
-                            table_map = map,
-                            n1ql_queries = data_info)
+                    source_table=self.database+"_"+"copy_simple_table",
+                    target_table=table_name,
+                    table_map=map,
+                    n1ql_queries=data_info)
             verification_query = "SELECT * from {0} ORDER by primary_key_id".format(table_name)
-            self._run_basic_crud_test(data_info[0], verification_query,  test_case_number, result_queue, failure_record_queue = failure_record_queue, table_name= table_name)
+
+            self._run_basic_crud_test(data_info[0], verification_query,  test_case_number, result_queue, failure_record_queue=failure_record_queue, table_name=table_name)
             self._populate_delta_buckets(table_name)
+            self.wait_for_num_items(table_name, 1000)
+
+    def wait_for_num_items(self,table, num_items):
+        num_items_reached = False
+        while not num_items_reached:
+            self.sleep(1)
+            query = "SELECT COUNT(*) from {0}".format(self.database+"_"+table)
+            result = self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_server)
+            if result["results"][0]["$1"] == num_items:
+                num_items_reached = True
 
     def _run_basic_test(self, test_data, test_case_number, result_queue, failure_record_queue = None):
         data = test_data
