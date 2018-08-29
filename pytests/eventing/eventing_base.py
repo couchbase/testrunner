@@ -51,6 +51,7 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         # See MB-28447, From now function name can only be max of 100 chars
         self.function_name = function_name[0:90]
         self.timer_storage_chan_size = self.input.param('timer_storage_chan_size', 10000)
+        self.dcp_gen_chan_size = self.input.param('dcp_gen_chan_size', 10000)
 
     def tearDown(self):
         # catch panics and print it in the test log
@@ -65,8 +66,7 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
                                   sock_batch_size=1, tick_duration=5000, timer_processing_tick_interval=500,
                                   timer_worker_pool_size=3, worker_count=3, processing_status=True,
                                   cpp_worker_thread_count=1, multi_dst_bucket=False, execution_timeout=60,
-                                  data_chan_size=10000, worker_queue_cap=100000, deadline_timeout=62,
-                                  timer_storage_chan_size=10000):
+                                  data_chan_size=10000, worker_queue_cap=100000, deadline_timeout=62):
         body = {}
         body['appname'] = appname
         script_dir = os.path.dirname(__file__)
@@ -110,6 +110,7 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
             deadline_timeout = execution_timeout + 1
         body['settings']['deadline_timeout'] = deadline_timeout
         body['settings']['timer_storage_chan_size'] = self.timer_storage_chan_size
+        body['settings']['dcp_gen_chan_size'] = self.dcp_gen_chan_size
         return body
 
     def wait_for_bootstrap_to_complete(self, name, iterations=20):
