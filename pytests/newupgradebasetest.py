@@ -18,6 +18,8 @@ from couchbase_helper.documentgenerator import BlobGenerator
 from query_tests_helper import QueryHelperTests
 from scripts.install import InstallerJob
 from builds.build_query import BuildQuery
+from couchbase_helper.tuq_helper import N1QLHelper
+from couchbase_helper.query_helper import QueryHelper
 from pprint import pprint
 from testconstants import CB_REPO
 from testconstants import MV_LATESTBUILD_REPO
@@ -63,6 +65,7 @@ class NewUpgradeBaseTest(QueryHelperTests):
         self.initial_build_type = self.input.param('initial_build_type', None)
         self.upgrade_build_type = self.input.param('upgrade_build_type', self.initial_build_type)
         self.stop_persistence = self.input.param('stop_persistence', False)
+        self.create_gsi_index = self.input.param('create_gsi_index', False)
         self.rest_settings = self.input.membase_settings
         self.rest = None
         self.rest_helper = None
@@ -103,6 +106,7 @@ class NewUpgradeBaseTest(QueryHelperTests):
                 self.log.warn("http://developer.couchbase.com/documentation/server/4.0/install/upgrading.html")
                 self.upgrade_versions = self.input.param('initial_version', '4.1.0-4963')
                 self.upgrade_versions = self.upgrade_versions.split(";")
+        self.n1ql_helper = None
 
     def tearDown(self):
         test_failed = (hasattr(self, '_resultForDoCleanups') and \
@@ -689,3 +693,77 @@ class NewUpgradeBaseTest(QueryHelperTests):
         index_map = self.get_index_map()
         stats_map = self.get_index_stats(perNode=False)
         return index_map, stats_map
+
+    def _initialize_n1ql_helper(self):
+        if self.n1ql_helper == None:
+            self.n1ql_server = self.get_nodes_from_services_map(service_type = \
+                                              "n1ql",servers=self.input.servers)
+            self.n1ql_helper = N1QLHelper(version = "sherlock", shell = None,
+                use_rest = True, max_verify = self.max_verify,
+                buckets = self.buckets, item_flag = None,
+                n1ql_port = self.n1ql_server.n1ql_port, full_docs_list = [],
+                log = self.log, input = self.input, master = self.master)
+
+    def create_index_with_gsi(self):
+        self.log.info("create_index")
+        self.index_list = {}
+        self._initialize_n1ql_helper()
+        try:
+            self.n1ql_helper.create_primary_index(using_gsi = True,
+                                               server = self.n1ql_server)
+            self.log.info("done create_index")
+        except Exception, e:
+            self.log.info(e)
+
+    def verify_storage_mode(self):
+        """
+           Verify storage mode automatically upgrade to plasma when
+           upgrade from 4.x to 5.x and later (MB-30354)
+        """
+        if int(self.input.param('initial_version', '2.5.1-1083')[:1]) <= 4 \
+                                   and int(self.upgrade_versions[0][:1]) >= 5:
+            if self.create_gsi_index:
+                nodes = self.get_nodes_in_cluster_after_upgrade()
+                if nodes:
+                    shell = RemoteMachineShellConnection(nodes[0])
+                    username = nodes[0].rest_username
+                    password = nodes[0].rest_password
+                    cmd = "curl -GET http://{0}:8091/settings/indexes -u {1}:{2}"\
+                                                                .format(nodes[0].ip,
+                                                                         username,
+                                                                         password)
+                    output, error = shell.execute_command(cmd)
+                    if output:
+                        if '"storageMode":"plasma"' not in output[0]:
+                            self.log.error("Storage mode is not update to plasma")
+                        else:
+                            self.log.info("index storage mode is upgraded to plasma")
+                    else:
+                        self.log.info("output is empty")
+            else:
+                self.log.info("No need to check storage mode upgrade"
+                              " since no index in initial cluster")
+        elif int(self.input.param('initial_version', '2.5.1')[:1]) >= 5:
+            self.log.info("\n no need to check storage mode")
+
+    def get_nodes_in_cluster_after_upgrade(self, master_node=None):
+        rest = None
+        if master_node == None:
+            rest = RestConnection(self.master)
+        else:
+            rest = RestConnection(master_node)
+        nodes = rest.node_statuses()
+        server_set = []
+        for node in nodes:
+            for server in self.input.servers:
+                if server.ip == node.ip:
+                    server_set.append(server)
+        return server_set
+
+    def set_storage_index(self):
+        if self.create_gsi_index:
+            storage_mode = "forestdb"
+            if 5 <= int(self.initial_version[:1]):
+                storage_mode = "plasma"
+            self.log.info("**** Setting storage mode in cluster ****")
+            RestConnection(self.master).set_indexer_storage_mode(storageMode=storage_mode)

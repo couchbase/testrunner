@@ -114,12 +114,16 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
 
     def offline_cluster_upgrade(self):
         self._install(self.servers[:self.nodes_init])
+        if self.create_gsi_index:
+            self.set_storage_index()
         self.operations(self.servers[:self.nodes_init])
         seqno_expected = 1
         if self.ddocs_num:
             self.create_ddocs_and_views()
             if self.input.param('run_index', False):
                 self.verify_all_queries()
+        if self.create_gsi_index:
+            self.create_index_with_gsi()
         if not self.initial_version.startswith("1.") and self.input.param('check_seqno', True):
             self.check_seqno(seqno_expected)
         if self.during_ops:
@@ -129,8 +133,9 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         num_stoped_nodes = self.input.param('num_stoped_nodes', self.nodes_init)
         upgrade_nodes = self.servers[self.nodes_init - num_stoped_nodes:self.nodes_init]
         for upgrade_version in self.upgrade_versions:
-            self.sleep(self.sleep_time, "Pre-setup of old version is done. Wait for upgrade to {0} version". \
-                       format(upgrade_version))
+            self.sleep(self.sleep_time, "Pre-setup of old version is done. "
+                                        "Wait for upgrade to {0} version". \
+                                                    format(upgrade_version))
             for server in upgrade_nodes:
                 remote = RemoteMachineShellConnection(server)
                 remote.stop_server()
@@ -139,10 +144,12 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                     self.sleep(self.expire_time)
                 if self.input.param('remove_manifest_files', False):
                     for file in ['manifest.txt', 'manifest.xml', 'VERSION.txt,']:
-                        output, error = remote.execute_command("rm -rf /opt/couchbase/{0}".format(file))
+                        output, error = remote.execute_command("rm -rf /opt/couchbase/{0}"\
+                                                                              .format(file))
                         remote.log_command_output(output, error)
                 if self.input.param('remove_config_files', False):
-                    for file in ['config', 'couchbase-server.node', 'ip', 'couchbase-server.cookie']:
+                    for file in ['config', 'couchbase-server.node', 'ip',
+                                               'couchbase-server.cookie']:
                         output, error = remote.execute_command(
                             "rm -rf /opt/couchbase/var/lib/couchbase/{0}".format(file))
                         remote.log_command_output(output, error)
@@ -166,13 +173,23 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                 elif "failover" in self.during_ops:
                     self.cluster.rebalance(self.servers[:self.nodes_init], [], [])
                     rem = [server for server in self.servers[:self.nodes_init]
-                           if self.failover_node.ip == server.ip and str(self.failover_node.port) == server.port]
+                           if self.failover_node.ip == server.ip \
+                                           and str(self.failover_node.port) == server.port]
                     self.dcp_rebalance_in_offline_upgrade_from_version2()
                     self.verification(list(set(self.servers[:self.nodes_init]) - set(rem)))
                     return
             self.dcp_rebalance_in_offline_upgrade_from_version2()
             self._create_ephemeral_buckets()
-            self.verification(self.servers[:self.nodes_init])
+            verify_servers = self.servers[:self.nodes_init]
+            if self.create_gsi_index:
+                self.log.info("Storage mode upgrade from forestdb to plasma need one "
+                              "rebalance to activate it.")
+                self._install([self.servers[self.nodes_init]], upgrade_version)
+                self.cluster.rebalance(self.servers[:(self.nodes_init + 1)],
+                                       [self.servers[2]], [])
+                self.verify_storage_mode()
+                verify_servers = self.servers[:(self.nodes_init + 1)]
+            self.verification(verify_servers)
             if self.input.param('check_seqno', True):
                 self.check_seqno(seqno_expected)
 
@@ -872,12 +889,16 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         # Configure the nodes with services
         self.operations(self.servers[:self.nodes_init], services="kv,index,n1ql,kv,kv,index,n1ql,kv")
         # get the n1ql node which will be used in pre,during and post upgrade for running n1ql commands
+        if self.create_gsi_index:
+            self.set_storage_index()
         self.n1ql_server = self.get_nodes_from_services_map(
             service_type="n1ql")
         # Run the pre upgrade operations, typically creating index
         self.pre_upgrade(self.servers[:self.nodes_init])
         if self.ddocs_num:
             self.create_ddocs_and_views()
+        if self.create_gsi_index:
+            self.create_index_with_gsi()
         # set the upgrade version
         self.initial_version = self.upgrade_versions[0]
         self.sleep(self.sleep_time, "Pre-setup of old version is done. Wait for online upgrade to {0} version". \
@@ -1009,6 +1030,8 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                 self.cluster.rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]], [],
                                        services=["kv", "index", "n1ql"])
         # creating new buckets after upgrade
+        if self.create_gsi_index:
+            self.verify_storage_mode()
         if after_upgrade_buckets_in is not False:
             self.bucket_size = 100
             self._create_sasl_buckets(self.master, 1)

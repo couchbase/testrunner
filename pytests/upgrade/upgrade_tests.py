@@ -13,13 +13,10 @@ import threading
 from fts.fts_base import FTSIndex
 from memcached.helper.data_helper import  VBucketAwareMemcached
 from remote.remote_util import RemoteMachineShellConnection, RemoteUtilHelper
-from membase.api.rest_client import RestConnection, Bucket
 from couchbase_helper.tuq_helper import N1QLHelper
 from couchbase_helper.query_helper import QueryHelper
 from TestInput import TestInputSingleton
-from couchbase_helper.tuq_helper import N1QLHelper
-from couchbase_helper.query_helper import QueryHelper
-from membase.api.rest_client import RestConnection, RestHelper
+from membase.api.rest_client import RestConnection, RestHelper, Bucket
 from couchbase_helper.documentgenerator import BlobGenerator
 from membase.helper.bucket_helper import BucketOperationHelper
 
@@ -83,6 +80,12 @@ class UpgradeTests(NewUpgradeBaseTest):
                                        self.maxParallelReplicaIndexers,\
                                                              self.port)
         self.bucket_size = self._get_bucket_size(self.quota, self.total_buckets)
+        if self.initialize_events and "create_index" in self.initialize_events[0]:
+            storage_mode = "forestdb"
+            if 5 <= int(self.initial_version[:1]):
+                storage_mode = "plasma"
+            self.log.info("**** Setting storage mode in cluster ****")
+            RestConnection(self.master).set_indexer_storage_mode(storageMode=storage_mode)
         self.create_buckets()
         self.n1ql_server = None
         self.success_run = True
@@ -590,6 +593,40 @@ class UpgradeTests(NewUpgradeBaseTest):
                 queue.put(False)
         if create_index and queue is not None:
             queue.put(True)
+
+    def verify_storage_mode(self, queue=None):
+        """
+           Verify storage mode automatically upgrade to plasma when
+           upgrade from 4.x to 5.x and later (MB-30354)
+        """
+        if int(self.input.param('initial_version', '2.5.1-1083')[:1]) <= 4 \
+                                   and int(self.upgrade_versions[0][:1]) >= 5:
+            if "create_index" in self.initialize_events[0]:
+                nodes = self.get_nodes_in_cluster_after_upgrade()
+                if nodes:
+                    shell = RemoteMachineShellConnection(nodes[0])
+                    username = nodes[0].rest_username
+                    password = nodes[0].rest_password
+                    cmd = "curl -GET http://{0}:8091/settings/indexes -u {1}:{2}"\
+                                                                .format(nodes[0].ip,
+                                                                         username,
+                                                                         password)
+                    output, error = shell.execute_command(cmd)
+                    if output:
+                        if '"storageMode":"plasma"' not in output[0]:
+                            self.log.error("Storage mode is not update to plasma")
+                            if queue is not None:
+                                queue.put(False)
+                        else:
+                            self.log.info("index storage mode is upgraded to plasma")
+                            queue.put(True)
+                    else:
+                        self.log.info("output is empty")
+            else:
+                self.log.info("No need to check storage mode upgrade"
+                              " since no index in initial cluster")
+        elif int(self.input.param('initial_version', '2.5.1')[:1]) >= 5:
+            self.log.info("\n no need to check storage mode")
 
     def create_views(self, queue=None):
         self.log.info("*** create_views ***")
