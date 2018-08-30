@@ -351,8 +351,9 @@ class BaseTestCase(unittest.TestCase):
                           .format(self.case_number, self._testMethodName))
 
             if not self.skip_init_check_cbserver:
-                self._log_start(self)
-                self.sleep(10)
+                status, content, header = self._log_start(self)
+                if not status:
+                    self.sleep(10)
         except Exception, e:
             traceback.print_exc()
             self.cluster.shutdown(force=True)
@@ -473,7 +474,7 @@ class BaseTestCase(unittest.TestCase):
     def _log_start(self):
         try:
             msg = "{0} : {1} started ".format(datetime.datetime.now(), self._testMethodName)
-            RestConnection(self.servers[0]).log_client_error(msg)
+            return RestConnection(self.servers[0]).log_client_error(msg)
         except:
             pass
 
@@ -499,7 +500,8 @@ class BaseTestCase(unittest.TestCase):
             self.assertTrue(stopped, msg="unable to stop rebalance")
         BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
         ClusterOperationHelper.cleanup_cluster(self.servers, master=self.master)
-        self.sleep(10)
+        # all required checks are implemented in ClusterOperationHelper.cleanup_cluster
+        #self.sleep(10)
         ClusterOperationHelper.wait_for_ns_servers_or_assert(self.servers, self)
 
     def _initialize_nodes(self, cluster, servers, disabled_consistent_view=None, rebalanceIndexWaitingDisabled=None,
@@ -2090,12 +2092,19 @@ class BaseTestCase(unittest.TestCase):
         self.log.info("**** add built-in '%s' user to node %s ****" % (testuser[0]["name"],
                                                                        node.ip))
         RbacBase().create_user_source(testuser, 'builtin', node)
-        self.sleep(10)
-
+        while RbacBase().get_user(testuser[0]["id"], node) == {}:
+            self.sleep(1)
         self.log.info("**** add '%s' role to '%s' user ****" % (rolelist[0]["roles"],
                                                                 testuser[0]["name"]))
         status = RbacBase().add_user_role(rolelist, RestConnection(node), 'builtin')
-        self.sleep(10)
+        attempts = 0
+        while attempts<10:
+            roles = RbacBase().get_user(testuser[0]["id"], node)['roles']
+            if rolelist[0]['roles'] in roles[0]['role']:
+                break
+            else:
+                self.sleep(1)
+                attempts+=1
         return status
 
     def get_nodes(self, server):

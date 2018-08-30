@@ -1627,6 +1627,7 @@ class RestConnection(object):
         status, content, header = self._http_request(api, 'POST', post)
         if not status:
             log.error('unable to logClientError')
+        return status,content,header
 
     def trigger_index_compaction(self, timeout=120):
         node = None
@@ -4447,6 +4448,22 @@ class RestConnection(object):
         if not status:
             raise Exception(content)
         return content
+
+    def get_user(self, user_id):
+        url = "settings/rbac/users/"
+        api = self.baseUrl + url
+        status, content, header = self._http_request(api, "GET")
+
+        if content != None:
+            content_json = json.loads(content)
+
+        for i in range(len(content_json)):
+            user = content_json[i]
+
+        if user.get('id') == user_id:
+            return user
+
+        return {}
 
 
 class MembaseServerVersion:
