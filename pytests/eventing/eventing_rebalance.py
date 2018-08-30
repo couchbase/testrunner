@@ -18,7 +18,7 @@ class EventingRebalance(EventingBaseTest):
         if self.create_functions_buckets:
             self.replicas = self.input.param("replicas", 0)
             self.bucket_size = 100
-            # This is needed as we have increased the context size to 93KB. If this is not incrased the metadata
+            # This is needed as we have increased the context size to 93KB. If this is not increased the metadata
             # bucket goes into heavy DGM
             self.metadata_bucket_size = 400
             log.info(self.bucket_size)

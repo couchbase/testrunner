@@ -22,6 +22,7 @@ from pytests.eventing.eventing_constants import HANDLER_CODE, EXPORTED_FUNCTION
 from testconstants import COUCHBASE_VERSION_2
 import os
 import json
+
 log = logging.getLogger()
 
 
@@ -182,7 +183,8 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
                         format(status, content))
         i = 1
         for server_in, service_in in zip(servers_in[1:], services[1:]):
-            log.info("Swap rebalance nodes : server_in: {0} service_in:{1} service_out:{2}".format(server_in, service_in,
+            log.info(
+                "Swap rebalance nodes : server_in: {0} service_in:{1} service_out:{2}".format(server_in, service_in,
                                                                                               self.servers[i]))
             self.cluster.rebalance(self.servers[:self.nodes_init], [server_in], [self.servers[i]],
                                    services=[service_in])
@@ -216,8 +218,19 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
         servers_out = self.servers[:self.nodes_init]
         self._new_master(self.servers[self.nodes_init])
         log.info("failover and rebalance nodes")
-        self.cluster.failover(self.servers[:self.num_servers],failover_nodes=servers_out, graceful=False)
+        self.cluster.failover(self.servers[:self.num_servers], failover_nodes=servers_out, graceful=False)
         self.cluster.rebalance(self.servers[:self.num_servers], [], servers_out)
+        self.baseUrl = "http://{0}:{1}/".format(self.master.ip, self.master.port)
+        http_res, success = self.rest.init_http_request(self.baseUrl + 'pools/default')
+        log.info("Output of pools/default from master node after upgrade is \n{0} ".format(
+            json.dumps(http_res, sort_keys=True,
+                       indent=4)))
+        eventing_server = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
+        self.baseUrl = "http://{0}:{1}/".format(eventing_server.ip, eventing_server.port)
+        http_res, success = self.rest.init_http_request(self.baseUrl + 'pools/default')
+        log.info("Output of pools/default from eventing node after upgrade is \n{0} ".format(
+            json.dumps(http_res, sort_keys=True,
+                       indent=4)))
 
     def _new_master(self, server):
         self.master = server
