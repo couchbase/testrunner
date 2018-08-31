@@ -182,6 +182,7 @@ class BaseTestCase(unittest.TestCase):
             self.sasl_bucket_priority = self.input.param("sasl_bucket_priority", None)
             self.standard_bucket_priority = self.input.param("standard_bucket_priority", None)
             # end of bucket parameters spot (this is ongoing)
+            self.disable_diag_eval_on_non_local_host = self.input.param("disable_diag_eval_non_local", False)
 
             if self.skip_setup_cleanup:
                 self.buckets = RestConnection(self.master).get_buckets()
@@ -309,6 +310,8 @@ class BaseTestCase(unittest.TestCase):
                     self.cluster.rebalance(self.servers, self.servers[1:],
                                            [], services=self.services)
                 self.setDebugLevel(service_type="index")
+                if not self.disable_diag_eval_on_non_local_host:
+                    self.enable_diag_eval_on_non_local_hosts()
             except BaseException, e:
                 # increase case_number to retry tearDown in setup for the next test
                 self.case_number += 1000
@@ -2610,6 +2613,19 @@ class BaseTestCase(unittest.TestCase):
             "ifconfig eth0 | grep 'inet addr:' | cut -d: -f2 |awk '{print $1}'")
         return ipAddress
 
+
+    def enable_diag_eval_on_non_local_hosts(self):
+        """
+        Enable diag/eval to be run on non-local hosts.
+        :return:
+        """
+        remote = RemoteMachineShellConnection(self.master)
+        output, error = remote.enable_diag_eval_on_non_local_hosts()
+        if "ok" not in output:
+            self.log.error("Error in enabling diag/eval on non-local hosts on {}".format(self.master.ip))
+            raise Exception("Error in enabling diag/eval on non-local hosts on {}".format(self.master.ip))
+        else:
+            self.log.info("Enabled diag/eval for non-local hosts from {}".format(self.master.ip))
 
     # get the dot version e.g. x.y
     def _get_version(self):

@@ -3063,6 +3063,7 @@ class FTSBaseTest(unittest.TestCase):
         self._cb_cluster.init_cluster(self._cluster_services,
                                       self._input.servers[1:])
 
+        self._enable_diag_eval_on_non_local_hosts()
         # Add built-in user
         testuser = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'password': 'password'}]
         RbacBase().create_user_source(testuser, 'builtin', master)
@@ -3087,6 +3088,20 @@ class FTSBaseTest(unittest.TestCase):
         self.__error_count_dict = {}
         if len(self.__report_error_list) > 0:
             self.__initialize_error_count_dict()
+
+    def _enable_diag_eval_on_non_local_hosts(self):
+        """
+        Enable diag/eval to be run on non-local hosts.
+        :return: Nothing
+        """
+        master = self._cb_cluster.get_master_node()
+        remote = RemoteMachineShellConnection(master)
+        output, error = remote.enable_diag_eval_on_non_local_hosts()
+        if "ok" not in output:
+            self.log.error("Error in enabling diag/eval on non-local hosts on {}".format(master.ip))
+            raise Exception("Error in enabling diag/eval on non-local hosts on {}".format(master.ip))
+        else:
+            self.log.info("Enabled diag/eval for non-local hosts from {}".format(master.ip))
 
     def construct_serv_list(self, serv_str):
         """

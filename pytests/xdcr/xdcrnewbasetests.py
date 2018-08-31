@@ -1121,6 +1121,7 @@ class CouchbaseCluster:
         3. Enable xdcr trace logs to easy debug for xdcr items mismatch issues.
         """
         master = RestConnection(self.__master_node)
+        self.enable_diag_eval_on_non_local_hosts(self.__master_node)
         is_master_sherlock_or_greater = master.is_cluster_compat_mode_greater_than(3.1)
         self.__init_nodes(disabled_consistent_view)
         self.__clusterop.async_rebalance(
@@ -1139,6 +1140,20 @@ class CouchbaseCluster:
                 if not status:
                     self.__log.info("Enabling audit ...")
                     audit_obj.setAuditEnable('true')
+
+    def enable_diag_eval_on_non_local_hosts(self, master):
+        """
+        Enable diag/eval to be run on non-local hosts.
+        :param master: Node information of the master node of the cluster
+        :return: Nothing
+        """
+        remote = RemoteMachineShellConnection(master)
+        output, error = remote.enable_diag_eval_on_non_local_hosts()
+        if "ok" not in output:
+            self.__log.error("Error in enabling diag/eval on non-local hosts on {}. {}".format(master.ip, output))
+            raise Exception("Error in enabling diag/eval on non-local hosts on {}".format(master.ip))
+        else:
+            self.__log.info("Enabled diag/eval for non-local hosts from {}".format(master.ip))
 
     def _create_bucket_params(self, server, replicas=1, size=0, port=11211, password=None,
                              bucket_type=None, enable_replica_index=1, eviction_policy='valueOnly',

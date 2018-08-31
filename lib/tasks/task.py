@@ -174,6 +174,8 @@ class NodeInitializeTask(Task):
                 self.quota = kv_quota
 
         rest.init_cluster_memoryQuota(username, password, self.quota)
+        remote_shell = RemoteMachineShellConnection(self.server)
+        remote_shell.enable_diag_eval_on_non_local_hosts()
         if rest.is_cluster_compat_mode_greater_than(4.0):
             if self.gsi_type == "plasma":
                 if not rest.is_cluster_compat_mode_greater_than(5.0):

@@ -65,7 +65,7 @@ class SwapRebalanceBase(unittest.TestCase):
             info = rest.get_nodes_self()
             rest.init_cluster(username=serverInfo.rest_username, password=serverInfo.rest_password)
             rest.init_cluster_memoryQuota(memoryQuota=int(info.mcdMemoryReserved * node_ram_ratio))
-
+            SwapRebalanceBase.enable_diag_eval_on_non_local_hosts(self, serverInfo)
             # Add built-in user
             testuser = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'password': 'password'}]
             RbacBase().create_user_source(testuser, 'builtin', self.servers[0])
@@ -127,6 +127,21 @@ class SwapRebalanceBase(unittest.TestCase):
         ClusterOperationHelper.wait_for_ns_servers_or_assert(self.servers, self)
         self.log.info("==============  SwapRebalanceBase cleanup was finished for test #{0} {1} =============="\
                           .format(self.case_number, self._testMethodName))
+
+    @staticmethod
+    def enable_diag_eval_on_non_local_hosts(self, master):
+        """
+        Enable diag/eval to be run on non-local hosts.
+        :param master: Node information of the master node of the cluster
+        :return: Nothing
+        """
+        remote = RemoteMachineShellConnection(master)
+        output, error = remote.enable_diag_eval_on_non_local_hosts()
+        if "ok" not in output:
+            self.log.error("Error in enabling diag/eval on non-local hosts on {}. {}".format(master.ip, output))
+            raise Exception("Error in enabling diag/eval on non-local hosts on {}".format(master.ip))
+        else:
+            self.log.info("Enabled diag/eval for non-local hosts from {}".format(master.ip))
 
     @staticmethod
     def _log_start(self):
