@@ -187,6 +187,28 @@ class NewUpgradeBaseTest(BaseTestCase):
                 hostname = RemoteUtilHelper.use_hostname_for_server_settings(server)
                 server.hostname = hostname
 
+    def initial_services(self, services=None):
+        if services is not None:
+            if "-" in services:
+                set_services = services.split("-")
+            elif "," in services:
+                set_services = services.split(",")
+        else:
+            set_services = services
+        return set_services
+
+    def initialize_nodes(self, servers, services=None):
+        set_services = self.initial_services(services)
+        if 4.5 > float(self.initial_version[:3]):
+            self.gsi_type = "forestdb"
+        self.quota = self._initialize_nodes(self.cluster, servers,
+                                            self.disabled_consistent_view,
+                                            self.rebalanceIndexWaitingDisabled,
+                                            self.rebalanceIndexPausingDisabled,
+                                            self.maxParallelIndexers,
+                                            self.maxParallelReplicaIndexers, self.port,
+                                            services=set_services)
+
     def operations(self, servers):
         self.quota = self._initialize_nodes(self.cluster, servers, self.disabled_consistent_view,
                                             self.rebalanceIndexWaitingDisabled, self.rebalanceIndexPausingDisabled,

@@ -66,12 +66,36 @@ class UpgradeTests(NewUpgradeBaseTest):
         self.after_gen_delete = BlobGenerator('upgrade', 'upgrade',\
                                       self.value_size, start=self.num_items * .5,\
                                                          end=self.num_items* 0.75)
+        initial_services_setting = self.input.param("initial-services-setting", None)
         self._install(self.servers[:self.nodes_init])
+        if not self.init_nodes and initial_services_setting is not None:
+            self.initialize_nodes(self.servers[:self.nodes_init],
+                                  services=initial_services_setting)
         self._log_start(self)
-        self.cluster.rebalance([self.master], self.servers[1:self.nodes_init], [])
+        if len(self.servers[:self.nodes_init]) > 1:
+            if initial_services_setting is None:
+                self.cluster.rebalance(self.servers[:1], self.servers[1:self.nodes_init],
+                                                   [], use_hostnames=self.use_hostnames)
+            else:
+                set_services = self.initial_services(initial_services_setting)
+                for i in range(1, len(set_services)):
+                    self.cluster.rebalance([self.servers[0]], [self.servers[i]], [],
+                                                   use_hostnames=self.use_hostnames,
+                                                         services=[set_services[i]])
+                    self.sleep(10)
+        else:
+            self.cluster.rebalance([self.servers[0]], self.servers[1:], [],
+                                         use_hostnames=self.use_hostnames)
+        self.sleep(10)
         """ sometimes, when upgrade failed and node does not install couchbase
             server yet, we could not set quota at beginning of the test.  We
             have to wait to install new couchbase server to set it properly here """
+        """ sometimes, when upgrade failed and node does not install couchbase
+            server yet, we could not set quota at beginning of the test.  We
+            have to wait to install new couchbase server to set it properly here """
+        servers_available = copy.deepcopy(self.servers)
+        if len(self.servers) > int(self.nodes_init):
+            servers_available = servers_available[:self.nodes_init]
         self.quota = self._initialize_nodes(self.cluster, self.servers,\
                                          self.disabled_consistent_view,\
                                     self.rebalanceIndexWaitingDisabled,\
@@ -79,6 +103,7 @@ class UpgradeTests(NewUpgradeBaseTest):
                                               self.maxParallelIndexers,\
                                        self.maxParallelReplicaIndexers,\
                                                              self.port)
+        self.add_built_in_server_user(node=self.master)
         self.bucket_size = self._get_bucket_size(self.quota, self.total_buckets)
         if self.initialize_events and "create_index" in self.initialize_events[0]:
             storage_mode = "forestdb"
