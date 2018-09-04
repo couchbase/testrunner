@@ -16,7 +16,8 @@ from testconstants import SHERLOCK_VERSION
 from testconstants import COUCHBASE_VERSION_2
 from testconstants import COUCHBASE_VERSION_3
 from testconstants import COUCHBASE_VERSION_2_WITH_REL
-from testconstants import COUCHBASE_RELEASE_FROM_VERSION_3
+from testconstants import COUCHBASE_RELEASE_FROM_VERSION_3,\
+                          COUCHBASE_RELEASE_FROM_SPOCK
 from testconstants import COUCHBASE_FROM_VERSION_3, COUCHBASE_FROM_SPOCK
 from testconstants import CB_RELEASE_REPO
 from testconstants import CB_LATESTBUILDS_REPO
@@ -316,6 +317,24 @@ class BuildQuery(object):
             build.url_latest_build = "{4}{0}_{1}_{3}.setup.{2}"\
                              .format(product, os_architecture,
                              deliverable_type, build_details, CB_LATESTBUILDS_REPO)
+        elif deliverable_type == "msi":
+            if not re.match(r'[1-9].[0-9].[0-9]$', build_version):
+                if build_version[:5] in COUCHBASE_RELEASE_FROM_SPOCK:
+                    arch_type = "amd64"
+                    if "x86_64" not in os_architecture:
+                        arch_type = "x86"
+                    build.url = "{5}{0}/{1}_{4}-windows_{2}.{3}"\
+                            .format(build_version[:build_version.find('-')],
+                            product, arch_type, deliverable_type, build_details[:5],
+                            CB_RELEASE_REPO)
+            else:
+                if build_version[:5] in COUCHBASE_RELEASE_FROM_SPOCK:
+                    arch_type = "amd64"
+                    if "x86_64" not in os_architecture:
+                        arch_type = "x86"
+                    build.url = "{5}{0}/{1}_{4}-windows_{2}.{3}"\
+                        .format(build_version, product, arch_type,
+                         deliverable_type, build_details[:5], CB_RELEASE_REPO)
         else:
             """ check match full version x.x.x-xxxx """
             if not re.match(r'[1-9].[0-9].[0-9]$', build_version):

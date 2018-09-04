@@ -252,7 +252,6 @@ class Installer(object):
                 """
                 if "2k8" in info.windows_name:
                     info.windows_name = 2008
-
                 if msi_build[0] in COUCHBASE_FROM_SPOCK:
                     info.deliverable_type = "msi"
                 elif "5" > msi_build[0] and info.windows_name == 2016:
@@ -282,7 +281,6 @@ class Installer(object):
             elif "server-analytics" in names:
                 build_repo = CB_REPO.replace("couchbase-server", "server-analytics") + CB_VERSION_NAME[version[:3]] + "/"
             elif "moxi-server" in names and version[:5] != "2.5.2":
-                print "version   ", version
                 """
                 moxi repo:
                    http://172.23.120.24/builds/latestbuilds/moxi/4.6.0/101/moxi-server..
