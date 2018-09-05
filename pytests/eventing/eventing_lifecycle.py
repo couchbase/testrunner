@@ -187,7 +187,7 @@ class EventingLifeCycle(EventingBaseTest):
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
         # get debugger url
-        pattern = re.compile(r'chrome-devtools://devtools/bundled/inspector.html(.*)')
+        pattern = re.compile(r'chrome-devtools://devtools/bundled/js_app.html(.*)')
         while count < 10:
             out2 = self.rest.get_eventing_debugger_url(self.function_name)
             matched = re.match(pattern, out2)
