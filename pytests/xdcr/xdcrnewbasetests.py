@@ -443,6 +443,8 @@ class NodeHelper:
             try:
                 if "ec2" in str(server.ip):
                     hostname = shell.get_aws_public_hostname()
+                elif "azure" in str(server.ip):
+                    hostname = str(server.ip)
                 else:
                     hostname = shell.get_full_hostname()
                 rest = RestConnection(server)
