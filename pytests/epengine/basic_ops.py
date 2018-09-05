@@ -11,7 +11,7 @@ from membase.api.rest_client import RestConnection, RestHelper
 from memcached.helper.data_helper import VBucketAwareMemcached, MemcachedClientHelper
 from ep_mc_bin_client import MemcachedClient, MemcachedError
 import json
-
+from lib.couchbase_helper.tuq_generators import JsonGenerator
 
 from remote.remote_util import RemoteMachineShellConnection
 
@@ -37,6 +37,7 @@ class basic_ops(BaseTestCase):
 
     def setUp(self):
         super(basic_ops, self).setUp()
+        self.src_bucket = RestConnection(self.master).get_buckets()
 
     def tearDown(self):
         super(basic_ops, self).tearDown()
@@ -120,3 +121,42 @@ class basic_ops(BaseTestCase):
                 self.fail("Error on second setWithMeta(), expected curr_temp_items to be 0")
             else:
                 self.log.info("<MemcachedError #%d ``%s''>" % (error.status, error.message))
+
+    def generate_docs_bigdata(self, docs_per_day, start=0, document_size=1024000):
+        json_generator = JsonGenerator()
+        return json_generator.generate_docs_bigdata(end=docs_per_day, start=start, value_size=document_size)
+
+    def test_large_doc_size_1MB(self):
+        # bucket size =256MB, when Bucket gets filled 236MB then the test starts failing
+        # document size =2MB, No of docs = 221 , load 250 docs
+        # epengine.basic_ops.basic_ops.test_large_doc_size_1MB,skip_cleanup=True,document_size=1024000,dgm_run=True
+        docs_per_day = 10
+        document_size = self.input.param('document_size')
+        # generate docs with size >=  1MB , See MB-29333
+        gens_load = self.generate_docs_bigdata(docs_per_day=(25 * docs_per_day), document_size=document_size)
+        self.load(gens_load, buckets=self.src_bucket, verify_data=False, batch_size=10)
+
+        # check if all the documents(250) are loaded else the test has failed with "Memcached Error 134"
+        mc = MemcachedClient(self.master.ip, 11210)
+        mc.sasl_auth_plain(self.master.rest_username, self.master.rest_password)
+        mc.bucket_select('default')
+        stats = mc.stats()
+        self.assertEquals(int(stats['curr_items']), 250)
+
+
+    def test_large_doc_size_2MB(self):
+        # bucket size =256MB, when Bucket gets filled 236MB then the test starts failing
+        # document size =2MB, No of docs = 108 , load 150 docs
+        # epengine.basic_ops.basic_ops.test_large_doc_size_2MB,skip_cleanup = True,document_size=2048000,dgm_run=True
+        docs_per_day = 5
+        document_size = self.input.param('document_size')
+        # generate docs with size >=  1MB , See MB-29333
+        gens_load = self.generate_docs_bigdata(docs_per_day=(25 *docs_per_day), document_size=document_size)
+        self.load(gens_load, buckets=self.src_bucket, verify_data=False, batch_size=10)
+
+        # check if all the documents(125) are loaded else the test has failed with "Memcached Error 134"
+        mc = MemcachedClient(self.master.ip, 11210)
+        mc.sasl_auth_plain(self.master.rest_username, self.master.rest_password)
+        mc.bucket_select('default')
+        stats = mc.stats()
+        self.assertEquals(int(stats['curr_items']), 125)

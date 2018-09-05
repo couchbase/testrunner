@@ -1123,7 +1123,10 @@ class VBucketAwareMemcached(object):
             else:
                 time.sleep(pause)
                 self.reset_vbuckets(self.rest, self._get_vBucket_ids(keyval.keys()))
-                rec_caller_fn(exp, flags, keyval, pause, timeout - pause)  # Start all over again for these key vals.
+                try:
+                    rec_caller_fn(exp, flags, keyval, pause, timeout - pause)  # Start all over again for these key vals.
+                except MemcachedError as error:
+                    return [error]
                 return []  # Note: If used for async,too many recursive threads could get spawn here.
         except (EOFError, socket.error), error:
             try:
