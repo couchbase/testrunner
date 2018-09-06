@@ -4659,9 +4659,9 @@ class RemoteMachineShellConnection:
         else:
             log.info("*** You need to set rest password at ini file ***")
             rest_password = "password"
-        command = "curl http://{0}:{1}@{2}:{3}/diag/eval -X POST -d " \
-                  "'ns_config:set(allow_nonlocal_eval, {4}).'".format(rest_username, rest_password,
-                                                                       self.ip, self.port, state.__str__().lower())
+        command = "curl http://{0}:{1}@localhost:{2}/diag/eval -X POST -d " \
+                  "'ns_config:set(allow_nonlocal_eval, {3}).'".format(rest_username, rest_password,
+                                                                      self.port, state.__str__().lower())
         os_type = self.extract_remote_info().distribution_type.lower()
         fv, sv, bn = self.get_cbversion(os_type)
         if (fv < "6"):
