@@ -4662,9 +4662,10 @@ class RemoteMachineShellConnection:
         command = "curl http://{0}:{1}@localhost:{2}/diag/eval -X POST -d " \
                   "'ns_config:set(allow_nonlocal_eval, {3}).'".format(rest_username, rest_password,
                                                                       self.port, state.__str__().lower())
-        os_type = self.extract_remote_info().distribution_type.lower()
-        fv, sv, bn = self.get_cbversion(os_type)
-        if (fv < "6"):
+        server = {"ip": self.ip, "username": rest_username, "password": rest_password, "port": self.port}
+        rest_connection = RestConnection(server)
+        is_cluster_compatible = rest_connection.check_cluster_compatibility("6.0")
+        if (not is_cluster_compatible):
             log.info("Enabling diag/eval on non-local hosts is available only post 6.0 releases")
             return None, "Enabling diag/eval on non-local hosts is available only post 6.0 releases"
         output, error = self.execute_command(command)
