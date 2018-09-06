@@ -160,3 +160,24 @@ class basic_ops(BaseTestCase):
         mc.bucket_select('default')
         stats = mc.stats()
         self.assertEquals(int(stats['curr_items']), 125)
+
+    def test_large_doc_20MB(self):
+        # test reproducer for MB-29258,
+        # Load a doc which is greater than 20 MB with compression enabled and check if it fails
+        # check with compression_mode as active, passive and off
+        document_size= self.input.param('document_size', 20)
+        gens_load = self.generate_docs_bigdata(docs_per_day=1, document_size=(document_size * 1024000))
+        self.load(gens_load, buckets=self.src_bucket, verify_data=False, batch_size=10)
+
+        mc = MemcachedClient(self.master.ip, 11210)
+        mc.sasl_auth_plain(self.master.rest_username, self.master.rest_password)
+        mc.bucket_select('default')
+        stats = mc.stats()
+        if (document_size > 20):
+            self.assertEquals(int(stats['curr_items']), 0) # failed with error "Data Too Big" when document size > 20MB
+        else:
+            self.assertEquals(int(stats['curr_items']), 1)
+            gens_update = self.generate_docs_bigdata(docs_per_day=1, document_size=(21 * 1024000))
+            self.load(gens_update, buckets=self.src_bucket, verify_data=False, batch_size=10)
+            stats = mc.stats()
+            self.assertEquals(int(stats['curr_items']), 1)
