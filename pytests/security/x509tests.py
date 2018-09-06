@@ -74,11 +74,11 @@ class x509tests(BaseTestCase):
                 self.sleep(30)
 
     def tearDown(self):
-        print "Into Teardown"
-        #self._reset_original()
-        #shell = RemoteMachineShellConnection(x509main.SLAVE_HOST)
-        #shell.execute_command("rm " + x509main.CACERTFILEPATH)
-        #super(x509tests, self).tearDown()
+        self.log.info ("Into Teardown")
+        self._reset_original()
+        shell = RemoteMachineShellConnection(x509main.SLAVE_HOST)
+        shell.execute_command("rm " + x509main.CACERTFILEPATH)
+        super(x509tests, self).tearDown()
 
     def _reset_original(self):
         self.log.info ("Reverting to original state - regenerating certificate and removing inbox folder")
