@@ -181,3 +181,36 @@ class basic_ops(BaseTestCase):
             self.load(gens_update, buckets=self.src_bucket, verify_data=False, batch_size=10)
             stats = mc.stats()
             self.assertEquals(int(stats['curr_items']), 1)
+
+    def test_daig_eval_curl(self):
+        # Check if diag/eval can be done only by local host
+        # epengine.basic_ops.basic_ops.test_daig_eval_curl,disable_diag_eval_non_local=True
+        port = 8091
+        cmd=[]
+
+        # check ip address on diag/eval will not work fine
+        cmd_base = 'curl http://{0}:{1}@{2}:{3}/diag/eval '.format(self.master.rest_username,
+                                                                self.master.rest_password, self.master.ip, port)
+        command = cmd_base +'-X POST -d \'os:cmd("env")\''
+        cmd.append(command)
+        command = cmd_base+'-X POST -d \'case file:read_file("/etc/passwd") of {ok, B} -> io:format("~p~n", [binary_to_term(B)]) end.\''
+        cmd.append(command)
+
+        shell = RemoteMachineShellConnection(self.master)
+        for command in cmd:
+            output, error = shell.execute_command(command)
+            self.assertEquals("API is accessible from localhost only",output[0])
+
+        # check if local host can work fine
+        cmd = []
+        cmd_base = 'curl http://{0}:{1}@127.0.0.1:{2}/diag/eval '.format(self.master.rest_username,
+                                                                   self.master.rest_password, port)
+        command = cmd_base + '-X POST -d \'os:cmd("env")\''
+        cmd.append(command)
+        command = cmd_base + '-X POST -d \'case file:read_file("/etc/passwd") of {ok, B} -> io:format("~p~n", [binary_to_term(B)]) end.\''
+        cmd.append(command)
+
+        shell = RemoteMachineShellConnection(self.master)
+        for command in cmd:
+            output, error = shell.execute_command(command)
+            self.assertNotEquals("API is accessible from localhost only", output[0])
