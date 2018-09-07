@@ -176,7 +176,7 @@ class RemoteMachineShellConnection:
 
     def __init__(self, username='root',
                  pkey_location='',
-                 ip=''):
+                 ip='', port=''):
         self.username = username
         self.use_sudo = True
         self.nonroot = False
@@ -192,6 +192,7 @@ class RemoteMachineShellConnection:
         # let's create a connection
         self._ssh_client = paramiko.SSHClient()
         self.ip = ip
+        self.port = port
         self.remote = (self.ip != "localhost" and self.ip != "127.0.0.1")
         self._ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         log.info('connecting to {0} with username : {1} pem key : {2}'.format(ip, username, pkey_location))
@@ -3114,7 +3115,7 @@ class RemoteMachineShellConnection:
 
         return self.execute_command_raw(command, debug=debug, use_channel=use_channel)
 
-    def execute_command_raw(self, command, debug=True, use_channel=False):
+    def execute_command_raw(self, command, debug=True, use_channel=False, timeout=420):
         if debug:
             log.info("running command.raw on {0}: {1}".format(self.ip, command))
         output = []
@@ -3135,7 +3136,7 @@ class RemoteMachineShellConnection:
             channel.close()
             stdin.close()
         elif self.remote:
-            stdin, stdout, stderro = self._ssh_client.exec_command(command)
+            stdin, stdout, stderro = self._ssh_client.exec_command(command, timeout=timeout)
             stdin.close()
 
         if not self.remote:
@@ -4410,7 +4411,7 @@ class RemoteMachineShellConnection:
                                     o, r = self.execute_command("dpkg --get-selections | grep libssl")
                                     log.info("package {0} should not appear below".format(s[:11]))
                                     self.log_command_output(o, r)
-           
+
     def check_pkgconfig(self, deliverable_type, openssl):
         if "SUSE" in self.info.distribution_type:
             o, r = self.execute_command("zypper -n if pkg-config 2>/dev/null| grep -i \"Installed: Yes\"")
@@ -4619,6 +4620,34 @@ class RemoteMachineShellConnection:
         self.sleep(5, "==== delay kill pid %d in 5 seconds to printout message ==="\
                                                                       % os.getpid())
         os.system('kill %d' % os.getpid())
+
+    def enable_diag_eval_on_non_local_hosts(self, state=True):
+        """
+        Enable diag/eval to be run on non-local hosts.
+        :return: Command output and error if any.
+        """
+        if self.input.membase_settings.rest_username:
+            rest_username = self.input.membase_settings.rest_username
+        else:
+            log.info("*** You need to set rest username at ini file ***")
+            rest_username = "Administrator"
+        if self.input.membase_settings.rest_password:
+            rest_password = self.input.membase_settings.rest_password
+        else:
+            log.info("*** You need to set rest password at ini file ***")
+            rest_password = "password"
+        command = "curl http://{0}:{1}@localhost:{2}/diag/eval -X POST -d " \
+                  "'ns_config:set(allow_nonlocal_eval, {3}).'".format(rest_username, rest_password,
+                                                                      self.port, state.__str__().lower())
+        server = {"ip": self.ip, "username": rest_username, "password": rest_password, "port": self.port}
+        rest_connection = RestConnection(server)
+        is_cluster_compatible = rest_connection.check_cluster_compatibility("5.5")
+        if (not is_cluster_compatible):
+            log.info("Enabling diag/eval on non-local hosts is available only post 5.5.2 or 6.0 releases")
+            return None, "Enabling diag/eval on non-local hosts is available only post 5.5.2 or 6.0 releases"
+        output, error = self.execute_command(command)
+        return output, error
+
 
 class RemoteUtilHelper(object):
 
