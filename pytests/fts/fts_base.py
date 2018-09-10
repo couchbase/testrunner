@@ -3097,12 +3097,17 @@ class FTSBaseTest(unittest.TestCase):
         master = self._cb_cluster.get_master_node()
         remote = RemoteMachineShellConnection(master)
         output, error = remote.enable_diag_eval_on_non_local_hosts()
-        if "ok" not in output:
-            self.log.error("Error in enabling diag/eval on non-local hosts on {}".format(master.ip))
-            raise Exception("Error in enabling diag/eval on non-local hosts on {}".format(master.ip))
+        if output is not None:
+            if "ok" not in output:
+                self.log.error("Error in enabling diag/eval on non-local hosts on {}".format(master.ip))
+                raise Exception("Error in enabling diag/eval on non-local hosts on {}".format(master.ip))
+            else:
+                self.log.info(
+                    "Enabled diag/eval for non-local hosts from {}".format(
+                        master.ip))
         else:
-            self.log.info("Enabled diag/eval for non-local hosts from {}".format(master.ip))
-
+            self.log.info("Running in compatibility mode, not enabled diag/eval for non-local hosts")
+    
     def construct_serv_list(self, serv_str):
         """
             Constructs a list of node services

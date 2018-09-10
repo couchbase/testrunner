@@ -1149,11 +1149,16 @@ class CouchbaseCluster:
         """
         remote = RemoteMachineShellConnection(master)
         output, error = remote.enable_diag_eval_on_non_local_hosts()
-        if "ok" not in output:
-            self.__log.error("Error in enabling diag/eval on non-local hosts on {}. {}".format(master.ip, output))
-            raise Exception("Error in enabling diag/eval on non-local hosts on {}".format(master.ip))
+        if output is not None:
+            if "ok" not in output:
+                self.__log.error("Error in enabling diag/eval on non-local hosts on {}".format(master.ip))
+                raise Exception("Error in enabling diag/eval on non-local hosts on {}".format(master.ip))
+            else:
+                self.__log.info(
+                    "Enabled diag/eval for non-local hosts from {}".format(
+                        master.ip))
         else:
-            self.__log.info("Enabled diag/eval for non-local hosts from {}".format(master.ip))
+            self.__log.info("Running in compatibility mode, not enabled diag/eval for non-local hosts")
 
     def _create_bucket_params(self, server, replicas=1, size=0, port=11211, password=None,
                              bucket_type=None, enable_replica_index=1, eviction_policy='valueOnly',
