@@ -32,6 +32,7 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         self.server = self.master
         self.restServer = self.get_nodes_from_services_map(service_type="eventing")
         self.rest = RestConnection(self.restServer)
+        self.rest.set_indexer_storage_mode()
         self.log.info(
             "Setting the min possible memory quota so that adding mode nodes to the cluster wouldn't be a problem.")
         self.rest.set_service_memoryQuota(service='memoryQuota', memoryQuota=330)
