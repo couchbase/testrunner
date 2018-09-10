@@ -174,17 +174,6 @@ class NodeInitializeTask(Task):
                 self.quota = kv_quota
 
         rest.init_cluster_memoryQuota(username, password, self.quota)
-        remote_shell = RemoteMachineShellConnection(self.server)
-        remote_shell.enable_diag_eval_on_non_local_hosts()
-        if rest.is_cluster_compat_mode_greater_than(4.0):
-            if self.gsi_type == "plasma":
-                if not rest.is_cluster_compat_mode_greater_than(5.0):
-                    rest.set_indexer_storage_mode(username, password, "forestdb")
-                else:
-                    rest.set_indexer_storage_mode(username, password, self.gsi_type)
-            else:
-                rest.set_indexer_storage_mode(username, password, self.gsi_type)
-
 
         if self.services:
             status = rest.init_node_services(username= username, password = password,\
@@ -207,6 +196,16 @@ class NodeInitializeTask(Task):
             rest.set_max_parallel_replica_indexers(self.maxParallelReplicaIndexers)
 
         rest.init_cluster(username, password, self.port)
+        remote_shell = RemoteMachineShellConnection(self.server)
+        remote_shell.enable_diag_eval_on_non_local_hosts()
+        if rest.is_cluster_compat_mode_greater_than(4.0):
+            if self.gsi_type == "plasma":
+                if not rest.is_cluster_compat_mode_greater_than(5.0):
+                    rest.set_indexer_storage_mode(username, password, "forestdb")
+                else:
+                    rest.set_indexer_storage_mode(username, password, self.gsi_type)
+            else:
+                rest.set_indexer_storage_mode(username, password, self.gsi_type)
         self.server.port = self.port
         try:
             rest = RestConnection(self.server)
