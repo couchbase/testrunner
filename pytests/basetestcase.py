@@ -2621,13 +2621,17 @@ class BaseTestCase(unittest.TestCase):
         """
         remote = RemoteMachineShellConnection(self.master)
         output, error = remote.enable_diag_eval_on_non_local_hosts()
-        if "ok" not in output and output is not None:
-            self.log.error("Error in enabling diag/eval on non-local hosts on {}".format(self.master.ip))
-            raise Exception("Error in enabling diag/eval on non-local hosts on {}".format(self.master.ip))
-        elif output is None:
-                self.log.info("Running in compatibility mode, not enabled diag/eval for non-local hosts")
+        if output is not None:
+            if "ok" not in output:
+                self.log.error("Error in enabling diag/eval on non-local hosts on {}".format(self.master.ip))
+                raise Exception("Error in enabling diag/eval on non-local hosts on {}".format(self.master.ip))
+            else:
+                self.log.info(
+                    "Enabled diag/eval for non-local hosts from {}".format(
+                        self.master.ip))
         else:
-            self.log.info("Enabled diag/eval for non-local hosts from {}".format(self.master.ip))
+            self.log.info("Running in compatibility mode, not enabled diag/eval for non-local hosts")
+
 
     # get the dot version e.g. x.y
     def _get_version(self):
