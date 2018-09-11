@@ -353,7 +353,7 @@ class EventingRecovery(EventingBaseTest):
     def test_time_drift_between_kv_eventing(self):
         try:
             kv_node = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=False)
-            self.change_time_zone(kv_node, timezone="America/Los_Angeles")
+            self.change_time_zone(kv_node, timezone="America/Chicago")
             self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                       batch_size=self.batch_size)
             body = self.create_save_function_body(self.function_name, self.handler_code,
@@ -366,7 +366,7 @@ class EventingRecovery(EventingBaseTest):
             self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
             self.undeploy_and_delete_function(body)
         finally:
-            self.change_time_zone(kv_node, timezone="UTC")
+            self.change_time_zone(kv_node, timezone="America/Los_Angeles")
 
     def test_partial_rollback(self):
         kv_node = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
@@ -398,3 +398,21 @@ class EventingRecovery(EventingBaseTest):
         stats_src = RestConnection(self.master).get_bucket_stats(bucket=self.src_bucket_name)
         log.info(stats_src)
         self.verify_eventing_results(self.function_name, stats_src["curr_items"], skip_stats_validation=True)
+
+    def test_time_drift_between_eventing_nodes(self):
+        try:
+            ev_node = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
+            self.change_time_zone(ev_node, timezone="America/Chicago")
+            self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                      batch_size=self.batch_size)
+            body = self.create_save_function_body(self.function_name, self.handler_code,
+                                                  worker_count=3)
+            self.deploy_function(body)
+            # Wait for eventing to catch up with all the update mutations and verify results
+            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+            self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                      batch_size=self.batch_size, op_type='delete')
+            self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+            self.undeploy_and_delete_function(body)
+        finally:
+            self.change_time_zone(ev_node, timezone="America/Los_Angeles")
