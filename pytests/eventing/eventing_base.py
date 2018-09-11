@@ -143,7 +143,7 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         if bucket is None:
             bucket=self.dst_bucket_name
         if not skip_stats_validation:
-            # we can't rely on DCP_MUTATION stats when doc timers events are set.
+            # we can't rely on dcp_mutation stats when doc timers events are set.
             # TODO : add this back when getEventProcessingStats works reliably for doc timer events as well
             if not doc_timer_events:
                 count = 0
@@ -152,11 +152,11 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
                 else:
                     stats = self.rest.get_aggregate_event_processing_stats(name)
                 if on_delete:
-                    mutation_type = "DCP_DELETION"
+                    mutation_type = "dcp_deletion"
                 else:
-                    mutation_type = "DCP_MUTATION"
+                    mutation_type = "dcp_mutation"
                 actual_dcp_mutations = stats[mutation_type]
-                # This is required when binary data is involved where DCP_MUTATION will have process DCP_MUTATIONS
+                # This is required when binary data is involved where dcp_mutation will have process DCP_MUTATIONS
                 # but ignore it
                 # wait for eventing node to process dcp mutations
                 log.info("Number of {0} processed till now : {1}".format(mutation_type, actual_dcp_mutations))
