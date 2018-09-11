@@ -1,8 +1,11 @@
 from lib.mc_bin_client import MemcachedClient, MemcachedError
 from lib.memcacheConstants import *
 from subdoc_base import SubdocBaseTest
+from membase.api.rest_client import RestConnection
+from memcached.helper.data_helper import VBucketAwareMemcached
 import copy, json
 import random
+import time
 
 class SubdocSimpleDataset(SubdocBaseTest):
     def setUp(self):
@@ -37,6 +40,26 @@ class SubdocSimpleDataset(SubdocBaseTest):
                 result = False
 
         self.assertTrue(result, dict)
+
+    # Test the fix for MB-31070
+    def test_expiry_after_append(self):
+        # create a doc and set expiry for the doc
+        # append to the doc and check if the expiry is not changed
+
+        self.key = "expiry_after_append"
+        array = {
+            "name": "Douglas Reynholm",
+            "place": "India",
+        }
+        jsonDump = json.dumps(array)
+        self.client.set(self.key, 60, 0, jsonDump)
+        client1 = VBucketAwareMemcached(RestConnection(self.master), 'default')
+        get_meta_resp_before = client1.generic_request(client1.memcached(self.key).getMeta, self.key)
+        self.log.info("Sleeping for 5 sec")
+        time.sleep(5)
+        client1.generic_request(client1.memcached(self.key).append, self.key, 'appended data')
+        get_meta_resp_after = client1.generic_request(client1.memcached(self.key).getMeta, self.key)
+        self.assertEquals(get_meta_resp_before[2], get_meta_resp_after[2]) # 3rd value is expiry value
 
 #SD_COUNTER
     def test_counter(self):
