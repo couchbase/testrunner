@@ -1244,6 +1244,20 @@ class QueryTests(BaseTestCase):
                     'select * from system:completed_requests where requestId  =  "%s"' % requestId)
                 self.assertTrue(result['metrics']['resultCount'] == 0)
 
+    def debug_query(self, query, expected_result, result, function_name):
+        print("### "+function_name+" #### QUERY ::" + str(query) + "::")
+        print("### "+function_name+" #### EXPECTED RESULT ::" + str(expected_result) + "::")
+        print("### "+function_name+" #### FULL RESULT ::"+str(result)+"::")
+
+    def normalize_result(self, result):
+        if len(result['results'][0]) == 0:
+            return 'missing'
+        return result['results'][0]['$1']
+
+    def null_to_none(self, s):
+        if s.lower() == 'null':
+            return None
+        return s
 
 ##############################################################################################
 #
