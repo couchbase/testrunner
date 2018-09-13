@@ -243,197 +243,13 @@ class RQGTests(BaseTestCase):
 
     def test_rqg_concurrent(self):
         # Get Data Map
-        table_map = self.client._get_values_with_type_for_fields_in_table()
-        batches = []
-        batch = []
-        test_case_number = 1
-        count = 1
-        inserted_count = 0
-        self.use_secondary_index = self.run_query_with_secondary or self.run_explain_with_hints
-        # Load All the templates
-        self.test_file_path = self.unzip_template(self.test_file_path)
-        with open(self.test_file_path) as f:
-            query_list = f.readlines()
-        if self.total_queries is None:
-            self.total_queries = len(query_list)
-        for n1ql_query_info in query_list:
-            data = n1ql_query_info
-            batch.append({str(test_case_number): data})
-            if count == self.concurreny_count:
-                inserted_count += len(batch)
-                batches.append(batch)
-                count = 1
-                batch = []
-            else:
-                count += 1
-            test_case_number += 1
-            if test_case_number > self.total_queries:
-                break
-        if inserted_count != len(query_list):
-            batches.append(batch)
-        result_queue = Queue.Queue()
-        input_queue = Queue.Queue()
-        failure_record_queue = Queue.Queue()
-        # Run Test Batches
-        test_case_number = 1
-        thread_list = []
-        for _ in xrange(self.concurreny_count):
-            t = threading.Thread(target=self._testrun_worker, args=(input_queue, result_queue, failure_record_queue))
-            t.daemon = True
-            t.start()
-            thread_list.append(t)
-        for test_batch in batches:
-            # Build all required secondary Indexes
-            list = [data[data.keys()[0]] for data in test_batch]
-            list = self.client._convert_template_query_info(
-                    table_map=table_map,
-                    n1ql_queries=list,
-                    define_gsi_index=self.use_secondary_index,
-                    gen_expected_result=False,
-                    ansi_joins=self.ansi_joins,
-                    partitioned_indexes=self.partitioned_indexes)
-            if not self.subquery:
-                if self.use_secondary_index:
-                    self._generate_secondary_indexes_in_batches(list)
-            # Create threads and run the batch
-            for test_case in list:
-                test_case_input = test_case
-                input_queue.put({"test_case_number": test_case_number, "test_data": test_case_input})
-                test_case_number += 1
-            # Capture the results when done
-            # Drop all the secondary Indexes
-            if self.use_secondary_index:
-                self._drop_secondary_indexes_in_batches(list)
-        for t in thread_list:
-            t.join()
-
-        if self.drop_index:
-            query = 'select * from system:indexes where keyspace_id like "{0}%"'.format(self.database)
-            actual_result = self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_server)
-            index_names = []
-            keyspaces = []
-            for indexes in actual_result['results']:
-                index_names.append(indexes['indexes']['name'])
-                keyspaces.append(indexes['indexes']['keyspace_id'])
-            i = 0
-            for name in index_names:
-                keyspace = keyspaces[i]
-                if name == '#primary':
-                    query = 'drop primary index on {0}'.format(keyspace)
-                else:
-                    query = 'drop index {0}.{1}'.format(keyspace, name)
-                i += 1
-                self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_server, query_params={'timeout': '900s'})
-        if self.drop_bucket:
-            for bucket in self.buckets:
-                BucketOperationHelper.delete_bucket_or_assert(serverInfo=self.n1ql_server, bucket=bucket)
-        # Analyze the results for the failure and assert on the run
-        success, summary, result = self._test_result_analysis(result_queue)
-        self.log.info(result)
-        self.dump_failure_data(failure_record_queue)
-        self.assertTrue(success, summary)
-
-    def test_rqg_concurrent_new(self):
-        # Get Data Map
+        print("TEST_RQG_CONCURRENT")
         table_list = self.client._get_table_list()
         table_map = self.client._get_values_with_type_for_fields_in_table()
         if self.remove_alias:
             for key in table_map.keys():
                 if "alias_name" in table_map[key].keys():
-                    table_map[key].pop("alias_name", None)
-        batches = Queue.Queue()
-        batch = []
-        test_case_number = 1
-        count = 1
-        inserted_count = 0
-        self.use_secondary_index = self.run_query_with_secondary or self.run_explain_with_hints
-        # Load All the templates
-        self.test_file_path = self.unzip_template(self.test_file_path)
-        with open(self.test_file_path) as f:
-            query_list = f.readlines()
-        if self.total_queries is None:
-            self.total_queries = len(query_list)
-        for n1ql_query_info in query_list:
-            data = n1ql_query_info
-            batch.append({str(test_case_number):data})
-            if count == self.concurreny_count:
-                inserted_count += len(batch)
-                batches.put(batch)
-                count = 1
-                batch = []
-            else:
-                count += 1
-            test_case_number += 1
-            if test_case_number > self.total_queries:
-                break
-        if inserted_count != len(query_list):
-            batches.put(batch)
-        result_queue = Queue.Queue()
-        failure_record_queue = Queue.Queue()
-        # Run Test Batches
-        thread_list = []
-        start_test_case_number = 1
-        table_queue_map = {}
-        for table_name in table_list:
-            table_queue_map[table_name] = Queue.Queue()
-        self.log.info("CREATE BATCHES")
-        while not batches.empty():
-            # Build all required secondary Indexes
-            for table_name in table_list:
-                if batches.empty():
-                    break
-                test_batch = batches.get()
-                list = [data[data.keys()[0]] for data in test_batch]
-                table_queue_map[table_name].put({"table_name": table_name, "table_map": table_map, "list": list, "start_test_case_number": start_test_case_number})
-                start_test_case_number += len(list)
-        self.log.info("SPAWNING THREADS")
-        for table_name in table_list:
-            t = threading.Thread(target=self._testrun_worker_new, args=(table_queue_map[table_name], result_queue, failure_record_queue))
-            t.daemon = True
-            t.start()
-            thread_list.append(t)
-            # Drop all the secondary Indexes
-        for t in thread_list:
-            t.join()
-
-        if self.drop_index:
-            query = 'select * from system:indexes where keyspace_id like "{0}%"'.format(self.database)
-            actual_result = self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_server)
-            index_names = []
-            keyspaces = []
-            for indexes in actual_result['results']:
-                index_names.append(indexes['indexes']['name'])
-                keyspaces.append(indexes['indexes']['keyspace_id'])
-            i = 0
-            for name in index_names:
-                keyspace = keyspaces[i]
-                if name == '#primary':
-                    query = 'drop primary index on {0}'.format(keyspace)
-                else:
-                    query = 'drop index {0}.{1}'.format(keyspace, name)
-                i += 1
-                self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_server, query_params={'timeout': '900s'})
-        if self.drop_bucket:
-            for bucket in self.buckets:
-                BucketOperationHelper.delete_bucket_or_assert(serverInfo=self.master, bucket=bucket)
-        # Analyze the results for the failure and assert on the run
-        success, summary, result = self._test_result_analysis(result_queue)
-        self.log.info(result)
-        self.dump_failure_data(failure_record_queue)
-        self.assertTrue(success, summary)
-
-    def test_rqg_concurrent_with_secondary(self):
-        # Get Data Map
-        table_list = self.client._get_table_list()
-        table_map = self.client._get_values_with_type_for_fields_in_table()
-        for key in table_map.keys():
-            if "alias_name" in table_map[key].keys():
-                table_map[key].pop("alias_name")
-        batches = Queue.Queue()
-        batch = []
-        test_case_number = 1
-        count = 1
-        inserted_count = 0
+                    table_map[key].pop("alias_name")
         self.use_secondary_index = self.run_query_with_secondary or self.run_explain_with_hints
 
         # Load query templates from text file
@@ -444,6 +260,14 @@ class RQGTests(BaseTestCase):
             self.total_queries = len(query_template_list)
 
         # create query template batches
+
+        batches = Queue.Queue()
+
+        batch = []
+        test_case_number = 1
+        count = 1
+        inserted_count = 0
+
         for template_query in query_template_list:
             data = template_query
             batch.append({str(test_case_number): data})
@@ -457,7 +281,7 @@ class RQGTests(BaseTestCase):
             test_case_number += 1
             if test_case_number > self.total_queries:
                 break
-        if inserted_count != len(query_template_list):
+        if len(batch) > 0:
             batches.put(batch)
 
         result_queue = Queue.Queue()
@@ -468,7 +292,10 @@ class RQGTests(BaseTestCase):
         while not batches.empty():
             # Build all required secondary Indexes
             for table_name in table_list:
-                test_batch = batches.get()
+                try:
+                    test_batch = batches.get(False)
+                except Exception, ex:
+                    break
                 test_query_template_list = [test_data[test_data.keys()[0]] for test_data in test_batch]
                 # Create threads and run the batch
                 t = threading.Thread(target=self._testrun_secondary_index_worker, args=(table_name, table_map, test_query_template_list,
@@ -485,6 +312,153 @@ class RQGTests(BaseTestCase):
         success, summary, result = self._test_result_analysis(result_queue)
         self.log.info(result)
         self.dump_failure_data(failure_record_queue)
+        print("TEST_RQG_CONCURRENT")
+        self.assertTrue(success, summary)
+
+    def test_rqg_concurrent_new(self):
+        # Get Data Map
+        print("TEST_RQG_CONCURRENT_NEW")
+        table_list = self.client._get_table_list()
+        table_map = self.client._get_values_with_type_for_fields_in_table()
+        if self.remove_alias:
+            for key in table_map.keys():
+                if "alias_name" in table_map[key].keys():
+                    table_map[key].pop("alias_name")
+        self.use_secondary_index = self.run_query_with_secondary or self.run_explain_with_hints
+
+        # Load query templates from text file
+        self.test_file_path = self.unzip_template(self.test_file_path)
+        with open(self.test_file_path) as f:
+            query_template_list = f.readlines()
+        if self.total_queries is None:
+            self.total_queries = len(query_template_list)
+
+        # create query template batches
+        batches = Queue.Queue()
+        batch = []
+        test_case_number = 1
+        count = 1
+        inserted_count = 0
+
+        for template_query in query_template_list:
+            data = template_query
+            batch.append({str(test_case_number): data})
+            if count == self.concurreny_count:
+                inserted_count += len(batch)
+                batches.put(batch)
+                count = 1
+                batch = []
+            else:
+                count += 1
+            test_case_number += 1
+            if test_case_number > self.total_queries:
+                break
+        if len(batch) > 0:
+            batches.put(batch)
+
+        result_queue = Queue.Queue()
+        failure_record_queue = Queue.Queue()
+        # Run Test Batches
+        thread_list = []
+        start_test_case_number = 1
+        while not batches.empty():
+            # Build all required secondary Indexes
+            for table_name in table_list:
+                try:
+                    test_batch = batches.get(False)
+                except Exception, ex:
+                    break
+                test_query_template_list = [test_data[test_data.keys()[0]] for test_data in test_batch]
+                # Create threads and run the batch
+                t = threading.Thread(target=self._testrun_secondary_index_worker, args=(table_name, table_map, test_query_template_list,
+                                                                                        start_test_case_number, result_queue,
+                                                                                        failure_record_queue))
+                start_test_case_number += len(test_query_template_list)
+                t.daemon = True
+                t.start()
+                thread_list.append(t)
+                # Drop all the secondary Indexes
+            for t in thread_list:
+                t.join()
+        # Analyze the results for the failure and assert on the run
+        success, summary, result = self._test_result_analysis(result_queue)
+        self.log.info(result)
+        self.dump_failure_data(failure_record_queue)
+        print("TEST_RQG_CONCURRENT_NEW")
+        self.assertTrue(success, summary)
+
+    def test_rqg_concurrent_with_secondary(self):
+        # Get Data Map
+        print("TEST_RQG_CONCURRENT_WITH_SECONDARY")
+        table_list = self.client._get_table_list()
+        table_map = self.client._get_values_with_type_for_fields_in_table()
+        if self.remove_alias:
+            for key in table_map.keys():
+                if "alias_name" in table_map[key].keys():
+                    table_map[key].pop("alias_name")
+        self.use_secondary_index = self.run_query_with_secondary or self.run_explain_with_hints
+
+        # Load query templates from text file
+        self.test_file_path = self.unzip_template(self.test_file_path)
+        with open(self.test_file_path) as f:
+            query_template_list = f.readlines()
+        if self.total_queries is None:
+            self.total_queries = len(query_template_list)
+
+        # create query template batches
+
+        batches = Queue.Queue()
+
+        batch = []
+        test_case_number = 1
+        count = 1
+        inserted_count = 0
+
+        for template_query in query_template_list:
+            data = template_query
+            batch.append({str(test_case_number): data})
+            if count == self.concurreny_count:
+                inserted_count += len(batch)
+                batches.put(batch)
+                count = 1
+                batch = []
+            else:
+                count += 1
+            test_case_number += 1
+            if test_case_number > self.total_queries:
+                break
+        if len(batch) > 0:
+            batches.put(batch)
+
+        result_queue = Queue.Queue()
+        failure_record_queue = Queue.Queue()
+        # Run Test Batches
+        thread_list = []
+        start_test_case_number = 1
+        while not batches.empty():
+            # Build all required secondary Indexes
+            for table_name in table_list:
+                try:
+                    test_batch = batches.get(False)
+                except Exception, ex:
+                    break
+                test_query_template_list = [test_data[test_data.keys()[0]] for test_data in test_batch]
+                # Create threads and run the batch
+                t = threading.Thread(target=self._testrun_secondary_index_worker, args=(table_name, table_map, test_query_template_list,
+                                                                                        start_test_case_number, result_queue,
+                                                                                        failure_record_queue))
+                start_test_case_number += len(test_query_template_list)
+                t.daemon = True
+                t.start()
+                thread_list.append(t)
+                # Drop all the secondary Indexes
+            for t in thread_list:
+                t.join()
+        # Analyze the results for the failure and assert on the run
+        success, summary, result = self._test_result_analysis(result_queue)
+        self.log.info(result)
+        self.dump_failure_data(failure_record_queue)
+        print("TEST_RQG_CONCURRENT_WITH_SECONDARY")
         self.assertTrue(success, summary)
 
     def test_rqg_crud_ops(self):
@@ -597,8 +571,9 @@ class RQGTests(BaseTestCase):
             t.start()
             thread_list.append(t)
             # Drop all the secondary Indexes
-            for t in thread_list:
-                t.join()
+
+        for t in thread_list:
+            t.join()
 
         if self.use_secondary_index and self.drop_secondary_indexes:
             self._drop_secondary_indexes_in_batches(sql_n1ql_index_map_list)
