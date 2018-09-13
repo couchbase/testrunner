@@ -237,7 +237,7 @@ class QueryNewTuqTests(QueryTests):
                                 'Duplicate result alias name',
                           'SELECT test.$obj0 as points FROM {0} AS TEST ' +
                            'GROUP BY $obj0 AS GROUP_POINT' :
-                                'syntax error'}
+                                'Expression must be a group key or aggregate'}
         self.negative_common_body(queries_errors)
 
     def test_alias_from_clause(self):

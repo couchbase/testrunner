@@ -734,6 +734,7 @@ class QueryTests(BaseTestCase):
                     check_code = True
                 try:
                     query = self.gen_results.generate_query(query_template)
+                    print("####### QUERY ::"+str(query)+"::")
                     actual_result = self.run_cbq_query(query.format(bucket.name))
                 except CBQError as ex:
                     self.log.error(ex)

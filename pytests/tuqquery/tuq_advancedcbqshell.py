@@ -328,7 +328,10 @@ class AdvancedQueryTests(QueryTests):
         queries = ['\SET -pretty true;',
                    'select * from default limit 5;']
         pretty = self.execute_commands_inside(self.cbqpath,'',queries,'','','','')
-        pretty_json = json.loads(pretty)
+        try:
+            pretty_json = json.loads(pretty)
+        except Exception, ex:
+            self.log.error("Incorrect JSON object is "+str(pretty)+"")
         pretty_size = pretty_json['metrics']['resultSize']
         queries = ['\SET -pretty false;',
                    'select * from default limit 5;']
