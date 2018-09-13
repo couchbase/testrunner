@@ -843,9 +843,13 @@ class QueryTests(BaseTestCase):
                 query = query + ";"
                 for bucket in self.buckets:
                     query = query.replace(bucket.name, bucket.name + "_shadow")
-                result = RestConnection(self.cbas_node).execute_statement_on_cbas(query,
+                result1 = RestConnection(self.cbas_node).execute_statement_on_cbas(query,
                                                                                   "immediate")
-                result = json.loads(result)
+                try:
+                    result = json.loads(result1)
+                except Exception, ex:
+                    self.log.error("CANNOT LOAD QUERY RESULT IN JSON: %s" % ex.message)
+                    self.log.error("INCORRECT DOCUMENT IS: " + str(result1))
             else:
                 result = rest.query_tool(query, self.n1ql_port, query_params=query_params,
                                          is_prepared=is_prepared, named_prepare=self.named_prepare,
@@ -871,7 +875,11 @@ class QueryTests(BaseTestCase):
                         output1 = '{%s' % output
                     else:
                         output1 = output
-                    result = json.loads(output1)
+                    try:
+                        result = json.loads(output1)
+                    except Exception, ex:
+                        self.log.error("CANNOT LOAD QUERY RESULT IN JSON: %s" % ex.message)
+                        self.log.error("INCORRECT DOCUMENT IS: "+str(output1))
         if isinstance(result, str) or 'errors' in result:
             raise CBQError(result, server.ip)
         if 'metrics' in result:
