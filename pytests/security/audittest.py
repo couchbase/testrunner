@@ -32,11 +32,11 @@ class auditTest(BaseTestCase):
         super(auditTest, self).setUp()
         self.ipAddress = self.getLocalIPAddress()
         self.eventID = self.input.param('id', None)
-	auditTemp = audit(host=self.master)
-	currentState = auditTemp.getAuditStatus()
-	self.log.info ("Current status of audit on ip - {0} is {1}".format(self.master.ip, currentState))
-	if not currentState:
-	    self.log.info ("Enabling Audit ")
+        auditTemp = audit(host=self.master)
+        currentState = auditTemp.getAuditStatus()
+        self.log.info("Current status of audit on ip - {0} is {1}".format(self.master.ip, currentState))
+        if not currentState:
+            self.log.info("Enabling Audit ")
             auditTemp.setAuditEnable('true')
             self.sleep(30)
         rest = RestConnection(self.master)

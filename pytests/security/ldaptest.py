@@ -13,6 +13,7 @@ from remote.remote_util import RemoteMachineShellConnection
 from random import randint
 from clitest.cli_base import CliBaseTest
 
+
 class ServerInfo():
     def __init__(self,
                  ip,
@@ -26,7 +27,6 @@ class ServerInfo():
         self.ssh_password = ssh_password
         self.port = port
         self.ssh_key = ssh_key
-
 
 
 class ldaptest(BaseTestCase):
