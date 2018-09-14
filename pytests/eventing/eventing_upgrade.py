@@ -43,7 +43,7 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
     def tearDown(self):
         super(EventingUpgrade, self).tearDown()
 
-    def test_offline_upgrade_with_eventing(self):
+    def test_offline_upgrade_with_eventing_pre_vulcan(self):
         self._install(self.servers[:self.nodes_init])
         self.operations(self.servers[:self.nodes_init], services="kv,kv,index,n1ql")
         self.create_buckets()
@@ -69,6 +69,50 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
         self.sleep(180)
         self.validate_eventing(self.dst_bucket_name, self.docs_per_day * 2016)
 
+    def test_offline_upgrade_with_eventing(self):
+        self._install(self.servers[:self.nodes_init])
+        self.operations(self.servers[:self.nodes_init], services="kv,eventing,index,n1ql")
+        self.create_buckets()
+        # Load the data in older version
+        self.load(self.gens_load, buckets=self.src_bucket, verify_data=False)
+        self.restServer = self.get_nodes_from_services_map(service_type="eventing")
+        self.rest = RestConnection(self.restServer)
+        # Deploy the bucket op function
+        log.info("Deploy the function in the initial version")
+        self.import_function(EXPORTED_FUNCTION.BUCKET_OP)
+        # Validate the data
+        self.validate_eventing(self.dst_bucket_name, self.docs_per_day * 2016)
+        # offline upgrade all the nodes
+        upgrade_threads = self._async_update(self.upgrade_version, self.servers)
+        for upgrade_thread in upgrade_threads:
+            upgrade_thread.join()
+        self.sleep(120)
+        success_upgrade = True
+        while not self.queue.empty():
+            success_upgrade &= self.queue.get()
+        if not success_upgrade:
+            self.fail("Upgrade failed!")
+        self.add_built_in_server_user()
+        self.restServer = self.get_nodes_from_services_map(service_type="eventing")
+        self.rest = RestConnection(self.restServer)
+        # Deploy the bucket op with timer function
+        self.import_function(EXPORTED_FUNCTION.BUCKET_OP_WITH_TIMER)
+        # Validate the data
+        self.validate_eventing(self.dst_bucket_name1, self.docs_per_day * 2016)
+        # Delete the data on source bucket
+        self.load(self.gens_load, buckets=self.src_bucket, verify_data=False, op_type='delete')
+        # Validate the data for both the functions
+        self.validate_eventing(self.dst_bucket_name, 0)
+        self.validate_eventing(self.dst_bucket_name1, 0)
+        # add data to source bucket
+        self.load(self.gens_load, buckets=self.src_bucket, verify_data=False)
+        # Validate the data for both the functions
+        self.validate_eventing(self.dst_bucket_name, self.docs_per_day * 2016)
+        self.validate_eventing(self.dst_bucket_name1, self.docs_per_day * 2016)
+        # Undeploy and delete both the functions
+        self.undeploy_and_delete_function("test_import_function_1")
+        self.undeploy_and_delete_function("test_import_function_2")
+
     def test_online_upgrade_with_regular_rebalance_with_eventing(self):
         self._install(self.servers[:self.nodes_init])
         self.initial_version = self.upgrade_version
@@ -80,6 +124,7 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
         self.load(self.gens_load, buckets=self.src_bucket, verify_data=False)
         self.restServer = self.get_nodes_from_services_map(service_type="eventing")
         self.rest = RestConnection(self.restServer)
+        # Deploy the bucket op function
         log.info("Deploy the function in the initial version")
         self.import_function(EXPORTED_FUNCTION.BUCKET_OP)
         # Do validations
@@ -89,8 +134,23 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
         self.restServer = self.get_nodes_from_services_map(service_type="eventing")
         self.rest = RestConnection(self.restServer)
         self.add_built_in_server_user()
+        # Deploy the bucket op with timer function
         self.import_function(EXPORTED_FUNCTION.BUCKET_OP_WITH_TIMER)
+        # Do validations
         self.validate_eventing(self.dst_bucket_name1, self.docs_per_day * 2016)
+        # Delete the data on source bucket
+        self.load(self.gens_load, buckets=self.src_bucket, verify_data=False, op_type='delete')
+        # Validate the data for both the functions
+        self.validate_eventing(self.dst_bucket_name, 0)
+        self.validate_eventing(self.dst_bucket_name1, 0)
+        # add data to source bucket
+        self.load(self.gens_load, buckets=self.src_bucket, verify_data=False)
+        # Validate the data for both the functions
+        self.validate_eventing(self.dst_bucket_name, self.docs_per_day * 2016)
+        self.validate_eventing(self.dst_bucket_name1, self.docs_per_day * 2016)
+        # Undeploy and delete both the functions
+        self.undeploy_and_delete_function("test_import_function_1")
+        self.undeploy_and_delete_function("test_import_function_2")
 
     def test_online_upgrade_with_swap_rebalance_with_eventing(self):
         self._install(self.servers[:self.nodes_init])
@@ -103,6 +163,7 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
         self.load(self.gens_load, buckets=self.src_bucket, verify_data=False)
         self.restServer = self.get_nodes_from_services_map(service_type="eventing")
         self.rest = RestConnection(self.restServer)
+        # Deploy the bucket op function
         log.info("Deploy the function in the initial version")
         self.import_function(EXPORTED_FUNCTION.BUCKET_OP)
         # Do validations
@@ -112,8 +173,23 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
         self.restServer = self.get_nodes_from_services_map(service_type="eventing")
         self.rest = RestConnection(self.restServer)
         self.add_built_in_server_user()
+        # Deploy the bucket op with timer function
         self.import_function(EXPORTED_FUNCTION.BUCKET_OP_WITH_TIMER)
+        # Do validations
         self.validate_eventing(self.dst_bucket_name1, self.docs_per_day * 2016)
+        # Delete the data on source bucket
+        self.load(self.gens_load, buckets=self.src_bucket, verify_data=False, op_type='delete')
+        # Validate the data for both the functions
+        self.validate_eventing(self.dst_bucket_name, 0)
+        self.validate_eventing(self.dst_bucket_name1, 0)
+        # add data to source bucket
+        self.load(self.gens_load, buckets=self.src_bucket, verify_data=False)
+        # Validate the data for both the functions
+        self.validate_eventing(self.dst_bucket_name, self.docs_per_day * 2016)
+        self.validate_eventing(self.dst_bucket_name1, self.docs_per_day * 2016)
+        # Undeploy and delete both the functions
+        self.undeploy_and_delete_function("test_import_function_1")
+        self.undeploy_and_delete_function("test_import_function_2")
 
     def test_online_upgrade_with_failover_rebalance_with_eventing(self):
         self._install(self.servers[:self.nodes_init])
@@ -126,6 +202,7 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
         self.load(self.gens_load, buckets=self.src_bucket, verify_data=False)
         self.restServer = self.get_nodes_from_services_map(service_type="eventing")
         self.rest = RestConnection(self.restServer)
+        # Deploy the bucket op function
         log.info("Deploy the function in the initial version")
         self.import_function(EXPORTED_FUNCTION.BUCKET_OP)
         # Do validations
@@ -135,8 +212,23 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
         self.restServer = self.get_nodes_from_services_map(service_type="eventing")
         self.rest = RestConnection(self.restServer)
         self.add_built_in_server_user()
+        # Deploy the bucket op with timer function
         self.import_function(EXPORTED_FUNCTION.BUCKET_OP_WITH_TIMER)
+        # Do validations
         self.validate_eventing(self.dst_bucket_name1, self.docs_per_day * 2016)
+        # Delete the data on source bucket
+        self.load(self.gens_load, buckets=self.src_bucket, verify_data=False, op_type='delete')
+        # Validate the data for both the functions
+        self.validate_eventing(self.dst_bucket_name, 0)
+        self.validate_eventing(self.dst_bucket_name1, 0)
+        # add data to source bucket
+        self.load(self.gens_load, buckets=self.src_bucket, verify_data=False)
+        # Validate the data for both the functions
+        self.validate_eventing(self.dst_bucket_name, self.docs_per_day * 2016)
+        self.validate_eventing(self.dst_bucket_name1, self.docs_per_day * 2016)
+        # Undeploy and delete both the functions
+        self.undeploy_and_delete_function("test_import_function_1")
+        self.undeploy_and_delete_function("test_import_function_2")
 
     def import_function(self, function):
         script_dir = os.path.dirname(__file__)
@@ -189,8 +281,8 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
             self.cluster.rebalance(self.servers[:self.nodes_init], [server_in], [self.servers[i]],
                                    services=[service_in])
             i += 1
-        self._new_master(self.servers[self.nodes_init])
-        self.cluster.rebalance(self.servers[:self.num_servers], [servers_in[0]], [self.servers[0]],
+        self._new_master(self.servers[self.nodes_init + 1])
+        self.cluster.rebalance(self.servers[self.nodes_init + 1:self.num_servers], [servers_in[0]], [self.servers[0]],
                                services=[services[0]])
 
     def online_upgrade_with_failover(self, services=None):
@@ -220,17 +312,7 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
         log.info("failover and rebalance nodes")
         self.cluster.failover(self.servers[:self.num_servers], failover_nodes=servers_out, graceful=False)
         self.cluster.rebalance(self.servers[:self.num_servers], [], servers_out)
-        self.baseUrl = "http://{0}:{1}/".format(self.master.ip, self.master.port)
-        http_res, success = self.rest.init_http_request(self.baseUrl + 'pools/default')
-        log.info("Output of pools/default from master node after upgrade is \n{0} ".format(
-            json.dumps(http_res, sort_keys=True,
-                       indent=4)))
-        eventing_server = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
-        self.baseUrl = "http://{0}:{1}/".format(eventing_server.ip, eventing_server.port)
-        http_res, success = self.rest.init_http_request(self.baseUrl + 'pools/default')
-        log.info("Output of pools/default from eventing node after upgrade is \n{0} ".format(
-            json.dumps(http_res, sort_keys=True,
-                       indent=4)))
+        self.sleep(180)
 
     def _new_master(self, server):
         self.master = server
@@ -262,7 +344,9 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
         count = 0
         stats_dst = self.rest.get_bucket_stats(bucket_name)
         while stats_dst["curr_items"] != no_of_docs and count < 20:
-            self.sleep(30, message="Waiting for handler code to complete all bucket operations...")
+            message = "Waiting for handler code to complete bucket operations... Current : {0} Expected : {1}". \
+                format(stats_dst["curr_items"], no_of_docs)
+            self.sleep(30, message=message)
             count += 1
             stats_dst = self.rest.get_bucket_stats(bucket_name)
         if stats_dst["curr_items"] != no_of_docs:
@@ -270,3 +354,10 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
             raise Exception(
                 "Bucket operations from handler code took lot of time to complete or didn't go through. Current : {0} "
                 "Expected : {1} ".format(stats_dst["curr_items"], no_of_docs))
+
+    def undeploy_and_delete_function(self, function):
+        log.info("Undeploying function : {0}".format(function))
+        content = self.rest.undeploy_function(function)
+        self.sleep(180)
+        log.info("Deleting function : {0}".format(function))
+        content1 = self.rest.delete_single_function(function)

@@ -1138,7 +1138,35 @@ class EventingRebalance(EventingBaseTest):
                 log.info(str(ex))
                 stats_map = self.get_index_stats(perNode=False)
                 item_count_dst_bucket = stats_map[self.dst_bucket_name]["#primary"]["items_count"]
-                log.info("Destination item count : {0}".format(item_count_dst_bucket))
+                log.info("Destination item count : {0}\n\n".format(item_count_dst_bucket))
+                # See MB-30764, Hence adding these queries
+                n1ql_query1 = "select meta().id, * from metadata where \
+                                meta().id not like 'eventing::%::vb::%' and \
+                                meta().id not like 'eventing::%:rt:%' and \
+                                meta().id not like 'eventing::%:sp'"
+                result1 = self.n1ql_helper.run_cbq_query(query=n1ql_query1, server=self.n1ql_node)
+                log.info("\n RESULTS for query {1} : count : {2} \n\n{0} \n\n".format(json.dumps(result1["results"],
+                                                                                                sort_keys=True,
+                                                                                                indent=4),
+                                                                                      n1ql_query1,
+                                                                                      len(result1["results"])))
+                n1ql_query2 = "select meta().id, * from metadata where \
+                                meta().id like 'eventing::%:sp'\
+                                and sta != stp"
+                result2 = self.n1ql_helper.run_cbq_query(query=n1ql_query2, server=self.n1ql_node)
+                log.info("\n RESULTS for query {1} : count : {2} \n\n{0} \n\n".format(json.dumps(result2["results"],
+                                                                                                sort_keys=True,
+                                                                                                indent=4),
+                                                                                      n1ql_query2,
+                                                                                      len(result2["results"])))
+                n1ql_query3 = "select meta().id, * from metadata where\
+                                meta().id like 'eventing::%:rt:%'"
+                result3 = self.n1ql_helper.run_cbq_query(query=n1ql_query3, server=self.n1ql_node)
+                log.info("\n RESULTS for query {1} : count : {2} \n\n{0} \n\n".format(json.dumps(result3["results"],
+                                                                                                sort_keys=True,
+                                                                                                indent=4),
+                                                                                      n1ql_query3,
+                                                                                      len(result3["results"])))
                 if item_count_dst_bucket != self.docs_per_day * 2016 * self.num_functions:
                     raise
         else:
