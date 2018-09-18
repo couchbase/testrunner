@@ -107,8 +107,7 @@ class UpgradeTests(NewUpgradeBaseTest, EventingBaseTest):
         servers_available = copy.deepcopy(self.servers)
         if len(self.servers) > int(self.nodes_init):
             servers_available = servers_available[:self.nodes_init]
-        if not self.skip_init_check_cbserver:
-            self.quota = self._initialize_nodes(self.cluster, servers_available,\
+        self.quota = self._initialize_nodes(self.cluster, servers_available,\
                                              self.disabled_consistent_view,\
                                         self.rebalanceIndexWaitingDisabled,\
                                         self.rebalanceIndexPausingDisabled,\
