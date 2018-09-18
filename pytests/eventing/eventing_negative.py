@@ -167,7 +167,7 @@ class EventingNegative(EventingBaseTest):
                                    'create', compression=self.sdk_compression)
         # create a function which sleeps for 5 secs and set execution_timeout to 1s
         body = self.create_save_function_body(self.function_name, HANDLER_CODE_ERROR.EXECUTION_TIME_MORE_THAN_TIMEOUT,
-                                              execution_timeout=1)
+                                              execution_timeout=30)
         # deploy the function
         self.deploy_function(body)
         # This is intentionally added so that we wait for some mutations to process and we decide none are processed
@@ -183,7 +183,7 @@ class EventingNegative(EventingBaseTest):
             exec_timeout_count += out[0]["failure_stats"]["timeout_count"]
         # check whether all the function executions timed out and is equal to number of docs created
         if exec_timeout_count != num_docs:
-            self.fail("Not all event executions timed out : Expected : {0} Actual : {1}".format(len(keys),
+            self.fail("Not all event executions timed out : Expected : {0} Actual : {1}".format(num_docs,
                                                                                                 exec_timeout_count))
         self.undeploy_and_delete_function(body)
 

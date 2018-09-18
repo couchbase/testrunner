@@ -255,7 +255,7 @@ class EventingTools(EventingBaseTest, EnterpriseBackupRestoreBase, NewUpgradeBas
                                      file_name="Function_396275055_test_export_function.json")
         # deploy the function
         self._couchbase_cli_eventing(eventing_node, "Function_396275055_test_export_function", "deploy",
-                                     "SUCCESS: Function deployed")
+                                     "SUCCESS: Request to deploy the function was accepted")
         self.verify_eventing_results("Function_396275055_test_export_function", self.docs_per_day * 2016,
                                      skip_stats_validation=True)
         # list the function
@@ -281,10 +281,11 @@ class EventingTools(EventingBaseTest, EnterpriseBackupRestoreBase, NewUpgradeBas
             self.fail("file does not exist after export-all")
         # undeploy the function
         self._couchbase_cli_eventing(eventing_node, "Function_396275055_test_export_function", "undeploy",
-                                     "SUCCESS: Function undeployed")
+                                     "SUCCESS: Request to undeploy the function was accepted")
+        self.sleep(120)
         # delete the function
         self._couchbase_cli_eventing(eventing_node, "Function_396275055_test_export_function", "delete",
-                                     "SUCCESS: Function deleted")
+                                     "SUCCESS: Request to delete the function was accepted")
 
     def _couchbase_cli_eventing(self, host, function_name, operation, result, file_name=None, name=True):
         remote_client = RemoteMachineShellConnection(host)
