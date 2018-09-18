@@ -1228,7 +1228,10 @@ def main():
         print "verify installation..."
         success = True
         for server in input.servers:
-            success &= RemoteMachineShellConnection(server).is_couchbase_installed()
+            success= RemoteMachineShellConnection(server).is_couchbase_installed()
+            if not success:
+                print("installation failed on:{}".format(server))
+            success &= success
         if not success:
             sys.exit(log_install_failed)
     if "product" in input.test_params and input.test_params["product"] in ["moxi", "moxi-server"]:
