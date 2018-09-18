@@ -375,6 +375,22 @@ class QueryTests(BaseTestCase):
             self.log.info("SUCCESS: Role(s) %s assigned to %s"
                           %(user_role['roles'], user_role['id']))
 
+    def does_test_meet_server_version(self, required_major_version = -1, required_minor_version1 = -1, required_minor_version2 = -1):
+        rest = RestConnection(self.master)
+        versions = rest.get_nodes_versions()
+        server_version = versions[0].split('-')[0]
+        server_version_major = int(server_version.split(".")[0])
+        server_version_minor1 = int(server_version.split(".")[1])
+        server_version_minor2 = int(server_version.split(".")[2])
+
+        if server_version_major >= required_major_version:
+            if server_version_minor1 >= required_minor_version1:
+                if server_version_minor2 >= required_minor_version2:
+                    return True
+
+        return False
+
+
 ##############################################################################################
 #
 #   Query Runner
@@ -734,7 +750,6 @@ class QueryTests(BaseTestCase):
                     check_code = True
                 try:
                     query = self.gen_results.generate_query(query_template)
-                    print("####### QUERY ::"+str(query)+"::")
                     actual_result = self.run_cbq_query(query.format(bucket.name))
                 except CBQError as ex:
                     self.log.error(ex)

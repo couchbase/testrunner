@@ -229,15 +229,18 @@ class QueryNewTuqTests(QueryTests):
                               "Results are incorrect.Actual %s.\n Expected: %s.\n" % (
                                         actual_result['results'], expected_result))
 
+
     def test_simple_negative_alias(self):
         queries_errors = {'SELECT $str0._last_name as *' : 'syntax error',
                           'SELECT $str0._last_name as DATABASE ?' : 'syntax error',
                           'SELECT $str0 AS NULL FROM {0}' : 'syntax error',
                           'SELECT $str1 as $str0, $str0 FROM {0}' :
-                                'Duplicate result alias name',
-                          'SELECT test.$obj0 as points FROM {0} AS TEST ' +
-                           'GROUP BY $obj0 AS GROUP_POINT' :
-                                'Expression must be a group key or aggregate'}
+                                'Duplicate result alias name'}
+
+        if self.does_test_meet_server_version(6, 5, 0):
+            queries_errors['SELECT test.$obj0 as points FROM {0} AS TEST ' +
+                           'GROUP BY $obj0 AS GROUP_POINT'] = 'Expression must be a group key or aggregate'
+
         self.negative_common_body(queries_errors)
 
     def test_alias_from_clause(self):
