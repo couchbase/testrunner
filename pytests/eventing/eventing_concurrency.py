@@ -17,7 +17,7 @@ class EventingConcurrency(EventingBaseTest):
             self.bucket_size = 100
             # This is needed as we have increased the context size to 93KB. If this is not increased the metadata
             # bucket goes into heavy DGM
-            self.metadata_bucket_size = 400
+            self.metadata_bucket_size = 300
             log.info(self.bucket_size)
             bucket_params = self._create_bucket_params(server=self.server, size=self.bucket_size,
                                                        replicas=self.replicas)
@@ -27,6 +27,8 @@ class EventingConcurrency(EventingBaseTest):
                                                 bucket_params=bucket_params)
             self.src_bucket = RestConnection(self.master).get_buckets()
             self.cluster.create_standard_bucket(name=self.dst_bucket_name, port=STANDARD_BUCKET_PORT + 1,
+                                                bucket_params=bucket_params)
+            self.cluster.create_standard_bucket(name=self.dst_bucket_name1, port=STANDARD_BUCKET_PORT + 1,
                                                 bucket_params=bucket_params)
             self.cluster.create_standard_bucket(name=self.metadata_bucket_name, port=STANDARD_BUCKET_PORT + 1,
                                                 bucket_params=bucket_params_meta)
