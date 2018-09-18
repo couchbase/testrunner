@@ -143,7 +143,7 @@ class EventingN1QL(EventingBaseTest):
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
         body = self.create_save_function_body(self.function_name,HANDLER_CODE.ANONYMOUS,dcp_stream_boundary="from_now"
-                                              ,execution_timeout=5)
+                                              )
         self.deploy_function(body)
         #create a mutation via N1QL
         self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
@@ -157,7 +157,7 @@ class EventingN1QL(EventingBaseTest):
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
         body = self.create_save_function_body(self.function_name, HANDLER_CODE.RECURSION_FUNCTION,
-                                              dcp_stream_boundary="from_now",execution_timeout=5)
+                                              dcp_stream_boundary="from_now")
         self.deploy_function(body)
         # create a mutation via N1QL
         self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
@@ -177,8 +177,6 @@ class EventingN1QL(EventingBaseTest):
         except Exception as e:
             if "Only function declaration are allowed in global scope" not in str(e):
                 self.fail("Deployment is expected to be failed but no message of failure")
-
-
 
     def test_empty_handler(self):
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
