@@ -2076,6 +2076,8 @@ class RemoteMachineShellConnection:
 
         log.info('******start install_server_win ********')
         if windows_msi:
+            self.remove_win_backup_dir()
+            self.remove_win_collect_tmp()
             if enable_ipv6:
                 output, error = self.execute_command("cd /cygdrive/c/tmp;"
                                                  "msiexec /i {0}.msi USE_IPV6=true /qn "\
