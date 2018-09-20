@@ -167,7 +167,14 @@ class basic_ops(BaseTestCase):
         # check with compression_mode as active, passive and off
         document_size= self.input.param('document_size', 20)
         gens_load = self.generate_docs_bigdata(docs_per_day=1, document_size=(document_size * 1024000))
-        self.load(gens_load, buckets=self.src_bucket, verify_data=False, batch_size=10)
+
+        try:
+            self.load(gens_load, buckets=self.src_bucket, verify_data=False, batch_size=10)
+        except MemcachedError as error:
+            if (document_size > 20):
+                self.log.info("expected to FAIL")
+            else:
+                self.fail("Failed when suppose to pass")
 
         mc = MemcachedClient(self.master.ip, 11210)
         mc.sasl_auth_plain(self.master.rest_username, self.master.rest_password)
@@ -178,7 +185,10 @@ class basic_ops(BaseTestCase):
         else:
             self.assertEquals(int(stats['curr_items']), 1)
             gens_update = self.generate_docs_bigdata(docs_per_day=1, document_size=(21 * 1024000))
-            self.load(gens_update, buckets=self.src_bucket, verify_data=False, batch_size=10)
+            try:
+                self.load(gens_update, buckets=self.src_bucket, verify_data=False, batch_size=10)
+            except MemcachedError as error:
+                self.log.info("expected to FAIL")
             stats = mc.stats()
             self.assertEquals(int(stats['curr_items']), 1)
 
