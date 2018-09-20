@@ -7,7 +7,7 @@ from random import randint
 from datetime import datetime
 
 
-class QueryHelper(object):
+class RQGQueryHelper(object):
     def _find_hints(self, n1ql_query):
         map = self._divide_sql(n1ql_query)
         select_from = map["select_from"]

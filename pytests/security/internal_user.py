@@ -68,4 +68,8 @@ class InternalUser(UserBase):
                      "spock feature.")
             return
         self.delete_user()
-        self.create_user()
+        return self.create_user()
+
+    def get_user(self, user_id, host):
+        rest = RestConnection(host)
+        return rest.get_user(user_id)
