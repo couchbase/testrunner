@@ -124,9 +124,15 @@ class QueryTests(BaseTestCase):
         self.log.info('-'*100)
         self.log.info('Temp fix for MB-16888')
         if self.cluster_ops == False:
-           self.shell.execute_command("killall -9 cbq-engine")
-           self.shell.execute_command("killall -9 indexer")
-           self.sleep(30, 'wait for indexer')
+            output, error = self.shell.execute_command("killall -9 cbq-engine")
+            output1, error1 = self.shell.execute_command("killall -9 indexer")
+            if (len(error) == 0 or len(error1) == 0):
+                self.sleep(30, 'wait for indexer')
+            else:
+                if (len(error) > 0):
+                    self.log.info("Error executing shell command: killall -9 cbq-engine! Error - " + str(error[0]))
+                if (len(error1) > 0):
+                    self.log.info("Error executing shell command: killall -9 indexer! Error - " + str(error1[0]))
         self.log.info('-'*100)
         if self.analytics:
             self.setup_analytics()
@@ -1134,8 +1140,22 @@ class QueryTests(BaseTestCase):
             for bucket in self.buckets:
                 if self.primary_indx_drop:
                     self.log.info("Dropping primary index for %s ..." % bucket.name)
-                    self.query = "DROP PRIMARY INDEX ON %s using %s" % (bucket.name, self.primary_indx_type)
-                    self.sleep(6, 'Sleep for some time after index drop')
+                    try:
+                        self.query = "DROP PRIMARY INDEX ON %s using %s" % (
+                            bucket.name, self.primary_indx_type)
+                        self.run_cbq_query(self.query)
+                        self.query = "select * from system:indexes where name='#primary' and keyspace_id = %s" % bucket.name
+                        attempts = 0
+                        while attempts<6:
+                            res = self.run_cbq_query(self.query)
+                            if res['metrics']['resultCount'] == 0:
+                                break
+                            else:
+                                self.sleep(1)
+                                attempts+=1
+                    except Exception, ex:
+                        self.log.info(str(ex))
+
                 self.query = "select * from system:indexes where name='#primary' and keyspace_id = %s" % bucket.name
                 res = self.run_cbq_query(self.query)
                 if res['metrics']['resultCount'] == 0:
