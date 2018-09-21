@@ -406,3 +406,65 @@ class EventingBucket(EventingBaseTest):
         self.sleep(30)
         self.assertTrue(self.check_if_eventing_consumers_are_cleaned_up(),
                         msg="eventing-consumer processes are not cleaned up even after undeploying the function")
+
+    #MB-31126
+    def test_bucket_overhead(self):
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_WITH_CRON_TIMER,
+                                              worker_count=3)
+        # create an alias so that src bucket as well so that we can read data from source bucket
+        body['depcfg']['buckets'].append({"alias": self.src_bucket_name, "bucket_name": self.src_bucket_name})
+        self.deploy_function(body)
+        # sleep intentionally added as we are validating no mutations are processed by eventing
+        self.sleep(60)
+        countMap=self.get_buckets_itemCount()
+        initalDoc=countMap["metadata"]
+        # load some data
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        # Wait for eventing to catch up with all the delete mutations and verify results
+        self.verify_eventing_results(self.function_name, 2016*self.docs_per_day, skip_stats_validation=True)
+        countMap = self.get_buckets_itemCount()
+        finalDoc=countMap["metadata"]
+        if(initalDoc !=finalDoc):
+            n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
+            n1ql_helper = N1QLHelper(shell=self.shell, max_verify=self.max_verify, buckets=self.buckets,
+                                          item_flag=self.item_flag, n1ql_port=self.n1ql_port,
+                                          full_docs_list=self.full_docs_list, log=self.log, input=self.input,
+                                          master=self.master, use_rest=True)
+            n1ql_helper.create_primary_index(using_gsi=True, server=n1ql_node)
+            query1="select meta().id from metadata where meta().id not like 'eventing::%::vb::%'" \
+                  " and meta().id not like 'eventing::%:rt:%' and meta().id not like 'eventing::%:sp'"
+            result1=n1ql_helper.run_cbq_query(query=query1,server=n1ql_node)
+            print(result1)
+            query2="select meta().id from metadata where meta().id like 'eventing::%:sp' and sta != stp"
+            result2 = n1ql_helper.run_cbq_query(query=query2, server=n1ql_node)
+            print(result2)
+            query3="select meta().id from meta where meta().id like 'eventing::%:rt:%'"
+            result3=n1ql_helper.run_cbq_query(query=query3, server=n1ql_node)
+            print(result3)
+            self.fail("initial doc in metadata {} is not equals to final doc in metadata {}".format(initalDoc,finalDoc))
+        self.undeploy_and_delete_function(body)
+
+    #MB-30973
+    def test_cleanup_metadata(self):
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_WITH_CRON_TIMER,
+                                              worker_count=3)
+        # create an alias so that src bucket as well so that we can read data from source bucket
+        body['depcfg']['buckets'].append({"alias": self.src_bucket_name, "bucket_name": self.src_bucket_name})
+        self.deploy_function(body)
+        # sleep intentionally added as we are validating no mutations are processed by eventing
+        self.sleep(60)
+        countMap = self.get_buckets_itemCount()
+        initalDoc = countMap["metadata"]
+        # load some data
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        # Wait for eventing to catch up with all the delete mutations and verify results
+        self.verify_eventing_results(self.function_name, 2016 * self.docs_per_day, skip_stats_validation=True)
+        self.undeploy_and_delete_function(body)
+        countMap = self.get_buckets_itemCount()
+        finalDoc = countMap["metadata"]
+        assert int(finalDoc) == 0
+
+
+
