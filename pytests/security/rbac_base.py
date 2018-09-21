@@ -32,13 +32,11 @@ class RbacBase:
             password = user['password']
             user_name = user['name']
             if source == 'ldap':
-                return LdapUser(userid,password,host).user_setup()
+                LdapUser(userid,password,host).user_setup()
             if source == 'builtin':
                 payload = "name=" + user_name + "&roles=&password=" + password
-                return InternalUser(userid,payload,host).user_setup()
+                InternalUser(userid,payload,host).user_setup()
 
-    def get_user(self, user_id, host, payload=None):
-        return InternalUser(user_id, payload, host).get_user(user_id, host)
 
     '''
     user_role_list = list of user information and role assignment

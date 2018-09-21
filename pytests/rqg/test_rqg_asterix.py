@@ -12,7 +12,7 @@ from membase.helper.cluster_helper import ClusterOperationHelper
 import mc_bin_client
 import threading
 from memcached.helper.data_helper import  VBucketAwareMemcached
-from rqg_mysql_client import MySQLClient
+from mysql_client import MySQLClient
 from membase.api.rest_client import RestConnection, Bucket
 from couchbase_helper.analytics_helper import AnalyticsHelper
 from couchbase_helper.query_helper import QueryHelper
