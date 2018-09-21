@@ -4453,16 +4453,12 @@ class RestConnection(object):
         url = "settings/rbac/users/"
         api = self.baseUrl + url
         status, content, header = self._http_request(api, "GET")
-
         if content != None:
             content_json = json.loads(content)
-
         for i in range(len(content_json)):
             user = content_json[i]
-
-        if user.get('id') == user_id:
-            return user
-
+            if user.get('id') == user_id:
+                return user
         return {}
 
 
