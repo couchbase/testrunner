@@ -213,6 +213,8 @@ class BuildQuery(object):
                             os_name = "ubuntu14.04"
                         elif "ubuntu 16.04" in os_version:
                             os_name = "ubuntu16.04"
+                        elif "ubuntu 18.04" in os_version:
+                            os_name = "ubuntu18.04"
                         build.url = "{6}{0}/{1}_{4}-{5}_{2}.{3}"\
                                 .format(build_version[:build_version.find('-')],
                                  product, os_architecture, deliverable_type,
@@ -241,6 +243,8 @@ class BuildQuery(object):
                             os_name = "ubuntu14.04"
                         elif "ubuntu 16.04" in os_version:
                             os_name = "ubuntu16.04"
+                        elif "ubuntu 18.04" in os_version:
+                            os_name = "ubuntu18.04"
                         build.url = "{6}{0}/{1}_{4}-{5}_{2}.{3}"\
                             .format(build_version, product, os_architecture,
                             deliverable_type, build_details[:5], os_name,
@@ -375,6 +379,8 @@ class BuildQuery(object):
                             os_name = "ubuntu14.04"
                         elif "ubuntu 16.04" in os_version.lower():
                             os_name = "ubuntu16.04"
+                        elif "ubuntu 18.04" in os_version.lower():
+                            os_name = "ubuntu18.04"
                         build.url = "{6}{0}/{1}_{4}-{5}_{2}.{3}"\
                                 .format(build_version[:build_version.find('-')],
                                  product, os_architecture, deliverable_type,
@@ -430,6 +436,8 @@ class BuildQuery(object):
                             os_name = "ubuntu14.04"
                         elif "ubuntu 16.04" in os_version.lower():
                             os_name = "ubuntu16.04"
+                        elif "ubuntu 18.04" in os_version.lower():
+                            os_name = "ubuntu18.04"
                         build.url = "{6}{0}/{1}_{4}-{5}_{2}.{3}"\
                             .format(build_version, product, os_architecture,
                             deliverable_type, build_details[:5], os_name,
@@ -617,7 +625,7 @@ class BuildQuery(object):
 
             if any( x + "-" in build_info for x in COUCHBASE_FROM_VERSION_3):
                 deb_words = ["debian7", "debian8", "ubuntu12.04", "ubuntu14.04",
-                             "ubuntu16.04", "windows", "macos"]
+                             "ubuntu16.04", "ubuntu18.04", "windows", "macos"]
                 if "centos" not in build_info and "suse" not in build_info:
                     tmp_str = build_info.split("_")
                     product_version = tmp_str[1].split("-")
@@ -836,6 +844,8 @@ class BuildQuery(object):
                     os_name = "ubuntu14.04"
                 elif "ubuntu 16.04" in distribution_version:
                     os_name = "ubuntu16.04"
+                elif "ubuntu 18.04" in distribution_version:
+                    os_name = "ubuntu18.04"
                 elif "debian gnu/linux 7" in distribution_version:
                     build.distribution_version = "debian7"
                     os_name = "debian7"
