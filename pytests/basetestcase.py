@@ -2095,7 +2095,9 @@ class BaseTestCase(unittest.TestCase):
         self.log.info("**** add built-in '%s' user to node %s ****" % (testuser[0]["name"],
                                                                        node.ip))
         RbacBase().create_user_source(testuser, 'builtin', node)
-        while RbacBase().get_user(testuser[0]["id"], node) == {}:
+        attempts = 0
+        while RbacBase().get_user(testuser[0]["id"], node) == {} and attempts<10:
+            attempts+=1
             self.sleep(1)
         self.log.info("**** add '%s' role to '%s' user ****" % (rolelist[0]["roles"],
                                                                 testuser[0]["name"]))

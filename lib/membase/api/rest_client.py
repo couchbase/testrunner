@@ -4459,10 +4459,8 @@ class RestConnection(object):
 
         for i in range(len(content_json)):
             user = content_json[i]
-
-        if user.get('id') == user_id:
-            return user
-
+            if user.get('id') == user_id:
+                return user
         return {}
 
 
