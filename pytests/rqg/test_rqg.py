@@ -216,7 +216,8 @@ class RQGTests(BaseTestCase):
                                                                                    n1ql_queries=query_template_list,
                                                                                    define_gsi_index=self.use_secondary_index,
                                                                                    aggregate_pushdown=self.aggregate_pushdown,
-                                                                                   partitioned_indexes=self.partitioned_indexes)
+                                                                                   partitioned_indexes=self.partitioned_indexes,
+                                                                                   ansi_joins=self.ansi_joins)
 
                 for sql_n1ql_index_map in sql_n1ql_index_map_list:
                     sql_n1ql_index_map["n1ql"] = sql_n1ql_index_map['n1ql'].replace("simple_table", self.database+"_"+"simple_table")
@@ -470,7 +471,9 @@ class RQGTests(BaseTestCase):
     def _run_query_with_pushdown_check(self, n1ql_query, index):
         message = "Pass"
         explain_check = False
-        query = self.query_helper._add_index_hints_to_query(n1ql_query, [index])
+        if isinstance(index, dict):
+            index = [index]
+        query = self.query_helper._add_index_hints_to_query(n1ql_query, index)
         explain_n1ql = "EXPLAIN " + query
         try:
             actual_result = self.n1ql_helper.run_cbq_query(query=explain_n1ql, server=self.n1ql_server)
