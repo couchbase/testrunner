@@ -87,10 +87,10 @@ class QueryCurlTests(QueryTests):
             curl_noinsert_permissions = 'query_select[*]:query_manage_index[*]' \
                                         ':query_system_catalog:query_external_access'
             # Assign user to role
-            role_list = [{'id': 'no_curl', 'name': 'no_curl','roles': '%s' % noncurl_permissions},
-                         {'id': 'curl', 'name': 'curl', 'roles': '%s' % curl_permissions},
+            role_list = [{'id': 'no_curl', 'name': 'no_curl','roles': '%s' % noncurl_permissions, 'password': 'password'},
+                         {'id': 'curl', 'name': 'curl', 'roles': '%s' % curl_permissions, 'password': 'password'},
                           {'id': 'curl_no_insert', 'name': 'curl_no_insert',
-                           'roles': '%s' % curl_noinsert_permissions}]
+                           'roles': '%s' % curl_noinsert_permissions, 'password': 'password'}]
             temp = RbacBase().add_user_role(role_list, self.rest, 'builtin')
             self.log.info("==============  QueryCurlTests suite_setup has completed ==============")
             self.log_config_info()
