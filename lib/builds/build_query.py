@@ -657,7 +657,6 @@ class BuildQuery(object):
                     build_info = build_info.replace("-amd64", "")
                 del_words = ["centos6", "debian7", "debian8", "debian9",
                              "ubuntu12.04", "ubuntu14.04", "ubuntu16.04",
-                             "ubuntu18.04",
                              "windows", "macos", "centos7", "suse11", "suse12"]
                 if build_info.startswith("couchbase-server"):
                     build.product = build_info.split("-")
