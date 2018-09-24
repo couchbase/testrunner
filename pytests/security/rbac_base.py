@@ -62,6 +62,8 @@ class RbacBase:
             if self.source == "ldap":
                 response = rest.set_user_roles(userid,payload)
             elif self.source == 'builtin':
+                if 'password' in user_role.keys():
+                    payload=payload+'&password='+user_role['password']
                 cluster_compatibility = rest.check_cluster_compatibility("5.0")
                 if cluster_compatibility is None:
                     pre_spock = True
@@ -69,7 +71,7 @@ class RbacBase:
                     pre_spock = not cluster_compatibility
                 if pre_spock:
                     return None
-                response = rest.add_set_builtin_user(userid,payload)
+                response = rest.add_set_builtin_user(userid, payload)
             response_return.append({'id':userid,'reponse':response})
         return response_return
 

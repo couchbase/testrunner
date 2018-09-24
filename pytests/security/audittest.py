@@ -30,7 +30,10 @@ class auditTest(BaseTestCase):
 
     def setUp(self):
         super(auditTest, self).setUp()
-        self.ipAddress = self.getLocalIPAddress()
+        try:
+            self.ipAddress = self.getLocalIPAddress()
+        except Exception, ex:
+            self.ipAddress = '127.0.0.1'
         self.eventID = self.input.param('id', None)
         auditTemp = audit(host=self.master)
         currentState = auditTemp.getAuditStatus()

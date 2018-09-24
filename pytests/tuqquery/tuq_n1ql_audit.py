@@ -33,8 +33,8 @@ class QueryN1QLAuditTests(auditTest,QueryTests):
                            'query_insert[*]:query_delete[*]:query_manage_index[*]:' \
                            'query_system_catalog'
 
-        role_list = [{'id': 'no_select', 'name': 'no_select', 'roles': '%s' % no_select_permissions},
-                     {'id': 'query', 'name': 'query', 'roles': '%s' % query_permissions}]
+        role_list = [{'id': 'no_select', 'name': 'no_select', 'roles': '%s' % no_select_permissions, 'password':'password'},
+                     {'id': 'query', 'name': 'query', 'roles': '%s' % query_permissions, 'password':'password'}]
         RbacBase().add_user_role(role_list, self.rest, 'builtin')
         self.log.info("==============  QueryN1QLAuditTests suite_setup has completed ==============")
         self.log_config_info()
