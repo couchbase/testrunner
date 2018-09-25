@@ -1,28 +1,14 @@
 from newupgradebasetest import NewUpgradeBaseTest
-import json, re
-import os
-import zipfile
-import pprint
 import Queue
-import json
-import logging
 import copy
 from membase.helper.cluster_helper import ClusterOperationHelper
-import mc_bin_client
 import threading
 from random import randrange, randint
-from fts.fts_base import FTSIndex
-from memcached.helper.data_helper import  VBucketAwareMemcached
 from remote.remote_util import RemoteMachineShellConnection, RemoteUtilHelper
-from membase.api.rest_client import RestConnection, Bucket
 from couchbase_helper.tuq_helper import N1QLHelper
-from couchbase_helper.query_helper import QueryHelper
-from TestInput import TestInputSingleton
-from couchbase_helper.document import View
 from eventing.eventing_base import EventingBaseTest
 from pytests.eventing.eventing_constants import HANDLER_CODE
 from lib.testconstants import STANDARD_BUCKET_PORT
-from pytests.query_tests_helper import QueryHelperTests
 from membase.api.rest_client import RestConnection, RestHelper
 from couchbase_helper.documentgenerator import BlobGenerator
 from membase.helper.bucket_helper import BucketOperationHelper
