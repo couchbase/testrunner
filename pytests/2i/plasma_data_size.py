@@ -304,7 +304,7 @@ class SecondaryIndexDatasizeTests(BaseSecondaryIndexingTests):
         rolelist = []
         for bucket in buckets:
             testuser.append({'id': bucket, 'name': bucket, 'password': 'password'})
-            rolelist.append({'id': bucket, 'name': bucket, 'roles': 'admin'})
+            rolelist.append({'id': bucket, 'name': bucket, 'roles': 'admin', 'password':'password'})
         self.add_built_in_server_user(testuser=testuser, rolelist=rolelist)
         buckets = []
         for bucket in self.buckets:
