@@ -421,7 +421,10 @@ class MemcachedClient(object):
 
     def __parseGet(self, data, klen=0):
         flags = struct.unpack(memcacheConstants.GET_RES_FMT, data[-1][:4])[0]
-        return flags, data[1], data[-1][4 + klen:]
+        if klen == 0:
+            return flags, data[1], data[-1][4 + klen:]
+        else:
+            return flags, data[1], "{" + data[-1].split('{')[-1] # take only the value and value starts with "{"
 
     def get(self, key, vbucket= -1):
         """Get the value for a given key within the memcached server."""
