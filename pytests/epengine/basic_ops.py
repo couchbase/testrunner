@@ -167,14 +167,7 @@ class basic_ops(BaseTestCase):
         # check with compression_mode as active, passive and off
         document_size= self.input.param('document_size', 20)
         gens_load = self.generate_docs_bigdata(docs_per_day=1, document_size=(document_size * 1024000))
-
-        try:
-            self.load(gens_load, buckets=self.src_bucket, verify_data=False, batch_size=10)
-        except MemcachedError as error:
-            if (document_size > 20):
-                self.log.info("expected to FAIL")
-            else:
-                self.fail("Failed when suppose to pass")
+        self.load(gens_load, buckets=self.src_bucket, verify_data=False, batch_size=10)
 
         mc = MemcachedClient(self.master.ip, 11210)
         mc.sasl_auth_plain(self.master.rest_username, self.master.rest_password)
@@ -185,10 +178,7 @@ class basic_ops(BaseTestCase):
         else:
             self.assertEquals(int(stats['curr_items']), 1)
             gens_update = self.generate_docs_bigdata(docs_per_day=1, document_size=(21 * 1024000))
-            try:
-                self.load(gens_update, buckets=self.src_bucket, verify_data=False, batch_size=10)
-            except MemcachedError as error:
-                self.log.info("expected to FAIL")
+            self.load(gens_update, buckets=self.src_bucket, verify_data=False, batch_size=10)
             stats = mc.stats()
             self.assertEquals(int(stats['curr_items']), 1)
 
@@ -196,7 +186,7 @@ class basic_ops(BaseTestCase):
         # Check if diag/eval can be done only by local host
         # epengine.basic_ops.basic_ops.test_diag_eval_curl,disable_diag_eval_non_local=True
 
-        port = 8091
+        port = self.master.port
 
         # check if local host can work fine
         cmd=[]
