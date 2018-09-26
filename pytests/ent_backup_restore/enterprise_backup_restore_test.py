@@ -2471,8 +2471,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                 self.log.info("**** add built-in '%s' user to node %s ****" % (testuser[0]["name"],
                                                                                servers[2].ip))
                 RbacBase().create_user_source(testuser, 'builtin', servers[2])
-                self.sleep(10)
-
+                
                 self.log.info("**** add '%s' role to '%s' user ****" % (rolelist[0]["roles"],
                                                                         testuser[0]["name"]))
                 status = RbacBase().add_user_role(rolelist, RestConnection(servers[2]), 'builtin')

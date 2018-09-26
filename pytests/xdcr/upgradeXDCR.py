@@ -208,7 +208,6 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
                 RbacBase().create_user_source(testuser, 'builtin',
                                               self.src_master)
 
-                self.sleep(10)
 
                 # Assign user to role
                 role_list = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'roles': 'admin'}]
@@ -216,7 +215,6 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
                                          RestConnection(self.src_master),
                                          'builtin')
 
-                self.sleep(10)
 
             if "dest" in upgrade_nodes:
                 # Add built-in user to C2
@@ -224,7 +222,6 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
                 RbacBase().create_user_source(testuser, 'builtin',
                                               self.dest_master)
 
-                self.sleep(10)
 
                 # Assign user to role
                 role_list = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'roles': 'admin'}]
@@ -232,7 +229,6 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
                                          RestConnection(self.dest_master),
                                          'builtin')
 
-                self.sleep(10)
 
         self.log.info("######### Upgrade of C1 and C2 completed ##########")
 
@@ -415,16 +411,14 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
             RbacBase().create_user_source(testuser, 'builtin',
                                             self.src_master)
 
-            self.sleep(10)
-
+            
             # Assign user to role
             role_list = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'roles': 'admin'}]
             RbacBase().add_user_role(role_list,
                                         RestConnection(self.src_master),
                                         'builtin')
 
-            self.sleep(10)
-
+            
         self._load_bucket(bucket_standard, self.dest_master, self.gen_create, 'create', exp=0)
         self._load_bucket(bucket_default, self.src_master, self.gen_update, 'create', exp=self._expires)
         self._load_bucket(bucket_sasl, self.src_master, self.gen_update, 'create', exp=self._expires)
@@ -462,7 +456,6 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
             RbacBase().create_user_source(testuser, 'builtin',
                                           self.dest_master)
 
-            self.sleep(10)
 
             # Assign user to role
             role_list = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'roles': 'admin'}]
@@ -470,7 +463,6 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
                                      RestConnection(self.dest_master),
                                      'builtin')
 
-            self.sleep(10)
 
         self.log.info("###### Upgrading C2: completed ######")
 
@@ -599,7 +591,6 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
                 RbacBase().create_user_source(testuser, 'builtin',
                                               self.src_master)
 
-                self.sleep(10)
 
                 # Assign user to role
                 role_list = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'roles': 'admin'}]
@@ -607,14 +598,12 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
                                          RestConnection(self.src_master),
                                          'builtin')
 
-                self.sleep(10)
 
                 # Add built-in user to C2
                 testuser = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'password': 'password'}]
                 RbacBase().create_user_source(testuser, 'builtin',
                                               self.dest_master)
 
-                self.sleep(10)
 
                 # Assign user to role
                 role_list = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'roles': 'admin'}]
@@ -622,7 +611,6 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
                                          RestConnection(self.dest_master),
                                          'builtin')
 
-                self.sleep(10)
             bucket = self.src_cluster.get_bucket_by_name('sasl_bucket_1')
             itemPrefix = "loadThree" + _seq * 'a'
             gen_create3 = BlobGenerator(itemPrefix, itemPrefix, self._value_size, end=self.num_items)

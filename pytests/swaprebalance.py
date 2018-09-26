@@ -69,13 +69,11 @@ class SwapRebalanceBase(unittest.TestCase):
             # Add built-in user
             testuser = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'password': 'password'}]
             RbacBase().create_user_source(testuser, 'builtin', self.servers[0])
-            time.sleep(10)
-
+            
             # Assign user to role
             role_list = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'roles': 'admin'}]
             RbacBase().add_user_role(role_list, RestConnection(self.servers[0]), 'builtin')
-            time.sleep(10)
-
+            
             if self.num_buckets > 10:
                 BaseTestCase.change_max_buckets(self, self.num_buckets)
             self.log.info("==============  SwapRebalanceBase setup was finished for test #{0} {1} =============="

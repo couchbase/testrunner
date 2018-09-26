@@ -2979,11 +2979,9 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                      'roles': 'admin'}]
         self.log.info("before create_user_source")
         RbacBase().create_user_source(testuser, 'builtin', node)
-        self.sleep(10)
         self.log.info("before add_user_role")
         status = RbacBase().add_user_role(rolelist, RestConnection(node), 'builtin')
-        self.sleep(10)
-
+        
     def load_buckets_with_high_ops(self, server, bucket, items, batch=2000,
                                    threads=5, start_document=0, instances=1, ttl=0):
         import subprocess

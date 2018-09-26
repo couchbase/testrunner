@@ -145,12 +145,10 @@ class BaseUITestCase(unittest.TestCase):
         self.log.info("**** add built-in '%s' user to node %s ****" % (testuser[0]["name"],
                                                                        node.ip))
         RbacBase().create_user_source(testuser, 'builtin', node)
-        self.sleep(10)
-
+        
         self.log.info("**** add '%s' role to '%s' user ****" % (rolelist[0]["roles"],
                                                                 testuser[0]["name"]))
         status = RbacBase().add_user_role(rolelist, RestConnection(node), 'builtin')
-        self.sleep(10)
         return status
 
     def setUp(self):

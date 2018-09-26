@@ -938,12 +938,10 @@ class ImportExportTests(CliBaseTest):
                 self.log.info("add built-in user cbadminbucket to second cluster.")
                 testuser = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'password': 'password'}]
                 RbacBase().create_user_source(testuser, 'builtin', import_servers[2])
-                self.sleep(10)
                 """ Assign user to role """
                 role_list = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'roles': 'admin'}]
                 RbacBase().add_user_role(role_list, RestConnection(import_servers[2]), 'builtin')
-                self.sleep(10)
-
+                
                 bucket_params=self._create_bucket_params(server=import_servers[2],
                                         size=250,
                                         replicas=self.num_replicas,

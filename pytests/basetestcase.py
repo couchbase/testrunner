@@ -2095,21 +2095,10 @@ class BaseTestCase(unittest.TestCase):
         self.log.info("**** add built-in '%s' user to node %s ****" % (testuser[0]["name"],
                                                                        node.ip))
         RbacBase().create_user_source(testuser, 'builtin', node)
-        attempts = 0
-        while RbacBase().get_user(testuser[0]["id"], node) == {} and attempts<10:
-            attempts+=1
-            self.sleep(1)
         self.log.info("**** add '%s' role to '%s' user ****" % (rolelist[0]["roles"],
                                                                 testuser[0]["name"]))
         status = RbacBase().add_user_role(rolelist, RestConnection(node), 'builtin')
-        attempts = 0
-        while attempts<10:
-            roles = RbacBase().get_user(testuser[0]["id"], node)['roles']
-            if rolelist[0]['roles'] in roles[0]['role']:
-                break
-            else:
-                self.sleep(1)
-                attempts+=1
+        
         return status
 
     def get_nodes(self, server):

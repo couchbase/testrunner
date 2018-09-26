@@ -36,13 +36,11 @@ class AutoFailoverBaseTest(unittest.TestCase):
         # Add built-in user
         testuser = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'password': 'password'}]
         RbacBase().create_user_source(testuser, 'builtin', servers[0])
-        time.sleep(10)
-
+        
         # Assign user to role
         role_list = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'roles': 'admin'}]
         RbacBase().add_user_role(role_list, RestConnection(servers[0]), 'builtin')
-        time.sleep(10)
-
+        
         log.info("==============  common_setup was finished for test #{0} {1} =============="\
                       .format(testcase.case_number, testcase._testMethodName))
 

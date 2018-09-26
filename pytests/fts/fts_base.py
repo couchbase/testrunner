@@ -3067,13 +3067,11 @@ class FTSBaseTest(unittest.TestCase):
         # Add built-in user
         testuser = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'password': 'password'}]
         RbacBase().create_user_source(testuser, 'builtin', master)
-        time.sleep(10)
-
+        
         # Assign user to role
         role_list = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'roles': 'admin'}]
         RbacBase().add_user_role(role_list, RestConnection(master), 'builtin')
-        time.sleep(10)
-
+        
         self.__set_free_servers()
         if not no_buckets:
             self.__create_buckets()

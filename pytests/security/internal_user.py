@@ -68,8 +68,26 @@ class InternalUser(UserBase):
                      "spock feature.")
             return
         self.delete_user()
-        return self.create_user()
+        self.create_user()
+        self.check_user_creation()
 
-    def get_user(self, user_id, host):
-        rest = RestConnection(host)
-        return rest.get_user(user_id)
+    def get_user(self):
+        rest = RestConnection(self.host)
+        return rest.get_user(self.user_id)
+    
+    def check_user_creation(self):
+        attempts = 0
+        while self.get_user() == {} and attempts<10:
+            attempts+=1
+            self.sleep(1)
+    
+    def check_user_roles_assignment(self):
+        attempts = 0
+        while attempts<10:
+            roles = self.get_user()['roles']
+            if rolelist[0]['roles'] in roles[0]['role']:
+                break
+            else:
+                self.sleep(1)
+                attempts+=1
+    

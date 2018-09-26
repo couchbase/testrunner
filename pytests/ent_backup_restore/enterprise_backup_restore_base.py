@@ -1735,12 +1735,10 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
 
         testuser = [{'id': bucket.name, 'name': bucket.name, 'password': 'password'}]
         RbacBase().create_user_source(testuser, 'builtin', cluster_host)
-        self.sleep(10)
-
+        
         role_list = [{'id': bucket.name, 'name': bucket.name, 'roles': 'admin'}]
         RbacBase().add_user_role(role_list, RestConnection(cluster_host), 'builtin')
-        self.sleep(10)
-
+        
         try:
             cb = Bucket('couchbase://' + ip + '/' + bucket.name, password='password')
             if cb is not None:

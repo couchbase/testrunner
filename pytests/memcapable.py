@@ -42,13 +42,11 @@ class MemcapableTestBase(object):
         # Add built-in user
         testuser = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'password': 'password'}]
         RbacBase().create_user_source(testuser, 'builtin', self.master)
-        time.sleep(10)
-
+        
         # Assign user to role
         role_list = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'roles': 'admin'}]
         RbacBase().add_user_role(role_list, RestConnection(self.master), 'builtin')
-        time.sleep(10)
-
+        
         self._create_default_bucket(unittest)
 
 

@@ -64,4 +64,4 @@ class LdapUser(UserBase):
             host = self.host
 
         self.delete_user()
-        return self.create_user()
+        self.create_user()

@@ -40,13 +40,11 @@ class SimpleSetGetTestBase(object):
         # Add built-in user
         testuser = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'password': 'password'}]
         RbacBase().create_user_source(testuser, 'builtin', self.master)
-        time.sleep(10)
 
         # Assign user to role
         role_list = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'roles': 'admin'}]
         RbacBase().add_user_role(role_list, RestConnection(self.master), 'builtin')
-        time.sleep(10)
-
+        
     def set_get_test(self, value_size, number_of_items):
         fixed_value = MemcachedClientHelper.create_value("S", value_size)
         specs = [("default", 0),

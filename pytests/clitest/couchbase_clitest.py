@@ -3202,13 +3202,11 @@ class XdcrCLITest(CliBaseTest):
         testuser = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'password': 'password'}]
         RbacBase().create_user_source(testuser, 'builtin', self.dest_nodes[0])
 
-        time.sleep(10)
 
         # Assign user to role
         role_list = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'roles': 'admin'}]
         RbacBase().add_user_role(role_list, RestConnection(self.dest_nodes[0]), 'builtin')
 
-        time.sleep(10)
 
         self.bucket_size = self._get_bucket_size(self.quota, 1)
         if from_bucket:

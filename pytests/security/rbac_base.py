@@ -37,9 +37,6 @@ class RbacBase:
                 payload = "name=" + user_name + "&roles=&password=" + password
                 return InternalUser(userid,payload,host).user_setup()
 
-    def get_user(self, user_id, host, payload=None):
-        return InternalUser(user_id, payload, host).get_user(user_id, host)
-
     '''
     user_role_list = list of user information and role assignment
                      [{'id':ritam,'name'=ritamsharma,'roles'='cluster_admin:admin'}]
@@ -100,10 +97,6 @@ class RbacBase:
         response = rest.check_user_permission(user,password,user_per_list)
         print response
         return response
-
-
-
-
 
 
 

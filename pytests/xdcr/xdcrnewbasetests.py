@@ -2650,16 +2650,14 @@ class XDCRNewBaseTest(unittest.TestCase):
             RbacBase().create_user_source(testuser, 'builtin',
                                           self.get_cb_cluster_by_name('C' + str(i)).get_master_node())
 
-            time.sleep(10)
-
+            
             # Assign user to role
             role_list = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'roles': 'admin'}]
             RbacBase().add_user_role(role_list,
                                      RestConnection(self.get_cb_cluster_by_name('C' + str(i)).get_master_node()),
                                      'builtin')
 
-            time.sleep(10)
-
+            
         self.__set_free_servers()
         if str(self.__class__).find('upgradeXDCR') == -1 and str(self.__class__).find('lww') == -1\
                 and str(self.__class__).find('capiXDCR') == -1:
@@ -2838,13 +2836,11 @@ class XDCRNewBaseTest(unittest.TestCase):
         self.log.info("**** add built-in '%s' user to node %s ****" % (testuser[0]["name"],
                                                                        node.ip))
         RbacBase().create_user_source(testuser, 'builtin', node)
-        self.sleep(10)
-
+        
         self.log.info("**** add '%s' role to '%s' user ****" % (rolelist[0]["roles"],
                                                                 testuser[0]["name"]))
         RbacBase().add_user_role(rolelist, RestConnection(node), 'builtin')
-        self.sleep(10)
-
+        
     def get_cb_cluster_by_name(self, name):
         """Return couchbase cluster object for given name.
         @return: CouchbaseCluster object
