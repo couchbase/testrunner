@@ -17,7 +17,6 @@ from couchbase_helper.document import DesignDocument, View
 from couchbase_helper.documentgenerator import BlobGenerator
 from query_tests_helper import QueryHelperTests
 from couchbase_helper.tuq_helper import N1QLHelper
-from couchbase_helper.query_helper import QueryHelper
 from scripts.install import InstallerJob
 from builds.build_query import BuildQuery
 from eventing.eventing_base import EventingBaseTest
