@@ -450,6 +450,11 @@ class RQGQueryHelper(object):
 
     def _gen_select_tables_info(self, sql="", table_map={}, ansi_joins=False):
         table_name_list = table_map.keys()
+        # For ansi_joins there is an edge case where there is only 1 table name available to select and
+        # this creates a join of a table against itself, very expensive and not useful at all
+        if ansi_joins:
+            persistent_table_name_list = ['simple_table_1','simple_table_2','simple_table_3','simple_table_4',
+                                          'simple_table_10']
         prev_table_list = []
         standard_tokens = ["INNER JOIN", "LEFT JOIN"]
         new_sub_query = ""
@@ -466,6 +471,7 @@ class RQGQueryHelper(object):
                 bucket_string = table_name+"  "+table_name_alias
             return sql.replace("BUCKET_NAME", bucket_string), {table_name: table_map[table_name]}
         for token in sql_token_list:
+            use_table_entry = False
             if token.strip() not in standard_tokens:
                 choice_list = list(set(table_name_list) - set(prev_table_list))
                 if len(choice_list) > 0:
@@ -474,6 +480,16 @@ class RQGQueryHelper(object):
                 else:
                     table_name = table_name_list[0]
                     table_name_alias = table_map[table_name]["alias_name"]+self._random_alphabet_string()
+                    # If there is only one table this will cause a join to use the same table on the left and right, we
+                    # want to avoid this at all costs 
+                    if ansi_joins:
+                        join_list = re.split('INNER JOIN|LEFT JOIN', new_sub_query)
+                        join_bucket = join_list[0].strip().split(" ")[0]
+                        if table_name == join_bucket:
+                            new_table_name_list =list(set(persistent_table_name_list) - set([table_name]))
+                            table_name = random.choice(new_table_name_list)
+                            table_name_alias = table_map[table_name_list[0]]["alias_name"]+self._random_alphabet_string()
+                            use_table_entry = True
                 data = token
                 data = data.replace("BUCKET_NAME", (table_name+" "+table_name_alias))
                 if "ALIAS" in token:
@@ -481,7 +497,10 @@ class RQGQueryHelper(object):
                     rewrite_table_name_alias = True
                 if "PREVIOUS_TABLE" in token:
                     previous_table_name = random.choice(prev_table_list)
-                    previous_table_name_alias = table_map[previous_table_name]["alias_name"]
+                    if use_table_entry:
+                        previous_table_name_alias = table_map[table_name_list[0]]["alias_name"]
+                    else:
+                        previous_table_name_alias = table_map[previous_table_name]["alias_name"]
                     if "BOOL_FIELD" in token:
                         field_name, values = self._search_field(["tinyint"], table_map)
                         table_field = field_name.split(".")[1]
@@ -511,8 +530,16 @@ class RQGQueryHelper(object):
                                                 ("query" + "." + table_field)) + " "
                         data = data.replace("CURRENT_TABLE.NUMERIC_FIELD", (table_name_alias + "." + table_field)) + " "
                         data = data.replace("PREVIOUS_TABLE.NUMERIC_FIELD", (previous_table_name_alias+"." + table_field))
-                    data = data.replace("PREVIOUS_TABLE.FIELD", (previous_table_name_alias+"."+table_map[previous_table_name]["primary_key_field"]))
-                    data = data.replace("CURRENT_TABLE.FIELD", (table_name_alias+"."+table_map[table_name]["primary_key_field"]))
+                    if use_table_entry:
+                        data = data.replace("PREVIOUS_TABLE.FIELD", (
+                                previous_table_name_alias + "." + "primary_key_id"))
+
+                        data = data.replace("CURRENT_TABLE.FIELD",
+                                            (table_name_alias + "." + table_map[table_name_list[0]]["primary_key_field"]))
+                    else:
+                        data = data.replace("PREVIOUS_TABLE.FIELD", (
+                                previous_table_name_alias + "." + table_map[previous_table_name]["primary_key_field"]))
+                        data = data.replace("CURRENT_TABLE.FIELD", (table_name_alias+"."+table_map[table_name]["primary_key_field"]))
                     rewrite_table_name_alias = False
 
                 if "CURRENT_TABLE" in token:
