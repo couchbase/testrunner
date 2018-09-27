@@ -187,6 +187,7 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         if stats_dst["curr_items"] != expected_dcp_mutations:
             total_dcp_backlog = 0
             timers_in_past = 0
+            lcb = {}
             # TODO : Use the following stats in a meaningful way going forward. Just printing them for debugging.
             for eventing_node in eventing_nodes:
                 rest_conn = RestConnection(eventing_node)
@@ -194,6 +195,9 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
                 total_dcp_backlog += out[0]["events_remaining"]["dcp_backlog"]
                 if "TIMERS_IN_PAST" in out[0]["event_processing_stats"]:
                     timers_in_past += out[0]["event_processing_stats"]["TIMERS_IN_PAST"]
+                total_lcb_exceptions= out[0]["lcb_exception_stats"]
+                host=eventing_node.ip
+                lcb[host]=total_lcb_exceptions
                 full_out = rest_conn.get_all_eventing_stats(seqs_processed=True)
                 log.info("Stats for Node {0} is \n{1} ".format(eventing_node.ip, json.dumps(out, sort_keys=True,
                                                                                           indent=4)))
@@ -202,10 +206,10 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
                                                                                                 indent=4)))
             raise Exception(
                 "Bucket operations from handler code took lot of time to complete or didn't go through. Current : {0} "
-                "Expected : {1}  dcp_backlog : {2}  TIMERS_IN_PAST : {3}".format(stats_dst["curr_items"],
+                "Expected : {1}  dcp_backlog : {2}  TIMERS_IN_PAST : {3} lcb_exceptions : {4}".format(stats_dst["curr_items"],
                                                                                  expected_dcp_mutations,
                                                                                  total_dcp_backlog,
-                                                                                 timers_in_past))
+                                                                                 timers_in_past,lcb))
         log.info("Final docs count... Current : {0} Expected : {1}".
                  format(stats_dst["curr_items"], expected_dcp_mutations))
         # TODO : Use the following stats in a meaningful way going forward. Just printing them for debugging.
