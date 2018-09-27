@@ -4379,6 +4379,35 @@ class RestConnection(object):
         return content
 
     '''
+               enable debugger
+    '''
+    def enable_eventing_debugger(self):
+        authorization = base64.encodestring('%s:%s' % (self.username, self.password))
+        url = "_p/event/api/v1/config"
+        api = self.baseUrl + url
+        headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
+        body="{\"enable_debugger\": true}"
+        status, content, header = self._http_request(api, 'POST', headers=headers,params=body)
+        if not status:
+            raise Exception(content)
+        return content
+
+    '''
+                   disable debugger
+    '''
+
+    def disable_eventing_debugger(self):
+        authorization = base64.encodestring('%s:%s' % (self.username, self.password))
+        url = "_p/event/api/v1/config"
+        api = self.baseUrl + url
+        headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
+        body = "{\"enable_debugger\": false}"
+        status, content, header = self._http_request(api, 'POST', headers=headers, params=body)
+        if not status:
+            raise Exception(content)
+        return content
+
+    '''
             Start debugger
     '''
     def start_eventing_debugger(self, name):

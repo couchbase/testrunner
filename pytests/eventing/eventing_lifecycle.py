@@ -180,6 +180,8 @@ class EventingLifeCycle(EventingBaseTest):
         match = False
         body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_ON_UPDATE)
         self.deploy_function(body)
+        #enable debugger
+        self.rest.enable_eventing_debugger()
         # Start eventing debugger
         out1 = self.rest.start_eventing_debugger(self.function_name)
         log.info(" Started eventing debugger : {0}".format(out1))
@@ -201,6 +203,50 @@ class EventingLifeCycle(EventingBaseTest):
             self.fail("Debugger url was not generated even after waiting for 300 secs...    ")
         # stop debugger
         self.rest.stop_eventing_debugger(self.function_name)
+        # undeploy and delete the function
+        self.undeploy_and_delete_function(body)
+
+    #MB-30847
+    def test_eventing_debugger_default_settings(self):
+        count = 0
+        match = False
+        try:
+            out1 = self.rest.start_eventing_debugger(self.function_name)
+        except Exception as e:
+            msg=json.dumps(str(e))
+            assert "ERR_DEBUGGER_DISABLED" in msg
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_ON_UPDATE)
+        self.deploy_function(body)
+        #enable debugger
+        self.rest.enable_eventing_debugger()
+        #start debugger
+        out1 = self.rest.start_eventing_debugger(self.function_name)
+        log.info(" Started eventing debugger : {0}".format(out1))
+        # do some mutations
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        # get debugger url
+        pattern = re.compile(r'chrome-devtools://devtools/bundled/js_app.html(.*)')
+        while count < 10:
+            out2 = self.rest.get_eventing_debugger_url(self.function_name)
+            matched = re.match(pattern, out2)
+            if matched:
+                log.info("Got debugger url : {0}{1}".format(matched.group(0), matched.group(1)))
+                match = True
+                break
+            count += 1
+            self.sleep(30)
+        if not match:
+            self.fail("Debugger url was not generated even after waiting for 300 secs...    ")
+        # stop debugger
+        self.rest.stop_eventing_debugger(self.function_name)
+        # disable debugger
+        self.rest.disable_eventing_debugger()
+        try:
+            out1 = self.rest.start_eventing_debugger(self.function_name)
+        except Exception as e:
+            msg=json.dumps(str(e))
+            assert "ERR_DEBUGGER_DISABLED" in msg
         # undeploy and delete the function
         self.undeploy_and_delete_function(body)
 
