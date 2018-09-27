@@ -894,11 +894,22 @@ class ImportExportTests(CliBaseTest):
                         while int(res_status) > self.active_resident_threshold:
                             self.sleep(5)
                             res_status = stats_all_buckets[bucket.name].get_stats([self.master],
-                                         bucket, '', 'vb_active_perc_mem_resident')[self.master]
+                                         bucket, '',
+                                         'vb_active_perc_mem_resident')[self.master]
                         if int(res_status) <= self.active_resident_threshold:
                             self.log.info("Clear terminal")
                             self.shell.execute_command('printf "\033c"')
-                    output, error = self.shell.execute_command(exe_cmd_str)
+                    output = ""
+                    try:
+                        output, error = self.shell.execute_command_raw(exe_cmd_str,
+                                                                        timeout=60)
+                    except Exception as e:
+                        if not output:
+                            self.log.info("Run one more time export command \
+                                                     until MB-31432 is fixed")
+                            output, error = self.shell.execute_command_raw(exe_cmd_str,
+                                                                            timeout=60)
+
                     data_exported = True
                     if self.secure_conn:
                         if self.no_ssl_verify:
@@ -1347,10 +1358,19 @@ class ImportExportTests(CliBaseTest):
                         e = set(samples)
                         not_in_samples = [x for x in exports if x not in e]
                         print "\n data in exports not in samples  ", not_in_samples
-                    if sorted(samples) == sorted(exports):
-                        self.log.info("export and sample json mathch")
-                    else:
-                        self.fail("export and sample json does not match")
+                    e = set(samples)
+                    count = 0
+                    self.log.info("Compare data with sample data")
+                    for x in exports:
+                        if x in e:
+                            count += 1
+                    if count != len(e):
+                        self.fail("export and sample json count does not match")
+                    elif not self.dgm_run:
+                        if sorted(samples) == sorted(exports):
+                            self.log.info("export and sample json mathch")
+                        else:
+                            self.fail("export and sample json does not match")
                     sample_file.close()
                     export_file.close()
                     self.log.info("remove file /tmp/export{0}".format(self.master.ip))
