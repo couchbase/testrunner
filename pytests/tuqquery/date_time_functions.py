@@ -256,43 +256,67 @@ class DateTimeFunctionClass(QueryTests):
                                      "Query {0} Failed".format(query))
 
     def test_new_functions(self):
-        local_formats = ["2006-01-02"]
+        local_formats = ["2006-01-02T00:00:00"]
         for expression in local_formats:
             query = 'SELECT STR_TO_UTC(CLOCK_STR("{0}"))'.format(expression)
             expected_result = self.run_cbq_query(query)
             self.log.info("Expected Result : %s", expected_result)
+
             query = 'SELECT CLOCK_UTC("{0}")'.format(expression)
             actual_result = self.run_cbq_query(query)
             self.log.info("Actual Result : %s", actual_result)
-            self.assertEqual(actual_result["results"][0]["$1"],
-                             expected_result["results"][0]["$1"],
-                             "{0} failed ".format(query))
+
+            str_expected = expected_result["results"][0]["$1"]
+            str_expected = str_expected[:str_expected.find("T")]
+            str_actual = actual_result["results"][0]["$1"]
+            str_actual = str_actual[:str_actual.find("T")]
+
+            self.assertEqual(str_actual, str_expected, "{0} failed ".format(query))
+
+
             query = 'SELECT STR_TO_UTC(NOW_STR("{0}"))'.format(expression)
             expected_result = self.run_cbq_query(query)
             self.log.info("Expected Result : %s", expected_result)
+
             query = 'SELECT NOW_UTC("{0}")'.format(expression)
             actual_result = self.run_cbq_query(query)
             self.log.info("Actual Result : %s", actual_result)
-            self.assertEqual(actual_result["results"][0]["$1"],
-                             expected_result["results"][0]["$1"],
-                             "{0} failed ".format(query))
-            query = 'SELECT STR_TO_ZONE_NAME(CLOCK_STR("{0}"), "UTC")'.format(
-                expression)
+
+            str_expected = expected_result["results"][0]["$1"]
+            str_expected = str_expected[:str_expected.find("T")]
+            str_actual = actual_result["results"][0]["$1"]
+            str_actual = str_actual[:str_actual.find("T")]
+
+            self.assertEqual(str_actual, str_expected, "{0} failed ".format(query))
+
+
+            query = 'SELECT STR_TO_ZONE_NAME(CLOCK_STR("{0}"), "UTC")'.format(expression)
             expected_result = self.run_cbq_query(query)
             self.log.info("Expected Result : %s", expected_result)
+
             query = 'SELECT CLOCK_TZ("UTC", "{0}")'.format(expression)
             actual_result = self.run_cbq_query(query)
             self.log.info("Actual Result : %s", actual_result)
-            self.assertEqual(actual_result["results"][0]["$1"],
-                             expected_result["results"][0]["$1"],
-                             "{0} failed ".format(query))
-            query = 'SELECT STR_TO_ZONE_NAME(NOW_STR("{0}"), "UTC")'.format(
-                expression)
+
+            str_expected = expected_result["results"][0]["$1"]
+            str_expected = str_expected[:str_expected.find("T")]
+            str_actual = actual_result["results"][0]["$1"]
+            str_actual = str_actual[:str_actual.find("T")]
+
+            self.assertEqual(str_actual, str_expected, "{0} failed ".format(query))
+
+
+            query = 'SELECT STR_TO_ZONE_NAME(NOW_STR("{0}"), "UTC")'.format(expression)
             expected_result = self.run_cbq_query(query)
             self.log.info("Expected Result : %s", expected_result)
+
             query = 'SELECT NOW_TZ("UTC", "{0}")'.format(expression)
             actual_result = self.run_cbq_query(query)
             self.log.info("Actual Result : %s", actual_result)
-            self.assertEqual(actual_result["results"][0]["$1"],
-                             expected_result["results"][0]["$1"],
-                             "{0} failed ".format(query))
+
+            str_expected = expected_result["results"][0]["$1"]
+            str_expected = str_expected[:str_expected.find("T")]
+            str_actual = actual_result["results"][0]["$1"]
+            str_actual = str_actual[:str_actual.find("T")]
+
+            self.assertEqual(str_actual, str_expected, "{0} failed ".format(query))
