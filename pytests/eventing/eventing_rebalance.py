@@ -392,6 +392,7 @@ class EventingRebalance(EventingBaseTest):
             self.fail("rebalance failed with  error : {0}".format(str(ex)))
         finally:
             remote.start_server()
+            self.sleep(40, "Wait for server to start")
         # Wait for eventing to catch up with all the delete mutations and verify results
         # This is required to ensure eventing works after rebalance goes through successfully
         stats_src = RestConnection(self.master).get_bucket_stats(bucket=self.src_bucket_name)
@@ -559,6 +560,7 @@ class EventingRebalance(EventingBaseTest):
             # Wait for eventing to catch up with all the delete mutations and verify results
             # This is required to ensure eventing works after rebalance goes through successfully
             self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+        self.refresh_rest_server()
         self.undeploy_and_delete_function(body)
 
     def test_stop_start_kv_rebalance_which_has_eventing_nodes(self):
