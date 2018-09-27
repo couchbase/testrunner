@@ -3135,7 +3135,7 @@ class RemoteMachineShellConnection:
 
         return self.execute_command_raw(command, debug=debug, use_channel=use_channel)
 
-    def execute_command_raw(self, command, debug=True, use_channel=False):
+    def execute_command_raw(self, command, debug=True, use_channel=False, timeout=420):
         if debug:
             log.info("running command.raw on {0}: {1}".format(self.ip, command))
         output = []
@@ -3156,7 +3156,7 @@ class RemoteMachineShellConnection:
             channel.close()
             stdin.close()
         elif self.remote:
-            stdin, stdout, stderro = self._ssh_client.exec_command(command)
+            stdin, stdout, stderro = self._ssh_client.exec_command(command, timeout=timeout)
             stdin.close()
 
         if not self.remote:
