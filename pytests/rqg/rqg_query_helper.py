@@ -1735,8 +1735,8 @@ class RQGQueryHelper(object):
                     elif "LIST" in token:
                         string_check = False
                         add_token = False
-                        max = 5
-                        if len(values) < 5:
+                        max = 20
+                        if len(values) < 20:
                             max = len(values)
                         list = self._convert_list(values[0:max], type="string")
                         new_sql += token.replace("LIST", list)+space
@@ -1766,8 +1766,8 @@ class RQGQueryHelper(object):
                     elif "LIST" in token:
                         numeric_check = False
                         add_token = False
-                        max = 5
-                        if len(values) < 5:
+                        max = 20
+                        if len(values) < 20:
                             max = len(values)
                         list = self._convert_list(values[0:max], type="numeric")
                         new_sql += token.replace("LIST", list)+space
@@ -1793,8 +1793,8 @@ class RQGQueryHelper(object):
                     elif "LIST" in token:
                         datetime_check = False
                         add_token = False
-                        max = 5
-                        if len(values) < 5:
+                        max = 20
+                        if len(values) < 20:
                             max = len(values)
                         list = self._convert_list(values[0:max], type="datetime")
                         new_sql += token.replace("LIST",list)+space
@@ -1853,8 +1853,8 @@ class RQGQueryHelper(object):
                     elif "LIST" in token:
                         string_check = False
                         add_token = False
-                        max = 5
-                        if len(values) < 5:
+                        max = 20
+                        if len(values) < 20:
                             max = len(values)
                         list = self._convert_list(values[0:max], type="string")
                         new_sql += token.replace("LIST", list)+space
@@ -1884,8 +1884,8 @@ class RQGQueryHelper(object):
                     elif "LIST" in token:
                         numeric_check = False
                         add_token = False
-                        max = 5
-                        if len(values) < 5:
+                        max = 20
+                        if len(values) < 20:
                             max = len(values)
                         list = self._convert_list(values[0:max], type="numeric")
                         new_sql += token.replace("LIST", list)+space
@@ -1911,8 +1911,8 @@ class RQGQueryHelper(object):
                     elif "LIST" in token:
                         datetime_check = False
                         add_token = False
-                        max = 5
-                        if len(values) < 5:
+                        max = 20
+                        if len(values) < 20:
                             max = len(values)
                         list = self._convert_list(values[0:max], type="datetime")
                         new_sql += token.replace("LIST", list)+space
@@ -1965,8 +1965,8 @@ class RQGQueryHelper(object):
                     elif "DATETIME_LIST" in token:
                         datetime_check = False
                         add_token = False
-                        max = 5
-                        if len(values) < 5:
+                        max = 20
+                        if len(values) < 20:
                             max = len(values)
                         list = self._convert_list(values[0:max], type="datetime")
                         new_list = self._convert_list_datetime(values[0:max], function_list)

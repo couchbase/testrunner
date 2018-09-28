@@ -10,6 +10,7 @@ import zipfile
 from os.path import basename
 from lib.mysql_client import MySQLClient
 from pytests.rqg.rqg_query_helper import RQGQueryHelper
+import re
 
 
 class RQGMySQLClient(MySQLClient):
@@ -351,8 +352,22 @@ class RQGMySQLClient(MySQLClient):
                     sql_n1ql_index_map["expected_result"] = sql_result
                 except Exception, ex:
                     print ex
+
+
+            sql_n1ql_index_map = self._translate_function_names(sql_n1ql_index_map)
             query_input_list.append(sql_n1ql_index_map)
         return query_input_list
+
+    def _translate_function_names(self, query_map):
+        sql_n1ql_synonim_functions = {'NVL': {"n1ql_name": "NVL", "sql_name": "IFNULL"},
+                                      ' RAW ': {"n1ql_name": " RAW ", "sql_name": " "}}
+
+        for key in sql_n1ql_synonim_functions:
+            if key.lower() in query_map['sql'].lower():
+                funcname_to_replace = re.compile(key, re.IGNORECASE)
+                query_map['sql'] = funcname_to_replace.sub(sql_n1ql_synonim_functions[key]['sql_name'], query_map['sql'])
+
+        return query_map
 
     def _convert_update_template_query_info(self, n1ql_queries=[], table_map={}):
         helper = RQGQueryHelper()
