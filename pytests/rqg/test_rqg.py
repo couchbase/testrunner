@@ -32,6 +32,7 @@ class RQGTests(BaseTestCase):
             self.skip_setup_cleanup = True
             self.crud_ops = self.input.param("crud_ops", False)
             self.ansi_joins = self.input.param("ansi_joins", False)
+            self.ansi_transform = self.input.param("ansi_transform", False)
             self.prepared = self.input.param("prepared", False)
             self.hash_joins = self.input.param("hash_joins", False)
             self.create_secondary_meta_indexes = self.input.param("create_secondary_meta_indexes", False)
@@ -262,6 +263,10 @@ class RQGTests(BaseTestCase):
         result_run["n1ql_query"] = n1ql_query
         result_run["sql_query"] = sql_query
         result_run["test_case_number"] = test_case_number
+
+        if self.ansi_transform:
+            result = self._run_explain_queries(n1ql_query=n1ql_query, keyword="u'outer':u'True'", present=False)
+            result_run.update(result)
 
         # run the query
         result_run["run_query_without_index_hint"] = self._run_queries_and_verify(aggregate=aggregate,
@@ -755,6 +760,31 @@ class RQGTests(BaseTestCase):
                 finally:
                     key = "Explain for index {0}".format(index_name)
                     run_result[key] = {"success": check, "result": message}
+        return run_result
+
+    def _run_explain_queries(self, n1ql_query=None, keyword ="", present=True):
+        run_result = {}
+        # Run n1ql query
+        n1ql = self.query_helper._add_explain_with_hints(n1ql_query)
+        self.log.info("Running query: " + n1ql)
+        message = "Pass"
+        try:
+            actual_result = self.n1ql_helper.run_cbq_query(query=n1ql, server=self.n1ql_server)
+            self.log.info(actual_result)
+            check = self.n1ql_helper.verify_explain(actual_result, keyword, present)
+            if not check:
+                if present:
+                    message = " query {0} failed explain result, keyword {1} not found".format(n1ql_query, keyword)
+                else:
+                    message = " query {0} failed explain result, keyword {1} was found but should not be present".format(n1ql_query, keyword)
+                self.log.info(message)
+        except Exception, ex:
+            self.log.info(ex)
+            message = ex
+            check = False
+        finally:
+            key = "Explain for query:  {0}".format(n1ql)
+            run_result[key] = {"success": check, "result": message}
         return run_result
 
     def _initialize_cluster_setup(self):
