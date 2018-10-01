@@ -4573,6 +4573,9 @@ class RemoteMachineShellConnection:
         if self.info.deliverable_type == "deb":
             for lib_name in MISSING_UBUNTU_LIB:
                 if lib_name != "":
+                    if lib_name == "libcurl3" and \
+                        self.info.distribution_version.lower() == "ubuntu 18.04":
+                        lib_name = "libcurl4"
                     log.info("prepare install library {0}".format(lib_name))
                     o, r = self.execute_command("apt-get install -y {0}".format(lib_name))
                     self.log_command_output(o, r)
