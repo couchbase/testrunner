@@ -18,7 +18,8 @@ from testconstants import COUCHBASE_VERSION_3
 from testconstants import COUCHBASE_VERSION_2_WITH_REL
 from testconstants import COUCHBASE_RELEASE_FROM_VERSION_3,\
                           COUCHBASE_RELEASE_FROM_SPOCK
-from testconstants import COUCHBASE_FROM_VERSION_3, COUCHBASE_FROM_SPOCK
+from testconstants import COUCHBASE_FROM_VERSION_3, COUCHBASE_FROM_SPOCK,\
+                          COUCHBASE_FROM_MAD_HATTER
 from testconstants import CB_RELEASE_REPO
 from testconstants import CB_LATESTBUILDS_REPO
 from testconstants import CE_EE_ON_SAME_FOLDER
@@ -375,6 +376,12 @@ class BuildQuery(object):
                             os_name = "ubuntu14.04"
                         elif "ubuntu 16.04" in os_version.lower():
                             os_name = "ubuntu16.04"
+                        elif "ubuntu 18.04" in os_version.lower():
+                            if build_version[:5] in COUCHBASE_FROM_MAD_HATTER:
+                                os_name = "ubuntu18.04"
+                            else:
+                                self.fail("ubuntu 18.04 doesn't support version %s "
+                                                                % build_version[:5])
                         build.url = "{6}{0}/{1}_{4}-{5}_{2}.{3}"\
                                 .format(build_version[:build_version.find('-')],
                                  product, os_architecture, deliverable_type,
@@ -430,6 +437,12 @@ class BuildQuery(object):
                             os_name = "ubuntu14.04"
                         elif "ubuntu 16.04" in os_version.lower():
                             os_name = "ubuntu16.04"
+                        elif "ubuntu 18.04" in os_version.lower():
+                            if build_version[:5] in COUCHBASE_FROM_MAD_HATTER:
+                                os_name = "ubuntu18.04"
+                            else:
+                                self.fail("ubuntu 18.04 doesn't support version %s "
+                                                                % build_version[:5])
                         build.url = "{6}{0}/{1}_{4}-{5}_{2}.{3}"\
                             .format(build_version, product, os_architecture,
                             deliverable_type, build_details[:5], os_name,
@@ -617,7 +630,7 @@ class BuildQuery(object):
 
             if any( x + "-" in build_info for x in COUCHBASE_FROM_VERSION_3):
                 deb_words = ["debian7", "debian8", "ubuntu12.04", "ubuntu14.04",
-                             "ubuntu16.04", "windows", "macos"]
+                             "ubuntu16.04", "ubuntu18.04", "windows", "macos"]
                 if "centos" not in build_info and "suse" not in build_info:
                     tmp_str = build_info.split("_")
                     product_version = tmp_str[1].split("-")
@@ -648,7 +661,7 @@ class BuildQuery(object):
                     build.architecture_type = "x86_64"
                     build_info = build_info.replace("-amd64", "")
                 del_words = ["centos6", "debian7", "debian8", "debian9",
-                             "ubuntu12.04", "ubuntu14.04", "ubuntu16.04",
+                             "ubuntu12.04", "ubuntu14.04", "ubuntu16.04", "ubuntu18.04",
                              "windows", "macos", "centos7", "suse11", "suse12"]
                 if build_info.startswith("couchbase-server"):
                     build.product = build_info.split("-")
@@ -836,6 +849,12 @@ class BuildQuery(object):
                     os_name = "ubuntu14.04"
                 elif "ubuntu 16.04" in distribution_version:
                     os_name = "ubuntu16.04"
+                elif "ubuntu 18.04" in distribution_version.lower():
+                    if version[:5] in COUCHBASE_FROM_MAD_HATTER:
+                        os_name = "ubuntu18.04"
+                    else:
+                        self.fail("ubuntu 18.04 doesn't support version %s "
+                                                              % version[:5])
                 elif "debian gnu/linux 7" in distribution_version:
                     build.distribution_version = "debian7"
                     os_name = "debian7"

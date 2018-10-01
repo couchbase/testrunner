@@ -83,7 +83,8 @@ CB_VERSION_NAME = {"0.0":"master", "4.0":"sherlock", "4.1":"sherlock",
                    "6.0":"alice",
                    "6.5":"mad-hatter"}
 
-SYSTEMD_SERVER = ["centos 7", "suse 12", "ubuntu 16.04", "debian gnu/linux 8", "debian gnu/linux 9"]
+SYSTEMD_SERVER = ["centos 7", "suse 12", "ubuntu 16.04", "ubuntu 18.04",
+                  "debian gnu/linux 8", "debian gnu/linux 9"]
 WIN_MEMBASE_DATA_PATH = '/cygdrive/c/Program\ Files/Membase/Server/var/lib/membase/data/'
 WIN_COUCHBASE_DATA_PATH = '/cygdrive/c/Program\ Files/Couchbase/Server/var/lib/couchbase/data/'
 WIN_COUCHBASE_DATA_PATH_RAW = 'c:/Program\ Files/Couchbase/Server/var/lib/couchbase/data/'
