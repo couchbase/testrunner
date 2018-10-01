@@ -177,11 +177,10 @@ class QueryChainedLetTests(QueryTests):
     def test_chained_let_in_let_subquery(self):
         queries = dict()
 
-        query_2 = 'select a, b, c from default d0 let usekeys=(select raw meta(d1).id from default d1 order by meta(d1).id limit 20), a=join_yr, b=a+1, c=(select e from default d4 use keys usekeys let d=b+1,e=d+1 order by join_day limit 5) order by a, b, c limit 10'
-        verify_2 = 'select join_yr as a, join_yr+1 as b, (select d0.join_yr+3 as e from default d4 use keys (select raw meta(d1).id from default d1 order by meta(d1).id limit 20) order by join_day limit 5) as c from default d0 order by a, b, c limit 10'
+        query_1 = 'select a, b, c from default d0 let usekeys=(select raw meta(d1).id from default d1 order by meta(d1).id limit 20), a=join_yr, b=a+1, c=(select e from default d4 use keys usekeys let d=b+1,e=d+1 order by join_day limit 5) order by a, b, c limit 10'
+        verify_1 = 'select join_yr as a, join_yr+1 as b, (select d0.join_yr+3 as e from default d4 use keys (select raw meta(d1).id from default d1 order by meta(d1).id limit 20) order by join_day limit 5) as c from default d0 order by a, b, c limit 10'
 
         queries["a"] = {"queries": [query_1], "asserts": [self.verifier(verify_1)]}
-        queries["b"] = {"queries": [query_2], "asserts": [self.verifier(verify_2)]}
 
         self.query_runner(queries)
 
