@@ -345,8 +345,11 @@ class Installer(object):
                             #build.url = build.url.replace("enterprise", "community")
                             #build.name = build.name.replace("enterprise", "community")
                     """ check if URL is live """
+                    url_valid = False
                     remote_client = RemoteMachineShellConnection(server)
-                    if remote_client.is_url_live(build.url):
+                    url_valid = remote_client.is_url_live(build.url)
+                    remote_client.disconnect()
+                    if url_valid:
                         return build
                     else:
                         sys.exit("ERROR: URL is not good. Check URL again")
@@ -1020,7 +1023,9 @@ class InstallerJob(object):
                 if "product" in params and params["product"] in ["couchbase", "couchbase-server", "cb"]:
                     success = True
                     for server in servers:
-                        success &= not RemoteMachineShellConnection(server).is_couchbase_installed()
+                        shell = RemoteMachineShellConnection(server)
+                        success &= not shell.is_couchbase_installed()
+                        shell.disconnect()
                     if not success:
                         print "Server:{0}.Couchbase is still" + \
                               " installed after uninstall".format(server)
@@ -1074,7 +1079,9 @@ class InstallerJob(object):
         if "product" in params and params["product"] in ["couchbase", "couchbase-server", "cb"]:
             success = True
             for server in servers:
-                success &= not RemoteMachineShellConnection(server).is_couchbase_installed()
+                shell = RemoteMachineShellConnection(server)
+                success &= not shell.is_couchbase_installed()
+                shell.disconnect()
             if not success:
                 print "Server:{0}.Couchbase is still installed after uninstall".format(server)
                 return success
@@ -1102,6 +1109,7 @@ class InstallerJob(object):
                 shell = RemoteMachineShellConnection(server)
                 shell.execute_command("rm -f /cygdrive/c/automation/*_172.23*")
                 shell.execute_command("rm -f /cygdrive/c/automation/*_10.17*")
+                shell.disconnect()
                 os.system("rm -f resources/windows/automation/*_172.23*")
                 os.system("rm -f resources/windows/automation/*_10.17*")
         return success
