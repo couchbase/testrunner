@@ -430,10 +430,10 @@ class N1QLHelper():
                 self.query += " USING VIEW "
             if self.use_rest:
                 try:
-                    check = self._is_index_in_list(bucket.name, "#primary", server = server)
+                    check = self._is_index_in_list(bucket.name, "#primary", server=server)
                     if not check:
-                        self.run_cbq_query(server = server,query_params={'timeout' : '900s'})
-                        check = self.is_index_online_and_in_list(bucket.name, "#primary", server = server)
+                        self.run_cbq_query(server=server, query_params={'timeout': '900s'})
+                        check = self.is_index_online_and_in_list(bucket.name, "#primary", server=server)
                         if not check:
                             raise Exception(" Timed-out Exception while building primary index for bucket {0} !!!".format(bucket.name))
                     else:

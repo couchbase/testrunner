@@ -318,7 +318,7 @@ class RQGMySQLClient(MySQLClient):
                 f.write(json.dumps(map)+"\n")
         f.close()
 
-    def _convert_template_query_info(self, n1ql_queries=[], table_map={}, define_gsi_index=True, gen_expected_result=False, ansi_joins=False, aggregate_pushdown=False, partitioned_indexes=False):
+    def _convert_template_query_info(self, n1ql_queries=[], table_map={}, define_gsi_index=True, gen_expected_result=False, ansi_joins=False, aggregate_pushdown=False, partitioned_indexes=False, with_let=False):
         helper = RQGQueryHelper()
         query_input_list = []
         for n1ql_query in n1ql_queries:
@@ -339,7 +339,8 @@ class RQGMySQLClient(MySQLClient):
                                                                                                      define_gsi_index=define_gsi_index,
                                                                                                      ansi_joins=ansi_joins,
                                                                                                      aggregate_pushdown=aggregate_pushdown,
-                                                                                                     partitioned_indexes=partitioned_indexes)
+                                                                                                     partitioned_indexes=partitioned_indexes,
+                                                                                                     with_let=with_let)
             else:
                 sql_n1ql_index_map = helper._convert_sql_template_to_value_for_secondary_indexes_sub_queries(n1ql_query,
                                                                                                              table_map=table_map,

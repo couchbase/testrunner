@@ -32,6 +32,7 @@ class RQGTests(BaseTestCase):
             self.skip_setup_cleanup = True
             self.crud_ops = self.input.param("crud_ops", False)
             self.ansi_joins = self.input.param("ansi_joins", False)
+            self.with_let = self.input.param("with_let", False)
             self.ansi_transform = self.input.param("ansi_transform", False)
             self.prepared = self.input.param("prepared", False)
             self.hash_joins = self.input.param("hash_joins", False)
@@ -218,7 +219,8 @@ class RQGTests(BaseTestCase):
                                                                                    define_gsi_index=self.use_secondary_index,
                                                                                    aggregate_pushdown=self.aggregate_pushdown,
                                                                                    partitioned_indexes=self.partitioned_indexes,
-                                                                                   ansi_joins=self.ansi_joins)
+                                                                                   ansi_joins=self.ansi_joins,
+                                                                                   with_let=self.with_let)
 
                 for sql_n1ql_index_map in sql_n1ql_index_map_list:
                     sql_n1ql_index_map["n1ql"] = sql_n1ql_index_map['n1ql'].replace("simple_table", self.database+"_"+"simple_table")
@@ -296,7 +298,7 @@ class RQGTests(BaseTestCase):
                                                                                 sql_query=sql_query,
                                                                                 expected_result=expected_result)
 
-            if self.aggregate_pushdown == "primary":
+            if self.aggregate_pushdown == "primary" and not self.with_let:
                 result_run["aggregate_explain_check::#primary"] = self._run_query_with_pushdown_check(n1ql_query,
                                                                                                       index_info)
 
@@ -314,7 +316,7 @@ class RQGTests(BaseTestCase):
             result = self._run_queries_with_explain(n1ql_query, indexes)
             result_run.update(result)
 
-        if self.aggregate_pushdown:
+        if self.aggregate_pushdown and not self.with_let:
             for index_name in indexes.keys():
                 result_run["aggregate_explain_check::" + str(index_name)] = self._run_query_with_pushdown_check(
                     n1ql_query,
