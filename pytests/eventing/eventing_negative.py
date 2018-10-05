@@ -129,6 +129,49 @@ class EventingNegative(EventingBaseTest):
                   batch_size=self.batch_size)
         # delete source, metadata and destination buckets when eventing is processing_mutations
         for bucket in self.buckets:
+                self.log.info("deleting bucket: %s",bucket.name)
+                self.rest.delete_bucket(bucket.name)
+        # Wait for function to get undeployed automatically
+        self.wait_for_undeployment(body['appname'])
+        # Delete the function
+        self.delete_function(body)
+        self.sleep(60)
+        # check if all the eventing-consumers are cleaned up
+        # Validation of any issues like panic will be taken care by teardown method
+        self.assertTrue(self.check_if_eventing_consumers_are_cleaned_up(),
+                        msg="eventing-consumer processes are not cleaned up even after undeploying the function")
+
+    # MB-30377
+    def test_src_bucket_delete_when_eventing_is_processing_mutations(self):
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_WITH_DOC_TIMER)
+        self.deploy_function(body)
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        # delete source, metadata and destination buckets when eventing is processing_mutations
+        for bucket in self.buckets:
+            if bucket.name == "src_bucket":
+                self.log.info("deleting bucket: %s",bucket.name)
+                self.rest.delete_bucket(bucket.name)
+        # Wait for function to get undeployed automatically
+        self.wait_for_undeployment(body['appname'])
+        # Delete the function
+        self.delete_function(body)
+        self.sleep(60)
+        # check if all the eventing-consumers are cleaned up
+        # Validation of any issues like panic will be taken care by teardown method
+        self.assertTrue(self.check_if_eventing_consumers_are_cleaned_up(),
+                        msg="eventing-consumer processes are not cleaned up even after undeploying the function")
+
+    # MB-29533 and MB-31545
+    def test_metadata_bucket_delete_when_eventing_is_processing_mutations(self):
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_WITH_DOC_TIMER)
+        self.deploy_function(body)
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        # delete source, metadata and destination buckets when eventing is processing_mutations
+        for bucket in self.buckets:
+            if bucket.name == "metadata":
+                self.log.info("deleting bucket: %s",bucket.name)
                 self.rest.delete_bucket(bucket.name)
         # Wait for function to get undeployed automatically
         self.wait_for_undeployment(body['appname'])
