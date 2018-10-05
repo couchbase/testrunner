@@ -894,7 +894,7 @@ class x509tests(BaseTestCase):
             rest.create_bucket(bucket='default', ramQuotaMB=100)
                 
         cmd = "curl -v  " + \
-                " -s -u Administrator:password --data pretty=true --data-urlencode 'statement=create bucket default_cbas with {\"name\":\"default\"}' " + \
+                " -s -u Administrator:password --data pretty=true --data-urlencode 'statement=create dataset on default' " + \
                 "http://{0}:{1}/_p/cbas/query/service ". \
                 format(host.ip, 8091)
         
@@ -1068,21 +1068,37 @@ class x509_upgrade(NewUpgradeBaseTest):
         if output == "":
             self.assertTrue(True, "Issue with post on /pools/default")
     
-    def _sdk_connection(self, root_ca_path=x509main.CACERTFILEPATH + x509main.CACERTFILE, bucket='default', host_ip=None):
+    def _sdk_connection(self, root_ca_path=x509main.CACERTFILEPATH + x509main.CACERTFILE, bucket='default', host_ip=None, sdk_version='pre-vulcan'):
         self.sleep(30)
         result = False
         self.add_built_in_server_user([{'id': bucket, 'name': bucket, 'password': 'password'}], \
                                       [{'id': bucket, 'name': bucket, 'roles': 'admin'}], self.master)
-        connection_string = 'couchbases://' + host_ip + '/' + bucket + '?certpath=' + root_ca_path
-        self.log.info("Connection string is -{0}".format(connection_string))
-        try:
-            cb = Bucket(connection_string, password='password')
-            if cb is not None:
-                result = True
-                return result, cb
-        except Exception, ex:
-            self.log.info("Exception is  -{0}".format(ex))
-            return result
+        if sdk_version == 'pre-vulcan':
+            connection_string = 'couchbases://' + host_ip + '/' + bucket + '?certpath=' + root_ca_path
+            self.log.info("Connection string is -{0}".format(connection_string))
+            try:
+                cb = Bucket(connection_string, password='password')
+                if cb is not None:
+                    result = True
+                    return result, cb
+            except Exception, ex:
+                self.log.info("Expection is  -{0}".format(ex))
+        elif sdk_version == 'vulcan':
+            self.add_built_in_server_user([{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'password': 'password'}], \
+                                      [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'roles': 'admin'}], self.master)
+            key_file = x509main.CACERTFILEPATH + self.ip_address + ".key"
+            chain_file = x509main.CACERTFILEPATH + "/long_chain" + self.ip_address + ".pem"
+            connection_string = 'couchbases://' + host_ip + '/?certpath=' + chain_file + "&keypath=" + key_file
+            self.log.info("Connection string is -{0}".format(connection_string))
+            try:
+                cluster = Cluster(connection_string);
+                cb = cluster.open_bucket(bucket)
+                if cb is not None:
+                    result = True
+                    return result, cb
+            except Exception, ex:
+                self.log.info("Expection is  -{0}".format(ex))
+        return result
 
     def upgrade_all_nodes(self):
         servers_in = self.servers[1:]
@@ -1141,5 +1157,7 @@ class x509_upgrade(NewUpgradeBaseTest):
         
         for server in self.servers:
             result = self._sdk_connection(host_ip=server.ip)
+            self.assertTrue(result, "Cannot create a security connection with server")
+            result = self._sdk_connection(host_ip=server.ip, sdk_version='vulcan')
             self.assertTrue(result, "Cannot create a security connection with server")
             self.check_rest_api(server)
