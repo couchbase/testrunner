@@ -12,7 +12,10 @@ create_index:
 	CREATE INDEX INDEX_NAME ON BUCKET_NAME(USER_FIELD_LIST);
 
 select_from:
-	* | COUNT(*) |  COUNT( DISTINCT field ) | SUM( non_string_field ) | SUM(DISTINCT non_string_field ) | AVG( non_string_field ) | AVG( DISTINCT non_string_field ) |  MAX( non_string_field ) | MIN( non_string_field );
+	* | COUNT(*) |  COUNT( DISTINCT field ) | SUM( non_string_field ) | SUM(DISTINCT non_string_field ) | aggregate_function( non_string_field ) | aggregate_function( DISTINCT non_string_field ) |  MAX( non_string_field ) | MIN( non_string_field );
+
+aggregate_function:
+    AVG | STDDEV | VARIANCE | STDDEV_SAMP | STDDEV_POP | VARIANCE_POP | VARIANCE_SAMP | MEAN ;
 
 complex_condition:
 	(condition) AND (condition) | (condition) OR (condition) | condition;

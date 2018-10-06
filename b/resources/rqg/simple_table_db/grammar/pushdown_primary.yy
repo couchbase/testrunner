@@ -95,8 +95,12 @@ numerical_agg:
     MIN |
     MAX |
     SUM |
-    AVG |
+    aggregate_function |
     COUNT ;
+
+aggregate_function:
+    AVG | STDDEV | VARIANCE | STDDEV_SAMP | STDDEV_POP | VARIANCE_POP | VARIANCE_SAMP | MEAN ;
+
 
 n:
     0 |

@@ -32,7 +32,10 @@ numeric_field1:
     NUMERIC_FIELD ;
 
 aggregate_func:
-    COUNT | MIN | MAX | AVG | SUM ;
+    COUNT | MIN | MAX | aggregate_function | SUM ;
+
+aggregate_function:
+    AVG | STDDEV | VARIANCE | STDDEV_SAMP | STDDEV_POP | VARIANCE_POP | VARIANCE_SAMP | MEAN ;
 
 where_condition:
     1=1 | COALESCE(numeric_field, 10) > 0 |

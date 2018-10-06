@@ -361,12 +361,17 @@ class RQGMySQLClient(MySQLClient):
 
     def _translate_function_names(self, query_map):
         sql_n1ql_synonim_functions = {'NVL': {"n1ql_name": "NVL", "sql_name": "IFNULL"},
-                                      ' RAW ': {"n1ql_name": " RAW ", "sql_name": " "}}
-
+                                      'RAW': {"n1ql_name": "RAW ", "sql_name": " "},
+                                      'VARIANCE_POP' : {"n1ql_name": "VARIANCE_POP", "sql_name": "VAR_POP"},
+                                      'VARIANCE_SAMP': {"n1ql_name": "VARIANCE_SAMP", "sql_name": "VAR_SAMP"},
+                                      'VARIANCE': {"n1ql_name": "VARIANCE", "sql_name": "VAR_SAMP"},
+                                      'STDDEV': {"n1ql_name": "STDDEV", "sql_name": "STDDEV_SAMP"},
+                                      'MEAN': {"n1ql_name": "MEAN", "sql_name": "AVG"}}
         for key in sql_n1ql_synonim_functions:
             if key.lower() in query_map['sql'].lower():
-                funcname_to_replace = re.compile(key, re.IGNORECASE)
-                query_map['sql'] = funcname_to_replace.sub(sql_n1ql_synonim_functions[key]['sql_name'], query_map['sql'])
+                n1ql_name = key
+                sql_name = sql_n1ql_synonim_functions[key]['sql_name']
+                query_map['sql'] = re.sub(r'([^\w]{1})'+key+'([^\w]{1})', r'\1'+sql_name+r'\2',query_map['sql'])
 
         return query_map
 

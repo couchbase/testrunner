@@ -778,9 +778,10 @@ class RQGQueryHelper(object):
         return new_sql
 
     def _check_function(self, sql):
-        func_list = ["MIN", "min", "MAX", "max", "COUNT", "SUM", "sum", "AVG", "avg"]
+        func_list = ["min", "max", "count", "sum", "avg", "stddev", "variance", "stddev_samp", "stddev_pop",
+                     "variance_pop", "variance_samp", "mean", "var_pop", "var_samp"]
         for func in func_list:
-            if func in sql:
+            if func in sql.lower():
                 return True
         return False
 

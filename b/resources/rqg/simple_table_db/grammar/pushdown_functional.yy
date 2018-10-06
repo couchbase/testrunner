@@ -61,7 +61,10 @@ agg:
     MAX |
     SUM |
     COUNT |
-    AVG ;
+    aggregate_function ;
+
+aggregate_function:
+    AVG | STDDEV | VARIANCE | STDDEV_SAMP | STDDEV_POP | VARIANCE_POP | VARIANCE_SAMP | MEAN ;
 
 num_func:
     ABS |
