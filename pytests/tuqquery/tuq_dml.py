@@ -23,6 +23,7 @@ class DMLQueryTests(QueryTests):
         self.log.info(self.shell.execute_command("ps aux | grep indexer"))
         self.log.info(self.shell.execute_command("ps aux | grep cbq"))
         self.log.info("-"*100)
+        self.run_cbq_query('delete from system:prepareds')
         self.log.info("==============  DMLQueryTests setup has started ==============")
         self.log_config_info()
 
@@ -593,7 +594,7 @@ class DMLQueryTests(QueryTests):
                 for bucket in self.buckets:
                     self.query = 'upsert into %s (key, value) values  ("%s", %s)' % (bucket.name, key, value)
                     if self.named_prepare:
-                        self.named_prepare= "prepare_" + bucket.name + str(uuid.uuid4())[:3]
+                        self.named_prepare= "prepare_" + bucket.name + str(uuid.uuid4())[:5]
                         self.query = "PREPARE %s from %s" % (self.named_prepare,self.query)
                     else:
                         self.query = "PREPARE %s" % self.query

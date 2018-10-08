@@ -1881,7 +1881,8 @@ class QueriesIndexTests(QueryTests):
                 actual_result = self.run_cbq_query()
                 plan = self.ExplainPlanHelper(actual_result)
                 print("####### PLAN ::"+str(plan)+"::")
-                self.assertTrue(plan['~children'][0]['~children'][0]['#operator'] == 'IntersectScan',
+                self.assertTrue(plan['~children'][0]['~children'][0]['#operator'] == 'IntersectScan'
+                                or plan['~children'][0]['~children'][0]['#operator'] == 'UnionScan',
                                 "Intersect Scan is not being used in and query for 2 array indexes")
                 result1 =plan['~children'][0]['~children'][0]['scans'][0]['scan']['index']
                 result2 =plan['~children'][0]['~children'][0]['scans'][1]['scan']['index']
@@ -2718,15 +2719,11 @@ class QueriesIndexTests(QueryTests):
                 self.assertTrue(actual_result['results']==[{u'$1': self.docs_per_day*2016}])
                 self.assertTrue("index_group_aggs" in str(plan))
                 self.assertEqual(plan['~children'][0]['index_group_aggs']['aggregates'][0]['aggregate'], "COUNT")
-                self.assertTrue(
-                    plan['~children'][0]['#operator'] == 'IndexScan3',
-                    "IndexScan3 is not being used")
+                self.assertTrue(plan['~children'][0]['#operator'] == 'IndexScan3', "IndexScan3 is not being used")
                 self.query = "explain select a.cnt from (select count(1) as cnt from default where meta().id is not null) as a"
                 actual_result2 = self.run_cbq_query()
                 plan = self.ExplainPlanHelper(actual_result2)
-                self.assertTrue(
-                    plan['~children'][0]['#operator'] != 'IndexScan3',
-                    "IndexScan3 should not be used in subquery")
+                self.assertTrue(plan['~children'][0]['#operator'] != 'IndexScan3', "IndexScan3 should not be used in subquery")
                 self.query = "select a.cnt from (select count(1) as cnt from default where meta().id is not null) as a"
                 actual_result2 = self.run_cbq_query()
                 self.query = "select a.cnt from (select count(1) as cnt from %s where _id is not null) as a " %(bucket.name)
@@ -2905,9 +2902,7 @@ class QueriesIndexTests(QueryTests):
             created_indexes = []
             try:
                 idx = "idx"
-                self.query = "CREATE INDEX %s ON %s(%s) " %(idx,bucket.name,'job_title')+\
-                             "where email  like '%@%.%' " + \
-                             "USING %s" % (self.index_type)
+                self.query = "CREATE INDEX %s ON %s(%s) " %(idx,bucket.name,'job_title') + "where email  like '%@%.%' " + "USING %s" % (self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
                 self._verify_results(actual_result['results'], [])
