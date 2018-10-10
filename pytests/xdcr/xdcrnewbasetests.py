@@ -390,14 +390,16 @@ class NodeHelper:
         return str(dir)
 
     @staticmethod
-    def check_goxdcr_log(server, str, goxdcr_log=None, print_matches=None):
+    def check_goxdcr_log(server, str, goxdcr_log=None, print_matches=None, log_name=None):
         """ Checks if a string 'str' is present in goxdcr.log on server
             and returns the number of occurances
             @param goxdcr_log: goxdcr log location on the server
         """
         if not goxdcr_log:
+            if not log_name:
+                log_name = "goxdcr.log"
             goxdcr_log = NodeHelper.get_goxdcr_log_dir(server)\
-                     + '/goxdcr.log*'
+                     + '/' + log_name + '*'
 
         shell = RemoteMachineShellConnection(server)
         info = shell.extract_remote_info().type.lower()
@@ -1038,6 +1040,7 @@ class CouchbaseCluster:
         self.__hostnames = {}
         self.__fail_over_nodes = []
         self.__data_verified = True
+        self.__meta_data_verified = True
         self.__remote_clusters = []
         self.__clusterop = Cluster()
         self.__kv_gen = {}
@@ -2420,6 +2423,32 @@ class CouchbaseCluster:
 
         self.__data_verified = True
 
+    def verify_meta_data(self, kv_store=1, timeout=None, skip=[]):
+        """Verify if metadata for bucket matches on src and dest clusters
+        @param kv_store: Index of kv_store where item values are stored on
+        bucket.
+        @param timeout: None if wait indefinitely else give timeout value.
+        """
+        self.__meta_data_verified = False
+        tasks = []
+        for bucket in self.__buckets:
+            if bucket.name not in skip:
+                data_map = {}
+                gather_task = self.__clusterop.async_get_meta_data(self.__master_node, bucket, bucket.kvs[kv_store],
+                                                        compression=self.sdk_compression)
+                gather_task.result()
+                data_map[bucket.name] = gather_task.get_meta_data_store()
+                tasks.append(
+                    self.__clusterop.async_verify_meta_data(
+                        self.__master_node,
+                        bucket,
+                        bucket.kvs[kv_store],
+                        data_map[bucket.name]
+                        ))
+        for task in tasks:
+            task.result(timeout)
+        self.__meta_data_verified = True
+
     def wait_for_dcp_queue_drain(self, timeout=180):
         """Wait for ep_dcp_xdcr_items_remaining to reach 0.
         @return: True if reached 0 else False.
@@ -2650,14 +2679,14 @@ class XDCRNewBaseTest(unittest.TestCase):
             RbacBase().create_user_source(testuser, 'builtin',
                                           self.get_cb_cluster_by_name('C' + str(i)).get_master_node())
 
-            
+
             # Assign user to role
             role_list = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'roles': 'admin'}]
             RbacBase().add_user_role(role_list,
                                      RestConnection(self.get_cb_cluster_by_name('C' + str(i)).get_master_node()),
                                      'builtin')
 
-            
+
         self.__set_free_servers()
         if str(self.__class__).find('upgradeXDCR') == -1 and str(self.__class__).find('lww') == -1\
                 and str(self.__class__).find('capiXDCR') == -1:
@@ -2836,11 +2865,11 @@ class XDCRNewBaseTest(unittest.TestCase):
         self.log.info("**** add built-in '%s' user to node %s ****" % (testuser[0]["name"],
                                                                        node.ip))
         RbacBase().create_user_source(testuser, 'builtin', node)
-        
+
         self.log.info("**** add '%s' role to '%s' user ****" % (rolelist[0]["roles"],
                                                                 testuser[0]["name"]))
         RbacBase().add_user_role(rolelist, RestConnection(node), 'builtin')
-        
+
     def get_cb_cluster_by_name(self, name):
         """Return couchbase cluster object for given name.
         @return: CouchbaseCluster object
@@ -3484,7 +3513,7 @@ class XDCRNewBaseTest(unittest.TestCase):
                             _count1 = 0
                             for node in nodes:
                                 _count1 += node["interestingStats"]["curr_items"]
-                            
+
                             bucket_info2 = rest2.get_bucket_json(bucket.name)
                             nodes = bucket_info1["nodes"]
                             _count2 = 0
@@ -3545,6 +3574,7 @@ class XDCRNewBaseTest(unittest.TestCase):
             6. Verify Revision id of each item.
         """
         skip_key_validation = self._input.param("skip_key_validation", False)
+        skip_meta_validation = self._input.param("skip_meta_validation", True)
         src_dcp_queue_drained = False
         dest_dcp_queue_drained = False
         src_active_passed = False
@@ -3617,13 +3647,17 @@ class XDCRNewBaseTest(unittest.TestCase):
                             self.fail("RevID verification failed for remote-cluster: {0}".
                                 format(remote_cluster_ref))
 
+                if not skip_meta_validation:
+                    src_cluster.verify_meta_data()
+                    dest_cluster.verify_meta_data()
+
         self.check_replication_restarted()
         # treat errors in self.__report_error_list as failures
         if len(self.__report_error_list) > 0:
             error_logger = self.check_errors_in_goxdcr_logs()
             if error_logger:
                 self.fail("Errors found in logs : {0}".format(error_logger))
-                
+
     def wait_service_started(self, server, wait_time=120):
         shell = RemoteMachineShellConnection(server)
         type = shell.extract_remote_info().distribution_type
