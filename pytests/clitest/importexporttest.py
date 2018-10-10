@@ -905,11 +905,8 @@ class ImportExportTests(CliBaseTest):
                                                                         timeout=60)
                     except Exception as e:
                         if not output:
-                            self.log.info("Run one more time export command \
-                                                     until MB-31432 is fixed")
-                            output, error = self.shell.execute_command_raw(exe_cmd_str,
-                                                                            timeout=60)
-
+                            self.fail("MB-31432 is fixed.  This must be other issue {0}"
+                                                                             .format(e))
                     data_exported = True
                     if self.secure_conn:
                         if self.no_ssl_verify:
