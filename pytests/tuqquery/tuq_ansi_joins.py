@@ -1,11 +1,6 @@
-import logging
-import threading
-import json
-import uuid
-import time
-import os
 from tuq import QueryTests
 from membase.api.exception import CBQError, ReadDocumentException
+
 
 class QueryANSIJOINSTests(QueryTests):
     def setUp(self):
@@ -15,7 +10,6 @@ class QueryANSIJOINSTests(QueryTests):
             self.rest.load_sample("travel-sample")
         self.log.info("==============  QueryANSIJOINSTests setup has completed ==============")
         self.log_config_info()
-
 
     def suite_setUp(self):
         super(QueryANSIJOINSTests, self).suite_setUp()

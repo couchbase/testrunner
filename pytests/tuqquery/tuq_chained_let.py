@@ -214,9 +214,6 @@ class QueryChainedLetTests(QueryTests):
 
         self.query_runner(queries)
 
-    def test_chained_let_and_letting_in_let_and_letting_subquery(self):
-        self.fail()
-
     def test_chained_let_and_letting_index_selection(self):
         self.fail()
 
