@@ -550,6 +550,23 @@ class RemoteMachineShellConnection:
             o, r = self.execute_command("kill "
                         " $(ps aux | grep 'beam.smp' | awk '{print $2}')")
             self.log_command_output(o, r)
+            all_killed = False
+            count = 0
+            while not all_killed and count < 6:
+                process_count = 0
+                self.sleep(2, "wait for erlang processes terminated")
+                out, _ = self.execute_command("ps aux | grep beam.smp")
+                for idx, val in enumerate(out):
+                    if "/opt/couchbase" in val:
+                        process_count += 1
+                if process_count == 0:
+                    all_killed = True
+                if count == 3:
+                    o, r = self.execute_command("kill "
+                        " $(ps aux | grep 'beam.smp' | awk '{print $2}')")
+                count += 1
+            if not all_killed:
+                raise Exception("Could not kill erlang process")
         return o, r
 
     def kill_cbft_process(self):
