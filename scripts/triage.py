@@ -32,7 +32,7 @@ Examples:
 
 def triage(os, build, component, username, password, job, format):
     fmt = format
-    if format == '':
+    if format == '' or format is None:
         fmt = 'csd'
 
     connection_error = ['ServerUnavailableException', 'unable to reach the host']
