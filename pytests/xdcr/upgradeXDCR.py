@@ -250,6 +250,7 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
         self.sleep(60)
 
         if self._demand_encryption or self._use_encryption_after_upgrade:
+            ret = self.is_ssl_over_memcached(self.src_master)
             if not self.is_ssl_over_memcached(self.src_master):
                 self.fail("C1: After old nodes were replaced, C1 still uses "
                           "ns_proxy connection to C2 which is >= 3.0")
@@ -356,10 +357,11 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
         return True
 
     def is_ssl_over_memcached(self, master):
-        if not NodeHelper.check_goxdcr_log(master,
-                    "Trying to create a ssl over memcached connection"):
+        goxdcr_log = NodeHelper.get_goxdcr_log_dir(master) + '/goxdcr.log*'
+        count = NodeHelper.check_goxdcr_log(master, "Trying to create a ssl over memcached connection", goxdcr_log)
+        if count == 0:
             if NodeHelper.check_goxdcr_log(master,
-                    "Get or create ssl over proxy connection"):
+                    "Get or create ssl over proxy connection",goxdcr_log):
                 self.log.error("SSL still uses ns_proxy connection!")
             return False
         self.log.info("SSL uses memcached after upgrade!")
