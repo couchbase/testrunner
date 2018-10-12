@@ -627,6 +627,10 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
             new_vb_nums = RestHelper(RestConnection(self.master))._get_vbuckets(servers,
                                                                                 bucket_name=self.buckets[0].name)
             self._verify_vbucket_nums_for_swap(old_vb_nums, new_vb_nums)
+            self.log.info("Enable remote eval if its version is 5.5+")
+            shell = RemoteMachineShellConnection(self.master)
+            shell.enable_diag_eval_on_non_local_hosts()
+            shell.disconnect()
             status, content = ClusterOperationHelper.find_orchestrator(servers[0])
             self.assertTrue(status, msg="Unable to find orchestrator: {0}:{1}". \
                             format(status, content))
