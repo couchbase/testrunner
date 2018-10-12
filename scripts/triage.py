@@ -109,11 +109,20 @@ def triage(os, build, component, username, password, job, format):
         '''Load json logs for last job call'''
         logs_url = "http://qa.sc.couchbase.com/job/test_suite_executor/"+str(build_id)+"/testReport/api/json"
         response = urllib.urlopen(logs_url)
-        logs_data = json.loads(response.read())
-        if (len(logs_data)) == 0:
-            job_dict['fail_reasons']['no_logs']['cases'].append('case')
+
+        logs_data = {}
+        try:
+            logs_data = json.loads(response.read())
+        except ValueError, ve:
+            print("No logs for job - "+str(job_name))
+
+        if (str(logs_data)) == '{}':
+            job_dict['fail_reasons']['no_logs']['cases'].append('no_logs_case')
+            failers.append(job_dict)
             continue
-        if len(logs_data['suites']) == 0:
+        if (len(logs_data['suites'])) == 0:
+            job_dict['fail_reasons']['no_logs']['cases'].append('no_logs_case')
+            failers.append(job_dict)
             continue
         suites = logs_data['suites']
 
@@ -184,7 +193,6 @@ def extract_cmd(case_name, lines):
 
 def print_report(failers, os, build, component, fmt):
     print("########################## GREEN BOARD REPORT FOR "+os+"   BUILD "+build+"   COMPONENT - "+component+" #################################")
-
     connection_failers = []
     no_logs_failers = []
     all_the_rest_failers = []
@@ -218,7 +226,7 @@ def print_report(failers, os, build, component, fmt):
         print str(n)+". There are failed jobs without logs."
         no_logs_jobs_container = ""
         for job in no_logs_failers:
-            no_logs_jobs_container = no_logs_jobs_container + job + ','
+            no_logs_jobs_container = no_logs_jobs_container + job[job.find('_')+1:] + ','
         print("Jobs list to be restarted:")
         print(no_logs_jobs_container[:len(no_logs_jobs_container)-1])
         n = n+1
