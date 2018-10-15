@@ -379,3 +379,29 @@ class ObserveSeqNoTests(BaseTestCase):
         self.check_results( op_data, after_failover_results)
 
         self.log.info('Test complete')
+
+    def test_CASnotzero(self):
+        # MB-31149
+        # observe.observeseqnotests.ObserveSeqNoTests.test_CASnotzero
+        # set value, append and check CAS value
+        self.log.info('Starting test_CASnotzero')
+
+        # without hello(mutationseqencenumber)
+        client = VBucketAwareMemcached(RestConnection(self.master), 'default')
+        KEY_NAME = "test1key"
+        client.set(KEY_NAME, 0,0, json.dumps({'value':'value2'}))
+        client.generic_request(client.memcached(KEY_NAME).append, 'test1key', 'appended data')
+        get_meta_resp = client.generic_request(client.memcached(KEY_NAME).getMeta, 'test1key')
+        self.log.info('the CAS value without hello(mutationseqencenumber): {} '.format(get_meta_resp[4]))
+        self.assertNotEquals(get_meta_resp[4], 0)
+        
+        # with hello(mutationseqencenumber)
+        KEY_NAME = "test2key"
+        client.set(KEY_NAME, 0,0, json.dumps({'value':'value1'}))
+        h = client.sendHellos(memcacheConstants.PROTOCOL_BINARY_FEATURE_MUTATION_SEQNO)
+        client.generic_request(client.memcached(KEY_NAME).append, 'test2key', 'appended data456')
+
+        get_meta_resp = client.generic_request(client.memcached(KEY_NAME).getMeta, 'test2key')
+        self.log.info('the CAS value with hello(mutationseqencenumber): {} '.format(get_meta_resp[4]))
+        self.assertNotEquals(get_meta_resp[4], 0)
+
