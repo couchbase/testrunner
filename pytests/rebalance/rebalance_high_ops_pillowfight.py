@@ -30,7 +30,7 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
         self.recovery_type = self.input.param("recovery_type", None)
         self.node_out = self.input.param("node_out", 0)
         self.threads = self.input.param("threads", 5)
-        self.use_replica_to = self.input.param("use_replica_to",False)
+        self.use_replica_to = self.input.param("use_replica_to", False)
         self.run_with_views = self.input.param("run_with_views", False)
         self.default_view_name = "upgrade-test-view"
         self.ddocs_num = self.input.param("ddocs-num", 1)
@@ -46,7 +46,7 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
                 rest = RestConnection(server)
                 rest.diag_eval(
                     "[ns_config:set({node, N, extra_rebalance_quirks}, [reset_replicas, trivial_moves]) || N <- ns_node_disco:nodes_wanted()].")
-                #rest.diag_eval(
+                # rest.diag_eval(
                 #    "[ns_config:set({node, N, disable_rebalance_quirks}, [disable_old_master]) || N <- ns_node_disco:nodes_wanted()].")
 
     def tearDown(self):
@@ -55,8 +55,6 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
     def load_buckets_with_high_ops(self, server, bucket, items, batch=20000,
                                    threads=5, start_document=0, instances=1, ttl=0):
         import subprocess
-        # cmd_format = "python scripts/high_ops_doc_gen.py  --node {0} --bucket {1} --user {2} --password {3} " \
-        #              "--count {4} --batch_size {5} --threads {6} --start_document {7} --cb_version {8} --instances {9} --ttl {10}"
         cmd_format = "python scripts/thanosied.py  --spec couchbase://{0} --bucket {1} --user {2} --password {3} " \
                      "--count {4} --batch_size {5} --threads {6} --start_document {7} --cb_version {8} --workers {9} --ttl {10} --rate_limit {11} " \
                      "--passes 1"
@@ -89,9 +87,6 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
                                      batch=20000, threads=5, start_document=0,
                                      instances=1):
         import subprocess
-        # cmd_format = "python scripts/high_ops_doc_gen.py  --node {0} --bucket {1} --user {2} --password {3} " \
-        #              "--count {4} --batch_size {5} --threads {6} --start_document {7} --cb_version {8} --instances {" \
-        #              "9} --ops {10} --updates"
         cmd_format = "python scripts/thanosied.py  --spec couchbase://{0} --bucket {1} --user {2} --password {3} " \
                      "--count {4} --batch_size {5} --threads {6} --start_document {7} --cb_version {8} --workers {9} --rate_limit {10} " \
                      "--passes 1  --update_counter {11}"
@@ -125,9 +120,6 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
                                      start_document=0,
                                      instances=1):
         import subprocess
-        # cmd_format = "python scripts/high_ops_doc_gen.py  --node {0} --bucket {1} --user {2} --password {3} " \
-        #              "--count {4} --batch_size {5} --threads {6} --start_document {7} --cb_version {8} --instances {" \
-        #              "9} --ops {10} --delete"
         cmd_format = "python scripts/thanosied.py  --spec couchbase://{0} --bucket {1} --user {2} --password {3} " \
                      "--count {4} --batch_size {5} --threads {6} --start_document {7} --cb_version {8} --workers {9} --rate_limit {10} " \
                      "--passes 1  --delete --num_delete {4}"
@@ -166,7 +158,8 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
         num_threads = multiprocessing.cpu_count() / 2
         num_cycles = int(items / batch * 1.5 / num_threads)
 
-        cmd = "cbc-pillowfight -U couchbase://{0}/default -I {1} -m {3} -M {3} -B {2} -c {5} --sequential --json -t {4} --rate-limit={6} --start-at={7}" \
+        cmd = "cbc-pillowfight -U couchbase://{0}/default -I {1} -m {3} -M {3} -B {2} -c {5} --sequential --json -t {4} " \
+              "--rate-limit={6} --start-at={7}" \
             .format(server.ip, items, batch, docsize, num_threads, num_cycles,
                     rate_limit, start_at)
 
@@ -180,7 +173,7 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
             self.fail(
                 "Exception running cbc-pillowfight: subprocess module returned non-zero response!")
 
-    def load_docs(self, num_items=0, start_document=0,ttl=0):
+    def load_docs(self, num_items=0, start_document=0, ttl=0):
         if num_items == 0:
             num_items = self.num_items
         if self.loader == "pillowfight":
@@ -210,7 +203,7 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
         from lib.memcached.helper.data_helper import VBucketAwareMemcached
 
         cmd_format = "python scripts/thanosied.py  --spec couchbase://{0} --bucket {1} --user {2} --password {3} " \
-                     "--count {4} --batch_size {5} --threads {6} --start_document {7} --cb_version {8} --validation 1 "\
+                     "--count {4} --batch_size {5} --threads {6} --start_document {7} --cb_version {8} --validation 1 " \
                      "--rate_limit {9} --passes 1"
         cb_version = RestConnection(server).get_nodes_version()[:3]
         if updated:
@@ -221,7 +214,7 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
             cmd_format = "{} --ttl {}".format(cmd_format, ttl)
         cmd = cmd_format.format(server.ip, bucket.name, server.rest_username,
                                 server.rest_password,
-                                int(items), batch, threads, start_document, cb_version)
+                                int(items), batch, threads, start_document, cb_version, self.rate_limit)
         self.log.info("Running {}".format(cmd))
         result = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE,
                                   stderr=subprocess.PIPE)
@@ -254,8 +247,8 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
                         key = key.replace('\'', '').replace('\\', '')
                         vBucketId = VBucketAware._get_vBucket_id(key)
                         errors.append((
-                                      "Wrong value for key: {0}, VBucketId: {1}".format(
-                                          key, vBucketId)))
+                            "Wrong value for key: {0}, VBucketId: {1}".format(
+                                key, vBucketId)))
         return errors
 
     def check_dataloss(self, server, bucket, num_items):
@@ -319,12 +312,6 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
         rest = RestConnection(self.master)
         bucket = rest.get_buckets()[0]
 
-        #servers_in = []
-        #for i in range(0,self.nodes_in):
-        #    servers_in.append(self.servers[self.nodes_init+i])
-
-        #self.log.info("Servers In : {0}".format(servers_in))
-
         load_thread = self.load_docs()
         if self.run_with_views:
             self.log.info('creating ddocs and views')
@@ -342,13 +329,13 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
                                                  self.servers[
                                                  self.nodes_init:self.nodes_init + self.nodes_in],
                                                  [])
-        #rebalance.result()
+        # rebalance.result()
         rest.monitorRebalance(stop_if_loop=False)
         load_thread.join()
         if self.run_with_views:
             view_query_thread.join()
         num_items_to_validate = self.num_items * 3
-        errors = self.check_data(self.master, bucket, num_items_to_validate)
+        errors = self.check_data(self.master, bucket, num_items=num_items_to_validate)
         if errors:
             self.log.info("Printing missing keys:")
         for error in errors:
@@ -362,10 +349,11 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
             self.assertEqual(num_items_to_validate,
                              (rest.get_replica_key_count(
                                  bucket) / self.num_replicas),
-                             "Not all keys present in replica vbuckets. Expected No. of items : {0}, Item count per replica: {1}".format(
+                             "Not all keys present in replica vbuckets. Expected No. of items : {0}, Item count per "
+                             "replica: {1}".format(
                                  num_items_to_validate, (
-                                 rest.get_replica_key_count(
-                                     bucket) / self.num_replicas)))
+                                         rest.get_replica_key_count(
+                                             bucket) / self.num_replicas)))
 
     def test_rebalance_in_with_update_workload(self):
         rest = RestConnection(self.master)
@@ -382,10 +370,10 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
         load_thread.join()
 
         update_thread = Thread(target=self.update_buckets_with_high_ops,
-                             name="update_high_ops_load",
-                             args=(self.master, self.buckets[0], self.num_items,
-                                   self.num_items * 2, self.batch_size,
-                                   self.threads, 0, self.instances))
+                               name="update_high_ops_load",
+                               args=(self.master, self.buckets[0], self.num_items,
+                                     self.num_items * 2, self.batch_size,
+                                     self.threads, 0, self.instances))
 
         update_thread.start()
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
@@ -418,8 +406,8 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
                                  bucket) / self.num_replicas),
                              "Not all keys present in replica vbuckets. Expected No. of items : {0}, Item count per replica: {1}".format(
                                  num_items_to_validate, (
-                                     rest.get_replica_key_count(
-                                         bucket) / self.num_replicas)))
+                                         rest.get_replica_key_count(
+                                             bucket) / self.num_replicas)))
 
     def test_rebalance_in_with_delete_workload(self):
         rest = RestConnection(self.master)
@@ -438,9 +426,9 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
         delete_thread = Thread(target=self.delete_buckets_with_high_ops,
                                name="delete_high_ops_load",
                                args=(
-                               self.master, self.buckets[0], self.num_items,
-                               self.num_items, self.batch_size,
-                               self.threads, 0, self.instances))
+                                   self.master, self.buckets[0], self.num_items,
+                                   self.num_items, self.batch_size,
+                                   self.threads, 0, self.instances))
 
         delete_thread.start()
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
@@ -475,8 +463,8 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
                                  bucket) / self.num_replicas),
                              "Not all keys deleted from replica vbuckets. Expected No. of items : {0}, Item count per replica: {1}".format(
                                  num_items_to_validate, (
-                                     rest.get_replica_key_count(
-                                         bucket) / self.num_replicas)))
+                                         rest.get_replica_key_count(
+                                             bucket) / self.num_replicas)))
 
     def test_rebalance_in_with_expiry(self):
         rest = RestConnection(self.master)
@@ -496,8 +484,8 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
         self.sleep(15)
 
         validate_thread = Thread(target=self.check_data,
-                               name="update_high_ops_load",
-                               args=(self.master, bucket, self.num_items, 0, False, 0, 100))
+                                 name="update_high_ops_load",
+                                 args=(self.master, bucket, self.num_items, 0, False, 0, 100))
 
         validate_thread.start()
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
@@ -537,12 +525,6 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
     def test_rebalance_out(self):
         servs_out = [self.servers[self.nodes_init - i - 1] for i in
                      range(self.nodes_out)]
-
-        #servs_out = []
-        #for i in range(0, self.nodes_out):
-        #    servs_out.append(self.servers[self.nodes_init -1 - i])
-
-        #self.log.info("Servers In : {0}".format(servs_out))
 
         self.log.info("Servers Out: {0}".format(servs_out))
         rest = RestConnection(self.master)
@@ -586,10 +568,11 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
             self.assertEqual(num_items_to_validate,
                              (rest.get_replica_key_count(
                                  bucket) / self.num_replicas),
-                             "Not all keys present in replica vbuckets. Expected No. of items : {0}, Item count per replica: {1}".format(
+                             "Not all keys present in replica vbuckets. Expected No. of items : {0}, Item count per "
+                             "replica: {1}".format(
                                  num_items_to_validate, (
-                                 rest.get_replica_key_count(
-                                     bucket) / self.num_replicas)))
+                                         rest.get_replica_key_count(
+                                             bucket) / self.num_replicas)))
 
     def test_rebalance_out_with_update_workload(self):
         servs_out = [self.servers[self.nodes_init - i - 1] for i in
@@ -611,9 +594,9 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
         update_thread = Thread(target=self.update_buckets_with_high_ops,
                                name="update_high_ops_load",
                                args=(
-                               self.master, self.buckets[0], self.num_items,
-                               self.num_items * 2, self.batch_size,
-                               self.threads, 0, self.instances))
+                                   self.master, self.buckets[0], self.num_items,
+                                   self.num_items * 2, self.batch_size,
+                                   self.threads, 0, self.instances))
 
         update_thread.start()
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
@@ -646,8 +629,8 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
                                  bucket) / self.num_replicas),
                              "Not all keys present in replica vbuckets. Expected No. of items : {0}, Item count per replica: {1}".format(
                                  num_items_to_validate, (
-                                     rest.get_replica_key_count(
-                                         bucket) / self.num_replicas)))
+                                         rest.get_replica_key_count(
+                                             bucket) / self.num_replicas)))
 
     def test_rebalance_out_with_delete_workload(self):
         servs_out = [self.servers[self.nodes_init - i - 1] for i in
@@ -706,8 +689,8 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
                                  bucket) / self.num_replicas),
                              "Not all keys deleted from replica vbuckets. Expected No. of items : {0}, Item count per replica: {1}".format(
                                  num_items_to_validate, (
-                                     rest.get_replica_key_count(
-                                         bucket) / self.num_replicas)))
+                                         rest.get_replica_key_count(
+                                             bucket) / self.num_replicas)))
 
     def test_rebalance_out_with_expiry(self):
         servs_out = [self.servers[self.nodes_init - i - 1] for i in
@@ -731,8 +714,8 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
         validate_thread = Thread(target=self.check_data,
                                  name="update_high_ops_load",
                                  args=(
-                                 self.master, bucket, self.num_items, 0, False,
-                                 0, 100))
+                                     self.master, bucket, self.num_items, 0, False,
+                                     0, 100))
 
         validate_thread.start()
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
@@ -818,8 +801,8 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
                                  bucket) / self.num_replicas),
                              "Not all keys present in replica vbuckets. Expected No. of items : {0}, Item count per replica: {1}".format(
                                  num_items_to_validate, (
-                                 rest.get_replica_key_count(
-                                     bucket) / self.num_replicas)))
+                                         rest.get_replica_key_count(
+                                             bucket) / self.num_replicas)))
 
     def test_rebalance_in_out_with_update_workload(self):
         servs_out = [self.servers[self.nodes_init - i - 1] for i in
@@ -879,8 +862,8 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
                                  bucket) / self.num_replicas),
                              "Not all keys present in replica vbuckets. Expected No. of items : {0}, Item count per replica: {1}".format(
                                  num_items_to_validate, (
-                                     rest.get_replica_key_count(
-                                         bucket) / self.num_replicas)))
+                                         rest.get_replica_key_count(
+                                             bucket) / self.num_replicas)))
 
     def test_rebalance_in_out_with_delete_workload(self):
         servs_out = [self.servers[self.nodes_init - i - 1] for i in
@@ -942,9 +925,8 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
                                  bucket) / self.num_replicas),
                              "Not all keys deleted from replica vbuckets. Expected No. of items : {0}, Item count per replica: {1}".format(
                                  num_items_to_validate, (
-                                     rest.get_replica_key_count(
-                                         bucket) / self.num_replicas)))
-
+                                         rest.get_replica_key_count(
+                                             bucket) / self.num_replicas)))
 
     def test_rebalance_in_out_with_expiry(self):
         servs_out = [self.servers[self.nodes_init - i - 1] for i in
@@ -1058,8 +1040,8 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
                                  bucket) / self.num_replicas),
                              "Not all keys present in replica vbuckets. Expected No. of items : {0}, Item count per replica: {1}".format(
                                  num_items_to_validate, (
-                                 rest.get_replica_key_count(
-                                     bucket) / self.num_replicas)))
+                                         rest.get_replica_key_count(
+                                             bucket) / self.num_replicas)))
 
     def test_multiple_rebalance_in_out(self):
         servs_out = [self.servers[self.nodes_init - i - 1] for i in
@@ -1102,12 +1084,12 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
                                  bucket) / self.num_replicas),
                              "Not all keys present in replica vbuckets. Expected No. of items : {0}, Item count per replica: {1}".format(
                                  num_items_to_validate, (
-                                 rest.get_replica_key_count(
-                                     bucket) / self.num_replicas)))
+                                         rest.get_replica_key_count(
+                                             bucket) / self.num_replicas)))
 
         self.log.info('starting the load before rebalance out...')
         load_thread = self.load_docs(num_items=(self.num_items * 2),
-                                         start_document=self.num_items*3)
+                                     start_document=self.num_items * 3)
 
         load_thread.start()
         # Remove 1 node
@@ -1133,12 +1115,12 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
                                  bucket) / self.num_replicas),
                              "Not all keys present in replica vbuckets. Expected No. of items : {0}, Item count per replica: {1}".format(
                                  num_items_to_validate, (
-                                 rest.get_replica_key_count(
-                                     bucket) / self.num_replicas)))
+                                         rest.get_replica_key_count(
+                                             bucket) / self.num_replicas)))
 
         self.log.info('starting the load before swap rebalance...')
         load_thread = self.load_docs(num_items=(self.num_items * 2),
-                                         start_document=self.num_items * 5)
+                                     start_document=self.num_items * 5)
 
         load_thread.start()
         # Swap rebalance 1 node
@@ -1165,8 +1147,8 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
                                  bucket) / self.num_replicas),
                              "Not all keys present in replica vbuckets. Expected No. of items : {0}, Item count per replica: {1}".format(
                                  num_items_to_validate, (
-                                 rest.get_replica_key_count(
-                                     bucket) / self.num_replicas)))
+                                         rest.get_replica_key_count(
+                                             bucket) / self.num_replicas)))
 
     def test_start_stop_rebalance_multiple_times(self):
         rest = RestConnection(self.master)
@@ -1185,7 +1167,7 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
                                                  [])
         # rebalance.result()
         rest.monitorRebalance(stop_if_loop=False)
-        for i in range(1,100):
+        for i in range(1, 100):
             self.sleep(20)
             stopped = rest.stop_rebalance(wait_timeout=10)
             self.assertTrue(stopped, msg="Unable to stop rebalance in iteration {0}".format(i))
@@ -1213,18 +1195,14 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
                                  bucket) / self.num_replicas),
                              "Not all keys present in replica vbuckets. Expected No. of items : {0}, Item count per replica: {1}".format(
                                  num_items_to_validate, (
-                                     rest.get_replica_key_count(
-                                         bucket) / self.num_replicas)))
+                                         rest.get_replica_key_count(
+                                             bucket) / self.num_replicas)))
 
     def test_rebalance_in_with_indexer_node(self):
         rest = RestConnection(self.master)
-        #rest.add_node(self.servers[self.nodes_init].rest_username,
-        #                  self.servers[self.nodes_init].rest_password,
-        #                  self.servers[self.nodes_init].ip, services=['index','n1ql'])
-
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
                                                  [self.servers[self.nodes_init]],
-                                                 [], ["index","n1ql"])
+                                                 [], ["index", "n1ql"])
 
         # rebalance.result()
         rest.monitorRebalance(stop_if_loop=False)
@@ -1267,13 +1245,15 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
                                  bucket) / self.num_replicas),
                              "Not all keys present in replica vbuckets. Expected No. of items : {0}, Item count per replica: {1}".format(
                                  num_items_to_validate, (
-                                     rest.get_replica_key_count(
-                                         bucket) / self.num_replicas)))
+                                         rest.get_replica_key_count(
+                                             bucket) / self.num_replicas)))
 
         # Fetch count of indexed documents
         query = "select count(body) from default where body is not missing"
         count = self.run_n1ql_query(create_index_statement)
-        self.assertEqual(num_items_to_validate, count, "Indexed document count not as expected. It is {0}, expected : {1}".format(count,num_items_to_validate))
+        self.assertEqual(num_items_to_validate, count,
+                         "Indexed document count not as expected. It is {0}, expected : {1}".format(count,
+                                                                                                    num_items_to_validate))
 
     def run_n1ql_query(self, query):
         self.n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
@@ -1295,7 +1275,6 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
                                    args=(self.run_view_query_iterations,))
         return view_query_thread
 
-
     def view_queries(self, iterations):
         query = {"connectionTimeout": 60000}
         for count in xrange(iterations):
@@ -1304,7 +1283,6 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
                                         self.default_view_name + str(i), query,
                                         expected_rows=None, bucket="default",
                                         retry_time=2)
-
 
     def create_ddocs_and_views(self):
         self.default_view = View(self.default_view_name, None, None)
