@@ -2,12 +2,15 @@ query:
  	select ;
 
 select:
-	SELECT select_from FROM BUCKET_NAME WHERE complex_condition ORDER BY select_from |
+	SELECT select_from FROM BUCKET_NAME WHERE complex_condition ORDER BY select_from nulls_first_last |
 	SELECT select_from FROM BUCKET_NAME WHERE complex_condition GROUP BY field_list |
 	SELECT select_from FROM BUCKET_NAME WHERE complex_condition |
 	SELECT sel_from FROM BUCKET_NAME WHERE numeric_condition |
 	SELECT sel_from FROM BUCKET_NAME WHERE string_condition |
 	SELECT sel_from FROM BUCKET_NAME WHERE bool_condition;
+
+nulls_first_last:
+    | ASC NULLS FIRST | DESC NULLS LAST ;
 
 create_index:
 	CREATE INDEX INDEX_NAME ON BUCKET_NAME(FIELD_LIST) WHERE complex_condition |

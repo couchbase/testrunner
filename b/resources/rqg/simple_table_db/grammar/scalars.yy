@@ -2,13 +2,15 @@ query:
     select;
 
 select:
-    SELECT select_from FROM BUCKET_NAME WHERE where_condition ORDER BY VAL |
-    SELECT primary_key_id, COALESCE(field,field,field,field) as VAL FROM BUCKET_NAME WHERE where_condition ORDER BY primary_key_id |
-    SELECT DISTINCT(COALESCE(numeric_field, numeric_field)) as VAL FROM BUCKET_NAME WHERE 1=1 ORDER BY VAL |
+    SELECT select_from FROM BUCKET_NAME WHERE where_condition ORDER BY VAL nulls_first_last|
+    SELECT primary_key_id, COALESCE(field,field,field,field) as VAL FROM BUCKET_NAME WHERE where_condition ORDER BY primary_key_id nulls_first_last|
+    SELECT DISTINCT(COALESCE(numeric_field, numeric_field)) as VAL FROM BUCKET_NAME WHERE 1=1 ORDER BY VAL nulls_first_last|
     SELECT select_from1 FROM BUCKET_NAME WHERE 1=1 GROUP BY numeric_field1 HAVING having_condition |
-    SELECT primary_key_id, NVL(field, field) as VAL FROM BUCKET_NAME WHERE where_condition ORDER BY primary_key_id |
-    SELECT DISTINCT(NVL(numeric_field, numeric_field)) as VAL FROM BUCKET_NAME WHERE 1=1 ORDER BY VAL;
+    SELECT primary_key_id, NVL(field, field) as VAL FROM BUCKET_NAME WHERE where_condition ORDER BY primary_key_id nulls_first_last |
+    SELECT DISTINCT(NVL(numeric_field, numeric_field)) as VAL FROM BUCKET_NAME WHERE 1=1 ORDER BY VAL nulls_first_last;
 
+nulls_first_last:
+    | ASC NULLS FIRST | DESC NULLS LAST ;
 
 field:
     NUMERIC_FIELD | STRING_FIELD | BOOL_FIELD | DATETIME_FIELD;

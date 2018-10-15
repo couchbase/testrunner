@@ -2,9 +2,10 @@ query:
  	select ;
 
 select:
-	SELECT select_from FROM BUCKET_NAME WHERE complex_condition ORDER BY NUMERIC_FIELD |
-	SELECT select_from FROM BUCKET_NAME WHERE complex_condition ORDER BY STRING_FIELD |
-	SELECT select_from FROM BUCKET_NAME WHERE complex_condition ORDER BY BOOL_FIELD , NUMERIC_FIELD ;
+        SELECT select_from FROM BUCKET_NAME WHERE complex_condition ORDER BY NUMERIC_FIELD |
+        SELECT select_from FROM BUCKET_NAME WHERE complex_condition ORDER BY STRING_FIELD |
+        SELECT select_from FROM BUCKET_NAME WHERE complex_condition ORDER BY BOOL_FIELD , NUMERIC_FIELD ;
+
 
 select_from:
 	*  | field | DISTINCT( field );

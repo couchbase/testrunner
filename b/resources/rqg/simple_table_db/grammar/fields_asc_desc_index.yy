@@ -9,7 +9,7 @@ create_index:
 	CREATE INDEX INDEX_NAME ON BUCKET_NAME(field direction) WHERE complex_condition ;
 
 direction:
-	ASC | DESC;
+	ASC | DESC | ASC NULLS FIRST | DESC NULLS LAST ;
 
 select_from:
 	field | DISTINCT( field );

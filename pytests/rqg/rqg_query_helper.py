@@ -921,7 +921,7 @@ class RQGQueryHelper(object):
         values = values[0:len(values)-1]
         return intial_statement+column_names+" VALUES "+values
 
-    def _generate_insert_statement(self, table_name="TABLE_NAME", table_map={}, primary_key=""):
+    def _generate_insert_statement(self, table_name="TABLE_NAME", table_map={}, primary_key="", mask=[0,0,0,0,0,0]):
         intial_statement = ""
         intial_statement += " INSERT INTO {0} ".format(table_name)
         column_names = "( "+",".join(table_map.keys())+" ) "
@@ -931,21 +931,36 @@ class RQGQueryHelper(object):
             if "primary" in field_name:
                 values += primary_key+","
             elif "tinyint" in type:
-                values += str(self._random_tiny_int())+","
+                if mask[0] == 0:
+                    values += str(self._random_tiny_int()) + ","
+                else:
+                    values += 'NULL,'
             elif "mediumint" in type:
                 values += str(self._random_int() % 100)+","
             elif "int" in type:
-                values += str(self._random_int())+","
+                if mask[1] == 0:
+                    values += str(self._random_int()) + ","
+                else:
+                    values += 'NULL,'
             elif "decimal" in type:
-                values += str(self._random_float())+","
+                if mask[2] == 0:
+                    values += str(self._random_float()) + ","
+                else:
+                    values += 'NULL,'
             elif "float" in type:
                 values += str(self._random_float())+","
             elif "double" in type:
                 values += str(self._random_double())+","
             elif "varchar" in type:
-                values += "\""+self._random_alphabet_string()+"\","
+                if mask[3] == 0:
+                    values += "\"" + self._random_alphabet_string() + "\","
+                else:
+                    values += 'NULL,'
             elif "char" in type:
-                values += "\'"+self._random_char()+"\',"
+                if mask[4] == 0:
+                    values += "\'"+self._random_char()+"\',"
+                else:
+                    values += 'NULL,'
             elif "tinytext" in type:
                 values += "\'"+self._random_alphabet_string(limit=1)+"\',"
             elif "mediumtext" in type:

@@ -13,8 +13,8 @@ CREATE TABLE IF NOT EXISTS `DATABASE_NAME`.`simple_table` (
   `int_field1` INT(11) NULL DEFAULT NULL,
   `decimal_field1` DECIMAL(10,0) NULL DEFAULT NULL,
   `datetime_field1` DATETIME NULL DEFAULT NULL,
-  `bool_field1` TINYINT(1) NOT NULL DEFAULT 0,
-  `varchar_field1` VARCHAR(1000) NOT NULL,
+  `bool_field1` TINYINT(1) NULL DEFAULT 0,
+  `varchar_field1` VARCHAR(1000) NULL,
   `char_field1` CHAR(100) NULL DEFAULT NULL,
   PRIMARY KEY (`primary_key_id`))
 ENGINE = InnoDB

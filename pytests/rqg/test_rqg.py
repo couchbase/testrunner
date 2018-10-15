@@ -946,6 +946,7 @@ class RQGTests(BaseTestCase):
             table_field_map = self.client._get_field_list_map_for_tables()
             fields = table_field_map['simple_table']
             combination_fields = sum([map(list, combinations(fields, i)) for i in range(len(fields) + 1)], [])
+            print("##### COMBINATION FIELDS ::"+str(combination_fields)+"::")
             for x in xrange(1, len(combination_fields)):
                 input = combination_fields[x]
                 if len(input) == 1:
@@ -955,6 +956,7 @@ class RQGTests(BaseTestCase):
                     fields_indexed = str(input[0])
                     for i in xrange(1, len(input)):
                         index_name = "ix_" + str(i) + str(x)
+                        print("##### X ::"+str(x)+"::")
                     fields_indexed = fields_indexed+"," + str(x[i])
                 if self.partitioned_indexes:
                     query = "CREATE INDEX {0} ON {1}({2}) PARTITION BY HASH(meta().id)".format(

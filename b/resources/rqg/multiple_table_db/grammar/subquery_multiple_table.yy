@@ -1,12 +1,21 @@
 query:
  	START_MAIN select END_MAIN ;
 select:
-		SELECT OUTERBUCKET.*,(SELECT SUBTABLE.productId FROM SUBTABLE WHERE SUBTABLE.primary_key_id=OUTERBUCKET.primary_key_id ORDER BY SUBTABLE.price asc limit 1) ABC  FROM OUTERBUCKET WHERE subquery_condition_exists |
-		SELECT OUTERBUCKET.*,(SELECT SUBTABLE.productId FROM SUBTABLE WHERE SUBTABLE.primary_key_id=OUTERBUCKET.primary_key_id ORDER BY SUBTABLE.price desc limit 1) ABC  FROM OUTERBUCKET WHERE subquery_condition_exists |
-		SELECT OUTERBUCKET.*,(SELECT sum(SUBTABLE.productId) as productId FROM SUBTABLE WHERE SUBTABLE.primary_key_id=OUTERBUCKET.primary_key_id GROUP BY  SUBTABLE.price  ORDER BY SUBTABLE.price limit 1) ABC  FROM OUTERBUCKET WHERE subquery_condition_exists |
-		SELECT OUTERBUCKET.*,(SELECT max(SUBTABLE.productId) as productId  FROM SUBTABLE WHERE SUBTABLE.primary_key_id=OUTERBUCKET.primary_key_id GROUP BY  SUBTABLE.price  ORDER BY SUBTABLE.price limit 1) ABC  FROM OUTERBUCKET WHERE subquery_condition_exists |
-		SELECT OUTERBUCKET.*,(SELECT min(SUBTABLE.productId) as productId FROM SUBTABLE WHERE SUBTABLE.primary_key_id=OUTERBUCKET.primary_key_id GROUP BY  SUBTABLE.price  ORDER BY  SUBTABLE.price limit 1) ABC  FROM OUTERBUCKET WHERE subquery_condition_exists |
-		SELECT OUTERBUCKET.*,(SELECT count(SUBTABLE.productId) as productId FROM SUBTABLE WHERE SUBTABLE.primary_key_id=OUTERBUCKET.primary_key_id GROUP BY  SUBTABLE.price  ORDER BY SUBTABLE.price limit 1) ABC  FROM OUTERBUCKET WHERE subquery_condition_exists ;
+		SELECT OUTERBUCKET.*,(SELECT SUBTABLE.productId FROM SUBTABLE WHERE SUBTABLE.primary_key_id=OUTERBUCKET.primary_key_id ORDER BY SUBTABLE.price asc_nulls_first limit 1) ABC  FROM OUTERBUCKET WHERE subquery_condition_exists |
+		SELECT OUTERBUCKET.*,(SELECT SUBTABLE.productId FROM SUBTABLE WHERE SUBTABLE.primary_key_id=OUTERBUCKET.primary_key_id ORDER BY SUBTABLE.price desc_nulls_last limit 1) ABC  FROM OUTERBUCKET WHERE subquery_condition_exists |
+		SELECT OUTERBUCKET.*,(SELECT sum(SUBTABLE.productId) as productId FROM SUBTABLE WHERE SUBTABLE.primary_key_id=OUTERBUCKET.primary_key_id GROUP BY  SUBTABLE.price  ORDER BY SUBTABLE.price nulls_first_last limit 1) ABC  FROM OUTERBUCKET WHERE subquery_condition_exists |
+		SELECT OUTERBUCKET.*,(SELECT max(SUBTABLE.productId) as productId  FROM SUBTABLE WHERE SUBTABLE.primary_key_id=OUTERBUCKET.primary_key_id GROUP BY  SUBTABLE.price  ORDER BY SUBTABLE.price nulls_first_last limit 1) ABC  FROM OUTERBUCKET WHERE subquery_condition_exists |
+		SELECT OUTERBUCKET.*,(SELECT min(SUBTABLE.productId) as productId FROM SUBTABLE WHERE SUBTABLE.primary_key_id=OUTERBUCKET.primary_key_id GROUP BY  SUBTABLE.price  ORDER BY  SUBTABLE.price nulls_first_last limit 1) ABC  FROM OUTERBUCKET WHERE subquery_condition_exists |
+		SELECT OUTERBUCKET.*,(SELECT count(SUBTABLE.productId) as productId FROM SUBTABLE WHERE SUBTABLE.primary_key_id=OUTERBUCKET.primary_key_id GROUP BY  SUBTABLE.price  ORDER BY SUBTABLE.price nulls_first_last limit 1) ABC  FROM OUTERBUCKET WHERE subquery_condition_exists ;
+
+asc_nulls_first:
+    ASC | ASC NULLS FIRST ;
+
+desc_nulls_last:
+    DESC | DESC NULLS LAST ;
+
+nulls_first_last:
+    | ASC NULLS FIRST | DESC NULLS LAST ;
 
 subquery_condition_exists:
 	exists_operator_type START_EXISTS_SUBQUERY ( rule_subquery_exists ) END_EXISTS_SUBQUERY ;

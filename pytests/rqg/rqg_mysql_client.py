@@ -270,9 +270,23 @@ class RQGMySQLClient(MySQLClient):
     def _gen_data_simple_table(self, number_of_rows=1000):
         helper = RQGQueryHelper()
         map = self._get_pkey_map_for_tables_wit_primary_key_column()
+        marker = 1
+
         for table_name in map.keys():
             for x in range(0, number_of_rows):
-                statement = helper._generate_insert_statement(table_name, map[table_name], "\""+str(x+1)+"\"")
+                mask = [0, 0, 0, 0, 0]
+                if x % 20 == 0:
+                    marker = x
+                    mask[0] = '1'
+                if x == marker + 1:
+                    mask[1] = '1'
+                if x == marker + 2:
+                    mask[2] = '1'
+                if x == marker + 3:
+                    mask[3] = '1'
+                if x == marker + 4:
+                    mask[4] = '1'
+                statement = helper._generate_insert_statement(table_name, map[table_name], "\""+str(x+1)+"\"", mask)
                 self._insert_execute_query(statement)
 
     def _gen_queries_from_template(self, query_path="./queries.txt", table_name=None):
@@ -366,7 +380,9 @@ class RQGMySQLClient(MySQLClient):
                                       'VARIANCE_SAMP': {"n1ql_name": "VARIANCE_SAMP", "sql_name": "VAR_SAMP"},
                                       'VARIANCE': {"n1ql_name": "VARIANCE", "sql_name": "VAR_SAMP"},
                                       'STDDEV': {"n1ql_name": "STDDEV", "sql_name": "STDDEV_SAMP"},
-                                      'MEAN': {"n1ql_name": "MEAN", "sql_name": "AVG"}}
+                                      'MEAN': {"n1ql_name": "MEAN", "sql_name": "AVG"},
+                                      'NULLS FIRST': {'n1ql_name': 'NULLS FIRST', 'sql_name': ''},
+                                      'NULLS LAST': {'n1ql_name': 'NULLS LAST', 'sql_name': ''}}
         for key in sql_n1ql_synonim_functions:
             if key.lower() in query_map['sql'].lower():
                 n1ql_name = key
@@ -479,3 +495,4 @@ class RQGMySQLClient(MySQLClient):
 if __name__ == "__main__":
     client = MySQLClient(host="localhost", user_id="root", password="")
     client.remove_databases()
+
