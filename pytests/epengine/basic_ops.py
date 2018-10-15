@@ -222,3 +222,55 @@ class basic_ops(BaseTestCase):
                 self.assertEquals("API is accessible from localhost only", output[0])
             else:
                 self.assertNotEquals("API is accessible from localhost only", output[0])
+
+    def verify_stat(self,items, value="active" ):
+        mc = MemcachedClient(self.master.ip, 11210)
+        mc.sasl_auth_plain(self.master.rest_username, self.master.rest_password)
+        mc.bucket_select('default')
+        stats = mc.stats()
+        self.assertEquals(stats['ep_compression_mode'], value)
+        self.assertEquals(int(stats['ep_item_compressor_num_compressed']), items)
+        self.assertNotEquals(int(stats['vb_active_itm_memory']), int(stats['vb_active_itm_memory_uncompressed']))
+
+    def test_compression_active_and_off(self):
+        '''
+        test reproducer for MB-29272,
+        Load some documents with compression mode set to active
+        get the cbstats
+        change compression mode to off and wait for minimum 250ms
+        Load some more documents and check the compression is not done
+        epengine.basic_ops.basic_ops.test_compression_active_and_off,items=10000,compression_mode=active
+
+        :return:
+        '''
+        # Load some documents with compression mode as active
+        gen_create = BlobGenerator('eviction', 'eviction-', self.value_size, end=self.num_items)
+        gen_create2 = BlobGenerator('eviction2', 'eviction2-', self.value_size, end=self.num_items)
+        self._load_all_buckets(self.master, gen_create, "create", 0)
+        self._wait_for_stats_all_buckets(self.servers[:self.nodes_init])
+        self._verify_stats_all_buckets(self.servers[:self.nodes_init])
+
+        remote = RemoteMachineShellConnection(self.master)
+        for bucket in self.buckets:
+            # Verify the stat or compression_mode active and compressed items should be 10000
+            self.verify_stat(items=self.num_items)
+
+            # change compression mode to off
+            output, _ = remote.execute_couchbase_cli(cli_command='bucket-edit',
+                                                     cluster_host="localhost:8091",
+                                                     user=self.master.rest_username,
+                                                     password=self.master.rest_password,
+                                                     options='--bucket=%s --compression-mode off' % bucket.name)
+            self.assertTrue(' '.join(output).find('SUCCESS') != -1, 'compression mode set to off')
+
+            # sleep for 10 sec (minimum 250sec)
+            time.sleep(10)
+
+        # Load data and check stats to see compression is not done for newly added data
+        self._load_all_buckets(self.master, gen_create2, "create", 0)
+        self._wait_for_stats_all_buckets(self.servers[:self.nodes_init])
+        self._verify_stats_all_buckets(self.servers[:self.nodes_init])
+
+        for bucket in self.buckets:
+            # Verify the stat for compression_mode off and compressed items should be still 10000
+            self.verify_stat(items=self.num_items, value="off")
