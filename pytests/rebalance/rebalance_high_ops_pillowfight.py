@@ -58,7 +58,7 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
         # cmd_format = "python scripts/high_ops_doc_gen.py  --node {0} --bucket {1} --user {2} --password {3} " \
         #              "--count {4} --batch_size {5} --threads {6} --start_document {7} --cb_version {8} --instances {9} --ttl {10}"
         cmd_format = "python scripts/thanosied.py  --spec couchbase://{0} --bucket {1} --user {2} --password {3} " \
-                     "--count {4} --batch_size {5} --threads {6} --start_document {7} --cb_version {8} --workers {9} --ttl {10}" \
+                     "--count {4} --batch_size {5} --threads {6} --start_document {7} --cb_version {8} --workers {9} --ttl {10} --rate_limit {11} " \
                      "--passes 1"
         cb_version = RestConnection(server).get_nodes_version()[:3]
         if self.num_replicas > 0 and self.use_replica_to:
@@ -66,7 +66,7 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
         cmd = cmd_format.format(server.ip, bucket.name, server.rest_username,
                                 server.rest_password,
                                 items, batch, threads, start_document,
-                                cb_version, instances, ttl)
+                                cb_version, instances, ttl, self.rate_limit)
         self.log.info("Running {}".format(cmd))
         result = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE,
                                   stderr=subprocess.PIPE)
@@ -209,9 +209,9 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
         import subprocess
         from lib.memcached.helper.data_helper import VBucketAwareMemcached
 
-        cmd_format = "python scripts/high_ops_doc_gen.py  --node {0} --bucket {1} --user {2} --password {3} " \
-                     "--count {4} " \
-                     "--batch_size {5} --threads {6} --start_document {7} --cb_version {8} --validate"
+        cmd_format = "python scripts/thanosied.py  --spec couchbase://{0} --bucket {1} --user {2} --password {3} " \
+                     "--count {4} --batch_size {5} --threads {6} --start_document {7} --cb_version {8} --validation 1 "\
+                     "--rate_limit {9} --passes 1"
         cb_version = RestConnection(server).get_nodes_version()[:3]
         if updated:
             cmd_format = "{} --updated --ops {}".format(cmd_format, ops)
