@@ -1961,7 +1961,6 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         1. Creates specified bucket on the cluster and loads it with given number of items
         2. Creates a backupset on the backup host and backsup data
         3. Initiates a restore - while restore is going on kills memcached process
-        4. Waits for 200s and Validates restore output
         """
         gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
         self._load_all_buckets(self.master, gen, "create", 0)
@@ -1970,21 +1969,9 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         rest_conn = RestConnection(self.backupset.restore_cluster_host)
         rest_conn.create_bucket(bucket="default", ramQuotaMB=512)
         try:
-            restore_result = self.cluster.async_restore_cluster(
-                                            restore_host=self.backupset.restore_cluster_host,
-                                            backup_host=self.backupset.backup_host,
-                                            backups=self.backups, start=self.backupset.start,
-                                            end=self.backupset.end,
-                                            directory=self.backupset.directory,
-                                            name=self.backupset.name,
-                                            force_updates=self.backupset.force_updates,
-                                            no_progress_bar=self.no_progress_bar,
-                                            cli_command_location=self.cli_command_location,
-                                            cb_version=self.cb_version)
-            self.sleep(10)
             conn = RemoteMachineShellConnection(self.backupset.restore_cluster_host)
             conn.pause_memcached(self.os_name)
-            output = restore_result.result(timeout=200)
+            output, error = self.backup_restore()
             self.assertTrue(self._check_output(
                 "Error restoring cluster: Not all data was sent to Couchbase", output),
                 "Expected error message not thrown by Restore 180 seconds after memcached crash")

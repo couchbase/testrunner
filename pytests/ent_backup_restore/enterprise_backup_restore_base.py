@@ -1493,7 +1493,11 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
 
     def _verify_bucket_compression_mode(self, restore_bucket_compression_mode):
         if self.enable_firewall:
-            self.sleep(10)
+            if self.should_fail:
+                self.log.info("No need to verify.  This is negative test")
+                return
+            else:
+                self.sleep(10)
         rest = RestConnection(self.backupset.restore_cluster_host)
         cb_version = rest.get_nodes_version()
         if 5.5 > float(cb_version[:3]):
