@@ -137,10 +137,10 @@ class QueryCTETests(QueryTests):
         query_1 = 'with a as (2000), b as (a+10), c as (b+10) select join_yr from default where join_yr between a and c and join_yr != b order by join_yr'
         verify_1 = 'select join_yr from default where join_yr between 2000 and 2020 and join_yr != 2010 order by join_yr'
 
-        query_2 = 'with a as (select raw join_yr from default d1), b as (select raw join_mo from default d2 where join_yr in a), c as (select raw join_day from default d3 where join_mo in b) select join_yr from default d0 where join_yr in a and join_mo in b and join_day in c order by join_yr'
-        verify_2 = 'select join_yr from default d0 where join_yr in (select raw join_yr from default d1) and join_mo in (select raw join_mo from default d2 where join_yr in a) and join_day in (select raw join_day from default d3 where join_mo in b) order by join_yr'
+        query_2 = 'with usekeys as (select raw meta(def).id from default def), a as (select raw join_yr from default d1 use keys usekeys), b as (select raw join_mo from default d2 use keys usekeys where join_yr in a), c as (select raw join_day from default d3 use keys usekeys where join_mo in b) select join_yr from default d0 use keys usekeys where join_yr in a and join_mo in b and join_day in c order by join_yr'
+        verify_2 = 'select join_yr from default d0 where join_yr in (select raw join_yr from default d1) and join_mo in (select raw join_mo from default d2 where join_yr in (select raw join_yr from default d1)) and join_day in (select raw join_day from default d3 where join_mo in (select raw join_mo from default d2 where join_yr in (select raw join_yr from default d1))) order by join_yr'
 
-        query_3 = 'with a as (2010), b as (a+10), c as (select raw join_yr from default d1 where join_yr > a), d as (select raw join_yr from default d2 where join_yr in c and join_yr < b) select join_yr from default d0 where join_yr in d order by join_yr'
+        query_3 = 'with usekeys as (select raw meta(def).id from default def), a as (2010), b as (a+10), c as (select raw join_yr from default d1 use keys usekeys where join_yr > a), d as (select raw join_yr from default d2 use keys usekeys where join_yr in c and join_yr < b) select join_yr from default d0 use keys usekeys where join_yr in d order by join_yr'
         verify_3 = 'select join_yr from default d0 where join_yr in (select raw join_yr from default d2 where join_yr in (select raw join_yr from default d1 where join_yr > 2010) and join_yr < 2020) order by join_yr'
 
         queries["a"] = {"queries": [query_1], "asserts": [self.verifier(verify_1)]}
