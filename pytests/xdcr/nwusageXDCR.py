@@ -62,7 +62,7 @@ class nwusage(XDCRNewBaseTest):
                 skip_count += 1
                 continue
             if end_time:
-                end_datetime = datetime.datetime.strptime(end_time.group(), '%Y-%m-%dT%H:%M:%S')
+                end_datetime = self._extract_timestamp(end_time)
                 if item_datetime > end_datetime:
                     skip_count += 1
                     continue
