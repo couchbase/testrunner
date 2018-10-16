@@ -210,13 +210,13 @@ class EventingLifeCycle(EventingBaseTest):
     def test_eventing_debugger_default_settings(self):
         count = 0
         match = False
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_ON_UPDATE)
+        self.deploy_function(body)
         try:
             out1 = self.rest.start_eventing_debugger(self.function_name)
         except Exception as e:
             msg=json.dumps(str(e))
             assert "ERR_DEBUGGER_DISABLED" in msg
-        body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_ON_UPDATE)
-        self.deploy_function(body)
         #enable debugger
         self.rest.enable_eventing_debugger()
         #start debugger

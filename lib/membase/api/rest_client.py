@@ -4412,10 +4412,14 @@ class RestConnection(object):
     '''
     def start_eventing_debugger(self, name):
         authorization = base64.encodestring('%s:%s' % (self.username, self.password))
+        url="/pools/default"
+        api = self.baseUrl + url
+        headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
+        status, content, header = self._http_request(api, 'GET', headers=headers)
         url = "_p/event/startDebugger/?name=" + name
         api = self.baseUrl + url
         headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
-        status, content, header = self._http_request(api, 'POST', headers=headers)
+        status, content, header = self._http_request(api, 'POST', headers=headers,params=content)
         if not status:
             raise Exception(content)
         return content
