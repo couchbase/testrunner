@@ -3515,7 +3515,7 @@ class XDCRNewBaseTest(unittest.TestCase):
                                 _count1 += node["interestingStats"]["curr_items"]
 
                             bucket_info2 = rest2.get_bucket_json(bucket.name)
-                            nodes = bucket_info1["nodes"]
+                            nodes = bucket_info2["nodes"]
                             _count2 = 0
                             for node in nodes:
                                 _count2 += node["interestingStats"]["curr_items"]
