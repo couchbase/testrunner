@@ -439,9 +439,8 @@ class EventingRebalance(EventingBaseTest):
         # do a recovery and rebalance
         self.rest.set_recovery_type('ns_1@' + kv_server.ip, recovery_type)
         self.rest.add_back_node('ns_1@' + kv_server.ip)
-        self.sleep(30)
-        task.result()
         rebalance = self.cluster.rebalance(self.servers[:self.nodes_init], [], [])
+        #task.result()
         if rebalance:
             result = self.rest.monitorRebalance()
             msg = "successfully rebalanced cluster {0}"
