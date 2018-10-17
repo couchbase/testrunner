@@ -57,6 +57,11 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
     def tearDown(self):
         # catch panics and print it in the test log
         self.check_eventing_logs_for_panic()
+        rest = RestConnection(self.master)
+        buckets = rest.get_buckets()
+        for bucket in buckets:
+            stats = self.rest.get_bucket_stats(bucket)
+            self.log.info("Bucket {} DGM is {}".format(bucket,stats["vb_active_resident_items_ratio"]))
         super(EventingBaseTest, self).tearDown()
 
     def create_save_function_body(self, appname, appcode, description="Sample Description",
