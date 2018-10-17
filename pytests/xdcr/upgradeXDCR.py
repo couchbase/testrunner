@@ -40,6 +40,8 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
         self.post_upgrade_ops = self.input.param("post-upgrade-actions", None)
         self._use_encryption_after_upgrade = self.input.param("use_encryption_after_upgrade", 0)
         self.upgrade_same_version = self.input.param("upgrade_same_version", 0)
+        # Enable to include delete operations in backward compatibility test (MB-31141)
+        self._check_del_compatibility = self.input.param("chk_del_compat", False)
         self.ddocs_src = []
         self.ddocs_dest = []
         self.skip_this_version = False
@@ -109,19 +111,19 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
             self.src_cluster.add_remote_cluster(self.dest_cluster,
                                                 name='remote_cluster_C1-C2',
                                                 encryption=self._demand_encryption)
-        if len(self.repl_buckets_from_dest):
-            self.dest_cluster.add_remote_cluster(self.src_cluster,
-                                                name='remote_cluster_C2-C1',
-                                                encryption =self._demand_encryption)
-        self._replicate_clusters(
-            self.src_cluster,
-            self.src_cluster.get_remote_cluster_ref_by_name("remote_cluster_C1-C2"),
-            self.repl_buckets_from_src)
-        self._replicate_clusters(
-            self.dest_cluster,
-            self.dest_cluster.get_remote_cluster_ref_by_name("remote_cluster_C2-C1"),
-            self.repl_buckets_from_dest)
+            self._replicate_clusters(
+                self.src_cluster,
+                self.src_cluster.get_remote_cluster_ref_by_name("remote_cluster_C1-C2"),
+                self.repl_buckets_from_src)
 
+        if len(self.repl_buckets_from_dest):
+             self.dest_cluster.add_remote_cluster(self.src_cluster,
+                                                 name='remote_cluster_C2-C1',
+                                                 encryption =self._demand_encryption)
+             self._replicate_clusters(
+                self.dest_cluster,
+                self.dest_cluster.get_remote_cluster_ref_by_name("remote_cluster_C2-C1"),
+                self.repl_buckets_from_dest)
 
     def _replicate_clusters(self, cluster, remote_cluster_ref, buckets):
         for bucket in buckets:
@@ -208,7 +210,6 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
                 RbacBase().create_user_source(testuser, 'builtin',
                                               self.src_master)
 
-                self.sleep(10)
 
                 # Assign user to role
                 role_list = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'roles': 'admin'}]
@@ -216,7 +217,6 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
                                          RestConnection(self.src_master),
                                          'builtin')
 
-                self.sleep(10)
 
             if "dest" in upgrade_nodes:
                 # Add built-in user to C2
@@ -224,7 +224,6 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
                 RbacBase().create_user_source(testuser, 'builtin',
                                               self.dest_master)
 
-                self.sleep(10)
 
                 # Assign user to role
                 role_list = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'roles': 'admin'}]
@@ -232,7 +231,6 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
                                          RestConnection(self.dest_master),
                                          'builtin')
 
-                self.sleep(10)
 
         self.log.info("######### Upgrade of C1 and C2 completed ##########")
 
@@ -417,7 +415,6 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
             RbacBase().create_user_source(testuser, 'builtin',
                                             self.src_master)
 
-            self.sleep(10)
 
             # Assign user to role
             role_list = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'roles': 'admin'}]
@@ -425,7 +422,6 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
                                         RestConnection(self.src_master),
                                         'builtin')
 
-            self.sleep(10)
 
         self._load_bucket(bucket_standard, self.dest_master, self.gen_create, 'create', exp=0)
         self._load_bucket(bucket_default, self.src_master, self.gen_update, 'create', exp=self._expires)
@@ -464,7 +460,6 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
             RbacBase().create_user_source(testuser, 'builtin',
                                           self.dest_master)
 
-            self.sleep(10)
 
             # Assign user to role
             role_list = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'roles': 'admin'}]
@@ -472,7 +467,6 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
                                      RestConnection(self.dest_master),
                                      'builtin')
 
-            self.sleep(10)
 
         self.log.info("###### Upgrading C2: completed ######")
 
@@ -601,7 +595,6 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
                 RbacBase().create_user_source(testuser, 'builtin',
                                               self.src_master)
 
-                self.sleep(10)
 
                 # Assign user to role
                 role_list = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'roles': 'admin'}]
@@ -609,14 +602,12 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
                                          RestConnection(self.src_master),
                                          'builtin')
 
-                self.sleep(10)
 
                 # Add built-in user to C2
                 testuser = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'password': 'password'}]
                 RbacBase().create_user_source(testuser, 'builtin',
                                               self.dest_master)
 
-                self.sleep(10)
 
                 # Assign user to role
                 role_list = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'roles': 'admin'}]
@@ -624,7 +615,6 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
                                          RestConnection(self.dest_master),
                                          'builtin')
 
-                self.sleep(10)
             bucket = self.src_cluster.get_bucket_by_name('sasl_bucket_1')
             itemPrefix = "loadThree" + _seq * 'a'
             gen_create3 = BlobGenerator(itemPrefix, itemPrefix, self._value_size, end=self.num_items)
@@ -735,12 +725,22 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
                         self.initial_version = self.upgrade_versions[0]
                         self._install(servers_to_add)
                         self.initial_version = temp
-                    if cluster == 'src':
-                        self.cluster.rebalance(self.src_nodes, servers_to_add, [])
-                        self.src_nodes.extend(servers_to_add)
-                    elif cluster == 'dest':
-                        self.cluster.rebalance(self.dest_nodes, servers_to_add, [])
-                        self.dest_nodes.extend(servers_to_add)
+                        if cluster == 'src':
+                            self.cluster.rebalance(self.src_nodes, servers_to_add, [])
+                            self.src_nodes.extend(servers_to_add)
+                        elif cluster == 'dest':
+                            try:
+                                self.cluster.rebalance(self.dest_nodes, servers_to_add, [])
+                                self.dest_nodes.extend(servers_to_add)
+                            except RebalanceFailedException:
+                                if self._check_del_compatibility:
+                                    for node in servers_to_add:
+                                        err, numerr = NodeHelper.check_goxdcr_log(node,"Invalid format specified for DCP_DELETION",\
+                                            log_name="memcached.log",print_matches=True)
+                                        if numerr >= 1:
+                                            self.fail("MB-31141 has been hit!")
+                                else:
+                                    self.fail("Rebalance failed")
                 elif op == 'rebalanceout':
                     if cluster == 'src':
                         self.src_master = self.servers[0]
@@ -814,44 +814,47 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
                     remote_cluster.pause_all_replications()
 
         self.sleep(60)
-        bucket = self.src_cluster.get_bucket_by_name('default')
         self._operations()
-        self._load_bucket(bucket, self.src_master, self.gen_create, 'create', exp=0)
-        bucket = self.src_cluster.get_bucket_by_name('sasl_bucket_1')
-        self._load_bucket(bucket, self.src_master, self.gen_create, 'create', exp=0)
-        bucket = self.dest_cluster.get_bucket_by_name('standard_bucket_1')
+        for bucket in self.src_cluster.get_buckets():
+            self._load_bucket(bucket, self.src_master, self.gen_create, 'create', exp=0)
+
         gen_create2 = BlobGenerator('loadTwo', 'loadTwo', self._value_size, end=self.num_items)
-        self._load_bucket(bucket, self.dest_master, gen_create2, 'create', exp=0)
+        for bucket in self.dest_cluster.get_buckets():
+            self._load_bucket(bucket, self.dest_master, gen_create2, 'create', exp=0)
 
         if float(self.c1_version[:2]) >= 3.0:
             for cluster in self.get_cb_clusters():
                 for remote_cluster in cluster.get_remote_clusters():
                     remote_cluster.resume_all_replications()
 
-        self._wait_for_replication_to_catchup()
+        # Test for MB-31141
+        if self._check_del_compatibility == True:
+            for bucket in self.src_cluster.get_buckets():
+                self._load_bucket(bucket, self.src_master, self.gen_delete, 'delete', exp=0)
+        else:
+            if float(self.c1_version[:2]) > 2.5:
+                for remote_cluster in self.src_cluster.get_remote_clusters():
+                    remote_cluster.modify()
+                for remote_cluster in self.dest_cluster.get_remote_clusters():
+                    remote_cluster.modify()
+            self.sleep(30)
 
-        if float(self.c1_version[:2]) > 2.5:
-            for remote_cluster in self.src_cluster.get_remote_clusters():
-                remote_cluster.modify()
-            for remote_cluster in self.dest_cluster.get_remote_clusters():
-                remote_cluster.modify()
+            for bucket in self.src_cluster.get_buckets():
+                if bucket.name == 'default':
+                    self._load_bucket(bucket, self.src_master, gen_create2, 'create', exp=0)
+                elif bucket.name == 'sasl_bucket_1':
+                    gen_create3 = BlobGenerator('loadThree', 'loadThree', self._value_size, end=self.num_items)
+                    self._load_bucket(bucket, self.src_master, gen_create3, 'create', exp=0)
 
-        self.sleep(30)
-
-        bucket = self.src_cluster.get_bucket_by_name('sasl_bucket_1')
-        gen_create3 = BlobGenerator('loadThree', 'loadThree', self._value_size, end=self.num_items)
-        self._load_bucket(bucket, self.src_master, gen_create3, 'create', exp=0)
-        bucket = self.dest_cluster.get_bucket_by_name('sasl_bucket_1')
-        gen_create4 = BlobGenerator('loadFour', 'loadFour', self._value_size, end=self.num_items)
-        self._load_bucket(bucket, self.dest_master, gen_create4, 'create', exp=0)
-        bucket = self.src_cluster.get_bucket_by_name('default')
-        self._load_bucket(bucket, self.src_master, gen_create2, 'create', exp=0)
+            for bucket in self.dest_cluster.get_buckets():
+                if bucket.name == 'sasl_bucket_1':
+                    gen_create4 = BlobGenerator('loadFour', 'loadFour', self._value_size, end=self.num_items)
+                    self._load_bucket(bucket, self.dest_master, gen_create4, 'create', exp=0)
 
         self.merge_all_buckets()
-        self.sleep(60)
         self._post_upgrade_ops()
-        self.sleep(60)
         self.verify_results()
+
         if float(self.initial_version[:3]) == 3.1 and float(self.upgrade_versions[0][:3]) == 4.1:
             goxdcr_log = NodeHelper.get_goxdcr_log_dir(self._input.servers[0])\
                      + '/goxdcr.log*'
