@@ -832,8 +832,6 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
             for bucket in self.src_cluster.get_buckets():
                 self._load_bucket(bucket, self.src_master, self.gen_delete, 'delete', exp=0)
         else:
-            self._wait_for_replication_to_catchup()
-
             if float(self.c1_version[:2]) > 2.5:
                 for remote_cluster in self.src_cluster.get_remote_clusters():
                     remote_cluster.modify()
@@ -854,9 +852,7 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
                     self._load_bucket(bucket, self.dest_master, gen_create4, 'create', exp=0)
 
         self.merge_all_buckets()
-        self.sleep(60)
         self._post_upgrade_ops()
-        self.sleep(60)
         self.verify_results()
 
         if float(self.initial_version[:3]) == 3.1 and float(self.upgrade_versions[0][:3]) == 4.1:
