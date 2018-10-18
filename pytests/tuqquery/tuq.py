@@ -424,15 +424,18 @@ class QueryTests(BaseTestCase):
                 cleanups = test_dict[test_name].get('cleanups',[])
 
                 # INDEX STAGE
+                
                 current_indexes = self.get_parsed_indexes()
                 desired_indexes = self.parse_desired_indexes(index_list)
                 desired_index_set = self.make_hashable_index_set(desired_indexes)
                 current_index_set = self.make_hashable_index_set(current_indexes)
 
                 # drop all undesired indexes
+
                 self.drop_undesired_indexes(desired_index_set, current_index_set, current_indexes)
 
                 # create desired indexes
+
                 current_indexes = self.get_parsed_indexes()
                 current_index_set = self.make_hashable_index_set(current_indexes)
                 self.create_desired_indexes(desired_index_set, current_index_set, desired_indexes)
@@ -444,26 +447,35 @@ class QueryTests(BaseTestCase):
                 res_dict['cleanup_res'] = []
 
                 # PRE_QUERIES STAGE
+
                 self.log.info('Running Pre-query Stage')
                 for func in pre_queries:
                     res = func(res_dict)
                     res_dict['pre_q_res'].append(res)
+
                 # QUERIES STAGE
+
                 self.log.info('Running Query Stage')
                 for query in queries:
                     res = self.run_cbq_query(query)
                     res_dict['q_res'].append(res)
+
                 # POST_QUERIES STAGE
+
                 self.log.info('Running Post-query Stage')
                 for func in post_queries:
                     res = func(res_dict)
                     res_dict['post_q_res'].append(res)
+
                 # ASSERT STAGE
+
                 self.log.info('Running Assert Stage')
                 for func in asserts:
                     res = func(res_dict)
                     self.log.info('Pass: ' + test_name)
+
                 # CLEANUP STAGE
+
                 self.log.info('Running Cleanup Stage')
                 for func in cleanups:
                     res = func(res_dict)
@@ -474,7 +486,8 @@ class QueryTests(BaseTestCase):
 
             test_results[test_name] = res_dict
 
-        ## reset indexes
+        # reset indexes
+
         self.log.info('Queries completed, restoring previous indexes')
         current_indexes = self.get_parsed_indexes()
         restore_index_set = self.make_hashable_index_set(restore_indexes)
@@ -484,7 +497,8 @@ class QueryTests(BaseTestCase):
         current_index_set = self.make_hashable_index_set(current_indexes)
         self.create_desired_indexes(restore_index_set, current_index_set, restore_indexes)
 
-        ## print errors
+        # print errors
+
         errors = [error for key in test_results.keys() for error in test_results[key]['errors']]
         has_errors = False
         if errors != []:
@@ -497,17 +511,18 @@ class QueryTests(BaseTestCase):
             self.log.error(error_string)
 
         # trigger failure
+
         self.assertEqual(has_errors, False)
 
     def is_index_present(self, bucket_name, index_name, fields_set, using):
         desired_index = (index_name, bucket_name,
-                         frozenset([field.split()[0].replace('`', '').replace('(', '').replace(')', '') for field in fields_set]),
+                         frozenset([field for field in fields_set]),
                          "online", using)
         query_response = self.run_cbq_query("SELECT * FROM system:indexes")
         current_indexes = [(i['indexes']['name'],
                             i['indexes']['keyspace_id'],
-                            frozenset([key.replace('`', '').replace('(', '').replace(')', '')
-                                       for key in i['indexes']['index_key']]),
+                            frozenset([(key.replace('`', '').replace('(', '').replace(')', ''), j)
+                                       for j, key in enumerate(i['indexes']['index_key'], 0)]),
                             i['indexes']['state'],
                             i['indexes']['using']) for i in query_response['results']]
         if desired_index in current_indexes:
@@ -530,8 +545,8 @@ class QueryTests(BaseTestCase):
         query_response = self.run_cbq_query("SELECT * FROM system:indexes")
         current_indexes = [{'name': i['indexes']['name'],
                             'bucket': i['indexes']['keyspace_id'],
-                            'fields': frozenset([key.replace('`', '').replace('(', '').replace(')', '')
-                                                 for key in i['indexes']['index_key']]),
+                            'fields': frozenset([(key.replace('`', '').replace('(', '').replace(')', ''), j)
+                                                 for j, key in enumerate(i['indexes']['index_key'], 0)]),
                             'state': i['indexes']['state'],
                             'using': i['indexes']['using'],
                             'where': i['indexes'].get('condition', ''),
@@ -541,7 +556,7 @@ class QueryTests(BaseTestCase):
     def parse_desired_indexes(self, index_list):
         desired_indexes = [{'name': index['name'],
                             'bucket': index['bucket'],
-                            'fields': frozenset([field.split()[0] for field in index['fields']]),
+                            'fields': frozenset([field for field in index['fields']]),
                             'state': index['state'],
                             'using': index['using'],
                             'where': index.get('where', ''),
@@ -555,7 +570,8 @@ class QueryTests(BaseTestCase):
         name = index['name']
         keyspace = index['bucket']
         fields = index['fields']
-        joined_fields = ', '.join(fields)
+        sorted_fields = [item[0] for item in tuple(sorted(fields, key=lambda item: item[1]))]
+        joined_fields = ', '.join(sorted_fields)
         using = index['using']
         is_primary = index['is_primary']
         where = index['where']
