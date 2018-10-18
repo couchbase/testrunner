@@ -547,8 +547,7 @@ class RemoteMachineShellConnection:
                     kill_all = True
                     log.info("all erlang processes were killed")
         else:
-            o, r = self.execute_command("kill "
-                        " $(ps aux | grep 'beam.smp' | awk '{print $2}')")
+            o, r = self.execute_command("killall -9 beam.smp")
             self.log_command_output(o, r)
             all_killed = False
             count = 0
@@ -562,8 +561,7 @@ class RemoteMachineShellConnection:
                 if process_count == 0:
                     all_killed = True
                 if count == 3:
-                    o, r = self.execute_command("kill "
-                        " $(ps aux | grep 'beam.smp' | awk '{print $2}')")
+                    o, r = self.execute_command("killall -9 beam.smp")
                 count += 1
             if not all_killed:
                 raise Exception("Could not kill erlang process")
