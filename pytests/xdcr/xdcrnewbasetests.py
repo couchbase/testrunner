@@ -390,46 +390,40 @@ class NodeHelper:
         return str(dir)
 
     @staticmethod
-    def check_goxdcr_log(server, str, goxdcr_log=None, print_matches=None, log_name=None):
-        """ Checks if a string 'str' is present in goxdcr.log on server
+    def check_goxdcr_log(server, str, goxdcr_log=None, print_matches=None, log_name=None, timeout=0):
+        """ Checks if a string 'str' is present in 'log_name' on 'server'
             and returns the number of occurances
             @param goxdcr_log: goxdcr log location on the server
+            @timeout: search every 10 seconds until timeout
         """
+        if not log_name:
+            log_name = "goxdcr.log"
         if not goxdcr_log:
-            if not log_name:
-                log_name = "goxdcr.log"
             goxdcr_log = NodeHelper.get_goxdcr_log_dir(server)\
                      + '/' + log_name + '*'
-
         shell = RemoteMachineShellConnection(server)
         info = shell.extract_remote_info().type.lower()
         if info == "windows":
-            matches = []
-            if print_matches:
-                matches, err = shell.execute_command("grep \"{0}\" {1}".
-                                            format(str, goxdcr_log))
-                if matches:
-                    NodeHelper._log.info(matches)
-
-            count, err = shell.execute_command("grep \"{0}\" {1} | wc -l".
-                                            format(str, goxdcr_log))
+            cmd = "grep "
         else:
-            matches = []
-            if print_matches:
-                matches, err = shell.execute_command("zgrep \"{0}\" {1}".
-                                                     format(str, goxdcr_log))
-                if matches:
-                    NodeHelper._log.info(matches)
+            cmd = "zgrep "
+        cmd += "\"{0}\" {1}".format(str, goxdcr_log)
+        end_time = time.time() + timeout
+        count = 0
+        matches = []
+        while time.time() <= end_time:
+            matches, err = shell.execute_command(cmd)
+            count = len(matches)
+            if count > 0 or timeout == 0:
+                break
+            else:
+                time.sleep(10)
+                NodeHelper._log.info("Waiting for {0} to appear in {1} ..".format(str, log_name))
 
-            count, err = shell.execute_command("zgrep \"{0}\" {1} | wc -l".
-                                               format(str, goxdcr_log))
-        if isinstance(count, list):
-            count = int(count[0])
-        else:
-            count = int(count)
-        NodeHelper._log.info(count)
         shell.disconnect()
+        NodeHelper._log.info(count)
         if print_matches:
+            NodeHelper._log.info(matches)
             return matches, count
         return count
 

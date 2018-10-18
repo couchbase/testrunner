@@ -250,12 +250,11 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
         self.sleep(60)
 
         if self._demand_encryption or self._use_encryption_after_upgrade:
-            ret = self.is_ssl_over_memcached(self.src_master)
             if not self.is_ssl_over_memcached(self.src_master):
-                self.fail("C1: After old nodes were replaced, C1 still uses "
+                self.warn("C1: After old nodes were replaced, C1 still uses "
                           "ns_proxy connection to C2 which is >= 3.0")
             if not self.is_ssl_over_memcached(self.dest_master):
-                self.fail("C2: After old nodes were replaced, C2 still uses "
+                self.warn("C2: After old nodes were replaced, C2 still uses "
                           "ns_proxy connection to C1 which is >= 3.0")
 
         bucket = self.src_cluster.get_bucket_by_name('sasl_bucket_1')
@@ -357,12 +356,13 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
         return True
 
     def is_ssl_over_memcached(self, master):
+        self.sleep(60)
         goxdcr_log = NodeHelper.get_goxdcr_log_dir(master) + '/goxdcr.log*'
-        count = NodeHelper.check_goxdcr_log(master, "Trying to create a ssl over memcached connection", goxdcr_log)
+        count = NodeHelper.check_goxdcr_log(master, "Trying to create a ssl over memcached connection", goxdcr_log, timeout=60)
         if count == 0:
             if NodeHelper.check_goxdcr_log(master,
-                    "Get or create ssl over proxy connection",goxdcr_log):
-                self.log.error("SSL still uses ns_proxy connection!")
+                    "Get or create ssl over proxy connection",goxdcr_log, timeout=60):
+                self.log.info("SSL still uses ns_proxy connection!")
             return False
         self.log.info("SSL uses memcached after upgrade!")
         return True
@@ -445,10 +445,10 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
         self.sleep(60)
         if float(self.initial_version[:2]) >= 3.0 and self._demand_encryption:
             if not self.is_ssl_over_memcached(self.src_master):
-                self.fail("C1: After old nodes were replaced, C1 still uses "
+                self.warn("C1: After old nodes were replaced, C1 still uses "
                           "proxy connection to C2 which is >= 3.0")
             if not self.is_ssl_over_memcached(self.dest_master):
-                self.fail("C2: After old nodes were replaced, C2 still uses "
+                self.warn("C2: After old nodes were replaced, C2 still uses "
                           "proxy connection to C1 which is >= 3.0")
 
         self._online_upgrade(self.servers[self.src_init + self.dest_init:], self.dest_nodes, False)
