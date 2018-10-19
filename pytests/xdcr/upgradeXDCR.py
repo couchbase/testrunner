@@ -251,10 +251,10 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
 
         if self._demand_encryption or self._use_encryption_after_upgrade:
             if not self.is_ssl_over_memcached(self.src_master):
-                self.warn("C1: After old nodes were replaced, C1 still uses "
+                self.log.info("C1: After old nodes were replaced, C1 still uses "
                           "ns_proxy connection to C2 which is >= 3.0")
             if not self.is_ssl_over_memcached(self.dest_master):
-                self.warn("C2: After old nodes were replaced, C2 still uses "
+                self.log.info("C2: After old nodes were replaced, C2 still uses "
                           "ns_proxy connection to C1 which is >= 3.0")
 
         bucket = self.src_cluster.get_bucket_by_name('sasl_bucket_1')
@@ -364,7 +364,7 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
                     "Get or create ssl over proxy connection",goxdcr_log, timeout=60):
                 self.log.info("SSL still uses ns_proxy connection!")
             return False
-        self.log.info("SSL uses memcached after upgrade!")
+        self.log.info("SSL uses memcached after upgrade")
         return True
 
     def online_cluster_upgrade(self):
@@ -445,10 +445,10 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
         self.sleep(60)
         if float(self.initial_version[:2]) >= 3.0 and self._demand_encryption:
             if not self.is_ssl_over_memcached(self.src_master):
-                self.warn("C1: After old nodes were replaced, C1 still uses "
+                self.log.info("C1: After old nodes were replaced, C1 still uses "
                           "proxy connection to C2 which is >= 3.0")
             if not self.is_ssl_over_memcached(self.dest_master):
-                self.warn("C2: After old nodes were replaced, C2 still uses "
+                self.log.info("C2: After old nodes were replaced, C2 still uses "
                           "proxy connection to C1 which is >= 3.0")
 
         self._online_upgrade(self.servers[self.src_init + self.dest_init:], self.dest_nodes, False)

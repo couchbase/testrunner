@@ -44,15 +44,16 @@ class nwusage(XDCRNewBaseTest):
         if event_time:
             time_to_compare = datetime.datetime.strptime(event_time.group(), '%Y-%m-%dT%H:%M:%S')
         else:
-            matches, _ = NodeHelper.check_goxdcr_log(node, "Success adding replication specification",
-                                                 goxdcr_log, print_matches=True)
+            matches, count = NodeHelper.check_goxdcr_log(node, "Success adding replication specification",
+                                                 goxdcr_log, print_matches=True, timeout=60)
         #Time when replication was set up
-        time_to_compare = self._extract_timestamp(matches[-1])
-
+        if count > 0:
+            time_to_compare = self._extract_timestamp(matches[-1])
+        else:
+            self.fail("Replication not successful")
         matches, count = NodeHelper.check_goxdcr_log(node, "\\\"bandwidth_usage\\\": " + nw_usage, goxdcr_log, print_matches=True, timeout=60)
         if count == 0:
-            self.fail("Bandwidth usage information not found in logs")
-
+            self.fail("Bandwidth usage information not found in logs!")
         match_count = 0
         skip_count = 0
         for item in matches:
