@@ -60,7 +60,7 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         rest = RestConnection(self.master)
         buckets = rest.get_buckets()
         for bucket in buckets:
-            stats = self.rest.get_bucket_stats(bucket)
+            stats = rest.get_bucket_stats(bucket)
             self.log.info("Bucket {} DGM is {}".format(bucket,stats["vb_active_resident_items_ratio"]))
         super(EventingBaseTest, self).tearDown()
 
