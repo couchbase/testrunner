@@ -440,7 +440,10 @@ class unidirectional(XDCRNewBaseTest):
     # Nodes Crashing Scenarios
     def __kill_processes(self, crashed_nodes=[]):
         for node in crashed_nodes:
-            NodeHelper.kill_erlang(node)
+            try:
+                NodeHelper.kill_erlang(node)
+            except:
+                self.log.info('Could not kill erlang process on node, continuing..')
 
     def __start_cb_server(self, node):
         shell = RemoteMachineShellConnection(node)
