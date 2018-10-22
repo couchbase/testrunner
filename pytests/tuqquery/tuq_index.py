@@ -498,12 +498,6 @@ class QueriesViewsTests(QuerySanityTests):
         res = self.run_cbq_query()
         self.assertTrue(res['results']==[{u'$1': [1, 2, [2, 3], u'verbose', 2, {u'a': 1}]}])
 
-    '''MB-21011: Explain queries should not run the query that they generate the explain plan for'''
-    def test_explain_prepared(self):
-        self.run_cbq_query("EXPLAIN prepare a from select * from default")
-        prepareds = self.run_cbq_query("SELECT * from system:prepareds")
-        self.assertTrue(prepareds['metrics']['resultCount'] == 0)
-
     def test_explain_index_with_fn(self):
         self.fail_if_no_buckets()
         for bucket in self.buckets:
