@@ -2396,15 +2396,20 @@ class RestConnection(object):
             settings.enabled = json_parsed["enabled"]
             settings.count = json_parsed["count"]
             settings.timeout = json_parsed["timeout"]
+            settings.can_abort_rebalance = json_parsed["canAbortRebalance"]
         return settings
 
-    def update_autofailover_settings(self, enabled, timeout):
+    def update_autofailover_settings(self, enabled, timeout, canAbortRebalance):
+        params_dict = {}
+        params_dict['timeout'] = timeout
         if enabled:
-            params = urllib.urlencode({'enabled': 'true',
-                                       'timeout': timeout})
+            params_dict['enabled'] = 'true'
+
         else:
-            params = urllib.urlencode({'enabled': 'false',
-                                       'timeout': timeout})
+            params_dict['enabled'] = 'false'
+        if canAbortRebalance:
+            params_dict['canAbortRebalance'] = 'true'
+        params = urllib.urlencode(params_dict)
         api = self.baseUrl + 'settings/autoFailover'
         log.info('settings/autoFailover params : {0}'.format(params))
         status, content, header = self._http_request(api, 'POST', params)

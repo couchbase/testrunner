@@ -43,12 +43,15 @@ class AutoFailoverBaseTest(BaseTestCase):
                                      self.update_load_gen, "update", 0)
         self._async_load_all_buckets(self.orchestrator,
                                      self.delete_load_gen, "delete", 0)
-        self.server_to_fail = self._servers_to_fail()
+        self.server_index_to_fail = self.input.param("server_index_to_fail", None)
+        if self.server_index_to_fail is None:
+            self.server_to_fail = self._servers_to_fail()
+        else:
+            self.server_to_fail = [self.servers[self.server_index_to_fail]]
         self.servers_to_add = self.servers[self.nodes_init:self.nodes_init +
                                                            self.nodes_in]
         self.servers_to_remove = self.servers[self.nodes_init -
                                               self.nodes_out:self.nodes_init]
-        # self.node_monitor_task = self.start_node_monitors_task()
 
     def tearDown(self):
         self.log.info("============AutoFailoverBaseTest teardown============")
@@ -77,7 +80,8 @@ class AutoFailoverBaseTest(BaseTestCase):
         False
         """
         status = self.rest.update_autofailover_settings(True,
-                                                        self.timeout)
+                                                        self.timeout,
+                                                        self.can_abort_rebalance)
         return status
 
     def disable_autofailover(self):
@@ -86,7 +90,7 @@ class AutoFailoverBaseTest(BaseTestCase):
         :return: True If the setting was disabled, else return
         False
         """
-        status = self.rest.update_autofailover_settings(False, 120)
+        status = self.rest.update_autofailover_settings(False, 120, False)
         return status
 
     def enable_autofailover_and_validate(self):
@@ -105,6 +109,10 @@ class AutoFailoverBaseTest(BaseTestCase):
                          "Incorrect timeout set. Expected timeout : {0} "
                          "Actual timeout set : {1}".format(self.timeout,
                                                            settings.timeout))
+        self.assertEqual(self.can_abort_rebalance, settings.can_abort_rebalance,
+                         "Incorrect can_abort_rebalance set. Expected can_abort_rebalance : {0} "
+                         "Actual can_abort_rebalance set : {1}".format(self.can_abort_rebalance,
+                                                                       settings.can_abort_rebalance))
 
     def disable_autofailover_and_validate(self):
         """
@@ -396,6 +404,7 @@ class AutoFailoverBaseTest(BaseTestCase):
                                                   "delta")
         self.multi_node_failures = self.input.param("multi_node_failures",
                                                     False)
+        self.can_abort_rebalance = self.input.param("can_abort_rebalance", True)
         self.num_node_failures = self.input.param("num_node_failures", 1)
         self.services = self.input.param("services", None)
         self.zone = self.input.param("zone", 1)
