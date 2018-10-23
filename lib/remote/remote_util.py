@@ -536,16 +536,24 @@ class RemoteMachineShellConnection:
         if os == "windows":
             o, r = self.execute_command("taskkill /F /T /IM epmd.exe*")
             self.log_command_output(o, r)
-            o, r = self.execute_command("taskkill /F /T /IM erl*")
+            o, r = self.execute_command("taskkill /F /T /IM erl.exe*")
             self.log_command_output(o, r)
             o, r = self.execute_command("tasklist | grep erl.exe")
             kill_all = False
+            count = 0
             while len(o) >= 1 and not kill_all:
-                self.execute_command("taskkill /F /T /IM erl*")
-                o, r = self.execute_command("tasklist | grep erl.exe")
+                if o and "erl.exe" in o[0]:
+                    self.execute_command("taskkill /F /T /IM erl.exe*")
+                    self.sleep(1)
+                    o, r = self.execute_command("tasklist | grep erl.exe")
                 if len(o) == 0:
                     kill_all = True
                     log.info("all erlang processes were killed")
+                else:
+                    count += 1
+                if count == 5:
+                    log.error("erlang process is not killed")
+                    break
         else:
             o, r = self.execute_command("kill "
                         " $(ps aux | grep 'beam.smp' | awk '{print $2}')")
