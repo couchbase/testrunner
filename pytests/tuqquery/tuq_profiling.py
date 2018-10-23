@@ -130,10 +130,8 @@ class QueryProfilingTests(QueryMonitoringTests):
         self.assertTrue('phaseTimes' in result['results'][0]['completed_requests'])
 
     '''Basic check for the profiling setting profile=timings
-        -Check that the default profile setting does not contain phaseTimes
-        -Check that setting profile = timings on the master node does not change the setting on other nodes
-        -Check that you can change profile to timings in the middle of a query.'''
-    def test_profiling_timings(self):
+        -Check that the default profile setting does not contain phaseTimes'''
+    def test_profiling_timings_default(self):
         # Test 1: Check to see if profiling = off
         self.rest.set_profiling(self.master, "off")
         e = threading.Event()
@@ -148,9 +146,11 @@ class QueryProfilingTests(QueryMonitoringTests):
         result = self.run_cbq_query('select * from system:completed_requests')
         self.assertTrue('phaseTimes' not in result['results'][0]['completed_requests'])
 
-        # Reset completed log
-        self.run_cbq_query('delete from system:completed_requests')
-
+    """Check that setting profile = timings on the master node does not change the setting on other nodes"""
+    def test_profiling_timings_propagation(self):
+        # Create flags to ensure the queries were both inside of active_requests
+        query_one = False
+        query_two = False
         # Test 2: Set profile = timings and make sure it impacts only the node whose setting was changed
         self.rest.set_profiling(self.master, "timings")
         e = threading.Event()
@@ -162,21 +162,40 @@ class QueryProfilingTests(QueryMonitoringTests):
         thread2.start()
         e.set()
         # Make sure the node with profiling set to phases contains phaseTimes and the other query does not.
-        result = self.run_cbq_query('select *, meta().plan from system:active_requests')
-        self.assertTrue('plan' in result['results'][0] and 'phaseTimes' in result['results'][0]['active_requests'])
-        self.assertTrue('plan' not in result['results'][2] and
-                        'phaseTimes' not in result['results'][2]['active_requests'])
+        results = self.run_cbq_query('select *, meta().plan from system:active_requests')
+        for result in results['results']:
+            if result['active_requests']['statement'] == 'select * from default union select * from default' \
+                    and result['active_requests']['node'] =='%s:%s' % (self.master.ip, self.master.port):
+                self.assertTrue('plan' in result and 'phaseTimes' in result['active_requests'])
+                query_one = True
+            elif result['active_requests']['statement'] == 'select * from default union select * from default':
+                self.assertTrue('plan' not in result and
+                                'phaseTimes' not in result['active_requests'])
+                query_two = True
+
+        self.assertTrue(query_one and query_two, "One of the queries did not appear inside of active_requests : %s" % results)
+
         thread1.join()
         thread2.join()
+
+        query_one = False
+        query_two = False
         # Make sure completed_requests contains phasetimes for the query run on the node with profiling set to phases
-        result = self.run_cbq_query('select *, meta().plan from system:completed_requests')
-        self.assertTrue('plan' in result['results'][0] and 'phaseTimes' in result['results'][0]['completed_requests'])
-        self.assertTrue('plan' not in result['results'][1] and
-                        'phaseTimes' not in result['results'][1]['completed_requests'])
+        results = self.run_cbq_query('select *, meta().plan from system:completed_requests')
+        for result in results['results']:
+            if result['completed_requests']['statement'] == 'select * from default union select * from default' \
+                    and result['completed_requests']['node'] =='%s:%s' % (self.master.ip, self.master.port):
+                self.assertTrue('plan' in result and 'phaseTimes' in result['completed_requests'])
+                query_one = True
+            elif result['completed_requests']['statement'] == 'select * from default union select * from default':
+                self.assertTrue('plan' not in result and
+                                'phaseTimes' not in result['completed_requests'])
+                query_two = True
 
-        # Reset completed log
-        self.run_cbq_query('delete from system:completed_requests')
+        self.assertTrue(query_one and query_two, "One of the queries did not appear inside of completed_requests : %s" % results)
 
+    """-Check that you can change profile to timings in the middle of a query."""
+    def test_profiling_timings_in_flight(self):
         # Test 3: Set profiling to phases in the middle of the running query and see if it takes effect.
         self.rest.set_profiling(self.master, "off")
         e = threading.Event()
@@ -192,6 +211,7 @@ class QueryProfilingTests(QueryMonitoringTests):
         # Check if completed_requests contains the phaseTimes
         result = self.run_cbq_query('select *, meta().plan from system:completed_requests')
         self.assertTrue('plan' in result['results'][0] and 'phaseTimes' in result['results'][0]['completed_requests'])
+
 
     def test_profiling_controls(self):
         self.rest.get_query_admin_settings(self.master)
@@ -223,7 +243,7 @@ class QueryProfilingTests(QueryMonitoringTests):
 
     def run_parallel_query(self, server):
         logging.info('parallel query is active')
-        query = 'select * from default'
+        query = 'select * from default union select * from default'
         self.run_cbq_query(query, server=server)
 
     def run_controlled_query(self,server):
