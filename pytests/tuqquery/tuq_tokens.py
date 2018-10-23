@@ -201,7 +201,10 @@ class TokenTests(QueryTests):
     #This test is specific to beer-sample bucket
     def test_tokens_simple_syntax(self):
         self.rest.load_sample("beer-sample")
-        self.sleep(20)
+        bucket_doc_map = {"beer-sample": 7303}
+        bucket_status_map = {"beer-sample":"healthy"}
+        self.wait_for_buckets_status(bucket_status_map, 5, 120)
+        self.wait_for_bucket_docs(bucket_doc_map, 5, 120)
         created_indexes = []
         try:
             idx1 = "idx_suffixes"

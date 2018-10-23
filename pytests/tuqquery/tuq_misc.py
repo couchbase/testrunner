@@ -233,9 +233,17 @@ class QueryMiscTests(QueryTests):
                 self.cluster.bucket_delete(self.master, "temp_bucket")
 
     '''MB-31600 Indexing meta().id for binary data was broken, the index would contain no data'''
+    '''bug has not been fixed, will fail until then'''
     def test_indexing_meta(self):
         idx_list=[]
         item_count = 10
+        for bucket in self.buckets:
+            if bucket.name == "default":
+                self.cluster.bucket_flush(self.master, bucket=bucket, timeout=180000)
+        bucket_doc_map = {"default": 0}
+        bucket_status_map = {"default": "healthy"}
+        self.wait_for_buckets_status(bucket_status_map, 5, 120)
+        self.wait_for_bucket_docs(bucket_doc_map, 5, 120)
         self.shell.execute_cbworkloadgen("Administrator", "password", item_count, 100, 'default', 1024, '')
         try:
             self.run_cbq_query(query="CREATE INDEX idx1 on default(meta().id)")
@@ -245,6 +253,7 @@ class QueryMiscTests(QueryTests):
             self.log.info(curl_output)
             # The above command returns a tuple, we want the first element of that tuple
             expected_curl = self.convert_list_to_json(curl_output[0])
+
             self.assertTrue(expected_curl['default:idx1:items_count'] == item_count)
 
             self.run_cbq_query(query = "CREATE INDEX idx2 on default(meta().cas)")

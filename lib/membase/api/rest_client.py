@@ -3247,8 +3247,8 @@ class RestConnection(object):
                 params = 'prepared=' + urllib.quote(prepared, '~()')
                 params = 'prepared="%s"'% named_prepare
             else:
-                prepared = json.dumps(query)
-                prepared = str(prepared.encode('utf-8'))
+                prepared = json.dumps(query['name'])
+                prepared = str(prepared)
                 params = 'prepared=' + urllib.quote(prepared, '~()')
             if 'creds' in query_params and query_params['creds']:
                 headers = self._create_headers_with_auth(query_params['creds'][0]['user'].encode('utf-8'),
@@ -3266,7 +3266,6 @@ class RestConnection(object):
             if verbose:
                 log.info('query params : {0}'.format(params))
             api = "http://%s:%s/query?%s" % (self.ip, port, params)
-
 
         status, content, header = self._http_request(api, 'POST', timeout=timeout, headers=headers)
         try:

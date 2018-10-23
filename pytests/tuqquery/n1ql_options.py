@@ -206,7 +206,11 @@ class OptionsRestTests(QueryTests):
             #in clause with missing first argument
             statement = 'EXPLAIN SELECT * FROM %s where job_title=$job_title and name IN $name&$job_title is missing&$name= ["id@mail.com", "employee-4"]'% (bucket.name)
             output = self.curl_helper(statement)
-            self.assertTrue(output['errors'][0]['msg'] == 'No named argument $job_title is missing value')
+            self.assertEqual(output['status'], 'success')
+
+            statement = 'SELECT * FROM %s where job_title=$job_title and name IN $name&$job_title is missing&$name= ["id@mail.com", "employee-4"]'% (bucket.name)
+            output = self.curl_helper(statement)
+            self.assertEqual(output['errors'][0]['msg'], "Error evaluating filter. - cause: No value for named parameter $job_title.")
 
             #in clause with null first argument
             statement = 'EXPLAIN SELECT * FROM %s where job_title=$job_title and name IN $name&$job_title=null&$name= ["id@mail.com", "employee-4"]'% (bucket.name)

@@ -368,23 +368,25 @@ class QueryCurlTests(QueryTests):
     def test_from_external(self):
         url = "'https://jsonplaceholder.typicode.com/users'"
         select_query = "select *"
-        from_query=" from curl("+ url +") result "
-        curl = self.shell.execute_commands_inside(self.cbqpath,select_query + from_query,'', '', '', '', '')
+        from_query=" from curl(" + url + ") result "
+        curl = self.shell.execute_commands_inside(self.cbqpath, select_query + from_query, '', '', '', '', '')
         # Convert the output of the above command to json
         json_curl = self.convert_to_json(curl)
         self.assertEqual(json_curl['metrics']['resultCount'], 10)
 
         # Test the use of curl in the from as a bucket, see if you can specify only usernames
         select_query = "select result.username"
-        curl = self.shell.execute_commands_inside(self.cbqpath,select_query + from_query,'', '', '', '', '')
+        curl = self.shell.execute_commands_inside(self.cbqpath, select_query + from_query, '', '', '', '', '')
         json_curl = self.convert_to_json(curl)
-        # Need to make sure that only the usernames were stored, that correlates to a resultsize of 478
-        self.assertEqual(json_curl['metrics']['resultSize'], 478)
+        self.assertEqual(len(json_curl['results']), 10)
+        for item in json_curl['results']:
+            self.assertTrue(len(item['username']) > 0)
+            self.assertEqual(len(item.keys()), 1)
 
         # Test of the use of curl in the from as a bucket, see if you can filter results
         select_query = "select *"
         where_query ="where result.username == 'Bret'"
-        curl = self.shell.execute_commands_inside(self.cbqpath,select_query + from_query+ where_query,'', '', '', '', '')
+        curl = self.shell.execute_commands_inside(self.cbqpath, select_query + from_query + where_query, '', '', '', '', '')
         json_curl = self.convert_to_json(curl)
         self.assertTrue(json_curl['metrics']['resultCount'] == 1 and
                         json_curl['results'][0]['result']['username'] == 'Bret')
