@@ -540,12 +540,16 @@ class RemoteMachineShellConnection:
             self.log_command_output(o, r)
             o, r = self.execute_command("tasklist | grep erl.exe")
             kill_all = False
-            while len(o) >= 1 and not kill_all:
+            count = 0
+            while len(o) >= 1 and not kill_all and count < 10:
                 self.execute_command("taskkill /F /T /IM erl*")
                 o, r = self.execute_command("tasklist | grep erl.exe")
                 if len(o) == 0:
                     kill_all = True
                     log.info("all erlang processes were killed")
+                count+=1
+            if not kill_all:
+                raise Exception("Could not kill erlang process")
         else:
             o, r = self.execute_command("killall -9 beam.smp")
             self.log_command_output(o, r)
