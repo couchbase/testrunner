@@ -1342,9 +1342,11 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         if self.debug_logs:
             print "\nlog path: ", logs_path
             print "output : ", output
+        log_name = ""
         if output:
             for x in output:
                 if "collectinfo" in x:
+                    log_name = x.split(".")[0]
                     shell.execute_command("cd {0}; unzip {1}"
                                              .format(logs_path, x))
         else:
@@ -1354,6 +1356,11 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                 self.fail("Failed to run with ex log path")
 
         output, _ = shell.execute_command("ls {0}".format(logs_path))
+        if output:
+            for ele in output:
+                if log_name == ele:
+                    output, _ = shell.execute_command("ls {0}"\
+                                               .format(logs_path + "/" + log_name))
         if "C_" in output:
             win_path = "/C_/tmp/entbackup"
             output, _ = shell.execute_command("ls {0}".format(logs_path + win_path))
