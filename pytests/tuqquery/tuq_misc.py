@@ -231,3 +231,53 @@ class QueryMiscTests(QueryTests):
                 self.wait_for_index_drop("temp_bucket", index, createdIndexes[index], self.gsi_type)
             if createdBucket:
                 self.cluster.bucket_delete(self.master, "temp_bucket")
+
+    '''MB-31600 Indexing meta().id for binary data was broken, the index would contain no data'''
+    '''bug has not been fixed, will fail until then'''
+    def test_indexing_meta(self):
+        self.fail_if_no_buckets()
+        idx_list = []
+        item_count = 10
+        for bucket in self.buckets:
+            if bucket.name == "default":
+                self.cluster.bucket_flush(self.master, bucket=bucket, timeout=180000)
+        bucket_doc_map = {"default": 0}
+        bucket_status_map = {"default": "healthy"}
+        self.wait_for_buckets_status(bucket_status_map, 5, 120)
+        self.wait_for_bucket_docs(bucket_doc_map, 5, 120)
+        self.shell.execute_cbworkloadgen("Administrator", "password", item_count, 100, 'default', 1024, '')
+        try:
+            self.run_cbq_query(query="CREATE INDEX idx1 on default(meta().id)")
+            self._wait_for_index_online("default", "idx1")
+            idx_list.append('idx1')
+            curl_output = self.shell.execute_command("%s -u Administrator:password http://%s:9102/stats"
+                                                     % (self.curl_path, self.master.ip))
+            self.log.info(curl_output)
+            # The above command returns a tuple, we want the first element of that tuple
+            expected_curl = self.convert_list_to_json(curl_output[0])
+
+            self.assertEqual(expected_curl['default:idx1:items_count'], item_count)
+
+            self.run_cbq_query(query="CREATE INDEX idx2 on default(meta().cas)")
+            self._wait_for_index_online("default", "idx2")
+            idx_list.append('idx2')
+            curl_output = self.shell.execute_command("%s -u Administrator:password http://%s:9102/stats"
+                                                     % (self.curl_path, self.master.ip))
+            self.log.info(curl_output)
+            # The above command returns a tuple, we want the first element of that tuple
+            expected_curl = self.convert_list_to_json(curl_output[0])
+            self.assertEqual(expected_curl['default:idx2:items_count'], item_count)
+
+            self.run_cbq_query(query="CREATE INDEX idx3 on default(meta().expiration)")
+            self._wait_for_index_online("default", "idx3")
+            idx_list.append('idx3')
+            curl_output = self.shell.execute_command("%s -u Administrator:password http://%s:9102/stats"
+                                                     % (self.curl_path, self.master.ip))
+            self.log.info(curl_output)
+            # The above command returns a tuple, we want the first element of that tuple
+            expected_curl = self.convert_list_to_json(curl_output[0])
+            self.assertEqual(expected_curl['default:idx3:items_count'], item_count)
+        finally:
+            for idx in idx_list:
+                drop_query = "DROP INDEX default.%s" % (idx)
+                self.run_cbq_query(query=drop_query)
