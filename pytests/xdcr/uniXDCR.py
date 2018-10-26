@@ -880,7 +880,7 @@ class unidirectional(XDCRNewBaseTest):
         count = NodeHelper.check_goxdcr_log(
                         nodes[0],
                         "Received rollback from DCP stream",
-                        goxdcr_log)
+                        goxdcr_log, timeout=60)
         self.assertGreater(count, 0, "rollback did not happen as expected")
         self.log.info("rollback happened as expected")
 
@@ -919,14 +919,13 @@ class unidirectional(XDCRNewBaseTest):
             self.src_cluster.pause_all_replications()
             self.sleep(30)
             self.src_cluster.resume_all_replications()
-
             self.sleep(self._wait_timeout)
-
             output, error = conn.execute_command("netstat -an | grep " + self.src_cluster.get_master_node().ip
                                                  + ":11210 | wc -l")
             conn.log_command_output(output, error)
             self.log.info("No. of memcached connections in iteration {0}:  {1}".format(i+1, output[0]))
-            self.assertLessEqual(abs(int(output[0]) - int(before)), 5, "Number of memcached connections changed beyond allowed limit")
+            if int(output[0]) - int(before) > 5:
+                self.fail("Number of memcached connections changed beyond allowed limit")
 
         for task in load_tasks:
             task.result()
