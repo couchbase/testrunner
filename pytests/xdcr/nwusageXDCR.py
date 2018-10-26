@@ -40,17 +40,17 @@ class nwusage(XDCRNewBaseTest):
                                 nw_usage="[1-9][0-9]*", end_time=None):
         goxdcr_log = NodeHelper.get_goxdcr_log_dir(node) + '/goxdcr.log'
         nw_max = (nw_limit * 1024 * 1024)/no_of_nodes
-
         if event_time:
-            time_to_compare = datetime.datetime.strptime(event_time.group(), '%Y-%m-%dT%H:%M:%S')
+            time_to_compare = self._extract_timestamp(event_time)
         else:
             matches, count = NodeHelper.check_goxdcr_log(node, "Success adding replication specification",
                                                  goxdcr_log, print_matches=True, timeout=60)
-        #Time when replication was set up
-        if count > 0:
-            time_to_compare = self._extract_timestamp(matches[-1])
-        else:
-            self.fail("Replication not successful")
+            #Time when replication was set up
+            if count > 0:
+                time_to_compare = self._extract_timestamp(matches[-1])
+            else:
+                self.fail("Replication not successful")
+        self.sleep(60,'Waiting for bandwidth usage logs..')
         matches, count = NodeHelper.check_goxdcr_log(node, "\\\"bandwidth_usage\\\": " + nw_usage, goxdcr_log, print_matches=True, timeout=60)
         if count == 0:
             self.fail("Bandwidth usage information not found in logs!")
@@ -68,7 +68,7 @@ class nwusage(XDCRNewBaseTest):
                     skip_count += 1
                     continue
             bandwidth_usage = ((item.split('{"bandwidth_usage": ')[1]).split(' ')[0]).rstrip(',')
-            if int(float(bandwidth_usage)) < nw_max:
+            if int(float(bandwidth_usage)) <= nw_max:
                 match_count += 1
                 continue
             else:
