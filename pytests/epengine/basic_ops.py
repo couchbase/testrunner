@@ -274,3 +274,21 @@ class basic_ops(BaseTestCase):
         for bucket in self.buckets:
             # Verify the stat for compression_mode off and compressed items should be still 10000
             self.verify_stat(items=self.num_items, value="off")
+
+
+    def do_get_random_key(self):
+        # MB-31548, get_Random key gets hung sometimes.
+        mc = MemcachedClient(self.master.ip, 11210)
+        mc.sasl_auth_plain(self.master.rest_username, self.master.rest_password)
+        mc.bucket_select('default')
+
+        count = 0
+        while (count < 1000000):
+            count = count +1
+            try:
+                mc.get_random_key()
+            except MemcachedError as error:
+                self.fail("<MemcachedError #%d ``%s''>" % (error.status, error.message))
+            if count % 1000 == 0:
+                self.log.info('The number of iteration is {}'.format(count))
+
