@@ -165,8 +165,10 @@ class Lww(XDCRNewBaseTest):
         conn.upsert(key=doc_id, value=value)
 
     def _kill_processes(self, crashed_nodes=[]):
-        for node in crashed_nodes:
+        try:
             NodeHelper.kill_erlang(node)
+        except:
+            self.log.info('Could not kill erlang process on node, continuing..')
 
     def _start_cb_server(self, node):
         shell = RemoteMachineShellConnection(node)
@@ -2333,6 +2335,7 @@ class Lww(XDCRNewBaseTest):
         conn1.start_couchbase()
         conn2.start_couchbase()
         conn3.start_couchbase()
+        self._wait_for_replication_to_catchup()
 
     def test_lww_mixed_with_diff_topology_and_clocks_out_of_sync(self):
         self.c3_cluster = self.get_cb_cluster_by_name('C3')
