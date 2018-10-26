@@ -1,5 +1,4 @@
-import json
-import ntplib
+import zlib
 
 from couchbase_helper.documentgenerator import BlobGenerator, DocumentGenerator
 from xdcrnewbasetests import XDCRNewBaseTest, FloatingServers
@@ -166,12 +165,9 @@ class Lww(XDCRNewBaseTest):
                 break
         return long(max_cas)
 
-    def _get_vbucket_id(self, node, bucket, key):
-        conn = RemoteMachineShellConnection(node)
-        command = "curl -s http://" + node.ip + ":8091/pools/default/buckets/" + bucket + " | /opt/couchbase/bin/tools/vbuckettool - " + key
-        output, error = conn.execute_command(command)
-        conn.log_command_output(output, error)
-        return output[0].split()[5]
+    def _get_vbucket_id(self, key, num_vbuckets=1024):
+        vbucket_id = ((zlib.crc32(key) >> 16) & 0x7FFF) % num_vbuckets
+        return vbucket_id
 
     def test_lww_enable(self):
         src_conn = RestConnection(self.c1_cluster.get_master_node())
@@ -2332,10 +2328,10 @@ class Lww(XDCRNewBaseTest):
         gen = DocumentGenerator('lww', '{{"key1":"value1"}}', xrange(100), start=0, end=1)
         self.c1_cluster.load_all_buckets_from_generator(gen)
 
-        vbucket_id = self._get_vbucket_id(self.c1_cluster.get_master_node(), 'default', 'lww-0')
+        vbucket_id = self._get_vbucket_id(key='lww-0')
         max_cas_active = self._get_max_cas(node=self.c1_cluster.get_master_node(), bucket='default', vbucket_id=vbucket_id)
 
-        vbucket_id = self._get_vbucket_id(self._input.servers[1], 'default', 'lww-0')
+        vbucket_id = self._get_vbucket_id(key='lww-0')
         max_cas_replica = self._get_max_cas(node=self._input.servers[1], bucket='default', vbucket_id=vbucket_id)
 
         self.log.info("max_cas_active: " + str(max_cas_active))
@@ -2391,7 +2387,7 @@ class Lww(XDCRNewBaseTest):
         gen = DocumentGenerator('lww', '{{"key1":"value1"}}', xrange(100), start=0, end=1)
         self.c2_cluster.load_all_buckets_from_generator(gen)
 
-        vbucket_id = self._get_vbucket_id(self.c2_cluster.get_master_node(), 'default', 'lww-0')
+        vbucket_id = self._get_vbucket_id(key='lww-0')
         max_cas_c2_before = self._get_max_cas(node=self.c2_cluster.get_master_node(), bucket='default', vbucket_id=vbucket_id)
 
         gen = DocumentGenerator('lww', '{{"key2":"value2"}}', xrange(100), start=0, end=1)
@@ -2443,7 +2439,7 @@ class Lww(XDCRNewBaseTest):
         gen = DocumentGenerator('lww', '{{"key1":"value1"}}', xrange(100), start=0, end=1)
         self.c2_cluster.load_all_buckets_from_generator(gen)
 
-        vbucket_id = self._get_vbucket_id(self.c2_cluster.get_master_node(), 'default', 'lww-0')
+        vbucket_id = self._get_vbucket_id(key='lww-0')
         max_cas_c2_before = self._get_max_cas(node=self.c2_cluster.get_master_node(), bucket='default', vbucket_id=vbucket_id)
 
         gen = DocumentGenerator('lww', '{{"key2":"value2"}}', xrange(100), start=0, end=1)
@@ -2493,7 +2489,7 @@ class Lww(XDCRNewBaseTest):
         gen = DocumentGenerator('lww', '{{"key1":"value1"}}', xrange(100), start=0, end=1)
         self.c2_cluster.load_all_buckets_from_generator(gen)
 
-        vbucket_id = self._get_vbucket_id(self.c2_cluster.get_master_node(), 'default', 'lww-0')
+        vbucket_id = self._get_vbucket_id(key='lww-0')
         max_cas_c2_before = self._get_max_cas(node=self.c2_cluster.get_master_node(), bucket='default', vbucket_id=vbucket_id)
 
         gen = DocumentGenerator('lww', '{{"key2":"value2"}}', xrange(100), start=0, end=1)
@@ -2551,7 +2547,7 @@ class Lww(XDCRNewBaseTest):
         gen = DocumentGenerator('lww', '{{"key1":"value1"}}', xrange(100), start=0, end=1)
         self.c2_cluster.load_all_buckets_from_generator(gen)
 
-        vbucket_id = self._get_vbucket_id(self.c2_cluster.get_master_node(), 'default', 'lww-0')
+        vbucket_id = self._get_vbucket_id(key='lww-0')
         max_cas_c2_before = self._get_max_cas(node=self.c2_cluster.get_master_node(), bucket='default', vbucket_id=vbucket_id)
 
         gen = DocumentGenerator('lww', '{{"key2":"value2"}}', xrange(100), start=0, end=1)
@@ -2607,7 +2603,7 @@ class Lww(XDCRNewBaseTest):
         gen = DocumentGenerator('lww', '{{"key1":"value1"}}', xrange(100), start=0, end=1)
         self.c1_cluster.load_all_buckets_from_generator(gen)
 
-        vbucket_id = self._get_vbucket_id(self.c1_cluster.get_master_node(), 'default', 'lww-0')
+        vbucket_id = self._get_vbucket_id(key='lww-0')
         hlc_c1 = self._get_max_cas(node=self.c1_cluster.get_master_node(), bucket='default', vbucket_id=vbucket_id)
 
         self.sleep(timeout=1200)
@@ -2615,7 +2611,7 @@ class Lww(XDCRNewBaseTest):
         gen = DocumentGenerator('lww', '{{"key2":"value2"}}', xrange(100), start=0, end=1)
         self.c2_cluster.load_all_buckets_from_generator(gen)
 
-        vbucket_id = self._get_vbucket_id(self.c2_cluster.get_master_node(), 'default', 'lww-0')
+        vbucket_id = self._get_vbucket_id(key='lww-0')
         hlc_c2_1 = self._get_max_cas(node=self.c2_cluster.get_master_node(), bucket='default', vbucket_id=vbucket_id)
 
         self.c1_cluster.resume_all_replications_by_id()
