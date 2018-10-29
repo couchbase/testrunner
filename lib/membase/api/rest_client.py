@@ -2399,7 +2399,7 @@ class RestConnection(object):
             settings.can_abort_rebalance = json_parsed["canAbortRebalance"]
         return settings
 
-    def update_autofailover_settings(self, enabled, timeout, canAbortRebalance):
+    def update_autofailover_settings(self, enabled, timeout, canAbortRebalance=False):
         params_dict = {}
         params_dict['timeout'] = timeout
         if enabled:
