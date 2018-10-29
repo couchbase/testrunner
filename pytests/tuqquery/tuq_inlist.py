@@ -62,7 +62,7 @@ class InListOperatorTests(QueryTests):
         super(InListOperatorTests, self).suite_tearDown()
 
 
-    def test_run_tests(self):
+    def run_all(self):
         self.test_in_single_constant()
         self.test_in_single_subquery()
         self.test_not_in_single_constant()
@@ -160,11 +160,12 @@ class InListOperatorTests(QueryTests):
         self._create_indexes()
         count = 0
         test_dict = dict()
-        primary_idx = {'name': '#primary', 'bucket': "temp_bucket", 'fields': [], 'state': 'online', 'using': self.index_type.lower(), 'is_primary': True}
-        idx_1 = {'name': "ix1", 'bucket': "temp_bucket", 'fields': ["int_field"], 'state': "online", 'using': self.index_type.lower(), 'is_primary':False}
+        primary_idx = {'name': '#primary', 'bucket': "temp_bucket", 'fields': (), 'state': 'online', 'using': self.index_type.lower(), 'is_primary': True}
+        idx_1 = {'name': "ix1", 'bucket': "temp_bucket", 'fields': [("int_field",0)], 'state': "online", 'using': self.index_type.lower(), 'is_primary':False}
 
         for innotin in self.in_not_in:
-            for wherecond in (self.constant_list+self.subquery):
+            #for wherecond in (self.constant_list+self.subquery):
+            for wherecond in self.constant_list:
                 query_in = "select varchar_field from temp_bucket where int_field "
                 query_or = "select varchar_field from temp_bucket where "
                 query_in += innotin + wherecond
@@ -205,7 +206,7 @@ class InListOperatorTests(QueryTests):
         count = 0
         test_dict = dict()
         primary_idx = {'name': '#primary', 'bucket': "temp_bucket", 'fields': [], 'state': 'online', 'using': self.index_type.lower(), 'is_primary': True}
-        idx_1 = {'name': "ix1", 'bucket': "temp_bucket", 'fields': ["int_field"], 'state': "online", 'using': self.index_type.lower(), 'is_primary':False}
+        idx_1 = {'name': "ix1", 'bucket': "temp_bucket", 'fields': [("int_field",0)], 'state': "online", 'using': self.index_type.lower(), 'is_primary':False}
 
         for innotin1 in self.in_not_in:
             for wherecond1 in self.constant_list+self.subquery:
@@ -262,7 +263,7 @@ class InListOperatorTests(QueryTests):
         count = 0
         test_dict = dict()
         primary_idx = {'name': '#primary', 'bucket': "temp_bucket", 'fields': [], 'state': 'online', 'using': self.index_type.lower(), 'is_primary': True}
-        idx_1 = {'name': "ix1", 'bucket': "temp_bucket", 'fields': ["int_field"], 'state': "online", 'using': self.index_type.lower(), 'is_primary':False}
+        idx_1 = {'name': "ix1", 'bucket': "temp_bucket", 'fields': [("int_field",0)], 'state': "online", 'using': self.index_type.lower(), 'is_primary':False}
 
         for innotin1 in self.in_not_in:
             for wherecond1 in self.constant_list + self.subquery:
