@@ -503,11 +503,12 @@ class QueryCurlTests(QueryTests):
         n1ql_query = 'prepare prepared_with_curl FROM select * from default limit 5'
         # This is the query that the cbq-engine will execute
         query = "select curl("+ self.query_service_url +", {'data' : 'statement=%s','user':'%s:%s'})" % (n1ql_query,self.username,self.password)
-        curl = self.shell.execute_commands_inside(self.cbqpath,query,'', '', '', '', '')
+        curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         json_curl = self.convert_to_json(curl)
         result = self.run_cbq_query('select * from system:prepareds')
-        self.assertTrue(result['results'][0]['prepareds']['name'] == 'prepared_with_curl' and result['metrics']['resultCount'] == 3
-                        and result['results'][0]['prepareds']['statement'] == n1ql_query)
+        self.assertEqual(result['results'][0]['prepareds']['name'], 'prepared_with_curl')
+        self.assertEqual(result['metrics']['resultCount'], len(self.servers))
+        self.assertEqual(result['results'][0]['prepareds']['statement'], n1ql_query)
 
     '''Check if the cipher_list returned by pinging the website is consistent with the expected list
        of ciphers'''

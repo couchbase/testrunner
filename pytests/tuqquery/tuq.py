@@ -118,8 +118,8 @@ class QueryTests(BaseTestCase):
         if self.input.param("gomaxprocs", None):
             self.configure_gomaxprocs()
         self.gen_results = TuqGenerators(self.log, self.generate_full_docs_list(self.gens_load))
-        if str(self.__class__).find('QueriesUpgradeTests') == -1 and self.primary_index_created == False:
-            if self.analytics == False:
+        if str(self.__class__).find('QueriesUpgradeTests') == -1:
+            if not self.analytics:
                 self.create_primary_index_for_3_0_and_greater()
         self.log.info('-'*100)
         self.log.info('Temp fix for MB-16888')
@@ -751,11 +751,23 @@ class QueryTests(BaseTestCase):
                 ready = False
         return ready
 
+    def bucket_deleted(self, bucket_name):
+        query_response = self.run_cbq_query("select COUNT(*) from system:keyspaces where name == " + bucket_name)
+        count = query_response['results'][0]['$1']
+        if count != 0:
+            self.log.info("Buckets still exists: " + bucket_name)
+            return False
+        if count == 0:
+            return True
+
     def wait_for_buckets_status(self, bucket_status_map, delay, retries):
         self.with_retry(lambda: self.buckets_status_ready(bucket_status_map), delay=delay, tries=retries)
 
     def wait_for_bucket_docs(self, bucket_doc_map, delay, retries):
         self.with_retry(lambda: self.buckets_docs_ready(bucket_doc_map), delay=delay, tries=retries)
+
+    def wait_for_bucket_delete(self, bucket_name, delay, retries):
+        self.with_retry(lambda: self.bucket_deleted(bucket_name), delay=delay, tries=retries)
 
     def with_retry(self, func, eval=True, delay=5, tries=10, func_params=None):
         attempts = 0
@@ -794,6 +806,25 @@ class QueryTests(BaseTestCase):
                                         "Error code is incorrect.Actual %s.\n Expected: %s.\n" % (str(ex), code))
                 else:
                     self.fail("There were no errors. Error expected: %s" % error)
+
+    def get_bucket_from_name(self, bucket_name):
+        for bucket in self.buckets:
+            if bucket.name == bucket_name:
+                return bucket
+        return None
+
+    def delete_bucket(self, bucket):
+        self.cluster.bucket_delete(self.master, bucket=bucket, timeout=180000)
+
+    def ensure_bucket_does_not_exist(self, bucket_name, using_rest=False):
+        bucket = self.get_bucket_from_name(bucket_name)
+        if bucket:
+            if using_rest:
+                rest = RestConnection(self.master)
+                rest.delete_bucket("beer-sample")
+            else:
+                self.delete_bucket(bucket)
+        self.wait_for_bucket_delete(bucket_name, 5, 10)
 
     def prepared_common_body(self, server=None):
         self.isprepared = True
@@ -1088,7 +1119,6 @@ class QueryTests(BaseTestCase):
             return False
         return True
 
-
     def check_missing_and_extra(self, actual, expected):
         missing, extra = [], []
         for item in actual:
@@ -1167,22 +1197,13 @@ class QueryTests(BaseTestCase):
                 if self.primary_indx_drop:
                     self.log.info("Dropping primary index for %s ..." % bucket.name)
                     try:
-                        self.query = "DROP PRIMARY INDEX ON %s using %s" % (
-                            bucket.name, self.primary_indx_type)
+                        self.query = "DROP PRIMARY INDEX ON %s using %s" % (bucket.name, self.primary_indx_type)
                         self.run_cbq_query(self.query)
-                        self.query = "select * from system:indexes where name='#primary' and keyspace_id = %s" % bucket.name
-                        attempts = 0
-                        while attempts<6:
-                            res = self.run_cbq_query(self.query)
-                            if res['metrics']['resultCount'] == 0:
-                                break
-                            else:
-                                self.sleep(1)
-                                attempts+=1
+                        self.wait_for_index_drop(bucket.name, '#primary', [], self.primary_indx_type.lower())
                     except Exception, ex:
                         self.log.info(str(ex))
 
-                self.query = "select * from system:indexes where name='#primary' and keyspace_id = %s" % bucket.name
+                self.query = "select * from system:indexes where name = '#primary' and keyspace_id = '%s'" % bucket.name
                 res = self.run_cbq_query(self.query)
                 if res['metrics']['resultCount'] == 0:
                     self.query = "CREATE PRIMARY INDEX ON %s USING %s" % (bucket.name, self.primary_indx_type)

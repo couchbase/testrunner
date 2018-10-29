@@ -704,7 +704,7 @@ class QueriesIndexTests(QueryTests):
                 actual_result = self.run_cbq_query()
                 plan = self.ExplainPlanHelper(actual_result)
                 self.assertTrue(plan['~children'][0]['#operator']=='UnionScan')
-                self.assertTrue(plan['~children'][0]['scans'][0]['index']=='idx4' or plan['~children'][0]['scans'][1]['index']=='idx4')
+                self.assertTrue(plan['~children'][0]['scans'][0]['index'] in ['idx4', '#primary'] or plan['~children'][0]['scans'][1]['index'] in ['idx4', '#primary'])
                 self.query = 'explain SELECT meta().cas, meta().expiration,meta().id FROM default where meta().cas = 1487875768758304768 and meta().expiration > 0'
                 actual_result = self.run_cbq_query()
                 plan = self.ExplainPlanHelper(actual_result)
@@ -1731,13 +1731,20 @@ class QueriesIndexTests(QueryTests):
                              "AND  NOT (department = 'Manager') order BY name limit 10"
                 actual_result = self.run_cbq_query()
                 plan = self.ExplainPlanHelper(actual_result)
-                print("####### PLAN ::"+str(plan)+"::")
-                self.assertTrue(plan['~children'][0]['~children'][0]['#operator'] == 'IntersectScan',
-                                "Intersect Scan is not being used in and query for 2 array indexes")
-                result1 =plan['~children'][0]['~children'][0]['scans'][0]['scan']['index']
-                result2 =plan['~children'][0]['~children'][0]['scans'][1]['scan']['index']
-                self.assertTrue(result1 == idx2 or result1 == idx)
-                self.assertTrue(result2 == idx or result2 == idx2)
+                if plan['~children'][0]['~children'][0]['#operator'] == 'IntersectScan':
+                    self.assertEqual(plan['~children'][0]['~children'][0]['#operator'], 'IntersectScan')
+                    result1 = plan['~children'][0]['~children'][0]['scans'][0]['scan']['index']
+                    result2 = plan['~children'][0]['~children'][0]['scans'][1]['scan']['index']
+                    self.assertTrue(result1 == idx2 or result1 == idx)
+                    self.assertTrue(result2 == idx or result2 == idx2)
+                elif plan['~children'][0]['~children'][0]['#operator'] == 'UnionScan':
+                    self.assertEqual(plan['~children'][0]['~children'][0]['#operator'], 'UnionScan')
+                    self.assertEqual(plan['~children'][0]['~children'][0]['scans'][0]['#operator'], 'IntersectScan')
+                    self.assertEqual(plan['~children'][0]['~children'][0]['scans'][1]['#operator'], 'IntersectScan')
+                    result1 = plan['~children'][0]['~children'][0]['scans'][0]['scans'][0]['scan']['index']
+                    result2 = plan['~children'][0]['~children'][0]['scans'][0]['scans'][1]['scan']['index']
+                    self.assertTrue(result1 == idx2 or result1 == idx)
+                    self.assertTrue(result2 == idx or result2 == idx2)
                 self.run_cbq_query()
                 self.query = "select name from %s WHERE ANY i IN %s.tasks SATISFIES  (ANY j IN i SATISFIES j='Search' end) END " % (
                 bucket.name,bucket.name) + \
@@ -3136,17 +3143,19 @@ class QueriesIndexTests(QueryTests):
                     self.run_cbq_query()
 
     def test_dynamic_names(self):
+        self.fail_if_no_buckets()
         self.run_cbq_query('create primary index on {0} using GSI'.format("default"))
+        self._wait_for_index_online("default", "#primary")
         try:
             self.query = 'select { UPPER("foo"):1,"foo"||"bar":2 }'
             actual_result = self.run_cbq_query()
             expected_result = [{u'$1': {u'foobar': 2, u'FOO': 1}}]
-            self.assertTrue(actual_result['results']==expected_result)
+            self.assertEqual(actual_result['results'], expected_result)
             self.query = 'insert into {0} (key k,value doc)  select to_string(name)|| UUID() as k , doc as doc from {0} where name is not null'.format("default")
             self.run_cbq_query()
             self.query = 'select * from {0}'.format("default")
             actual_result = self.run_cbq_query()
-            self.assertEqual(actual_result['metrics']['resultCount'],24192)
+            self.assertEqual(actual_result['metrics']['resultCount'], 24192)
             self.query = 'delete from {0} where meta().id in (select RAW to_string(name)|| UUID()  from {0} d)'.format("default")
             self.run_cbq_query()
         finally:

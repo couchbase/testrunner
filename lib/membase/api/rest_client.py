@@ -2225,7 +2225,7 @@ class RestConnection(object):
         data = '["{0}"]'.format(sample_name)
         status, content, header = self._http_request(api, 'POST', data)
         # Sleep to allow the sample bucket to be loaded
-        time.sleep(10)
+        time.sleep(15)
         return status
 
     # figure out the proxy port
@@ -3252,7 +3252,10 @@ class RestConnection(object):
                 params = 'prepared=' + urllib.quote(prepared, '~()')
                 params = 'prepared="%s"'% named_prepare
             else:
-                prepared = json.dumps(query['name'])
+                if isinstance(query, dict):
+                    prepared = json.dumps(query['name'])
+                else:
+                    prepared = json.dumps(query)
                 prepared = str(prepared)
                 params = 'prepared=' + urllib.quote(prepared, '~()')
             if 'creds' in query_params and query_params['creds']:

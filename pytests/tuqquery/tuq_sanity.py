@@ -3174,15 +3174,15 @@ class QuerySanityTests(QueryTests):
     def test_union_where_covering(self):
         created_indexes = []
         ind_list = ["one", "two"]
-        index_name="one"
+        index_name = "one"
         self.fail_if_no_buckets()
         for bucket in self.buckets:
             for ind in ind_list:
                 index_name = "coveringindex%s" % ind
-                if ind =="one":
-                    self.query = "CREATE INDEX %s ON %s(name, email, join_mo)  USING %s" % (index_name, bucket.name,self.index_type)
-                elif ind =="two":
-                    self.query = "CREATE INDEX %s ON %s(email,join_mo) USING %s" % (index_name, bucket.name,self.index_type)
+                if ind == "one":
+                    self.query = "CREATE INDEX %s ON %s(name, email, join_mo)  USING %s" % (index_name, bucket.name, self.index_type)
+                elif ind == "two":
+                    self.query = "CREATE INDEX %s ON %s(email, join_mo) USING %s" % (index_name, bucket.name, self.index_type)
                 self.run_cbq_query()
                 self._wait_for_index_online(bucket, index_name)
                 created_indexes.append(index_name)
@@ -3193,10 +3193,8 @@ class QuerySanityTests(QueryTests):
             self.query = "select name from %s where name is not null union select email from %s where email is not null and join_mo >2" % (bucket.name, bucket.name)
             actual_list = self.run_cbq_query()
             actual_result = sorted(actual_list['results'])
-            expected_result = [{"name" : doc["name"]}
-                                for doc in self.full_list]
-            expected_result.extend([{"email" : doc["email"]}
-                                    for doc in self.full_list if doc["join_mo"] > 2])
+            expected_result = [{"name": doc["name"]} for doc in self.full_list]
+            expected_result.extend([{"email": doc["email"]} for doc in self.full_list if doc["join_mo"] > 2])
             expected_result = sorted([dict(y) for y in set(tuple(x.items()) for x in expected_result)])
             self._verify_results(actual_result, expected_result)
             for index_name in created_indexes:
@@ -3253,7 +3251,7 @@ class QuerySanityTests(QueryTests):
                 self.run_cbq_query()
             self.query = "CREATE PRIMARY INDEX ON %s" % bucket.name
             self.run_cbq_query()
-            self.sleep(15,'wait for index')
+            self.sleep(15, 'wait for index')
             self.query = "select count(name) as names from %s where join_day is not null union select count(email) as emails from %s where email is not null" % (bucket.name, bucket.name)
             result = self.run_cbq_query()
             self.assertEqual(actual_result,sorted(result['results']))
