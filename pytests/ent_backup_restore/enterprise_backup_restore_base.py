@@ -61,6 +61,10 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.cmd_ext = ""
         self.should_fail = self.input.param("should-fail", False)
         self.database_path = COUCHBASE_DATA_PATH
+        for server in self.servers:
+            shell = RemoteMachineShellConnection(server)
+            shell.enable_diag_eval_on_non_local_hosts()
+            shell.disconnect()
 
         cmd =  'curl -g {0}:8091/diag/eval -u {1}:{2} '.format(self.master.ip,
                                                               self.master.rest_username,
