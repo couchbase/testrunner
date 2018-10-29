@@ -88,6 +88,10 @@ class CliBaseTest(BaseTestCase):
         self.full_v = None
         self.short_v = None
         self.build_number = None
+        for server in self.servers:
+            shell = RemoteMachineShellConnection(server)
+            shell.enable_diag_eval_on_non_local_hosts()
+            shell.disconnect()
         cmd =  'curl -g {0}:8091/diag/eval -u {1}:{2} '.format(self.master.ip,
                                                               self.master.rest_username,
                                                               self.master.rest_password)
