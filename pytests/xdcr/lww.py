@@ -679,6 +679,8 @@ class Lww(XDCRNewBaseTest):
         self.assertFalse(dest_conn.is_lww_enabled(), "LWW enabled on dest bucket")
         self.log.info("LWW not enabled on dest bucket as expected")
 
+        self.sleep(10)
+
         try:
             self.setup_xdcr()
         except Exception as e:
