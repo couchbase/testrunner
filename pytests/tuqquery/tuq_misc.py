@@ -231,3 +231,72 @@ class QueryMiscTests(QueryTests):
                 self.wait_for_index_drop("temp_bucket", index, createdIndexes[index], self.gsi_type)
             if createdBucket:
                 self.cluster.bucket_delete(self.master, "temp_bucket")
+
+    def test_indexer_endpoints(self):
+        curl = "curl "
+        credentials = [("full", "-u Administrator:password "), ("none", " ")]
+        protocols = [("insecure", " ", "http://", ":9102"), ("secure", "-k ", "https://", ":19102")]
+        ips = [self.master.ip]
+        endpoints = ["/stats",
+                     "/listMetadataTokens",
+                     "/debug/pprof/",
+                     "/debug/pprof/goroutine",
+                     "/debug/pprof/block",
+                     "/debug/pprof/heap",
+                     "/debug/pprof/threadcreate",
+                     "/debug/pprof/profile",
+                     "/debug/pprof/cmdline",
+                     "/debug/pprof/symbol",
+                     "/debug/pprof/trace",
+                     "/debug/vars",
+                     "/registerRebalanceToken",
+                     "/listRebalanceTokens",
+                     "/cleanupRebalance",
+                     "/moveIndex",
+                     "/moveIndexInternal",
+                     "/nodeuuid",
+                     "/api/indexes",
+                     "/settings",
+                     "/internal/settings",
+                     "/triggerCompaction",
+                     "/settings/runtime/freeMemory",
+                     "/settings/runtime/forceGC",
+                     "/plasmaDiag",
+                     "/listMetadataTokens",
+                     "/stats",
+                     "/stats/mem",
+                     "/stats/storage/mm",
+                     "/stats/storage",
+                     "/stats/reset",
+                     "/createIndex",
+                     "/createIndexRebalance",
+                     "/dropIndex",
+                     "/buildIndex",
+                     "/getLocalIndexMetadata",
+                     "/getIndexMetadata",
+                     "/restoreIndexMetadata",
+                     "/getIndexStatus",
+                     "/getIndexStatement",
+                     "/planIndex",
+                     "/settings/storageMode",
+                     "/api/index",
+                     "/api",
+                     "/listCreateTokens"]
+        for ip in ips:
+            for endpoint in endpoints:
+                for credential in credentials:
+                    # secure and insecure with credentials should return same data
+                    # secure and insecure without credentials should return same error
+                    self.log.info("\n hitting endpoint with credentials: "+credential[0])
+                    endpoint_responses = []
+                    for protocol in protocols:
+                        self.log.info("\n using: "+protocol[0])
+                        cmd = curl + credential[1] + protocol[1] + protocol[2] + ip + protocol[3] + endpoint
+                        curl_output = self.shell.execute_command(cmd)
+                        endpoint_responses.append(curl_output)
+                        self.log.info("\n"+str(curl_output)+"\n")
+                    for response in endpoint_responses:
+                        if credential == "full":
+                            self.assertTrue('No web credentials found in request.' not in response[0] and '401 Unauthorized' not in response[0])
+                        if credential == "none":
+                            self.assertTrue('No web credentials found in request.' in response[0] or '401 Unauthorized' in response[0])

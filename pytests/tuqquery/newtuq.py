@@ -123,7 +123,6 @@ class QueryTests(BaseTestCase):
                 self.shell.execute_command("killall tuqtng")
                 self.shell.disconnect()
 
-
     def setup_analytics(self):
         #data = ""
         # for bucket in self.buckets:
@@ -869,7 +868,6 @@ class QueryTests(BaseTestCase):
         json_generator = JsonGenerator()
         return json_generator.generate_docs_bigdata(end=(1000*docs_per_day), start=start, value_size=self.value_size)
 
-
     def _verify_results(self, actual_result, expected_result, missing_count = 1, extra_count = 1):
         if len(actual_result) != len(expected_result):
             missing, extra = self.check_missing_and_extra(actual_result, expected_result)
@@ -955,9 +953,6 @@ class QueryTests(BaseTestCase):
                         time.sleep(20)
                         self.run_cbq_query()
 
-
-
-
     def _wait_for_index_online(self, bucket, index_name, timeout=6000):
         end_time = time.time() + timeout
         while time.time() < end_time:
@@ -972,7 +967,6 @@ class QueryTests(BaseTestCase):
                         return
             self.sleep(5, 'index is pending or not in the list. sleeping... (%s)' % [item['indexes'] for item in res['results']])
         raise Exception('index %s is not online. last response is %s' % (index_name, res))
-
 
     def _get_keys(self, key_num):
         keys = []
