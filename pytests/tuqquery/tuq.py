@@ -528,6 +528,8 @@ class QueryTests(BaseTestCase):
         if desired_index in current_indexes:
             return True
         else:
+            self.log.info("waiting for: \n" + str(desired_index) + "\n")
+            self.log.info("current indexes: \n" + str(current_indexes) + "\n")
             return False
 
     def wait_for_all_indexes_online(self):
