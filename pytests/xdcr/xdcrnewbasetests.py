@@ -408,18 +408,19 @@ class NodeHelper:
         else:
             cmd = "zgrep "
         cmd += "\"{0}\" {1}".format(str, goxdcr_log)
-        end_time = time.time() + timeout
+        iter = 0
         count = 0
         matches = []
-        while time.time() <= end_time:
+        # Search 5 times with a break of timeout sec
+        while iter < 5:
             matches, err = shell.execute_command(cmd)
             count = len(matches)
             if count > 0 or timeout == 0:
                 break
             else:
-                time.sleep(10)
-                NodeHelper._log.info("Waiting for {0} to appear in {1} ..".format(str, log_name))
-
+                time.sleep(timeout)
+                NodeHelper._log.info("Waiting {0}s for {1} to appear in {2} ..".format(timeout, str, log_name))
+            iter += 1
         shell.disconnect()
         NodeHelper._log.info(count)
         if print_matches:

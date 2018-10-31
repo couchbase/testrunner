@@ -1,12 +1,14 @@
-from xdcrnewbasetests import XDCRNewBaseTest, XDCR_PARAM, REPLICATION_TYPE
-from remote.remote_util import RemoteMachineShellConnection
-from lib.membase.api.rest_client import RestConnection
-from membase.api.exception import XDCRCheckpointException
-from mc_bin_client import MemcachedClient, MemcachedError
-from memcached.helper.data_helper import MemcachedClientHelper, VBucketAwareMemcached
-from xdcrnewbasetests import NodeHelper
-from couchbase_helper.documentgenerator import BlobGenerator
 import time
+
+from couchbase_helper.documentgenerator import BlobGenerator
+from lib.membase.api.rest_client import RestConnection
+from mc_bin_client import MemcachedClient, MemcachedError
+from membase.api.exception import XDCRCheckpointException
+from memcached.helper.data_helper import MemcachedClientHelper, VBucketAwareMemcached
+from remote.remote_util import RemoteMachineShellConnection
+
+from xdcrnewbasetests import NodeHelper
+from xdcrnewbasetests import XDCRNewBaseTest, REPLICATION_TYPE
 
 
 class XDCRCheckpointUnitTest(XDCRNewBaseTest):
@@ -154,42 +156,44 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
         stats = MemcachedClientHelper.direct_client(vb0_active_node, 'default').stats('vbucket-seqno')
         return stats['vb_0:uuid'], stats['vb_0:high_seqno']
 
-    """ Gets _commit_for_checkpoint call history recorded so far on a node """
+    """ _commit_for_checkpoint is deprecated. Checking stats for call history recorded so far on a node """
     def get_checkpoint_call_history(self, node):
-        shell = RemoteMachineShellConnection(node)
-        os_type = shell.extract_remote_info().distribution_type
-        if os_type.lower() == 'windows':
-            couchdb_log = "C:/Program Files/Couchbase/Server/var/lib/couchbase/logs/couchdb.log"
+        chkpts, count = NodeHelper.check_goxdcr_log(node,
+                                                   "num_checkpoints",
+                                                   log_name="stats.log",
+                                                   print_matches=True,
+                                                   timeout=10)
+        if count > 0:
+            chkpts = chkpts.split(',')
+            total_successful_chkpts = int(chkpts[-2].rstrip('},'))
         else:
-            couchdb_log = "/opt/couchbase/var/lib/couchbase/logs/couchdb.log"
-        total_chkpt_calls, error = shell.execute_command("grep \"POST /_commit_for_checkpoint\" \"{0}\" | wc -l"
-                                                                     .format(couchdb_log))
-        total_successful_chkpts, error = shell.execute_command("grep \"POST /_commit_for_checkpoint 200\" \"{0}\" | wc -l"
-                                                                     .format(couchdb_log))
-        self.log.info(int(total_successful_chkpts[0]))
-        if self.num_successful_chkpts_so_far != 0:
-            checkpoint_number = int(total_successful_chkpts[0]) - self.num_successful_chkpts_beginning
-            self.log.info("Checkpoint on this node (this run): {0}".format(checkpoint_number))
-        shell.disconnect()
-        total_commit_failures = int(total_chkpt_calls[0]) - int(total_successful_chkpts[0])
-        return int(total_chkpt_calls[0]), int(total_successful_chkpts[0]), total_commit_failures
+            total_successful_chkpts = 0
+        self.log.info(total_successful_chkpts)
+        chkpts, count = NodeHelper.check_goxdcr_log(node,
+                                                  "num_failedckpts",
+                                                  log_name="stats.log",
+                                                  print_matches=True,
+                                                  timeout=10)
+        if count > 0:
+            chkpts = chkpts.split(',')
+            total_failed_chkpts = int(chkpts[-2].rstrip('},'))
+        else:
+            total_failed_chkpts = 0
+        return total_successful_chkpts + total_failed_chkpts, total_successful_chkpts, total_failed_chkpts
 
     """ Gets total number of pre_replicate responses made from dest, number of
         successful and failed pre_replicate calls so far on the current dest node """
     def get_pre_replicate_call_history(self, node):
-        shell = RemoteMachineShellConnection(node)
-        os_type = shell.extract_remote_info().distribution_type
-        if os_type.lower() == 'windows':
-            couchdb_log = "C:/Program Files/Couchbase/Server/var/lib/couchbase/logs/couchdb.log"
-        else:
-            couchdb_log = "/opt/couchbase/var/lib/couchbase/logs/couchdb.log"
-        total_prerep_calls, error = shell.execute_command("grep \"POST /_pre_replicate\" \"{0}\" | wc -l"
-                                                                     .format(couchdb_log))
-        total_successful_prereps, error = shell.execute_command("grep \"POST /_pre_replicate 200\" \"{0}\" | wc -l"
-                                                                     .format(couchdb_log))
-        shell.disconnect()
-        total_prerep_failures = int(total_prerep_calls[0]) - int(total_successful_prereps[0])
-        return int(total_prerep_calls[0]), int(total_successful_prereps[0]), total_prerep_failures
+        total_prerep_calls = NodeHelper.check_goxdcr_log(node,
+                                                        "POST /_pre_replicate",
+                                                        log_name="http_access.log",
+                                                        timeout=10)
+        total_successful_prereps = NodeHelper.check_goxdcr_log(node,
+                                                        "POST /_pre_replicate 200",
+                                                        log_name="http_access.log",
+                                                        timeout=10)
+        total_prerep_failures = total_prerep_calls - total_successful_prereps
+        return total_prerep_calls, total_successful_prereps, total_prerep_failures
 
     """ From destination couchdb log tells if checkpointing was successful """
     def was_checkpointing_successful(self):
@@ -271,8 +275,6 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
     def mutate_and_checkpoint(self, n=3, skip_validation=False):
         count = 1
         # get vb0 active source node
-        stats_log = NodeHelper.get_goxdcr_log_dir(self._input.servers[0])\
-                     + '/stats.log'
         active_src_node = self.get_active_vb0_node(self.src_master)
         while count <=n:
             remote_vbuuid, remote_highseqno = self.get_failover_log(self.dest_master)
@@ -287,54 +289,59 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
                 # avoid checking very first/empty checkpoint record
                 count += 1
                 continue
-            end_time = time.time() + self._wait_timeout
-            while time.time() < end_time:
-                stats_count = NodeHelper.check_goxdcr_log(
-                            active_src_node,
-                            "docs_checked,{0}".format(count),
-                            stats_log)
-                if stats_count > 0:
-                    self.log.info("Checkpoint recorded as expected")
-                    if not skip_validation:
-                        self.log.info("Validating latest checkpoint")
-                        self.get_and_validate_latest_checkpoint()
-                    break
-                else:
-                    self.sleep(20, "Checkpoint not recorded yet, will check after 20s")
+            stats_count = NodeHelper.check_goxdcr_log(
+                        active_src_node,
+                        "docs_checked,{0}".format(count),
+                        log_name="stats.log",
+                        timeout=30)
+            if stats_count > 0:
+                self.log.info("Checkpoint recorded as expected")
+                if not skip_validation:
+                    self.log.info("Validating latest checkpoint")
+                    self.get_and_validate_latest_checkpoint()
             else:
                 self.log.info("Checkpointing failed - may not be an error if vb_uuid changed ")
                 return False
             count += 1
-
         return True
 
     """ Verify checkpoint 404 error thrown when the dest node containing vb0 is no more a part of cluster """
     def mutate_and_check_error404(self, n=1):
         # get vb0 active source node
         active_src_node = self.get_active_vb0_node(self.src_master)
-        shell = RemoteMachineShellConnection(active_src_node)
         os_type = shell.extract_remote_info().distribution_type
         if os_type.lower() == 'windows':
             trace_log = "C:/Program Files/Couchbase/Server/var/lib/couchbase/logs/xdcr_trace.log"
         else:
             trace_log = "/opt/couchbase/var/lib/couchbase/logs/xdcr_trace.*"
-        num_404_errors_before_load, error = shell.execute_command("grep \"error,404\" {0} | wc -l"
-                                                                     .format(trace_log))
-        num_get_remote_bkt_failed_before_load, error = shell.execute_command("grep \"get_remote_bucket_failed\" \"{0}\" | wc -l"
-                                                                     .format(trace_log))
+        num_404_errors_before_load, error = NodeHelper.check_goxdcr_log(
+                                            active_src_node,
+                                            "error,404",
+                                            trace_log,
+                                            timeout=30)
+        num_get_remote_bkt_failed_before_load, error = NodeHelper.check_goxdcr_log(
+                                            active_src_node,
+                                            "get_remote_bucket_failed",
+                                            trace_log,
+                                            timeout=30)
         self.log.info("404 errors: {0}, get_remote_bucket_failed errors : {1}".
                       format(num_404_errors_before_load, num_get_remote_bkt_failed_before_load))
         self.sleep(60)
         self.log.info("################ New mutation:{0} ##################".format(self.key_counter+1))
         self.load_one_mutation_into_source_vb0(active_src_node)
         self.sleep(5)
-        num_404_errors_after_load, error = shell.execute_command("grep \"error,404\" {0} | wc -l"
-                                                                     .format(trace_log))
-        num_get_remote_bkt_failed_after_load, error = shell.execute_command("grep \"get_remote_bucket_failed\" \"{0}\" | wc -l"
-                                                                     .format(trace_log))
+        num_404_errors_after_load, error = NodeHelper.check_goxdcr_log(
+                                            active_src_node,
+                                            "error,404",
+                                            trace_log,
+                                            timeout=30)
+        num_get_remote_bkt_failed_after_load, error = NodeHelper.check_goxdcr_log(
+                                            active_src_node,
+                                            "get_remote_bucket_failed",
+                                            trace_log,
+                                            timeout=30)
         self.log.info("404 errors: {0}, get_remote_bucket_failed errors : {1}".
                       format(num_404_errors_after_load, num_get_remote_bkt_failed_after_load))
-        shell.disconnect()
         if (int(num_404_errors_after_load[0]) > int(num_404_errors_before_load[0])) or \
            (int(num_get_remote_bkt_failed_after_load[0]) > int(num_get_remote_bkt_failed_before_load[0])):
             self.log.info("Checkpointing error-404 verified after dest failover/rebalance out")
@@ -632,13 +639,15 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
         count1 = NodeHelper.check_goxdcr_log(
             nodes[0],
             "Received rollback from DCP stream",
-            goxdcr_log)
+            goxdcr_log,
+            timeout=30)
         self.assertGreater(count1, 0, "full rollback not received from DCP as expected")
         self.log.info("full rollback received from DCP as expected")
         count2 = NodeHelper.check_goxdcr_log(
             nodes[0],
             "Rolled back startSeqno to 0",
-            goxdcr_log)
+            goxdcr_log,
+            timeout=30)
         self.assertGreater(count2, 0, "startSeqno not rolled back to 0 as expected")
         self.log.info("startSeqno rolled back to 0 as expected")
 
