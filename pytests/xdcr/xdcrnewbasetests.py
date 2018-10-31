@@ -390,44 +390,41 @@ class NodeHelper:
         return str(dir)
 
     @staticmethod
-    def check_goxdcr_log(server, str, goxdcr_log=None, print_matches=None):
-        """ Checks if a string 'str' is present in goxdcr.log on server
+    def check_goxdcr_log(server, str, goxdcr_log=None, print_matches=None, log_name=None, timeout=0):
+        """ Checks if a string 'str' is present in 'log_name' on 'server'
             and returns the number of occurances
             @param goxdcr_log: goxdcr log location on the server
+            @timeout: search every 10 seconds until timeout
         """
+        if not log_name:
+            log_name = "goxdcr.log"
         if not goxdcr_log:
             goxdcr_log = NodeHelper.get_goxdcr_log_dir(server)\
-                     + '/goxdcr.log*'
-
+                     + '/' + log_name + '*'
         shell = RemoteMachineShellConnection(server)
         info = shell.extract_remote_info().type.lower()
         if info == "windows":
-            matches = []
-            if print_matches:
-                matches, err = shell.execute_command("grep \"{0}\" {1}".
-                                            format(str, goxdcr_log))
-                if matches:
-                    NodeHelper._log.info(matches)
-
-            count, err = shell.execute_command("grep \"{0}\" {1} | wc -l".
-                                            format(str, goxdcr_log))
+            cmd = "grep "
         else:
-            matches = []
-            if print_matches:
-                matches, err = shell.execute_command("zgrep \"{0}\" {1}".
-                                                     format(str, goxdcr_log))
-                if matches:
-                    NodeHelper._log.info(matches)
-
-            count, err = shell.execute_command("zgrep \"{0}\" {1} | wc -l".
-                                               format(str, goxdcr_log))
-        if isinstance(count, list):
-            count = int(count[0])
-        else:
-            count = int(count)
-        NodeHelper._log.info(count)
+            cmd = "zgrep "
+        cmd += "\"{0}\" {1}".format(str, goxdcr_log)
+        iter = 0
+        count = 0
+        matches = []
+        # Search 5 times with a break of timeout sec
+        while iter < 5:
+            matches, err = shell.execute_command(cmd)
+            count = len(matches)
+            if count > 0 or timeout == 0:
+                break
+            else:
+                time.sleep(timeout)
+                NodeHelper._log.info("Waiting {0}s for {1} to appear in {2} ..".format(timeout, str, log_name))
+            iter += 1
         shell.disconnect()
+        NodeHelper._log.info(count)
         if print_matches:
+            NodeHelper._log.info(matches)
             return matches, count
         return count
 
@@ -441,7 +438,12 @@ class NodeHelper:
         for server in servers:
             shell = RemoteMachineShellConnection(server)
             try:
-                hostname = shell.get_full_hostname()
+                if "ec2" in str(server.ip):
+                    hostname = shell.get_aws_public_hostname()
+                elif "azure" in str(server.ip):
+                    hostname = str(server.ip)
+                else:
+                    hostname = shell.get_full_hostname()
                 rest = RestConnection(server)
                 renamed, content = rest.rename_node(
                     hostname, username=server.rest_username,
@@ -554,6 +556,7 @@ class XDCRRemoteClusterRef:
         self.__encryption = encryption
         self.__rest_info = {}
         self.__replicator_target_role = replicator_target_role
+        self.__use_scramsha = TestInputSingleton.input.param("use_scramsha", False)
 
         # List of XDCReplication objects
         self.__replications = []
@@ -621,12 +624,22 @@ class XDCRRemoteClusterRef:
             self.dest_user = dest_master.rest_username
             self.dest_pass = dest_master.rest_password
 
-        self.__rest_info = rest_conn_src.add_remote_cluster(
-            dest_master.ip, dest_master.port,
-            self.dest_user,
-            self.dest_pass, self.__name,
-            demandEncryption=self.__encryption,
-            certificate=certificate)
+        if not self.__use_scramsha:
+            self.__rest_info = rest_conn_src.add_remote_cluster(
+                dest_master.ip, dest_master.port,
+                self.dest_user,
+                self.dest_pass, self.__name,
+                demandEncryption=self.__encryption,
+                certificate=certificate)
+        else:
+            print "Using scram-sha authentication"
+            self.__rest_info = rest_conn_src.add_remote_cluster(
+                dest_master.ip, dest_master.port,
+                self.dest_user,
+                self.dest_pass, self.__name,
+                demandEncryption=self.__encryption,
+                encryptionType="half"
+            )
 
         self.__validate_create_event()
 
@@ -636,6 +649,10 @@ class XDCRRemoteClusterRef:
             self.__src_cluster.get_master_node(),
             self.__get_event_expected_results())
 
+    def use_scram_sha_auth(self):
+        self.__use_scramsha = True
+        self.__encryption = True
+        self.modify()
 
     def modify(self, encryption=True):
         """Modify cluster reference to enable SSL encryption
@@ -645,15 +662,23 @@ class XDCRRemoteClusterRef:
         certificate = ""
         if encryption:
             rest_conn_dest = RestConnection(dest_master)
-            certificate = rest_conn_dest.get_cluster_ceritificate()
-            self.__rest_info = rest_conn_src.modify_remote_cluster(
-                dest_master.ip, dest_master.port,
-                self.dest_user,
-                self.dest_pass, self.__name,
-                demandEncryption=encryption,
-                certificate=certificate)
+            if not self.__use_scramsha:
+                certificate = rest_conn_dest.get_cluster_ceritificate()
+                self.__rest_info = rest_conn_src.modify_remote_cluster(
+                    dest_master.ip, dest_master.port,
+                    self.dest_user,
+                    self.dest_pass, self.__name,
+                    demandEncryption=encryption,
+                    certificate=certificate)
+            else:
+                print "Using scram-sha authentication"
+                self.__rest_info = rest_conn_src.modify_remote_cluster(
+                    dest_master.ip, dest_master.port,
+                    self.dest_user,
+                    self.dest_pass, self.__name,
+                    demandEncryption=encryption,
+                    encryptionType="half")
         self.__encryption = encryption
-
         self.__validate_modify_event()
 
     def __validate_remove_event(self):
@@ -991,7 +1016,7 @@ class XDCReplication:
 
 class CouchbaseCluster:
 
-    def __init__(self, name, nodes, log, use_hostname=False):
+    def __init__(self, name, nodes, log, use_hostname=False, sdk_compression=True):
         """
         @param name: Couchbase cluster name. e.g C1, C2 to distinguish in logs.
         @param nodes: list of server objects (read from ini file).
@@ -1010,9 +1035,11 @@ class CouchbaseCluster:
         self.__hostnames = {}
         self.__fail_over_nodes = []
         self.__data_verified = True
+        self.__meta_data_verified = True
         self.__remote_clusters = []
         self.__clusterop = Cluster()
         self.__kv_gen = {}
+        self.sdk_compression = sdk_compression
 
     def __str__(self):
         return "Couchbase Cluster: %s, Master Ip: %s" % (
@@ -1057,6 +1084,9 @@ class CouchbaseCluster:
     def get_remote_clusters(self):
         return self.__remote_clusters
 
+    def clear_all_remote_clusters(self):
+        self.__remote_clusters = []
+
     def get_nodes(self):
         return self.__nodes
 
@@ -1089,6 +1119,7 @@ class CouchbaseCluster:
         3. Enable xdcr trace logs to easy debug for xdcr items mismatch issues.
         """
         master = RestConnection(self.__master_node)
+        self.enable_diag_eval_on_non_local_hosts(self.__master_node)
         is_master_sherlock_or_greater = master.is_cluster_compat_mode_greater_than(3.1)
         self.__init_nodes(disabled_consistent_view)
         self.__clusterop.async_rebalance(
@@ -1108,9 +1139,28 @@ class CouchbaseCluster:
                     self.__log.info("Enabling audit ...")
                     audit_obj.setAuditEnable('true')
 
+    def enable_diag_eval_on_non_local_hosts(self, master):
+        """
+        Enable diag/eval to be run on non-local hosts.
+        :param master: Node information of the master node of the cluster
+        :return: Nothing
+        """
+        remote = RemoteMachineShellConnection(master)
+        output, error = remote.enable_diag_eval_on_non_local_hosts()
+        if output is not None:
+            if "ok" not in output:
+                self.__log.error("Error in enabling diag/eval on non-local hosts on {}".format(master.ip))
+                raise Exception("Error in enabling diag/eval on non-local hosts on {}".format(master.ip))
+            else:
+                self.__log.info(
+                    "Enabled diag/eval for non-local hosts from {}".format(
+                        master.ip))
+        else:
+            self.__log.info("Running in compatibility mode, not enabled diag/eval for non-local hosts")
+
     def _create_bucket_params(self, server, replicas=1, size=0, port=11211, password=None,
                              bucket_type=None, enable_replica_index=1, eviction_policy='valueOnly',
-                             bucket_priority=None, flush_enabled=1, lww=False):
+                             bucket_priority=None, flush_enabled=1, lww=False, maxttl=None):
         """Create a set of bucket_parameters to be sent to all of the bucket_creation methods
         Parameters:
             server - The server to create the bucket on. (TestInputServer)
@@ -1145,6 +1195,7 @@ class CouchbaseCluster:
         bucket_params['bucket_priority'] = bucket_priority
         bucket_params['flush_enabled'] = flush_enabled
         bucket_params['lww'] = lww
+        bucket_params['maxTTL'] = maxttl
         return bucket_params
 
     def set_global_checkpt_interval(self, value):
@@ -1216,7 +1267,8 @@ class CouchbaseCluster:
     def create_sasl_buckets(
             self, bucket_size, num_buckets=1, num_replicas=1,
             eviction_policy=EVICTION_POLICY.VALUE_ONLY,
-            bucket_priority=BUCKET_PRIORITY.HIGH, lww=False):
+            bucket_priority=BUCKET_PRIORITY.HIGH, lww=False,
+            maxttl=None):
         """Create sasl buckets.
         @param bucket_size: size of the bucket.
         @param num_buckets: number of buckets to create.
@@ -1232,7 +1284,7 @@ class CouchbaseCluster:
                                                      size=bucket_size, replicas=num_replicas,
                                                      eviction_policy=eviction_policy,
                                                      bucket_priority=bucket_priority,
-                                                     lww=lww)
+                                                     lww=lww, maxttl=maxttl)
             bucket_tasks.append(self.__clusterop.async_create_sasl_bucket(name=name,password='password',
                                                                           bucket_params=sasl_params))
 
@@ -1242,7 +1294,8 @@ class CouchbaseCluster:
                     num_replicas=num_replicas, bucket_size=bucket_size,
                     eviction_policy=eviction_policy,
                     bucket_priority=bucket_priority,
-                    lww=lww
+                    lww=lww,
+                    maxttl=maxttl
                 ))
 
         for task in bucket_tasks:
@@ -1251,7 +1304,7 @@ class CouchbaseCluster:
     def create_standard_buckets(
             self, bucket_size, num_buckets=1, num_replicas=1,
             eviction_policy=EVICTION_POLICY.VALUE_ONLY,
-            bucket_priority=BUCKET_PRIORITY.HIGH, lww=False):
+            bucket_priority=BUCKET_PRIORITY.HIGH, lww=False, maxttl=None):
         """Create standard buckets.
         @param bucket_size: size of the bucket.
         @param num_buckets: number of buckets to create.
@@ -1269,7 +1322,8 @@ class CouchbaseCluster:
                 replicas=num_replicas,
                 eviction_policy=eviction_policy,
                 bucket_priority=bucket_priority,
-                lww=lww)
+                lww=lww,
+                maxttl=maxttl)
 
             bucket_tasks.append(self.__clusterop.async_create_standard_bucket(name=name, port=STANDARD_BUCKET_PORT+i,
                                                                               bucket_params=standard_params))
@@ -1285,7 +1339,8 @@ class CouchbaseCluster:
                     port=STANDARD_BUCKET_PORT + i,
                     eviction_policy=eviction_policy,
                     bucket_priority=bucket_priority,
-                    lww=lww
+                    lww=lww,
+                    maxttl=maxttl
                 ))
 
         for task in bucket_tasks:
@@ -1294,8 +1349,8 @@ class CouchbaseCluster:
     def create_default_bucket(
             self, bucket_size, num_replicas=1,
             eviction_policy=EVICTION_POLICY.VALUE_ONLY,
-            bucket_priority=BUCKET_PRIORITY.HIGH, lww=False
-    ):
+            bucket_priority=BUCKET_PRIORITY.HIGH, lww=False,
+            maxttl=None):
         """Create default bucket.
         @param bucket_size: size of the bucket.
         @param num_replicas: number of replicas (1-3).
@@ -1309,8 +1364,9 @@ class CouchbaseCluster:
             replicas=num_replicas,
             eviction_policy=eviction_policy,
             bucket_priority=bucket_priority,
-            lww=lww
-        )
+            lww=lww,
+            maxttl=maxttl)
+
         self.__clusterop.create_default_bucket(bucket_params)
         self.__buckets.append(
             Bucket(
@@ -1321,7 +1377,8 @@ class CouchbaseCluster:
                 bucket_size=bucket_size,
                 eviction_policy=eviction_policy,
                 bucket_priority=bucket_priority,
-                lww=lww
+                lww=lww,
+                maxttl=maxttl
             ))
 
     def get_buckets(self):
@@ -1407,7 +1464,7 @@ class CouchbaseCluster:
         task = self.__clusterop.async_load_gen_docs(
             self.__master_node, bucket.name, gen, bucket.kvs[kv_store],
             OPS.CREATE, exp, flag, only_store_hash, batch_size, pause_secs,
-            timeout_secs)
+            timeout_secs, compression=self.sdk_compression)
         return task
 
     def load_bucket(self, bucket, num_items, value_size=512, exp=0,
@@ -1462,7 +1519,7 @@ class CouchbaseCluster:
                 self.__clusterop.async_load_gen_docs(
                     self.__master_node, bucket.name, gen, bucket.kvs[kv_store],
                     OPS.CREATE, exp, flag, only_store_hash, batch_size,
-                    pause_secs, timeout_secs)
+                    pause_secs, timeout_secs, compression=self.sdk_compression)
             )
         return tasks
 
@@ -1513,7 +1570,8 @@ class CouchbaseCluster:
                 self.__clusterop.async_load_gen_docs(
                     self.__master_node, bucket.name, kv_gen,
                     bucket.kvs[kv_store], ops, exp, flag,
-                    only_store_hash, batch_size, pause_secs, timeout_secs)
+                    only_store_hash, batch_size, pause_secs, timeout_secs,
+                    compression=self.sdk_compression)
             )
         for task in tasks:
             task.result()
@@ -1544,7 +1602,7 @@ class CouchbaseCluster:
                 self.__clusterop.async_load_gen_docs(
                     self.__master_node, bucket.name, kv_gen,
                     bucket.kvs[kv_store], ops, exp, flag,
-                    only_store_hash, batch_size, pause_secs, timeout_secs)
+                    only_store_hash, batch_size, pause_secs, timeout_secs, compression=self.sdk_compression)
             )
         return tasks
 
@@ -1594,7 +1652,7 @@ class CouchbaseCluster:
                 tasks.append(self.__clusterop.async_load_gen_docs(
                     self.__master_node, bucket.name, kv_gen, bucket.kvs[kv_store],
                     OPS.CREATE, exp, flag, only_store_hash, batch_size,
-                    pause_secs, timeout_secs))
+                    pause_secs, timeout_secs, compression=self.sdk_compression))
 
                 for task in tasks:
                     task.result()
@@ -1681,7 +1739,8 @@ class CouchbaseCluster:
                     bucket.kvs[kv_store],
                     op_type,
                     expiration,
-                    batch_size=1000)
+                    batch_size=1000,
+                    compression=self.sdk_compression)
             )
         return tasks
 
@@ -2352,11 +2411,38 @@ class CouchbaseCluster:
                                 max_verify,
                                 only_store_hash,
                                 batch_size,
-                                timeout_sec=60))
+                                timeout_sec=60,
+                                compression=self.sdk_compression))
         for task in tasks:
             task.result(timeout)
 
         self.__data_verified = True
+
+    def verify_meta_data(self, kv_store=1, timeout=None, skip=[]):
+        """Verify if metadata for bucket matches on src and dest clusters
+        @param kv_store: Index of kv_store where item values are stored on
+        bucket.
+        @param timeout: None if wait indefinitely else give timeout value.
+        """
+        self.__meta_data_verified = False
+        tasks = []
+        for bucket in self.__buckets:
+            if bucket.name not in skip:
+                data_map = {}
+                gather_task = self.__clusterop.async_get_meta_data(self.__master_node, bucket, bucket.kvs[kv_store],
+                                                        compression=self.sdk_compression)
+                gather_task.result()
+                data_map[bucket.name] = gather_task.get_meta_data_store()
+                tasks.append(
+                    self.__clusterop.async_verify_meta_data(
+                        self.__master_node,
+                        bucket,
+                        bucket.kvs[kv_store],
+                        data_map[bucket.name]
+                        ))
+        for task in tasks:
+            task.result(timeout)
+        self.__meta_data_verified = True
 
     def wait_for_dcp_queue_drain(self, timeout=180):
         """Wait for ep_dcp_xdcr_items_remaining to reach 0.
@@ -2567,6 +2653,7 @@ class XDCRNewBaseTest(unittest.TestCase):
 
     def __setup_for_test(self):
         use_hostanames = self._input.param("use_hostnames", False)
+        sdk_compression = self._input.param("sdk_compression", True)
         counter = 1
         for _, nodes in self._input.clusters.iteritems():
             cluster_nodes = copy.deepcopy(nodes)
@@ -2575,7 +2662,7 @@ class XDCRNewBaseTest(unittest.TestCase):
             self.__cb_clusters.append(
                 CouchbaseCluster(
                     "C%s" % counter, cluster_nodes,
-                    self.log, use_hostanames))
+                    self.log, use_hostanames, sdk_compression=sdk_compression))
             counter += 1
 
         self.__cleanup_previous()
@@ -2587,7 +2674,6 @@ class XDCRNewBaseTest(unittest.TestCase):
             RbacBase().create_user_source(testuser, 'builtin',
                                           self.get_cb_cluster_by_name('C' + str(i)).get_master_node())
 
-            time.sleep(10)
 
             # Assign user to role
             role_list = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'roles': 'admin'}]
@@ -2595,7 +2681,6 @@ class XDCRNewBaseTest(unittest.TestCase):
                                      RestConnection(self.get_cb_cluster_by_name('C' + str(i)).get_master_node()),
                                      'builtin')
 
-            time.sleep(10)
 
         self.__set_free_servers()
         if str(self.__class__).find('upgradeXDCR') == -1 and str(self.__class__).find('lww') == -1:
@@ -2681,6 +2766,7 @@ class XDCRNewBaseTest(unittest.TestCase):
             self._input.param("active_resident_threshold", 100)
         CHECK_AUDIT_EVENT.CHECK = self._input.param("verify_audit", 0)
         self._max_verify = self._input.param("max_verify", 100000)
+        self._sdk_compression = self._input.param("sdk_compression", True)
         self._evict_with_compactor = self._input.param("evict_with_compactor", False)
         self._replicator_role = self._input.param("replicator_role",False)
         self._replicator_all_buckets = self._input.param("replicator_all_buckets",False)
@@ -2773,12 +2859,10 @@ class XDCRNewBaseTest(unittest.TestCase):
         self.log.info("**** add built-in '%s' user to node %s ****" % (testuser[0]["name"],
                                                                        node.ip))
         RbacBase().create_user_source(testuser, 'builtin', node)
-        self.sleep(10)
 
         self.log.info("**** add '%s' role to '%s' user ****" % (rolelist[0]["roles"],
                                                                 testuser[0]["name"]))
         RbacBase().add_user_role(rolelist, RestConnection(node), 'builtin')
-        self.sleep(10)
 
     def get_cb_cluster_by_name(self, name):
         """Return couchbase cluster object for given name.
@@ -2831,6 +2915,8 @@ class XDCRNewBaseTest(unittest.TestCase):
         num_buckets = self.__num_sasl_buckets + \
             self.__num_stand_buckets + int(self._create_default_bucket)
 
+        maxttl = self._input.param("maxttl", None)
+
         for cb_cluster in self.__cb_clusters:
             total_quota = cb_cluster.get_mem_quota()
             bucket_size = self.__calculate_bucket_size(
@@ -2843,19 +2929,22 @@ class XDCRNewBaseTest(unittest.TestCase):
                     self._num_replicas,
                     eviction_policy=self.__eviction_policy,
                     bucket_priority=bucket_priority,
-                    lww=self.__lww)
+                    lww=self.__lww,
+                    maxttl=maxttl)
 
             cb_cluster.create_sasl_buckets(
                 bucket_size, num_buckets=self.__num_sasl_buckets,
                 num_replicas=self._num_replicas,
                 eviction_policy=self.__eviction_policy,
-                bucket_priority=bucket_priority, lww=self.__lww)
+                bucket_priority=bucket_priority, lww=self.__lww,
+                maxttl=maxttl)
 
             cb_cluster.create_standard_buckets(
                 bucket_size, num_buckets=self.__num_stand_buckets,
                 num_replicas=self._num_replicas,
                 eviction_policy=self.__eviction_policy,
-                bucket_priority=bucket_priority, lww=self.__lww)
+                bucket_priority=bucket_priority, lww=self.__lww,
+                maxttl=maxttl)
 
     def create_buckets_on_cluster(self, cluster_name):
         # if mixed priority is set by user, set high priority for sasl and
@@ -3218,7 +3307,8 @@ class XDCRNewBaseTest(unittest.TestCase):
                         repl.get_src_bucket(),
                         repl.get_src_bucket().kvs[kv_store],
                         repl.get_dest_bucket().kvs[kv_store],
-                        max_verify=self._max_verify)
+                        max_verify=self._max_verify,
+                        compression=self._sdk_compression)
                 tasks.append(task_info)
         for task in tasks:
             if self._dgm_run:
@@ -3417,9 +3507,9 @@ class XDCRNewBaseTest(unittest.TestCase):
                             _count1 = 0
                             for node in nodes:
                                 _count1 += node["interestingStats"]["curr_items"]
-                            
+
                             bucket_info2 = rest2.get_bucket_json(bucket.name)
-                            nodes = bucket_info1["nodes"]
+                            nodes = bucket_info2["nodes"]
                             _count2 = 0
                             for node in nodes:
                                 _count2 += node["interestingStats"]["curr_items"]
@@ -3478,6 +3568,7 @@ class XDCRNewBaseTest(unittest.TestCase):
             6. Verify Revision id of each item.
         """
         skip_key_validation = self._input.param("skip_key_validation", False)
+        skip_meta_validation = self._input.param("skip_meta_validation", True)
         src_dcp_queue_drained = False
         dest_dcp_queue_drained = False
         src_active_passed = False
@@ -3550,13 +3641,17 @@ class XDCRNewBaseTest(unittest.TestCase):
                             self.fail("RevID verification failed for remote-cluster: {0}".
                                 format(remote_cluster_ref))
 
+                if not skip_meta_validation:
+                    src_cluster.verify_meta_data()
+                    dest_cluster.verify_meta_data()
+
         self.check_replication_restarted()
         # treat errors in self.__report_error_list as failures
         if len(self.__report_error_list) > 0:
             error_logger = self.check_errors_in_goxdcr_logs()
             if error_logger:
                 self.fail("Errors found in logs : {0}".format(error_logger))
-                
+
     def wait_service_started(self, server, wait_time=120):
         shell = RemoteMachineShellConnection(server)
         type = shell.extract_remote_info().distribution_type
