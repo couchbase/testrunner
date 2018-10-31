@@ -390,44 +390,41 @@ class NodeHelper:
         return str(dir)
 
     @staticmethod
-    def check_goxdcr_log(server, str, goxdcr_log=None, print_matches=None):
-        """ Checks if a string 'str' is present in goxdcr.log on server
+    def check_goxdcr_log(server, str, goxdcr_log=None, print_matches=None, log_name=None, timeout=0):
+        """ Checks if a string 'str' is present in 'log_name' on 'server'
             and returns the number of occurances
             @param goxdcr_log: goxdcr log location on the server
+            @timeout: search every 10 seconds until timeout
         """
+        if not log_name:
+            log_name = "goxdcr.log"
         if not goxdcr_log:
             goxdcr_log = NodeHelper.get_goxdcr_log_dir(server)\
-                     + '/goxdcr.log*'
-
+                     + '/' + log_name + '*'
         shell = RemoteMachineShellConnection(server)
         info = shell.extract_remote_info().type.lower()
         if info == "windows":
-            matches = []
-            if print_matches:
-                matches, err = shell.execute_command("grep \"{0}\" {1}".
-                                            format(str, goxdcr_log))
-                if matches:
-                    NodeHelper._log.info(matches)
-
-            count, err = shell.execute_command("grep \"{0}\" {1} | wc -l".
-                                            format(str, goxdcr_log))
+            cmd = "grep "
         else:
-            matches = []
-            if print_matches:
-                matches, err = shell.execute_command("zgrep \"{0}\" {1}".
-                                                     format(str, goxdcr_log))
-                if matches:
-                    NodeHelper._log.info(matches)
-
-            count, err = shell.execute_command("zgrep \"{0}\" {1} | wc -l".
-                                               format(str, goxdcr_log))
-        if isinstance(count, list):
-            count = int(count[0])
-        else:
-            count = int(count)
-        NodeHelper._log.info(count)
+            cmd = "zgrep "
+        cmd += "\"{0}\" {1}".format(str, goxdcr_log)
+        iter = 0
+        count = 0
+        matches = []
+        # Search 5 times with a break of timeout sec
+        while iter < 5:
+            matches, err = shell.execute_command(cmd)
+            count = len(matches)
+            if count > 0 or timeout == 0:
+                break
+            else:
+                time.sleep(timeout)
+                NodeHelper._log.info("Waiting {0}s for {1} to appear in {2} ..".format(timeout, str, log_name))
+            iter += 1
         shell.disconnect()
+        NodeHelper._log.info(count)
         if print_matches:
+            NodeHelper._log.info(matches)
             return matches, count
         return count
 
@@ -441,7 +438,12 @@ class NodeHelper:
         for server in servers:
             shell = RemoteMachineShellConnection(server)
             try:
-                hostname = shell.get_full_hostname()
+                if "ec2" in str(server.ip):
+                    hostname = shell.get_aws_public_hostname()
+                elif "azure" in str(server.ip):
+                    hostname = str(server.ip)
+                else:
+                    hostname = shell.get_full_hostname()
                 rest = RestConnection(server)
                 renamed, content = rest.rename_node(
                     hostname, username=server.rest_username,
@@ -1033,6 +1035,7 @@ class CouchbaseCluster:
         self.__hostnames = {}
         self.__fail_over_nodes = []
         self.__data_verified = True
+        self.__meta_data_verified = True
         self.__remote_clusters = []
         self.__clusterop = Cluster()
         self.__kv_gen = {}
@@ -1116,6 +1119,7 @@ class CouchbaseCluster:
         3. Enable xdcr trace logs to easy debug for xdcr items mismatch issues.
         """
         master = RestConnection(self.__master_node)
+        self.enable_diag_eval_on_non_local_hosts(self.__master_node)
         is_master_sherlock_or_greater = master.is_cluster_compat_mode_greater_than(3.1)
         self.__init_nodes(disabled_consistent_view)
         self.__clusterop.async_rebalance(
@@ -1134,6 +1138,25 @@ class CouchbaseCluster:
                 if not status:
                     self.__log.info("Enabling audit ...")
                     audit_obj.setAuditEnable('true')
+
+    def enable_diag_eval_on_non_local_hosts(self, master):
+        """
+        Enable diag/eval to be run on non-local hosts.
+        :param master: Node information of the master node of the cluster
+        :return: Nothing
+        """
+        remote = RemoteMachineShellConnection(master)
+        output, error = remote.enable_diag_eval_on_non_local_hosts()
+        if output is not None:
+            if "ok" not in output:
+                self.__log.error("Error in enabling diag/eval on non-local hosts on {}".format(master.ip))
+                raise Exception("Error in enabling diag/eval on non-local hosts on {}".format(master.ip))
+            else:
+                self.__log.info(
+                    "Enabled diag/eval for non-local hosts from {}".format(
+                        master.ip))
+        else:
+            self.__log.info("Running in compatibility mode, not enabled diag/eval for non-local hosts")
 
     def _create_bucket_params(self, server, replicas=1, size=0, port=11211, password=None,
                              bucket_type=None, enable_replica_index=1, eviction_policy='valueOnly',
@@ -2395,6 +2418,32 @@ class CouchbaseCluster:
 
         self.__data_verified = True
 
+    def verify_meta_data(self, kv_store=1, timeout=None, skip=[]):
+        """Verify if metadata for bucket matches on src and dest clusters
+        @param kv_store: Index of kv_store where item values are stored on
+        bucket.
+        @param timeout: None if wait indefinitely else give timeout value.
+        """
+        self.__meta_data_verified = False
+        tasks = []
+        for bucket in self.__buckets:
+            if bucket.name not in skip:
+                data_map = {}
+                gather_task = self.__clusterop.async_get_meta_data(self.__master_node, bucket, bucket.kvs[kv_store],
+                                                        compression=self.sdk_compression)
+                gather_task.result()
+                data_map[bucket.name] = gather_task.get_meta_data_store()
+                tasks.append(
+                    self.__clusterop.async_verify_meta_data(
+                        self.__master_node,
+                        bucket,
+                        bucket.kvs[kv_store],
+                        data_map[bucket.name]
+                        ))
+        for task in tasks:
+            task.result(timeout)
+        self.__meta_data_verified = True
+
     def wait_for_dcp_queue_drain(self, timeout=180):
         """Wait for ep_dcp_xdcr_items_remaining to reach 0.
         @return: True if reached 0 else False.
@@ -2625,7 +2674,6 @@ class XDCRNewBaseTest(unittest.TestCase):
             RbacBase().create_user_source(testuser, 'builtin',
                                           self.get_cb_cluster_by_name('C' + str(i)).get_master_node())
 
-            time.sleep(10)
 
             # Assign user to role
             role_list = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'roles': 'admin'}]
@@ -2633,7 +2681,6 @@ class XDCRNewBaseTest(unittest.TestCase):
                                      RestConnection(self.get_cb_cluster_by_name('C' + str(i)).get_master_node()),
                                      'builtin')
 
-            time.sleep(10)
 
         self.__set_free_servers()
         if str(self.__class__).find('upgradeXDCR') == -1 and str(self.__class__).find('lww') == -1:
@@ -2812,12 +2859,10 @@ class XDCRNewBaseTest(unittest.TestCase):
         self.log.info("**** add built-in '%s' user to node %s ****" % (testuser[0]["name"],
                                                                        node.ip))
         RbacBase().create_user_source(testuser, 'builtin', node)
-        self.sleep(10)
 
         self.log.info("**** add '%s' role to '%s' user ****" % (rolelist[0]["roles"],
                                                                 testuser[0]["name"]))
         RbacBase().add_user_role(rolelist, RestConnection(node), 'builtin')
-        self.sleep(10)
 
     def get_cb_cluster_by_name(self, name):
         """Return couchbase cluster object for given name.
@@ -3462,7 +3507,7 @@ class XDCRNewBaseTest(unittest.TestCase):
                             _count1 = 0
                             for node in nodes:
                                 _count1 += node["interestingStats"]["curr_items"]
-                            
+
                             bucket_info2 = rest2.get_bucket_json(bucket.name)
                             nodes = bucket_info2["nodes"]
                             _count2 = 0
@@ -3523,6 +3568,7 @@ class XDCRNewBaseTest(unittest.TestCase):
             6. Verify Revision id of each item.
         """
         skip_key_validation = self._input.param("skip_key_validation", False)
+        skip_meta_validation = self._input.param("skip_meta_validation", True)
         src_dcp_queue_drained = False
         dest_dcp_queue_drained = False
         src_active_passed = False
@@ -3595,13 +3641,17 @@ class XDCRNewBaseTest(unittest.TestCase):
                             self.fail("RevID verification failed for remote-cluster: {0}".
                                 format(remote_cluster_ref))
 
+                if not skip_meta_validation:
+                    src_cluster.verify_meta_data()
+                    dest_cluster.verify_meta_data()
+
         self.check_replication_restarted()
         # treat errors in self.__report_error_list as failures
         if len(self.__report_error_list) > 0:
             error_logger = self.check_errors_in_goxdcr_logs()
             if error_logger:
                 self.fail("Errors found in logs : {0}".format(error_logger))
-                
+
     def wait_service_started(self, server, wait_time=120):
         shell = RemoteMachineShellConnection(server)
         type = shell.extract_remote_info().distribution_type
