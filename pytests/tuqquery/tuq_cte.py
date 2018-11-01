@@ -155,54 +155,80 @@ class QueryCTETests(QueryTests):
         query_1 = 'with a as (with b as (2010) select raw c from b as c) select d from a as d'
         verify_1 = 'select 2010 as d'
 
-        #query_2 = 'with a as (with b as (select raw join_yr from default d1) select raw join_mo from default d2 where join_yr in b) select join_yr from default d0 where join_mo in a'
-        #verify_2 = ''
+        query_2 = 'with a as (with b as (select join_yr from default d1) select raw bb.join_yr from b as bb) select raw aa from a as aa order by aa'
+        verify_2 = 'select raw join_yr from default d1 order by join_yr'
+
+        # will fail until MB-31827 is fixed
+        query_3 = 'with a as (with b as (select raw field1 from default d1 limit 1) select raw field2 from default d2 where field1 in b limit 1) select 1'
+        verify_3 = 'select 1'
 
         queries["a"] = {"queries": [query_1], "asserts": [self.verifier(verify_1)]}
+        queries["b"] = {"queries": [query_2], "asserts": [self.verifier(verify_2)]}
+        queries["c"] = {"queries": [query_3], "asserts": [self.verifier(verify_3)]}
 
         self.query_runner(queries)
 
     def test_chained_and_nested_cte(self):
-        self.fail()
+        queries = dict()
+
+        query_1 = 'with a as (with b as (2010) select raw c from b as c) select d from a as d'
+        verify_1 = 'select 2010 as d'
+
+        query_2 = 'with a as (with b as (select join_yr from default d1) select raw bb.join_yr from b as bb) select raw aa from a as aa order by aa'
+        verify_2 = 'select raw join_yr from default d1 order by join_yr'
+
+        query_3 = 'with usekeys as (select raw meta(def).id from default def), a as (with aa as (select d0.join_yr from default d0) select raw aa.join_yr from aa), b as  (with bb as (select d1.join_yr from default d1) select raw bb.join_yr from bb where bb.join_yr in a), c as (select join_yr from default d2 use keys usekeys where join_yr in b) select c.join_yr from c order by c.join_yr'
+        verify_3 = 'select join_yr from default order by join_yr'
+
+        queries["a"] = {"queries": [query_1], "asserts": [self.verifier(verify_1)]}
+        queries["b"] = {"queries": [query_2], "asserts": [self.verifier(verify_2)]}
+        queries["c"] = {"queries": [query_3], "asserts": [self.verifier(verify_3)]}
+
+        self.query_runner(queries)
 
     def test_cte_joins(self):
         queries = dict()
+        primary_index = {'name': '#primary', 'bucket': 'default', 'fields': [],
+                                  'state': 'online', 'using': self.index_type.lower(), 'is_primary': True}
+
+        index_1 = {'name': 'idx1', 'bucket': 'default', 'fields': [("join_yr", 0)], 'state': 'online',
+                   'using': self.index_type.lower(), 'is_primary': False}
 
         # hash join
 
         # no hint
-        query_1 = 'with with_table as (select * from default d0 where join_yr == 2010 order by meta(d0).id limit 1) select * from default AS table1 inner join with_table as table2 on (table1.join_yr == table2.d0.join_yr)'
-        verify_1 = 'select * from default AS table1 inner join (select * from default d0 where join_yr == 2010 order by meta(d0).id limit 1) as table2 on (table1.join_yr == table2.d0.join_yr)'
+        query_1 = 'with with_table as (select * from default d0 where join_yr == 2010 order by meta(d0).id limit 1) select * from default inner join with_table on (default.join_yr == with_table.d0.join_yr)'
+        verify_1 = 'select * from default inner join (select * from default d0 where join_yr == 2010 order by meta(d0).id limit 1) as with_table on (default.join_yr == with_table.d0.join_yr)'
 
-        query_2 = 'explain with with_table as (select * from default d0 where join_yr == 2010 order by meta(d0).id limit 1) select * from default AS table1 inner join with_table as table2 on (table1.join_yr == table2.d0.join_yr)'
+        query_2 = 'explain with with_table as (select * from default d0 where join_yr == 2010 order by meta(d0).id limit 1) select * from default inner join with_table on (default.join_yr == with_table.d0.join_yr)'
 
         # use hash(probe)
-        query_3 = 'with with_table as (select * from default d0 where join_yr == 2010 order by meta(d0).id limit 1) select * from default AS table1 inner join with_table as table2  use hash(probe) on (table1.join_yr == table2.d0.join_yr)'
-        verify_3 = 'select * from default AS table1 inner join (select * from default d0 where join_yr == 2010 order by meta(d0).id limit 1) as table2 use hash(probe) on (table1.join_yr == table2.d0.join_yr)'
+        query_3 = 'with with_table as (select * from default d0 where join_yr == 2010 order by meta(d0).id limit 1) select * from default inner join with_table use hash(probe) on (default.join_yr == with_table.d0.join_yr)'
+        verify_3 = 'select * from default inner join (select * from default d0 where join_yr == 2010 order by meta(d0).id limit 1) as with_table use hash(probe) on (default.join_yr == with_table.d0.join_yr)'
 
-        query_4 = 'explain with with_table as (select * from default d0 where join_yr == 2010 order by meta(d0).id limit 1) select * from default AS table1 inner join with_table as table2 use hash(probe) on (table1.join_yr == table2.d0.join_yr)'
+        query_4 = 'explain with with_table as (select * from default d0 where join_yr == 2010 order by meta(d0).id limit 1) select * from default inner join with_table use hash(probe) on (default.join_yr == with_table.d0.join_yr)'
 
         # use hash(build)
-        query_5 = 'with with_table as (select * from default d0 where join_yr == 2010 order by meta(d0).id limit 1) select * from default AS table1 inner join with_table as table2  use hash(build) on (table1.join_yr == table2.d0.join_yr)'
-        verify_5 = 'select * from default AS table1 inner join (select * from default d0 where join_yr == 2010 order by meta(d0).id limit 1) as table2 use hash(build) on (table1.join_yr == table2.d0.join_yr)'
+        query_5 = 'with with_table as (select * from default d0 where join_yr == 2010 order by meta(d0).id limit 1) select * from default inner join with_table use hash(build) on (default.join_yr == with_table.d0.join_yr)'
+        verify_5 = 'select * from default inner join (select * from default d0 where join_yr == 2010 order by meta(d0).id limit 1) as with_table use hash(build) on (default.join_yr == with_table.d0.join_yr)'
 
-        query_6 = 'explain with with_table as (select * from default d0 where join_yr == 2010 order by meta(d0).id limit 1) select * from default AS table1 inner join with_table as table2 use hash(build) on (table1.join_yr == table2.d0.join_yr)'
+        query_6 = 'explain with with_table as (select * from default d0 where join_yr == 2010 order by meta(d0).id limit 1) select * from default inner join with_table use hash(build) on (default.join_yr == with_table.d0.join_yr)'
 
         # nested loop join
 
-        query_7 = 'with with_table as (select * from default d0 where join_yr == 2010 order by meta(d0).id limit 1) select * from with_table as table2 inner join default AS table1 on (table1.join_yr == table2.d0.join_yr)'
-        verify_7 = 'select * from (select * from default d0 where join_yr == 2010 order by meta(d0).id limit 1) as table2 inner join default AS table1 on (table1.join_yr == table2.d0.join_yr)'
+        query_7 = 'with with_table as (select * from default d0 where join_yr == 2010 order by meta(d0).id limit 1) select * from with_table inner join default on (default.join_yr == with_table.d0.join_yr)'
+        verify_7 = 'select * from (select * from default d0 where join_yr == 2010 order by meta(d0).id limit 1) as with_table inner join default on (default.join_yr == with_table.d0.join_yr)'
 
-        query_8 = 'explain with with_table as (select * from default d0 where join_yr == 2010 order by meta(d0).id limit 1) select * from with_table as table2 inner join default AS table1 on (table1.join_yr == table2.d0.join_yr)'
+        query_8 = 'explain with with_table as (select * from default d0 where join_yr == 2010 order by meta(d0).id limit 1) select * from with_table inner join default on (default.join_yr == with_table.d0.join_yr)'
 
-        queries["a"] = {"queries": [query_1], "asserts": [self.verifier(verify_1)]}
-        queries["b"] = {"queries": [query_2], "asserts": [self.plan_verifier("HashJoin")]}
-        queries["c"] = {"queries": [query_3], "asserts": [self.verifier(verify_3)]}
-        queries["d"] = {"queries": [query_4], "asserts": [self.plan_verifier("HashJoin")]}
-        queries["e"] = {"queries": [query_5], "asserts": [self.verifier(verify_5)]}
-        queries["f"] = {"queries": [query_6], "asserts": [self.plan_verifier("HashJoin")]}
-        queries["g"] = {"queries": [query_7], "asserts": [self.verifier(verify_7)]}
-        queries["h"] = {"queries": [query_8], "asserts": [self.plan_verifier("NestedLoopJoin")]}
+        queries["a"] = {"indexes": [primary_index, index_1], "queries": [query_1], "asserts": [self.verifier(verify_1)]}
+        queries["b"] = {"indexes": [primary_index, index_1], "queries": [query_2], "asserts": [self.plan_verifier("HashJoin")]}
+        queries["c"] = {"indexes": [primary_index, index_1], "queries": [query_3], "asserts": [self.verifier(verify_3)]}
+        queries["d"] = {"indexes": [primary_index, index_1], "queries": [query_4], "asserts": [self.plan_verifier("HashJoin")]}
+        queries["e"] = {"indexes": [primary_index, index_1], "queries": [query_5], "asserts": [self.verifier(verify_5)]}
+        queries["f"] = {"indexes": [primary_index, index_1], "queries": [query_6], "asserts": [self.plan_verifier("HashJoin")]}
+        queries["g"] = {"indexes": [primary_index, index_1], "queries": [query_7], "asserts": [self.verifier(verify_7)]}
+        queries["h"] = {"indexes": [primary_index, index_1], "queries": [query_8], "asserts": [self.plan_verifier("NestedLoopJoin")]}
 
         self.query_runner(queries)
 
@@ -220,7 +246,7 @@ class QueryCTETests(QueryTests):
         query_5 = 'explain with a as (select raw join_yr from default) select join_yr from default where join_yr in a'
 
         query_6 = 'explain with a as (select raw join_yr from default) select join_yr from default where join_yr in a'
-        index_6 = {'name': 'idx', 'bucket': 'default', 'fields': ["join_yr"], 'state': 'online',
+        index_6 = {'name': 'idx', 'bucket': 'default', 'fields': [("join_yr", 0)], 'state': 'online',
                    'using': self.index_type.lower(), 'is_primary': False}
 
         queries["a"] = {"queries": [query_1], "asserts": [self.plan_verifier("DummyScan")]}
