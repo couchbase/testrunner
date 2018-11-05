@@ -270,7 +270,7 @@ class SwapRebalanceBase(unittest.TestCase):
             for node in nodes:
                 if node.ip == server.ip and node.port == server.port:
                     servers_in_cluster.append(server)
-        RebalanceHelper.wait_for_replication(servers_in_cluster, test.cluster_helper)
+        time.sleep(60)
         SwapRebalanceBase.items_verification(test, master)
 
     @staticmethod
