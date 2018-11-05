@@ -521,7 +521,7 @@ class QueryTests(BaseTestCase):
         query_response = self.run_cbq_query("SELECT * FROM system:indexes")
         current_indexes = [(i['indexes']['name'],
                             i['indexes']['keyspace_id'],
-                            frozenset([(key.replace('`', '').replace('(', '').replace(')', ''), j)
+                            frozenset([(key.replace('`', '').replace('(', '').replace(')', '').replace('meta.id', 'meta().id'), j)
                                        for j, key in enumerate(i['indexes']['index_key'], 0)]),
                             i['indexes']['state'],
                             i['indexes']['using']) for i in query_response['results']]
@@ -547,7 +547,7 @@ class QueryTests(BaseTestCase):
         query_response = self.run_cbq_query("SELECT * FROM system:indexes")
         current_indexes = [{'name': i['indexes']['name'],
                             'bucket': i['indexes']['keyspace_id'],
-                            'fields': frozenset([(key.replace('`', '').replace('(', '').replace(')', ''), j)
+                            'fields': frozenset([(key.replace('`', '').replace('(', '').replace(')', '').replace('meta.id', 'meta().id'), j)
                                                  for j, key in enumerate(i['indexes']['index_key'], 0)]),
                             'state': i['indexes']['state'],
                             'using': i['indexes']['using'],
@@ -771,15 +771,20 @@ class QueryTests(BaseTestCase):
     def wait_for_bucket_delete(self, bucket_name, delay, retries):
         self.with_retry(lambda: self.bucket_deleted(bucket_name), delay=delay, tries=retries)
 
-    def with_retry(self, func, eval=True, delay=5, tries=10, func_params=None):
+    def with_retry(self, func, eval=None, delay=5, tries=10, func_params=None):
         attempts = 0
         while attempts < tries:
             attempts = attempts + 1
-            res = func()
-            if res == eval:
-                return res
-            else:
-                self.sleep(delay, 'incorrect results, sleeping for %s' % delay)
+            try:
+                res = func()
+                if eval is None:
+                    return res
+                elif res == eval:
+                    return res
+                else:
+                    self.sleep(delay, 'incorrect results, sleeping for %s' % delay)
+            except ex:
+                self.sleep(delay, 'exception returned: %s \n sleeping for %s' % (ex, delay))
         raise Exception('timeout, invalid results: %s' % res)
 
     def negative_common_body(self, queries_errors={}):
@@ -1191,32 +1196,13 @@ class QueryTests(BaseTestCase):
             return
         if self.flat_json:
             return
-        self.sleep(30, 'Sleep for some time prior to index creation')
-        rest = RestConnection(self.master)
-        versions = rest.get_nodes_versions()
-        if int(versions[0].split('.')[0]) > 2:
-            for bucket in self.buckets:
-                if self.primary_indx_drop:
-                    self.log.info("Dropping primary index for %s ..." % bucket.name)
-                    try:
-                        self.query = "DROP PRIMARY INDEX ON %s using %s" % (bucket.name, self.primary_indx_type)
-                        self.run_cbq_query(self.query)
-                        self.wait_for_index_drop(bucket.name, '#primary', [], self.primary_indx_type.lower())
-                    except Exception, ex:
-                        self.log.info(str(ex))
-
-                self.query = "select * from system:indexes where name = '#primary' and keyspace_id = '%s'" % bucket.name
-                res = self.run_cbq_query(self.query)
-                if res['metrics']['resultCount'] == 0:
-                    self.query = "CREATE PRIMARY INDEX ON %s USING %s" % (bucket.name, self.primary_indx_type)
-                    self.log.info("Creating primary index for %s ..." % bucket.name)
-                    try:
-                        self.run_cbq_query()
-                        self.primary_index_created = True
-                        if self.primary_indx_type.lower() == 'gsi':
-                            self._wait_for_index_online(bucket.name, '#primary')
-                    except Exception, ex:
-                        self.log.info(str(ex))
+        for bucket in self.buckets:
+            try:
+                self.with_retry(lambda: self.ensure_primary_indexes_exist(), eval=None, delay=1, tries=30)
+                self.primary_index_created = True
+                self._wait_for_index_online(bucket.name, '#primary')
+            except Exception, ex:
+                self.log.info(str(ex))
 
     def ensure_primary_indexes_exist(self):
         query_response = self.run_cbq_query("SELECT * FROM system:keyspaces")
@@ -1250,7 +1236,7 @@ class QueryTests(BaseTestCase):
                 if item['indexes']['keyspace_id'] == bucket_name:
                     if item['indexes']['state'] == "online":
                         return
-            self.sleep(5, 'index is pending or not in the list. sleeping... (%s)' % [item['indexes'] for item in res['results']])
+            self.sleep(1, 'index is pending or not in the list. sleeping... (%s)' % [item['indexes'] for item in res['results']])
         raise Exception('index %s is not online. last response is %s' % (index_name, res))
 
 

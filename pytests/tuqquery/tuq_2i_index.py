@@ -397,9 +397,7 @@ class QueriesIndexTests(QueryTests):
                 idx3 = "idx3"
                 idx4 = "idx4"
                 idx5 = "idx5"
-                self.query = "CREATE PRIMARY INDEX ON %s" % bucket.name
-                self.run_cbq_query()
-                self.sleep(15,'wait for index')
+                self.ensure_primary_indexes_exist()
                 self.query = 'CREATE INDEX {0} ON {1}( IFMISSING( IsSpecial,b, name ), join_day,name ) using {2}'.format(idx,bucket.name,self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)

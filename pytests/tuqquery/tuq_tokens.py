@@ -198,7 +198,7 @@ class TokenTests(QueryTests):
             self.query = "DROP INDEX %s.%s USING %s" % ("`beer-sample`", idx, self.index_type)
             actual_result = self.run_cbq_query()
 
-    #This test is specific to beer-sample bucket
+    '''This test is specific to beer-sample bucket'''
     def test_tokens_simple_syntax(self):
         self.rest.load_sample("beer-sample")
         bucket_doc_map = {"beer-sample": 7303}
@@ -206,6 +206,7 @@ class TokenTests(QueryTests):
         self.wait_for_buckets_status(bucket_status_map, 5, 120)
         self.wait_for_bucket_docs(bucket_doc_map, 5, 120)
         self._wait_for_index_online("beer-sample", "beer_primary")
+        self.sleep(10)
         created_indexes = []
         try:
             idx1 = "idx_suffixes"

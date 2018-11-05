@@ -212,6 +212,7 @@ class QueryAutoPrepareTests(QueryTests):
         remote = RemoteMachineShellConnection(self.servers[1])
         remote.stop_server()
         self.sleep(30)
+        self.with_retry(lambda: self.ensure_primary_indexes_exist(), eval=None, delay=1, tries=30)
 
         try:
             self.run_cbq_query(query="PREPARE p1 from select * from default limit 5", server=self.servers[0])
@@ -220,10 +221,10 @@ class QueryAutoPrepareTests(QueryTests):
             remote.start_server()
             self.sleep(30)
 
-        for i in range(self.nodes_init + 1):
+        for i in range(1, self.nodes_init):
             try:
                 self.run_cbq_query(query="execute p1", server=self.servers[i])
-            except CBQError,ex:
+            except CBQError, ex:
                 self.assertTrue("No such prepared statement: p1" in str(ex), "There error should be no such prepared "
                                                                              "statement, it really is %s" % ex)
                 self.log.info(ex)
