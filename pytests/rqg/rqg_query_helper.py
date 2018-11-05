@@ -1925,10 +1925,16 @@ class RQGQueryHelper(object):
                     elif "UPPER_BOUND_VALUE" in token:
                         string_check = False
                         add_token = False
-                        new_sql += token.replace("UPPER_BOUND_VALUE", "\""+str(values[len(values) - 1])+"\"")+space
+                        val = values[len(values) - 1]
+                        if val is None:
+                            val = ''
+                        new_sql += token.replace("UPPER_BOUND_VALUE", "\""+str(val)+"\"")+space
                     elif "LOWER_BOUND_VALUE" in token:
                         add_token = False
-                        new_sql += token.replace("LOWER_BOUND_VALUE", "\""+str(values[0])+"\"")+space
+                        val = values[0]
+                        if val is None:
+                            val = ''
+                        new_sql += token.replace("LOWER_BOUND_VALUE", "\""+str(val)+"\"")+space
                     else:
                         add_token = False
                         new_sql += token+space
@@ -1952,10 +1958,16 @@ class RQGQueryHelper(object):
                     elif "UPPER_BOUND_VALUE" in token:
                         numeric_check = False
                         add_token = False
-                        new_sql += token.replace("UPPER_BOUND_VALUE", str(values[len(values) - 1]))+space
+                        val = values[len(values) - 1]
+                        if val is None:
+                            val = 'NULL'
+                        new_sql += token.replace("UPPER_BOUND_VALUE", str(val))+space
                     elif "LOWER_BOUND_VALUE" in token:
                         add_token = False
-                        new_sql += token.replace("LOWER_BOUND_VALUE", str(values[0]))+space
+                        val = values[0]
+                        if val is None:
+                            val = 'NULL'
+                        new_sql += token.replace("LOWER_BOUND_VALUE", str(val))+space
                     else:
                         add_token = False
                         new_sql += token+space
@@ -1974,10 +1986,16 @@ class RQGQueryHelper(object):
                     elif "UPPER_BOUND_VALUE" in token:
                         datetime_check = False
                         add_token = False
-                        new_sql += token.replace("UPPER_BOUND_VALUE", "\'"+str(values[len(values) - 1])+"\'")+space
+                        val = values[len(values) - 1]
+                        if val is None:
+                            val = ''
+                        new_sql += token.replace("UPPER_BOUND_VALUE", "\'"+str(val)+"\'")+space
                     elif "LOWER_BOUND_VALUE" in token:
                         add_token = False
-                        new_sql += token.replace("LOWER_BOUND_VALUE", "\'"+str(values[0])+"\'")+space
+                        val = values[0]
+                        if val is None:
+                            val = ''
+                        new_sql += token.replace("LOWER_BOUND_VALUE", "\'"+str(val)+"\'")+space
                     else:
                         add_token = False
                         new_sql += token+space
@@ -2043,10 +2061,16 @@ class RQGQueryHelper(object):
                     elif "UPPER_BOUND_VALUE" in token:
                         string_check = False
                         add_token = False
-                        new_sql += token.replace("UPPER_BOUND_VALUE","\""+str(values[len(values) -1])+"\"")+space
+                        val = values[len(values) -1]
+                        if val is None:
+                            val = ''
+                        new_sql += token.replace("UPPER_BOUND_VALUE","\""+str(val)+"\"")+space
                     elif "LOWER_BOUND_VALUE" in token:
                         add_token = False
-                        new_sql += token.replace("LOWER_BOUND_VALUE", "\""+str(values[0])+"\"")+space
+                        val = values[0]
+                        if val is None:
+                            val = ''
+                        new_sql += token.replace("LOWER_BOUND_VALUE", "\""+str(val)+"\"")+space
                     else:
                         add_token = False
                         new_sql += token+space
@@ -2070,10 +2094,16 @@ class RQGQueryHelper(object):
                     elif "UPPER_BOUND_VALUE" in token:
                         numeric_check = False
                         add_token = False
-                        new_sql += token.replace("UPPER_BOUND_VALUE", str(values[len(values) - 1]))+space
+                        val = values[len(values) - 1]
+                        if val is None:
+                            val = 'NULL'
+                        new_sql += token.replace("UPPER_BOUND_VALUE", str(val))+space
                     elif "LOWER_BOUND_VALUE" in token:
                         add_token = False
-                        new_sql += token.replace("LOWER_BOUND_VALUE", str(values[0]))+space
+                        val = values[0]
+                        if val is None:
+                            val = 'NULL'
+                        new_sql += token.replace("LOWER_BOUND_VALUE", str(val))+space
                     else:
                         add_token = False
                         new_sql += token+space
@@ -2092,10 +2122,16 @@ class RQGQueryHelper(object):
                     elif "UPPER_BOUND_VALUE" in token:
                         datetime_check = False
                         add_token = False
-                        new_sql += token.replace("UPPER_BOUND_VALUE", "\'"+str(values[len(values) - 1])+"\'")+space
+                        val = values[len(values) - 1]
+                        if val is None:
+                            val = ''
+                        new_sql += token.replace("UPPER_BOUND_VALUE", "\'"+str(val)+"\'")+space
                     elif "LOWER_BOUND_VALUE" in token:
                         add_token = False
-                        new_sql += token.replace("LOWER_BOUND_VALUE", "\'"+str(values[0])+"\'")+space
+                        val = values[0]
+                        if val is None:
+                            val = ''
+                        new_sql += token.replace("LOWER_BOUND_VALUE", "\'"+str(val)+"\'")+space
                     else:
                         add_token = False
                         new_sql += token+space
@@ -2160,16 +2196,22 @@ class RQGQueryHelper(object):
                     elif "UPPER_BOUND_VALUE" in token:
                         datetime_check = False
                         add_token = False
+                        val = values[len(values) - 1]
+                        if val is None:
+                            val = ''
                         if sql_type == "n1ql":
-                            new_sql += token.replace("UPPER_BOUND_VALUE", self._apply_functions_to_params(function_list, "\'"+str(values[len(values) - 1])+"\'"))+space
+                            new_sql += token.replace("UPPER_BOUND_VALUE", self._apply_functions_to_params(function_list, "\'"+str(val)+"\'"))+space
                         else:
-                            new_sql += token.replace("UPPER_BOUND_VALUE", "\'"+str(values[len(values) - 1])+"\'")+space
+                            new_sql += token.replace("UPPER_BOUND_VALUE", "\'"+str(val)+"\'")+space
                     elif "LOWER_BOUND_VALUE" in token:
                         add_token = False
+                        val = values[0]
+                        if val is None:
+                            val = ''
                         if sql_type == "n1ql":
-                            new_sql += token.replace("LOWER_BOUND_VALUE", self._apply_functions_to_params(function_list, "\'"+str(values[0])+"\'"))+space
+                            new_sql += token.replace("LOWER_BOUND_VALUE", self._apply_functions_to_params(function_list, "\'"+str(val)+"\'"))+space
                         else:
-                            new_sql += token.replace("LOWER_BOUND_VALUE", "\'"+str(values[0])+"\'")+space
+                            new_sql += token.replace("LOWER_BOUND_VALUE", "\'"+str(val)+"\'")+space
                     else:
                         add_token = False
                         new_sql += token+space
