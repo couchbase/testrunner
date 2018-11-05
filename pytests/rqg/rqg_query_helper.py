@@ -1960,13 +1960,13 @@ class RQGQueryHelper(object):
                         add_token = False
                         val = values[len(values) - 1]
                         if val is None:
-                            val = 'NULL'
+                            val = 0
                         new_sql += token.replace("UPPER_BOUND_VALUE", str(val))+space
                     elif "LOWER_BOUND_VALUE" in token:
                         add_token = False
                         val = values[0]
                         if val is None:
-                            val = 'NULL'
+                            val = 0
                         new_sql += token.replace("LOWER_BOUND_VALUE", str(val))+space
                     else:
                         add_token = False
@@ -2096,13 +2096,13 @@ class RQGQueryHelper(object):
                         add_token = False
                         val = values[len(values) - 1]
                         if val is None:
-                            val = 'NULL'
+                            val = 0
                         new_sql += token.replace("UPPER_BOUND_VALUE", str(val))+space
                     elif "LOWER_BOUND_VALUE" in token:
                         add_token = False
                         val = values[0]
                         if val is None:
-                            val = 'NULL'
+                            val = 0
                         new_sql += token.replace("LOWER_BOUND_VALUE", str(val))+space
                     else:
                         add_token = False
@@ -2441,18 +2441,26 @@ class RQGQueryHelper(object):
         temp_list = ""
         if type == "numeric":
             for num in list:
+                if num is None:
+                    num = 'NULL'
                 temp_list += " " +str(num) + " ,"
         if type == "string":
             for num in list:
+                if num is None:
+                    num = ''
                 temp_list += " \"" +str(num) + "\" ,"
         if type == "datetime":
             for num in list:
+                if num is None:
+                    num = 'NULL'
                 temp_list += " \'" +str(num) + "\' ,"
         return temp_list[0:len(temp_list)-1]
 
     def _convert_list_datetime(self, list, function_list):
         temp_list = ""
         for num in list:
+            if num is None:
+                num = 'NULL'
             value = " \'"+str(num)+"\'"
             value = self._apply_functions_to_params(function_list, value)
             temp_list += value+" ,"
