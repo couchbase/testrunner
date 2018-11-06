@@ -652,7 +652,9 @@ class RQGQueryHelper(object):
         sql_template = 'INSERT INTO {0} (KEY, VALUE) VALUES {1}'
         temp = ""
         for key in map.keys():
-            temp += "({0},{1}),".format("\""+key+"\"", json.dumps(map[key]))
+            val = json.dumps(map[key])
+            val = val.replace("'NULL'", "NULL").replace('"NULL"','NULL')
+            temp += "({0},{1}),".format("\""+key+"\"", val)
         temp = temp[0:len(temp)-1]
         return sql_template.format(bucket_name, temp)
 

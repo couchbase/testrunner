@@ -61,15 +61,16 @@ class RQGMySQLClient(MySQLClient):
         return data
 
     def _convert_to_mysql_json_compatible_val(self, value, type):
+        if value is None:
+            return 'NULL'
+
         if isinstance(value, float):
             return round(value, 0)
         if "tiny" in str(type):
             if value == 0:
                 return False
-            elif value == 1:
-                return True
             else:
-                return None
+                return True
         if "int" in str(type):
             return value
         if "long" in str(type):
@@ -77,17 +78,11 @@ class RQGMySQLClient(MySQLClient):
         if "datetime" in str(type):
             return str(value)
         if ("float" in str(type)) or ("double" in str(type)):
-            if value is None:
-                return None
-            else:
-                return round(value, 0)
+            return round(value, 0)
         if "decimal" in str(type):
-            if value is None:
-                return None
-            else:
-                if isinstance(value, float):
-                    return round(value, 0)
-                return int(round(value, 0))
+            if isinstance(value, float):
+                return round(value, 0)
+            return int(round(value, 0))
         return unicode(value)
 
     def _get_table_list(self):
