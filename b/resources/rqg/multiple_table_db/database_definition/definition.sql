@@ -12,8 +12,8 @@ CREATE TABLE IF NOT EXISTS `DATABASE_NAME`.`simple_table_1` (
   `int_field1` INT(11) NULL DEFAULT NULL,
   `decimal_field1` DECIMAL(10,0) NULL DEFAULT NULL,
   `datetime_field1` DATETIME NULL DEFAULT NULL,
-  `bool_field1` TINYINT(1) NULL DEFAULT 0,
-  `varchar_field1` VARCHAR(1000) NULL,
+  `bool_field1` TINYINT(1) NOT NULL DEFAULT 0,
+  `varchar_field1` VARCHAR(1000) NOT NULL,
   `char_field1` CHAR(100) NULL DEFAULT NULL,
   PRIMARY KEY (`primary_key_id`))
 ENGINE = InnoDB
@@ -25,8 +25,8 @@ CREATE TABLE IF NOT EXISTS `DATABASE_NAME`.`simple_table_2` (
   `int_field1` INT(11) NULL DEFAULT NULL,
   `decimal_field1` DECIMAL(10,0) NULL DEFAULT NULL,
   `datetime_field1` DATETIME NULL DEFAULT NULL,
-  `bool_field1` TINYINT(1) NULL DEFAULT 0,
-  `varchar_field1` VARCHAR(1000) NULL,
+  `bool_field1` TINYINT(1) NOT NULL DEFAULT 0,
+  `varchar_field1` VARCHAR(1000) NOT NULL,
   `char_field1` CHAR(100) NULL DEFAULT NULL,
   PRIMARY KEY (`primary_key_id`))
 ENGINE = InnoDB
@@ -38,8 +38,8 @@ CREATE TABLE IF NOT EXISTS `DATABASE_NAME`.`simple_table_3` (
   `int_field1` INT(11) NULL DEFAULT NULL,
   `decimal_field1` DECIMAL(10,0) NULL DEFAULT NULL,
   `datetime_field1` DATETIME NULL DEFAULT NULL,
-  `bool_field1` TINYINT(1) NULL DEFAULT 0,
-  `varchar_field1` VARCHAR(1000) NULL,
+  `bool_field1` TINYINT(1) NOT NULL DEFAULT 0,
+  `varchar_field1` VARCHAR(1000) NOT NULL,
   `char_field1` CHAR(100) NULL DEFAULT NULL,
   PRIMARY KEY (`primary_key_id`))
 ENGINE = InnoDB
@@ -51,8 +51,8 @@ CREATE TABLE IF NOT EXISTS `DATABASE_NAME`.`simple_table_4` (
   `int_field1` INT(11) NULL DEFAULT NULL,
   `decimal_field1` DECIMAL(10,0) NULL DEFAULT NULL,
   `datetime_field1` DATETIME NULL DEFAULT NULL,
-  `bool_field1` TINYINT(1) NULL DEFAULT 0,
-  `varchar_field1` VARCHAR(1000) NULL,
+  `bool_field1` TINYINT(1) NOT NULL DEFAULT 0,
+  `varchar_field1` VARCHAR(1000) NOT NULL,
   `char_field1` CHAR(100) NULL DEFAULT NULL,
   PRIMARY KEY (`primary_key_id`))
 ENGINE = InnoDB
@@ -64,8 +64,8 @@ CREATE TABLE IF NOT EXISTS `DATABASE_NAME`.`simple_table_5` (
   `int_field1` INT(11) NULL DEFAULT NULL,
   `decimal_field1` DECIMAL(10,0) NULL DEFAULT NULL,
   `datetime_field1` DATETIME NULL DEFAULT NULL,
-  `bool_field1` TINYINT(1) NULL DEFAULT 0,
-  `varchar_field1` VARCHAR(1000) NULL,
+  `bool_field1` TINYINT(1) NOT NULL DEFAULT 0,
+  `varchar_field1` VARCHAR(1000) NOT NULL,
   `char_field1` CHAR(100) NULL DEFAULT NULL,
   PRIMARY KEY (`primary_key_id`))
 ENGINE = InnoDB
@@ -77,8 +77,8 @@ CREATE TABLE IF NOT EXISTS `DATABASE_NAME`.`simple_table_6` (
   `int_field1` INT(11) NULL DEFAULT NULL,
   `decimal_field1` DECIMAL(10,0) NULL DEFAULT NULL,
   `datetime_field1` DATETIME NULL DEFAULT NULL,
-  `bool_field1` TINYINT(1) NULL DEFAULT 0,
-  `varchar_field1` VARCHAR(1000) NULL,
+  `bool_field1` TINYINT(1) NOT NULL DEFAULT 0,
+  `varchar_field1` VARCHAR(1000) NOT NULL,
   `char_field1` CHAR(100) NULL DEFAULT NULL,
   PRIMARY KEY (`primary_key_id`))
 ENGINE = InnoDB
@@ -90,8 +90,8 @@ CREATE TABLE IF NOT EXISTS `DATABASE_NAME`.`simple_table_7` (
   `int_field1` INT(11) NULL DEFAULT NULL,
   `decimal_field1` DECIMAL(10,0) NULL DEFAULT NULL,
   `datetime_field1` DATETIME NULL DEFAULT NULL,
-  `bool_field1` TINYINT(1) NULL DEFAULT 0,
-  `varchar_field1` VARCHAR(1000) NULL,
+  `bool_field1` TINYINT(1) NOT NULL DEFAULT 0,
+  `varchar_field1` VARCHAR(1000) NOT NULL,
   `char_field1` CHAR(100) NULL DEFAULT NULL,
   PRIMARY KEY (`primary_key_id`))
 ENGINE = InnoDB
@@ -103,8 +103,8 @@ CREATE TABLE IF NOT EXISTS `DATABASE_NAME`.`simple_table_8` (
   `int_field1` INT(11) NULL DEFAULT NULL,
   `decimal_field1` DECIMAL(10,0) NULL DEFAULT NULL,
   `datetime_field1` DATETIME NULL DEFAULT NULL,
-  `bool_field1` TINYINT(1) NULL DEFAULT 0,
-  `varchar_field1` VARCHAR(1000) NULL,
+  `bool_field1` TINYINT(1) NOT NULL DEFAULT 0,
+  `varchar_field1` VARCHAR(1000) NOT NULL,
   `char_field1` CHAR(100) NULL DEFAULT NULL,
   PRIMARY KEY (`primary_key_id`))
 ENGINE = InnoDB
@@ -116,8 +116,8 @@ CREATE TABLE IF NOT EXISTS `DATABASE_NAME`.`simple_table_9` (
   `int_field1` INT(11) NULL DEFAULT NULL,
   `decimal_field1` DECIMAL(10,0) NULL DEFAULT NULL,
   `datetime_field1` DATETIME NULL DEFAULT NULL,
-  `bool_field1` TINYINT(1) NULL DEFAULT 0,
-  `varchar_field1` VARCHAR(1000) NULL,
+  `bool_field1` TINYINT(1) NOT NULL DEFAULT 0,
+  `varchar_field1` VARCHAR(1000) NOT NULL,
   `char_field1` CHAR(100) NULL DEFAULT NULL,
   PRIMARY KEY (`primary_key_id`))
 ENGINE = InnoDB
@@ -129,8 +129,8 @@ CREATE TABLE IF NOT EXISTS `DATABASE_NAME`.`simple_table_10` (
   `int_field1` INT(11) NULL DEFAULT NULL,
   `decimal_field1` DECIMAL(10,0) NULL DEFAULT NULL,
   `datetime_field1` DATETIME NULL DEFAULT NULL,
-  `bool_field1` TINYINT(1) NULL DEFAULT 0,
-  `varchar_field1` VARCHAR(1000) NULL,
+  `bool_field1` TINYINT(1) NOT NULL DEFAULT 0,
+  `varchar_field1` VARCHAR(1000) NOT NULL,
   `char_field1` CHAR(100) NULL DEFAULT NULL,
   PRIMARY KEY (`primary_key_id`))
 ENGINE = InnoDB

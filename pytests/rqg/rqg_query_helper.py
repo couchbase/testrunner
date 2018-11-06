@@ -652,9 +652,7 @@ class RQGQueryHelper(object):
         sql_template = 'INSERT INTO {0} (KEY, VALUE) VALUES {1}'
         temp = ""
         for key in map.keys():
-            val = json.dumps(map[key])
-            val = val.replace("'NULL'", "NULL").replace('"NULL"','NULL')
-            temp += "({0},{1}),".format("\""+key+"\"", val)
+            temp += "({0},{1}),".format("\"" + key + "\"", json.dumps(map[key]))
         temp = temp[0:len(temp)-1]
         return sql_template.format(bucket_name, temp)
 
@@ -923,7 +921,7 @@ class RQGQueryHelper(object):
         values = values[0:len(values)-1]
         return intial_statement+column_names+" VALUES "+values
 
-    def _generate_insert_statement(self, table_name="TABLE_NAME", table_map={}, primary_key="", mask=[0,0,0,0,0,0]):
+    def _generate_insert_statement(self, table_name="TABLE_NAME", table_map={}, primary_key=""):
         intial_statement = ""
         intial_statement += " INSERT INTO {0} ".format(table_name)
         column_names = "( "+",".join(table_map.keys())+" ) "
@@ -933,36 +931,21 @@ class RQGQueryHelper(object):
             if "primary" in field_name:
                 values += primary_key+","
             elif "tinyint" in type:
-                if mask[0] == 0:
-                    values += str(self._random_tiny_int()) + ","
-                else:
-                    values += 'NULL,'
+                values += str(self._random_tiny_int()) + ","
             elif "mediumint" in type:
                 values += str(self._random_int() % 100)+","
             elif "int" in type:
-                if mask[1] == 0:
-                    values += str(self._random_int()) + ","
-                else:
-                    values += 'NULL,'
+                values += str(self._random_int()) + ","
             elif "decimal" in type:
-                if mask[2] == 0:
-                    values += str(self._random_float()) + ","
-                else:
-                    values += 'NULL,'
+                values += str(self._random_float()) + ","
             elif "float" in type:
                 values += str(self._random_float())+","
             elif "double" in type:
                 values += str(self._random_double())+","
             elif "varchar" in type:
-                if mask[3] == 0:
-                    values += "\"" + self._random_alphabet_string() + "\","
-                else:
-                    values += 'NULL,'
+                values += "\"" + self._random_alphabet_string() + "\","
             elif "char" in type:
-                if mask[4] == 0:
-                    values += "\'"+self._random_char()+"\',"
-                else:
-                    values += 'NULL,'
+                values += "\'" + self._random_char() + "\',"
             elif "tinytext" in type:
                 values += "\'"+self._random_alphabet_string(limit=1)+"\',"
             elif "mediumtext" in type:
@@ -1927,16 +1910,10 @@ class RQGQueryHelper(object):
                     elif "UPPER_BOUND_VALUE" in token:
                         string_check = False
                         add_token = False
-                        val = values[len(values) - 1]
-                        if val is None:
-                            val = ''
-                        new_sql += token.replace("UPPER_BOUND_VALUE", "\""+str(val)+"\"")+space
+                        new_sql += token.replace("UPPER_BOUND_VALUE", "\"" + str(values[len(values) - 1]) + "\"") + space
                     elif "LOWER_BOUND_VALUE" in token:
                         add_token = False
-                        val = values[0]
-                        if val is None:
-                            val = ''
-                        new_sql += token.replace("LOWER_BOUND_VALUE", "\""+str(val)+"\"")+space
+                        new_sql += token.replace("LOWER_BOUND_VALUE", "\"" + str(values[0]) + "\"") + space
                     else:
                         add_token = False
                         new_sql += token+space
@@ -1960,16 +1937,10 @@ class RQGQueryHelper(object):
                     elif "UPPER_BOUND_VALUE" in token:
                         numeric_check = False
                         add_token = False
-                        val = values[len(values) - 1]
-                        if val is None:
-                            val = 0
-                        new_sql += token.replace("UPPER_BOUND_VALUE", str(val))+space
+                        new_sql += token.replace("UPPER_BOUND_VALUE", str(values[len(values) - 1])) + space
                     elif "LOWER_BOUND_VALUE" in token:
                         add_token = False
-                        val = values[0]
-                        if val is None:
-                            val = 0
-                        new_sql += token.replace("LOWER_BOUND_VALUE", str(val))+space
+                        new_sql += token.replace("LOWER_BOUND_VALUE", str(values[0])) + space
                     else:
                         add_token = False
                         new_sql += token+space
@@ -1988,16 +1959,10 @@ class RQGQueryHelper(object):
                     elif "UPPER_BOUND_VALUE" in token:
                         datetime_check = False
                         add_token = False
-                        val = values[len(values) - 1]
-                        if val is None:
-                            val = ''
-                        new_sql += token.replace("UPPER_BOUND_VALUE", "\'"+str(val)+"\'")+space
+                        new_sql += token.replace("UPPER_BOUND_VALUE", "\'" + str(values[len(values) - 1]) + "\'") + space
                     elif "LOWER_BOUND_VALUE" in token:
                         add_token = False
-                        val = values[0]
-                        if val is None:
-                            val = ''
-                        new_sql += token.replace("LOWER_BOUND_VALUE", "\'"+str(val)+"\'")+space
+                        new_sql += token.replace("LOWER_BOUND_VALUE", "\'" + str(values[0]) + "\'") + space
                     else:
                         add_token = False
                         new_sql += token+space
@@ -2063,16 +2028,10 @@ class RQGQueryHelper(object):
                     elif "UPPER_BOUND_VALUE" in token:
                         string_check = False
                         add_token = False
-                        val = values[len(values) -1]
-                        if val is None:
-                            val = ''
-                        new_sql += token.replace("UPPER_BOUND_VALUE","\""+str(val)+"\"")+space
+                        new_sql += token.replace("UPPER_BOUND_VALUE", "\"" + str(values[len(values) - 1]) + "\"") + space
                     elif "LOWER_BOUND_VALUE" in token:
                         add_token = False
-                        val = values[0]
-                        if val is None:
-                            val = ''
-                        new_sql += token.replace("LOWER_BOUND_VALUE", "\""+str(val)+"\"")+space
+                        new_sql += token.replace("LOWER_BOUND_VALUE", "\"" + str(values[0]) + "\"") + space
                     else:
                         add_token = False
                         new_sql += token+space
@@ -2096,16 +2055,10 @@ class RQGQueryHelper(object):
                     elif "UPPER_BOUND_VALUE" in token:
                         numeric_check = False
                         add_token = False
-                        val = values[len(values) - 1]
-                        if val is None:
-                            val = 0
-                        new_sql += token.replace("UPPER_BOUND_VALUE", str(val))+space
+                        new_sql += token.replace("UPPER_BOUND_VALUE", str(values[len(values) - 1])) + space
                     elif "LOWER_BOUND_VALUE" in token:
                         add_token = False
-                        val = values[0]
-                        if val is None:
-                            val = 0
-                        new_sql += token.replace("LOWER_BOUND_VALUE", str(val))+space
+                        new_sql += token.replace("LOWER_BOUND_VALUE", str(values[0])) + space
                     else:
                         add_token = False
                         new_sql += token+space
@@ -2124,16 +2077,10 @@ class RQGQueryHelper(object):
                     elif "UPPER_BOUND_VALUE" in token:
                         datetime_check = False
                         add_token = False
-                        val = values[len(values) - 1]
-                        if val is None:
-                            val = ''
-                        new_sql += token.replace("UPPER_BOUND_VALUE", "\'"+str(val)+"\'")+space
+                        new_sql += token.replace("UPPER_BOUND_VALUE", "\'" + str(values[len(values) - 1]) + "\'") + space
                     elif "LOWER_BOUND_VALUE" in token:
                         add_token = False
-                        val = values[0]
-                        if val is None:
-                            val = ''
-                        new_sql += token.replace("LOWER_BOUND_VALUE", "\'"+str(val)+"\'")+space
+                        new_sql += token.replace("LOWER_BOUND_VALUE", "\'" + str(values[0]) + "\'") + space
                     else:
                         add_token = False
                         new_sql += token+space
@@ -2198,22 +2145,16 @@ class RQGQueryHelper(object):
                     elif "UPPER_BOUND_VALUE" in token:
                         datetime_check = False
                         add_token = False
-                        val = values[len(values) - 1]
-                        if val is None:
-                            val = ''
                         if sql_type == "n1ql":
-                            new_sql += token.replace("UPPER_BOUND_VALUE", self._apply_functions_to_params(function_list, "\'"+str(val)+"\'"))+space
+                            new_sql += token.replace("UPPER_BOUND_VALUE", self._apply_functions_to_params(function_list, "\'" + str(values[len(values) - 1]) + "\'")) + space
                         else:
-                            new_sql += token.replace("UPPER_BOUND_VALUE", "\'"+str(val)+"\'")+space
+                            new_sql += token.replace("UPPER_BOUND_VALUE", "\'" + str(values[len(values) - 1]) + "\'") + space
                     elif "LOWER_BOUND_VALUE" in token:
                         add_token = False
-                        val = values[0]
-                        if val is None:
-                            val = ''
                         if sql_type == "n1ql":
-                            new_sql += token.replace("LOWER_BOUND_VALUE", self._apply_functions_to_params(function_list, "\'"+str(val)+"\'"))+space
+                            new_sql += token.replace("LOWER_BOUND_VALUE", self._apply_functions_to_params(function_list, "\'" + str(values[0]) + "\'")) + space
                         else:
-                            new_sql += token.replace("LOWER_BOUND_VALUE", "\'"+str(val)+"\'")+space
+                            new_sql += token.replace("LOWER_BOUND_VALUE", "\'" + str(values[0]) + "\'") + space
                     else:
                         add_token = False
                         new_sql += token+space
@@ -2443,26 +2384,18 @@ class RQGQueryHelper(object):
         temp_list = ""
         if type == "numeric":
             for num in list:
-                if num is None:
-                    num = 'NULL'
                 temp_list += " " +str(num) + " ,"
         if type == "string":
             for num in list:
-                if num is None:
-                    num = ''
                 temp_list += " \"" +str(num) + "\" ,"
         if type == "datetime":
             for num in list:
-                if num is None:
-                    num = 'NULL'
                 temp_list += " \'" +str(num) + "\' ,"
         return temp_list[0:len(temp_list)-1]
 
     def _convert_list_datetime(self, list, function_list):
         temp_list = ""
         for num in list:
-            if num is None:
-                num = 'NULL'
             value = " \'"+str(num)+"\'"
             value = self._apply_functions_to_params(function_list, value)
             temp_list += value+" ,"

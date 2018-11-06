@@ -61,16 +61,15 @@ class RQGMySQLClient(MySQLClient):
         return data
 
     def _convert_to_mysql_json_compatible_val(self, value, type):
-        if value is None:
-            return 'NULL'
-
         if isinstance(value, float):
             return round(value, 0)
         if "tiny" in str(type):
             if value == 0:
                 return False
-            else:
+            elif value == 1:
                 return True
+            else:
+                return None
         if "int" in str(type):
             return value
         if "long" in str(type):
@@ -78,11 +77,17 @@ class RQGMySQLClient(MySQLClient):
         if "datetime" in str(type):
             return str(value)
         if ("float" in str(type)) or ("double" in str(type)):
-            return round(value, 0)
-        if "decimal" in str(type):
-            if isinstance(value, float):
+            if value is None:
+                return None
+            else:
                 return round(value, 0)
-            return int(round(value, 0))
+        if "decimal" in str(type):
+            if value is None:
+                return None
+            else:
+                if isinstance(value, float):
+                    return round(value, 0)
+                return int(round(value, 0))
         return unicode(value)
 
     def _get_table_list(self):
@@ -265,23 +270,9 @@ class RQGMySQLClient(MySQLClient):
     def _gen_data_simple_table(self, number_of_rows=1000):
         helper = RQGQueryHelper()
         map = self._get_pkey_map_for_tables_wit_primary_key_column()
-        marker = 1
-
         for table_name in map.keys():
             for x in range(0, number_of_rows):
-                mask = [0, 0, 0, 0, 0]
-                if x % 20 == 0:
-                    marker = x
-                    mask[0] = '1'
-                if x == marker + 1:
-                    mask[1] = '1'
-                if x == marker + 2:
-                    mask[2] = '1'
-                if x == marker + 3:
-                    mask[3] = '1'
-                if x == marker + 4:
-                    mask[4] = '1'
-                statement = helper._generate_insert_statement(table_name, map[table_name], "\""+str(x+1)+"\"", mask)
+                statement = helper._generate_insert_statement(table_name, map[table_name], "\"" + str(x + 1) + "\"")
                 self._insert_execute_query(statement)
 
     def _gen_queries_from_template(self, query_path="./queries.txt", table_name=None):
