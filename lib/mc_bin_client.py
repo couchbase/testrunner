@@ -583,8 +583,7 @@ class MemcachedClient(object):
     def get_vbucket_state(self, vbucket):
         assert isinstance(vbucket, int)
         self.vbucketId = vbucket
-        return self._doCmd(memcacheConstants.CMD_GET_VBUCKET_STATE,
-                           str(vbucket), '')
+        return self._doCmd(memcacheConstants.CMD_GET_VBUCKET_STATE, '', '')
 
     def delete_vbucket(self, vbucket):
         assert isinstance(vbucket, int)
