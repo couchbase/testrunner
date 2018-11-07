@@ -2378,6 +2378,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                                                  [servers[int(self.nodes_init) - 1]], [])
         rebalance.result()
         self.sleep(15)
+        self.add_built_in_server_user()
         rest = RestConnection(self.master)
         rest.create_bucket(bucket='default', ramQuotaMB=512)
         self.buckets = rest.get_buckets()
