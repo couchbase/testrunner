@@ -2,22 +2,23 @@ import random
 import copy
 from base_query_helper import BaseRQGQueryHelper
 
+
 class RQGQueryHelperNew(BaseRQGQueryHelper):
 
     ''' Dispatcher function. Uses test_name parameter to identify the way how templates
         will be transformed into SQL and N1QL queries.
         from let where group by letting haVING SELECT ORDER BY'''
-    def _convert_sql_template_to_value(self, query_template="", table_map={}, table_name="simple_table",
-                                       define_gsi_index=False, partitioned_indexes=False, test_name=""):
-
+    def _get_conversion_func(self, test_name):
         if test_name == 'group_by_alias':
-            return self._convert_sql_template_for_group_by_aliases(query_template, table_map, table_name)
+            return self._convert_sql_template_for_group_by_aliases
         else:
             print("Unknown test name")
             exit(1)
 
     ''' Main function to convert templates into SQL and N1QL queries for GROUP BY clause field aliases '''
-    def _convert_sql_template_for_group_by_aliases(self, query_template="", table_map={}, table_name="simple_table"):
+    def _convert_sql_template_for_group_by_aliases(self, query_template, conversion_map):
+        table_map = conversion_map.get("table_map", {})
+        table_name = conversion_map.get("table_name", "simple_table")
         n1ql_template_map = self._divide_sql(query_template)
 
         sql_template_map = copy.copy(n1ql_template_map)
@@ -110,7 +111,6 @@ class RQGQueryHelperNew(BaseRQGQueryHelper):
                                                                                  converted_sql_map)
 
         return converted_sql_map, converted_n1ql_map
-
 
     def _add_field_aliases_to_sql_select_clause(self, sql_map):
         select_from = sql_map['select_from']

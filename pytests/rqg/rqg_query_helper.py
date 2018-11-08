@@ -1,5 +1,6 @@
 from base_query_helper import BaseRQGQueryHelper
 
+
 class RQGQueryHelper(BaseRQGQueryHelper):
 
     def _find_hints(self, n1ql_query):

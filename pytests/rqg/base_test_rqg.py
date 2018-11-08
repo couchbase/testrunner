@@ -13,7 +13,6 @@ from rqg_query_helper import RQGQueryHelper
 from remote.remote_util import RemoteMachineShellConnection
 import random
 from itertools import combinations
-from sdk_client import SDKClient
 import shutil
 from os import listdir
 from os.path import isfile, join
@@ -89,8 +88,8 @@ class BaseRQGTests(BaseTestCase):
             self.pushdown = self.input.param("pushdown", False)
             self.subquery = self.input.param("subquery", False)
             self.drop_secondary_indexes = self.input.param("drop_secondary_indexes", True)
-            self.query_helper = RQGQueryHelper()
-            self._initialize_n1ql_helper()
+            self.query_helper = self._initialize_rqg_query_helper()
+            self.n1ql_helper = self._initialize_n1ql_helper()
             self.rest = RestConnection(self.master)
             self.indexer_memQuota = self.input.param("indexer_memQuota", 1024)
             self.teardown_mysql = self.use_mysql and self.reset_database and (not self.skip_cleanup)
@@ -798,7 +797,7 @@ class BaseRQGTests(BaseTestCase):
                 self._initialize_mysql_client()
             self._setup_and_load_buckets_from_files()
 
-        self._initialize_n1ql_helper()
+        self.n1ql_helper = self._initialize_n1ql_helper()
         # create copy of simple table if this is a merge operation
         self.sleep(10)
         if self.gsi_type == "memory_optimized":
@@ -884,8 +883,11 @@ class BaseRQGTests(BaseTestCase):
             self.log.info('WARN=======================')
             self.log.info(ex)
 
+    def _initialize_rqg_query_helper(self):
+        return RQGQueryHelper()
+
     def _initialize_n1ql_helper(self):
-        self.n1ql_helper = N1QLHelper(version="sherlock", shell=None, max_verify=self.max_verify,
+        return N1QLHelper(version="sherlock", shell=None, max_verify=self.max_verify,
                                       buckets=self.buckets, item_flag=None, n1ql_port=getattr(self.n1ql_server, 'n1ql_port', 8903),
                                       full_docs_list=[], log=self.log, input=self.input, master=self.master,
                                       database=self.database, use_rest=self.use_rest)

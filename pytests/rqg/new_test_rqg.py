@@ -1,6 +1,7 @@
 from base_test_rqg import BaseRQGTests
-import threading
 from new_rqg_mysql_client import RQGMySQLClientNew
+from new_rqg_query_helper import RQGQueryHelperNew
+import threading
 
 
 class RQGTestsNew(BaseRQGTests):
@@ -17,10 +18,8 @@ class RQGTestsNew(BaseRQGTests):
     def test_rqg(self):
         super(RQGTestsNew, self).test_rqg()
 
-
     def _rqg_worker(self, table_name, table_map, input_queue, result_queue, failure_record_queue=None):
         count = 0
-        table_name_description_map = {table_name: table_map[table_name]}
         while True:
             if self.total_queries <= self.query_count:
                 break
@@ -29,22 +28,23 @@ class RQGTestsNew(BaseRQGTests):
                 start_test_case_number = data["start_test_case_number"]
                 query_template_list = data["query_template_list"]
                 # create strings for queries and indexes but doesnt send indexes to Couchbase
-                sql_n1ql_index_map_list = self.client._convert_template_query_info(table_map=table_name_description_map,
-                                                                                   n1ql_queries=query_template_list,
-                                                                                   define_gsi_index=self.use_secondary_index,
-                                                                                   partitioned_indexes=self.partitioned_indexes,
-                                                                                   test_name=self.test_name
-                                                                                   )
 
-                for sql_n1ql_index_map in sql_n1ql_index_map_list:
+                query_input_list = []
+                conversion_func = self.query_helper._get_conversion_func(self.test_name)
+                conversion_map = {'table_name': table_name, "table_map": table_map}
+
+                for n1ql_query in query_template_list:
+                    sql_n1ql_index_map = conversion_func(n1ql_query, conversion_map)
+                    sql_n1ql_index_map = self.client._translate_function_names(sql_n1ql_index_map)
+                    query_input_list.append(sql_n1ql_index_map)
                     sql_n1ql_index_map["n1ql"] = sql_n1ql_index_map['n1ql'].replace("simple_table", self.database+"_"+"simple_table")
 
                 # build indexes
                 if self.use_secondary_index:
-                    self._generate_secondary_indexes_in_batches(sql_n1ql_index_map_list)
+                    self._generate_secondary_indexes_in_batches(query_input_list)
                 thread_list = []
                 test_case_number = start_test_case_number
-                for test_case_input in sql_n1ql_index_map_list:
+                for test_case_input in query_input_list:
                     t = threading.Thread(target=self._run_basic_test, args=(test_case_input, test_case_number, result_queue, failure_record_queue))
                     test_case_number += 1
                     t.daemon = True
@@ -56,11 +56,14 @@ class RQGTestsNew(BaseRQGTests):
                     t.join()
 
                 if self.use_secondary_index and self.drop_secondary_indexes:
-                    self._drop_secondary_indexes_in_batches(sql_n1ql_index_map_list)
+                    self._drop_secondary_indexes_in_batches(query_input_list)
             else:
                 count += 1
                 if count > 1000:
                     return
+
+    def _initialize_rqg_query_helper(self):
+        return RQGQueryHelperNew()
 
     def _initialize_mysql_client(self):
         if self.reset_database:
