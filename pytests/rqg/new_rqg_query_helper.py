@@ -1,5 +1,6 @@
 import random
 import copy
+import string
 from base_query_helper import BaseRQGQueryHelper
 
 
@@ -11,9 +12,105 @@ class RQGQueryHelperNew(BaseRQGQueryHelper):
     def _get_conversion_func(self, test_name):
         if test_name == 'group_by_alias':
             return self._convert_sql_template_for_group_by_aliases
+        elif test_name == 'skip_range_key_scan':
+            return self._convert_sql_template_for_skip_range_scan
         else:
             print("Unknown test name")
             exit(1)
+
+    def _convert_sql_template_for_skip_range_scan(self, n1ql_template, conversion_map):
+        table_map = conversion_map.get("table_map", {})
+        table_name = conversion_map.get("table_name", "simple_table")
+        aggregate_pushdown = "secondary"
+        sql, table_map = self._convert_sql_template_to_value(sql=n1ql_template, table_map=table_map, table_name=table_name, aggregate_pushdown=aggregate_pushdown, ansi_joins=False)
+        n1ql = self._gen_sql_to_nql(sql, ansi_joins=False)
+        sql = self._convert_condition_template_to_value_datetime(sql, table_map, sql_type="sql")
+        n1ql = self._convert_condition_template_to_value_datetime(n1ql, table_map, sql_type="n1ql")
+        sql_map = self._divide_sql(n1ql)
+
+        if "IS MISSING" in sql:
+            sql = sql.replace("IS MISSING", "IS NULL")
+
+        map = {"n1ql": n1ql,
+               "sql": sql,
+               "bucket": str(",".join(table_map.keys())),
+               "expected_result": None,
+               "indexes": {}
+               }
+
+        table_name = random.choice(table_map.keys())
+        map["bucket"] = table_name
+        table_fields = table_map[table_name]["fields"].keys()
+
+        aggregate_pushdown_index_name, create_aggregate_pushdown_index_statement = self._create_skip_range_key_scan_index(table_name, table_fields, sql_map)
+        map = self.aggregate_special_convert(map)
+        map["indexes"][aggregate_pushdown_index_name] = {"name": aggregate_pushdown_index_name,
+                                                         "type": "GSI",
+                                                         "definition": create_aggregate_pushdown_index_statement
+                                                         }
+        return map
+
+    def _create_skip_range_key_scan_index(self, table_name, table_fields, sql_map):
+        where_condition = sql_map["where_condition"]
+        select_from = sql_map["select_from"]
+        group_by = sql_map["group_by"]
+        select_from_fields = []
+        where_condition_fields = []
+        groupby_fields = []
+        aggregate_pushdown_fields_in_order = []
+        skip_range_scan_index_fields_in_order = []
+
+        for field in table_fields:
+            if field.find('char') == 0:
+                if select_from:
+                    idx = self.find_char_field(select_from)
+                    if idx > -1:
+                        select_from_fields.append((idx, field))
+                if where_condition:
+                    idx = self.find_char_field(where_condition)
+                    if idx > -1:
+                        where_condition_fields.append((idx, field))
+                if group_by:
+                    idx = self.find_char_field(group_by)
+                    if idx > -1:
+                        groupby_fields.append((idx, field))
+            else:
+                if select_from:
+                    idx = select_from.find(field)
+                    if idx > -1:
+                        select_from_fields.append((idx, field))
+                if where_condition:
+                    idx = where_condition.find(field)
+                    if idx > -1:
+                        where_condition_fields.append((idx, field))
+                if group_by:
+                    idx = group_by.find(field)
+                    if idx > -1:
+                        groupby_fields.append((idx, field))
+
+        select_from_fields.sort(key=lambda tup: tup[0])
+        where_condition_fields.sort(key=lambda tup: tup[0])
+        groupby_fields.sort(key=lambda tup: tup[0])
+
+        leading_key = random.choice(where_condition_fields)
+        skip_range_scan_index_fields_in_order.append(leading_key[1])
+        where_condition_fields.remove(leading_key)
+        all_fields = select_from_fields + where_condition_fields + groupby_fields
+
+        for i in range(0, len(all_fields)):
+            num_random_fields = random.choice([1, 2, 3])
+            for j in range(0, num_random_fields):
+                random_field = ''.join(random.choice(string.ascii_uppercase) for _ in range(10))
+                skip_range_scan_index_fields_in_order.append(random_field)
+            next_field = random.choice(all_fields)
+            all_fields.remove(next_field)
+            skip_range_scan_index_fields_in_order.append(next_field[1])
+
+        aggregate_pushdown_index_name = "{0}_aggregate_pushdown_index_{1}".format(table_name, self._random_int())
+
+        create_aggregate_pushdown_index = \
+                        "CREATE INDEX {0} ON {1}({2}) USING GSI".format(aggregate_pushdown_index_name, table_name, self._convert_list(skip_range_scan_index_fields_in_order, "numeric"))
+        return aggregate_pushdown_index_name, create_aggregate_pushdown_index
 
     ''' Main function to convert templates into SQL and N1QL queries for GROUP BY clause field aliases '''
     def _convert_sql_template_for_group_by_aliases(self, query_template, conversion_map):
