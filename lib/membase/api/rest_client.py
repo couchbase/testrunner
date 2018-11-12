@@ -4502,7 +4502,16 @@ class RestConnection(object):
             if user.get('id') == user_id:
                 return user
         return {}
-
+    
+    '''
+    Update IP version on server.
+    afamily: The value must be one of the following: [ipv4,ipv6] 
+    '''
+    def set_ip_version(self, afamily='ipv4'):
+        params = urllib.urlencode({'afamily': afamily})
+        api = "%snode/controller/setupNetConfig" % (self.baseUrl)
+        status, content, header = self._http_request(api, 'POST', params)
+        return status, content
 
 class MembaseServerVersion:
     def __init__(self, implementationVersion='', componentsVersion=''):
