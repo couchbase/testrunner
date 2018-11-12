@@ -2049,9 +2049,8 @@ class RemoteMachineShellConnection:
                 startserver = True
 
             if enable_ipv6:
-                output, error = \
-                    self.execute_command("sed -i '/ipv6, /c \\{ipv6, true\}'. %s"
-                        % testconstants.LINUX_STATIC_CONFIG)
+                # dist_cfg is empty so we write inet6_tcp to enable IPv6
+                output, error = self.execute_command("echo inet6_tcp > %s" % testconstants.LINUX_DIST_CONFIG)
                 success &= self.log_command_output(output, error, track_words)
                 startserver = True
 
