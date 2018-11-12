@@ -1135,12 +1135,14 @@ class QueriesIndexTests(QueryTests):
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
     def test_panic_in_null(self):
-        self.query = 'create index ix5 on default(join_yr)'
-        self.run_cbq_query()
-        self.query = 'explain select join_yr from default where join_yr IN [NULL]'
-        actual_result = self.run_cbq_query()
-        plan = self.ExplainPlanHelper(actual_result)
-        self.assertTrue(plan['~children'][0]['index'] == "ix5")
+        queries = dict()
+        index_1 = {'name': 'idx1', 'bucket': 'default', 'fields': [("join_yr", 0)], 'state': 'online',
+                   'using': self.index_type.lower(), 'is_primary': False}
+        query_1 = "explain select join_yr from default where join_yr IN [NULL]"
+        verifier = lambda x: self.assertEqual(x['q_res'][0]['results'][0]['plan']['~children'][0]['index'], 'idx1')
+        queries["a"] = {"indexes": [index_1], "queries": [query_1],
+                        "asserts": [verifier]}
+        self.query_runner(queries)
 
     def test_avoid_intersect_scan(self):
         created_indexes = []

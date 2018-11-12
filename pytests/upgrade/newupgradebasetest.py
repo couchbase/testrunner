@@ -138,7 +138,6 @@ class NewUpgradeBaseTest(BaseTestCase):
         self.fts_obj = None
         self.log.info("==============  NewUpgradeBaseTest setup has completed ==============")
 
-
     def tearDown(self):
         self.log.info("==============  NewUpgradeBaseTest tearDown has started ==============")
         test_failed = (hasattr(self, '_resultForDoCleanups') and \
