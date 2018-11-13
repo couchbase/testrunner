@@ -51,31 +51,36 @@ class QuerySanityTests(QueryTests):
             expected_list_sorted = sorted(expected_list, key=lambda doc: (doc['name']))
             self._verify_results(actual_result['results'], expected_list_sorted)
 
-    '''MB-22273'''
     def test_prepared_encoded_rest(self):
         result_count = 1412
         self.rest.load_sample("beer-sample")
+        self.wait_for_buckets_status({"beer-sample": "healthy"}, 5, 120)
+        self.wait_for_bucket_docs({"beer-sample": 7303}, 5, 120)
+        self._wait_for_index_online('beer-sample', 'beer_primary')
         try:
             query = 'create index myidx on `beer-sample`(name,country,code) where (type="brewery")'
             self.run_cbq_query(query)
-            time.sleep(10)
-            result = self.run_cbq_query('prepare s1 from SELECT name, IFMISSINGORNULL(country,999), '
-                                        'IFMISSINGORNULL(code,999) FROM `beer-sample` WHERE type = "brewery" AND name IS NOT MISSING')
+            self._wait_for_index_online('beer-sample', 'myidx')
+            query = 'prepare s1 from SELECT name, IFMISSINGORNULL(country,999), IFMISSINGORNULL(code,999) FROM `beer-sample` ' \
+                    'WHERE type = "brewery" AND name IS NOT MISSING'
+            result = self.run_cbq_query(query)
             encoded_plan = '"' + result['results'][0]['encoded_plan'] + '"'
             for server in self.servers:
                 remote = RemoteMachineShellConnection(server)
                 remote.stop_server()
+
             time.sleep(20)
             for server in self.servers:
                 remote = RemoteMachineShellConnection(server)
                 remote.start_server()
-            time.sleep(30)
+            self.wait_for_buckets_status({"beer-sample": "healthy"}, 5, 120)
+            self.wait_for_bucket_docs({"beer-sample": 7303}, 5, 120)
+            self._wait_for_index_online('beer-sample', 'beer_primary')
+            cmd = "%s http://%s:%s/query/service -u %s:%s -H 'Content-Type: application/json' " \
+                  "-d '{ \"prepared\": \"s1\", \"encoded_plan\": %s }'" % (self.curl_path, server.ip, self.n1ql_port, self.username, self.password, encoded_plan)
             for server in self.servers:
                 remote = RemoteMachineShellConnection(server)
-                result = remote.execute_command(
-                    "%s http://%s:%s/query/service -u %s:%s -H 'Content-Type: application/json' "
-                    "-d '{ \"prepared\": \"s1\", \"encoded_plan\": %s }'"
-                    % (self.curl_path,server.ip, self.n1ql_port, self.username, self.password, encoded_plan))
+                result = remote.execute_command(cmd)
                 new_list = [string.strip() for string in result[0]]
                 concat_string = ''.join(new_list)
                 json_output = json.loads(concat_string)
@@ -83,6 +88,7 @@ class QuerySanityTests(QueryTests):
                 self.assertEqual(json_output['metrics']['resultCount'], result_count)
         finally:
             self.rest.delete_bucket("beer-sample")
+            self.wait_for_bucket_delete("beer-sample", 5, 120)
 
     #These bugs are not planned to be fixed therefore this test isnt in any confs
     '''MB-19887 and MB-24303: These queries were returning incorrect results with views.'''
