@@ -449,3 +449,32 @@ class AutoFailoverBaseTest(BaseTestCase):
         "stop_memcached": stop_memcached,
         "network_split": split_network
     }
+
+    def _auto_failover_message_present_in_logs(self, ipaddress):
+        return any("Rebalance interrupted due to auto-failover of nodes ['ns_1@{0}'].".format(ipaddress) in
+                   d.values() for d in self.rest.get_logs(10))
+
+    def wait_for_failover_or_assert(self, expected_failover_count, timeout):
+        time_start = time.time()
+        time_max_end = time_start + timeout
+        actual_failover_count = 0
+        while time.time() < time_max_end:
+            actual_failover_count = self.get_failover_count()
+            if actual_failover_count == expected_failover_count:
+                break
+            time.sleep(20)
+        time_end = time.time()
+        self.assertTrue(actual_failover_count == expected_failover_count, "{0} nodes failed over, expected : {1}".
+                        format(actual_failover_count, expected_failover_count))
+        self.log.info(
+            "{0} nodes failed over as expected in {1} seconds".format(actual_failover_count, time_end - time_start))
+
+    def get_failover_count(self):
+        rest = RestConnection(self.master)
+        cluster_status = rest.cluster_status()
+        failover_count = 0
+        # check for inactiveFailed
+        for node in cluster_status['nodes']:
+            if node['clusterMembership'] == "inactiveFailed":
+                failover_count += 1
+        return failover_count
