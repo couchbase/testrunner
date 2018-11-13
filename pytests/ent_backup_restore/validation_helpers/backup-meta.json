@@ -14,5 +14,6 @@
   "disable_ft_indexes": false,
   "disable_data": false,
   "disable_eventing": false,
-  "filter_vbuckets": {"enabled": false, "list": []}
+  "filter_vbuckets": {"enabled": false, "list": []},
+  "create_missing_buckets": false
 }
