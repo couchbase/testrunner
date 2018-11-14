@@ -81,7 +81,7 @@ class AutoFailoverAbortsRebalance(AutoFailoverBaseTest, BaseTestCase):
                     "Rebalance failed even before auto-failover had a chance to stop it self.server_to_fail.ip: {0}".format(
                         str(ex)))
             elif not RestHelper(self.rest).is_cluster_rebalanced():
-                if _auto_failover_message_present_in_logs:
+                if self._auto_failover_message_present_in_logs(self.server_to_fail[0].ip):
                     self.log.info("Rebalance interrupted due to auto-failover of nodes - message was seen in logs")
                 else:
                     self.fail("Rebalance interrupted message was not seen in logs")
@@ -117,7 +117,7 @@ class AutoFailoverAbortsRebalance(AutoFailoverBaseTest, BaseTestCase):
                     "Rebalance failed even before auto-failover had a chance to stop it self.server_to_fail.ip: {0}".format(
                         str(ex)))
             elif not RestHelper(self.rest).is_cluster_rebalanced():
-                if _auto_failover_message_present_in_logs:
+                if self._auto_failover_message_present_in_logs(self.server_to_fail[0].ip):
                     self.log.info("Rebalance interrupted due to auto-failover of nodes - message was seen in logs")
                 else:
                     self.fail("Rebalance interrupted message was not seen in logs")
@@ -147,7 +147,7 @@ class AutoFailoverAbortsRebalance(AutoFailoverBaseTest, BaseTestCase):
                     "Rebalance failed even before auto-failover had a chance to stop it self.server_to_fail.ip: {0}".format(
                         str(ex)))
             elif not RestHelper(self.rest).is_cluster_rebalanced():
-                if _auto_failover_message_present_in_logs:
+                if self._auto_failover_message_present_in_logs(self.server_to_fail[0].ip):
                     self.log.info("Rebalance interrupted due to auto-failover of nodes - message was seen in logs")
                 else:
                     self.fail("Rebalance interrupted message was not seen in logs")
@@ -178,7 +178,7 @@ class AutoFailoverAbortsRebalance(AutoFailoverBaseTest, BaseTestCase):
             if "Rebalance failed. See logs for detailed reason. You can try again" in str(ex):
                 self.fail("Rebalance failed when it was not expected to fail".format(str(ex)))
             elif not RestHelper(self.rest).is_cluster_rebalanced():
-                if _auto_failover_message_present_in_logs:
+                if self._auto_failover_message_present_in_logs(self.server_to_fail[0].ip):
                     self.fail("Rebalance interrupted due to auto-failover of nodes - It was not expected")
                 else:
                     self.log.info("Rebalance was not interrupted as expected")
@@ -212,7 +212,7 @@ class AutoFailoverAbortsRebalance(AutoFailoverBaseTest, BaseTestCase):
                     "Rebalance failed even before auto-failover had a chance to stop it self.server_to_fail.ip: {0}".format(
                         str(ex)))
             elif not RestHelper(self.rest).is_cluster_rebalanced():
-                if _auto_failover_message_present_in_logs:
+                if self._auto_failover_message_present_in_logs(self.server_to_fail[0].ip):
                     self.log.info("Rebalance interrupted due to auto-failover of nodes - message was seen in logs")
                 else:
                     self.fail("Rebalance interrupted message was not seen in logs")
@@ -250,7 +250,7 @@ class AutoFailoverAbortsRebalance(AutoFailoverBaseTest, BaseTestCase):
                     "Rebalance failed even before auto-failover had a chance to stop it self.server_to_fail.ip: {0}".format(
                         str(ex)))
             elif not RestHelper(self.rest).is_cluster_rebalanced():
-                if _auto_failover_message_present_in_logs:
+                if self._auto_failover_message_present_in_logs(self.server_to_fail[0].ip):
                     self.log.info("Rebalance interrupted due to auto-failover of nodes - message was seen in logs")
                 else:
                     self.fail("Rebalance interrupted message was not seen in logs")
