@@ -36,29 +36,16 @@ class nwusage(XDCRNewBaseTest):
         timestamp = datetime.datetime.strptime(timestamp_str.group(), '%Y-%m-%dT%H:%M:%S')
         return timestamp
 
-    def _verify_bandwidth_usage(self, node, nw_limit=1, no_of_nodes=2, event_time=None,
-                                nw_usage="[1-9][0-9]*", end_time=None):
-        goxdcr_log = NodeHelper.get_goxdcr_log_dir(node) + '/goxdcr.log'
-        nw_max = (nw_limit * 1024 * 1024)/no_of_nodes
-        if event_time:
-            time_to_compare = self._extract_timestamp(event_time)
-        else:
-            matches, count = NodeHelper.check_goxdcr_log(node, "Success adding replication specification",
-                                                 goxdcr_log, print_matches=True, timeout=60)
-            #Time when replication was set up
-            if count > 0:
-                time_to_compare = self._extract_timestamp(matches[-1])
-            else:
-                self.fail("Replication not successful")
-        self.sleep(60,'Waiting for bandwidth usage logs..')
-        matches, count = NodeHelper.check_goxdcr_log(node, "\\\"bandwidth_usage\\\": " + nw_usage, goxdcr_log, print_matches=True, timeout=60)
-        if count == 0:
-            self.fail("Bandwidth usage information not found in logs!")
-        match_count = 0
+    '''Extract current, non zero bandwidth usage stats from logs'''
+
+    def _extract_bandwidth_usage(self, node, time_to_compare, nw_max, nw_usage, end_time):
+        valid_count = 0
         skip_count = 0
+        matches, count = NodeHelper.check_goxdcr_log(node, "\\\"bandwidth_usage\\\": " + nw_usage,
+                                                     print_matches=True, timeout=60)
         for item in matches:
             item_datetime = self._extract_timestamp(item)
-            #Ignore entries that happened before the replication was set up
+            # Ignore entries that happened before the replication was set up
             if item_datetime < time_to_compare:
                 skip_count += 1
                 continue
@@ -67,23 +54,46 @@ class nwusage(XDCRNewBaseTest):
                 if item_datetime > end_datetime:
                     skip_count += 1
                     continue
-            bandwidth_usage = ((item.split('{"bandwidth_usage": ')[1]).split(' ')[0]).rstrip(',')
-            if int(float(bandwidth_usage)) <= nw_max:
-                match_count += 1
-                continue
-            else:
-                self.fail("Bandwidth usage {0} is higher than Bandwidth limit {1} in {2}".format(bandwidth_usage,nw_max,item))
+            bandwidth_usage = int(float(((item.split('{"bandwidth_usage": ')[1]).split(' ')[0]).rstrip(',')))
+            if bandwidth_usage > nw_max:
+                self.fail(
+                    "Bandwidth usage {0} is higher than Bandwidth limit {1} in {2}".format(bandwidth_usage, nw_max,
+                                                                                           item))
+            if nw_usage == "0":
+                if bandwidth_usage == 0:
+                    valid_count += 1
+            elif bandwidth_usage > 0:
+                    valid_count += 1
+        self.log.info("Stale entries :{0}, Valid entries :{1}".format(skip_count, valid_count))
+        return valid_count
 
-        if match_count + skip_count == count:
-            self.log.info("{0} stale entries skipped".format(skip_count))
-            if match_count > 0:
-                self.log.info("{0} entries checked - Bandwidth usage always lower than Bandwidth limit as expected".
-                          format(match_count))
+    def _verify_bandwidth_usage(self, node, nw_limit=1, no_of_nodes=2, event_time=None, nw_usage="[1-9][0-9]*",
+                                end_time=None):
+        nw_max = (nw_limit * 1024 * 1024) / no_of_nodes
+        if event_time:
+            time_to_compare = self._extract_timestamp(event_time)
+        else:
+            matches, count = NodeHelper.check_goxdcr_log(node, "Success adding replication specification",
+                                                         print_matches=True, timeout=60)
+            # Time when replication was set up
+            if count > 0:
+                time_to_compare = self._extract_timestamp(matches[-1])
             else:
-                if self._input.param("replication_type") == "capi":
-                    self.log.info("Bandwidth Throttler not enabled on replication as expected")
-                else:
-                    self.fail("Bandwidth Throttler not enabled on replication")
+                self.fail("Replication not successful")
+        self.sleep(60, 'Waiting for bandwidth usage logs..')
+        # Try 3 times to extract current bandwidth usage from logs
+        iter = 0
+        while iter < 3:
+            self.sleep(30, 'Waiting for bandwidth usage logs..')
+            valid_count = self._extract_bandwidth_usage(node, time_to_compare, nw_max, nw_usage, end_time)
+            if valid_count == 0 and self._input.param("replication_type") == "capi":
+                self.log.info("Bandwidth Throttler not enabled on replication as expected")
+                break
+            if valid_count > 0:
+                break
+            iter += 1
+        else:
+            self.fail("Bandwidth Throttler not enabled!")
 
     def _get_current_time(self, server):
         shell = RemoteMachineShellConnection(server)
