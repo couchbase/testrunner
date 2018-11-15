@@ -48,7 +48,7 @@ from testconstants import CB_RELEASE_APT_GET_REPO
 from testconstants import CB_RELEASE_YUM_REPO
 
 from testconstants import LINUX_NONROOT_CB_BIN_PATH,\
-                          NR_INSTALL_LOCATION_FILE
+                          NR_INSTALL_LOCATION_FILE, LINUX_DIST_CONFIG
 
 from membase.api.rest_client import RestConnection, RestHelper
 
@@ -2020,9 +2020,16 @@ class RemoteMachineShellConnection:
                 startserver = True
 
             if enable_ipv6:
-                output, error = \
-                    self.execute_command("sed -i '/ipv6, /c \\{ipv6, true\}'. %s"
-                        % testconstants.LINUX_STATIC_CONFIG)
+                if build.product_version[:5] < "5.5.3":
+                    output, error = \
+                        self.execute_command("sed -i '/ipv6, /c \\{ipv6, true\}'. %s"
+                            % testconstants.LINUX_STATIC_CONFIG)
+                else:
+                    """ dist_cfg contains {dist_type,inet_tcp}. in IPv4.
+                        We need to change it to {dist_type,inet6_tcp}. in IPv6 server
+                    """
+                    output, error = self.execute_command("echo \{dist_type,inet6_tcp\}. > {0}"\
+                                                             .format(LINUX_DIST_CONFIG))
                 success &= self.log_command_output(output, error, track_words)
                 startserver = True
 
