@@ -89,7 +89,7 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
         import subprocess
         cmd_format = "python scripts/thanosied.py  --spec couchbase://{0} --bucket {1} --user {2} --password {3} " \
                      "--count {4} --batch_size {5} --threads {6} --start_document {7} --cb_version {8} --workers {9} --rate_limit {10} " \
-                     "--passes 1  --update_counter {11}"
+                     "--passes 1  --update_counter {7}"
         cb_version = RestConnection(server).get_nodes_version()[:3]
         if self.num_replicas > 0 and self.use_replica_to:
             cmd_format = "{} --replicate_to 1".format(cmd_format)
@@ -207,7 +207,7 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
                      "--rate_limit {9} --passes 1"
         cb_version = RestConnection(server).get_nodes_version()[:3]
         if updated:
-            cmd_format = "{} --updated --ops {}".format(cmd_format, ops)
+            cmd_format = "{} --update_counter 0 --ops {}".format(cmd_format, ops)
         if deleted:
             cmd_format = "{} --deleted --deleted_items {}".format(cmd_format, deleted_items)
         if ttl > 0:
