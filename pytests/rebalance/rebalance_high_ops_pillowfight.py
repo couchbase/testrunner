@@ -207,7 +207,7 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
                      "--rate_limit {9} --passes 1"
         cb_version = RestConnection(server).get_nodes_version()[:3]
         if updated:
-            cmd_format = "{} --update_counter 0 --ops {}".format(cmd_format, ops)
+            cmd_format = "{} --update_counter 0".format(cmd_format)
         if deleted:
             cmd_format = "{} --deleted --deleted_items {}".format(cmd_format, deleted_items)
         if ttl > 0:
@@ -372,7 +372,7 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
         update_thread = Thread(target=self.update_buckets_with_high_ops,
                                name="update_high_ops_load",
                                args=(self.master, self.buckets[0], self.num_items,
-                                     self.num_items * 2, self.batch_size,
+                                     self.num_items, self.batch_size,
                                      self.threads, 0, self.instances))
 
         update_thread.start()
@@ -595,7 +595,7 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
                                name="update_high_ops_load",
                                args=(
                                    self.master, self.buckets[0], self.num_items,
-                                   self.num_items * 2, self.batch_size,
+                                   self.num_items, self.batch_size,
                                    self.threads, 0, self.instances))
 
         update_thread.start()
@@ -824,7 +824,7 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
                                name="update_high_ops_load",
                                args=(
                                    self.master, self.buckets[0], self.num_items,
-                                   self.num_items * 2, self.batch_size,
+                                   self.num_items, self.batch_size,
                                    self.threads, 0, self.instances))
 
         update_thread.start()
