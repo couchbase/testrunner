@@ -2049,7 +2049,8 @@ class RemoteMachineShellConnection:
                 startserver = True
 
             if enable_ipv6:
-                if build.product_version[:5] == "6.0.0":
+                cb_version = build.product_version[:5]
+                if cb_version == "6.0.0" or cb_version < "5.5.3":
                     output, error = \
                         self.execute_command("sed -i '/ipv6, /c \\{ipv6, true\}'. %s"
                             % testconstants.LINUX_STATIC_CONFIG)
@@ -2057,8 +2058,8 @@ class RemoteMachineShellConnection:
                     """ dist_cfg contains {dist_type,inet_tcp}. in IPv4.
                         We need to change it to {dist_type,inet6_tcp}. in IPv6 server
                     """
-                    output, error = self.execute_command("echo \{dist_type,inet6_tcp\}. > {0}"\
-                                                                   .format(LINUX_DIST_CONFIG))
+                    output, error = self.execute_command("echo '{{dist_type,inet6_tcp}}.' > {0}"\
+                                                                      .format(LINUX_DIST_CONFIG))
                 success &= self.log_command_output(output, error, track_words)
                 startserver = True
 
