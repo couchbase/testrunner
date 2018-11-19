@@ -131,12 +131,13 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
                 'Eventing took lot of time to come out of bootstrap state or did not successfully bootstrap')
 
     def wait_for_undeployment(self, name, iterations=20):
+        self.sleep(30, message="Waiting for undeployment of function...")
         result = self.rest.get_running_eventing_apps()
         count = 0
         while name in result and count < iterations:
             self.sleep(30, message="Waiting for undeployment of function...")
             count += 1
-            result = self.rest.get_deployed_eventing_apps()
+            result = self.rest.get_running_eventing_apps()
         if count == iterations:
             raise Exception('Eventing took lot of time to undeploy')
 
