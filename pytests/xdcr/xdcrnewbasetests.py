@@ -2613,14 +2613,16 @@ class XDCRNewBaseTest(unittest.TestCase):
                 NodeHelper.collect_logs(server, self.__is_cluster_run())
 
         for i in range(1, len(self.__cb_clusters) + 1):
-            # Remove rbac users in teardown
-            role_del = ['cbadminbucket']
-            RbacBase().remove_user_role(role_del, RestConnection(self.get_cb_cluster_by_name('C' + str(i)).get_master_node()))
-            if self._replicator_role:
-                role_del = ['replicator_user']
-                RbacBase().remove_user_role(role_del,
-                                            RestConnection(self.get_cb_cluster_by_name('C' + str(i)).get_master_node()))
-
+            try:
+                # Remove rbac users in teardown
+                role_del = ['cbadminbucket']
+                RbacBase().remove_user_role(role_del, RestConnection(self.get_cb_cluster_by_name('C' + str(i)).get_master_node()))
+                if self._replicator_role:
+                    role_del = ['replicator_user']
+                    RbacBase().remove_user_role(role_del,
+                                                RestConnection(self.get_cb_cluster_by_name('C' + str(i)).get_master_node()))
+            except Exception as e:
+                self.log.warn(e)
         try:
             if self.__is_cleanup_needed() or self._input.param("skip_cleanup", False):
                 self.log.warn("CLEANUP WAS SKIPPED")
