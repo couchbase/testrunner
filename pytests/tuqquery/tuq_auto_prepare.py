@@ -2,7 +2,6 @@ from membase.api.rest_client import RestConnection, RestHelper
 from tuq import QueryTests
 from remote.remote_util import RemoteMachineShellConnection
 from membase.api.exception import CBQError
-import logger
 
 
 class QueryAutoPrepareTests(QueryTests):
@@ -12,7 +11,6 @@ class QueryAutoPrepareTests(QueryTests):
         self.run_cbq_query('delete from system:prepareds')
         self.log.info("==============  QueryAutoPrepareTests setup has completed ==============")
         self.log_config_info()
-
 
     def suite_setUp(self):
         super(QueryAutoPrepareTests, self).suite_setUp()
@@ -163,26 +161,39 @@ class QueryAutoPrepareTests(QueryTests):
     def test_delete_recreate_bucket(self):
         try:
             self.run_cbq_query(query="CREATE INDEX idx on default(join_day)")
+            self._wait_for_index_online("default", "idx")
+            expected_results = self.run_cbq_query(query="select * from default WHERE join_day = 10 limit 5", server=self.servers[0])
+
             self.run_cbq_query(query="PREPARE P1 FROM select * from default WHERE join_day = 10 limit 5",
                                server=self.servers[0])
-            self.sleep(2)
+            self.sleep(5)
             prepared_results = self.run_cbq_query(query="select * from system:prepareds")
-            self.assertEqual(prepared_results['metrics']['resultCount'], 3)
+            self.assertEqual(prepared_results['metrics']['resultCount'], self.nodes_init)
+
             query_results = self.run_cbq_query(query="execute P1", server=self.servers[0])
+            self._verify_results(query_results['results'], expected_results['results'])
             self.assertEqual(query_results['metrics']['resultCount'], 5)
+
             query_results2 = self.run_cbq_query(query="execute P1", server=self.servers[1])
+            self._verify_results(query_results2['results'], expected_results['results'])
             self.assertEqual(query_results2['metrics']['resultCount'], 5)
 
-            self.rest.delete_bucket("default")
-            self.sleep(5)
-
+            self.ensure_bucket_does_not_exist("default", using_rest=True)
             self.rest.create_bucket(bucket="default", ramQuotaMB=100)
+            self.wait_for_buckets_status({"default": "healthy"}, 5, 120)
+            # this sleep is need because index deletion after bucket deletion is async
             self.sleep(5)
+            self.wait_for_index_drop("default", "idx", [("join_day", 0)], self.index_type.lower())
             self.run_cbq_query(query="CREATE INDEX idx on default(join_day)")
+            self._wait_for_index_online("default", "idx")
+            expected_results = self.run_cbq_query(query="select * from default WHERE join_day = 10 limit 5", server=self.servers[0])
 
             query_results = self.run_cbq_query(query="execute P1", server=self.servers[0])
+            self._verify_results(query_results['results'], expected_results['results'])
             self.assertEqual(query_results['metrics']['resultCount'], 0)
+
             query_results2 = self.run_cbq_query(query="execute P1", server=self.servers[1])
+            self._verify_results(query_results2['results'], expected_results['results'])
             self.assertEqual(query_results2['metrics']['resultCount'], 0)
         finally:
             self.run_cbq_query(query="DROP INDEX default.idx")
@@ -209,11 +220,18 @@ class QueryAutoPrepareTests(QueryTests):
                 self.log.info("node: %s:%s does not have the statement" % (self.servers[i].ip, self.servers[i].port))
 
     def test_server_drop(self):
+        self.with_retry(lambda: self.ensure_primary_indexes_exist(), eval=None, delay=3, tries=5)
+        # try to move index to self.servers[0]
+        try:
+            query = """ALTER INDEX `default`.`#primary` WITH {"action":"move","nodes": ["%s:8091"]}""" % str(self.servers[0].ip)
+            self.run_cbq_query(query=query, server=self.servers[0])
+            self.sleep(30)
+        except Exception as ex:
+            self.assertTrue("GSI AlterIndex() - cause: No Index Movement Required for Specified Destination List" in str(ex))
+
         remote = RemoteMachineShellConnection(self.servers[1])
         remote.stop_server()
         self.sleep(30)
-        self.with_retry(lambda: self.ensure_primary_indexes_exist(), eval=None, delay=1, tries=30)
-
         try:
             self.run_cbq_query(query="PREPARE p1 from select * from default limit 5", server=self.servers[0])
             self.sleep(5)
@@ -231,18 +249,19 @@ class QueryAutoPrepareTests(QueryTests):
                 self.log.info("node: %s:%s does not have the statement" % (self.servers[i].ip, self.servers[i].port))
 
     def test_rebalance_in_query_node(self):
+        self.with_retry(lambda: self.ensure_primary_indexes_exist(), eval=None, delay=3, tries=5)
         self.run_cbq_query(query="PREPARE p1 from select * from default limit 5", server=self.servers[0])
         self.sleep(5)
         for i in range(self.nodes_init):
             self.run_cbq_query(query="execute p1", server=self.servers[i])
         services_in = ["n1ql", "index", "data"]
-        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init + 1]],[],
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]],[],
                                                  services=services_in)
         reached = RestHelper(self.rest).rebalance_reached()
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
         self.sleep(30)
-        for i in range(self.nodes_init + 2):
+        for i in range(self.nodes_init + 1):
             self.run_cbq_query(query="execute '[%s:%s]p1'" % (self.servers[0].ip, self.servers[0].port), server=self.servers[i])
 
     def test_query_swap_rebalance(self):

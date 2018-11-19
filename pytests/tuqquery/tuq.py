@@ -783,7 +783,7 @@ class QueryTests(BaseTestCase):
                     return res
                 else:
                     self.sleep(delay, 'incorrect results, sleeping for %s' % delay)
-            except ex:
+            except Exception as ex:
                 self.sleep(delay, 'exception returned: %s \n sleeping for %s' % (ex, delay))
         raise Exception('timeout, invalid results: %s' % res)
 
@@ -828,7 +828,7 @@ class QueryTests(BaseTestCase):
         if bucket:
             if using_rest:
                 rest = RestConnection(self.master)
-                rest.delete_bucket("beer-sample")
+                rest.delete_bucket(bucket_name)
             else:
                 self.delete_bucket(bucket)
         self.wait_for_bucket_delete(bucket_name, 5, 10)
@@ -2920,7 +2920,7 @@ class QueryTests(BaseTestCase):
         msg = "Results are incorrect. Actual num %s. Expected num: %s.\n" % (len(actual_result), len(expected_result))
         self.assertEquals(len(actual_result), len(expected_result), msg)
         msg = "Results are incorrect.\n Actual first and last 100:  %s.\n ... \n %s Expected first and last 100: %s." \
-              "\n  ... \n %s" % (actual_result[:100],actual_result[-100:],expected_result[:100],expected_result[-100:])
+              "\n  ... \n %s" % (actual_result[:100], actual_result[-100:], expected_result[:100], expected_result[-100:])
         self.assertTrue(sorted(actual_result) == sorted(expected_result), msg)
 
 ##############################################################################################
