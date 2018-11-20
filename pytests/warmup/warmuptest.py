@@ -20,8 +20,8 @@ class WarmUpTests(BaseTestCase):
             self.doc_ops = self.doc_ops.split(";")
         generate_load = BlobGenerator('nosqlini', 'nosqlini-', self.value_size, end=self.num_items)
         self._load_all_buckets(self.servers[0], generate_load, "create", 0, batch_size=2000)
-        #reinitialize active_resident_threshold
-        self.active_resident_threshold = 0
+        # reinitialize active_resident_threshold to avoid further data loading as dgm
+        self.active_resident_threshold = 100
 
     def tearDown(self):
         super(WarmUpTests, self).tearDown()
