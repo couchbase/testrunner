@@ -36,8 +36,8 @@ class RQGTestsNew(BaseRQGTests):
                 for n1ql_query in query_template_list:
                     sql_n1ql_index_map = conversion_func(n1ql_query, conversion_map)
                     sql_n1ql_index_map = self.client._translate_function_names(sql_n1ql_index_map)
-                    query_input_list.append(sql_n1ql_index_map)
                     sql_n1ql_index_map["n1ql"] = sql_n1ql_index_map['n1ql'].replace("simple_table", self.database+"_"+"simple_table")
+                    query_input_list.append(sql_n1ql_index_map)
 
                 # build indexes
                 if self.use_secondary_index:
