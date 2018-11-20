@@ -136,7 +136,7 @@ class BaseTestCase(unittest.TestCase):
             self.num_items = self.input.param("items", 1000)
             self.value_size = self.input.param("value_size", 512)
             self.dgm_run = self.input.param("dgm_run", False)
-            self.active_resident_threshold = int(self.input.param("active_resident_threshold", 0))
+            self.active_resident_threshold = float(self.input.param("active_resident_threshold", 100))
             # max items number to verify in ValidateDataTask, None - verify all
             self.max_verify = self.input.param("max_verify", None)
             # we don't change consistent_view on server by default
@@ -914,20 +914,20 @@ class BaseTestCase(unittest.TestCase):
         """
            Load bucket to DGM if params active_resident_threshold is passed
         """
-        if self.active_resident_threshold:
+        if self.active_resident_threshold < 100.0:
             stats_all_buckets = {}
             for bucket in self.buckets:
                 stats_all_buckets[bucket.name] = StatsCommon()
 
+            rest = RestConnection(self.master)
             for bucket in self.buckets:
                 threshold_reached = False
                 while not threshold_reached:
                     active_resident = \
-                        stats_all_buckets[bucket.name].get_stats([self.master], bucket, '',
-                                                     'vb_active_perc_mem_resident')[server]
-                    if int(active_resident) > self.active_resident_threshold:
+                        rest.get_bucket_stats(bucket)['vb_active_resident_items_ratio']
+                    if active_resident >= self.active_resident_threshold:
                         self.log.info(
-                            "resident ratio is %s greater than %s for %s in bucket %s.\n"\
+                            "resident ratio is %s > %s for %s in bucket %s.\n"\
                             " Continue loading to the cluster" %
                                                (active_resident,
                                                 self.active_resident_threshold,
