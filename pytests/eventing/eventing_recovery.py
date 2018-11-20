@@ -1,6 +1,9 @@
 import copy
 import json
+import sys
+import traceback
 
+from couchbase_helper.stats_tools import StatsCommon
 from lib.couchbase_helper.tuq_helper import N1QLHelper
 from lib.membase.api.rest_client import RestConnection
 from lib.remote.remote_util import RemoteMachineShellConnection
@@ -9,6 +12,7 @@ from lib.memcached.helper.data_helper import MemcachedClientHelper
 from pytests.eventing.eventing_constants import HANDLER_CODE
 from pytests.eventing.eventing_base import EventingBaseTest
 import logging
+import time
 
 log = logging.getLogger()
 
@@ -127,6 +131,7 @@ class EventingRecovery(EventingBaseTest):
         # kill memcached on kv and eventing when eventing is processing mutations
         for node in [kv_node, eventing_node]:
             self.kill_memcached_service(node)
+        self.warmup_check()
         # Wait for eventing to catch up with all the update mutations and verify results
         # See MB-27115
         # self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
@@ -290,6 +295,7 @@ class EventingRecovery(EventingBaseTest):
             self.kill_memcached_service(node)
         # Wait for eventing to catch up with all the update mutations and verify results
         self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+        self.warmup_check()
         # delete all documents
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size, op_type='delete')
@@ -416,3 +422,16 @@ class EventingRecovery(EventingBaseTest):
             self.undeploy_and_delete_function(body)
         finally:
             self.change_time_zone(ev_node, timezone="America/Los_Angeles")
+
+    def warmup_check(self, timeout=1800):
+        warmup=False
+        i =0
+        self.sleep(10)
+        while warmup == False and i < 20 :
+            task=self.rest.get_warming_up_tasks()
+            self.sleep(10)
+            if len(task) ==0:
+                warmup= True
+            i+=1
+        if i >= 20 and len(task) !=0:
+            raise Exception("Bucket won't warm up in expected time")
