@@ -110,9 +110,9 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
             total_loaded = 0
             for load in loaded:
                 total_loaded += int(load.split(':')[1].strip())
-            self.assertEqual(total_loaded, ops,
-                             "Failed to update {} items. Loaded only {} items".format(
-                                 ops,
+            self.assertEqual(total_loaded, items,
+                             "Failed to update {} items. Updated only {} items".format(
+                                 items,
                                  total_loaded))
 
     def delete_buckets_with_high_ops(self, server, bucket, items, ops,
@@ -122,7 +122,7 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
         import subprocess
         cmd_format = "python scripts/thanosied.py  --spec couchbase://{0} --bucket {1} --user {2} --password {3} " \
                      "--count {4} --batch_size {5} --threads {6} --start_document {7} --cb_version {8} --workers {9} --rate_limit {10} " \
-                     "--passes 1  --delete --num_delete {4}"
+                     "--passes 0  --delete --num_delete {4}"
         cb_version = RestConnection(server).get_nodes_version()[:3]
         if self.num_replicas > 0 and self.use_replica_to:
             cmd_format = "{} --replicate_to 1".format(cmd_format)
@@ -139,14 +139,14 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
             self.log.error(error)
             self.fail("Failed to run the loadgen.")
         if output:
+            self.log.info("output : {}".format(output))
             loaded = output.split('\n')[:-1]
             total_loaded = 0
             for load in loaded:
                 total_loaded += int(load.split(':')[1].strip())
-            self.assertEqual(total_loaded, ops,
-                             "Failed to update {} items. Loaded only {} items".format(
-                                 ops,
-                                 total_loaded))
+            # Tool seems to be returning wrong number for deleted
+            # Since its verified using check_dataloss_for_high_ops_loader inside the script its ok to skip here
+            self.log.info("Total deleted from the datagen tool : {}".format(total_loaded))
 
     def load(self, server, items, batch=1000, docsize=100, rate_limit=100000,
              start_at=0):
@@ -198,13 +198,14 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
     def check_dataloss_for_high_ops_loader(self, server, bucket, items,
                                            batch=20000, threads=5,
                                            start_document=0,
-                                           updated=False, ops=0, ttl=0, deleted=False, deleted_items=0):
+                                           updated=False, ops=0, ttl=0, deleted=False, deleted_items=0,
+                                           validate_expired=None, passes=0):
         import subprocess
         from lib.memcached.helper.data_helper import VBucketAwareMemcached
 
         cmd_format = "python scripts/thanosied.py  --spec couchbase://{0} --bucket {1} --user {2} --password {3} " \
                      "--count {4} --batch_size {5} --threads {6} --start_document {7} --cb_version {8} --validation 1 " \
-                     "--rate_limit {9} --passes 1"
+                     "--rate_limit {9} --passes {10}"
         cb_version = RestConnection(server).get_nodes_version()[:3]
         if updated:
             cmd_format = "{} --update_counter 0".format(cmd_format)
@@ -212,9 +213,11 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
             cmd_format = "{} --deleted --deleted_items {}".format(cmd_format, deleted_items)
         if ttl > 0:
             cmd_format = "{} --ttl {}".format(cmd_format, ttl)
+        if validate_expired:
+            cmd_format = "{} --validate_expired".format(cmd_format)
         cmd = cmd_format.format(server.ip, bucket.name, server.rest_username,
                                 server.rest_password,
-                                int(items), batch, threads, start_document, cb_version, self.rate_limit)
+                                int(items), batch, threads, start_document, cb_version, self.rate_limit, passes)
         self.log.info("Running {}".format(cmd))
         result = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE,
                                   stderr=subprocess.PIPE)
@@ -294,7 +297,7 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
 
     def check_data(self, server, bucket, num_items=0, start_document=0,
                    updated=False, ops=0, batch_size=0, ttl=0, deleted=False,
-                   deleted_items=0):
+                   deleted_items=0, validate_expired=None, passes=1):
         if batch_size == 0:
             batch_size = self.batch_size
         if self.loader == "pillowfight":
@@ -306,7 +309,7 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
                                                            self.threads,
                                                            start_document,
                                                            updated, ops, ttl,
-                                                           deleted, deleted_items)
+                                                           deleted, deleted_items, validate_expired, passes)
 
     def test_rebalance_in(self):
         rest = RestConnection(self.master)
@@ -337,7 +340,7 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
         num_items_to_validate = self.num_items * 3
         errors = self.check_data(self.master, bucket, num_items=num_items_to_validate)
         if errors:
-            self.log.info("Missing keys:")
+            self.log.info("Missing keys count : {0}".format(len(errors)))
         # for error in errors:
         #     print error
         if num_items_to_validate != rest.get_active_key_count(bucket):
@@ -388,7 +391,7 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
         num_items_to_validate = self.num_items
         errors = self.check_data(self.master, bucket, num_items_to_validate, 0, True, self.num_items * 2)
         if errors:
-            self.log.info("Missing keys:")
+            self.log.info("Missing keys count : {0}".format(len(errors)))
         # for error in errors:
         #     print error
         if num_items_to_validate != rest.get_active_key_count(bucket):
@@ -422,6 +425,7 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
         self.log.info('starting the load thread...')
         load_thread.start()
         load_thread.join()
+        self.sleep(60)
 
         delete_thread = Thread(target=self.delete_buckets_with_high_ops,
                                name="delete_high_ops_load",
@@ -442,9 +446,9 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
             view_query_thread.join()
         num_items_to_validate = self.num_items
         errors = self.check_data(self.master, bucket, num_items_to_validate, 0,
-                                 deleted=True, deleted_items=num_items_to_validate)
+                                 deleted=True, deleted_items=num_items_to_validate, passes=0)
         if errors:
-            self.log.info("Missing keys:")
+            self.log.info("Missing keys count : {0}".format(len(errors)))
         # for error in errors:
         #     print error
         if rest.get_active_key_count(bucket) != 0:
@@ -469,6 +473,7 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
     def test_rebalance_in_with_expiry(self):
         rest = RestConnection(self.master)
         bucket = rest.get_buckets()[0]
+        ClusterOperationHelper.flushctl_set(self.master, "exp_pager_stime", 10, bucket=bucket)
         load_thread = self.load_docs(ttl=10)
         if self.run_with_views:
             self.log.info('creating ddocs and views')
@@ -478,37 +483,28 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
             view_query_thread.start()
         self.log.info('starting the load thread...')
         load_thread.start()
-        load_thread.join()
 
-        # Allow docs to expire
-        self.sleep(15)
-
-        validate_thread = Thread(target=self.check_data,
-                                 name="update_high_ops_load",
-                                 args=(self.master, bucket, self.num_items, 0, False, 0, 100))
-
-        validate_thread.start()
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
                                                  self.servers[
                                                  self.nodes_init:self.nodes_init + self.nodes_in],
                                                  [])
         # rebalance.result()
         rest.monitorRebalance(stop_if_loop=False)
-        validate_thread.join()
+        load_thread.join()
 
         if self.run_with_views:
             view_query_thread.join()
-
-        num_items_to_validate = self.num_items
-        errors = self.check_data(self.master, bucket, num_items_to_validate, ttl=10)
+        ClusterOperationHelper.flushctl_set(self.master, "exp_pager_stime", 10, bucket=bucket)
+        errors = self.check_data(self.master, bucket, self.num_items, 0, False, 0, self.batch_size, ttl=10,
+                                 validate_expired=True, passes=0)
         if errors:
-            self.log.info("Missing keys:")
+            self.log.info("Missing keys count : {0}".format(len(errors)))
         # for error in errors:
         #     print error
         if rest.get_active_key_count(bucket) != 0:
             self.fail(
-                "FATAL: Data loss detected!! Docs expired : {0}, docs present: {1}".
-                    format(num_items_to_validate,
+                "FATAL: Data loss detected!! Docs expected to be expired : {0}, docs present: {1}".
+                    format(self.num_items,
                            rest.get_active_key_count(bucket)))
         else:
             if errors:
@@ -556,7 +552,7 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
         num_items_to_validate = self.num_items * 3
         errors = self.check_data(self.master, bucket, num_items_to_validate)
         if errors:
-            self.log.info("Missing keys:")
+            self.log.info("Missing keys count : {0}".format(len(errors)))
         # for error in errors:
         #     print error
         if num_items_to_validate != rest.get_active_key_count(bucket):
@@ -610,7 +606,7 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
         errors = self.check_data(self.master, bucket, num_items_to_validate, 0,
                                  True, self.num_items * 2)
         if errors:
-            self.log.info("Missing keys:")
+            self.log.info("Missing keys count : {0}".format(len(errors)))
         # for error in errors:
         #     print error
         if num_items_to_validate != rest.get_active_key_count(bucket):
@@ -648,6 +644,7 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
         self.log.info('starting the load thread...')
         load_thread.start()
         load_thread.join()
+        self.sleep(60)
 
         delete_thread = Thread(target=self.delete_buckets_with_high_ops,
                                name="delete_high_ops_load",
@@ -667,10 +664,10 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
         num_items_to_validate = self.num_items
         errors = self.check_data(self.master, bucket, num_items_to_validate, 0,
                                  deleted=True,
-                                 deleted_items=num_items_to_validate)
+                                 deleted_items=num_items_to_validate, passes=0)
 
         if errors:
-            self.log.info("Missing keys:")
+            self.log.info("Missing keys count : {0}".format(len(errors)))
         # for error in errors:
         #     print error
         if rest.get_active_key_count(bucket) != 0:
@@ -697,6 +694,7 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
                      range(self.nodes_out)]
         rest = RestConnection(self.master)
         bucket = rest.get_buckets()[0]
+        ClusterOperationHelper.flushctl_set(self.master, "exp_pager_stime", 10, bucket=bucket)
         load_thread = self.load_docs(ttl=10)
         if self.run_with_views:
             self.log.info('creating ddocs and views')
@@ -706,38 +704,27 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
             view_query_thread.start()
         self.log.info('starting the load thread...')
         load_thread.start()
-        load_thread.join()
 
-        # Allow docs to expire
-        self.sleep(15)
-
-        validate_thread = Thread(target=self.check_data,
-                                 name="update_high_ops_load",
-                                 args=(
-                                     self.master, bucket, self.num_items, 0, False,
-                                     0, 100))
-
-        validate_thread.start()
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
                                                  [], servs_out)
         # rebalance.result()
         rest.monitorRebalance(stop_if_loop=False)
-        validate_thread.join()
+        load_thread.join()
 
         if self.run_with_views:
             view_query_thread.join()
-
-        num_items_to_validate = self.num_items
-        errors = self.check_data(self.master, bucket, num_items_to_validate,
-                                 ttl=10)
+        ClusterOperationHelper.flushctl_set(self.master, "exp_pager_stime", 10, bucket=bucket)
+        errors = self.check_data(self.master, bucket, self.num_items, 0, False, 0, self.batch_size, ttl=10,
+                                 validate_expired=True, passes=0)
         if errors:
-            self.log.info("Missing keys:")
+            self.log.info("Missing keys count : {0}".format(len(errors)))
         # for error in errors:
         #     print error
+
         if rest.get_active_key_count(bucket) != 0:
             self.fail(
-                "FATAL: Data loss detected!! Docs expired : {0}, docs present: {1}".
-                    format(num_items_to_validate,
+                "FATAL: Data loss detected!! Docs expected to be expired : {0}, docs present: {1}".
+                    format(self.num_items,
                            rest.get_active_key_count(bucket)))
         else:
             if errors:
@@ -787,7 +774,7 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
         num_items_to_validate = self.num_items * 3
         errors = self.check_data(self.master, bucket, num_items_to_validate)
         if errors:
-            self.log.info("Missing keys:")
+            self.log.info("Missing keys count : {0}".format(len(errors)))
         # for error in errors:
         #     print error
         if num_items_to_validate != rest.get_active_key_count(bucket):
@@ -843,7 +830,7 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
         errors = self.check_data(self.master, bucket, num_items_to_validate, 0,
                                  True, self.num_items * 2)
         if errors:
-            self.log.info("Missing keys:")
+            self.log.info("Missing keys count : {0}".format(len(errors)))
         # for error in errors:
         #     print error
         if num_items_to_validate != rest.get_active_key_count(bucket):
@@ -880,6 +867,7 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
         self.log.info('starting the load thread...')
         load_thread.start()
         load_thread.join()
+        self.sleep(60)
 
         delete_thread = Thread(target=self.delete_buckets_with_high_ops,
                                name="delete_high_ops_load",
@@ -903,10 +891,10 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
         num_items_to_validate = self.num_items
         errors = self.check_data(self.master, bucket, num_items_to_validate, 0,
                                  deleted=True,
-                                 deleted_items=num_items_to_validate)
+                                 deleted_items=num_items_to_validate, passes=0)
 
         if errors:
-            self.log.info("Missing keys:")
+            self.log.info("Missing keys count : {0}".format(len(errors)))
         # for error in errors:
         #     print error
         if rest.get_active_key_count(bucket) != 0:
@@ -933,6 +921,7 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
                      range(self.nodes_out)]
         rest = RestConnection(self.master)
         bucket = rest.get_buckets()[0]
+        ClusterOperationHelper.flushctl_set(self.master, "exp_pager_stime", 10, bucket=bucket)
         load_thread = self.load_docs(ttl=10)
         if self.run_with_views:
             self.log.info('creating ddocs and views')
@@ -942,41 +931,28 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
             view_query_thread.start()
         self.log.info('starting the load thread...')
         load_thread.start()
-        load_thread.join()
 
-        # Allow docs to expire
-        self.sleep(15)
-
-        validate_thread = Thread(target=self.check_data,
-                                 name="update_high_ops_load",
-                                 args=(
-                                     self.master, bucket, self.num_items, 0,
-                                     False,
-                                     0, 100))
-
-        validate_thread.start()
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
                                                  self.servers[
                                                  self.nodes_init:self.nodes_init + self.nodes_in],
                                                  servs_out)
         # rebalance.result()
         rest.monitorRebalance(stop_if_loop=False)
-        validate_thread.join()
+        load_thread.join()
 
         if self.run_with_views:
             view_query_thread.join()
-
-        num_items_to_validate = self.num_items
-        errors = self.check_data(self.master, bucket, num_items_to_validate,
-                                 ttl=10)
+        ClusterOperationHelper.flushctl_set(self.master, "exp_pager_stime", 10, bucket=bucket)
+        errors = self.check_data(self.master, bucket, self.num_items, 0, False, 0, self.batch_size, ttl=10,
+                                 validate_expired=True, passes=0)
         if errors:
-            self.log.info("Missing keys:")
+            self.log.info("Missing keys count : {0}".format(len(errors)))
         # for error in errors:
         #     print error
         if rest.get_active_key_count(bucket) != 0:
             self.fail(
-                "FATAL: Data loss detected!! Docs expired : {0}, docs present: {1}".
-                    format(num_items_to_validate,
+                "FATAL: Data loss detected!! Docs expected to be expired : {0}, docs present: {1}".
+                    format(self.num_items,
                            rest.get_active_key_count(bucket)))
         else:
             if errors:
@@ -1026,7 +1002,7 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
         num_items_to_validate = self.num_items * 3
         errors = self.check_data(self.master, bucket, num_items_to_validate)
         if errors:
-            self.log.info("Missing keys:")
+            self.log.info("Missing keys count : {0}".format(len(errors)))
         # for error in errors:
         #     print error
         if num_items_to_validate != rest.get_active_key_count(bucket):
@@ -1070,7 +1046,7 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
         num_items_to_validate = self.num_items * 3
         errors = self.check_data(self.master, bucket, num_items_to_validate)
         if errors:
-            self.log.info("Missing keys:")
+            self.log.info("Missing keys count : {0}".format(len(errors)))
         # for error in errors:
         #     print error
         if num_items_to_validate != rest.get_active_key_count(bucket):
@@ -1101,7 +1077,7 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
         num_items_to_validate = self.num_items * 5
         errors = self.check_data(self.master, bucket, num_items_to_validate)
         if errors:
-            self.log.info("Missing keys:")
+            self.log.info("Missing keys count : {0}".format(len(errors)))
         # for error in errors:
         #     print error
         if num_items_to_validate != rest.get_active_key_count(bucket):
@@ -1133,7 +1109,7 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
         num_items_to_validate = self.num_items * 7
         errors = self.check_data(self.master, bucket, num_items_to_validate)
         if errors:
-            self.log.info("Missing keys:")
+            self.log.info("Missing keys count : {0}".format(len(errors)))
         # for error in errors:
         #     print error
         if num_items_to_validate != rest.get_active_key_count(bucket):
@@ -1181,7 +1157,7 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
         num_items_to_validate = self.num_items * 3
         errors = self.check_data(self.master, bucket, num_items_to_validate)
         if errors:
-            self.log.info("Missing keys:")
+            self.log.info("Missing keys count : {0}".format(len(errors)))
         # for error in errors:
         #     print error
         if num_items_to_validate != rest.get_active_key_count(bucket):
@@ -1231,7 +1207,7 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
         num_items_to_validate = self.num_items * 3
         errors = self.check_data(self.master, bucket, num_items_to_validate)
         if errors:
-            self.log.info("Missing keys:")
+            self.log.info("Missing keys count : {0}".format(len(errors)))
         # for error in errors:
         #     print error
         if num_items_to_validate != rest.get_active_key_count(bucket):
