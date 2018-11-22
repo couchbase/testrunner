@@ -350,18 +350,26 @@ class BaseTestCase(unittest.TestCase):
             if str(self.__class__).find('upgrade_tests') == -1 and \
                             str(self.__class__).find('newupgradetests') == -1:
                 self._bucket_creation()
-            self.log.info("==============  basetestcase setup was finished for test #{0} {1} ==============" \
+            self.log.info("==============  basetestcase setup was finished for test #{0} {1} =============="
                           .format(self.case_number, self._testMethodName))
 
             if not self.skip_init_check_cbserver:
                 status, content, header = self._log_start(self)
                 if not status:
                     self.sleep(10)
+
+            self.print_cluster_stats()
         except Exception, e:
             traceback.print_exc()
             self.cluster.shutdown(force=True)
             self.fail(e)
 
+    def print_cluster_stats(self):
+        cluster_stats = RestConnection(self.master).get_cluster_stats()
+        self.log.info("------- Cluster statistics -------")
+        for cluster_node, node_stats in cluster_stats.items():
+            self.log.info("{0} => {1}".format(cluster_node, node_stats))
+        self.log.info("--- End of cluster statistics ---")
 
     def get_cbcollect_info(self, server):
         """Collect cbcollectinfo logs for all the servers in the cluster.
@@ -376,9 +384,8 @@ class BaseTestCase(unittest.TestCase):
         except Exception as e:
             self.log.error( "IMPOSSIBLE TO GRAB CBCOLLECT FROM {0}: {1}".format( server.ip, e))
 
-
-
     def tearDown(self):
+        self.print_cluster_stats()
         if self.skip_setup_cleanup:
                 return
         try:

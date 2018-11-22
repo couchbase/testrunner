@@ -1846,6 +1846,23 @@ class RestConnection(object):
             parsed = json_parsed
         return parsed
 
+    def get_cluster_stats(self):
+        """
+        Reads cluster nodes statistics using `pools/default` rest GET method
+        :return stat_dict - Dictionary of CPU & Memory status each cluster node:
+        """
+        stat_dict = dict()
+        json_output = self.get_pools_default()
+        for node_stat in json_output['nodes']:
+            stat_dict[node_stat['hostname']] = dict()
+            stat_dict[node_stat['hostname']]['services'] = node_stat['services']
+            stat_dict[node_stat['hostname']]['cpu_utilization'] = node_stat['systemStats']['cpu_utilization_rate']
+            stat_dict[node_stat['hostname']]['mem_free'] = node_stat['systemStats']['mem_free']
+            stat_dict[node_stat['hostname']]['mem_total'] = node_stat['systemStats']['mem_total']
+            stat_dict[node_stat['hostname']]['swap_mem_used'] = node_stat['systemStats']['swap_used']
+            stat_dict[node_stat['hostname']]['swap_mem_total'] = node_stat['systemStats']['swap_total']
+        return stat_dict
+
     def get_pools(self):
         version = None
         api = self.baseUrl + 'pools'
