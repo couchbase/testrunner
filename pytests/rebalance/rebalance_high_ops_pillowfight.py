@@ -495,6 +495,7 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
         if self.run_with_views:
             view_query_thread.join()
         ClusterOperationHelper.flushctl_set(self.master, "exp_pager_stime", 10, bucket=bucket)
+        self.sleep(30)
         errors = self.check_data(self.master, bucket, self.num_items, 0, False, 0, self.batch_size, ttl=10,
                                  validate_expired=True, passes=0)
         if errors:
@@ -714,6 +715,7 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
         if self.run_with_views:
             view_query_thread.join()
         ClusterOperationHelper.flushctl_set(self.master, "exp_pager_stime", 10, bucket=bucket)
+        self.sleep(30)
         errors = self.check_data(self.master, bucket, self.num_items, 0, False, 0, self.batch_size, ttl=10,
                                  validate_expired=True, passes=0)
         if errors:
@@ -943,6 +945,7 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
         if self.run_with_views:
             view_query_thread.join()
         ClusterOperationHelper.flushctl_set(self.master, "exp_pager_stime", 10, bucket=bucket)
+        self.sleep(30)
         errors = self.check_data(self.master, bucket, self.num_items, 0, False, 0, self.batch_size, ttl=10,
                                  validate_expired=True, passes=0)
         if errors:
