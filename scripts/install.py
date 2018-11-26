@@ -1234,19 +1234,25 @@ def main():
     else:
         log.info('Doing  serial install****')
         success = InstallerJob().sequential_install(input.servers, input.test_params)
+
+    # Check for installation success
+    if not success:
+        sys.exit(log_install_failed)
+
+    success = True
     if "product" in input.test_params and input.test_params["product"] in ["couchbase", "couchbase-server", "cb"]:
         print "verify installation..."
-        success = True
         for server in input.servers:
-            success= RemoteMachineShellConnection(server).is_couchbase_installed()
+            success = RemoteMachineShellConnection(server).is_couchbase_installed()
             if not success:
                 print("installation failed on:{}".format(server))
             success &= success
         if not success:
             sys.exit(log_install_failed)
+
+    success = True
     if "product" in input.test_params and input.test_params["product"] in ["moxi", "moxi-server"]:
         print "verify installation..."
-        success = True
         for server in input.servers:
             success &= RemoteMachineShellConnection(server).is_moxi_installed()
         if not success:
