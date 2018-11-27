@@ -48,7 +48,11 @@ def triage(os, build, component, username, password, job, format, ignore_list):
                         'ValueError: No JSON object could be decoded']
 
     if job is not None and job != '':
-        job_name = " and lower(name)='"+job.lower()+"' "
+        job_arr = job.split(",")
+        jobs_list = ''
+        for j in job_arr:
+            jobs_list += ("'"+j.lower()+"'"+',')
+        job_name = ' and lower(name) in ['+jobs_list[:len(jobs_list)-1]+'] '
     if ignore_list is not None and ignore_list !='':
         ignore_arr = ignore_list.split(",")
         ignore_jobs_list = ''
@@ -62,7 +66,7 @@ def triage(os, build, component, username, password, job, format, ignore_list):
     authenticator = PasswordAuthenticator(username, password)
     cluster.authenticate(authenticator)
     cb = cluster.open_bucket('server')
-    query = N1QLQuery("select * from server where os='"+os.upper()+"' and `build`='"+build+"' and result='UNSTABLE' and component='"+component.upper()+"' "+job_name+ignore_jobs)
+    query = N1QLQuery("select * from server where os='"+os.upper()+"' and `build`='"+build+"' and result='UNSTABLE' and component='"+component.upper()+"' "+job_name+ignore_jobs+" order by name")
     # centos-query_covering_tokens centos-query_monitoring_moi centos-query_vset-ro-moi centos-query_clusterops_moi centos-query_tokens
 
     '''
