@@ -239,7 +239,7 @@ class QueryNewTuqTests(QueryTests):
 
         if self.does_test_meet_server_version(6, 5, 0):
             queries_errors['SELECT test.$obj0 as points FROM {0} AS TEST ' +
-                           'GROUP BY $obj0 AS GROUP_POINT'] = 'Expression must be a group key or aggregate'
+                           'GROUP BY $obj0 AS GROUP_POINT'] = 'must depend only on group keys or aggregates'
 
         self.negative_common_body(queries_errors)
 
