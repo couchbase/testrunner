@@ -19,7 +19,7 @@ def main():
     parser.add_option('-v', '--version', dest='version')
     parser.add_option('-o', '--os', dest='os',default="CENTOS",choices=['CENTOS', 'WIN', 'UBUNTU'],help='options: CENTOS,WIN,UBUNTU or default: %default')
     parser.add_option('-t','--type',dest='type',default='executor',choices=['executor','jython','docker'],help='options: executor,jython,docker or default: %default')
-    parser.add_option('-f', '--fail', dest='fail_percent',default=100,help='default: %default')
+    parser.add_option('-f', '--fail', type='int',dest='fail_percent',default=100,help='default: %default')
     parser.add_option('-s','--suite',dest='suite',default="12hour",help='default: %default')
     parser.add_option('-c','--component',dest='component',default=None,help='default: %default')
     parser.add_option('-S','--serverPoolId',dest='serverPoolId',default='regression',help='default: %default')
@@ -75,7 +75,9 @@ def getFailedJobs(options):
                       url=url)
     retryJob={}
     print("Running query:{}".format(q))
+    count=0
     for row in bkt.n1ql_query(q):
+        count+=1
         print("failed job: {}".format(row))
         component=row["component"]
         #print component
@@ -92,6 +94,7 @@ def getFailedJobs(options):
             #print "subcomponent from jenkins:",subcomponent
             sub = retryJob[component]
             sub.append(subcomponent)
+    print("total failed jobs:{}".format(count))
     return retryJob
 
 def trigger_job(param):
