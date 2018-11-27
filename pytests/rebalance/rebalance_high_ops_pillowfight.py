@@ -37,8 +37,7 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
         self.view_num = self.input.param("view-per-ddoc", 2)
         self.is_dev_ddoc = self.input.param("is-dev-ddoc", False)
         self.ddocs = []
-        self.run_view_query_iterations = self.input.param(
-            "run_view_query_iterations", 30)
+        self.run_view_query_iterations = self.input.param("run_view_query_iterations", 10)
         self.rebalance_quirks = self.input.param('rebalance_quirks', False)
 
         if self.rebalance_quirks:
