@@ -117,8 +117,9 @@ class QuerySubqueryTests(QueryTests):
         self.query = 'select meta().id,total from {0} GROUP BY meta().id LETTING total = (SELECT RAW SUM(VMs.memory) FROM default.VMs AS VMs)[0] order by meta().id limit 10'.format('default')
         try:
             self.run_cbq_query()
+            self.fail("Query should have failed")
         except CBQError as e:
-            self.assertTrue('Expression must be a group key or aggregate: (correlated (select raw sum((`VMs`.`memory`)) from (`default`.`VMs`) as `VMs`)[0])' in str(e))
+            self.assertTrue('Expression (correlated (select raw sum((`VMs`.`memory`)) from (`default`.`VMs`) as `VMs`)[0]) must depend only on group keys or aggregates.' in str(e), "Incorrect error message: \n" + str(e))
 
     def test_update_unset(self):
         self.query = 'UPDATE default a unset name  where "windows" in ( SELECT RAW VMs.os FROM a.VMs) limit 2 returning a.*,meta().id '

@@ -251,36 +251,56 @@ class QueryMiscTests(QueryTests):
         try:
             self.run_cbq_query(query="CREATE INDEX idx1 on default(meta().id)")
             self._wait_for_index_online("default", "idx1")
-            self.sleep(5)
+            self.sleep(10)
             idx_list.append('idx1')
-            curl_output = self.shell.execute_command("%s -u Administrator:password http://%s:9102/stats"
+
+            i = 0
+            while i < 10:
+                curl_output = self.shell.execute_command("%s -u Administrator:password http://%s:9102/stats"
                                                      % (self.curl_path, self.master.ip))
-            # The above command returns a tuple, we want the first element of that tuple
-            expected_curl = self.convert_list_to_json(curl_output[0])
-            self.log.info(str(expected_curl))
-            self.assertEqual(expected_curl['default:idx1:items_count'], item_count)
+                # The above command returns a tuple, we want the first element of that tuple
+                expected_curl = self.convert_list_to_json(curl_output[0])
+                self.log.info(str(expected_curl))
+
+                if 'default:idx1:items_count' in expected_curl or i == 9:
+                    self.assertEqual(expected_curl['default:idx1:items_count'], item_count)
+                i += 1
+                self.sleep(3)
 
             self.run_cbq_query(query="CREATE INDEX idx2 on default(meta().cas)")
             self._wait_for_index_online("default", "idx2")
-            self.sleep(5)
+            self.sleep(10)
             idx_list.append('idx2')
-            curl_output = self.shell.execute_command("%s -u Administrator:password http://%s:9102/stats"
-                                                     % (self.curl_path, self.master.ip))
-            # The above command returns a tuple, we want the first element of that tuple
-            expected_curl = self.convert_list_to_json(curl_output[0])
-            self.log.info(str(expected_curl))
-            self.assertEqual(expected_curl['default:idx2:items_count'], item_count)
+
+            i = 0
+            while i < 10:
+                curl_output = self.shell.execute_command("%s -u Administrator:password http://%s:9102/stats"
+                                                         % (self.curl_path, self.master.ip))
+                # The above command returns a tuple, we want the first element of that tuple
+                expected_curl = self.convert_list_to_json(curl_output[0])
+                self.log.info(str(expected_curl))
+
+                if 'default:idx2:items_count' in expected_curl or i == 9:
+                    self.assertEqual(expected_curl['default:idx2:items_count'], item_count)
+                i += 1
+                self.sleep(3)
 
             self.run_cbq_query(query="CREATE INDEX idx3 on default(meta().expiration)")
             self._wait_for_index_online("default", "idx3")
-            self.sleep(5)
+            self.sleep(10)
             idx_list.append('idx3')
-            curl_output = self.shell.execute_command("%s -u Administrator:password http://%s:9102/stats"
-                                                     % (self.curl_path, self.master.ip))
-            # The above command returns a tuple, we want the first element of that tuple
-            expected_curl = self.convert_list_to_json(curl_output[0])
-            self.log.info(str(expected_curl))
-            self.assertEqual(expected_curl['default:idx3:items_count'], item_count)
+
+            i = 0
+            while i < 10:
+                curl_output = self.shell.execute_command("%s -u Administrator:password http://%s:9102/stats"
+                                                         % (self.curl_path, self.master.ip))
+                # The above command returns a tuple, we want the first element of that tuple
+                expected_curl = self.convert_list_to_json(curl_output[0])
+                self.log.info(str(expected_curl))
+                if 'default:idx3:items_count' in expected_curl or i == 9:
+                    self.assertEqual(expected_curl['default:idx3:items_count'], item_count)
+                i += 1
+                self.sleep(3)
 
         finally:
             for idx in idx_list:

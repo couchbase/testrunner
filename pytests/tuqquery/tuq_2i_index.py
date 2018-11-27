@@ -1864,8 +1864,10 @@ class QueriesIndexTests(QueryTests):
                              "AND  NOT (department = 'Manager') order BY name limit 10"
                 actual_result = self.run_cbq_query()
                 plan = self.ExplainPlanHelper(actual_result)
-                self.assertTrue(plan['~children'][0]['~children'][0]['#operator'] == 'IntersectScan',
-                                "Intersect Scan is not being used in and query for 2 array indexes")
+                scan1 = plan['~children'][0]['~children'][0]
+                self.assertTrue((scan1['#operator'] == 'IntersectScan') or
+                                (scan1['#operator'] == 'UnionScan' and scan1['scans'][0]['#operator'] == 'IntersectScan' and scan1['scans'][1]['#operator'] == 'IntersectScan'),
+                                "Single InteresectScan or UnionScan of two IntersectScans not being used")
                 result1 =plan['~children'][0]['~children'][0]['scans'][0]['scan']['index']
                 result2 =plan['~children'][0]['~children'][0]['scans'][1]['scan']['index']
                 self.assertTrue(result1 == idx2 or result1 == idx)
