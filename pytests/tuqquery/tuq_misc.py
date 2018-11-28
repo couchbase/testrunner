@@ -27,6 +27,27 @@ class QueryMiscTests(QueryTests):
         self.log.info("==============  QueriesIndexTests suite_tearDown has completed ==============")
         super(QueryMiscTests, self).suite_tearDown()
 
+    '''MB-32120'''
+    def test_xattrs_use_keys(self):
+        queries = dict()
+
+        assert1 = lambda x: self.assertEqual(x['q_res'][0]['status'], 'success')
+        assert2 = lambda x: self.assertEqual(x['q_res'][0]['metrics']['resultCount'], 0)
+        assert3 = lambda x: self.assertEqual(x['q_res'][0]['results'], [])
+        asserts = [assert1, assert2, assert3]
+
+        queries["a"] = {"queries": ["SELECT META().xattrs._sync FROM default USE KEYS []"], "asserts": asserts}
+        queries["b"] = {"queries": ["SELECT META().xattrs._sync FROM default USE KEYS [\"\"]"], "asserts": asserts}
+        queries["c"] = {"queries": ["SELECT META().xattrs._sync FROM default USE KEYS [\" \"]"], "asserts": asserts}
+        queries["d"] = {"queries": ["SELECT META().xattrs._sync FROM default USE KEYS [\"\", \"\"]"], "asserts": asserts}
+        queries["e"] = {"queries": ["SELECT META().xattrs._sync FROM default USE KEYS [\" \", \"\"]"], "asserts": asserts}
+        queries["f"] = {"queries": ["SELECT META().xattrs._sync FROM default USE KEYS [\" \", \" \"]"], "asserts": asserts}
+        queries["g"] = {"queries": ["SELECT META().xattrs._sync FROM default USE KEYS [\"xxxx\"]"], "asserts": asserts}
+        queries["h"] = {"queries": ["SELECT META().xattrs._sync FROM default USE KEYS [\"xxxx\", \"yyyy\"]"], "asserts": asserts}
+        queries["i"] = {"queries": ["SELECT META().xattrs._sync FROM default USE KEYS [\"xxxx\", \"xxxx\"]"], "asserts": asserts}
+
+        self.query_runner(queries)
+
     '''MB-30946: Empty array from index scan not working properly when backfill is used'''
     def test_empty_array_low_scancap(self):
         createdIndex = False

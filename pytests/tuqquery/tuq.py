@@ -408,12 +408,20 @@ class QueryTests(BaseTestCase):
         res_dict['errors'] = []
         for test_name in sorted(test_dict.keys()):
             try:
-                index_list = test_dict[test_name]['indexes']
-                pre_queries = test_dict[test_name]['pre_queries']
-                queries = test_dict[test_name]['queries']
-                post_queries = test_dict[test_name]['post_queries']
-                asserts = test_dict[test_name]['asserts']
-                cleanups = test_dict[test_name]['cleanups']
+                res_dict = dict()
+                res_dict['errors'] = []
+                index_list = test_dict[test_name].get('indexes', [
+                    {'name': '#primary',
+                     'bucket': 'default',
+                     'fields': [],
+                     'state': 'online',
+                     'using': self.index_type.lower(),
+                     'is_primary': True}])
+                pre_queries = test_dict[test_name].get('pre_queries', [])
+                queries = test_dict[test_name].get('queries',[])
+                post_queries = test_dict[test_name].get('post_queries',[])
+                asserts = test_dict[test_name].get('asserts',[])
+                cleanups = test_dict[test_name].get('cleanups',[])
 
                 # INDEX STAGE
                 current_indexes = self.get_parsed_indexes()
