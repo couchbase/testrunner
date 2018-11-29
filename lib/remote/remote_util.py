@@ -1779,6 +1779,7 @@ class RemoteMachineShellConnection:
                             {2}opt/{0}/bin/{0}-server".format(server_type, int(fts_query_limit),
                                                               nonroot_path_start))
                 success &= self.log_command_output(o, e, track_words)
+                self.sleep(5, "wait for server up before stop it.")
                 self.stop_couchbase()
                 self.start_couchbase()
         return output, error
