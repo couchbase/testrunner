@@ -30,10 +30,10 @@ class MySQLClient(object):
         self._set_mysql_client(self.database, self.host, self.user_id, self.password)
 
     def _set_mysql_client(self, database="flightstats", host="127.0.0.1", user_id="root", password=""):
-        self.mysql_connector_client = mysql.connector.connect(user=user_id, password=password, host=host, database=database)
+        self.mysql_connector_client = mysql.connector.connect(user=user_id, password=password, host=host, database=database, auth_plugin='mysql_native_password')
 
     def _set_mysql_client_without_database(self, host="127.0.0.1", user_id="root", password=""):
-        self.mysql_connector_client = mysql.connector.connect(user=user_id, password=password, host=host)
+        self.mysql_connector_client = mysql.connector.connect(user=user_id, password=password, host=host, auth_plugin='mysql_native_password')
 
     def _close_mysql_connection(self):
         self.mysql_connector_client.close()
@@ -171,7 +171,7 @@ class MySQLClient(object):
         columns, rows = self._execute_query(query="SHOW DATABASES")
         for row in rows:
             if "table" in row[0]:
-                table_list.append(row[0])
+                table_list.append(row[0].decode("utf-8"))
         return table_list
 
     def _get_table_info(self, table_name=""):
