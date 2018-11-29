@@ -446,7 +446,7 @@ class RebalanceInTests(RebalanceBaseTest):
     sum(curr_items) match the curr_items_total.
     Once all nodes have been rebalanced in the test is finished."""
     def incremental_rebalance_in_with_queries(self):
-        num_views = self.input.param("num_views", 5)
+        num_views = self.input.param("num_views", 3)
         is_dev_ddoc = self.input.param("is_dev_ddoc", False)
         views = self.make_default_views(self.default_view_name, num_views, is_dev_ddoc)
         ddoc_name = "ddoc1"
@@ -454,7 +454,7 @@ class RebalanceInTests(RebalanceBaseTest):
         # increase timeout for big data
         timeout = max(self.wait_timeout * 4, self.wait_timeout * self.num_items / 25000)
         query = {}
-        query["connectionTimeout"] = 60000;
+        query["connectionTimeout"] = 60000
         query["full_set"] = "true"
         tasks = []
         tasks = self.async_create_views(self.master, ddoc_name, views, self.default_bucket_name)
@@ -729,7 +729,7 @@ class RebalanceWithPillowFight(BaseTestCase):
         from couchbase.bucket import Bucket
         from couchbase.exceptions import NotFoundError
         from lib.memcached.helper.data_helper import VBucketAwareMemcached
-        bkt = Bucket('couchbase://{0}/{1}'.format(server.ip, bucket.name))
+        bkt = Bucket('couchbase://{0}/{1}'.format(server.ip, bucket.name), username="cbadminbucket", password="password")
         rest = RestConnection(self.master)
         VBucketAware = VBucketAwareMemcached(rest, bucket.name)
         _, _, _ = VBucketAware.request_map(rest, bucket.name)

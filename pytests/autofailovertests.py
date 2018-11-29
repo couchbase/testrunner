@@ -261,14 +261,14 @@ class AutoFailoverTests(unittest.TestCase):
         AutoFailoverBaseTest.wait_for_failover_or_assert(self.master, 1, timeout + AutoFailoverBaseTest.MAX_FAIL_DETECT_TIME, self)
 
     def test_invalid_timeouts(self):
-        timeouts = [-360, -60, 0, 15, 29, 300000]
+        # The value of "timeout" must be a positive integer in a range from 5 to 3600
+        timeouts = [-360, -60, 0, 4, 300000]
         for timeout in timeouts:
-            status = self.rest.update_autofailover_settings(True, timeout)
-            if status:
-                self.fail('autofailover_settings have been changed incorrectly!')
-            #read settings and verify
+            self.rest.update_autofailover_settings(True, timeout)
+            # read settings and verify
             settings = self.rest.get_autofailover_settings()
-            self.assertTrue(settings.timeout >= 30)
+            self.log.info("Value returned by autofailover settings : {0}".format(settings.timeout))
+            self.assertNotEqual(settings.timeout, timeout)
 
     def test_two_failed_nodes(self):
         timeout = self.timeout / 2
