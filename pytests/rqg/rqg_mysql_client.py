@@ -93,7 +93,7 @@ class RQGMySQLClient(MySQLClient):
         table_list = []
         columns, rows = self._execute_query(query="SHOW TABLES")
         for row in rows:
-            table_list.append(row[0])
+            table_list.append(row[0].decode("utf-8"))
         return table_list
 
     def _get_databases(self):
