@@ -4,6 +4,7 @@ import random
 import datetime
 import os
 from TestInput import TestInputSingleton
+from couchbase_helper.tuq_helper import N1QLHelper
 from lib.couchbase_helper.documentgenerator import BlobGenerator
 from lib.couchbase_helper.stats_tools import StatsCommon
 from lib.couchbase_helper.tuq_generators import JsonGenerator
@@ -53,6 +54,12 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         self.function_name = function_name[0:90]
         self.timer_storage_chan_size = self.input.param('timer_storage_chan_size', 10000)
         self.dcp_gen_chan_size = self.input.param('dcp_gen_chan_size', 10000)
+        self.is_sbm=self.input.param('source_bucket_mutation',False)
+        self.n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
+        self.n1ql_helper = N1QLHelper(shell=self.shell, max_verify=self.max_verify, buckets=self.buckets,
+                                      item_flag=self.item_flag, n1ql_port=self.n1ql_port,
+                                      full_docs_list=self.full_docs_list, log=self.log, input=self.input,
+                                      master=self.master, use_rest=True)
 
     def tearDown(self):
         # catch panics and print it in the test log
@@ -117,6 +124,8 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         body['settings']['deadline_timeout'] = deadline_timeout
         body['settings']['timer_storage_chan_size'] = self.timer_storage_chan_size
         body['settings']['dcp_gen_chan_size'] = self.dcp_gen_chan_size
+        if self.is_sbm:
+            body['depcfg']['buckets'].append({"alias": self.src_bucket_name, "bucket_name": self.src_bucket_name,"access": "rw"})
         return body
 
     def wait_for_bootstrap_to_complete(self, name, iterations=20):
@@ -148,6 +157,8 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         eventing_nodes = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
         if bucket is None:
             bucket=self.dst_bucket_name
+        if self.is_sbm:
+            bucket=self.src_bucket_name
         if not skip_stats_validation:
             # we can't rely on dcp_mutation stats when doc timers events are set.
             # TODO : add this back when getEventProcessingStats works reliably for doc timer events as well
@@ -511,3 +522,24 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
             log.info("Go routine dumps for Node {0} is \n{1} ======================================================"
                      "============================================================================================="
                      "\n\n".format(eventing_node.ip, out))
+
+    def verify_source_bucket_mutation(self,doc_count,deletes=False):
+        # query = "create primary index on {}".format(self.src_bucket_name)
+        # self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_node)
+        count=0
+        result=0
+        while count < 20 and doc_count != result:
+            self.sleep(10)
+            if deletes:
+                query="select raw(count(*)) from {} where doc_deleted = 1".format(self.src_bucket_name)
+            else:
+                query="select raw(count(*)) from {} where updated_field = 1".format(self.src_bucket_name)
+            result_set=self.n1ql_helper.run_cbq_query(query=query,server=self.n1ql_node)
+            result=result_set["results"][0]
+            if deletes:
+                self.log.info("deleted docs:{}  expected doc: {}".format(result,doc_count))
+            else:
+                self.log.info("updated docs:{}  expected doc: {}".format(result, doc_count))
+
+        if count > 20 and doc_count != result:
+            raise Exception("All documents are not update in expected time")

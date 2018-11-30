@@ -56,6 +56,10 @@ class EventingBucket(EventingBaseTest):
                                           )
             self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
             self.handler_code = HANDLER_CODE.N1QL_OPS_WITH_TIMERS
+        elif handler_code == 'bucket_op_with_sbm':
+            self.handler_code= HANDLER_CODE.BUCKET_OP_WITH_SOURCE_BUCKET_MUTATION
+        elif handler_code == 'bucket_op_with_sbm_with_timers':
+            self.handler_code= HANDLER_CODE.BUCKET_OP_SOURCE_BUCKET_MUTATION_WITH_TIMERS
         else:
             self.handler_code = HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE
 

@@ -47,6 +47,10 @@ class HANDLER_CODE:
     BUCKET_OP_WITH_DOC_TIMER_RAND = 'handler_code/bucket_op_with_doc_timer_rand.js'
     BUCKET_OP_WITH_CRON_TIMER_RAND = 'handler_code/bucket_op_with_cron_timer_rand.js'
     BUCKET_OP_WITH_TIMER_OVERWRITTEN = 'handler_code/bucket_op_with_timers_overwritten.js'
+    BUCKET_OP_SOURCE_DOC_MUTATION = 'handler_code/bucket_op_source_doc_mutation.js'
+    BUCKET_OP_SOURCE_DOC_MUTATION_WITH_TIMERS= 'handler_code/bucket_op_source_doc_mutation_with_timers.js'
+    BUCKET_OP_WITH_SOURCE_BUCKET_MUTATION= 'handler_code/bucket_op_with_source_bucket_mutation.js'
+    BUCKET_OP_SOURCE_BUCKET_MUTATION_WITH_TIMERS= 'handler_code/bucket_op_source_bucket_mutation_with_timer.js'
 
 class HANDLER_CODE_ERROR:
     N1QL_SYNTAX='handler_code/handler_code_error/n1ql_syntax.js'

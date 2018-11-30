@@ -23,6 +23,8 @@ class EventingSanity(EventingBaseTest):
             self.buckets = RestConnection(self.master).get_buckets()
         self.gens_load = self.generate_docs(self.docs_per_day)
         self.expiry = 3
+        query = "create primary index on {}".format(self.src_bucket_name)
+        self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_node)
 
     def tearDown(self):
         super(EventingSanity, self).tearDown()
@@ -155,5 +157,69 @@ class EventingSanity(EventingBaseTest):
                                               worker_count=3)
         self.deploy_function(body)
         # Wait for eventing to catch up with all the update mutations and verify results
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        self.undeploy_and_delete_function(body)
+
+    def test_source_doc_mutations(self):
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                 batch_size=self.batch_size)
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OP_SOURCE_DOC_MUTATION,
+                                              worker_count=3)
+        self.deploy_function(body)
+        # Wait for eventing to catch up with all the update mutations and verify results
+        #self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        #self.verify_source_bucket_mutation(self.docs_per_day * 2016)
+        self.verify_source_bucket_mutation(self.docs_per_day * 2016)
+        # delete all documents
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size, op_type='delete')
+        self.verify_source_bucket_mutation(self.docs_per_day * 2016,deletes=True)
+        self.undeploy_and_delete_function(body)
+
+    def test_source_doc_mutations_with_timers(self):
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                 batch_size=self.batch_size)
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OP_SOURCE_DOC_MUTATION_WITH_TIMERS,
+                                              worker_count=3)
+        self.deploy_function(body)
+        # Wait for eventing to catch up with all the update mutations and verify results
+        #self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        #self.verify_source_bucket_mutation(self.docs_per_day * 2016)
+        self.verify_source_bucket_mutation(self.docs_per_day * 2016)
+        # delete all documents
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size, op_type='delete')
+        self.verify_source_bucket_mutation(self.docs_per_day * 2016,deletes=True)
+        self.undeploy_and_delete_function(body)
+
+    def test_source_bucket_mutations(self):
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                 batch_size=self.batch_size)
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OP_WITH_SOURCE_BUCKET_MUTATION,
+                                              worker_count=3)
+        self.deploy_function(body)
+        # Wait for eventing to catch up with all the update mutations and verify results
+        #self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        #self.verify_source_bucket_mutation(self.docs_per_day * 2016)
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 4032, skip_stats_validation=True)
+        # delete all documents
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size, op_type='delete')
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        self.undeploy_and_delete_function(body)
+
+    def test_source_bucket_mutations_with_timers(self):
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                 batch_size=self.batch_size)
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OP_SOURCE_BUCKET_MUTATION_WITH_TIMERS,
+                                              worker_count=3)
+        self.deploy_function(body)
+        # Wait for eventing to catch up with all the update mutations and verify results
+        #self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        #self.verify_source_bucket_mutation(self.docs_per_day * 2016)
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 4032, skip_stats_validation=True)
+        # delete all documents
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size, op_type='delete')
         self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
