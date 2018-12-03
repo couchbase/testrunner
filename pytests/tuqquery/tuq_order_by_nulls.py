@@ -19,10 +19,10 @@ class OrderByNullsTests(QueryTests):
         self.maybe_nulls_last = [' ', ' NULLS LAST ']
 
         self.primary_idx = {'name': '#primary', 'bucket': "temp_bucket", 'fields': [], 'state': 'online', 'using': self.index_type.lower(), 'is_primary': True}
-        self.idx_1 = {'name': "ix1", 'bucket': "temp_bucket", 'fields': ["int_field"], 'state': "online", 'using': self.index_type.lower(), 'is_primary': False}
-        self.idx_2 = {'name': "ix2", 'bucket': "temp_bucket", 'fields': ["float_field"], 'state': "online", 'using': self.index_type.lower(), 'is_primary': False}
-        self.idx_3 = {'name': "ix3", 'bucket': "temp_bucket", 'fields': ["varchar_field"], 'state': "online", 'using': self.index_type.lower(), 'is_primary': False}
-        self.idx_4 = {'name': "ix4", 'bucket': "temp_bucket", 'fields': ["bool_field"], 'state': "online", 'using': self.index_type.lower(), 'is_primary': False}
+        self.idx_1 = {'name': "ix1", 'bucket': "temp_bucket", 'fields': [("int_field", 0)], 'state': "online", 'using': self.index_type.lower(), 'is_primary': False}
+        self.idx_2 = {'name': "ix2", 'bucket': "temp_bucket", 'fields': [("float_field", 0)], 'state': "online", 'using': self.index_type.lower(), 'is_primary': False}
+        self.idx_3 = {'name': "ix3", 'bucket': "temp_bucket", 'fields': [("varchar_field", 0)], 'state': "online", 'using': self.index_type.lower(), 'is_primary': False}
+        self.idx_4 = {'name': "ix4", 'bucket': "temp_bucket", 'fields': [("bool_field", 0)], 'state': "online", 'using': self.index_type.lower(), 'is_primary': False}
 
         self.indexes = [self.primary_idx, self.idx_1, self.idx_3]
 
