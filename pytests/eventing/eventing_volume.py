@@ -91,8 +91,8 @@ class EventingVolume(EventingBaseTest):
                                                cpp_worker_thread_count=self.cpp_worker_thread_count)
         self.deploy_function(body1, wait_for_bootstrap=False)
         # deploy the second function - Bucket op with cron timers
-        body2 = self.create_save_function_body(self.function_name + "_bucket_op_with_cron_timers",
-                                               HANDLER_CODE.BUCKET_OPS_WITH_CRON_TIMERS,
+        body2 = self.create_save_function_body(self.function_name + "_bucket_op2",
+                                               HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE,
                                                worker_count=self.worker_count,
                                                cpp_worker_thread_count=self.cpp_worker_thread_count)
         # this is required to deploy multiple functions at the same time
@@ -100,8 +100,8 @@ class EventingVolume(EventingBaseTest):
         body2['depcfg']['buckets'].append({"alias": self.dst_bucket_name, "bucket_name": self.dst_bucket_name1})
         self.deploy_function(body2, wait_for_bootstrap=False)
         # deploy the third function - N1QL op with doc timers
-        body3 = self.create_save_function_body(self.function_name + "_n1ql_op_with_doc_timers",
-                                               HANDLER_CODE.N1QL_OPS_WITH_TIMERS1,
+        body3 = self.create_save_function_body(self.function_name + "_bucket_op3",
+                                               HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE,
                                                worker_count=self.worker_count,
                                                cpp_worker_thread_count=self.cpp_worker_thread_count)
         # this is required to deploy multiple functions at the same time
@@ -118,10 +118,10 @@ class EventingVolume(EventingBaseTest):
     def verify_eventing_results_of_all_functions(self, docs_expected, verify_results=True,  timeout=600):
         if verify_results:
             # Verify the results of all the buckets
-            self.verify_eventing_results(self.function_name, docs_expected, skip_stats_validation=True, timeout=timeout)
-            self.verify_eventing_results(self.function_name, docs_expected, skip_stats_validation=True,
+            self.verify_eventing_results(self.function_name + "_bucket_op", docs_expected, skip_stats_validation=True, timeout=timeout)
+            self.verify_eventing_results(self.function_name + "_bucket_op2", docs_expected, skip_stats_validation=True,
                                          bucket=self.dst_bucket_name1, timeout=timeout)
-            self.verify_eventing_results(self.function_name, docs_expected, skip_stats_validation=True,
+            self.verify_eventing_results(self.function_name + "_bucket_op3", docs_expected, skip_stats_validation=True,
                                          bucket=self.dst_bucket_name2, timeout=timeout)
         else:
             # Just print the stats after sleeping for 10 mins. Required to get the latest stats.
