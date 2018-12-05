@@ -135,16 +135,10 @@ class x509main:
                 
                 output, error = shell.execute_command("openssl genrsa " + encryption + " -out " + x509main.CACERTFILEPATH + server.ip + ".key " + str(key_length))
                 log.info ('Output message is {0} and error message is {1}'.format(output, error))
-                # output, error= shell.execute_command("openssl req -new -key " + x509main.CACERTFILEPATH + server.ip + ".key -out " + x509main.CACERTFILEPATH + server.ip + ".csr -subj '/C=UA/O=My Company/CN=" + server.ip + "'")
                 output, error = shell.execute_command("openssl req -new -key " + x509main.CACERTFILEPATH + server.ip + ".key -out " + x509main.CACERTFILEPATH + server.ip + ".csr -config ./pytests/security/clientconf3.conf")
                 log.info ('Output message is {0} and error message is {1}'.format(output, error))
                 output, error = shell.execute_command("openssl x509 -req -in " + x509main.CACERTFILEPATH + server.ip + ".csr -CA " + x509main.CACERTFILEPATH + "int.pem -CAkey " + \
-                                x509main.CACERTFILEPATH + "int.key -CAcreateserial -CAserial " + x509main.CACERTFILEPATH + "intermediateCA.srl -out " + x509main.CACERTFILEPATH + server.ip + ".pem -days 365 -sha256 -extfile ./pytests/security/clientconf3.conf -extensions req_ext")
-                                
-                log.info ('Output message is {0} and error message is {1}'.format(output, error))
-                output, error = shell.execute_command("openssl x509 -req -days 300 -in " + x509main.CACERTFILEPATH + server.ip + ".csr -CA " + x509main.CACERTFILEPATH + "int.pem -CAkey " + \
-                                x509main.CACERTFILEPATH + "int.key -set_serial 01 -out " + x509main.CACERTFILEPATH + server.ip + ".pem -extfile ./pytests/security/clientconf3.conf -extensions req_ext")
-                
+                                x509main.CACERTFILEPATH + "int.key -CAcreateserial -CAserial " + x509main.CACERTFILEPATH + "intermediateCA.srl -out " + x509main.CACERTFILEPATH + server.ip + ".pem -days 365 -sha256 -extfile ./pytests/security/clientconf3.conf -extensions req_ext")                
                 log.info ('Output message is {0} and error message is {1}'.format(output, error))
                 output, error = shell.execute_command("cat " + x509main.CACERTFILEPATH + server.ip + ".pem " + x509main.CACERTFILEPATH + "int.pem " + x509main.CACERTFILEPATH + "ca.pem > " + x509main.CACERTFILEPATH + "long_chain" + server.ip + ".pem")
                 log.info ('Output message is {0} and error message is {1}'.format(output, error))
@@ -371,7 +365,7 @@ class x509main:
         if plain_curl:
             main_url = final_verb
         elif client_cert:
-            main_url = final_verb + " --cacert " + x509main.CERT_FILE + " --cert-type PEM --cert " + x509main.CLIENT_CERT_PEM + " --key-type PEM --key " + x509main.CLIENT_CERT_KEY
+            main_url = final_verb + " --cacert " + x509main.SRC_CHAIN_FILE + " --cert-type PEM --cert " + x509main.CLIENT_CERT_PEM + " --key-type PEM --key " + x509main.CLIENT_CERT_KEY
         else:
             main_url = final_verb + "  --cacert " + x509main.CERT_FILE
          
