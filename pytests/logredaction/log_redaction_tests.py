@@ -482,13 +482,13 @@ class LogRedactionTests(LogRedactionBase):
                                   logFileName="ns_server.goxdcr.log")
         finally:
             """ clean up xdcr """
-            rest_dest.delete_bucket()
-            rest_src.remove_all_replications()
-            rest_src.remove_all_remote_clusters()
             if self.interrupt_replication:
                 shell = RemoteMachineShellConnection(self.master)
                 shell.disable_firewall()
                 shell.disconnect()
+            rest_dest.delete_bucket()
+            rest_src.remove_all_replications()
+            rest_src.remove_all_remote_clusters()
 
 ##############################################################################################
 #
