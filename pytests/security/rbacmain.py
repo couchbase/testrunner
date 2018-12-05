@@ -62,7 +62,7 @@ class rbacmain:
     def _set_user_roles(self,user_name,payload):
         rest = RestConnection(self.master_ip)
         if self.auth_type == "ldap" or self.auth_type == "pam":
-            url = "settings/rbac/users/" + user_name
+            url = "settings/rbac/users/external/" + user_name
         elif self.auth_type == 'builtin':
             url = "settings/rbac/users/local/" + user_name
         api = rest.baseUrl + url
@@ -73,7 +73,7 @@ class rbacmain:
     def _delete_user(self,user_name):
         rest = RestConnection(self.master_ip)
         if self.auth_type == 'ldap' or self.auth_type == "pam":
-            url = "/settings/rbac/users/" + user_name
+            url = "/settings/rbac/users/external/" + user_name
         else:
             url = "settings/rbac/users/local/" + user_name
         api = rest.baseUrl + url
