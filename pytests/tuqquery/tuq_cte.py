@@ -186,6 +186,42 @@ class QueryCTETests(QueryTests):
 
         self.query_runner(queries)
 
+    def test_cte_subquery(self):
+        queries = dict()
+
+        # subquery in select
+        query_1 = 'select (with a as (select join_mo from default) select a.join_mo from a where a.join_mo > 11) as b'
+        verify_1 = 'select (select join_mo from default where join_mo > 11) as b'
+
+        # subquery in from
+        query_2 = 'select b.* from (with a as (select join_mo from default) select a.join_mo from a where a.join_mo > 11) as b'
+        verify_2 = 'select join_mo from default where join_mo > 11'
+
+        # subquery in where
+        query_3 = 'select join_mo from default where join_mo in (with a as (select join_mo from default d0) select raw a.join_mo from a where a.join_mo > 11)'
+        verify_3 = 'select join_mo from default where join_mo > 11'
+
+        # subquery in let
+        query_4 = 'select raw a[0] as a from default let a=(with b as (select join_mo from default d0) select b.join_mo from b where b.join_mo = 12)'
+        verify_4 = 'select 12 as join_mo from default'
+
+        # subquery in letting
+        query_5 = 'select count(join_mo) as count_join_mo, join_yr from default group by join_yr letting a=(with b as (select join_yr from default d0) select raw min(b.join_yr) from b) having join_yr>a[0]'
+        verify_5 = 'select count(join_mo) as count_join_mo, join_yr from default where join_yr = 2011 group by join_yr'
+
+        # subquery in having
+        query_6 = 'select join_mo from default group by join_mo having join_mo in (with a as (select join_mo from default d0) select raw a.join_mo from a where a.join_mo = 5)'
+        verify_6 = 'select join_mo from default where join_mo = 5 group by join_mo'
+
+        queries["a"] = {"queries": [query_1], "asserts": [self.verifier(verify_1)]}
+        queries["b"] = {"queries": [query_2], "asserts": [self.verifier(verify_2)]}
+        queries["c"] = {"queries": [query_3], "asserts": [self.verifier(verify_3)]}
+        queries["d"] = {"queries": [query_4], "asserts": [self.verifier(verify_4)]}
+        queries["f"] = {"queries": [query_5], "asserts": [self.verifier(verify_5)]}
+        queries["g"] = {"queries": [query_6], "asserts": [self.verifier(verify_6)]}
+
+        self.query_runner(queries)
+
     def test_cte_joins(self):
         queries = dict()
         primary_index = {'name': '#primary', 'bucket': 'default', 'fields': [],
