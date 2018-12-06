@@ -437,8 +437,9 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                                 validate_directory_structure=True):
         if not skip_backup:
             output, error = self.backup_cluster()
-            if error or "Backup successfully completed" not in output[-1]:
-                self.fail("Taking cluster backup failed.")
+            if error or not self._check_output("Backup successfully completed", output):
+                self.fail("Taking cluster backup failed. Check printout below. "
+                          "\nErrors: {0} \nOutput: {1}".format(error, output))
         self.backup_list()
         if repeats < 2 and validate_directory_structure:
             status, msg = self.validation_helper.validate_backup()
