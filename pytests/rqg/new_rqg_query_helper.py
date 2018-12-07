@@ -48,7 +48,32 @@ LIMIT_END
 CTE_START
 CTE_END
 WITH_CLAUSE_SUBQUERY
+NESTED_WITH_CLAUSE_SUBQUERY
+CHAINED_WITH_CLAUSE_SUBQUERY
 WITH_CLAUSE_CONSTANT
+CTE_ALIAS
+WITH_CLAUSE_ALIAS
+FIELDS
+FIELDS_CONDITION
+FROM_FIELD
+FROM_CLAUSE
+LEFT OUTER JOIN
+RIGHT OUTER JOIN
+INNER JOIN
+WITH_TEMPLATE
+WITH_EXPRESSION_TEMPLATES
+WITH_EXPRESSION_ORDER
+WITH_EXPRESSIONS
+WITH_FIELDS
+WITH_CLAUSE
+FROM_TEMPLATE
+BUCKET_NAME
+TABLE_AND_CTE_JOIN
+TABLE_CTE
+TABLE_TABLE
+CTE_CTE
+CTE_TABLE
+WHERE_CLAUSE
 '''
 
 
@@ -68,243 +93,56 @@ class RQGQueryHelperNew(BaseRQGQueryHelper):
             print("Unknown test name")
             exit(1)
 
+    def log_info(self, object):
+        if not self.debug_logging:
+            return
+        pprint.pprint(object)
+
     def _convert_sql_template_for_common_table_expression(self, query_template, conversion_map):
         table_map = conversion_map.get("table_map", {})
-        table_name = conversion_map.get("table_name", "simple_table")
         template_map = self._extract_clauses(query_template)
-
-        query_template_map = self._convert_clauses_n1ql(conversion_map, template_map)
-        query_template_map['SQL'] = query_template_map['N1QL'].replace(" RAW ", " ")
-
-        query_map = {"n1ql": query_template_map['N1QL'],  "sql": query_template_map['N1QL'],
-                     "bucket": str(",".join(table_map.keys())),
-                     "expected_result": None, "indexes": {}}
-
-        return query_map
-
-    def _convert_clauses_n1ql(self, conversion_map, template_map):
         template_map = self._convert_with_clause_template_n1ql(conversion_map, template_map)
         template_map = self._convert_from_clause_template_n1ql(conversion_map, template_map)
         template_map = self._convert_where_clause_template_n1ql(conversion_map, template_map)
         template_map = self._convert_select_clause_template_n1ql(conversion_map, template_map)
         template_map["N1QL"] = self._combine_converted_clauses(template_map)
+        template_map = self.convert_on_clause_for_sql(template_map)
+        template_map["SQL"] = self._combine_converted_clauses(template_map)
+        indexes = {}
+        indexes = self.create_join_index(conversion_map, template_map, indexes)
+        query_map = {"n1ql": template_map['N1QL'],  "sql": template_map['SQL'],
+                     "bucket": str(",".join(table_map.keys())),
+                     "expected_result": None, "indexes": indexes,
+                     "tests": ["BASIC"]}
+        query_map = self.convert_table_name(query_map, conversion_map)
+        return query_map
+
+    def convert_on_clause_for_sql(self, template_map):
+        from_map = template_map['FROM_FIELD']
+        from_type = from_map['type']
+        if from_type == "joins":
+            from_clause = template_map['FROM_CLAUSE']
+            on_clause = from_clause.split(" ON ")[1].strip("(").strip(")").replace("==", "=")
+            from_clause = from_clause.split(" ON ")[0] + " ON " + on_clause
+            template_map['FROM_CLAUSE'] = from_clause
         return template_map
 
-    def _combine_converted_clauses(self, template_map):
-        clause_order = ["WITH_CLAUSE", "SELECT_CLAUSE", "FROM_CLAUSE", "LET_CLAUSE", "WHERE_CLAUSE", "GROUPBY_CLAUSE", "LETTING_CLAUSE",
-                        "HAVING_CLAUSE", "ORDERBY_CLAUSE", "OFFSET_CLAUSE", "LIMIT_CLAUSE"]
-        query = ""
-        for clause in clause_order:
-            converted_clause = template_map.get(clause, "")
-            if converted_clause != "":
-                query += converted_clause + " "
-        return query
-
-    def _convert_select_clause_template_n1ql(self, conversion_map, template_map):
-        select_template = template_map['SELECT_TEMPLATE'][0]
-        select_expression = select_template.split("SELECT")[1].strip()
-        select_clause = "SELECT"
-        from_info = template_map['FROM_FIELD']
-
-        if select_expression == "FIELDS":
-            random_select_fields = self._get_random_select_fields(from_info, conversion_map, template_map)
-        else:
-            print("Unknown select type")
-            exit(1)
-
-        for field in random_select_fields:
-            select_clause += " " + field + ","
-
-        select_clause = self._remove_trailing_substring(select_clause.strip(), ",")
-        template_map['SELECT_CLAUSE'] = select_clause
-        return template_map
-
-    def _get_random_select_fields(self, from_info, conversion_map, template_map):
-        from_field = from_info[0]
-        from_type = from_info[1]
-        table_map = conversion_map.get("table_map", {})
-        random_fields = []
-        if from_type == "BUCKET":
-            all_fields = table_map[from_field]["fields"].keys()
-            random_fields = self._random_sample(all_fields)
-        elif from_type == "WITH_ALIAS":
-            all_fields = template_map['WITH_FIELDS'][from_field]
-            all_fields = [field_tuple[0] for field_tuple in all_fields]
-            if len(all_fields) == 0:
-                random_fields = [from_field]
-            else:
-                random_fields = self._random_sample(all_fields)
-                random_fields = [from_field + "." + field for field in random_fields]
-        else:
-            print("Unknown from type")
-            exit(1)
-
-        return random_fields
-
-    def _random_sample(self, list):
-        size_of_sample = random.choice(range(1, len(list) + 1))
-        random_sample = [list[i] for i in random.sample(xrange(len(list)), size_of_sample)]
-        return random_sample
-
-    def _convert_where_clause_template_n1ql(self, conversion_map, template_map):
-        where_clause = "WHERE"
-
-        from_info = template_map['FROM_FIELD']
-        from_field = from_info[0]
-        from_type = from_info[1]
-
-        comparator = random.choice(['<', '>', '='])
-
-        if from_type == "BUCKET":
-            # need to add random field selection from bucket
-            table_map = conversion_map.get("table_map", {})
-            all_fields = table_map[from_field]["fields"].keys()
-            random_field = random.choice(all_fields)
-            where_clause += " " + random_field + " " + comparator + " " + str(self._random_constant(random_field))
-
-        elif from_type == "WITH_ALIAS":
-            with_alias_fields = template_map['WITH_FIELDS'][from_field]
-            random_with_field_info = random.choice(with_alias_fields)
-            random_with_field = random_with_field_info[0]
-            where_clause += " " + from_field + "." + random_with_field + " " + comparator + " " + str(self._random_constant(random_with_field))
-        else:
-            print("Unknown from expression type")
-            exit(1)
-
-        template_map['WHERE_CLAUSE'] = where_clause
-        return template_map
-
-    def _random_constant(self, field=None):
-        if field:
-            if field == "int_field1":
-                random_constant = random.randrange(36787, 99912344, 1000000)
-            elif field == "bool_field1":
-                random_constant = random.choice([True, False])
-            elif field == "char_field1":
-                random_constant = ''.join(random.choice(string.ascii_uppercase + string.ascii_lowercase) for _ in range(1))
-                random_constant = "'%s'" %random_constant
-            elif field == "datetime_field1":
-                random_constant = "'%s'" % self._random_datetime()#= "'%s'" % random.choice(["1999-01-01 00:00:00", "2007-6-15 00:00:00", "2014-12-31 00:00:00"])
-            elif field == "decimal_field1":
-                random_constant = random.randrange(16, 9971, 10)
-            elif field == "primary_key_id":
-                random_constant = "'%s'" % random.randrange(1, 9999, 10)
-            elif field == "varchar_field1":
-                random_constant = ''.join(random.choice(string.ascii_uppercase + string.ascii_lowercase) for _ in range(5))
-                random_constant = "'%s'" %random_constant
-            else:
-                print("Unknown field type")
-                exit(1)
-        else:
-            constant_type = random.choice(["STRING", "INTEGER", "DECIMAL", "BOOLEAN"])
-            if constant_type == "STRING":
-                random_constant = ''.join(random.choice(string.ascii_uppercase) for _ in range(5))
-                random_constant = "'%s'" %random_constant
-            elif constant_type == "INTEGER":
-                random_constant = random.randrange(36787, 99912344, 1000000)
-            elif constant_type == "DECIMAL":
-                random_constant = float((random.randrange(700, 997400))/100)
-            elif constant_type == "BOOLEAN":
-                random_constant = random.choice([True, False])
-            else:
-                print("Unknown constant type")
-                exit(1)
-        return random_constant
-
-    def _convert_from_clause_template_n1ql(self, conversion_map, template_map):
-        from_template = template_map['FROM_TEMPLATE'][0]
-        from_expression = from_template.split("FROM")[1].strip()
-        from_clause = "FROM"
-        if from_expression == "BUCKET_NAME":
-            table_name = conversion_map.get("table_name", "simple_table")
-            from_clause += " " + table_name
-            template_map['FROM_FIELD'] = (table_name, "BUCKET")
-        elif from_expression == "WITH_CLAUSE_ALIAS":
-            with_clause_aliases = template_map['WITH_EXPRESSIONS'].keys()
-            with_alias = random.choice(with_clause_aliases)
-            from_clause += " " + with_alias
-            template_map['FROM_FIELD'] = (with_alias, "WITH_ALIAS")
-        template_map['FROM_CLAUSE'] = from_clause
-        return template_map
-
-    def _convert_with_clause_template_n1ql(self, conversion_map, template_map):
-        with_template = template_map['WITH_TEMPLATE'][0]
-        template_map['WITH_EXPRESSION_TEMPLATES'] = {}
-        start_sep = "CTE_START"
-        end_sep = "CTE_END"
-        tmp = with_template.split(start_sep)
-
-        for substring in tmp:
-            if end_sep in substring:
-                random_alias = ''.join(random.choice(string.ascii_uppercase) for _ in range(5))
-                template_map['WITH_EXPRESSION_TEMPLATES'][random_alias] = substring.split(end_sep)[0].strip()
-
-        template_map['WITH_EXPRESSIONS'] = {}
-        template_map['WITH_FIELDS'] = {}
-        for with_expression_alias in template_map['WITH_EXPRESSION_TEMPLATES'].keys():
-            template_map = self._convert_with_expression(with_expression_alias, template_map, conversion_map)
-
-        converted_with_clause = "WITH"
-        for converted_with_expression_alias in template_map['WITH_EXPRESSIONS'].keys():
-            expression = template_map['WITH_EXPRESSIONS'][converted_with_expression_alias]
-            converted_with_clause += " " + converted_with_expression_alias + " as " + "(" + expression + "),"
-
-        with_clause = self._remove_trailing_substring(converted_with_clause.strip(), ",")
-        template_map['WITH_CLAUSE'] = with_clause
-        return template_map
-
-    def _remove_trailing_substring(self, string, ending):
-        if string.endswith(ending):
-            return string[:-len(ending)]
-        else:
-            return string
-
-    def _convert_with_expression(self, alias, template_map, conversion_map):
-        expression = template_map['WITH_EXPRESSION_TEMPLATES'][alias]
-        if expression == "WITH_CLAUSE_SUBQUERY":
-            query_template = "SELECT_START SELECT FIELDS SELECT_END FROM_START FROM BUCKET_NAME FROM_END WHERE_START WHERE FIELDS_CONDITION WHERE_END"
-            with_template_map = self._extract_clauses(query_template)
-            with_template_map = self._convert_from_clause_template_n1ql(conversion_map, with_template_map)
-            with_template_map = self._convert_where_clause_template_n1ql(conversion_map, with_template_map)
-            with_template_map = self._convert_select_clause_template_n1ql(conversion_map, with_template_map)
-            with_expression = self._combine_converted_clauses(with_template_map)
-        else:
-            print("Unknown with expression template")
-            exit(1)
-
-        template_map['WITH_EXPRESSIONS'][alias] = with_expression
-        template_map['WITH_FIELDS'][alias] = self._extract_fields_from_clause("SELECT", with_expression, with_template_map, conversion_map)
-        return template_map
-
-    def _extract_fields_from_clause(self, clause_type, expression, template_map, conversion_map):
-        table_map = conversion_map.get("table_map", {})
+    def create_join_index(self, conversion_map, template_map, indexes={}):
         table_name = conversion_map.get("table_name", "simple_table")
-        table_fields = table_map[table_name]["fields"].keys()
-
-        if expression.find(clause_type) == -1:
-            return []
-
-        if clause_type == "SELECT":
-            expression_fields_string = expression.split("SELECT")[1].split("FROM")[0].strip()
-            #pprint.pprint(expression_fields_string)
-        else:
-            print("Unknown clause type")
-            exit(1)
-
-        return self._extract_raw_fields_from_string(table_fields, expression_fields_string)
-
-    def _extract_raw_fields_from_string(self, raw_field_list, string):
-        raw_fields = []
-        for raw_field in raw_field_list:
-            if raw_field.find('char') == 0:
-                idx = self.find_char_field(string)
-                if idx > -1:
-                    raw_fields.append((raw_field, idx))
+        from_map = template_map['FROM_FIELD']
+        from_type = from_map['type']
+        if from_type == "joins":
+            join_type = from_map['join_type']
+            random_index_name = "join_index_" + str(self._random_int())
+            if join_type == "LEFT OUTER JOIN":
+                statement = "create index " + random_index_name + " on " + table_name + "(" + from_map['right_on_field'] + ")"
+                indexes[random_index_name] = {"name": random_index_name, "type": "GSI", "definition": statement}
+            elif join_type == "RIGHT OUTER JOIN" or join_type == "INNER JOIN":
+                statement = "create index " + random_index_name + " on " + table_name + "(" + from_map['left_on_field'] + ")"
+                indexes[random_index_name] = {"name": random_index_name, "type": "GSI", "definition": statement}
             else:
-                idx = string.find(raw_field)
-                if idx > -1:
-                    raw_fields.append((raw_field, idx))
-        return raw_fields
+                pass
+        return indexes
 
     def _extract_clauses(self, query_template):
         with_sep = ("WITH_TEMPLATE", "WITH_START", "WITH_END")
@@ -334,6 +172,506 @@ class RQGQueryHelperNew(BaseRQGQueryHelper):
                     result.append(substring.split(end_sep)[0].strip())
             parsed_clauses[clause] = result
         return parsed_clauses
+
+    def _convert_with_clause_template_n1ql(self, conversion_map, template_map, key_path=[]):
+        with_template = self.get_from_dict(template_map, key_path+['WITH_TEMPLATE', 0])
+        self.set_in_dict(template_map, key_path+['WITH_EXPRESSION_TEMPLATES'], {})
+        self.set_in_dict(template_map, key_path+['WITH_EXPRESSION_ORDER'], {})
+        start_sep = "CTE_START"
+        end_sep = "CTE_END"
+        tmp = with_template.split(start_sep)
+        i = 0
+        for substring in tmp:
+            if end_sep in substring:
+                random_alias = 'CTE_' + ''.join(random.choice(string.ascii_uppercase) for _ in range(5))
+                clause_template = substring.split(end_sep)[0].strip()
+                self.set_in_dict(template_map, key_path+['WITH_EXPRESSION_TEMPLATES', random_alias], clause_template)
+                self.set_in_dict(template_map, key_path+['WITH_EXPRESSION_ORDER', random_alias], i)
+                i += 1
+        with_ordering = []
+        with_expression_ordering_map = self.get_from_dict(template_map, key_path+['WITH_EXPRESSION_ORDER'])
+        for with_alias in with_expression_ordering_map.keys():
+            with_ordering.append((with_alias, self.get_from_dict(template_map, key_path+['WITH_EXPRESSION_ORDER', with_alias])))
+
+        with_ordering.sort(key=lambda x: x[1])
+
+        self.set_in_dict(template_map, key_path+['WITH_EXPRESSIONS'], {})
+        self.set_in_dict(template_map, key_path+['WITH_FIELDS'], {})
+
+        for with_order in with_ordering:
+            with_expression_alias = with_order[0]
+            template_map = self._convert_with_expression(with_expression_alias, template_map, conversion_map, key_path=key_path)
+        converted_with_clause = "WITH"
+        for with_order in with_ordering:
+            converted_with_expression_alias = with_order[0]
+            expression = self.get_from_dict(template_map, key_path+['WITH_EXPRESSIONS', converted_with_expression_alias])
+            converted_with_clause += " " + converted_with_expression_alias + " as " + "(" + expression + "),"
+
+        with_clause = str(self._remove_trailing_substring(converted_with_clause.strip(), ","))
+        self.set_in_dict(template_map, key_path+['WITH_CLAUSE'], with_clause)
+        return template_map
+
+    def _convert_with_expression(self, alias, template_map, conversion_map, key_path=[]):
+        expression = self.get_from_dict(template_map, key_path+['WITH_EXPRESSION_TEMPLATES', alias])
+        if expression == "WITH_CLAUSE_SUBQUERY":
+            query_template = "SELECT_START SELECT FIELDS SELECT_END FROM_START FROM BUCKET_NAME FROM_END WHERE_START WHERE FIELDS_CONDITION WHERE_END"
+            self.set_in_dict(template_map, key_path+['WITH_EXPRESSION_TEMPLATES', alias], self._extract_clauses(query_template))
+            template_map = self._convert_from_clause_template_n1ql(conversion_map, template_map, key_path=key_path+['WITH_EXPRESSION_TEMPLATES', alias])
+            template_map = self._convert_where_clause_template_n1ql(conversion_map, template_map, key_path=key_path+['WITH_EXPRESSION_TEMPLATES', alias])
+            template_map = self._convert_select_clause_template_n1ql(conversion_map, template_map, key_path=key_path+['WITH_EXPRESSION_TEMPLATES', alias])
+            with_expression = self._combine_converted_clauses(template_map, key_path=key_path+['WITH_EXPRESSION_TEMPLATES', alias])
+            self.set_in_dict(template_map, key_path+['WITH_EXPRESSIONS', alias], with_expression)
+            self.set_in_dict(template_map, key_path+['WITH_FIELDS', alias], self._extract_fields_from_clause("SELECT", template_map, conversion_map, key_path=key_path+['WITH_EXPRESSION_TEMPLATES', alias]))
+        elif expression == "NESTED_WITH_CLAUSE_SUBQUERY":
+            query_template = "WITH_START WITH CTE_START WITH_CLAUSE_SUBQUERY CTE_END WITH_END SELECT_START SELECT FIELDS SELECT_END FROM_START FROM WITH_CLAUSE_ALIAS FROM_END WHERE_START WHERE FIELDS_CONDITION WHERE_END"
+            self.set_in_dict(template_map, key_path+['WITH_EXPRESSION_TEMPLATES', alias], self._extract_clauses(query_template))
+            template_map = self._convert_with_clause_template_n1ql(conversion_map, template_map, key_path=key_path+['WITH_EXPRESSION_TEMPLATES', alias])
+            template_map = self._convert_from_clause_template_n1ql(conversion_map, template_map, key_path=key_path+['WITH_EXPRESSION_TEMPLATES', alias])
+            template_map = self._convert_where_clause_template_n1ql(conversion_map, template_map, key_path=key_path+['WITH_EXPRESSION_TEMPLATES', alias])
+            template_map = self._convert_select_clause_template_n1ql(conversion_map, template_map, key_path=key_path+['WITH_EXPRESSION_TEMPLATES', alias])
+            with_expression = self._combine_converted_clauses(template_map, key_path=key_path+['WITH_EXPRESSION_TEMPLATES', alias])
+            self.set_in_dict(template_map, key_path+['WITH_EXPRESSIONS', alias], with_expression)
+            self.set_in_dict(template_map, key_path+['WITH_FIELDS', alias], self._extract_fields_from_clause("SELECT", template_map, conversion_map, key_path=key_path+['WITH_EXPRESSION_TEMPLATES', alias]))
+        elif expression == "CHAINED_WITH_CLAUSE_SUBQUERY":
+            query_template = "SELECT_START SELECT FIELDS SELECT_END FROM_START FROM CTE_ALIAS FROM_END WHERE_START WHERE CTE_FIELDS_CONDITION WHERE_END"
+            self.set_in_dict(template_map, key_path+['WITH_EXPRESSION_TEMPLATES', alias], self._extract_clauses(query_template))
+            template_map = self._convert_from_clause_template_n1ql(conversion_map, template_map, key_path=key_path+['WITH_EXPRESSION_TEMPLATES', alias])
+            template_map = self._convert_where_clause_template_n1ql(conversion_map, template_map, key_path=key_path+['WITH_EXPRESSION_TEMPLATES', alias])
+            template_map = self._convert_select_clause_template_n1ql(conversion_map, template_map, key_path=key_path+['WITH_EXPRESSION_TEMPLATES', alias])
+            with_expression = self._combine_converted_clauses(template_map, key_path=key_path+['WITH_EXPRESSION_TEMPLATES', alias])
+            self.set_in_dict(template_map, key_path+['WITH_EXPRESSIONS', alias], with_expression)
+            self.set_in_dict(template_map, key_path+['WITH_FIELDS', alias], self._extract_fields_from_clause("SELECT", template_map, conversion_map, key_path=key_path+['WITH_EXPRESSION_TEMPLATES', alias]))
+        else:
+            print("Unknown with expression template")
+            exit(1)
+        return template_map
+
+    def _convert_from_clause_template_n1ql(self, conversion_map, template_map, key_path=[]):
+        from_template = self.get_from_dict(template_map, key_path+['FROM_TEMPLATE', 0])
+        from_expression = from_template.split("FROM")[1].strip()
+        from_clause = "FROM"
+        table_name = conversion_map.get("table_name", "simple_table")
+        if from_expression == "BUCKET_NAME":
+            # any select is from the default table/bucket
+            from_clause += " " + table_name
+            from_map = {"left_table": table_name, "class": "BUCKET",
+                        'type': "basic"}
+        elif from_expression == "WITH_CLAUSE_ALIAS":
+            # outer most select is from a with clause alias
+            with_clause_aliases = self.get_from_dict(template_map, key_path+['WITH_EXPRESSIONS'])
+            with_clause_aliases = with_clause_aliases.keys()
+            with_alias = random.choice(with_clause_aliases)
+            from_clause += " " + with_alias
+            from_map = {"left_table": with_alias, "class": "WITH_ALIAS", "type": "basic"}
+        elif from_expression == "CTE_ALIAS":
+            # select in a cte is from a previous cte
+            last_index = 0
+            i = 0
+            for part in key_path:
+                if part == 'WITH_EXPRESSION_TEMPLATES':
+                    last_index = i
+                i += 1
+            with_expression_order_key_path = key_path[:last_index]
+            with_expression_ordering = self.get_from_dict(template_map, with_expression_order_key_path + ['WITH_EXPRESSION_ORDER'])
+            target_alias = key_path[-1]
+            target_alias_order = with_expression_ordering[target_alias]
+            source_aliases = []
+            for source_alias in with_expression_ordering.keys():
+                if with_expression_ordering[source_alias] < target_alias_order:
+                    source_aliases.append(source_alias)
+            if len(source_aliases) == 0:
+                print("No with clause to chain to")
+                exit(1)
+            source_alias = random.choice(source_aliases)
+            from_clause += " " + source_alias + " " + "AS" + " " + source_alias+source_alias
+            from_map = {"left_table": source_alias, "left_table_alias": source_alias+source_alias,
+                        "class": "CTE_ALIAS", "type": "basic"}
+        elif from_expression == "TABLE_AND_CTE_JOIN":
+            with_clause_aliases = self.get_from_dict(template_map, key_path+['WITH_EXPRESSIONS'])
+            with_clause_aliases = with_clause_aliases.keys()
+            if len(with_clause_aliases) < 2:
+                join_order = random.choice(['TABLE_CTE', 'CTE_TABLE', 'TABLE_TABLE'])
+            else:
+                with_clause_aliases = self.get_from_dict(template_map, key_path+['WITH_EXPRESSIONS'])
+                with_clause_aliases = with_clause_aliases.keys()
+                left_table = random.choice(with_clause_aliases)
+                with_clause_aliases.remove(left_table)
+                right_table = random.choice(with_clause_aliases)
+
+                left_with_alias_fields = self.get_from_dict(template_map, key_path+['WITH_FIELDS', left_table])
+                left_with_alias_fields = [tuple[0] for tuple in left_with_alias_fields]
+
+                right_with_alias_fields = self.get_from_dict(template_map, key_path+['WITH_FIELDS', right_table])
+                right_with_alias_fields = [tuple[0] for tuple in right_with_alias_fields]
+
+                common_fields = [field for field in left_with_alias_fields if field in right_with_alias_fields]
+                if len(common_fields) == 0:
+                    join_order = random.choice(['TABLE_CTE', 'TABLE_TABLE', 'CTE_TABLE'])
+                else:
+                    join_order = random.choice(['CTE_CTE', 'TABLE_CTE', 'TABLE_TABLE', 'CTE_CTE'])
+
+            if join_order == "TABLE_CTE" or join_order == "CTE_TABLE":
+                # select is from a table/bucket joined to a cte
+                with_clause_aliases = self.get_from_dict(template_map, key_path+['WITH_EXPRESSIONS'])
+                with_clause_aliases = with_clause_aliases.keys()
+                with_alias = random.choice(with_clause_aliases)
+                with_alias_fields = self.get_from_dict(template_map, key_path+['WITH_FIELDS', with_alias])
+                with_alias_fields = [tuple[0] for tuple in with_alias_fields]
+                join_field = random.choice(with_alias_fields)
+                join_type = random.choice(["LEFT OUTER JOIN", "RIGHT OUTER JOIN", "INNER JOIN"])
+
+                if join_order == "CTE_TABLE":
+                    left_table = with_alias
+                    right_table = table_name
+
+                if join_order == "TABLE_CTE":
+                    left_table = table_name
+                    right_table = with_alias
+
+                from_clause += " " + left_table + " " + join_type + " " + right_table + " " + "ON" + " " + "(" + left_table + "." + join_field + " " + "==" + " " + right_table + "." + join_field + ")"
+                from_map = {"left_table": left_table, "class": "TABLE_AND_CTE_JOIN", "type": "joins",
+                            "right_table": right_table, "left_on_field": join_field, "right_on_field": join_field,
+                            "join_type": join_type}
+            elif join_order == "TABLE_TABLE":
+                table_map = conversion_map.get("table_map", {})
+                table_fields = table_map[table_name]["fields"].keys()
+                join_field = random.choice(table_fields)
+                join_type = random.choice(["LEFT OUTER JOIN", "RIGHT OUTER JOIN", "INNER JOIN"])
+                left_table = table_name
+                left_table_alias = left_table+"_ALIAS_LEFT"
+                right_table = table_name
+                right_table_alias = right_table+"_ALIAS_RIGHT"
+                from_clause += " " + left_table + " AS " + left_table_alias + " " + join_type + " " + right_table + " AS " + right_table_alias + " " + "ON" + " " + "(" + left_table_alias + "." + join_field + " " + "==" + " " + right_table_alias + "." + join_field + ")"
+                from_map = {"left_table": left_table, "left_table_alias": left_table_alias, "class": "TABLE_AND_CTE_JOIN", "type": "joins",
+                        "right_table": right_table, "right_table_alias": right_table_alias, "left_on_field": join_field, "right_on_field": join_field,
+                        "join_type": join_type}
+            elif join_order == "CTE_CTE":
+                left_table_alias = left_table + "_ALIAS_LEFT"
+                right_table_alias = right_table + "_ALIAS_RIGHT"
+
+                join_field = random.choice(common_fields)
+
+                join_type = random.choice(["LEFT OUTER JOIN", "RIGHT OUTER JOIN", "INNER JOIN"])
+                from_clause += " " + left_table + " AS " + left_table_alias + " " + join_type + " " + right_table + " AS " + right_table_alias + " " + "ON" + " " + "(" + left_table_alias + "." + join_field + " " + "==" + " " + right_table_alias + "." + join_field + ")"
+                from_map = {"left_table": left_table, "left_table_alias": left_table_alias, "class": "TABLE_AND_CTE_JOIN", "type": "joins",
+                            "right_table": right_table, "right_table_alias": right_table_alias, "left_on_field": join_field, "right_on_field": join_field,
+                            "join_type": join_type}
+        else:
+            print("Unknown from clause type")
+            exit(1)
+        self.set_in_dict(template_map, key_path+['FROM_FIELD'], from_map)
+        self.set_in_dict(template_map, key_path+['FROM_CLAUSE'], str(from_clause))
+        return template_map
+
+    def _convert_where_clause_template_n1ql(self, conversion_map, template_map, key_path=[]):
+        where_clause = "WHERE"
+        from_map = self.get_from_dict(template_map, key_path+['FROM_FIELD'])
+        from_class = from_map["class"]
+        table_map = conversion_map.get("table_map", {})
+
+        num_where_comparisons = random.randint(0, 4)
+        if num_where_comparisons == 0:
+            where_clause = ""
+            self.set_in_dict(template_map, key_path+['WHERE_CLAUSE'], where_clause)
+            return template_map
+
+        if from_class == "BUCKET":
+            # need to add random field selection from bucket
+            from_table = from_map["left_table"]
+            all_fields = table_map[from_table]["fields"].keys()
+
+            for i in range(0, num_where_comparisons):
+                random_field = random.choice(all_fields)
+                random_constant = self._random_constant(random_field)
+                comparator = random.choice(['<', '>', '=', '!='])
+                conjunction = random.choice(['AND', 'OR'])
+                where_clause += " " + random_field + " " + comparator + " " + str(random_constant) + " " + conjunction
+            where_clause = where_clause.rsplit(' ', 1)[0]
+
+        elif from_class == "WITH_ALIAS":
+            from_table = from_map["left_table"]
+            with_alias_fields = self.get_from_dict(template_map, key_path+['WITH_FIELDS', from_table])
+            for i in range(0, num_where_comparisons):
+                random_with_field_info = random.choice(with_alias_fields)
+                random_with_field = random_with_field_info[0]
+                random_constant = self._random_constant(random_with_field)
+                comparator = random.choice(['<', '>', '=', '!='])
+                conjunction = random.choice(['AND', 'OR'])
+                where_clause += " " + from_table + "." + random_with_field + " " + comparator + " " + str(random_constant) + " " + conjunction
+            where_clause = where_clause.rsplit(' ', 1)[0]
+
+        elif from_class == "CTE_ALIAS":
+            from_table = from_map["left_table"]
+            from_table_alias = from_map["left_table_alias"]
+            last_index = 0
+            i = 0
+            for part in key_path:
+                if part == 'WITH_EXPRESSION_TEMPLATES':
+                    last_index = i
+                i += 1
+            with_fields_key_path = key_path[:last_index]
+
+            with_fields = self.get_from_dict(template_map, with_fields_key_path + ['WITH_FIELDS', from_table])
+            source_fields = [field_tuple[0] for field_tuple in with_fields]
+
+            for i in range(0, num_where_comparisons):
+                where_field = random.choice(source_fields)
+                comparator = random.choice(['<', '>', '=', '!='])
+                conjunction = random.choice(['AND', 'OR'])
+                random_constant = self._random_constant(where_field)
+                where_clause += " " + from_table_alias + "." + where_field + " " + comparator + " " + str(random_constant) + " " + conjunction
+            where_clause = where_clause.rsplit(' ', 1)[0]
+
+        elif from_class == "TABLE_AND_CTE_JOIN":
+            from_map = self.get_from_dict(template_map, key_path + ['FROM_FIELD'])
+
+            left_table = from_map['left_table']
+            left_table_alias = from_map.get('left_table_alias', "NO_ALIAS")
+            if left_table_alias == "NO_ALIAS":
+                left_table_alias = left_table
+
+            if left_table.startswith("CTE"):
+                left_table_fields = self.get_from_dict(template_map, key_path + ['WITH_FIELDS', left_table])
+                left_table_fields = [tuple[0] for tuple in left_table_fields]
+            else:
+                left_table_fields = table_map[left_table]["fields"].keys()
+
+            right_table = from_map['right_table']
+            right_table_alias = from_map.get('right_table_alias', "NO_ALIAS")
+            if right_table_alias == "NO_ALIAS":
+                right_table_alias = right_table
+
+            if right_table.startswith("CTE"):
+                right_table_fields = self.get_from_dict(template_map, key_path + ['WITH_FIELDS', right_table])
+                right_table_fields = [tuple[0] for tuple in right_table_fields]
+            else:
+                right_table_fields = table_map[right_table]["fields"].keys()
+
+            for i in range(0, num_where_comparisons):
+                comparator = random.choice(['<', '>', '=', "!="])
+                conjunction = random.choice(['AND', 'OR'])
+                if random.choice(["LEFT_TABLE", "RIGHT_TABLE"]) == "LEFT_TABLE":
+                    where_field = random.choice(left_table_fields)
+                    where_table = left_table_alias
+                else:
+                    where_field = random.choice(right_table_fields)
+                    where_table = right_table_alias
+                random_constant = self._random_constant(where_field)
+                where_clause += " " + where_table + "." + where_field + " " + comparator + " " + str(random_constant) + " " + conjunction
+            where_clause = where_clause.rsplit(' ', 1)[0]
+
+        else:
+            print("Unknown from expression type")
+            exit(1)
+
+        self.set_in_dict(template_map, key_path+['WHERE_CLAUSE'], where_clause)
+        return template_map
+
+    def _convert_select_clause_template_n1ql(self, conversion_map, template_map, key_path=[]):
+        select_template = self.get_from_dict(template_map, key_path+['SELECT_TEMPLATE', 0])
+        select_expression = select_template.split("SELECT")[1].strip()
+        select_clause = "SELECT"
+        from_map = self.get_from_dict(template_map, key_path+['FROM_FIELD'])
+
+        if select_expression == "FIELDS":
+            random_select_fields = self._get_random_select_fields(from_map, conversion_map, template_map, key_path=key_path)
+        else:
+            print("Unknown select type")
+            exit(1)
+
+        for field in random_select_fields:
+            select_clause += " " + field + ","
+
+        select_clause = self._remove_trailing_substring(select_clause.strip(), ",")
+        self.set_in_dict(template_map, key_path+['SELECT_CLAUSE'], select_clause)
+        return template_map
+
+    def _combine_converted_clauses(self, template_map, key_path=[]):
+        clause_order = ["WITH_CLAUSE", "SELECT_CLAUSE", "FROM_CLAUSE", "LET_CLAUSE", "WHERE_CLAUSE", "GROUPBY_CLAUSE", "LETTING_CLAUSE",
+                        "HAVING_CLAUSE", "ORDERBY_CLAUSE", "OFFSET_CLAUSE", "LIMIT_CLAUSE"]
+        query = ""
+        for clause in clause_order:
+            converted_clause = self.get_from_dict(template_map, key_path).get(clause, "")
+            if converted_clause != "":
+                query += converted_clause + " "
+        return query
+
+    """this function takes in a dictionary and a list of keys 
+    and will return the value after traversing all the keys in the list
+    https://stackoverflow.com/questions/14692690/access-nested-dictionary-items-via-a-list-of-keys"""
+    def get_from_dict(self, data_dict, key_list):
+        for key in key_list:
+            data_dict = data_dict[key]
+        return data_dict
+
+    """this function take in a dictionary, a list of keys, and a value
+    and will set the value after traversing the list of keys
+    https://stackoverflow.com/questions/14692690/access-nested-dictionary-items-via-a-list-of-keys"""
+    def set_in_dict(self, data_dict, key_list, value):
+        for key in key_list[:-1]:
+            data_dict = data_dict.setdefault(key, {})
+        data_dict[key_list[-1]] = value
+
+    def _get_random_select_fields(self, from_map, conversion_map, template_map, key_path=[]):
+        from_class = from_map['class']
+        table_map = conversion_map.get("table_map", {})
+        random_fields = []
+        if from_class == "BUCKET":
+            from_table = from_map['left_table']
+            all_fields = table_map[from_table]["fields"].keys()
+            random_fields = self._random_sample(all_fields)
+
+        elif from_class == "WITH_ALIAS":
+            from_table = from_map['left_table']
+            all_fields = self.get_from_dict(template_map, key_path + ['WITH_FIELDS', from_table])
+            all_fields = [field_tuple[0] for field_tuple in all_fields]
+            if len(all_fields) == 0:
+                random_fields = [from_table]
+            else:
+                random_fields = self._random_sample(all_fields)
+                random_fields = [from_table + "." + field for field in random_fields]
+
+        elif from_class == "CTE_ALIAS":
+            from_table = from_map['left_table']
+            from_table_alias = from_map['left_table_alias']
+            last_index = 0
+            i = 0
+            for part in key_path:
+                if part == 'WITH_EXPRESSION_TEMPLATES':
+                    last_index = i
+                i += 1
+            with_fields_key_path = key_path[:last_index]
+            with_fields = self.get_from_dict(template_map, with_fields_key_path + ['WITH_FIELDS'])
+            target_fields = with_fields[from_table]
+            all_fields = [field_tuple[0] for field_tuple in target_fields]
+            random_fields = self._random_sample(all_fields)
+            random_fields = [from_table_alias + "." + field for field in random_fields]
+
+        elif from_class == "TABLE_AND_CTE_JOIN":
+            left_table = from_map['left_table']
+            left_table_alias = from_map.get('left_table_alias', "NO_ALIAS")
+            if left_table_alias == "NO_ALIAS":
+                left_table_alias = left_table
+
+            if left_table.startswith("CTE"):
+                left_table_fields = self.get_from_dict(template_map, key_path + ['WITH_FIELDS', left_table])
+                left_table_fields = [(left_table_alias, tuple[0]) for tuple in left_table_fields]
+            else:
+                left_table_fields = table_map[left_table]["fields"].keys()
+                left_table_fields = [(left_table_alias, field) for field in left_table_fields]
+
+            right_table = from_map['right_table']
+            right_table_alias = from_map.get('right_table_alias', "NO_ALIAS")
+            if right_table_alias == "NO_ALIAS":
+                right_table_alias = right_table
+
+            if right_table.startswith("CTE"):
+                right_table_fields = self.get_from_dict(template_map, key_path + ['WITH_FIELDS', right_table])
+                right_table_fields = [(right_table_alias, tuple[0]) for tuple in right_table_fields]
+            else:
+                right_table_fields = table_map[right_table]["fields"].keys()
+                right_table_fields = [(right_table_alias, field) for field in right_table_fields]
+
+            all_fields = []
+            seen_fields = []
+            check_fields = left_table_fields + right_table_fields
+            random.shuffle(check_fields)
+            for tuple in check_fields:
+                if tuple[1] not in seen_fields:
+                    seen_fields.append(tuple[1])
+                    all_fields.append(tuple)
+            random_fields = self._random_sample(all_fields)
+            random_fields = [field[0] + "." + field[1] for field in random_fields]
+
+        else:
+            print("Unknown from type for select clause conversion")
+            exit(1)
+
+        return random_fields
+
+    def convert_table_name(self, query_map, conversion_map):
+        database = conversion_map['database_name']
+        query_map["n1ql"] = query_map['n1ql'].replace("simple_table", database + "_" + "simple_table")
+        for key in query_map['indexes'].keys():
+            if 'definition' in query_map['indexes'][key]:
+                query_map['indexes'][key]['definition'] = query_map['indexes'][key]['definition'].replace("simple_table", database + "_" + "simple_table")
+        return query_map
+
+    def _random_sample(self, list):
+        size_of_sample = random.choice(range(1, len(list) + 1))
+        random_sample = [list[i] for i in random.sample(xrange(len(list)), size_of_sample)]
+        return random_sample
+
+    def _random_constant(self, field=None):
+        if field:
+            if field == "int_field1":
+                random_constant = random.randrange(36787, 99912344, 1000000)
+            elif field == "bool_field1":
+                random_constant = random.choice([True, False])
+            elif field == "char_field1":
+                random_constant = ''.join(random.choice(string.ascii_uppercase + string.ascii_lowercase) for _ in range(1))
+                random_constant = "'%s'" %random_constant
+            elif field == "datetime_field1":
+                random_constant = "'%s'" % self._random_datetime()
+            elif field == "decimal_field1":
+                random_constant = random.randrange(16, 9971, 10)
+            elif field == "primary_key_id":
+                random_constant = "'%s'" % random.randrange(1, 9999, 10)
+            elif field == "varchar_field1":
+                random_constant = ''.join(random.choice(string.ascii_uppercase + string.ascii_lowercase) for _ in range(5))
+                random_constant = "'%s'" %random_constant
+            else:
+                print("Unknown field type: " + str(field))
+                exit(1)
+        else:
+            constant_type = random.choice(["STRING", "INTEGER", "DECIMAL", "BOOLEAN"])
+            if constant_type == "STRING":
+                random_constant = ''.join(random.choice(string.ascii_uppercase) for _ in range(5))
+                random_constant = "'%s'" %random_constant
+            elif constant_type == "INTEGER":
+                random_constant = random.randrange(36787, 99912344, 1000000)
+            elif constant_type == "DECIMAL":
+                random_constant = float((random.randrange(700, 997400))/100)
+            elif constant_type == "BOOLEAN":
+                random_constant = random.choice([True, False])
+            else:
+                print("Unknown constant type")
+                exit(1)
+        return random_constant
+
+    def _remove_trailing_substring(self, string, ending):
+        if string.endswith(ending):
+            return string[:-len(ending)]
+        else:
+            return string
+
+    def _extract_fields_from_clause(self, clause_type, template_map, conversion_map, key_path=[]):
+        table_map = conversion_map.get("table_map", {})
+        table_name = conversion_map.get("table_name", "simple_table")
+        table_fields = table_map[table_name]["fields"].keys()
+        expression = self.get_from_dict(template_map, key_path+[clause_type + "_CLAUSE"])
+        if expression.find(clause_type) == -1:
+            return []
+        if clause_type == "SELECT":
+            expression_fields_string = expression.split("SELECT")[1].split("FROM")[0].strip()
+        else:
+            print("Unknown clause type")
+            exit(1)
+
+        return self._extract_raw_fields_from_string(table_fields, expression_fields_string)
+
+    def _extract_raw_fields_from_string(self, raw_field_list, string):
+        raw_fields = []
+        for raw_field in raw_field_list:
+            if raw_field.find('char') == 0:
+                idx = self.find_char_field(string)
+                if idx > -1:
+                    raw_fields.append((str(raw_field), idx))
+            else:
+                idx = string.find(raw_field)
+                if idx > -1:
+                    raw_fields.append((str(raw_field), idx))
+        return raw_fields
 
     def _convert_sql_template_for_skip_range_scan(self, n1ql_template, conversion_map):
         table_map = conversion_map.get("table_map", {})
