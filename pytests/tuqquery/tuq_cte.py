@@ -143,9 +143,18 @@ class QueryCTETests(QueryTests):
         query_3 = 'with usekeys as (select raw meta(def).id from default def), a as (2010), b as (a+10), c as (select raw join_yr from default d1 use keys usekeys where join_yr > a), d as (select raw join_yr from default d2 use keys usekeys where join_yr in c and join_yr < b) select join_yr from default d0 use keys usekeys where join_yr in d order by join_yr'
         verify_3 = 'select join_yr from default d0 where join_yr in (select raw join_yr from default d2 where join_yr in (select raw join_yr from default d1 where join_yr > 2010) and join_yr < 2020) order by join_yr'
 
+        query_4 = 'with a as (select join_yr from default where join_yr > 2010), b as (select aa.join_yr from a as aa where aa.join_yr < 2012) select b.* from b'
+        verify_4 = 'select join_yr from default where join_yr < 2012 and join_yr > 2010'
+
+        # will fail until MB-32271 is fixed
+        query_5 = 'with a as (select join_yr from default where join_yr > 2010), b as (select a.join_yr from a where a.join_yr < 2012) select b.* from b'
+        verify_5 = 'select join_yr from default where join_yr < 2012 and join_yr > 2010'
+
         queries["a"] = {"queries": [query_1], "asserts": [self.verifier(verify_1)]}
         queries["b"] = {"queries": [query_2], "asserts": [self.verifier(verify_2)]}
         queries["c"] = {"queries": [query_3], "asserts": [self.verifier(verify_3)]}
+        queries["d"] = {"queries": [query_4], "asserts": [self.verifier(verify_4)]}
+        queries["e"] = {"queries": [query_5], "asserts": [self.verifier(verify_5)]}
 
         self.query_runner(queries)
 

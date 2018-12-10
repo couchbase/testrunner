@@ -3146,6 +3146,11 @@ class QueriesIndexTests(QueryTests):
 
     def test_dynamic_names(self):
         self.fail_if_no_buckets()
+        num_docs = self.docs_per_day * 2016
+        bucket_doc_map = {"default": num_docs}
+        bucket_status_map = {"default": "healthy"}
+        self.wait_for_buckets_status(bucket_status_map, 5, 120)
+        self.wait_for_bucket_docs(bucket_doc_map, 5, 120)
         self.run_cbq_query('create primary index on {0} using GSI'.format("default"))
         self._wait_for_index_online("default", "#primary")
         try:
@@ -3156,11 +3161,14 @@ class QueriesIndexTests(QueryTests):
             self.query = 'insert into {0} (key k,value doc)  select to_string(name)|| UUID() as k , doc as doc from {0} where name is not null'.format("default")
             self.run_cbq_query()
             self.query = 'select * from {0}'.format("default")
+            new_num_docs = num_docs*2
+            bucket_doc_map = {"default": new_num_docs}
+            self.wait_for_bucket_docs(bucket_doc_map, 5, 120)
             actual_result = self.run_cbq_query()
-            self.assertEqual(actual_result['metrics']['resultCount'], 24192)
+            self.assertEqual(actual_result['metrics']['resultCount'], new_num_docs)
+        finally:
             self.query = 'delete from {0} where meta().id in (select RAW to_string(name)|| UUID()  from {0} d)'.format("default")
             self.run_cbq_query()
-        finally:
             self.run_cbq_query("DROP PRIMARY INDEX ON {0}".format("default"))
 
     def test_between_spans(self):
