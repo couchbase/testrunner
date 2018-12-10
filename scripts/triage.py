@@ -26,6 +26,7 @@ Options
     --job, -j Job name (optional), for example centos-query_covering-2_moi
     --format, -f, Output format (optional)\n \tc - config file\n \ts - stack trace\n \td - cmd line, ini file, core panic dump file (pretty long operation)
     --ignore, -i, Igrore jobs, comma-separated list (optional)\n
+    --restart, -r, Restart specified jobs list\n 
 
     --help Show this help
 
@@ -35,7 +36,7 @@ Examples:
     sys.exit(0)
 
 
-def triage(os, build, component, username, password, job, format, ignore_list):
+def triage(os, build, component, username, password, job_list, format, ignore_list, restart_list, dispatcher_token, server_pool_id, add_pool_id):
     fmt = format
     if format == '' or format is None:
         fmt = 'csd'
@@ -47,8 +48,12 @@ def triage(os, build, component, username, password, job, format, ignore_list):
                         'This test requires buckets',
                         'ValueError: No JSON object could be decoded']
 
-    if job is not None and job != '':
-        job_arr = job.split(",")
+    if restart_list is not None and restart_list != '':
+        execute_restart(restart_list, dispatcher_token, os, build, component, server_pool_id, add_pool_id)
+        exit(0)
+
+    if job_list is not None and job_list != '':
+        job_arr = job_list.split(",")
         jobs_list = ''
         for j in job_arr:
             jobs_list += ("'"+j.lower()+"'"+',')
@@ -132,7 +137,7 @@ def triage(os, build, component, username, password, job, format, ignore_list):
         try:
             logs_data = json.loads(response.read())
         except ValueError, ve:
-            print("No logs for job - "+str(job_name))
+            a=1
 
         if (str(logs_data)) == '{}':
             job_dict['fail_reasons']['no_logs']['cases'].append('no_logs_case')
@@ -201,6 +206,24 @@ def triage(os, build, component, username, password, job, format, ignore_list):
         failers.append(job_dict)
 
     print_report(failers, os, build, component, fmt)
+
+def execute_restart(restart_list, dispatcher_token, os, build, component, server_pool_id, add_pool_id):
+    if restart_list is None or restart_list == '':
+        print("Restart list cannot be empty! Please specify comma separated jobs list.")
+        exit(1)
+    if server_pool_id is None or server_pool_id == '':
+        server_pool_id = 'regression'
+    if add_pool_id is None or add_pool_id == '':
+        add_pool_id = 'None'
+
+    restart_url = "http://qa.sc.couchbase.com/job/test_suite_dispatcher/buildWithParameters?token="+dispatcher_token+"" \
+                  "&OS="+os.lower()+"&version_number="+build+"&suite=12hour&component="+component.lower()+"" \
+                  "&subcomponent="+restart_list+"&serverPoolId="+server_pool_id+"&addPoolId="+add_pool_id+"&branch=master"
+    print("#### URL ::"+restart_url+"::")
+
+    response = urllib.urlopen(restart_url)
+    print("Restart response - "+str(response))
+
 
 def collect_json_params(case_attrs):
     result = {}
@@ -304,7 +327,9 @@ def print_report(failers, os, build, component, fmt):
     n=1
     connection_jobs_container = ""
 
+    print str(n) + ". Total list of failed jobs. "
     for job in failers:
+        print(job['name'])
 
         if len(job['fail_reasons']['connection']['cases']) > 0:
             connection_failers.append(job['name'])
@@ -321,6 +346,9 @@ def print_report(failers, os, build, component, fmt):
                 job_data['cases'].append(case)
 
             all_the_rest_failers.append(job_data)
+
+    n+=1
+    print
 
     if len(connection_failers) > 0:
         print str(n)+". There are some connection issues. "
@@ -399,11 +427,13 @@ if __name__ == "__main__":
     parser.add_argument('--component', '-c', help='Component name', type=str)
     parser.add_argument('--user', '-u', help='Username', type=str)
     parser.add_argument('--password', '-p', help='Password', type=str)
-    parser.add_argument('--job', '-j', help='Job name (optional)', type=str)
+    parser.add_argument('--job', '-j', help='Job names list (optional)', type=str)
     parser.add_argument('--format', '-f', help='Output format (optional)\n c - config file\n s - stack trace\n d - cmd line, ini file, core panic dump file (pretty long operation)', type=str)
     parser.add_argument('--ignore', '-i', help='Igrore jobs, comma-separated list (optional)\n ', type=str)
-    #parser.add_argument('--restart' ,'-r', help='Restart jobs automatically, comma-separated list.\n'
-    #                                            ' Empty list means that only connection issue jobs will be restarted (optional)', type=str)
+    parser.add_argument('--restart' ,'-r', help='Restart jobs automatically, comma-separated list (optional).', type=str)
+    parser.add_argument('--dispatcher_token', '-t', help='Test suite dispatcher security token.', type=str)
+    parser.add_argument('--server_pool_id', '-l', help='Test suite dispatcher server pool id (optional). Default value is \'regression\'', type=str)
+    parser.add_argument('--add_pool_id', '-a', help='Test suite dispatcher additional pool id (optional). Default value is \'None\'', type=str)
 
     args = parser.parse_args()
     os = args.os
@@ -411,16 +441,24 @@ if __name__ == "__main__":
     component = args.component
     username = args.user
     password = args.password
-    job = args.job
+    job_list = args.job
     format = args.format
     ignore_list = args.ignore
-    #restart = args.restart
+    restart_list = args.restart
+    dispatcher_token = args.dispatcher_token
+    server_pool_id = args.server_pool_id
+    add_pool_id=args.add_pool_id
 
-    if os is None or os == '' or build is None or build == '' or component is None or component == '' \
+    if restart_list is None:
+        if os is None or os == '' or build is None or build == '' or component is None or component == '' \
             or username is None or username == '' or password is None or password == '':
-        usage()
+            usage()
+    else:
+        if os is None or os == '' or build is None or build == '' or component is None or component == '' \
+            or dispatcher_token is None or dispatcher_token == '' or restart_list is None or restart_list == '':
+            usage()
 
-    triage(os, build, component, username, password, job, format, ignore_list)
+    triage(os, build, component, username, password, job_list, format, ignore_list, restart_list, dispatcher_token, server_pool_id, add_pool_id)
 
 
 
