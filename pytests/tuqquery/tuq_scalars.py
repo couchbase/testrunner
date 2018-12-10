@@ -556,7 +556,7 @@ class ScalarFunctionsTests(QueryTests):
             self.run_cbq_query("select nvl2() from system:dual")
         except CBQError, e:
             is_err_detected = True;
-            is_err_message_correct = str(e).lower().find('Number of arguments to function nvl2 must be between 3 and 3. - at'.lower()) > -1
+            is_err_message_correct = str(e).lower().find('Number of arguments to function nvl2 must be 3. - at'.lower()) > -1
 
         self.assertTrue(is_err_detected)
         self.assertTrue(is_err_message_correct)
@@ -570,7 +570,7 @@ class ScalarFunctionsTests(QueryTests):
             self.run_cbq_query("select nvl() from system:dual")
         except CBQError, e:
             is_err_detected = True
-            is_err_message_correct = str(e).lower().find('Number of arguments to function nvl must be between 2 and 2. - at'.lower()) > -1
+            is_err_message_correct = str(e).lower().find('Number of arguments to function nvl must be 2. - at'.lower()) > -1
 
         self.assertTrue(is_err_detected)
         self.assertTrue(is_err_message_correct)
@@ -584,7 +584,7 @@ class ScalarFunctionsTests(QueryTests):
             self.run_cbq_query("select nvl2('param1') from system:dual")
         except CBQError, e:
             is_err_detected = True
-            is_err_message_correct = str(e).lower().find('Number of arguments to function nvl2 must be between 3 and 3. - at'.lower()) > -1
+            is_err_message_correct = str(e).lower().find('Number of arguments to function nvl2 must be 3. - at'.lower()) > -1
 
         self.assertTrue(is_err_detected)
         self.assertTrue(is_err_message_correct)
@@ -597,7 +597,7 @@ class ScalarFunctionsTests(QueryTests):
             self.run_cbq_query("select nvl('param1') from system:dual")
         except CBQError, e:
             is_err_detected = True
-            is_err_message_correct = str(e).lower().find('Number of arguments to function nvl must be between 2 and 2. - at'.lower()) > -1
+            is_err_message_correct = str(e).lower().find('Number of arguments to function nvl must be 2. - at'.lower()) > -1
 
         self.assertTrue(is_err_detected)
         self.assertTrue(is_err_message_correct)
@@ -610,7 +610,7 @@ class ScalarFunctionsTests(QueryTests):
             self.run_cbq_query("select nvl2('param1', 'param2') from system:dual")
         except CBQError, e:
             is_err_detected = True
-            is_err_message_correct = str(e).lower().find('Number of arguments to function nvl2 must be between 3 and 3. - at'.lower()) > -1
+            is_err_message_correct = str(e).lower().find('Number of arguments to function nvl2 must be 3. - at'.lower()) > -1
 
         self.assertTrue(is_err_detected)
         self.assertTrue(is_err_message_correct)
@@ -623,7 +623,7 @@ class ScalarFunctionsTests(QueryTests):
             self.run_cbq_query("select nvl('param1','param2','param3') from system:dual")
         except CBQError, e:
             is_err_detected = True
-            is_err_message_correct = str(e).lower().find('Number of arguments to function nvl must be between 2 and 2. - at'.lower()) > -1
+            is_err_message_correct = str(e).lower().find('Number of arguments to function nvl must be 2. - at'.lower()) > -1
 
         self.assertTrue(is_err_detected)
         self.assertTrue(is_err_message_correct)
@@ -636,7 +636,7 @@ class ScalarFunctionsTests(QueryTests):
             self.run_cbq_query("select nvl2('param1','param2','param3','param4') from system:dual")
         except CBQError, e:
             is_err_detected = True
-            is_err_message_correct = str(e).lower().find('Number of arguments to function nvl2 must be between 3 and 3. - at'.lower()) > -1
+            is_err_message_correct = str(e).lower().find('Number of arguments to function nvl2 must be 3. - at'.lower()) > -1
 
         self.assertTrue(is_err_detected)
         self.assertTrue(is_err_message_correct)
