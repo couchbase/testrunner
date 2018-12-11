@@ -1720,7 +1720,7 @@ class RemoteMachineShellConnection:
             pass
 
     def couchbase_upgrade(self, build, save_upgrade_config=False, forcefully=False,
-                                                             fts_query_limit=None):
+                                            fts_query_limit=None, debug_logs=False):
         server_type = None
         success = True
         if fts_query_limit is None:
@@ -1768,8 +1768,11 @@ class RemoteMachineShellConnection:
                 command = 'dpkg -i /tmp/{0}'.format(build.name)
                 if forcefully:
                     command = 'dpkg -i --force /tmp/{0}'.format(build.name)
-        output, error = self.execute_command(command, use_channel=True)
-        self.log_command_output(output, error)
+        if debug_logs:
+            output, error = self.execute_command(command, use_channel=True)
+            self.log_command_output(output, error)
+        else:
+            self.execute_command(command, use_channel=True)
         linux = ["deb", "rpm"]
         if float(build.product_version[:3]) >= 5.1:
             if self.info.deliverable_type in linux:
