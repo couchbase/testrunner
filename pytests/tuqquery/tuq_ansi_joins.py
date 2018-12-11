@@ -98,25 +98,263 @@ class QueryANSIJOINSTests(QueryTests):
         queries_to_run.append((query, 1000))
         self.run_common_body(index_list=idx_list, queries_to_run=queries_to_run)
 
+    ''' With subquery support both sides of a join can be subqueries'''
+    def test_join_subquery(self):
+        queries_to_run = []
+
+        query_1 = "select * from (select * from default) d INNER JOIN (select * from default d1 where d1.name == 'employee-9') d2 ON (d.default.name = d2.d1.name)"
+        # With subquery support this join should be a hash join
+        explain_query = "EXPLAIN " + query_1
+        explain_plan = self.run_cbq_query(explain_query)
+        plan = self.ExplainPlanHelper(explain_plan)
+        self.assertTrue("HashJoin" in str(plan))
+        #Ensure that the build side is d2
+        self.assertTrue('d2' in plan['~children'][2]['build_aliases'])
+        queries_to_run.append((query_1, 186624))
+
+        self.run_common_body(queries_to_run=queries_to_run)
+
+    ''' With subquery support both sides of a join can be expressions'''
+    def test_join_expression(self):
+        queries_to_run = []
+
+        query_1 = "select * from ([{'name' : 'employee-9'}, {'name': 'employee-10'}]) d INNER JOIN ([{'name' : 'employee-9'},{'name' : 'employee-10'}]) d2 ON (d.name = d2.name)"
+        # With subquery support this join should be a hash join
+        explain_query = "EXPLAIN " + query_1
+        explain_plan = self.run_cbq_query(explain_query)
+        plan = self.ExplainPlanHelper(explain_plan)
+        self.assertTrue("HashJoin" in str(plan))
+        #Ensure that the build side is d2
+        self.assertTrue('d2' in plan['~children'][1]['build_aliases'])
+        queries_to_run.append((query_1, 2))
+
+        self.run_common_body(queries_to_run=queries_to_run)
+
+    ''' With subquery support both sides of a join can be expressions/subquery'''
+    def test_join_mixed(self):
+        queries_to_run = []
+
+        query_1 = "select * from (select * from default d1 where d1.name == 'employee-9') d INNER JOIN ([{'name' : 'employee-9'},{'name' : 'employee-10'}]) d2 ON (d.d1.name = d2.name)"
+        # With subquery support this join should be a hash join
+        explain_query = "EXPLAIN " + query_1
+        explain_plan = self.run_cbq_query(explain_query)
+        plan = self.ExplainPlanHelper(explain_plan)
+        self.assertTrue("HashJoin" in str(plan))
+        self.assertTrue('d2' in plan['~children'][2]['build_aliases'])
+        queries_to_run.append((query_1, 432))
+
+        query_2 = "select * from ([{'name' : 'employee-9'},{'name' : 'employee-10'}]) d2 INNER JOIN (select * from default d1 where d1.name == 'employee-9') d ON (d.d1.name = d2.name)"
+        # With subquery support this join should be a hash join
+        explain_query = "EXPLAIN " + query_2
+        explain_plan = self.run_cbq_query(explain_query)
+        plan = self.ExplainPlanHelper(explain_plan)
+        self.assertTrue("HashJoin" in str(plan))
+        self.assertTrue('d' in plan['~children'][1]['build_aliases'])
+        queries_to_run.append((query_2, 432))
+
+        self.run_common_body(queries_to_run=queries_to_run)
+
     ''' The right hand side of a join can be an expression, it needs to be a key space (a bucket)
             -Run a query where the right hand expression is a subquery
             -Run a query where the right hand expression is another join'''
-    def test_join_right_hand_expression(self):
-
+    def test_join_right_hand_subquery(self):
         idx_list = []
         queries_to_run = []
         idx = "CREATE INDEX name on default(name)"
         idx_list.append((idx, ("default", "name")))
 
         query_1 = "select * from default d INNER JOIN (select * from default d1 where d1.name == 'ajay') d2 ON (d.name = d2.name)"
-
+        # With subquery support this join should be a hash join
+        explain_query = "EXPLAIN " + query_1
+        explain_plan = self.run_cbq_query(explain_query)
+        plan = self.ExplainPlanHelper(explain_plan)
+        self.assertTrue("HashJoin" in str(plan))
         queries_to_run.append((query_1, 0))
 
         query_2 ="select * from default d INNER JOIN (select * from default d1 inner join default d3 on " \
         "d1.name == d3.name LIMIT 100) d2 ON (d.name = d3.name) LIMIT 100"
+
         queries_to_run.append((query_2, 100))
 
         self.run_common_body(index_list=idx_list, queries_to_run=queries_to_run)
+
+        try:
+            idx = "CREATE INDEX name on default(name)"
+            self.run_cbq_query(idx)
+            explain_query_2 = "EXPLAIN " + query_2
+            explain_plan = self.run_cbq_query(explain_query_2)
+            plan = self.ExplainPlanHelper(explain_plan)
+            self.assertTrue("HashJoin" in str(plan))
+
+        finally:
+            self.run_cbq_query("drop index default.name")
+
+    ''' The right hand side of a join can be an expression, it needs to be a key space (a bucket)
+            -Run a query where the right hand expression is a json doc'''
+    def test_join_right_hand_expression(self):
+        idx_list = []
+        queries_to_run = []
+        idx = "CREATE INDEX name on default(name)"
+        idx_list.append((idx, ("default", "name")))
+
+        query_1 = "select * from default d INNER JOIN ({'name' : 'employee-9'}) d2 ON (d.name = d2.name)"
+        # With subquery support this join should be a hash join
+        explain_query = "EXPLAIN " + query_1
+        explain_plan = self.run_cbq_query(explain_query)
+        plan = self.ExplainPlanHelper(explain_plan)
+        self.assertTrue("HashJoin" in str(plan))
+        queries_to_run.append((query_1, 432))
+
+        self.run_common_body(index_list=idx_list, queries_to_run=queries_to_run)
+
+##############################################################################################
+#
+#   Hints
+#
+##############################################################################################
+
+    ''' With subquery support both sides of a join can be subqueries w/hash hints'''
+    def test_join_subquery_hints(self):
+        queries_to_run = []
+
+        query_1 = "select * from (select * from default) d INNER JOIN (select * from default d1 where d1.name == 'employee-9') d2 USE HASH(build) ON (d.default.name = d2.d1.name)"
+        # With subquery support this join should be a hash join
+        explain_query = "EXPLAIN " + query_1
+        explain_plan = self.run_cbq_query(explain_query)
+        plan = self.ExplainPlanHelper(explain_plan)
+        self.assertTrue("HashJoin" in str(plan))
+        #Ensure that the build side is d2
+        self.assertTrue('d2' in plan['~children'][2]['build_aliases'])
+        queries_to_run.append((query_1, 186624))
+
+        query_2 = "select * from (select * from default) d INNER JOIN (select * from default d1 where d1.name == 'employee-9') d2 USE HASH(probe) ON (d.default.name = d2.d1.name)"
+        # With subquery support this join should be a hash join
+        explain_query = "EXPLAIN " + query_2
+        explain_plan = self.run_cbq_query(explain_query)
+        plan = self.ExplainPlanHelper(explain_plan)
+        self.assertTrue("HashJoin" in str(plan))
+        #d2 is the probe side so d should be the build side
+        self.assertTrue('d' in plan['~children'][2]['build_aliases'])
+        queries_to_run.append((query_2, 186624))
+
+        self.run_common_body(queries_to_run=queries_to_run)
+
+    ''' With subquery support both sides of a join can be expressions w/hash hints'''
+    def test_join_expression_hints(self):
+        queries_to_run = []
+
+        query_1 = "select * from ([{'name' : 'employee-9'}, {'name': 'employee-10'}]) d INNER JOIN ([{'name' : 'employee-9'},{'name' : 'employee-10'}]) d2 USE HASH(build) ON (d.name = d2.name)"
+        # With subquery support this join should be a hash join
+        explain_query = "EXPLAIN " + query_1
+        explain_plan = self.run_cbq_query(explain_query)
+        plan = self.ExplainPlanHelper(explain_plan)
+        self.assertTrue("HashJoin" in str(plan))
+        #Ensure that the build side is d2
+        self.assertTrue('d2' in plan['~children'][1]['build_aliases'])
+        queries_to_run.append((query_1, 2))
+
+        query_2 = "select * from ([{'name' : 'employee-9'}, {'name': 'employee-10'}]) d INNER JOIN ([{'name' : 'employee-9'},{'name' : 'employee-10'}]) d2 USE HASH(probe) ON (d.name = d2.name)"
+        # With subquery support this join should be a hash join
+        explain_query = "EXPLAIN " + query_2
+        explain_plan = self.run_cbq_query(explain_query)
+        plan = self.ExplainPlanHelper(explain_plan)
+        self.assertTrue("HashJoin" in str(plan))
+        #d2 is the probe side so d should be the build side
+        self.assertTrue('d' in plan['~children'][1]['build_aliases'])
+        queries_to_run.append((query_2, 2))
+
+        self.run_common_body(queries_to_run=queries_to_run)
+
+    ''' With subquery support both sides of a join can be expressions/subquery w/hash hints'''
+    def test_join_mixed_hints(self):
+        queries_to_run = []
+
+        query_1 = "select * from (select * from default d1 where d1.name == 'employee-9') d INNER JOIN ([{'name' : 'employee-9'},{'name' : 'employee-10'}]) d2 USE HASH(build) ON (d.d1.name = d2.name)"
+        # With subquery support this join should be a hash join
+        explain_query = "EXPLAIN " + query_1
+        explain_plan = self.run_cbq_query(explain_query)
+        plan = self.ExplainPlanHelper(explain_plan)
+        self.assertTrue("HashJoin" in str(plan))
+        self.assertTrue('d2' in plan['~children'][2]['build_aliases'])
+        queries_to_run.append((query_1, 432))
+
+        query_2 = "select * from ([{'name' : 'employee-9'},{'name' : 'employee-10'}]) d2 INNER JOIN (select * from default d1 where d1.name == 'employee-9') d USE HASH(probe) ON (d.d1.name = d2.name)"
+        # With subquery support this join should be a hash join
+        explain_query = "EXPLAIN " + query_2
+        explain_plan = self.run_cbq_query(explain_query)
+        plan = self.ExplainPlanHelper(explain_plan)
+        self.assertTrue("HashJoin" in str(plan))
+        self.assertTrue('d2' in plan['~children'][2]['build_aliases'])
+        queries_to_run.append((query_2, 432))
+
+        self.run_common_body(queries_to_run=queries_to_run)
+
+    ''' The right hand side of a join can be an expression, it needs to be a key space (a bucket)
+            -Run a query where the right hand expression is a subquery
+            -Run a query where the right hand expression is another join'''
+    def test_join_right_hand_subquery_hints(self):
+        idx_list = []
+        queries_to_run = []
+        idx = "CREATE INDEX name on default(name)"
+        idx_list.append((idx, ("default", "name")))
+
+        query_1 = "select * from default d INNER JOIN (select * from default d1 where d1.name == 'ajay') d2 USE HASH(build) ON (d.name = d2.name)"
+        # With subquery support this join should be a hash join
+        explain_query = "EXPLAIN " + query_1
+        explain_plan = self.run_cbq_query(explain_query)
+        plan = self.ExplainPlanHelper(explain_plan)
+        self.assertTrue("HashJoin" in str(plan))
+        self.assertTrue('d2' in plan['~children'][2]['build_aliases'])
+
+        queries_to_run.append((query_1, 0))
+
+        query_2 ="select * from default d INNER JOIN (select * from default d1 inner join default d3 on " \
+        "d1.name == d3.name LIMIT 100) d2 USE HASH(build) ON (d.name = d3.name) LIMIT 100"
+
+        queries_to_run.append((query_2, 100))
+
+        self.run_common_body(index_list=idx_list, queries_to_run=queries_to_run)
+
+        try:
+            idx = "CREATE INDEX name on default(name)"
+            self.run_cbq_query(idx)
+            explain_query_2 = "EXPLAIN " + query_2
+            explain_plan = self.run_cbq_query(explain_query_2)
+            plan = self.ExplainPlanHelper(explain_plan)
+            self.assertTrue("HashJoin" in str(plan))
+            self.assertTrue('d2' in plan['~children'][0]['~children'][2]['build_aliases'])
+
+        finally:
+            self.run_cbq_query("drop index default.name")
+
+    ''' The right hand side of a join can be an expression, it needs to be a key space (a bucket)
+            -Run a query where the right hand expression is a json doc'''
+    def test_join_right_hand_expression_hints(self):
+        idx_list = []
+        queries_to_run = []
+        idx = "CREATE INDEX name on default(name)"
+        idx_list.append((idx, ("default", "name")))
+
+        query_1 = "select * from default d INNER JOIN ({'name' : 'employee-9'}) d2 USE HASH(build) ON (d.name = d2.name)"
+        # With subquery support this join should be a hash join
+        explain_query = "EXPLAIN " + query_1
+        explain_plan = self.run_cbq_query(explain_query)
+        plan = self.ExplainPlanHelper(explain_plan)
+        self.assertTrue("HashJoin" in str(plan))
+        self.assertTrue('d2' in plan['~children'][2]['build_aliases'])
+        queries_to_run.append((query_1, 432))
+
+        query_2 = "select * from default d INNER JOIN ({'name' : 'employee-9'}) d2 USE HASH(probe) ON (d.name = d2.name)"
+        # With subquery support this join should be a hash join
+        explain_query = "EXPLAIN " + query_2
+        explain_plan = self.run_cbq_query(explain_query)
+        plan = self.ExplainPlanHelper(explain_plan)
+        self.assertTrue("HashJoin" in str(plan))
+        self.assertTrue('d' in plan['~children'][1]['build_aliases'])
+        queries_to_run.append((query_1, 432))
+
+        self.run_common_body(index_list=idx_list, queries_to_run=queries_to_run)
+
 
 ##############################################################################################
 #
@@ -465,7 +703,7 @@ class QueryANSIJOINSTests(QueryTests):
         -index_list = a list that contains tuples that look like (index_definition,(bucket_name,index_name)) the 
         second nested tuple is used to drop the indexes at the end 
         -queries to run = a list that contains tuples that look like (query_definition, expected_results)'''
-    def run_common_body(self, index_list, queries_to_run):
+    def run_common_body(self, index_list=[], queries_to_run=[]):
         try:
             for idx in index_list:
                 self.run_cbq_query(query=idx[0])

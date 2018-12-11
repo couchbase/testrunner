@@ -89,6 +89,8 @@ class RQGQueryHelperNew(BaseRQGQueryHelper):
             return self._convert_sql_template_for_skip_range_scan
         elif test_name == 'common_table_expression':
             return self._convert_sql_template_for_common_table_expression
+        elif test_name == 'ansi_joins':
+            return self._convert_sql_template_for_ansi_join
         else:
             print("Unknown test name")
             exit(1)
@@ -672,6 +674,116 @@ class RQGQueryHelperNew(BaseRQGQueryHelper):
                 if idx > -1:
                     raw_fields.append((str(raw_field), idx))
         return raw_fields
+
+    def _convert_sql_template_for_ansi_join(self, query_template, conversion_map):
+        table_map = conversion_map.get("table_map", {})
+        table_name = conversion_map.get("table_name", "simple_table")
+        new_template = self._extract_subquery(query_template)
+        subqueries = []
+        aliases= []
+        alias = ''
+        subquery_index = 0
+
+        # Convert the whole query without the subquery clause inside of it
+        sql, table_map = self._convert_sql_template_to_value(sql=new_template['STRIPPED_QUERY'], table_map=table_map, table_name=table_name, ansi_joins=True)
+
+        # Go through subquery templates and convert them to real queries
+        for template in new_template['SUBQUERY_TEMPLATE']:
+            subquery, table_map = self._convert_sql_template_to_value(sql=template, table_map=table_map, table_name=table_name, ansi_joins=True)
+            # Strip out the alias name so the on clause can be fixed later
+            alias_name = subquery.split("SELECT")[1].split('.')[0].strip()
+            # Avoid duplicate subquery error
+            subquery = subquery.replace(alias_name, "s_" + str(subquery_index))
+            # Give the whole subquery an alias so it can be referred to in the on_clause
+            subquery = subquery.replace("ALIAS", "subquery" + str(subquery_index) + "_s_" + str(subquery_index))
+            subqueries.append((subquery, subquery_index, "s_" + str(subquery_index)))
+            subquery_index += 1
+
+        subquery_index = 0
+        # An index to add special logic for the first loop through a for loop
+        index = 0
+
+        # Go through each subquery and put it back into the overall query
+        for subquery in subqueries:
+            # Put the subquery back into its proper place
+            sql = sql.replace("STUB_" + str(subquery_index), subquery[0])
+            # The on_clause of the query needs to be fixed so that the correct fields are being referenced, extract it
+            old_on_clause = sql.split("ON")[1].strip().split(')')[0].strip()
+            old_on_clause = old_on_clause.replace('(','')
+            # Loop through the on clause to replace the alias's that need to be changed
+            for character in old_on_clause.split(" "):
+                # An alias needs to be referencing a bucket that is in the join, make sure this is the case
+                if "t_" in character and 'subquery' not in character:
+                    alias = character.split('.')[0].strip()
+                    if alias != '':
+                        # We don't want to change all t_ terms to subquery, only one of them
+                        if index > 0 and alias in aliases:
+                            aliases.append(alias)
+                        elif index == 0:
+                            aliases.append(alias)
+                            index += 1
+                        else:
+                            continue
+
+            # Replace the aliases that need to be changed inside of the on_clause
+            for alias in aliases:
+                new_on_clause = old_on_clause.replace(alias, 'subquery' + str(subquery[1]) + "_" + subquery[2])
+                if 'subquery' not in alias:
+                    sql = sql.replace(alias, 'subquery' + str(subquery[1]) + "_" + subquery[2])
+            # Put the new on clause into the original query
+            sql = sql.replace(old_on_clause, new_on_clause)
+
+            subquery_index += 1
+            aliases = []
+            index = 0
+
+        n1ql = self._gen_sql_to_nql(sql, ansi_joins=True)
+        sql = self._convert_condition_template_to_value_datetime(sql, table_map, sql_type="sql")
+        n1ql = self._convert_condition_template_to_value_datetime(n1ql, table_map, sql_type="n1ql")
+
+        # Handle a special difference between sql and n1ql, is missing is not a concept in sql
+        if "IS MISSING" in sql:
+            sql = sql.replace("IS MISSING", "IS NULL")
+
+        map = {"n1ql": n1ql,
+               "sql": sql,
+               "bucket": str(",".join(table_map.keys())),
+               "expected_result": None,
+               "indexes": {}
+               }
+
+        table_name = random.choice(table_map.keys())
+        map["bucket"] = table_name
+
+        return map
+
+    ''' This method will go through my templates and extract the subqueries out of the template. It will replace those extracted
+        subqueries with the keyword STUB_ followed by the number of subquery that it is. THis is so it can be re-inserted
+        in the correct spot later on.'''
+    def _extract_subquery(self, query_template):
+        subquery_sep = ("SUBQUERY_TEMPLATE", "SUBQUERY_START", "SUBQUERY_END")
+
+        clause_seperators = [subquery_sep]
+        parsed_clauses = dict()
+        parsed_clauses['RAW_QUERY_TEMPLATE'] = query_template
+        parsed_clauses['STRIPPED_QUERY'] = ''
+        index = 0
+        for clause_seperator in clause_seperators:
+            clause = clause_seperator[0]
+            start_sep = clause_seperator[1]
+            end_sep = clause_seperator[2]
+            result = []
+            tmp = query_template.split(start_sep)
+            for substring in tmp:
+                if end_sep in substring:
+                    result.append(substring.split(end_sep)[0].strip())
+                    parsed_clauses['STRIPPED_QUERY'] = parsed_clauses['STRIPPED_QUERY'] + "STUB_" + str(index) + " " + substring.split(end_sep)[1].strip()
+                    index += 1
+                else:
+                    parsed_clauses['STRIPPED_QUERY'] = parsed_clauses['STRIPPED_QUERY'] + substring
+            parsed_clauses[clause] = result
+
+        return parsed_clauses
 
     def _convert_sql_template_for_skip_range_scan(self, n1ql_template, conversion_map):
         table_map = conversion_map.get("table_map", {})

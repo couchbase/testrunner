@@ -38,84 +38,36 @@ class BaseRQGQueryHelper(object):
         order_by = self._find_string_type(sql, ["ORDER BY", "order by"])
         group_by = self._find_string_type(sql, ["GROUP BY", "group by"])
         having = self._find_string_type(sql, ["HAVING", "having"])
-        if ansi_joins:
-            if "(SELECT" in sql:
-                select_from_text = []
-                from_field_text = []
-                where_condition_text = []
-                queries = sql.split("ALIAS")
-                for select in queries[0].split(select_text):
-                    select_from_text.append(select.split(from_text)[0])
 
-                from_field_text.append("ALIAS" + sql.split(from_text)[2].split(where_text)[1].split("ALIAS")[1])
-                from_field_text.append(sql.split(from_text)[2].split(where_text)[0])
-
-                # where_condition_text[0] should be appended behind from_field_text [0]
-                where_condition_text.append(sql.split(from_text)[2].split(where_text)[1].split("ALIAS")[0])
-
-                # where_condition_text[1] should be appended behind from_field_text [1]
-                where_condition_text.append(sql.split(from_text)[2].split(where_text)[2])
-            else:
-                if where_text:
-                    from_field_text = sql.split(from_text)[1].split(where_text)[0]
-                else:
-                    if "SUBTABLE" in sql:
-                        from_field_text = sql.split(from_text)[2]
-                    else:
-                        from_field_text = sql.split(from_text)[1]
-                if "SUBTABLE" in sql:
-                    select_from_text = sql.split(' ')[1] + ' ' + sql.split(' ')[2]
-                else:
-                    select_from_text = sql.split(select_text)[1].split(from_text)[0].strip()
-                if where_text:
-                    if "SUBTABLE" in sql:
-                        where_condition_text = sql.split(from_text)[1].split(where_text)[1].split(order_by)[0]
-                    else:
-                        where_condition_text = sql.split(where_text)[1]
-                if group_by:
-                    group_by_text = sql.split(group_by)[1]
-                    where_condition_text = where_condition_text.split(group_by)[0]
-                    if having:
-                        having_text = group_by_text.split(having)[1]
-                        group_by_text = group_by_text.split(having)[0]
-                if order_by:
-                    order_by_text = sql.split(order_by)[1]
-                    if group_by_text and not having:
-                        group_by_text = group_by_text.split(order_by)[0]
-                    if having:
-                        having_text = having_text.split(order_by)[0]
-                    where_condition_text = where_condition_text.split(order_by)[0]
-
+        if where_text:
+            from_field_text = sql.split(from_text)[1].split(where_text)[0]
         else:
-            if where_text:
-                from_field_text = sql.split(from_text)[1].split(where_text)[0]
-            else:
-                if "SUBTABLE" in sql:
-                    from_field_text = sql.split(from_text)[2]
-                else:
-                    from_field_text = sql.split(from_text)[1]
             if "SUBTABLE" in sql:
-                select_from_text = sql.split(' ')[1]+' ' + sql.split(' ')[2]
+                from_field_text = sql.split(from_text)[2]
             else:
-                select_from_text = sql.split(select_text)[1].split(from_text)[0].strip()
-            if where_text:
-                if "SUBTABLE" in sql:
-                    where_condition_text = sql.split(from_text)[1].split(where_text)[1].split(order_by)[0]
-                else:
-                    where_condition_text = sql.split(where_text)[1]
-            if group_by:
-                group_by_text = sql.split(group_by)[1]
-                where_condition_text = where_condition_text.split(group_by)[0]
-                if having:
-                    having_text = group_by_text.split(having)[1]
-                    group_by_text = group_by_text.split(having)[0]
-            if order_by:
-                order_by_text = sql.split(order_by)[1]
-                if group_by_text and not having:
-                    group_by_text = group_by_text.split(order_by)[0]
-                if having:
-                    having_text = having_text.split(order_by)[0]
-                where_condition_text = where_condition_text.split(order_by)[0]
+                from_field_text = sql.split(from_text)[1]
+        if "SUBTABLE" in sql:
+            select_from_text = sql.split(' ')[1]+' ' + sql.split(' ')[2]
+        else:
+            select_from_text = sql.split(select_text)[1].split(from_text)[0].strip()
+        if where_text:
+            if "SUBTABLE" in sql:
+                where_condition_text = sql.split(from_text)[1].split(where_text)[1].split(order_by)[0]
+            else:
+                where_condition_text = sql.split(where_text)[1]
+        if group_by:
+            group_by_text = sql.split(group_by)[1]
+            where_condition_text = where_condition_text.split(group_by)[0]
+            if having:
+                having_text = group_by_text.split(having)[1]
+                group_by_text = group_by_text.split(having)[0]
+        if order_by:
+            order_by_text = sql.split(order_by)[1]
+            if group_by_text and not having:
+                group_by_text = group_by_text.split(order_by)[0]
+            if having:
+                having_text = having_text.split(order_by)[0]
+            where_condition_text = where_condition_text.split(order_by)[0]
 
         map = {
                 "from_fields": from_field_text,
