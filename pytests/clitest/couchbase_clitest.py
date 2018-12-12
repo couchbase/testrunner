@@ -2194,7 +2194,7 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
             elif delete:
                 self.assertTrue(not self.verifyGroupExists(server, name), "Group doesn't exist")
             elif rename:
-                self.assertTrue(self.verifyGroupExists(server, name), "Group not renamed")
+                self.assertTrue(self.verifyGroupExists(server, rename), "Group not renamed")
             elif move > 0:
                 _, _, errored = cli.group_manage(False, False, False, to_move, None, None, from_group, to_group)
                 self.assertTrue(errored, "Group reset failed")
