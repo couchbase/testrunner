@@ -196,8 +196,8 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         count = 0
         stats_dst = self.rest.get_bucket_stats(bucket)
         while stats_dst["curr_items"] != expected_dcp_mutations and count < 20:
-            message = "Waiting for handler code to complete bucket operations... Current : {0} Expected : {1}".\
-                      format(stats_dst["curr_items"], expected_dcp_mutations)
+            message = "Waiting for handler code {2} to complete bucket operations... Current : {0} Expected : {1}".\
+                      format(stats_dst["curr_items"], expected_dcp_mutations,name)
             self.sleep(timeout/20, message=message)
             count += 1
             stats_dst = self.rest.get_bucket_stats(bucket)
@@ -321,16 +321,18 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         content = self.rest.save_function(body['appname'], body)
         # undeploy the function
         content1 = self.rest.set_settings_for_function(body['appname'], body['settings'])
-        log.info("Pause Application : {0}".format(content1))
+        log.info("Pause Application : {0}".format(body['appname']))
 
     def resume_function(self, body):
         body['settings']['deployment_status'] = True
         body['settings']['processing_status'] = True
+        body['settings'].pop('dcp_stream_boundary')
+        #body['settings']['dcp_stream_boundary'] = "from_prior"
         # save the function so that it is visible in UI
         content = self.rest.save_function(body['appname'], body)
         # undeploy the function
         content1 = self.rest.set_settings_for_function(body['appname'], body['settings'])
-        log.info("Resume Application : {0}".format(content1))
+        log.info("Resume Application : {0}".format(body['appname']))
 
     def refresh_rest_server(self):
         eventing_nodes_list = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
