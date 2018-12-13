@@ -128,7 +128,7 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
             body['depcfg']['buckets'].append({"alias": self.src_bucket_name, "bucket_name": self.src_bucket_name,"access": "rw"})
         return body
 
-    def wait_for_bootstrap_to_complete(self, name, iterations=20):
+    def wait_for_bootstrap_to_complete(self, name, iterations=40):
         result = self.rest.get_deployed_eventing_apps()
         count = 0
         while name not in result and count < iterations:
