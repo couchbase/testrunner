@@ -1381,6 +1381,22 @@ class CouchbaseCluster:
                 maxttl=maxttl
             ))
 
+    def remove_bucket_ports(self):
+        node_str = ""
+        for node in self.__nodes:
+            if node_str:
+                node_str += ','
+            node_str += node.ip + ':11210'
+        ssh_conn = RemoteMachineShellConnection(self.__master_node)
+        for bucket in self.__buckets:
+            self.__log.info(
+                "Removing ports for bucket {0}".format(
+                    bucket.name))
+            options = "--bucket " + bucket.name + " --remove-bucket-port 1"
+            ssh_conn.execute_couchbase_cli("bucket-edit", cluster_host='localhost', options=options,
+                                           cluster_port=None, user='Administrator', password='password')
+        ssh_conn.disconnect()
+
     def get_buckets(self):
         return self.__buckets
 
@@ -2948,6 +2964,9 @@ class XDCRNewBaseTest(unittest.TestCase):
                 eviction_policy=self.__eviction_policy,
                 bucket_priority=bucket_priority, lww=self.__lww,
                 maxttl=maxttl)
+
+            # Remove Moxi ports. Deprecated since 5.x (MB-31697)
+            cb_cluster.remove_bucket_ports()
 
     def create_buckets_on_cluster(self, cluster_name):
         # if mixed priority is set by user, set high priority for sasl and
