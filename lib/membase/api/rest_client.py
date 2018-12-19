@@ -2415,9 +2415,14 @@ class RestConnection(object):
             settings.count = json_parsed["count"]
             settings.timeout = json_parsed["timeout"]
             settings.can_abort_rebalance = json_parsed["canAbortRebalance"]
+            settings.failoverOnDataDiskIssuesEnabled = json_parsed["failoverOnDataDiskIssues"]["enabled"]
+            settings.failoverOnDataDiskIssuesTimeout = json_parsed["failoverOnDataDiskIssues"]["timePeriod"]
+            settings.maxCount = json_parsed["maxCount"]
+            settings.failoverServerGroup = json_parsed["failoverServerGroup"]
         return settings
 
-    def update_autofailover_settings(self, enabled, timeout, canAbortRebalance=False):
+    def update_autofailover_settings(self, enabled, timeout, canAbortRebalance=False, enable_disk_failure=False,
+                                     disk_timeout=120, maxCount=1, enableServerGroup=False):
         params_dict = {}
         params_dict['timeout'] = timeout
         if enabled:
@@ -2427,6 +2432,16 @@ class RestConnection(object):
             params_dict['enabled'] = 'false'
         if canAbortRebalance:
             params_dict['canAbortRebalance'] = 'true'
+        if enable_disk_failure:
+            params_dict['failoverOnDataDiskIssues[enabled]'] = 'true'
+            params_dict['failoverOnDataDiskIssues[timePeriod]'] = disk_timeout
+        else:
+            params_dict['failoverOnDataDiskIssues[enabled]'] = 'false'
+        params_dict['maxCount'] = maxCount
+        if enableServerGroup:
+            params_dict['failoverServerGroup'] = 'true'
+        else:
+            params_dict['failoverServerGroup'] = 'false'
         params = urllib.urlencode(params_dict)
         api = self.baseUrl + 'settings/autoFailover'
         log.info('settings/autoFailover params : {0}'.format(params))
@@ -4521,7 +4536,7 @@ class RestConnection(object):
             if user.get('id') == user_id:
                 return user
         return {}
-    
+
     '''
     Update IP version on server.
     afamily: The value must be one of the following: [ipv4,ipv6] 
@@ -4654,6 +4669,11 @@ class AutoFailoverSettings(object):
         self.enabled = True
         self.timeout = 0
         self.count = 0
+        self.failoverOnDataDiskIssuesEnabled = False
+        self.failoverOnDataDiskIssuesTimeout = 0
+        self.maxCount = 1
+        self.failoverServerGroup = False
+        self.can_abort_rebalance = False
 
 
 class AutoReprovisionSettings(object):

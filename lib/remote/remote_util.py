@@ -4708,6 +4708,84 @@ class RemoteMachineShellConnection:
         return output, error
 
 
+    def give_directory_permissions_to_couchbase(self, location):
+        """
+        Change the directory permission of the location mentioned
+        to include couchbase as the user
+        :param location: Directory location whoes permissions has to be changed
+        :return: Nothing
+        """
+        command = "chown 'couchbase' {0}".format(location)
+        output, error = self.execute_command(command)
+        command = "chmod 777 {0}".format(location)
+        output, error = self.execute_command(command)
+
+    def create_new_partition(self, location, size=None):
+        """
+        Create a new partition at the location specified and of
+        the size specified
+        :param location: Location to create the new partition at.
+        :param size: Size of the partition in MB
+        :return: Nothing
+        """
+        command = "umount -l {0}".format(location)
+        output, error = self.execute_command(command)
+        command = "rm -rf {0}".format(location)
+        output, error = self.execute_command(command)
+        command = "rm -rf /usr/disk-img/disk-quota.ext3"
+        output, error = self.execute_command(command)
+        command = "mkdir -p {0}".format(location)
+        output, error = self.execute_command(command)
+        if size:
+            count = (size * 1024 * 1024) / 512
+        else:
+            count = (5 * 1024 * 1024 * 1024) / 512
+        command = "mkdir -p /usr/disk-img"
+        output, error = self.execute_command(command)
+        command = "dd if=/dev/zero of=/usr/disk-img/disk-quota.ext3 count={0}".format(count)
+        output, error = self.execute_command(command)
+        command = "/sbin/mkfs -t ext3 -q /usr/disk-img/disk-quota.ext3 -F"
+        output, error = self.execute_command(command)
+        command = "mount -o loop,rw,usrquota,grpquota /usr/disk-img/disk-quota.ext3 {0}".format(location)
+        output, error = self.execute_command(command)
+        command = "chown 'couchbase' {0}".format(location)
+        output, error = self.execute_command(command)
+        command = "chmod 777 {0}".format(location)
+        output, error = self.execute_command(command)
+
+    def mount_partition(self, location):
+        """
+        Mount a partition at the location specified
+        :param location: Mount location
+        :return: Output and error message from the mount command
+        """
+        command = "mount -o loop,rw,usrquota,grpquota /usr/disk-img/disk-quota.ext3 {0}; df -Th".format(location)
+        output, error = self.execute_command(command)
+        return output, error
+
+    def unmount_partition(self, location):
+        """
+        Unmount the partition at the specified location.
+        :param location: Location of the partition which has to be unmounted
+        :return: Output and error message from the umount command
+        """
+        command = "umount -l {0}; df -Th".format(location)
+        output, error = self.execute_command(command)
+        return output, error
+
+    def fill_disk_space(self, location, size):
+        """
+        Fill up the disk fully at the location specified.
+        This method creates a junk file of the specified size in the location specified
+        :param location: Location to fill the disk
+        :param size: Size of disk space to fill up, in MB
+        :return: Output and error message from filling up the disk.
+        """
+        count = (size * 1024 * 1024) / 512
+        command = "dd if=/dev/zero of={0}/disk-quota.ext3 count={1}; df -Th".format(location, count)
+        output, error = self.execute_command(command)
+        return output, error
+
 class RemoteUtilHelper(object):
 
     @staticmethod

@@ -1,6 +1,8 @@
+import gc
 import time
 
 from basetestcase import BaseTestCase
+from couchbase_cli import CouchbaseCLI
 from couchbase_helper.documentgenerator import BlobGenerator
 from membase.api.rest_client import RestConnection
 from membase.helper.bucket_helper import BucketOperationHelper
@@ -53,6 +55,34 @@ class AutoFailoverBaseTest(BaseTestCase):
         self.servers_to_remove = self.servers[self.nodes_init -
                                               self.nodes_out:self.nodes_init]
 
+    def bareSetUp(self):
+        super(AutoFailoverBaseTest, self).setUp()
+        self._get_params()
+        self.rest = RestConnection(self.orchestrator)
+        self.task_manager = TaskManager("Autofailover_thread")
+        self.task_manager.start()
+        self.node_failure_task_manager = TaskManager(
+            "Nodes_failure_detector_thread")
+        self.node_failure_task_manager.start()
+        self.initial_load_gen = BlobGenerator('auto-failover',
+                                              'auto-failover-',
+                                              self.value_size,
+                                              end=self.num_items)
+        self.update_load_gen = BlobGenerator('auto-failover',
+                                             'auto-failover-',
+                                             self.value_size,
+                                             end=self.update_items)
+        self.delete_load_gen = BlobGenerator('auto-failover',
+                                             'auto-failover-',
+                                             self.value_size,
+                                             start=self.update_items,
+                                             end=self.delete_items)
+        self.server_to_fail = self._servers_to_fail()
+        self.servers_to_add = self.servers[self.nodes_init:self.nodes_init +
+                                                           self.nodes_in]
+        self.servers_to_remove = self.servers[self.nodes_init -
+                                              self.nodes_out:self.nodes_init]
+
     def tearDown(self):
         self.log.info("============AutoFailoverBaseTest teardown============")
         self._get_params()
@@ -73,6 +103,50 @@ class AutoFailoverBaseTest(BaseTestCase):
             self.node_monitor_task.stop = True
         self.task_manager.shutdown(force=True)
 
+    def shuffle_nodes_between_zones_and_rebalance(self, to_remove=None):
+        """
+        Shuffle the nodes present in the cluster if zone > 1. Rebalance the nodes in the end.
+        Nodes are divided into groups iteratively i.e. 1st node in Group 1, 2nd in Group 2, 3rd in Group 1 and so on, when
+        zone=2.
+        :param to_remove: List of nodes to be removed.
+        """
+        if not to_remove:
+            to_remove = []
+        serverinfo = self.orchestrator
+        rest = RestConnection(serverinfo)
+        zones = ["Group 1"]
+        nodes_in_zone = {"Group 1": [serverinfo.ip]}
+        # Create zones, if not existing, based on params zone in test.
+        # Shuffle the nodes between zones.
+        if int(self.zone) > 1:
+            for i in range(1, int(self.zone)):
+                a = "Group "
+                zones.append(a + str(i + 1))
+                if not rest.is_zone_exist(zones[i]):
+                    rest.add_zone(zones[i])
+                nodes_in_zone[zones[i]] = []
+            # Divide the nodes between zones.
+            nodes_in_cluster = [node.ip for node in self.get_nodes_in_cluster()]
+            nodes_to_remove = [node.ip for node in to_remove]
+            for i in range(1, len(self.servers)):
+                if self.servers[i].ip in nodes_in_cluster and self.servers[i].ip not in nodes_to_remove:
+                    server_group = i % int(self.zone)
+                    nodes_in_zone[zones[server_group]].append(self.servers[i].ip)
+            # Shuffle the nodesS
+            for i in range(1, self.zone):
+                node_in_zone = list(set(nodes_in_zone[zones[i]]) -
+                                    set([node  for node in rest.get_nodes_in_zone(zones[i])]))
+                rest.shuffle_nodes_in_zones(node_in_zone, zones[0], zones[i])
+        self.zones = nodes_in_zone
+        otpnodes = [node.id for node in rest.node_statuses()]
+        nodes_to_remove = [node.id for node in rest.node_statuses() if node.ip in [t.ip for t in to_remove]]
+        # Start rebalance and monitor it.
+        started = rest.rebalance(otpNodes=otpnodes, ejectedNodes=nodes_to_remove)
+        if started:
+            result = rest.monitorRebalance()
+            msg = "successfully rebalanced cluster {0}"
+            self.log.info(msg.format(result))
+
     def enable_autofailover(self):
         """
         Enable the autofailover setting with the given timeout.
@@ -81,7 +155,9 @@ class AutoFailoverBaseTest(BaseTestCase):
         """
         status = self.rest.update_autofailover_settings(True,
                                                         self.timeout,
-                                                        self.can_abort_rebalance)
+                                                        self.can_abort_rebalance,
+                                                        maxCount=self.max_count,
+                                                        enableServerGroup=self.server_group_failover)
         return status
 
     def disable_autofailover(self):
@@ -390,6 +466,8 @@ class AutoFailoverBaseTest(BaseTestCase):
         :return:  Nothing
         """
         self.timeout = self.input.param("timeout", 60)
+        self.max_count = self.input.param("maxCount", 1)
+        self.server_group_failover = self.input.param("serverGroupFailover", False)
         self.failover_action = self.input.param("failover_action",
                                                 "stop_server")
         self.failover_orchestrator = self.input.param("failover_orchestrator",
@@ -414,10 +492,13 @@ class AutoFailoverBaseTest(BaseTestCase):
             "pause_between_failover_action", 0)
         self.remove_after_failover = self.input.param(
             "remove_after_failover", False)
-        self.timeout_buffer = 120 if self.failover_orchestrator else 3
-        failover_not_expected = self.num_node_failures > 1 and \
-                                self.pause_between_failover_action < \
-                                self.timeout or self.num_replicas < 1
+        self.timeout_buffer = 120 if self.failover_orchestrator else 10
+        failover_not_expected = (self. max_count == 1 and self.num_node_failures > 1 and
+                                self.pause_between_failover_action <
+                                self.timeout or self.num_replicas < 1)
+        failover_not_expected = failover_not_expected or (1 < self.max_count < self.num_node_failures and
+                                                          self.pause_between_failover_action < self.timeout or
+                                                          self.num_replicas < self.max_count)
         self.failover_expected = not failover_not_expected
         if self.failover_action is "restart_server":
             self.num_items *= 100
@@ -478,3 +559,207 @@ class AutoFailoverBaseTest(BaseTestCase):
             if node['clusterMembership'] == "inactiveFailed":
                 failover_count += 1
         return failover_count
+
+class DiskAutoFailoverBasetest(AutoFailoverBaseTest):
+    def setUp(self):
+        super(DiskAutoFailoverBasetest, self).bareSetUp()
+        self.log.info("=============Starting Diskautofailover base setup=============")
+        self.original_data_path = self.rest.get_data_path()
+        ClusterOperationHelper.cleanup_cluster(self.servers, True, self.master)
+        self.targetMaster = True
+        self.reset_cluster()
+        self.disk_location = self.input.param("data_location", "/data")
+        self.disk_location_size = self.input.param("data_location_size", 5120)
+        self.data_location = "{0}/data".format(self.disk_location)
+        self.disk_timeout = self.input.param("disk_timeout", 120)
+        self.read_loadgen = self.input.param("read_loadgen", False)
+        self.log.info("Cleanup the cluster and set the data location to the one specified by the test.")
+        for server in self.servers:
+            self._create_data_locations(server)
+            if server == self.master:
+                master_services = self.get_services(self.servers[:1],
+                                                    self.services_init,
+                                                    start_node=0)
+            else:
+                master_services = None
+            if master_services:
+                master_services = master_services[0].split(",")
+            self._initialize_node_with_new_data_location(server, self.data_location,
+                                                         master_services)
+        self.services = self.get_services(self.servers[:self.nodes_init], None)
+        self.cluster.rebalance(self.servers[:1],
+                               self.servers[1:self.nodes_init],
+                               [], services=self.services)
+        self.add_built_in_server_user(node=self.master)
+        if self.read_loadgen:
+            self.bucket_size = 100
+        super(DiskAutoFailoverBasetest,self)._bucket_creation()
+        self._load_all_buckets(self.servers[0], self.initial_load_gen,
+                               "create", 0)
+        self.failover_actions['disk_failure'] = self.fail_disk_via_disk_failure
+        self.failover_actions['disk_full'] = self.fail_disk_via_disk_full
+        self.loadgen_tasks = []
+        self.log.info("=============Finished Diskautofailover base setup=============")
+
+    def tearDown(self):
+        self.log.info("=============Starting Diskautofailover teardown ==============")
+        self.targetMaster = True
+        if hasattr(self, "original_data_path"):
+            for task in self.loadgen_tasks:
+                try:
+                    task.set_result(True)
+                    task.result()
+                except Exception:
+                    pass
+            self.task_manager.shutdown(force=True)
+            self.bring_back_failed_nodes_up()
+            self.reset_cluster()
+            for server in self.servers:
+                self._initialize_node_with_new_data_location(server, self.original_data_path)
+            for object in gc.get_objects():
+                try:
+                    if object.name in ["Autofailover_thread", "Cluster_Thread", "Nodes_failure_detector_thread"]:
+                        self.log.info(object.name)
+                        object.shutdown(force=True)
+                except:
+                    pass
+        self.log.info("=============Finished Diskautofailover teardown ==============")
+
+    def enable_disk_autofailover(self):
+        status = self.rest.update_autofailover_settings(True, self.timeout, enable_disk_failure=True,
+                                                        disk_timeout=self.disk_timeout)
+        return status
+
+    def enable_disk_autofailover_and_validate(self):
+        status = self.enable_disk_autofailover()
+        self.assertTrue(status, "Failed to enable disk autofailover for the cluster")
+        self.sleep(5)
+        settings = self.rest.get_autofailover_settings()
+        self.assertTrue(settings.enabled, "Failed to enable "
+                                          "autofailover_settings!")
+        self.assertEqual(self.timeout, settings.timeout,
+                         "Incorrect timeout set. Expected timeout : {0} "
+                         "Actual timeout set : {1}".format(self.timeout,
+                                                           settings.timeout))
+        self.assertTrue(settings.failoverOnDataDiskIssuesEnabled, "Failed to enable disk autofailover for the cluster")
+        self.assertEqual(self.disk_timeout, settings.failoverOnDataDiskIssuesTimeout,
+                         "Incorrect timeout period for disk failover set. Expected Timeout: {0} "
+                         "Actual timeout: {1}".format(self.disk_timeout, settings.failoverOnDataDiskIssuesTimeout))
+
+    def disable_disk_autofailover(self, disable_autofailover=False):
+        status = self.rest.update_autofailover_settings(not disable_autofailover, self.timeout, enable_disk_failure=False,
+                                                        disk_timeout=self.disk_timeout)
+        return status
+
+    def disable_disk_autofailover_and_validate(self, disable_autofailover=False):
+        status = self.disable_disk_autofailover(disable_autofailover)
+        self.assertTrue(status, "Failed to update autofailover settings. Failed to disable disk failover settings")
+        settings = self.rest.get_autofailover_settings()
+        self.assertEqual(not disable_autofailover, settings.enabled, "Failed to update autofailover settings.")
+        self.assertFalse(settings.failoverOnDataDiskIssuesEnabled, "Failed to disable disk autofailover for the "
+                                                                   "cluster")
+
+    def _create_data_locations(self, server):
+        shell = RemoteMachineShellConnection(server)
+        shell.create_new_partition(self.disk_location, self.disk_location_size)
+        shell.create_directory(self.data_location)
+        shell.give_directory_permissions_to_couchbase(self.data_location)
+        shell.disconnect()
+
+    def _initialize_node_with_new_data_location(self, server, data_location, services=None):
+        init_port = server.port or '8091'
+        init_tasks = []
+        cli = CouchbaseCLI(server, server.rest_username, server.rest_password)
+        output, error, status = cli.node_init(data_location, None, None)
+        self.log.info(output)
+        if error or "ERROR" in output:
+            self.log.info(error)
+            self.fail("Failed to set new data location. Check error message.")
+        init_tasks.append(self.cluster.async_init_node(server, self.disabled_consistent_view,
+                                                       self.rebalanceIndexWaitingDisabled,
+                                                       self.rebalanceIndexPausingDisabled, self.maxParallelIndexers,
+                                                       self.maxParallelReplicaIndexers, init_port,
+                                                       self.quota_percent, services=services,
+                                                       index_quota_percent=self.index_quota_percent,
+                                                       gsi_type=self.gsi_type))
+        for task in init_tasks:
+            task.result()
+
+    def fail_disk_via_disk_failure(self):
+        node_down_timer_tasks = []
+        for node in self.server_to_fail:
+            node_failure_timer_task = NodeDownTimerTask(node.ip)
+            node_down_timer_tasks.append(node_failure_timer_task)
+        task = AutoFailoverNodesFailureTask(self.orchestrator,
+                                            self.server_to_fail,
+                                            "disk_failure", self.timeout,
+                                            self.pause_between_failover_action,
+                                            self.failover_expected,
+                                            self.timeout_buffer,
+                                            failure_timers=node_down_timer_tasks,
+                                            disk_timeout=self.disk_timeout,
+                                            disk_location=self.disk_location,
+                                            disk_size=self.disk_location_size)
+        for node_down_timer_task in node_down_timer_tasks:
+            self.node_failure_task_manager.schedule(node_down_timer_task, 2)
+        self.task_manager.schedule(task)
+        try:
+            task.result()
+        except Exception, e:
+            self.fail("Exception: {}".format(e))
+
+    def fail_disk_via_disk_full(self):
+        node_down_timer_tasks = []
+        for node in self.server_to_fail:
+            node_failure_timer_task = NodeDownTimerTask(node.ip)
+            node_down_timer_tasks.append(node_failure_timer_task)
+        task = AutoFailoverNodesFailureTask(self.orchestrator,
+                                            self.server_to_fail,
+                                            "disk_full", self.timeout,
+                                            self.pause_between_failover_action,
+                                            self.failover_expected,
+                                            self.timeout_buffer,
+                                            failure_timers=node_down_timer_tasks,
+                                            disk_timeout=self.disk_timeout, disk_location=self.disk_location,
+                                            disk_size=self.disk_location_size)
+        for node_down_timer_task in node_down_timer_tasks:
+            self.node_failure_task_manager.schedule(node_down_timer_task, 2)
+        self.task_manager.schedule(task)
+        try:
+            task.result()
+        except Exception, e:
+            self.fail("Exception: {}".format(e))
+
+    def bring_back_failed_nodes_up(self):
+        if self.failover_action == "disk_failure":
+            task = AutoFailoverNodesFailureTask(self.orchestrator,
+                                                self.server_to_fail,
+                                                "recover_disk_failure", self.timeout,
+                                                self.pause_between_failover_action,
+                                                expect_auto_failover=False,
+                                                timeout_buffer=self.timeout_buffer,
+                                                check_for_failover=False,
+                                                disk_timeout=self.disk_timeout, disk_location=self.disk_location,
+                                                disk_size=self.disk_location_size)
+            self.task_manager.schedule(task)
+            try:
+                task.result()
+            except Exception, e:
+                self.fail("Exception: {}".format(e))
+        elif self.failover_action == "disk_full":
+            task = AutoFailoverNodesFailureTask(self.orchestrator,
+                                                self.server_to_fail,
+                                                "recover_disk_full_failure", self.timeout,
+                                                self.pause_between_failover_action,
+                                                expect_auto_failover=False,
+                                                timeout_buffer=self.timeout_buffer,
+                                                check_for_failover=False,
+                                                disk_timeout=self.disk_timeout, disk_location=self.disk_location,
+                                                disk_size=self.disk_location_size)
+            self.task_manager.schedule(task)
+            try:
+                task.result()
+            except Exception, e:
+                self.fail("Exception: {}".format(e))
+        else:
+            super(DiskAutoFailoverBasetest, self).bring_back_failed_nodes_up()

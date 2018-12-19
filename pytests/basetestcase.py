@@ -165,6 +165,7 @@ class BaseTestCase(unittest.TestCase):
             self.bucket_type = self.input.param("bucket_type", 'membase')
             self.num_replicas = self.input.param("replicas", 1)
             self.enable_replica_index = self.input.param("index_replicas", 1)
+            self.skip_bucket_setup = self.input.param("skip_bucket_setup", False)
             self.eviction_policy = self.input.param("eviction_policy", 'valueOnly')  # or 'fullEviction'
                            # for ephemeral bucket is can be noEviction or nruEviction
             if self.bucket_type == 'ephemeral' and self.eviction_policy == 'valueOnly':
@@ -348,7 +349,7 @@ class BaseTestCase(unittest.TestCase):
             self.bucket_base_params['memcached']['size'] = self.bucket_size
 
             if str(self.__class__).find('upgrade_tests') == -1 and \
-                            str(self.__class__).find('newupgradetests') == -1:
+                            str(self.__class__).find('newupgradetests') == -1 and not self.skip_bucket_setup:
                 self._bucket_creation()
             self.log.info("==============  basetestcase setup was finished for test #{0} {1} =============="
                           .format(self.case_number, self._testMethodName))
