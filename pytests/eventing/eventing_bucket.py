@@ -56,10 +56,8 @@ class EventingBucket(EventingBaseTest):
                                           )
             self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
             self.handler_code = HANDLER_CODE.N1QL_OPS_WITH_TIMERS
-        elif handler_code == 'bucket_op_with_sbm':
-            self.handler_code= HANDLER_CODE.BUCKET_OP_WITH_SOURCE_BUCKET_MUTATION
-        elif handler_code == 'bucket_op_with_sbm_with_timers':
-            self.handler_code= HANDLER_CODE.BUCKET_OP_SOURCE_BUCKET_MUTATION_WITH_TIMERS
+        elif handler_code == 'source_bucket_mutation':
+            self.handler_code = HANDLER_CODE.BUCKET_OP_WITH_SOURCE_BUCKET_MUTATION
         else:
             self.handler_code = HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE
 
@@ -408,12 +406,20 @@ class EventingBucket(EventingBaseTest):
         self.deploy_function(body)
         stats_src = RestConnection(self.master).get_bucket_stats(bucket=self.src_bucket_name)
         # Wait for eventing to catch up with all the update mutations and verify results
-        self.verify_eventing_results(self.function_name, stats_src["curr_items"], skip_stats_validation=True)
+        # Wait for eventing to catch up with all the update mutations and verify results after rebalance
+        if self.handler_code == HANDLER_CODE.BUCKET_OP_WITH_SOURCE_BUCKET_MUTATION:
+            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2, skip_stats_validation=True)
+        else:
+            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         # delete all documents
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size, op_type='delete')
         # Wait for eventing to catch up with all the delete mutations and verify results
-        self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+        # Wait for eventing to catch up with all the update mutations and verify results after rebalance
+        if self.handler_code == HANDLER_CODE.BUCKET_OP_WITH_SOURCE_BUCKET_MUTATION:
+            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        else:
+            self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
         # intentionally added , as it requires some time for eventing-consumers to shutdown
         self.sleep(30)
@@ -481,3 +487,18 @@ class EventingBucket(EventingBaseTest):
 
 
 
+    def test_source_bucket_mutation_with_read_access(self):
+        # load some data
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OP_WITH_SOURCE_BUCKET_MUTATION,
+                                              worker_count=3)
+        # create an alias so that src bucket is also destination bucket
+        del body['depcfg']['buckets'][0]
+        body['depcfg']['buckets'].append({"alias": self.src_bucket_name, "bucket_name": self.src_bucket_name})
+        self.deploy_function(body)
+        # sleep intentionally added as we are validating no mutations are processed by eventing
+        self.sleep(60)
+        self.verify_eventing_results(self.function_name, 2016 * self.docs_per_day, skip_stats_validation=True)
+        # Undeploy and delete the function
+        self.undeploy_and_delete_function(body)
