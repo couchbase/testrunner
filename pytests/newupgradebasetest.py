@@ -336,8 +336,7 @@ class NewUpgradeBaseTest(QueryHelperTests,EventingBaseTest, FTSBaseTest):
         return appropriate_build
 
     def _upgrade(self, upgrade_version, server, queue=None, skip_init=False, info=None,
-                                                            save_upgrade_config=False,
-                                                            fts_query_limit=None):
+                       save_upgrade_config=False, fts_query_limit=None, debug_logs=False):
         try:
             remote = RemoteMachineShellConnection(server)
             appropriate_build = self._get_build(server, upgrade_version, remote, info=info)
@@ -348,7 +347,7 @@ class NewUpgradeBaseTest(QueryHelperTests,EventingBaseTest, FTSBaseTest):
             o, e = remote.couchbase_upgrade(appropriate_build,\
                                             save_upgrade_config=save_upgrade_config,\
                                             forcefully=self.is_downgrade,
-                                            fts_query_limit=fts_query_limit)
+                                            fts_query_limit=fts_query_limit, debug_logs=debug_logs)
             self.log.info("upgrade {0} to version {1} is completed".format(server.ip, upgrade_version))
             """ remove this line when bug MB-11807 fixed """
             if self.is_ubuntu:
@@ -387,7 +386,7 @@ class NewUpgradeBaseTest(QueryHelperTests,EventingBaseTest, FTSBaseTest):
 
     def _async_update(self, upgrade_version, servers, queue=None, skip_init=False,
                       info=None, save_upgrade_config=False,
-                      fts_query_limit=None):
+                      fts_query_limit=None, debug_logs=False):
         self.log.info("servers {0} will be upgraded to {1} version".
                       format([server.ip for server in servers], upgrade_version))
         q = queue or self.queue
@@ -396,7 +395,8 @@ class NewUpgradeBaseTest(QueryHelperTests,EventingBaseTest, FTSBaseTest):
             upgrade_thread = Thread(target=self._upgrade,
                                     name="upgrade_thread" + server.ip,
                                     args=(upgrade_version, server, q, skip_init, info,
-                                          save_upgrade_config, fts_query_limit))
+                                          save_upgrade_config, fts_query_limit,
+                                          debug_logs))
             upgrade_threads.append(upgrade_thread)
             upgrade_thread.start()
         return upgrade_threads

@@ -1768,11 +1768,15 @@ class RemoteMachineShellConnection:
                 command = 'dpkg -i /tmp/{0}'.format(build.name)
                 if forcefully:
                     command = 'dpkg -i --force /tmp/{0}'.format(build.name)
+        output, error = self.execute_command(command, use_channel=True)
         if debug_logs:
-            output, error = self.execute_command(command, use_channel=True)
             self.log_command_output(output, error)
         else:
-            self.execute_command(command, use_channel=True)
+            mesg = "You have successfully installed Couchbase Server."
+            success_upgrade = self._check_output(mesg, output)
+            if success_upgrade:
+                output = []
+                output.append("You have successfully installed Couchbase Server.")
         linux = ["deb", "rpm"]
         if float(build.product_version[:3]) >= 5.1:
             if self.info.deliverable_type in linux:
@@ -1786,6 +1790,16 @@ class RemoteMachineShellConnection:
                 self.stop_couchbase()
                 self.start_couchbase()
         return output, error
+
+    def _check_output(self, word_check, output):
+        found = False
+        if len(output) >=1 :
+            for x in output:
+                if word_check.lower() in x.lower():
+                    log.info("Found '{0}' in output".format(word_check))
+                    found = True
+                    break
+        return found
 
     def couchbase_upgrade_win(self, architecture, windows_name, version):
         task = "upgrade"
