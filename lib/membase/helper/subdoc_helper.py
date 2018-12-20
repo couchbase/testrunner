@@ -135,7 +135,7 @@ class SubdocHelper:
         return self._createNestedJson(key, {'doc': dict['doc'], 'levels': dict['levels']-1})
 
 
-    def insert_nested_docs(self, num_of_docs, prefix='doc', levels=16, size=512, return_docs=False, long_path=False):
+    def insert_nested_docs(self, num_of_docs, prefix='doc', levels=16, size=512, return_docs=False, long_path=False,collection=None):
         rest = RestConnection(self.master)
         smart = VBucketAwareMemcached(rest, self.bucket)
         doc_names = []
@@ -157,7 +157,7 @@ class SubdocHelper:
             fail_count = 0
             while True:
                 try:
-                    smart.set(key, 0, 0, json.dumps(value))
+                    smart.set(key, 0, 0, json.dumps(value), collection=collection)
                     break
                 except MemcachedError as e:
                     fail_count += 1
@@ -181,7 +181,7 @@ class SubdocHelper:
     # If `return_docs` is true, it'll return the full docs and not
     # only the keys
     def insert_nested_specific_docs(self, num_of_docs, prefix='doc', extra_values={},
-                    return_docs=False):
+                    return_docs=False,collection=None):
         random.seed(12345)
         rest = RestConnection(self.master)
         smart = VBucketAwareMemcached(rest, self.bucket)
@@ -237,7 +237,7 @@ class SubdocHelper:
             fail_count = 0
             while True:
                 try:
-                    smart.set(key, 0, 0, json.dumps(value))
+                    smart.set(key, 0, 0, json.dumps(value),collection=collection)
                     break
                 except MemcachedError as e:
                     fail_count += 1
@@ -255,7 +255,7 @@ class SubdocHelper:
         return doc_names
 
     def insert_docs(self, num_of_docs, prefix='doc', extra_values={},
-                    return_docs=False):
+                    return_docs=False,collection=None):
         random.seed(12345)
         rest = RestConnection(self.master)
         smart = VBucketAwareMemcached(rest, self.bucket)
@@ -284,7 +284,7 @@ class SubdocHelper:
             fail_count = 0
             while True:
                 try:
-                    smart.set(key, 0, 0, json.dumps(value))
+                    smart.set(key, 0, 0, json.dumps(value),collection=collection)
                     break
                 except MemcachedError as e:
                     fail_count += 1

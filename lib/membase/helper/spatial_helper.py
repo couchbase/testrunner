@@ -91,7 +91,7 @@ class SpatialHelper:
     # If `return_docs` is true, it'll return the full docs and not
     # only the keys
     def insert_docs(self, num_of_docs, prefix='doc', extra_values={},
-                    return_docs=False):
+                    return_docs=False,collection=None):
         random.seed(12345)
         rest = RestConnection(self.master)
         smart = VBucketAwareMemcached(rest, self.bucket)
@@ -117,7 +117,7 @@ class SpatialHelper:
             fail_count = 0
             while True:
                 try:
-                    smart.set(key, 0, 0, json.dumps(value))
+                    smart.set(key, 0, 0, json.dumps(value),collection=collection)
                     break
                 except MemcachedError as e:
                     fail_count += 1

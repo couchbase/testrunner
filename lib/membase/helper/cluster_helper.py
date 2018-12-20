@@ -78,6 +78,7 @@ class ClusterOperationHelper(object):
             log.info("waiting for ns_server @ {0}:{1}".format(server.ip, server.port))
             if RestHelper(rest).is_ns_server_running(wait_time):
                 log.info("ns_server @ {0}:{1} is running".format(server.ip, server.port))
+
             elif wait_if_warmup:
                 # wait when warmup completed
                 buckets = rest.get_buckets()

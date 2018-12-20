@@ -21,6 +21,7 @@ from memcacheConstants import ERR_NOT_FOUND, ERR_NOT_MY_VBUCKET, ERR_ETMPFAIL, E
 import json
 import sys
 from perf_engines import mcsoda
+import memcacheConstants
 
 from Queue import Queue
 from threading import Thread
@@ -55,7 +56,8 @@ class MemcachedClientHelper(object):
                        moxi=True,
                        async_write=False,
                        delete_ratio=0,
-                       expiry_ratio=0):
+                       expiry_ratio=0,
+                       collection=None):
         log = logger.Logger.get_logger()
         if not servers:
             raise MemcachedClientHelperExcetion(errorcode='invalid_argument',
@@ -106,7 +108,8 @@ class MemcachedClientHelper(object):
                                   moxi=moxi,
                                   async_write=async_write,
                                   delete_ratio=delete_ratio,
-                                  expiry_ratio=expiry_ratio)
+                                  expiry_ratio=expiry_ratio,
+                                  collection=collection)
             threads.append(thread)
 
         return threads
@@ -122,7 +125,8 @@ class MemcachedClientHelper(object):
                                        write_only=False,
                                        moxi=True,
                                        delete_ratio=0,
-                                       expiry_ratio=0):
+                                       expiry_ratio=0,
+                                       collection=None):
         log = logger.Logger.get_logger()
         if not serverInfo:
             raise MemcachedClientHelperExcetion(errorcode='invalid_argument',
@@ -168,7 +172,8 @@ class MemcachedClientHelper(object):
                                   write_only=write_only,
                                   moxi=moxi,
                                   delete_ratio=delete_ratio,
-                                  expiry_ratio=expiry_ratio)
+                                  expiry_ratio=expiry_ratio,
+                                  collection=collection)
             threads.append(thread)
 
         return threads
@@ -184,7 +189,8 @@ class MemcachedClientHelper(object):
                                         write_only=False,
                                         moxi=True,
                                         delete_ratio=0,
-                                        expiry_ratio=0):
+                                        expiry_ratio=0,
+                                        collection=None):
         inserted_keys = []
         rejected_keys = []
         log = logger.Logger.get_logger()
@@ -198,7 +204,8 @@ class MemcachedClientHelper(object):
                                                        write_only=write_only,
                                                        moxi=moxi,
                                                        delete_ratio=delete_ratio,
-                                                       expiry_ratio=expiry_ratio)
+                                                       expiry_ratio=expiry_ratio,
+                                                       collection=collection)
 
         # we can start them!
         for thread in threads:
@@ -234,7 +241,8 @@ class MemcachedClientHelper(object):
                     number_of_threads=50,
                     override_vBucketId=-1,
                     write_only=False,
-                    moxi=True):
+                    moxi=True,
+                    collection=None):
         inserted_keys_count = 0
         rejected_keys_count = 0
         log = logger.Logger.get_logger()
@@ -246,7 +254,8 @@ class MemcachedClientHelper(object):
                                                        number_of_threads,
                                                        override_vBucketId,
                                                        write_only,
-                                                       moxi)
+                                                       moxi,
+                                                       collection=collection)
         # we can start them!
         for thread in threads:
             thread.start()
@@ -405,7 +414,7 @@ class MemcachedClientHelper(object):
 
 
 class MutationThread(threading.Thread):
-    def run(self):
+    def run(self, collection=None):
         values = DocumentGenerator.make_docs(len(self.keys),
                 {"name": "user-${prefix}", "payload": "memcached-json-${prefix}-${padding}",
                  "size": 1024, "seed": self.seed})
@@ -414,7 +423,7 @@ class MutationThread(threading.Thread):
         for value in values:
             try:
                 if self.op == "set":
-                    client.set(self.keys[counter], 0, 0, value)
+                    client.set(self.keys[counter], 0, 0, value, collection=collection)
                     self._mutated_count += 1
             except MemcachedError:
                 self._rejected_count += 1
@@ -433,11 +442,13 @@ class MutationThread(threading.Thread):
                  keys,
                  op,
                  seed,
-                 name='default'):
+                 name='default',
+                 collection=None):
         threading.Thread.__init__(self)
         self.log = logger.Logger.get_logger()
         self.serverInfo = serverInfo
         self.name = name
+        self.collection=collection
         self.keys = keys
         self.op = op
         self.seed = seed
@@ -447,13 +458,14 @@ class MutationThread(threading.Thread):
 
 
 class ReaderThread(object):
-    def __init__(self, info, keyset, queue):
+    def __init__(self, info, keyset, queue, collection=None):
         self.info = info
         self.log = logger.Logger.get_logger()
         self.error_seen = 0
         self.keyset = keyset
         self.aborted = False
         self.queue = queue
+        self.collection=collection
 
     def abort(self):
         self.aborted = True
@@ -478,7 +490,7 @@ class ReaderThread(object):
                                        selected['size'],
                                        int(selected['how_many']))
             try:
-                client.send_get(key)
+                client.send_get(key, self.collection)
             except Exception:
                 self._saw_error(key)
                 #        self.log.warn("attempted to get {0} keys before they are set".format(self.error_seen))
@@ -502,11 +514,13 @@ class WorkerThread(threading.Thread):
                  moxi=True,
                  async_write=False,
                  delete_ratio=0,
-                 expiry_ratio=0):
+                 expiry_ratio=0,
+                 collection=None):
         threading.Thread.__init__(self)
         self.log = logger.Logger.get_logger()
         self.serverInfo = serverInfo
         self.name = name
+        self.collection=collection
         self.values_list = []
         self.values_list.extend(copy.deepcopy(values_list))
         self._value_list_copy = []
@@ -528,7 +542,8 @@ class WorkerThread(threading.Thread):
         # let's create a read_thread
         self.info = {'server': serverInfo,
                      'name': self.name,
-                     'baseuuid': self._base_uuid}
+                     'baseuuid': self._base_uuid,
+                     'collection': self.collection}
         self.write_only = write_only
         self.aborted = False
         self.async_write = async_write
@@ -626,25 +641,25 @@ class WorkerThread(threading.Thread):
                 if self.override_vBucketId >= 0:
                     client.vbucketId = self.override_vBucketId
                 if self.async_write:
-                    client.send_set(key, 0, 0, value)
+                    client.send_set(key, 0, 0, value, self.collection)
                 else:
-                    client.set(key, 0, 0, value)
+                    client.set(key, 0, 0, value, self.collection)
                 self._inserted_keys_count += 1
                 backoff_count = 0
                 # do expiry sets, 30 second expiry time
                 if Random().random() < self._expiry_ratio:
-                    client.set(key + "-exp", 30, 0, value)
+                    client.set(key + "-exp", 30, 0, value, self.collection)
                     self._expiry_count += 1
                     # do deletes if we have 100 pending
                 # at the end delete the remaining
                 if len(self._delete) >= 100:
                 #                    self.log.info("deleting {0} keys".format(len(self._delete)))
                     for key_del in self._delete:
-                        client.delete(key_del)
+                        client.delete(key_del, self.collection)
                     self._delete = []
                     # do delete sets
                 if Random().random() < self._delete_ratio:
-                    client.set(key + "-del", 0, 0, value)
+                    client.set(key + "-del", 0, 0, value, self.collection)
                     self._delete.append(key + "-del")
                     self._delete_count += 1
             except MemcachedError as error:
@@ -705,9 +720,9 @@ class WorkerThread(threading.Thread):
                     if self.override_vBucketId >= 0:
                         client.vbucketId = self.override_vBucketId
                     if self.async_write:
-                        client.send_set(item["key"], 0, 0, item["value"])
+                        client.send_set(item["key"], 0, 0, item["value"], self.collection)
                     else:
-                        client.set(item["key"], 0, 0, item["value"])
+                        client.set(item["key"], 0, 0, item["value"], self.collection)
                     self._inserted_keys_count += 1
                 except MemcachedError:
                     self._rejected_keys_count += 1
@@ -720,7 +735,7 @@ class WorkerThread(threading.Thread):
             if len(self._delete) > 0:
             #                self.log.info("deleting {0} keys".format(len(self._delete)))
                 for key_del in self._delete:
-                    client.delete(key_del)
+                    client.delete(key_del, self.collection)
                 self._delete = []
 
             self.log.info("deleted {0} keys".format(self._delete_count))
@@ -746,7 +761,7 @@ class WorkerThread(threading.Thread):
 
 
 class VBucketAwareMemcached(object):
-    def __init__(self, rest, bucket, info=None):
+    def __init__(self, rest, bucket, info=None, collection=None):
         self.log = logger.Logger.get_logger()
         self.info = info
         self.bucket = bucket
@@ -757,6 +772,7 @@ class VBucketAwareMemcached(object):
         self.vBucketMapReplica = {}
         self.rest = rest
         self.reset(rest)
+        self.collections=collection
 
     def reset(self, rest=None):
         if not rest:
@@ -838,6 +854,7 @@ class VBucketAwareMemcached(object):
                             memcacheds[server_str] = \
                                 MemcachedClientHelper.direct_client(server, bucket, admin_user=admin_user,
                                                                     admin_pass=admin_pass)
+                            #self.enable_collection(memcacheds[server_str])
                         break
             except Exception as ex:
                 msg = "unable to establish connection to {0}. cleanup open connections"
@@ -873,7 +890,7 @@ class VBucketAwareMemcached(object):
             raise Exception(msg.format(self.vBucketMapReplica[vBucketId][replica_index]))
         return self.memcacheds[self.vBucketMapReplica[vBucketId][replica_index]]
 
-    def not_my_vbucket_memcached(self, key):
+    def not_my_vbucket_memcached(self, key, collection=None):
         vBucketId = self._get_vBucket_id(key)
         which_mc = self.vBucketMap[vBucketId]
         for server in self.memcacheds:
@@ -914,64 +931,64 @@ class VBucketAwareMemcached(object):
 # SUBDOCS
 
     @aware_call
-    def counter_sd(self, key, path, value, expiry=0, opaque=0, cas=0, create=False):
-        return self._send_op(self.memcached(key).counter_sd, key, path, value, expiry=expiry, opaque=opaque, cas=cas, create=create)
+    def counter_sd(self, key, path, value, expiry=0, opaque=0, cas=0, create=False, collection=None):
+        return self._send_op(self.memcached(key).counter_sd, key, path, value, expiry=expiry, opaque=opaque, cas=cas, create=create, collection=collection)
 
     @aware_call
-    def array_add_insert_sd(self, key, path, value, expiry=0, opaque=0, cas=0, create=False):
-        return self._send_op(self.memcached(key).array_add_insert_sd, key, path, value, expiry=expiry, opaque=opaque, cas=cas, create=create)
+    def array_add_insert_sd(self, key, path, value, expiry=0, opaque=0, cas=0, create=False, collection=None):
+        return self._send_op(self.memcached(key).array_add_insert_sd, key, path, value, expiry=expiry, opaque=opaque, cas=cas, create=create, collection=collection)
 
     @aware_call
-    def array_add_unique_sd(self, key, path, value, expiry=0, opaque=0, cas=0, create=False):
-        return self._send_op(self.memcached(key).array_add_unique_sd, key, path, value, expiry=expiry, opaque=opaque, cas=cas, create=create)
+    def array_add_unique_sd(self, key, path, value, expiry=0, opaque=0, cas=0, create=False, collection=None):
+        return self._send_op(self.memcached(key).array_add_unique_sd, key, path, value, expiry=expiry, opaque=opaque, cas=cas, create=create, collection=collection)
 
     @aware_call
-    def array_push_first_sd(self, key, path, value, expiry=0, opaque=0, cas=0, create=False):
-        return self._send_op(self.memcached(key).array_push_first_sd, key, path, value, expiry=expiry, opaque=opaque, cas=cas, create=create)
+    def array_push_first_sd(self, key, path, value, expiry=0, opaque=0, cas=0, create=False, collection=None):
+        return self._send_op(self.memcached(key).array_push_first_sd, key, path, value, expiry=expiry, opaque=opaque, cas=cas, create=create, collection=collection)
 
     @aware_call
-    def array_push_last_sd(self, key, path, value, expiry=0, opaque=0, cas=0, create=False):
-        return self._send_op(self.memcached(key).array_push_last_sd, key, path, value, expiry=expiry, opaque=opaque, cas=cas, create=create)
+    def array_push_last_sd(self, key, path, value, expiry=0, opaque=0, cas=0, create=False, collection=None):
+        return self._send_op(self.memcached(key).array_push_last_sd, key, path, value, expiry=expiry, opaque=opaque, cas=cas, create=create, collection=collection)
 
     @aware_call
-    def replace_sd(self, key, path, value, expiry=0, opaque=0, cas=0, create=False):
-        return self._send_op(self.memcached(key).replace_sd, key, path, value, expiry=expiry, opaque=opaque, cas=cas, create=create)
+    def replace_sd(self, key, path, value, expiry=0, opaque=0, cas=0, create=False, collection=None):
+        return self._send_op(self.memcached(key).replace_sd, key, path, value, expiry=expiry, opaque=opaque, cas=cas, create=create, collection=collection)
 
     @aware_call
-    def delete_sd(self, key, path, opaque=0, cas=0):
-        return self._send_op(self.memcached(key).delete_sd, key, path, opaque=opaque, cas=cas)
+    def delete_sd(self, key, path, opaque=0, cas=0, collection=None):
+        return self._send_op(self.memcached(key).delete_sd, key, path, opaque=opaque, cas=cas, collection=collection)
 
     @aware_call
-    def dict_upsert_sd(self, key, path, value, expiry=0, opaque=0, cas=0, create=False):
-        return self._send_op(self.memcached(key).dict_upsert_sd, key, path, value, expiry=expiry, opaque=opaque, cas=cas, create=create)
+    def dict_upsert_sd(self, key, path, value, expiry=0, opaque=0, cas=0, create=False, collection=None):
+        return self._send_op(self.memcached(key).dict_upsert_sd, key, path, value, expiry=expiry, opaque=opaque, cas=cas, create=create, collection=collection)
 
     @aware_call
-    def dict_add_sd(self, key, path, value, expiry=0, opaque=0, cas=0, create=False):
-        return self._send_op(self.memcached(key).dict_add_sd, key, path, value, expiry=expiry, opaque=opaque, cas=cas, create=create)
+    def dict_add_sd(self, key, path, value, expiry=0, opaque=0, cas=0, create=False, collection=None):
+        return self._send_op(self.memcached(key).dict_add_sd, key, path, value, expiry=expiry, opaque=opaque, cas=cas, create=create, collection=collection)
 
     @aware_call
-    def exists_sd(self, key, path, cas=0):
-        return self._send_op(self.memcached(key).exists_sd, key, path, cas=cas)
+    def exists_sd(self, key, path, cas=0, collection=None):
+        return self._send_op(self.memcached(key).exists_sd, key, path, cas=cas, collection=collection)
 
     @aware_call
-    def get_sd(self, key, path, cas=0):
-        return self._send_op(self.memcached(key).get_sd, key, path, cas=cas)
+    def get_sd(self, key, path, cas=0, collection=None):
+        return self._send_op(self.memcached(key).get_sd, key, path, cas=cas, collection=collection)
 
     @aware_call
-    def set(self, key, exp, flags, value):
-        return self._send_op(self.memcached(key).set, key, exp, flags, value)
+    def set(self, key, value, exp, flags, collection=None):
+        return self._send_op(self.memcached(key).set, key, exp, flags, value, collection=collection)
 
     @aware_call
-    def append(self, key, value):
-        return self._send_op(self.memcached(key).append, key, value)
+    def append(self, key, value, collection=None):
+        return self._send_op(self.memcached(key).append, key, value, collection=collection)
 
     @aware_call
-    def observe(self, key):
-        return self._send_op(self.memcached(key).observe, key)
+    def observe(self, key, collection=None):
+        return self._send_op(self.memcached(key).observe, key, collection=collection)
 
     @aware_call
-    def observe_seqno(self, key, vbucket_uuid):
-        return self._send_op(self.memcached(key).observe_seqno, key, vbucket_uuid)
+    def observe_seqno(self, key, vbucket_uuid, collection=None):
+        return self._send_op(self.memcached(key).observe_seqno, key, vbucket_uuid, collection=collection)
 
     # This saves a lot of repeated code - the func is the mc bin client function
 
@@ -1007,11 +1024,11 @@ class VBucketAwareMemcached(object):
                 else:
                     raise error
 
-    def get(self, key):
+    def get(self, key, collection=None):
         vb_error = 0
         while True:
             try:
-                return self._send_op(self.memcached(key).get, key)
+                return self._send_op(self.memcached(key).get, key, collection=collection)
             except MemcachedError as error:
                 if error.status == ERR_NOT_MY_VBUCKET and vb_error < 5:
                     self.reset_vbuckets(self.rest, set([self._get_vBucket_id(key)]),
@@ -1035,12 +1052,12 @@ class VBucketAwareMemcached(object):
                 else:
                     raise error
 
-    def getr(self, key, replica_index=0):
+    def getr(self, key, replica_index=0, collection=None):
         vb_error = 0
         while True:
             try:
                 vBucketId = self._get_vBucket_id(key)
-                return self._send_op(self.memcached(key, replica_index=replica_index).getr, key)
+                return self._send_op(self.memcached(key, replica_index=replica_index).getr, key, collection=collection)
             except MemcachedError as error:
                 if error.status == ERR_NOT_MY_VBUCKET and vb_error < 5:
                     self.reset_vbuckets(self.rest, set([self._get_vBucket_id(key)]),
@@ -1064,34 +1081,39 @@ class VBucketAwareMemcached(object):
                 else:
                     raise error
 
-    def setMulti(self, exp, flags, key_val_dic, pause_sec=1, timeout_sec=5, parallel=False):
+    def setMulti(self, exp, flags, key_val_dic, pause_sec=1, timeout_sec=5, parallel=False, collection=None):
+
         if parallel:
             try:
                 import concurrent.futures
-                self._setMulti_parallel(exp, flags, key_val_dic, pause_sec, timeout_sec)
+                self._setMulti_parallel(exp, flags, key_val_dic, pause_sec, timeout_sec, collection=collection)
             except ImportError:
-                self._setMulti_seq(exp, flags, key_val_dic, pause_sec, timeout_sec)
+                self._setMulti_seq(exp, flags, key_val_dic, pause_sec, timeout_sec, collection=collection)
         else:
-            self._setMulti_seq(exp, flags, key_val_dic, pause_sec, timeout_sec)
+            self._setMulti_seq(exp, flags, key_val_dic, pause_sec, timeout_sec, collection=collection)
 
 
-    def _setMulti_seq(self, exp, flags, key_val_dic, pause_sec=1, timeout_sec=5):
+    def _setMulti_seq(self, exp, flags, key_val_dic, pause_sec=1, timeout_sec=5, collection=None):
         # set keys in their respective vbuckets and identify the server for each vBucketId
+
         server_keyval = self._get_server_keyval_dic(key_val_dic)
+
         # get memcached client against each server and multi set
         for server_str , keyval in server_keyval.items():
             #if the server has been removed after server_keyval has been gotten
             if server_str not in self.memcacheds:
-                self._setMulti_seq(exp, flags, key_val_dic, pause_sec, timeout_sec)
+                self._setMulti_seq(exp, flags, key_val_dic, pause_sec, timeout_sec, collection=collection)
             else:
+
                 mc = self.memcacheds[server_str]
+
                 errors = self._setMulti_rec(mc, exp, flags, keyval, pause_sec,
-                                            timeout_sec, self._setMulti_seq)
+                                            timeout_sec, self._setMulti_seq, collection=collection)
                 if errors:
                     self.log.error(list(set(str(error) for error in errors)), exc_info=1)
                     raise errors[0]
 
-    def _setMulti_parallel(self, exp, flags, key_val_dic, pause_sec=1, timeout_sec=5):
+    def _setMulti_parallel(self, exp, flags, key_val_dic, pause_sec=1, timeout_sec=5, collection=None):
         # set keys in their respective vbuckets and identify the server for each vBucketId
         server_keyval = self._get_server_keyval_dic(key_val_dic)
         # get memcached client against each server and multi set
@@ -1100,7 +1122,7 @@ class VBucketAwareMemcached(object):
         with concurrent.futures.ThreadPoolExecutor(max_workers=len(server_keyval)) as executor:
             for server_str , keyval in server_keyval.items() :
                 mc = self.memcacheds[server_str]
-                tasks.append(executor.submit(self._setMulti_rec, mc, exp, flags, keyval, pause_sec, timeout_sec, self._setMulti_parallel))
+                tasks.append(executor.submit(self._setMulti_rec, mc, exp, flags, keyval, pause_sec, timeout_sec,collection, self._setMulti_parallel))
             errors = []
             now = time.time()
             for future in concurrent.futures.as_completed(tasks, timeout_sec):
@@ -1113,9 +1135,16 @@ class VBucketAwareMemcached(object):
                 self.log.error(list(set(str(error) for error in errors)), exc_info=1)
                 raise errors[0]
 
-    def _setMulti_rec(self, memcached_client, exp, flags, keyval, pause, timeout, rec_caller_fn):
+    def enable_collection(self, memcached_client,bucket="default"):
+        memcached_client.bucket_select(bucket)
+        memcached_client.enable_collections()
+        memcached_client.hello(memcacheConstants.FEATURE_COLLECTIONS)
+        memcached_client.get_collections(True)
+
+    def _setMulti_rec(self, memcached_client, exp, flags, keyval, pause, timeout, rec_caller_fn, collection=None):
         try:
-            errors = memcached_client.setMulti(exp, flags, keyval)
+            errors = memcached_client.setMulti(exp, flags, keyval, collection=collection)
+
             if not errors:
                 return []
             elif timeout <= 0:
@@ -1124,7 +1153,7 @@ class VBucketAwareMemcached(object):
                 time.sleep(pause)
                 self.reset_vbuckets(self.rest, self._get_vBucket_ids(keyval.keys()))
                 try:
-                    rec_caller_fn(exp, flags, keyval, pause, timeout - pause)  # Start all over again for these key vals.
+                    rec_caller_fn(exp, flags, keyval, pause, timeout - pause, collection=collection)  # Start all over again for these key vals.
                 except MemcachedError as error:
                     if error.status == ERR_2BIG:
                         self.log.info("<MemcachedError #%d ``%s''>" % (error.status, error.msg))
@@ -1146,6 +1175,7 @@ class VBucketAwareMemcached(object):
                 else:
                     return [error]
             except AttributeError:
+                # noinspection PyPackageRequirements
                 if "Got empty data (remote died?)" in error.message or \
                    "Timeout waiting for socket" in error.message or \
                    "Broken pipe" in error.message or \
@@ -1164,7 +1194,7 @@ class VBucketAwareMemcached(object):
             else:
                 time.sleep(pause)
                 self.reset_vbuckets(self.rest, self._get_vBucket_ids(keyval.keys()))
-                rec_caller_fn(exp, flags, keyval, pause, timeout - pause)  # Please refer above for comments.
+                rec_caller_fn(exp, flags, keyval, pause, timeout - pause, collection=collection)  # Please refer above for comments.
                 return []
 
     def _get_server_keyval_dic(self, key_val_dic):
@@ -1178,45 +1208,48 @@ class VBucketAwareMemcached(object):
         return server_keyval
 
 
-    def getMulti(self, keys_lst, pause_sec=1, timeout_sec=5, parallel=True):
+    def getMulti(self, keys_lst, pause_sec=1, timeout_sec=5, parallel=True,collection=None):
         if parallel:
             try:
+
                 import concurrent.futures
-                return self._getMulti_parallel(keys_lst, pause_sec, timeout_sec)
+                return self._getMulti_parallel(keys_lst, pause_sec, timeout_sec, collection=collection)
             except ImportError:
-                return self._getMulti_seq(keys_lst, pause_sec, timeout_sec)
+                return self._getMulti_seq(keys_lst, pause_sec, timeout_sec, collection=collection)
         else:
-            return self._getMulti_seq(keys_lst, pause_sec, timeout_sec)
+            return self._getMulti_seq(keys_lst, pause_sec, timeout_sec, collection=collection)
 
 
-    def _getMulti_seq(self, keys_lst, pause_sec=1, timeout_sec=5):
+    def _getMulti_seq(self, keys_lst, pause_sec=1, timeout_sec=5, collection=None):
         server_keys = self._get_server_keys_dic(keys_lst)  # set keys in their respective vbuckets and identify the server for each vBucketId
         keys_vals = {}
         for server_str , keys in server_keys.items() :  # get memcached client against each server and multi get
             mc = self.memcacheds[server_str]
-            keys_vals.update(self._getMulti_from_mc(mc, keys, pause_sec, timeout_sec, self._getMulti_seq))
+            keys_vals.update(self._getMulti_from_mc(mc, keys, pause_sec, timeout_sec,  self._getMulti_seq, collection=collection))
         if len(keys_lst) != len(keys_vals):
             raise ValueError("Not able to get values for following keys - {0}".format(set(keys_lst).difference(keys_vals.keys())))
         return keys_vals
 
 
-    def _getMulti_parallel(self, keys_lst, pause_sec=1, timeout_sec=5):
+    def _getMulti_parallel(self, keys_lst, pause_sec=1, timeout_sec=5, collection=None):
         server_keys = self._get_server_keys_dic(keys_lst)
         tasks = []
         import concurrent.futures
         with concurrent.futures.ThreadPoolExecutor(max_workers=len(server_keys)) as executor:
             for server_str , keys in server_keys.items() :
                 mc = self.memcacheds[server_str]
-                tasks.append(executor.submit(self._getMulti_from_mc , mc, keys, pause_sec, timeout_sec, self._getMulti_parallel))
+                tasks.append(executor.submit(self._getMulti_from_mc , mc, keys, pause_sec, timeout_sec, self._getMulti_parallel, collection=collection))
             keys_vals = self._reduce_getMulti_values(tasks, pause_sec, timeout_sec)
-            if len(keys_lst) != len(keys_vals):
-                raise ValueError("Not able to get values for following keys - {0}".format(set(keys_lst).difference(keys_vals.keys())))
+            if len(set(keys_lst)) != len(keys_vals):
+                raise ValueError("Not able to get values for following keys - {0}".format(set(keys_lst).difference(keys_vals[collection].keys())))
+
             return keys_vals
 
 
-    def _getMulti_from_mc(self, memcached_client, keys, pause, timeout, rec_caller_fn):
+    def _getMulti_from_mc(self, memcached_client, keys, pause, timeout, rec_caller_fn, collection=None):
         try:
-            return memcached_client.getMulti(keys)
+            return memcached_client.getMulti(keys, collection=collection)
+
         except (EOFError, socket.error), error:
             if "Got empty data (remote died?)" in error.message or \
                "Timeout waiting for socket" in error.message or \
@@ -1224,7 +1257,7 @@ class VBucketAwareMemcached(object):
                 and timeout > 0:
                 time.sleep(pause)
                 self.reset_vbuckets(self.rest, self._get_vBucket_ids(keys))
-                return rec_caller_fn(keys, pause, timeout - pause)
+                return rec_caller_fn(keys, pause, timeout - pause, collection=collection)
             else:
                 raise error
         except BaseException as error:
@@ -1255,20 +1288,19 @@ class VBucketAwareMemcached(object):
             server_keys[server_str].append(key)
         return server_keys
 
-    def _get_vBucket_ids(self, keys):
+    def _get_vBucket_ids(self, keys, collection=None):
         return set([self._get_vBucket_id(key) for key in keys])
 
 
-    def _get_vBucket_id(self, key):
-        # return crc32.crc32_hash(key) & (len(self.vBucketMap) - 1)
+    def _get_vBucket_id(self, key, collection=None):
         return (zlib.crc32(key) >> 16) & (len(self.vBucketMap) - 1)
 
 
-    def delete(self, key):
+    def delete(self, key, collection=None):
         vb_error = 0
         while True:
             try:
-                return self._send_op(self.memcached(key).delete, key)
+                return self._send_op(self.memcached(key).delete, key, collection=collection)
             except MemcachedError as error:
                 if error.status in [ERR_NOT_MY_VBUCKET, ERR_EINVAL] and vb_error < 5:
                     self.reset_vbuckets(self.rest, set([self._get_vBucket_id(key)]))
@@ -1280,7 +1312,7 @@ class VBucketAwareMemcached(object):
                    "Timeout waiting for socket" in error.message or \
                    "Broken pipe" in error.message or "Connection reset by peer" in error.message \
                     and vb_error < 5:
-                    self.reset_vbuckets(self.rest, set([key]))
+                    self.reset_vbuckets(self.rest, set([key], collection=collection))
                     vb_error += 1
                 else:
                     raise error
@@ -1386,22 +1418,23 @@ class VBucketAwareMemcached(object):
 
 
 class KVStoreAwareSmartClient(VBucketAwareMemcached):
-    def __init__(self, rest, bucket, kv_store=None, info=None, store_enabled=True):
-        VBucketAwareMemcached.__init__(self, rest, bucket, info)
+    def __init__(self, rest, bucket, kv_store=None, info=None, store_enabled=True, collection=None):
+        VBucketAwareMemcached.__init__(self, rest, bucket, info, collection=collection)
         self.kv_store = kv_store or ClientKeyValueStore()
         self.store_enabled = store_enabled
         self._rlock = threading.Lock()
 
-    def set(self, key, value, ttl=-1):
+    def set(self, key, value, ttl=-1,flag=0, collection=None):
         self._rlock.acquire()
         try:
             if ttl >= 0:
-                self.memcached(key).set(key, ttl, 0, value)
+                self.memcached(key).set(key, ttl, 0, value, collection=collection)
             else:
-                self.memcached(key).set(key, 0, 0, value)
+                self.memcached(key).set(key, 0, 0, value, collection=collection)
 
             if self.store_enabled:
                 self.kv_store.write(key, hashlib.md5(value).digest(), ttl)
+
         except MemcachedError as e:
             self._rlock.release()
             raise MemcachedError(e.status, e.msg)
@@ -1417,10 +1450,10 @@ class KVStoreAwareSmartClient(VBucketAwareMemcached):
     """
     " retrieve meta data of document from disk
     """
-    def get_doc_metadata(self, num_vbuckets, key):
+    def get_doc_metadata(self, num_vbuckets, key, collection=None):
         vid = crc32.crc32_hash(key) & (num_vbuckets - 1)
 
-        mc = self.memcached(key)
+        mc = self.memcached(key, collection=collection)
         metadatastats = None
 
         try:
@@ -1432,12 +1465,12 @@ class KVStoreAwareSmartClient(VBucketAwareMemcached):
         return metadatastats
 
 
-    def delete(self, key):
+    def delete(self, key, collection=None):
         try:
             self._rlock.acquire()
-            opaque, cas, data = self.memcached(key).delete(key)
+            opaque, cas, data = self.memcached(key).delete(key, collection=collection)
             if self.store_enabled:
-                self.kv_store.delete(key)
+                self.kv_store.delete(key, collection=collection)
             self._rlock.release()
             if cas == 0:
                 raise MemcachedError(7, "Invalid cas value")
@@ -1445,29 +1478,29 @@ class KVStoreAwareSmartClient(VBucketAwareMemcached):
             self._rlock.release()
             raise MemcachedError(7, e.message)
 
-    def get_valid_key(self, key):
-        return self.get_key_check_status(key, "valid")
+    def get_valid_key(self, key, collection=None):
+        return self.get_key_check_status(key, "valid", collection=collection)
 
-    def get_deleted_key(self, key):
-        return self.get_key_check_status(key, "deleted")
+    def get_deleted_key(self, key, collection=None):
+        return self.get_key_check_status(key, "deleted", collection=collection)
 
-    def get_expired_key(self, key):
-        return self.get_key_check_status(key, "expired")
+    def get_expired_key(self, key, collection=None):
+        return self.get_key_check_status(key, "expired", collection=collection)
 
-    def get_all_keys(self):
-        return self.kv_store.keys()
+    def get_all_keys(self, collection=None):
+        return self.kv_store.keys(collection=collection)
 
-    def get_all_valid_items(self):
-        return self.kv_store.valid_items()
+    def get_all_valid_items(self, collection=None):
+        return self.kv_store.valid_items(collection=collection)
 
-    def get_all_deleted_items(self):
-        return self.kv_store.deleted_items()
+    def get_all_deleted_items(self, collection=None):
+        return self.kv_store.deleted_items(collection=collection)
 
-    def get_all_expired_items(self):
-        return self.kv_store.expired_items()
+    def get_all_expired_items(self,collection=None):
+        return self.kv_store.expired_items(collection=collection)
 
-    def get_key_check_status(self, key, status):
-        item = self.kv_get(key)
+    def get_key_check_status(self, key, status,collection=None):
+        item = self.kv_get(key,collection=collection)
         if(item is not None  and item["status"] == status):
             return item
         else:
@@ -1478,10 +1511,10 @@ class KVStoreAwareSmartClient(VBucketAwareMemcached):
     # safe kvstore retrieval
     # return dict of {key,status,value,ttl}
     # or None if not found
-    def kv_get(self, key):
+    def kv_get(self, key,collection=None):
         item = None
         try:
-            item = self.kv_store.read(key)
+            item = self.kv_store.read(key, collection=collection)
         except KeyError:
             msg = "key {0} doesn't exist in store".format(key)
             # self.log.info(msg)
@@ -1491,17 +1524,17 @@ class KVStoreAwareSmartClient(VBucketAwareMemcached):
     # safe memcached retrieval
     # return dict of {key, flags, seq, value}
     # or None if not found
-    def mc_get(self, key):
-        item = self.mc_get_full(key)
+    def mc_get(self, key, collection=None):
+        item = self.mc_get_full(key, collection=collection)
         if item is not None:
             item["value"] = hashlib.md5(item["value"]).digest()
         return item
 
     # unhashed value
-    def mc_get_full(self, key):
+    def mc_get_full(self, key, collection=None):
         item = None
         try:
-            x, y, value = self.memcached(key).get(key)
+            x, y, value = self.memcached(key).get(key, collection=collection)
             item = {}
             item["key"] = key
             item["flags"] = x
@@ -1512,10 +1545,10 @@ class KVStoreAwareSmartClient(VBucketAwareMemcached):
 
         return item
 
-    def kv_mc_sync_get(self, key, status):
+    def kv_mc_sync_get(self, key, status, collection=None):
         self._rlock.acquire()
-        kv_item = self.get_key_check_status(key, status)
-        mc_item = self.mc_get(key)
+        kv_item = self.get_key_check_status(key, status, collection=collection)
+        mc_item = self.mc_get(key, collection=collection)
         self._rlock.release()
 
         return kv_item, mc_item
@@ -1524,33 +1557,33 @@ class KVStoreAwareSmartClient(VBucketAwareMemcached):
 class KVStoreSmartClientHelper(object):
 
     @staticmethod
-    def do_verification(client):
-        keys = client.get_all_keys()
+    def do_verification(client, collection=None):
+        keys = client.get_all_keys(collection=collection)
         validation_failures = {}
         for k in keys:
-            m, valid = KVStoreSmartClientHelper.verify_key(client, k)
+            m, valid = KVStoreSmartClientHelper.verify_key(client, k, collection=collection)
             if(valid == False):
                 validation_failures[k] = m
 
         return validation_failures
 
     @staticmethod
-    def verify_key(client, key):
+    def verify_key(client, key, collection=None):
         status = False
         msg = ""
-        item = client.kv_get(key)
+        item = client.kv_get(key, collection=collection)
         if item is not None:
             if item["status"] == "deleted":
                 msg, status = \
-                    KVStoreSmartClientHelper.verify_delete(client, key)
+                    KVStoreSmartClientHelper.verify_delete(client, key, collection=collection)
 
             elif item["status"] == "expired":
                 msg, status = \
-                    KVStoreSmartClientHelper.verify_expired(client, key)
+                    KVStoreSmartClientHelper.verify_expired(client, key, collection=collection)
 
             elif item["status"] == "valid":
                 msg, status = \
-                    KVStoreSmartClientHelper.verify_set(client, key)
+                    KVStoreSmartClientHelper.verify_set(client, key, collection=collection)
 
         return msg, status
 
@@ -1558,10 +1591,10 @@ class KVStoreSmartClientHelper(object):
     # and that key also exists in memcached with
     # expected value
     @staticmethod
-    def verify_set(client, key):
+    def verify_set(client, key, collection=None):
 
-        kv_item = client.get_valid_key(key)
-        mc_item = client.mc_get(key)
+        kv_item = client.get_valid_key(key, collection=collection)
+        mc_item = client.mc_get(key, collection=collection)
         status = False
         msg = ""
 
@@ -1582,9 +1615,9 @@ class KVStoreSmartClientHelper(object):
     # verify kvstore contains key with deleted status
     # and that it does not exist in memcached
     @staticmethod
-    def verify_delete(client, key):
-        deleted_kv_item = client.get_deleted_key(key)
-        mc_item = client.mc_get(key)
+    def verify_delete(client, key, collection=None):
+        deleted_kv_item = client.get_deleted_key(key, collection=collection)
+        mc_item = client.mc_get(key, collection=collection)
         status = False
         msg = ""
 
@@ -1601,9 +1634,9 @@ class KVStoreSmartClientHelper(object):
     # verify kvstore contains key with expired status
     # and that key has also expired in memcached
     @staticmethod
-    def verify_expired(client, key):
-        expired_kv_item = client.get_expired_key(key)
-        mc_item = client.mc_get(key)
+    def verify_expired(client, key, collection=None):
+        expired_kv_item = client.get_expired_key(key, collection=collection)
+        mc_item = client.mc_get(key, collection=collection)
         status = False
         msg = ""
 
@@ -1808,7 +1841,7 @@ class LoadWithMcsoda(object):
     def get_cfg(self):
         return self.cfg
 
-    def load_data(self):
+    def load_data(self, collection=None):
         cur, start_time, end_time = mcsoda.run(self.cfg, {}, self.protocol, self.host_port, self.rest_user, \
             self.rest_password, ctl=self.ctl, bucket=self.bucket)
         return cur

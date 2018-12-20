@@ -590,6 +590,34 @@ class RestConnection(object):
             raise Exception("unable to get random document/key for bucket %s" % (bucket))
         return json_parsed
 
+    def create_collection(self, bucket, scope, collection):
+        api = self.baseUrl + 'pools/default/buckets/%s/collections/%s' % (bucket, scope)
+        body = {'name': collection}
+        params = urllib.urlencode(body)
+        headers = self._create_headers()
+        status, content, header = self._http_request(api, 'POST', params=params, headers=headers)
+        return status
+
+    def create_scope(self, bucket, scope):
+        api = self.baseUrl + 'pools/default/buckets/%s/collections' % (bucket)
+        body = {'name': scope}
+        params = urllib.urlencode(body)
+        headers = self._create_headers()
+        status, content, header = self._http_request(api, 'POST', params=params, headers=headers)
+        return status
+
+    def delete_scope(self, bucket, scope):
+        api = self.baseUrl + 'pools/default/buckets/%s/collections/%s' % (bucket,scope)
+        headers = self._create_headers()
+        status, content, header = self._http_request(api, 'DELETE', headers=headers)
+        return status
+
+    def delete_collection(self, bucket, scope, collection):
+        api = self.baseUrl + 'pools/default/buckets/%s/collections/%s/%s' % (bucket,scope,collection)
+        headers = self._create_headers()
+        status, content, header = self._http_request(api, 'DELETE', headers=headers)
+        return status
+
     def run_view(self, bucket, view, name):
         api = self.capiBaseUrl + '/%s/_design/%s/_view/%s' % (bucket, view, name)
         status, content, header = self._http_request(api, headers=self._create_capi_headers())
@@ -1919,6 +1947,8 @@ class RestConnection(object):
                 else:
                     raise Exception("Duplicate entry in the stats command {0}".format(stat_name))
         return stats
+
+
 
     def get_bucket_status(self, bucket):
         if not bucket:

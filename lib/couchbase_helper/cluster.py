@@ -134,55 +134,55 @@ class Cluster(object):
         return _task
 
     def async_load_gen_docs(self, server, bucket, generator, kv_store, op_type, exp=0, flag=0, only_store_hash=True,
-                            batch_size=1, pause_secs=1, timeout_secs=5, proxy_client=None, compression=True):
+                            batch_size=1, pause_secs=1, timeout_secs=5, proxy_client=None, compression=True, collection=None):
 
         if isinstance(generator, list):
                 _task = LoadDocumentsGeneratorsTask(server, bucket, generator, kv_store, op_type, exp, flag,
-                                                    only_store_hash, batch_size, compression=compression)
+                                                    only_store_hash, batch_size, compression=compression, collection=collection)
         else:
                 _task = LoadDocumentsGeneratorsTask(server, bucket, [generator], kv_store, op_type, exp, flag,
-                                                    only_store_hash, batch_size, compression=compression)
+                                                    only_store_hash, batch_size, compression=compression, collection=collection)
 
         self.task_manager.schedule(_task)
         return _task
 
     def async_workload(self, server, bucket, kv_store, num_ops, create, read, update,
-                       delete, exp, compression=True):
+                       delete, exp, compression=True, collection=None):
         _task = WorkloadTask(server, bucket, kv_store, num_ops, create, read, update,
-                             delete, exp, compression=compression)
+                             delete, exp, compression=compression, collection=collection)
         self.task_manager.schedule(_task)
         return _task
 
     def async_verify_data(self, server, bucket, kv_store, max_verify=None,
-                          only_store_hash=True, batch_size=1, replica_to_read=None, timeout_sec=5, compression=True):
+                          only_store_hash=True, batch_size=1, replica_to_read=None, timeout_sec=5, compression=True, collection=None):
         if batch_size > 1:
             _task = BatchedValidateDataTask(server, bucket, kv_store, max_verify, only_store_hash, batch_size,
-                                            timeout_sec, compression=compression)
+                                            timeout_sec, compression=compression, collection=collection)
         else:
             _task = ValidateDataTask(server, bucket, kv_store, max_verify, only_store_hash, replica_to_read,
-                                     compression=compression)
+                                     compression=compression, collection=collection)
         self.task_manager.schedule(_task)
         return _task
 
-    def async_verify_active_replica_data(self, server, bucket, kv_store, max_verify=None, compression=True):
-        _task = ValidateDataWithActiveAndReplicaTask(server, bucket, kv_store, max_verify, compression=compression)
+    def async_verify_active_replica_data(self, server, bucket, kv_store, max_verify=None, compression=True, collection=None):
+        _task = ValidateDataWithActiveAndReplicaTask(server, bucket, kv_store, max_verify, compression=compression, collection=collection)
         self.task_manager.schedule(_task)
         return _task
 
-    def async_verify_meta_data(self, dest_server, bucket, kv_store, meta_data_store):
-        _task = VerifyMetaDataTask(dest_server, bucket, kv_store, meta_data_store)
+    def async_verify_meta_data(self, dest_server, bucket, kv_store, meta_data_store, collection=None):
+        _task = VerifyMetaDataTask(dest_server, bucket, kv_store, meta_data_store, collection=collection)
         self.task_manager.schedule(_task)
         return _task
 
-    def async_get_meta_data(self, dest_server, bucket, kv_store, compression=True):
-        _task = GetMetaDataTask(dest_server, bucket, kv_store, compression=compression)
+    def async_get_meta_data(self, dest_server, bucket, kv_store, compression=True, collection=None):
+        _task = GetMetaDataTask(dest_server, bucket, kv_store, compression=compression, collection=collection)
         self.task_manager.schedule(_task)
         return _task
 
     def async_verify_revid(self, src_server, dest_server, bucket, src_kv_store, dest_kv_store, max_verify=None,
-                           compression=True):
+                           compression=True, collection=None):
         _task = VerifyRevIdTask(src_server, dest_server, bucket, src_kv_store, dest_kv_store, max_verify=max_verify,
-                                compression=compression)
+                                compression=compression, collection=collection)
         self.task_manager.schedule(_task)
         return _task
 
@@ -210,7 +210,7 @@ class Cluster(object):
         self.task_manager.schedule(_task)
         return _task
 
-    def async_wait_for_stats(self, servers, bucket, param, stat, comparison, value):
+    def async_wait_for_stats(self, servers, bucket, param, stat, comparison, value, collection=None):
         """Asynchronously wait for stats
 
         Waits for stats to match the criteria passed by the stats variable. See
@@ -229,11 +229,11 @@ class Cluster(object):
 
         Returns:
             RebalanceTask - A task future that is a handle to the scheduled task"""
-        _task = StatsWaitTask(servers, bucket, param, stat, comparison, value)
+        _task = StatsWaitTask(servers, bucket, param, stat, comparison, value, collection)
         self.task_manager.schedule(_task)
         return _task
 
-    def async_wait_for_xdcr_stat(self, servers, bucket, param, stat, comparison, value):
+    def async_wait_for_xdcr_stat(self, servers, bucket, param, stat, comparison, value, collection=None):
         """Asynchronously wait for stats
 
         Waits for stats to match the criteria passed by the stats variable. See
@@ -252,7 +252,7 @@ class Cluster(object):
 
         Returns:
             RebalanceTask - A task future that is a handle to the scheduled task"""
-        _task = XdcrStatsWaitTask(servers, bucket, param, stat, comparison, value)
+        _task = XdcrStatsWaitTask(servers, bucket, param, stat, comparison, value, collection=collection)
         self.task_manager.schedule(_task)
         return _task
 

@@ -20,7 +20,7 @@ from membase.helper.bucket_helper import BucketOperationHelper
 from memcached.helper.data_helper import KVStoreAwareSmartClient, MemcachedClientHelper
 from memcached.helper.kvstore import KVStore
 from couchbase_helper.document import DesignDocument, View
-from mc_bin_client import MemcachedError
+from mc_bin_client import MemcachedError, MemcachedClient
 from tasks.future import Future
 from couchbase_helper.stats_tools import StatsCommon
 from membase.api.exception import N1QLQueryException, DropIndexException, CreateIndexException, DesignDocCreationException, QueryViewException, ReadDocumentException, RebalanceFailedException, \
@@ -31,6 +31,8 @@ from couchbase_helper.documentgenerator import BatchedDocumentGenerator
 from TestInput import TestInputServer, TestInputSingleton
 from testconstants import MIN_KV_QUOTA, INDEX_QUOTA, FTS_QUOTA, COUCHBASE_FROM_4DOT6, THROUGHPUT_CONCURRENCY, ALLOW_HTP, CBAS_QUOTA, COUCHBASE_FROM_VERSION_4
 from multiprocessing import Process, Manager, Semaphore
+import memcacheConstants
+
 
 try:
     CHECK_FLAG = False
@@ -581,7 +583,7 @@ class StatsWaitTask(Task):
     GREATER_THAN = '>'
     GREATER_THAN_EQ = '>='
 
-    def __init__(self, servers, bucket, param, stat, comparison, value):
+    def __init__(self, servers, bucket, param, stat, comparison, value, collection=None):
         Task.__init__(self, "stats_wait_task")
         self.servers = servers
         self.bucket = bucket
@@ -691,15 +693,17 @@ class XdcrStatsWaitTask(StatsWaitTask):
         self.set_result(True)
 
 class GenericLoadingTask(Thread, Task):
-    def __init__(self, server, bucket, kv_store, batch_size=1, pause_secs=1, timeout_secs=60, compression=True):
+    def __init__(self, server, bucket, kv_store, batch_size=1, pause_secs=1, timeout_secs=60, compression=True, collection=None):
         Thread.__init__(self)
         Task.__init__(self, "load_gen_task")
-        self.kv_store = kv_store
+
+        self.kv_store=kv_store
         self.batch_size = batch_size
         self.pause = pause_secs
         self.timeout = timeout_secs
         self.server = server
         self.bucket = bucket
+        self.collection=collection
         if CHECK_FLAG:
             self.client = VBucketAwareMemcached(RestConnection(server), bucket)
         else:
@@ -743,7 +747,8 @@ class GenericLoadingTask(Thread, Task):
             value = json.dumps(value)
 
         try:
-            self.client.set(key, self.exp, self.flag, value)
+            self.client.set(key, value, self.exp, self.flag, collection=self.collection)
+
             if self.only_store_hash:
                 value = str(crc32.crc32_hash(value))
             partition.set(key, value, self.exp, self.flag)
@@ -754,7 +759,7 @@ class GenericLoadingTask(Thread, Task):
 
     def _unlocked_read(self, partition, key):
         try:
-            o, c, d = self.client.get(key)
+            o, c, d = self.client.get(key, collection=self.collection)
         except MemcachedError as error:
             if error.status == ERR_NOT_FOUND and partition.get_valid(key) is None:
                 pass
@@ -764,7 +769,7 @@ class GenericLoadingTask(Thread, Task):
 
     def _unlocked_replica_read(self, partition, key):
         try:
-            o, c, d = self.client.getr(key)
+            o, c, d = self.client.getr(key, collection=self.collection)
         except Exception as error:
             self.state = FINISHED
             self.set_exception(error)
@@ -772,7 +777,7 @@ class GenericLoadingTask(Thread, Task):
     def _unlocked_update(self, partition, key):
         value = None
         try:
-            o, c, value = self.client.get(key)
+            o, c, value = self.client.get(key, collection=self.collection)
             if value is None:
                 return
 
@@ -798,7 +803,7 @@ class GenericLoadingTask(Thread, Task):
             self.set_exception(error)
 
         try:
-            self.client.set(key, self.exp, self.flag, value)
+            self.client.set(key, value, self.exp, self.flag, collection=self.collection)
             if self.only_store_hash:
                 value = str(crc32.crc32_hash(value))
             partition.set(key, value, self.exp, self.flag)
@@ -808,7 +813,7 @@ class GenericLoadingTask(Thread, Task):
 
     def _unlocked_delete(self, partition, key):
         try:
-            self.client.delete(key)
+            self.client.delete(key, collection=self.collection)
             partition.delete(key)
         except MemcachedError as error:
             if error.status == ERR_NOT_FOUND and partition.get_valid(key) is None:
@@ -823,7 +828,7 @@ class GenericLoadingTask(Thread, Task):
 
     def _unlocked_append(self, partition, key, value):
         try:
-            o, c, old_value = self.client.get(key)
+            o, c, old_value = self.client.get(key, collection=self.collection)
             if value is None:
                 return
             value_json = json.loads(value)
@@ -840,7 +845,7 @@ class GenericLoadingTask(Thread, Task):
                 self.set_exception(error)
                 return
         except ValueError:
-            o, c, old_value = self.client.get(key)
+            o, c, old_value = self.client.get(key, collection=self.collection)
             index = random.choice(range(len(value)))
             value = value[0:index] + random.choice(string.ascii_uppercase) + value[index + 1:]
             old_value += value
@@ -849,7 +854,7 @@ class GenericLoadingTask(Thread, Task):
             self.set_exception(error)
 
         try:
-            self.client.append(key, value)
+            self.client.append(key, value, collection=self.collection)
             if self.only_store_hash:
                 old_value = str(crc32.crc32_hash(old_value))
             partition.set(key, old_value)
@@ -870,7 +875,9 @@ class GenericLoadingTask(Thread, Task):
         try:
             self._process_values_for_create(key_val)
             client = shared_client or self.client
-            client.setMulti(self.exp, self.flag, key_val, self.pause, self.timeout, parallel=False)
+
+
+            client.setMulti(self.exp, self.flag, key_val, self.pause, self.timeout, parallel=False, collection=self.collection)
         except (MemcachedError, ServerUnavailableException, socket.error, EOFError, AttributeError, RuntimeError) as error:
             self.state = FINISHED
             self.set_exception(error)
@@ -882,7 +889,7 @@ class GenericLoadingTask(Thread, Task):
     def _update_batch(self, partition_keys_dic, key_val):
         try:
             self._process_values_for_update(partition_keys_dic, key_val)
-            self.client.setMulti(self.exp, self.flag, key_val, self.pause, self.timeout, parallel=False)
+            self.client.setMulti(self.exp, self.flag, key_val, self.pause, self.timeout, parallel=False, collection=self.collection)
             self._populate_kvstore(partition_keys_dic, key_val)
         except (MemcachedError, ServerUnavailableException, socket.error, EOFError, AttributeError, RuntimeError) as error:
             self.state = FINISHED
@@ -893,7 +900,7 @@ class GenericLoadingTask(Thread, Task):
         for partition, keys in partition_keys_dic.items():
             for key in keys:
                 try:
-                    self.client.delete(key)
+                    self.client.delete(key, collection=self.collection)
                     partition.delete(key)
                 except MemcachedError as error:
                     if error.status == ERR_NOT_FOUND and partition.get_valid(key) is None:
@@ -909,7 +916,8 @@ class GenericLoadingTask(Thread, Task):
 
     def _read_batch(self, partition_keys_dic, key_val):
         try:
-            o, c, d = self.client.getMulti(key_val.keys(), self.pause, self.timeout)
+            self.client.getMulti(key_val.keys(), self.pause, self.timeout, collection=self.collection)
+            # print "the key is {} from collection {}".format(c, collection)
         except MemcachedError as error:
                 self.state = FINISHED
                 self.set_exception(error)
@@ -966,15 +974,17 @@ class LoadDocumentsTask(GenericLoadingTask):
 
     def __init__(self, server, bucket, generator, kv_store, op_type, exp, flag=0,
                  only_store_hash=True, proxy_client=None, batch_size=1, pause_secs=1, timeout_secs=30,
-                 compression=True):
+                 compression=True,collection=None):
         GenericLoadingTask.__init__(self, server, bucket, kv_store, batch_size=batch_size,pause_secs=pause_secs,
-                                    timeout_secs=timeout_secs, compression=compression)
+                                    timeout_secs=timeout_secs, compression=compression, collection=collection)
 
         self.generator = generator
         self.op_type = op_type
         self.exp = exp
         self.flag = flag
         self.only_store_hash = only_store_hash
+        self.collection=collection
+
 
         if proxy_client:
             self.log.info("Changing client to proxy %s:%s..." % (proxy_client.host,
@@ -987,7 +997,7 @@ class LoadDocumentsTask(GenericLoadingTask):
     def next(self, override_generator = None):
         if self.batch_size == 1:
             key, value = self.generator.next()
-            partition = self.kv_store.acquire_partition(key)
+            partition = self.kv_store.acquire_partition(key,self.bucket, self.collection)
             if self.op_type == 'create':
                 is_base64_value = (self.generator.__class__.__name__ == 'Base64Generator')
                 self._unlocked_create(partition, key, value, is_base64_value=is_base64_value)
@@ -1004,12 +1014,13 @@ class LoadDocumentsTask(GenericLoadingTask):
             else:
                 self.state = FINISHED
                 self.set_exception(Exception("Bad operation type: %s" % self.op_type))
-            self.kv_store.release_partition(key)
+            self.kv_store.release_partition(key,self.bucket, self.collection)
 
         else:
             doc_gen = override_generator or self.generator
             key_value = doc_gen.next_batch()
-            partition_keys_dic = self.kv_store.acquire_partitions(key_value.keys())
+
+            partition_keys_dic = self.kv_store.acquire_partitions(key_value.keys(), self.bucket, self.collection)
             if self.op_type == 'create':
                 self._create_batch(partition_keys_dic, key_value)
             elif self.op_type == 'update':
@@ -1027,10 +1038,10 @@ class LoadDocumentsTask(GenericLoadingTask):
 
 class LoadDocumentsGeneratorsTask(LoadDocumentsTask):
     def __init__(self, server, bucket, generators, kv_store, op_type, exp, flag=0, only_store_hash=True,
-                 batch_size=1,pause_secs=1, timeout_secs=60, compression=True):
+                 batch_size=1,pause_secs=1, timeout_secs=60, compression=True,collection=None):
         LoadDocumentsTask.__init__(self, server, bucket, generators[0], kv_store, op_type, exp, flag=flag,
                     only_store_hash=only_store_hash, batch_size=batch_size, pause_secs=pause_secs,
-                                   timeout_secs=timeout_secs, compression=compression)
+                                   timeout_secs=timeout_secs, compression=compression,collection=collection)
 
         if batch_size == 1:
             self.generators = generators
@@ -1049,7 +1060,7 @@ class LoadDocumentsGeneratorsTask(LoadDocumentsTask):
                 len(self.generators) < self.process_concurrency
 
         self.input_generators = generators
-
+        self.bucket = bucket
         self.op_types = None
         self.buckets = None
         if isinstance(op_type, list):
@@ -1057,6 +1068,8 @@ class LoadDocumentsGeneratorsTask(LoadDocumentsTask):
         if isinstance(bucket, list):
             self.buckets = bucket
         self.compression = compression
+        self.collection=collection
+
 
     def run(self):
         if self.op_types:
@@ -1109,6 +1122,7 @@ class LoadDocumentsGeneratorsTask(LoadDocumentsTask):
                         self.batch_size)
                 self.generators.append(batch_gen)
 
+
         iterator = 0
         all_processes = []
         for generator in self.generators:
@@ -1147,11 +1161,11 @@ class LoadDocumentsGeneratorsTask(LoadDocumentsTask):
 
     def run_generator(self, generator, iterator):
 
-        # create a tmp kvstore to track work
         tmp_kv_store = KVStore()
         rv = {"err": None, "partitions": None}
 
         try:
+
             if CHECK_FLAG:
                 client = VBucketAwareMemcached(
                         RestConnection(self.server),
@@ -1169,7 +1183,6 @@ class LoadDocumentsGeneratorsTask(LoadDocumentsTask):
 
                 # generate
                 key_value = generator.next_batch()
-
                 # create
                 self._create_batch_client(key_value, client)
 
@@ -1193,25 +1206,30 @@ class LoadDocumentsGeneratorsTask(LoadDocumentsTask):
             unpacks keys,values and adds them to provided store
         """
         for key, value in key_value.iteritems():
+
             if self.only_store_hash:
                 value = str(crc32.crc32_hash(value))
-            store.partition(key)["partition"].set(
-                key,
-                value,
-                self.exp,
-                self.flag)
+
+            partition = store.partition(key,self.collection,self.bucket)
+            partition["partition"].set(
+            key,
+            value,
+            self.exp,
+            self.flag)
+
 
 class ESLoadGeneratorTask(Task):
     """
         Class to load/update/delete documents into/from Elastic Search
     """
 
-    def __init__(self, es_instance, index_name, generator, op_type="create"):
+    def __init__(self, es_instance, index_name, generator, op_type="create",collection=None):
         Task.__init__(self, "ES_loader_task")
         self.es_instance = es_instance
         self.index_name = index_name
         self.generator = generator
         self.iterator = 0
+        self.collection=collection
         self.log.info("Starting to load data into Elastic Search ...")
 
     def check(self, task_manager):
@@ -1224,7 +1242,7 @@ class ESLoadGeneratorTask(Task):
             self.es_instance.load_data(self.index_name,
                                        json.dumps(doc, encoding='utf-8'),
                                        doc['type'],
-                                       key)
+                                       key,self.collection)
             self.iterator += 1
             if math.fmod(self.iterator, 500) == 0.0:
                 self.log.info("{0} documents loaded into ES".
@@ -1238,7 +1256,7 @@ class ESBulkLoadGeneratorTask(Task):
     """
 
     def __init__(self, es_instance, index_name, generator, op_type="create",
-                 batch=1000):
+                 batch=1000,collection=None):
         Task.__init__(self, "ES_loader_task")
         self.es_instance = es_instance
         self.index_name = index_name
@@ -1246,6 +1264,7 @@ class ESBulkLoadGeneratorTask(Task):
         self.iterator = 0
         self.op_type = op_type
         self.batch_size = batch
+        self.collection=collection
         self.log.info("Starting operation '%s' on Elastic Search ..." % op_type)
 
     def check(self, task_manager):
@@ -1391,8 +1410,8 @@ class ESRunQueryCompare(Task):
 # This will be obsolete with the implementation of batch operations in LoadDocumentsTaks
 class BatchedLoadDocumentsTask(GenericLoadingTask):
     def __init__(self, server, bucket, generator, kv_store, op_type, exp, flag=0, only_store_hash=True,
-                 batch_size=100, pause_secs=1, timeout_secs=60, compression=True):
-        GenericLoadingTask.__init__(self, server, bucket, kv_store, compression=compression)
+                 batch_size=100, pause_secs=1, timeout_secs=60, compression=True,collection=None):
+        GenericLoadingTask.__init__(self, server, bucket, kv_store, compression=compression, collection=collection)
         self.batch_generator = BatchedDocumentGenerator(generator, batch_size)
         self.op_type = op_type
         self.exp = exp
@@ -1403,6 +1422,7 @@ class BatchedLoadDocumentsTask(GenericLoadingTask):
         self.timeout = timeout_secs
         self.bucket = bucket
         self.server = server
+        self.collection=collection
 
     def has_next(self):
         has = self.batch_generator.has_next()
@@ -1417,7 +1437,7 @@ class BatchedLoadDocumentsTask(GenericLoadingTask):
 
     def next(self):
         key_value = self.batch_generator.next_batch()
-        partition_keys_dic = self.kv_store.acquire_partitions(key_value.keys())
+        partition_keys_dic = self.kv_store.acquire_partitions(key_value.keys(),self.bucket, self.collection)
         if self.op_type == 'create':
             self._create_batch(partition_keys_dic, key_value)
         elif self.op_type == 'update':
@@ -1429,12 +1449,12 @@ class BatchedLoadDocumentsTask(GenericLoadingTask):
         else:
             self.state = FINISHED
             self.set_exception(Exception("Bad operation type: %s" % self.op_type))
-        self.kv_store.release_partitions(partition_keys_dic.keys())
+        self.kv_store.release_partitions(partition_keys_dic.keys(), self.collection)
 
     def _create_batch(self, partition_keys_dic, key_val):
         try:
             self._process_values_for_create(key_val)
-            self.client.setMulti(self.exp, self.flag, key_val, self.pause, self.timeout, parallel=False)
+            self.client.setMulti(self.exp, self.flag, key_val, self.pause, self.timeout, parallel=False, collection=self.collection)
             self._populate_kvstore(partition_keys_dic, key_val)
         except (MemcachedError, ServerUnavailableException, socket.error, EOFError, AttributeError, RuntimeError) as error:
             self.state = FINISHED
@@ -1444,7 +1464,7 @@ class BatchedLoadDocumentsTask(GenericLoadingTask):
     def _update_batch(self, partition_keys_dic, key_val):
         try:
             self._process_values_for_update(partition_keys_dic, key_val)
-            self.client.setMulti(self.exp, self.flag, key_val, self.pause, self.timeout, parallel=False)
+            self.client.setMulti(self.exp, self.flag, key_val, self.pause, self.timeout, parallel=False, collection=self.collection)
             self._populate_kvstore(partition_keys_dic, key_val)
         except (MemcachedError, ServerUnavailableException, socket.error, EOFError, AttributeError, RuntimeError) as error:
             self.state = FINISHED
@@ -1455,7 +1475,7 @@ class BatchedLoadDocumentsTask(GenericLoadingTask):
         for partition, keys in partition_keys_dic.items():
             for key in keys:
                 try:
-                    self.client.delete(key)
+                    self.client.delete(key, collection=self.collection)
                     partition.delete(key)
                 except MemcachedError as error:
                     if error.status == ERR_NOT_FOUND and partition.get_valid(key) is None:
@@ -1471,7 +1491,7 @@ class BatchedLoadDocumentsTask(GenericLoadingTask):
 
     def _read_batch(self, partition_keys_dic, key_val):
         try:
-            o, c, d = self.client.getMulti(key_val.keys(), self.pause, self.timeout)
+            self.client.getMulti(key_val.keys(), self.pause, self.timeout, collection=self.collection)
         except MemcachedError as error:
                 self.state = FINISHED
                 self.set_exception(error)
@@ -1524,8 +1544,8 @@ class BatchedLoadDocumentsTask(GenericLoadingTask):
 
 
 class WorkloadTask(GenericLoadingTask):
-    def __init__(self, server, bucket, kv_store, num_ops, create, read, update, delete, exp, compression=True):
-        GenericLoadingTask.__init__(self, server, bucket, kv_store, compression=compression)
+    def __init__(self, server, bucket, kv_store, num_ops, create, read, update, delete, exp, compression=True, collection=None):
+        GenericLoadingTask.__init__(self, server, bucket, kv_store, compression=compression, collection=collection)
         self.itr = 0
         self.num_ops = num_ops
         self.create = create
@@ -1533,6 +1553,8 @@ class WorkloadTask(GenericLoadingTask):
         self.update = create + read + update
         self.delete = create + read + update + delete
         self.exp = exp
+        self.collection=collection
+        self.bucket=bucket
 
     def has_next(self):
         if self.num_ops == 0 or self.itr < self.num_ops:
@@ -1558,11 +1580,11 @@ class WorkloadTask(GenericLoadingTask):
 
         key = partition.get_random_valid_key()
         if key is None:
-            self.kv_store.release_partition(part_num)
+            self.kv_store.release_partitions(part_num)
             return
 
         self._unlocked_read(partition, key)
-        self.kv_store.release_partition(part_num)
+        self.kv_store.release_partitions(part_num)
 
     def _create_random_key(self):
         partition, part_num = self.kv_store.acquire_random_partition(False)
@@ -1571,16 +1593,16 @@ class WorkloadTask(GenericLoadingTask):
 
         key = partition.get_random_deleted_key()
         if key is None:
-            self.kv_store.release_partition(part_num)
+            self.kv_store.release_partitions(part_num)
             return
 
         value = partition.get_deleted(key)
         if value is None:
-            self.kv_store.release_partition(part_num)
+            self.kv_store.release_partitions(part_num)
             return
 
         self._unlocked_create(partition, key, value)
-        self.kv_store.release_partition(part_num)
+        self.kv_store.release_partitions(part_num)
 
     def _update_random_key(self):
         partition, part_num = self.kv_store.acquire_random_partition()
@@ -1589,11 +1611,11 @@ class WorkloadTask(GenericLoadingTask):
 
         key = partition.get_random_valid_key()
         if key is None:
-            self.kv_store.release_partition(part_num)
+            self.kv_store.release_partitions(part_num)
             return
 
         self._unlocked_update(partition, key)
-        self.kv_store.release_partition(part_num)
+        self.kv_store.release_partitions(part_num)
 
     def _delete_random_key(self):
         partition, part_num = self.kv_store.acquire_random_partition()
@@ -1602,26 +1624,30 @@ class WorkloadTask(GenericLoadingTask):
 
         key = partition.get_random_valid_key()
         if key is None:
-            self.kv_store.release_partition(part_num)
+            self.kv_store.release_partitions(part_num)
             return
 
         self._unlocked_delete(partition, key)
-        self.kv_store.release_partition(part_num)
+        self.kv_store.release_partitions(part_num)
 
 class ValidateDataTask(GenericLoadingTask):
     def __init__(self, server, bucket, kv_store, max_verify=None, only_store_hash=True, replica_to_read=None,
-                 compression=True):
-        GenericLoadingTask.__init__(self, server, bucket, kv_store, compression=compression)
-        self.valid_keys, self.deleted_keys = kv_store.key_set()
+                 compression=True,collection=None):
+        GenericLoadingTask.__init__(self, server, bucket, kv_store, compression=compression,collection=collection)
+        self.collection=collection
+        self.bucket=bucket
+        self.valid_keys, self.deleted_keys = kv_store.key_set(bucket=self.bucket,collection=self.collection)
         self.num_valid_keys = len(self.valid_keys)
         self.num_deleted_keys = len(self.deleted_keys)
         self.itr = 0
         self.max_verify = self.num_valid_keys + self.num_deleted_keys
         self.only_store_hash = only_store_hash
         self.replica_to_read = replica_to_read
+        self.bucket=bucket
+        self.server=server
         if max_verify is not None:
             self.max_verify = min(max_verify, self.max_verify)
-        self.log.info("%s items will be verified on %s bucket" % (self.max_verify, bucket))
+        self.log.info("%s items will be verified on %s bucket on collection %s" % (self.max_verify, bucket, self.collection))
         self.start_time = time.time()
 
     def has_next(self):
@@ -1637,25 +1663,26 @@ class ValidateDataTask(GenericLoadingTask):
 
     def next(self):
         if self.itr < self.num_valid_keys:
-            self._check_valid_key(self.valid_keys[self.itr])
+            self._check_valid_key(self.valid_keys[self.itr],self.bucket, self.collection)
         else:
-            self._check_deleted_key(self.deleted_keys[self.itr - self.num_valid_keys])
+            self._check_deleted_key(self.deleted_keys[self.itr - self.num_valid_keys],self.bucket, self.collection)
         self.itr += 1
 
-    def _check_valid_key(self, key):
-        partition = self.kv_store.acquire_partition(key)
+    def _check_valid_key(self, key, bucket="default", collection=None):
+        partition = self.kv_store.acquire_partition(key,bucket, collection=collection)
 
         value = partition.get_valid(key)
         flag = partition.get_flag(key)
         if value is None or flag is None:
-            self.kv_store.release_partition(key)
+            self.kv_store.release_partition(key,bucket, collection=collection)
             return
 
         try:
             if self.replica_to_read is None:
-                o, c, d = self.client.get(key)
+
+                o, c, d = self.client.get(key, collection=collection)
             else:
-                o, c, d = self.client.getr(key, replica_index=self.replica_to_read)
+                o, c, d = self.client.getr(key, replica_index=self.replica_to_read, collection=collection)
             if self.only_store_hash:
                 if crc32.crc32_hash(d) != int(value):
                     self.state = FINISHED
@@ -1663,6 +1690,7 @@ class ValidateDataTask(GenericLoadingTask):
             else:
                 value = json.dumps(value)
                 if d != json.loads(value):
+                    print "the collection is {} for which the value is failing".format(collection)
                     self.state = FINISHED
                     self.set_exception(Exception('Key: %s, Bad result: %s != %s for key %s' % (key, json.dumps(d), value, key)))
             if CHECK_FLAG and o != flag:
@@ -1679,13 +1707,13 @@ class ValidateDataTask(GenericLoadingTask):
             self.log.error("Unexpected error: %s" % str(error))
             self.state = FINISHED
             self.set_exception(error)
-        self.kv_store.release_partition(key)
+        self.kv_store.release_partition(key,bucket, collection=collection)
 
-    def _check_deleted_key(self, key):
-        partition = self.kv_store.acquire_partition(key)
+    def _check_deleted_key(self, key,bucket="deafult", collection=None):
+        partition = self.kv_store.acquire_partition(key,bucket, collection=collection)
 
         try:
-            self.client.delete(key)
+            self.client.delete(key, collection=collection)
             if partition.get_valid(key) is not None:
                 self.state = FINISHED
                 self.set_exception(Exception('Not Deletes: %s' % (key)))
@@ -1699,12 +1727,14 @@ class ValidateDataTask(GenericLoadingTask):
             if error.rc != NotFoundError:
                 self.state = FINISHED
                 self.set_exception(error)
-        self.kv_store.release_partition(key)
+        self.kv_store.release_partition(key,bucket, collection=collection)
 
 class ValidateDataWithActiveAndReplicaTask(GenericLoadingTask):
-    def __init__(self, server, bucket, kv_store, max_verify=None, compression=True):
-        GenericLoadingTask.__init__(self, server, bucket, kv_store, compression=compression)
-        self.valid_keys, self.deleted_keys = kv_store.key_set()
+    def __init__(self, server, bucket, kv_store, max_verify=None, compression=True, collection=None):
+        GenericLoadingTask.__init__(self, server, bucket, kv_store, compression=compression, collection=collection)
+        self.colllection=collection
+        self.bucket=bucket
+        self.valid_keys, self.deleted_keys = kv_store.key_set(bucket=self.bucket,collection=self.collection)
         self.num_valid_keys = len(self.valid_keys)
         self.num_deleted_keys = len(self.deleted_keys)
         self.itr = 0
@@ -1713,6 +1743,8 @@ class ValidateDataWithActiveAndReplicaTask(GenericLoadingTask):
             self.max_verify = min(max_verify, self.max_verify)
         self.log.info("%s items will be verified on %s bucket" % (self.max_verify, bucket))
         self.start_time = time.time()
+
+
 
     def has_next(self):
         if self.itr < (self.num_valid_keys + self.num_deleted_keys) and\
@@ -1727,15 +1759,16 @@ class ValidateDataWithActiveAndReplicaTask(GenericLoadingTask):
 
     def next(self):
         if self.itr < self.num_valid_keys:
-            self._check_valid_key(self.valid_keys[self.itr])
+            self._check_valid_key(self.valid_keys[self.itr],self.bucket,self.collection)
         else:
-            self._check_deleted_key(self.deleted_keys[self.itr - self.num_valid_keys])
+            self._check_deleted_key(self.deleted_keys[self.itr - self.num_valid_keys],self.bucket,self.collection)
         self.itr += 1
 
-    def _check_valid_key(self, key):
+    def _check_valid_key(self, key,bucket, collection=None):
+        partition = self.kv_store.acquire_partition(key,bucket, collection=collection)
         try:
-            o, c, d = self.client.get(key)
-            o_r, c_r, d_r = self.client.getr(key, replica_index=0)
+            o, c, d = self.client.get(key, collection=collection)
+            o_r, c_r, d_r = self.client.getr(key, replica_index=0, collection=collection)
             if o != o_r:
                 self.state = FINISHED
                 self.set_exception(Exception('ACTIVE AND REPLICA FLAG CHECK FAILED :: Key: %s, Bad result for CAS value: REPLICA FLAG %s != ACTIVE FLAG %s' % (key, o_r, o)))
@@ -1757,10 +1790,10 @@ class ValidateDataWithActiveAndReplicaTask(GenericLoadingTask):
             self.state = FINISHED
             self.set_exception(error)
 
-    def _check_deleted_key(self, key):
-        partition = self.kv_store.acquire_partition(key)
+    def _check_deleted_key(self, key,bucket, collection=None):
+        partition = self.kv_store.acquire_partition(key,bucket, collection=collection)
         try:
-            self.client.delete(key)
+            self.client.delete(key, collection=collection)
             if partition.get_valid(key) is not None:
                 self.state = FINISHED
                 self.set_exception(Exception('ACTIVE CHECK :: Not Deletes: %s' % (key)))
@@ -1774,13 +1807,15 @@ class ValidateDataWithActiveAndReplicaTask(GenericLoadingTask):
             if error.rc != NotFoundError:
                 self.state = FINISHED
                 self.set_exception(error)
-        self.kv_store.release_partition(key)
+        self.kv_store.release_partition(key,bucket, collection=collection)
 
 class BatchedValidateDataTask(GenericLoadingTask):
     def __init__(self, server, bucket, kv_store, max_verify=None, only_store_hash=True, batch_size=100,
-                 timeout_sec=5, compression=True):
-        GenericLoadingTask.__init__(self, server, bucket, kv_store, compression=compression)
-        self.valid_keys, self.deleted_keys = kv_store.key_set()
+                 timeout_sec=5, compression=True, collection=None):
+        GenericLoadingTask.__init__(self, server, bucket, kv_store, compression=compression, collection=collection)
+        self.collection=collection
+        self.bucket=bucket
+        self.valid_keys, self.deleted_keys = kv_store.key_set(bucket=self.bucket,collection=self.collection)
         self.num_valid_keys = len(self.valid_keys)
         self.num_deleted_keys = len(self.deleted_keys)
         self.itr = 0
@@ -1792,6 +1827,7 @@ class BatchedValidateDataTask(GenericLoadingTask):
         self.log.info("%s items will be verified on %s bucket" % (self.max_verify, bucket))
         self.batch_size = batch_size
         self.start_time = time.time()
+
 
     def has_next(self):
         has = False
@@ -1809,15 +1845,15 @@ class BatchedValidateDataTask(GenericLoadingTask):
         if self.itr < self.num_valid_keys:
             keys_batch = self.valid_keys[self.itr:self.itr + self.batch_size]
             self.itr += len(keys_batch)
-            self._check_valid_keys(keys_batch)
+            self._check_valid_keys(keys_batch,self.bucket,self.collection)
         else:
-            self._check_deleted_key(self.deleted_keys[self.itr - self.num_valid_keys])
+            self._check_deleted_key(self.deleted_keys[self.itr - self.num_valid_keys],self.bucket,self.collection)
             self.itr += 1
 
-    def _check_valid_keys(self, keys):
-        partition_keys_dic = self.kv_store.acquire_partitions(keys)
+    def _check_valid_keys(self, keys,bucket, collection=None):
+        partition_keys_dic = self.kv_store.acquire_partitions(keys, bucket, collection=collection)
         try:
-            key_vals = self.client.getMulti(keys, parallel=True, timeout_sec=self.timeout_sec)
+            key_vals = self.client.getMulti(keys, parallel=True, timeout_sec=self.timeout_sec, collection=collection)
         except ValueError, error:
             self.state = FINISHED
             self.kv_store.release_partitions(partition_keys_dic.keys())
@@ -1859,10 +1895,10 @@ class BatchedValidateDataTask(GenericLoadingTask):
                 self.state = FINISHED
                 self.set_exception(error)
 
-    def _check_deleted_key(self, key):
-        partition = self.kv_store.acquire_partition(key)
+    def _check_deleted_key(self, key,bucket, collection=None):
+        partition = self.kv_store.acquire_partition(key,bucket, collection=collection)
         try:
-            self.client.delete(key)
+            self.client.delete(key, collection=collection)
             if partition.get_valid(key) is not None:
                 self.state = FINISHED
                 self.set_exception(Exception('Not Deletes: %s' % (key)))
@@ -1871,25 +1907,26 @@ class BatchedValidateDataTask(GenericLoadingTask):
                 pass
             else:
                 self.state = FINISHED
-                self.kv_store.release_partitions(key)
+                self.kv_store.release_partition(key,bucket, collection=collection)
                 self.set_exception(error)
         except Exception as error:
             if error.rc != NotFoundError:
                 self.state = FINISHED
-                self.kv_store.release_partitions(key)
+                self.kv_store.release_partition(key,bucket, collection=collection)
                 self.set_exception(error)
-        self.kv_store.release_partition(key)
+        self.kv_store.release_partition(key,bucket, collection=collection)
 
 
 class VerifyRevIdTask(GenericLoadingTask):
     def __init__(self, src_server, dest_server, bucket, src_kv_store, dest_kv_store, max_err_count=200000,
-                 max_verify=None, compression=True):
-        GenericLoadingTask.__init__(self, src_server, bucket, src_kv_store, compression=compression)
+                 max_verify=None, compression=True, collection=None):
+        GenericLoadingTask.__init__(self, src_server, bucket, src_kv_store, compression=compression, collection=collection)
         from memcached.helper.data_helper import VBucketAwareMemcached as SmartClient
+        self.collection=collection
         self.client_src = SmartClient(RestConnection(src_server), bucket)
         self.client_dest = SmartClient(RestConnection(dest_server), bucket)
-        self.src_valid_keys, self.src_deleted_keys = src_kv_store.key_set()
-        self.dest_valid_keys, self.dest_del_keys = dest_kv_store.key_set()
+        self.src_valid_keys, self.src_deleted_keys = src_kv_store.key_set(bucket=self.bucket,collection=self.collection)
+        self.dest_valid_keys, self.dest_del_keys = dest_kv_store.key_set(bucket=self.bucket,collection=self.collection)
         self.num_valid_keys = len(self.src_valid_keys)
         self.num_deleted_keys = len(self.src_deleted_keys)
         self.keys_not_found = {self.client.rest.ip: [], self.client_dest.rest.ip: []}
@@ -1904,6 +1941,7 @@ class VerifyRevIdTask(GenericLoadingTask):
         self.src_server = src_server
         self.bucket = bucket
         self.log.info("RevID verification: in progress for %s ..." % bucket.name)
+
 
     def has_next(self):
         if self.itr < (self.num_valid_keys + self.num_deleted_keys) and \
@@ -1932,11 +1970,11 @@ class VerifyRevIdTask(GenericLoadingTask):
 
     def next(self):
         if self.itr < self.num_valid_keys:
-            self._check_key_revId(self.src_valid_keys[self.itr])
+            self._check_key_revId(self.src_valid_keys[self.itr], self.collection)
         elif self.itr < (self.num_valid_keys + self.num_deleted_keys):
             # verify deleted/expired keys
             self._check_key_revId(self.src_deleted_keys[self.itr - self.num_valid_keys],
-                                  ignore_meta_data=['expiration','cas'])
+                                  ignore_meta_data=['expiration','cas'], collection=self.collection)
         self.itr += 1
 
         # show progress of verification for every 50k items
@@ -1944,10 +1982,10 @@ class VerifyRevIdTask(GenericLoadingTask):
             self.log.info("{0} items have been verified".format(self.itr))
 
 
-    def __get_meta_data(self, client, key):
+    def __get_meta_data(self, client, key, collection=None):
         try:
             mc = client.memcached(key)
-            meta_data = eval("{'deleted': %s, 'flags': %s, 'expiration': %s, 'seqno': %s, 'cas': %s}" % (mc.getMeta(key)))
+            meta_data = eval("{'deleted': %s, 'flags': %s, 'expiration': %s, 'seqno': %s, 'cas': %s}" % (mc.getMeta(key, collection=collection)))
             return meta_data
         except MemcachedError as error:
             if error.status == ERR_NOT_FOUND:
@@ -1955,7 +1993,7 @@ class VerifyRevIdTask(GenericLoadingTask):
                 # target kv store if key did not match filter expression
                 if key not in self.src_deleted_keys and key in (self.dest_valid_keys+self.dest_del_keys):
                     self.err_count += 1
-                    self.keys_not_found[client.rest.ip].append(("key: %s" % key, "vbucket: %s" % client._get_vBucket_id(key)))
+                    self.keys_not_found[client.rest.ip].append(("key: %s" % key, "vbucket: %s" % client._get_vBucket_id(key, collection=collection)))
                 else:
                     self.not_matching_filter_keys +=1
             else:
@@ -1966,9 +2004,9 @@ class VerifyRevIdTask(GenericLoadingTask):
             self.state = FINISHED
             self.set_unexpected_exception(e)
 
-    def _check_key_revId(self, key, ignore_meta_data=[]):
-        src_meta_data = self.__get_meta_data(self.client_src, key)
-        dest_meta_data = self.__get_meta_data(self.client_dest, key)
+    def _check_key_revId(self, key, ignore_meta_data=[], collection=None):
+        src_meta_data = self.__get_meta_data(self.client_src, key, collection=collection)
+        dest_meta_data = self.__get_meta_data(self.client_dest, key, collection=collection)
         if not src_meta_data or not dest_meta_data:
             return
         prev_error_count = self.err_count
@@ -2003,11 +2041,12 @@ class VerifyRevIdTask(GenericLoadingTask):
             self.state = FINISHED
 
 class VerifyMetaDataTask(GenericLoadingTask):
-    def __init__(self, dest_server, bucket, kv_store, meta_data_store, max_err_count=100, compression=True):
-        GenericLoadingTask.__init__(self, dest_server, bucket, kv_store, compression=compression)
+    def __init__(self, dest_server, bucket, kv_store, meta_data_store, max_err_count=100, compression=True, collection=None):
+        GenericLoadingTask.__init__(self, dest_server, bucket, kv_store, compression=compression, collection=collection)
         from memcached.helper.data_helper import VBucketAwareMemcached as SmartClient
+        self.collections=collection
         self.client = SmartClient(RestConnection(dest_server), bucket)
-        self.valid_keys, self.deleted_keys = kv_store.key_set()
+        self.valid_keys, self.deleted_keys = kv_store.key_set(bucket=self.bucket,collection=self.collection)
         self.num_valid_keys = len(self.valid_keys)
         self.num_deleted_keys = len(self.deleted_keys)
         self.keys_not_found = {self.client.rest.ip: [], self.client.rest.ip: []}
@@ -2015,6 +2054,7 @@ class VerifyMetaDataTask(GenericLoadingTask):
         self.err_count = 0
         self.max_err_count = max_err_count
         self.meta_data_store = meta_data_store
+
 
     def has_next(self):
         if self.itr < (self.num_valid_keys + self.num_deleted_keys) and self.err_count < self.max_err_count:
@@ -2027,21 +2067,21 @@ class VerifyMetaDataTask(GenericLoadingTask):
 
     def next(self):
         if self.itr < self.num_valid_keys:
-            self._check_key_meta_data(self.valid_keys[self.itr])
+            self._check_key_meta_data(self.valid_keys[self.itr], self.collections)
         elif self.itr < (self.num_valid_keys + self.num_deleted_keys):
             # verify deleted/expired keys
             self._check_key_meta_data(self.deleted_keys[self.itr - self.num_valid_keys],
-                                  ignore_meta_data=['expiration'])
+                                  ignore_meta_data=['expiration'], collection=self.collections)
         self.itr += 1
 
         # show progress of verification for every 50k items
         if math.fmod(self.itr, 50000) == 0.0:
             self.log.info("{0} items have been verified".format(self.itr))
 
-    def __get_meta_data(self, client, key):
+    def __get_meta_data(self, client, key, collection=None):
         try:
-            mc = client.memcached(key)
-            meta_data = eval("{'deleted': %s, 'flags': %s, 'expiration': %s, 'seqno': %s, 'cas': %s}" % (mc.getMeta(key)))
+            mc = client.memcached(key, collection=collection)
+            meta_data = eval("{'deleted': %s, 'flags': %s, 'expiration': %s, 'seqno': %s, 'cas': %s}" % (mc.getMeta(key, collection=collection)))
             return meta_data
         except MemcachedError as error:
             if error.status == ERR_NOT_FOUND:
@@ -2052,9 +2092,9 @@ class VerifyMetaDataTask(GenericLoadingTask):
                 self.state = FINISHED
                 self.set_exception(error)
 
-    def _check_key_meta_data(self, key, ignore_meta_data=[]):
+    def _check_key_meta_data(self, key, ignore_meta_data=[], collection=None):
         src_meta_data = self.meta_data_store[key]
-        dest_meta_data = self.__get_meta_data(self.client, key)
+        dest_meta_data = self.__get_meta_data(self.client, key, collection=collection)
         if not src_meta_data or not dest_meta_data:
             return
         prev_error_count = self.err_count
@@ -2081,11 +2121,12 @@ class VerifyMetaDataTask(GenericLoadingTask):
             self.state = FINISHED
 
 class GetMetaDataTask(GenericLoadingTask):
-    def __init__(self, dest_server, bucket, kv_store, compression=True):
-        GenericLoadingTask.__init__(self, dest_server, bucket, kv_store, compression=compression)
+    def __init__(self, dest_server, bucket, kv_store, compression=True, collection=None):
+        GenericLoadingTask.__init__(self, dest_server, bucket, kv_store, compression=compression, collection=collection)
         from memcached.helper.data_helper import VBucketAwareMemcached as SmartClient
+        self.collection=collection
         self.client = SmartClient(RestConnection(dest_server), bucket)
-        self.valid_keys, self.deleted_keys = kv_store.key_set()
+        self.valid_keys, self.deleted_keys = kv_store.key_set(bucket=self.bucket,collection=self.collection)
         self.num_valid_keys = len(self.valid_keys)
         self.num_deleted_keys = len(self.deleted_keys)
         self.keys_not_found = {self.client.rest.ip: [], self.client.rest.ip: []}
@@ -2093,6 +2134,7 @@ class GetMetaDataTask(GenericLoadingTask):
         self.err_count = 0
         self.max_err_count = 100
         self.meta_data_store = {}
+
 
     def has_next(self):
         if self.itr < (self.num_valid_keys + self.num_deleted_keys) and self.err_count < self.max_err_count:
@@ -2105,15 +2147,15 @@ class GetMetaDataTask(GenericLoadingTask):
 
     def next(self):
         if self.itr < self.num_valid_keys:
-            self.meta_data_store[self.valid_keys[self.itr]] = self.__get_meta_data(self.client,self.valid_keys[self.itr])
+            self.meta_data_store[self.valid_keys[self.itr]] = self.__get_meta_data(self.client,self.valid_keys[self.itr], self.collection)
         elif self.itr < (self.num_valid_keys + self.num_deleted_keys):
-            self.meta_data_store[self.deleted_keys[self.itr - self.num_valid_keys]] = self.__get_meta_data(self.client,self.deleted_keys[self.itr - self.num_valid_keys])
+            self.meta_data_store[self.deleted_keys[self.itr - self.num_valid_keys]] = self.__get_meta_data(self.client,self.deleted_keys[self.itr - self.num_valid_keys], collection=self.collection)
         self.itr += 1
 
-    def __get_meta_data(self, client, key):
+    def __get_meta_data(self, client, key, collection=None):
         try:
-            mc = client.memcached(key)
-            meta_data = eval("{'deleted': %s, 'flags': %s, 'expiration': %s, 'seqno': %s, 'cas': %s}" % (mc.getMeta(key)))
+            mc = client.memcached(key, collection=collection)
+            meta_data = eval("{'deleted': %s, 'flags': %s, 'expiration': %s, 'seqno': %s, 'cas': %s}" % (mc.getMeta(key, collection=collection)))
             return meta_data
         except MemcachedError as error:
             if error.status == ERR_NOT_FOUND:

@@ -10,6 +10,7 @@ import json
 import commands
 import mc_bin_client
 import traceback
+import re
 
 
 from memcached.helper.data_helper import VBucketAwareMemcached
@@ -89,6 +90,7 @@ class BaseTestCase(unittest.TestCase):
         self.cbas_servers = []
         self.kv_servers = []
         self.otpNodes = []
+        self.collection_name={}
         for server in self.servers:
             if "cbas" in server.services:
                 self.cbas_servers.append(server)
@@ -100,6 +102,9 @@ class BaseTestCase(unittest.TestCase):
         try:
             self.skip_setup_cleanup = self.input.param("skip_setup_cleanup", False)
             self.vbuckets = self.input.param("vbuckets", 1024)
+            self.collection=self.input.param("collection", False)
+            self.scope_num=self.input.param("scope_num", 4)
+            self.collection_num=self.input.param("collection_num", [2] * self.scope_num )
             self.upr = self.input.param("upr", None)
             self.index_quota_percent = self.input.param("index_quota_percent", None)
             self.targetIndexManager = self.input.param("targetIndexManager", False)
@@ -115,11 +120,14 @@ class BaseTestCase(unittest.TestCase):
                 self.default_bucket_name = "default"
             self.skip_standard_buckets = self.input.param("skip_standard_buckets", False)
             self.standard_buckets = self.input.param("standard_buckets", 0)
+            # list of list [[2,1,1],[3,1,2,1],[4,1,1,2,3]]
+            self.standard_buckets_scope=self.input.param("bucket_scope", [2]*self.standard_buckets)
             if self.skip_standard_buckets:
                 self.standard_buckets = 0
                 BucketOperationHelper.delete_all_buckets_or_assert(servers=self.servers, test_case=self)
             self.sasl_buckets = self.input.param("sasl_buckets", 0)
             self.num_buckets = self.input.param("num_buckets", 0)
+
             self.verify_unacked_bytes = self.input.param("verify_unacked_bytes", False)
             self.memcached_buckets = self.input.param("memcached_buckets", 0)
             self.enable_flow_control = self.input.param("enable_flow_control", False)
@@ -208,6 +216,7 @@ class BaseTestCase(unittest.TestCase):
                           .format(self.case_number, self._testMethodName))
             if not self.skip_buckets_handle and not self.skip_init_check_cbserver:
                 self._cluster_cleanup()
+
 
             shared_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
                                                        replicas=self.num_replicas,
@@ -358,7 +367,6 @@ class BaseTestCase(unittest.TestCase):
                 status, content, header = self._log_start(self)
                 if not status:
                     self.sleep(10)
-
             self.print_cluster_stats()
         except Exception, e:
             traceback.print_exc()
@@ -387,6 +395,7 @@ class BaseTestCase(unittest.TestCase):
 
     def tearDown(self):
         self.print_cluster_stats()
+
         if self.skip_setup_cleanup:
                 return
         try:
@@ -515,6 +524,7 @@ class BaseTestCase(unittest.TestCase):
         #self.sleep(10)
         ClusterOperationHelper.wait_for_ns_servers_or_assert(self.servers, self)
 
+
     def _initialize_nodes(self, cluster, servers, disabled_consistent_view=None, rebalanceIndexWaitingDisabled=None,
                           rebalanceIndexPausingDisabled=None, maxParallelIndexers=None, maxParallelReplicaIndexers=None,
                           port=None, quota_percent=None, services=None):
@@ -616,6 +626,13 @@ class BaseTestCase(unittest.TestCase):
             if self.enable_time_sync:
                 self._set_time_sync_on_buckets( ['default'] )
 
+            self.collection_name["default"]=[]
+
+            if self.collection:
+                self.create_scope_collection(scope_num=self.scope_num,collection_num=self.collection_num)
+
+
+
         self._create_sasl_buckets(self.master, self.sasl_buckets)
         self._create_standard_buckets(self.master, self.standard_buckets)
         self._create_memcached_buckets(self.master, self.memcached_buckets)
@@ -689,6 +706,10 @@ class BaseTestCase(unittest.TestCase):
         if self.enable_time_sync:
             self._set_time_sync_on_buckets(['bucket' + str(i) \
                                              for i in range(num_buckets)])
+        for i in range(num_buckets):
+            name = self.sasl_bucket_name + str(i)
+            self.collection_name[name]=[]
+
 
     def _create_standard_buckets(self, server, num_buckets, server_id=None, bucket_size=None):
         if not num_buckets:
@@ -731,6 +752,17 @@ class BaseTestCase(unittest.TestCase):
         if self.enable_time_sync:
             self._set_time_sync_on_buckets(['standard_bucket' + str(i) for i in range(num_buckets)])
 
+        for i in range(num_buckets):
+            name = 'standard_bucket' + str(i)
+            self.collection_name[name]=[]
+            if self.collection:
+                if self.standard_buckets_scope[i] is not list:
+                    scope_num=self.standard_buckets_scope[i]
+                    collection_num = [2] * self.standard_buckets_scope[i]
+                else:
+                    scope_num=self.standard_buckets_scope[i].remove
+                    collection_num = self.standard_buckets_scope[i]
+                self.create_scope_collection(scope_num=scope_num,collection_num=collection_num,bucket=name)
 
 
     def _create_buckets(self, server, bucket_list, server_id=None, bucket_size=None):
@@ -770,6 +802,10 @@ class BaseTestCase(unittest.TestCase):
         if self.enable_time_sync:
             self._set_time_sync_on_bucket( bucket_list )
 
+        for bucket_name in bucket_list:
+            self.collection_name[bucket_name]=[]
+
+
     def _create_memcached_buckets(self, server, num_buckets, server_id=None, bucket_size=None):
         if not num_buckets:
             return
@@ -803,6 +839,8 @@ class BaseTestCase(unittest.TestCase):
         for task in bucket_tasks:
             task.result()
 
+
+
     def _all_buckets_delete(self, server):
         delete_tasks = []
         for bucket in self.buckets:
@@ -820,18 +858,21 @@ class BaseTestCase(unittest.TestCase):
         for task in flush_tasks:
             task.result()
 
-    def _verify_stats_all_buckets(self, servers, master=None, timeout=60):
+    def _verify_stats_all_buckets(self, servers, master=None, timeout=60, collection=None):
         stats_tasks = []
         if not master:
             master = self.master
         servers = self.get_kv_nodes(servers, master)
+
         for bucket in self.buckets:
+
             items = sum([len(kv_store) for kv_store in bucket.kvs.values()])
             if bucket.type == 'memcached':
                 items_actual = 0
                 for server in servers:
                     client = MemcachedClientHelper.direct_client(server, bucket)
                     items_actual += int(client.stats()["curr_items"])
+
                 self.assertEqual(items, items_actual, "Items are not correct")
                 continue
             stats_tasks.append(self.cluster.async_wait_for_stats(servers, bucket, '',
@@ -880,18 +921,37 @@ class BaseTestCase(unittest.TestCase):
 
     def _async_load_all_buckets(self, server, kv_gen, op_type, exp, kv_store=1, flag=0,
                                 only_store_hash=True, batch_size=1, pause_secs=1, timeout_secs=30,
-                                proxy_client=None):
+                                proxy_client=None, collection=None):
         tasks = []
+
         for bucket in self.buckets:
             gen = copy.deepcopy(kv_gen)
-            if bucket.type != 'memcached':
-                tasks.append(self.cluster.async_load_gen_docs(server, bucket.name, gen,
-                                                              bucket.kvs[kv_store],
-                                                              op_type, exp, flag, only_store_hash,
-                                                              batch_size, pause_secs, timeout_secs,
-                                                              proxy_client, compression=self.sdk_compression))
+            try :
+                len(self.collection_name[bucket.name])
+            except KeyError:
+                self.collection_name[bucket.name] =[]
+            if not collection and (len(self.collection_name[bucket.name]) > 0):
+                for collections in self.collection_name[bucket.name]:
+                    gen = copy.deepcopy(kv_gen)
+                    if bucket.type != 'memcached':
+                        tasks.append(self.cluster.async_load_gen_docs(server, bucket.name, gen,
+                                                                      bucket.kvs[kv_store],
+                                                                      op_type, exp, flag, only_store_hash,
+                                                                      batch_size, pause_secs, timeout_secs,
+                                                                      proxy_client, compression=self.sdk_compression,collection=collections))
+                    else:
+                        self._load_memcached_bucket(server, gen, bucket.name, collections)
+
             else:
-                self._load_memcached_bucket(server, gen, bucket.name)
+                if bucket.type != 'memcached':
+                        tasks.append(self.cluster.async_load_gen_docs(server, bucket.name, gen,
+                                                                      bucket.kvs[kv_store],
+                                                                      op_type, exp, flag, only_store_hash,
+                                                                      batch_size, pause_secs, timeout_secs,
+                                                                      proxy_client, compression=self.sdk_compression,collection=collection))
+                else:
+                    self._load_memcached_bucket(server, gen, bucket.name, collection)
+
         return tasks
 
     """Synchronously applys load generation to all bucekts in the cluster.
@@ -906,7 +966,7 @@ class BaseTestCase(unittest.TestCase):
 
     def _load_all_buckets(self, server, kv_gen, op_type, exp, kv_store=1, flag=0,
                           only_store_hash=True, batch_size=1000, pause_secs=1,
-                          timeout_secs=30, proxy_client=None):
+                          timeout_secs=30, proxy_client=None, collection=None):
 
         if self.enable_bloom_filter:
             for bucket in self.buckets:
@@ -915,7 +975,8 @@ class BaseTestCase(unittest.TestCase):
 
         tasks = self._async_load_all_buckets(server, kv_gen, op_type, exp, kv_store, flag,
                                              only_store_hash, batch_size, pause_secs,
-                                             timeout_secs, proxy_client)
+                                             timeout_secs, proxy_client, collection)
+
         for task in tasks:
             task.result()
 
@@ -950,7 +1011,7 @@ class BaseTestCase(unittest.TestCase):
                                           "create", exp=0, kv_store=1, flag=0,
                                           only_store_hash=True,
                                           batch_size=batch_size,
-                                          pause_secs=5, timeout_secs=60)
+                                          pause_secs=5, timeout_secs=60, collection=collection)
                     else:
                         threshold_reached = True
                         self.log.info("\n DGM state achieved at %s %% for %s in bucket %s!"\
@@ -960,19 +1021,19 @@ class BaseTestCase(unittest.TestCase):
                         break
 
     def _async_load_bucket(self, bucket, server, kv_gen, op_type, exp, kv_store=1, flag=0, only_store_hash=True,
-                           batch_size=1000, pause_secs=1, timeout_secs=30):
+                           batch_size=1000, pause_secs=1, timeout_secs=30, collection=None):
         gen = copy.deepcopy(kv_gen)
         task = self.cluster.async_load_gen_docs(server, bucket.name, gen,
                                                 bucket.kvs[kv_store], op_type,
                                                 exp, flag, only_store_hash,
                                                 batch_size, pause_secs, timeout_secs,
-                                                compression=self.sdk_compression)
+                                                compression=self.sdk_compression, collection=collection)
         return task
 
     def _load_bucket(self, bucket, server, kv_gen, op_type, exp, kv_store=1, flag=0, only_store_hash=True,
-                     batch_size=1000, pause_secs=1, timeout_secs=30):
+                     batch_size=1000, pause_secs=1, timeout_secs=30, collection=None):
         task = self._async_load_bucket(bucket, server, kv_gen, op_type, exp, kv_store, flag, only_store_hash,
-                                       batch_size, pause_secs, timeout_secs)
+                                       batch_size, pause_secs, timeout_secs, collection=collection)
         task.result()
 
 
@@ -1038,7 +1099,7 @@ class BaseTestCase(unittest.TestCase):
 
     def _wait_for_stats_all_buckets(self, servers, ep_queue_size=0, \
                                     ep_queue_size_cond='==',
-                                    check_ep_items_remaining=False, timeout=360):
+                                    check_ep_items_remaining=False, timeout=360, collection=None):
         tasks = []
         servers = self.get_kv_nodes(servers)
         for server in servers:
@@ -1086,16 +1147,24 @@ class BaseTestCase(unittest.TestCase):
 
     def _verify_all_buckets(self, server, kv_store=1, timeout=180, max_verify=None, only_store_hash=True,
                             batch_size=1000,
-                            replica_to_read=None):
+                            replica_to_read=None, collection_name=None):
         tasks = []
+
         if len(self.buckets) > 1:
             batch_size = 1
         for bucket in self.buckets:
             if bucket.type == 'memcached':
                 continue
-            tasks.append(self.cluster.async_verify_data(server, bucket, bucket.kvs[kv_store], max_verify,
+            #self.collection_bucket=self.collection_name[bucket]
+            if not collection_name and (len(self.collection_name[bucket.name]) > 0):
+                for collections in self.collection_name[bucket.name]:
+                    tasks.append(self.cluster.async_verify_data(server, bucket, bucket.kvs[kv_store], max_verify,
                                                         only_store_hash, batch_size, replica_to_read,
-                                                        compression=self.sdk_compression))
+                                                        compression=self.sdk_compression, collection=collections))
+            else:
+                tasks.append(self.cluster.async_verify_data(server, bucket, bucket.kvs[kv_store], max_verify,
+                                                        only_store_hash, batch_size, replica_to_read,
+                                                        compression=self.sdk_compression, collection=collection_name))
         for task in tasks:
             task.result(timeout)
 
@@ -1160,7 +1229,7 @@ class BaseTestCase(unittest.TestCase):
     def verify_cluster_stats(self, servers=None, master=None, max_verify=None,
                              timeout=None, check_items=True, only_store_hash=True,
                              replica_to_read=None, batch_size=1000, check_bucket_stats=True,
-                             check_ep_items_remaining=False, verify_total_items=True):
+                             check_ep_items_remaining=False, verify_total_items=True, collection=None):
         servers = self.get_kv_nodes(servers)
         if servers is None:
             servers = self.servers
@@ -1175,14 +1244,14 @@ class BaseTestCase(unittest.TestCase):
             try:
                 self._verify_all_buckets(master, timeout=timeout, max_verify=max_verify,
                                          only_store_hash=only_store_hash, replica_to_read=replica_to_read,
-                                         batch_size=batch_size)
+                                         batch_size=batch_size, collection_name=collection)
             except ValueError, e:
                 """ get/verify stats if 'ValueError: Not able to get values
                                              for following keys' was gotten """
-                self._verify_stats_all_buckets(servers, timeout=(timeout or 120))
+                self._verify_stats_all_buckets(servers, timeout=(timeout or 120), collection=collection)
                 raise e
             if check_bucket_stats:
-                self._verify_stats_all_buckets(servers, timeout=(timeout or 120))
+                self._verify_stats_all_buckets(servers, timeout=(timeout or 120), collection=collection)
             # verify that curr_items_tot corresponds to sum of curr_items from all nodes
             if verify_total_items:
                 verified = True
@@ -1352,7 +1421,7 @@ class BaseTestCase(unittest.TestCase):
         shell.disconnect()
         self.fail("Couchbase service is not running after {0} seconds".format(wait_time))
 
-    def _load_memcached_bucket(self, server, gen_load, bucket_name):
+    def _load_memcached_bucket(self, server, gen_load, bucket_name, collection=None):
         num_tries = 0
         while num_tries < 6:
             try:
@@ -1368,7 +1437,7 @@ class BaseTestCase(unittest.TestCase):
             key, value = gen_load.next()
             for v in xrange(1024):
                 try:
-                    client.set(key, 0, 0, value, v)
+                    client.set(key, 0, 0, value, v, collection=collection)
                     break
                 except:
                     pass
@@ -2397,7 +2466,7 @@ class BaseTestCase(unittest.TestCase):
 
     def load(self, generators_load, buckets=None, exp=0, flag=0,
              kv_store=1, only_store_hash=True, batch_size=1, pause_secs=1,
-             timeout_secs=30, op_type='create', start_items=0, verify_data=True):
+             timeout_secs=30, op_type='create', start_items=0, verify_data=True, collection=None):
         if not buckets:
             buckets = self.buckets
         gens_load = {}
@@ -2417,17 +2486,18 @@ class BaseTestCase(unittest.TestCase):
                                                           gens_load[bucket],
                                                           bucket.kvs[kv_store], op_type, exp, flag,
                                                           only_store_hash, batch_size, pause_secs,
-                                                          timeout_secs, compression=self.sdk_compression))
+                                                          timeout_secs, compression=self.sdk_compression, collection=collection))
         for task in tasks:
             task.result()
         self.num_items = items + start_items
+        
         if verify_data:
             self.verify_cluster_stats(self.servers[:self.nodes_init])
         self.log.info("LOAD IS FINISHED")
 
     def async_load(self, generators_load, exp=0, flag=0,
                    kv_store=1, only_store_hash=True, batch_size=1, pause_secs=1,
-                   timeout_secs=30, op_type='create', start_items=0):
+                   timeout_secs=30, op_type='create', start_items=0, collection=None):
         gens_load = {}
         for bucket in self.buckets:
             tmp_gen = []
@@ -2445,7 +2515,7 @@ class BaseTestCase(unittest.TestCase):
                                                           gens_load[bucket],
                                                           bucket.kvs[kv_store], op_type, exp, flag,
                                                           only_store_hash, batch_size, pause_secs,
-                                                          timeout_secs, compression=self.sdk_compression))
+                                                          timeout_secs, compression=self.sdk_compression, collection=collection))
         self.num_items = items + start_items
         return tasks
 
@@ -2646,4 +2716,71 @@ class BaseTestCase(unittest.TestCase):
         rest = RestConnection(self.master)
         version = rest.get_nodes_self().version
         return float(version[:3])
+
+    def create_scope(self, bucket = "default", scope = "scope0", result = True):
+        status = RestConnection(self.master).create_scope(bucket, scope)
+        if result:
+            self.assertEquals(True, status)
+            self.log.info("Scope creation passed, name={}".format(scope))
+        else:
+            self.assertEquals(False, status)
+            self.log.info("Scope creation failed, name={}".format(scope))
+
+
+    def create_collection(self, bucket = "default", scope = "scope0", collection = "mycollection0", result = True):
+        status = RestConnection(self.master).create_collection(bucket, scope, collection)
+        if result:
+            self.assertEquals(True, status)
+            self.log.info("Collection creation passed, name={}".format(collection))
+        else:
+            self.assertEquals(False, status)
+            self.log.info("Collection creation failed, name={}".format(collection))
+
+    def delete_collection(self, bucket = "default", scope = '_default', collection = '_default' ):
+        status = RestConnection(self.master).delete_collection(bucket, scope, collection)
+        self.assertEquals(True, status)
+        self.log.info("{} collections deleted".format(collection))
+        try:
+            if "_default._default" in self.collection_name[bucket]:
+                self.collection_name[bucket].remove("_default._default")
+        except KeyError:
+            pass
+
+    def delete_scope(self, scope, bucket = "default"): # scope should be passed as default scope can not be deleted
+        status = RestConnection(self.master).delete_collection(bucket, scope)
+        self.assertEquals(True, status)
+        self.log.info("{} scope deleted".format(scope))
+        rex= re.compile(scope)
+        try:
+            # remove all the collections with the deleted scope
+            self.collection_name[bucket]=[x for x in self.collection_name[bucket] if not rex.match(self.collection_name[bucket])]
+        except KeyError:
+            pass
+
+    def create_scope_collection(self, scope_num, collection_num, bucket = "default"):
+        self.collection_name[bucket]= ["_default._default"]
+        for i in range(scope_num):
+            if i == 0:
+                scope_name = "_default"
+            else:
+                scope_name = bucket + str(i)
+                self.create_scope(bucket, scope=scope_name)
+            try:
+                if i == 0:
+                    num=int(collection_num[i] -1)
+                else:
+                    num=int(collection_num[i])
+            except:
+                num=2
+            for n in range(num):
+                collection = 'collection' + str(n)
+                self.create_collection(bucket=bucket,scope=scope_name, collection=collection)
+                self.collection_name[bucket].append(scope_name + '.' +collection)
+
+        self.log.info("created collections for the bucket {} are {}".format(bucket, self.collection_name[bucket]))
+
+
+
+
+
 
