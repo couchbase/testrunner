@@ -64,7 +64,7 @@ class CCCP(BaseTestCase):
                 if econfig_expected == config:
                     self.fail("It should not allow to set this format config ")
             except Exception as e:
-                if e and not "Got empty data" in str(e):
+                if e and not "Memcached error #4 'Invalid'" in str(e):
                     self.fail("ns server should not allow to set this config format")
 
     def test_not_my_vbucket_config(self):
