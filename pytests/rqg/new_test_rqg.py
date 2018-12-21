@@ -105,15 +105,16 @@ class RQGTestsNew(BaseRQGTests):
     def _run_queries_and_verify_new(self, n1ql_query=None, sql_query=None, expected_result=None):
         self.log.info(" SQL QUERY :: {0}".format(sql_query))
         self.log.info(" N1QL QUERY :: {0}".format(n1ql_query))
+        client = RQGMySQLClientNew(database=self.database, host=self.mysql_url, user_id=self.user_id, password=self.password)
+
         try:
 
             actual_result = self.n1ql_helper.run_cbq_query(query=n1ql_query, server=self.n1ql_server, scan_consistency="request_plus")
             n1ql_result = actual_result["results"]
-
             # Run SQL Query
             sql_result = expected_result
             if expected_result is None:
-                columns, rows = self.client._execute_query(query=sql_query)
+                columns, rows = client._execute_query(query=sql_query)
                 self.log.info(" result from n1ql query returns {0} items".format(len(n1ql_result)))
                 self.log.info(" result from sql query returns {0} items".format(len(rows)))
                 sql_result = self._gen_json_from_results(columns, rows)
@@ -134,11 +135,12 @@ class RQGTestsNew(BaseRQGTests):
                 traceback.print_exc()
                 return {"success": False, "result": str(ex)}
             return {"success": True, "result": "Pass"}
-
         except Exception, ex:
             self.log.info(ex)
             traceback.print_exc()
             return {"success": False, "result": str(ex)}
+        finally:
+            client._close_mysql_connection()
 
     def _gen_json_from_results(self, columns, rows):
         data = []
@@ -201,9 +203,15 @@ class RQGTestsNew(BaseRQGTests):
         msg = "The number of rows match but the results mismatch, please check"
         sorted_actual = self._sort_data(actual_result)
         sorted_expected = self._sort_data(expected_result)
-        if sorted_actual != sorted_expected:
-            extra_msg = self._get_failure_message(expected_result, actual_result)
-            raise Exception(msg+"\n "+extra_msg)
+
+        combined_results = zip(sorted_expected, sorted_actual)
+        for item in combined_results:
+            expected = item[0]
+            actual = item[1]
+            for result in expected:
+                if result not in actual:
+                    extra_msg = self._get_failure_message(expected_result, actual_result)
+                    raise Exception(msg+"\n "+extra_msg)
 
     def _sort_data(self, result):
         new_data = []

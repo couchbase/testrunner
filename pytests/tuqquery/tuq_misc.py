@@ -277,15 +277,21 @@ class QueryMiscTests(QueryTests):
             idx_list.append('idx1')
 
             i = 0
+            found = False
             while i < 10:
-                curl_output = self.shell.execute_command("%s -u Administrator:password http://%s:9102/stats"
-                                                     % (self.curl_path, self.master.ip))
-                # The above command returns a tuple, we want the first element of that tuple
-                expected_curl = self.convert_list_to_json(curl_output[0])
-                self.log.info(str(expected_curl))
+                for server in self.servers:
+                    curl_output = self.shell.execute_command("%s -u Administrator:password http://%s:9102/stats"
+                                                         % (self.curl_path, server.ip))
+                    # The above command returns a tuple, we want the first element of that tuple
+                    expected_curl = self.convert_list_to_json(curl_output[0])
+                    self.log.info(str(expected_curl))
 
-                if 'default:idx1:items_count' in expected_curl or i == 9:
-                    self.assertEqual(expected_curl['default:idx1:items_count'], item_count)
+                    if 'default:idx1:items_count' in expected_curl or i == 9:
+                        self.assertEqual(expected_curl['default:idx1:items_count'], item_count)
+                        found = True
+                        break
+                if found:
+                    break
                 i += 1
                 self.sleep(3)
 
@@ -295,15 +301,21 @@ class QueryMiscTests(QueryTests):
             idx_list.append('idx2')
 
             i = 0
+            found = False
             while i < 10:
-                curl_output = self.shell.execute_command("%s -u Administrator:password http://%s:9102/stats"
-                                                         % (self.curl_path, self.master.ip))
-                # The above command returns a tuple, we want the first element of that tuple
-                expected_curl = self.convert_list_to_json(curl_output[0])
-                self.log.info(str(expected_curl))
+                for server in self.servers:
+                    curl_output = self.shell.execute_command("%s -u Administrator:password http://%s:9102/stats"
+                                                             % (self.curl_path, server.ip))
+                    # The above command returns a tuple, we want the first element of that tuple
+                    expected_curl = self.convert_list_to_json(curl_output[0])
+                    self.log.info(str(expected_curl))
 
-                if 'default:idx2:items_count' in expected_curl or i == 9:
-                    self.assertEqual(expected_curl['default:idx2:items_count'], item_count)
+                    if 'default:idx2:items_count' in expected_curl or i == 9:
+                        self.assertEqual(expected_curl['default:idx2:items_count'], item_count)
+                        found = True
+                        break
+                if found:
+                    break
                 i += 1
                 self.sleep(3)
 
@@ -313,14 +325,20 @@ class QueryMiscTests(QueryTests):
             idx_list.append('idx3')
 
             i = 0
+            found = False
             while i < 10:
-                curl_output = self.shell.execute_command("%s -u Administrator:password http://%s:9102/stats"
-                                                         % (self.curl_path, self.master.ip))
-                # The above command returns a tuple, we want the first element of that tuple
-                expected_curl = self.convert_list_to_json(curl_output[0])
-                self.log.info(str(expected_curl))
-                if 'default:idx3:items_count' in expected_curl or i == 9:
-                    self.assertEqual(expected_curl['default:idx3:items_count'], item_count)
+                for server in self.servers:
+                    curl_output = self.shell.execute_command("%s -u Administrator:password http://%s:9102/stats"
+                                                             % (self.curl_path, server.ip))
+                    # The above command returns a tuple, we want the first element of that tuple
+                    expected_curl = self.convert_list_to_json(curl_output[0])
+                    self.log.info(str(expected_curl))
+                    if 'default:idx3:items_count' in expected_curl or i == 9:
+                        self.assertEqual(expected_curl['default:idx3:items_count'], item_count)
+                        found = True
+                        break
+                if found:
+                    break
                 i += 1
                 self.sleep(3)
 

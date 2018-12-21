@@ -4,6 +4,7 @@ import string
 import pprint
 from base_query_helper import BaseRQGQueryHelper
 
+
 '''
 N1QL PARSE ORDER
 1.  with
@@ -107,19 +108,27 @@ class RQGQueryHelperNew(BaseRQGQueryHelper):
         template_map = self._convert_from_clause_template_n1ql(conversion_map, template_map)
         template_map = self._convert_where_clause_template_n1ql(conversion_map, template_map)
         template_map = self._convert_select_clause_template_n1ql(conversion_map, template_map)
-        template_map["N1QL"] = self._combine_converted_clauses(template_map)
-        template_map = self.convert_on_clause_for_sql(template_map)
-        template_map["SQL"] = self._combine_converted_clauses(template_map)
+
+        n1ql_template_map = copy.deepcopy(template_map)
+        sql_template_map = copy.deepcopy(template_map)
+
+        n1ql_template_map = self._convert_select_subquery_for_n1ql(n1ql_template_map)
+        n1ql_template_map["N1QL"] = self._combine_converted_clauses(n1ql_template_map)
+
+        sql_template_map = self._convert_on_clause_for_sql(sql_template_map)
+        sql_template_map["SQL"] = self._combine_converted_clauses(sql_template_map)
+        sql_template_map["SQL"] = sql_template_map["SQL"].replace(" RAW ", " ")
+
         indexes = {}
         indexes = self.create_join_index(conversion_map, template_map, indexes)
-        query_map = {"n1ql": template_map['N1QL'],  "sql": template_map['SQL'],
+        query_map = {"n1ql": n1ql_template_map['N1QL'],  "sql": sql_template_map['SQL'],
                      "bucket": str(",".join(table_map.keys())),
                      "expected_result": None, "indexes": indexes,
                      "tests": ["BASIC"]}
         query_map = self.convert_table_name(query_map, conversion_map)
         return query_map
 
-    def convert_on_clause_for_sql(self, template_map):
+    def _convert_on_clause_for_sql(self, template_map):
         from_map = template_map['FROM_FIELD']
         from_type = from_map['type']
         if from_type == "joins":
@@ -127,6 +136,40 @@ class RQGQueryHelperNew(BaseRQGQueryHelper):
             on_clause = from_clause.split(" ON ")[1].strip("(").strip(")").replace("==", "=")
             from_clause = from_clause.split(" ON ")[0] + " ON " + on_clause
             template_map['FROM_CLAUSE'] = from_clause
+        return template_map
+
+    def _convert_select_subquery_for_n1ql(self, template_map):
+        select_subqueries = self.get_from_dict(template_map, ['SELECT_FIELDS', 'SUBQUERIES'])
+        if select_subqueries == []:
+            return template_map
+        subquery_aliases = select_subqueries.keys()
+        for alias in subquery_aliases:
+            subquery_select = select_subqueries[alias]["SELECT_CLAUSE"]
+            new_select_clause = "SELECT RAW " + subquery_select.split("SELECT")[1]
+            select_subqueries[alias]["SELECT_CLAUSE"] = new_select_clause
+
+        self.set_in_dict(template_map, ['SELECT_FIELDS', 'SUBQUERIES'], select_subqueries)
+
+        select_fields = self.get_from_dict(template_map, ['SELECT_FIELDS', 'FIELDS'])
+        final_select_fields = []
+        for field_info in select_fields:
+            if field_info['ALIAS'] != '':
+                field = field_info['FIELD'] + " AS " + field_info['ALIAS']
+            else:
+                field = field_info['FIELD']
+            final_select_fields.append(field)
+
+        subquery_dict = self.get_from_dict(template_map, ['SELECT_FIELDS', 'SUBQUERIES'])
+        for subquery_alias in subquery_dict.keys():
+            converted_subquery_map = self.get_from_dict(template_map, ['SELECT_FIELDS', 'SUBQUERIES', subquery_alias])
+            combined_subquery = "(" + self._combine_converted_clauses(converted_subquery_map) + ")[0] AS " + subquery_alias
+            final_select_fields.append(combined_subquery)
+
+        select_clause = "SELECT"
+        for field in final_select_fields:
+            select_clause += " " + field + ","
+        select_clause = self._remove_trailing_substring(select_clause.strip(), ",")
+        self.set_in_dict(template_map, ['SELECT_CLAUSE'], select_clause)
         return template_map
 
     def create_join_index(self, conversion_map, template_map, indexes={}):
@@ -216,7 +259,7 @@ class RQGQueryHelperNew(BaseRQGQueryHelper):
     def _convert_with_expression(self, alias, template_map, conversion_map, key_path=[]):
         expression = self.get_from_dict(template_map, key_path+['WITH_EXPRESSION_TEMPLATES', alias])
         if expression == "WITH_CLAUSE_SUBQUERY":
-            query_template = "SELECT_START SELECT FIELDS SELECT_END FROM_START FROM BUCKET_NAME FROM_END WHERE_START WHERE FIELDS_CONDITION WHERE_END"
+            query_template = "SELECT_START SELECT FIELDS SELECT_END FROM_START FROM BUCKET_NAME_WITH_ALIAS FROM_END WHERE_START WHERE FIELDS_CONDITION WHERE_END"
             self.set_in_dict(template_map, key_path+['WITH_EXPRESSION_TEMPLATES', alias], self._extract_clauses(query_template))
             template_map = self._convert_from_clause_template_n1ql(conversion_map, template_map, key_path=key_path+['WITH_EXPRESSION_TEMPLATES', alias])
             template_map = self._convert_where_clause_template_n1ql(conversion_map, template_map, key_path=key_path+['WITH_EXPRESSION_TEMPLATES', alias])
@@ -250,13 +293,19 @@ class RQGQueryHelperNew(BaseRQGQueryHelper):
 
     def _convert_from_clause_template_n1ql(self, conversion_map, template_map, key_path=[]):
         from_template = self.get_from_dict(template_map, key_path+['FROM_TEMPLATE', 0])
-        from_expression = from_template.split("FROM")[1].strip()
+        from_expression = from_template.split("FROM ")[1].strip()
         from_clause = "FROM"
         table_name = conversion_map.get("table_name", "simple_table")
         if from_expression == "BUCKET_NAME":
             # any select is from the default table/bucket
             from_clause += " " + table_name
-            from_map = {"left_table": table_name, "class": "BUCKET",
+            from_map = {"left_table": table_name, "class": "BUCKET_NAME",
+                        'type': "basic"}
+        elif from_expression == "BUCKET_NAME_WITH_ALIAS":
+            # any select is from the default table/bucket
+            bucket_alias = 'BUCKET_' + ''.join(random.choice(string.ascii_uppercase) for _ in range(5))
+            from_clause += " " + table_name + " AS " + bucket_alias
+            from_map = {"left_table": table_name, "left_table_alias": bucket_alias, "class": "BUCKET_NAME_WITH_ALIAS",
                         'type': "basic"}
         elif from_expression == "WITH_CLAUSE_ALIAS":
             # outer most select is from a with clause alias
@@ -265,6 +314,15 @@ class RQGQueryHelperNew(BaseRQGQueryHelper):
             with_alias = random.choice(with_clause_aliases)
             from_clause += " " + with_alias
             from_map = {"left_table": with_alias, "class": "WITH_ALIAS", "type": "basic"}
+        elif from_expression == "FROM_SUBQUERY_CTE":
+            from_subquery = self._get_raw_subquery_template("FROM_SUBQUERY_WITH_CTE")
+            subquery_template = self._extract_clauses(from_subquery)
+            subquery_template = self._convert_subquery(conversion_map, subquery_template, key_path=[])
+            subquery_alias = 'SUBQUERY_' + ''.join(random.choice(string.ascii_uppercase) for _ in range(5))
+            combined_subquery = "(" + self._combine_converted_clauses(subquery_template) + ") AS " + subquery_alias
+            from_map = {"subquery_alias": subquery_alias, "subquery_template": subquery_template, "subquery": combined_subquery,
+                        "class": "SUBQUERY_CTE", "type": "subquery"}
+            from_clause += " " + combined_subquery
         elif from_expression == "CTE_ALIAS":
             # select in a cte is from a previous cte
             last_index = 0
@@ -359,7 +417,7 @@ class RQGQueryHelperNew(BaseRQGQueryHelper):
                             "right_table": right_table, "right_table_alias": right_table_alias, "left_on_field": join_field, "right_on_field": join_field,
                             "join_type": join_type}
         else:
-            print("Unknown from clause type")
+            print("Unknown from clause type: " + from_expression)
             exit(1)
         self.set_in_dict(template_map, key_path+['FROM_FIELD'], from_map)
         self.set_in_dict(template_map, key_path+['FROM_CLAUSE'], str(from_clause))
@@ -371,36 +429,144 @@ class RQGQueryHelperNew(BaseRQGQueryHelper):
         from_class = from_map["class"]
         table_map = conversion_map.get("table_map", {})
 
+        where_template = self.get_from_dict(template_map, key_path+['WHERE_TEMPLATE', 0])
+        where_expression = where_template.split("WHERE ")[1].strip()
+
         num_where_comparisons = random.randint(0, 4)
         if num_where_comparisons == 0:
             where_clause = ""
             self.set_in_dict(template_map, key_path+['WHERE_CLAUSE'], where_clause)
             return template_map
 
-        if from_class == "BUCKET":
+        if from_class == "BUCKET_NAME":
             # need to add random field selection from bucket
             from_table = from_map["left_table"]
             all_fields = table_map[from_table]["fields"].keys()
-
-            for i in range(0, num_where_comparisons):
+            if where_expression == "FIELDS_CONDITION":
+                for i in range(0, num_where_comparisons):
+                    random_field = random.choice(all_fields)
+                    random_constant = self._random_constant(random_field)
+                    comparator = random.choice(['<', '>', '=', '!='])
+                    conjunction = random.choice(['AND', 'OR'])
+                    where_clause += " " + random_field + " " + comparator + " " + str(random_constant) + " " + conjunction
+                where_clause = where_clause.rsplit(' ', 1)[0]
+            elif where_expression == "FIELDS_SUBQUERY_CONDITION":
                 random_field = random.choice(all_fields)
-                random_constant = self._random_constant(random_field)
-                comparator = random.choice(['<', '>', '=', '!='])
-                conjunction = random.choice(['AND', 'OR'])
-                where_clause += " " + random_field + " " + comparator + " " + str(random_constant) + " " + conjunction
-            where_clause = where_clause.rsplit(' ', 1)[0]
+                random_field_no_alias = random_field.split(".")[-1]
+                subquery_select_field_no_alias = ''
+                while subquery_select_field_no_alias != random_field_no_alias:
+                    self.log_info("Attempting to generate proper subquery...")
+                    where_subquery = self._get_raw_subquery_template("WHERE_SUBQUERY_WITH_CTE")
+                    where_subquery_template = self._extract_clauses(where_subquery)
+                    where_subquery_template = self._convert_subquery(conversion_map, where_subquery_template, key_path=[])
+                    where_subquery_template['SELECT_CLAUSE'] = where_subquery_template['SELECT_CLAUSE'].replace("SELECT", "SELECT RAW")
+                    subquery_select_field_no_alias = where_subquery_template['SELECT_FIELDS']['FIELDS'][0]['FIELD'].split(".")[-1]
+                where_subquery = self._combine_converted_clauses(where_subquery_template)
+                where_clause += " " + random_field + " IN " + "(" + where_subquery + ")"
+                self.set_in_dict(template_map, key_path+['WHERE_SUBQUERIES'], where_subquery_template)
+
+            else:
+                print("WHERE CLAUSE CONVERSION - Unknown where expression type: " + str(where_expression))
+                exit(1)
+
+        elif from_class == "BUCKET_NAME_WITH_ALIAS":
+            from_table = from_map["left_table"]
+            all_fields = table_map[from_table]["fields"].keys()
+
+            if where_expression == "FIELDS_CONDITION":
+                for i in range(0, num_where_comparisons):
+                    random_field = random.choice(all_fields)
+                    random_field = from_map['left_table_alias'] + "." + random_field
+                    random_constant = self._random_constant(random_field)
+                    comparator = random.choice(['<', '>', '=', '!='])
+                    conjunction = random.choice(['AND', 'OR'])
+                    where_clause += " " + random_field + " " + comparator + " " + str(random_constant) + " " + conjunction
+                where_clause = where_clause.rsplit(' ', 1)[0]
+            elif where_expression == "FIELDS_SUBQUERY_CONDITION":
+                random_field = random.choice(all_fields)
+                random_field_no_alias = random_field.split(".")[-1]
+                subquery_select_field_no_alias = ''
+                while subquery_select_field_no_alias != random_field_no_alias:
+                    self.log_info("Attempting to generate proper subquery...")
+                    where_subquery = self._get_raw_subquery_template("WHERE_SUBQUERY_WITH_CTE")
+                    where_subquery_template = self._extract_clauses(where_subquery)
+                    where_subquery_template = self._convert_subquery(conversion_map, where_subquery_template, key_path=[])
+                    where_subquery_template['SELECT_CLAUSE'] = where_subquery_template['SELECT_CLAUSE'].replace("SELECT", "SELECT RAW")
+                    subquery_select_field_no_alias = where_subquery_template['SELECT_FIELDS']['FIELDS'][0]['FIELD'].split(".")[-1]
+                where_subquery = self._combine_converted_clauses(where_subquery_template)
+                random_field = from_map['left_table_alias'] + "." + random_field
+                where_clause += " " + random_field + " IN " + "(" + where_subquery + ")"
+                self.set_in_dict(template_map, key_path+['WHERE_SUBQUERIES'], where_subquery_template)
+            else:
+                print("WHERE CLAUSE CONVERSION - Unknown where expression type: " + str(where_expression))
+                exit(1)
+
+        elif from_class == "SUBQUERY_CTE":
+            subquery_alias = from_map["subquery_alias"]
+            subquery_select_fields = self.get_from_dict(template_map, key_path+['FROM_FIELD', 'subquery_template', 'SELECT_FIELDS', 'FIELDS'])
+            all_fields = [field_tuple['FIELD'] for field_tuple in subquery_select_fields]
+
+            if where_expression == "FIELDS_CONDITION":
+                for i in range(0, num_where_comparisons):
+                    random_field = random.choice(all_fields)
+                    random_field = subquery_alias + "." + random_field
+                    random_constant = self._random_constant(random_field)
+                    comparator = random.choice(['<', '>', '=', '!='])
+                    conjunction = random.choice(['AND', 'OR'])
+                    where_clause += " " + random_field + " " + comparator + " " + str(random_constant) + " " + conjunction
+                where_clause = where_clause.rsplit(' ', 1)[0]
+
+            elif where_expression == "FIELDS_SUBQUERY_CONDITION":
+                random_field = random.choice(all_fields)
+                random_field_no_alias = random_field.split(".")[-1]
+                subquery_select_field_no_alias = ''
+                while subquery_select_field_no_alias != random_field_no_alias:
+                    self.log_info("Attempting to generate proper subquery...")
+                    where_subquery = self._get_raw_subquery_template("WHERE_SUBQUERY_WITH_CTE")
+                    where_subquery_template = self._extract_clauses(where_subquery)
+                    where_subquery_template = self._convert_subquery(conversion_map, where_subquery_template, key_path=[])
+                    where_subquery_template['SELECT_CLAUSE'] = where_subquery_template['SELECT_CLAUSE'].replace("SELECT", "SELECT RAW")
+                    subquery_select_field_no_alias = where_subquery_template['SELECT_FIELDS']['FIELDS'][0]['FIELD'].split(".")[-1]
+                where_subquery = self._combine_converted_clauses(where_subquery_template)
+                random_field = subquery_alias + "." + random_field
+                where_clause += " " + random_field + " IN " + "(" + where_subquery + ")"
+                self.set_in_dict(template_map, key_path+['WHERE_SUBQUERIES'], where_subquery_template)
+            else:
+                print("WHERE CLAUSE CONVERSION - Unknown where expression type: " + str(where_expression))
+                exit(1)
 
         elif from_class == "WITH_ALIAS":
             from_table = from_map["left_table"]
             with_alias_fields = self.get_from_dict(template_map, key_path+['WITH_FIELDS', from_table])
-            for i in range(0, num_where_comparisons):
-                random_with_field_info = random.choice(with_alias_fields)
-                random_with_field = random_with_field_info[0]
-                random_constant = self._random_constant(random_with_field)
-                comparator = random.choice(['<', '>', '=', '!='])
-                conjunction = random.choice(['AND', 'OR'])
-                where_clause += " " + from_table + "." + random_with_field + " " + comparator + " " + str(random_constant) + " " + conjunction
-            where_clause = where_clause.rsplit(' ', 1)[0]
+
+            if where_expression == "FIELDS_CONDITION":
+                for i in range(0, num_where_comparisons):
+                    random_with_field_info = random.choice(with_alias_fields)
+                    random_with_field = random_with_field_info[0]
+                    random_constant = self._random_constant(random_with_field)
+                    comparator = random.choice(['<', '>', '=', '!='])
+                    conjunction = random.choice(['AND', 'OR'])
+                    where_clause += " " + from_table + "." + random_with_field + " " + comparator + " " + str(random_constant) + " " + conjunction
+                where_clause = where_clause.rsplit(' ', 1)[0]
+            elif where_expression == "FIELDS_SUBQUERY_CONDITION":
+                random_field = random.choice(with_alias_fields)
+                random_field = random_field[0]
+                random_field_no_alias = random_field.split(".")[-1]
+                subquery_select_field_no_alias = ''
+                while subquery_select_field_no_alias != random_field_no_alias:
+                    self.log_info("Attempting to generate proper subquery...")
+                    where_subquery = self._get_raw_subquery_template("WHERE_SUBQUERY_WITH_CTE")
+                    where_subquery_template = self._extract_clauses(where_subquery)
+                    where_subquery_template = self._convert_subquery(conversion_map, where_subquery_template, key_path=[])
+                    where_subquery_template['SELECT_CLAUSE'] = where_subquery_template['SELECT_CLAUSE'].replace("SELECT", "SELECT RAW")
+                    subquery_select_field_no_alias = where_subquery_template['SELECT_FIELDS']['FIELDS'][0]['FIELD'].split(".")[-1]
+                where_subquery = self._combine_converted_clauses(where_subquery_template)
+                random_field = from_table + "." + random_field
+                where_clause += " " + random_field + " IN " + "(" + where_subquery + ")"
+                self.set_in_dict(template_map, key_path+['WHERE_SUBQUERIES'], where_subquery_template)
+            else:
+                print("WHERE CLAUSE CONVERSION - Unknown where expression type: " + str(where_expression))
+                exit(1)
 
         elif from_class == "CTE_ALIAS":
             from_table = from_map["left_table"]
@@ -416,14 +582,32 @@ class RQGQueryHelperNew(BaseRQGQueryHelper):
             with_fields = self.get_from_dict(template_map, with_fields_key_path + ['WITH_FIELDS', from_table])
             source_fields = [field_tuple[0] for field_tuple in with_fields]
 
-            for i in range(0, num_where_comparisons):
-                where_field = random.choice(source_fields)
-                comparator = random.choice(['<', '>', '=', '!='])
-                conjunction = random.choice(['AND', 'OR'])
-                random_constant = self._random_constant(where_field)
-                where_clause += " " + from_table_alias + "." + where_field + " " + comparator + " " + str(random_constant) + " " + conjunction
-            where_clause = where_clause.rsplit(' ', 1)[0]
-
+            if where_expression == "CTE_FIELDS_CONDITION":
+                for i in range(0, num_where_comparisons):
+                    where_field = random.choice(source_fields)
+                    comparator = random.choice(['<', '>', '=', '!='])
+                    conjunction = random.choice(['AND', 'OR'])
+                    random_constant = self._random_constant(where_field)
+                    where_clause += " " + from_table_alias + "." + where_field + " " + comparator + " " + str(random_constant) + " " + conjunction
+                where_clause = where_clause.rsplit(' ', 1)[0]
+            elif where_expression == "FIELDS_SUBQUERY_CONDITION":
+                random_field = random.choice(source_fields)
+                random_field_no_alias = random_field.split(".")[-1]
+                subquery_select_field_no_alias = ''
+                while subquery_select_field_no_alias != random_field_no_alias:
+                    self.log_info("Attempting to generate proper subquery...")
+                    where_subquery = self._get_raw_subquery_template("WHERE_SUBQUERY_WITH_CTE")
+                    where_subquery_template = self._extract_clauses(where_subquery)
+                    where_subquery_template = self._convert_subquery(conversion_map, where_subquery_template, key_path=[])
+                    where_subquery_template['SELECT_CLAUSE'] = where_subquery_template['SELECT_CLAUSE'].replace("SELECT", "SELECT RAW")
+                    subquery_select_field_no_alias = where_subquery_template['SELECT_FIELDS']['FIELDS'][0]['FIELD'].split(".")[-1]
+                where_subquery = self._combine_converted_clauses(where_subquery_template)
+                random_field = from_table_alias + "." + random_field
+                where_clause += " " + random_field + " IN " + "(" + where_subquery + ")"
+                self.set_in_dict(template_map, key_path+['WHERE_SUBQUERIES'], where_subquery_template)
+            else:
+                print("WHERE CLAUSE CONVERSION - Unknown where expression type: " + str(where_expression))
+                exit(1)
         elif from_class == "TABLE_AND_CTE_JOIN":
             from_map = self.get_from_dict(template_map, key_path + ['FROM_FIELD'])
 
@@ -449,21 +633,47 @@ class RQGQueryHelperNew(BaseRQGQueryHelper):
             else:
                 right_table_fields = table_map[right_table]["fields"].keys()
 
-            for i in range(0, num_where_comparisons):
-                comparator = random.choice(['<', '>', '=', "!="])
-                conjunction = random.choice(['AND', 'OR'])
+            if where_expression == "FIELDS_CONDITION":
+                for i in range(0, num_where_comparisons):
+                    comparator = random.choice(['<', '>', '=', "!="])
+                    conjunction = random.choice(['AND', 'OR'])
+                    if random.choice(["LEFT_TABLE", "RIGHT_TABLE"]) == "LEFT_TABLE":
+                        where_field = random.choice(left_table_fields)
+                        where_table = left_table_alias
+                    else:
+                        where_field = random.choice(right_table_fields)
+                        where_table = right_table_alias
+                    random_constant = self._random_constant(where_field)
+                    where_clause += " " + where_table + "." + where_field + " " + comparator + " " + str(random_constant) + " " + conjunction
+                where_clause = where_clause.rsplit(' ', 1)[0]
+            elif where_expression == "FIELDS_SUBQUERY_CONDITION":
                 if random.choice(["LEFT_TABLE", "RIGHT_TABLE"]) == "LEFT_TABLE":
                     where_field = random.choice(left_table_fields)
                     where_table = left_table_alias
                 else:
                     where_field = random.choice(right_table_fields)
                     where_table = right_table_alias
-                random_constant = self._random_constant(where_field)
-                where_clause += " " + where_table + "." + where_field + " " + comparator + " " + str(random_constant) + " " + conjunction
-            where_clause = where_clause.rsplit(' ', 1)[0]
+
+                random_field = where_field
+                random_field_no_alias = random_field.split(".")[-1]
+                subquery_select_field_no_alias = ''
+                while subquery_select_field_no_alias != random_field_no_alias:
+                    self.log_info("Attempting to generate proper subquery...")
+                    where_subquery = self._get_raw_subquery_template("WHERE_SUBQUERY_WITH_CTE")
+                    where_subquery_template = self._extract_clauses(where_subquery)
+                    where_subquery_template = self._convert_subquery(conversion_map, where_subquery_template, key_path=[])
+                    where_subquery_template['SELECT_CLAUSE'] = where_subquery_template['SELECT_CLAUSE'].replace("SELECT", "SELECT RAW")
+                    subquery_select_field_no_alias = where_subquery_template['SELECT_FIELDS']['FIELDS'][0]['FIELD'].split(".")[-1]
+                where_subquery = self._combine_converted_clauses(where_subquery_template)
+                random_field = where_table + "." + where_field
+                where_clause += " " + random_field + " IN " + "(" + where_subquery + ")"
+                self.set_in_dict(template_map, key_path+['WHERE_SUBQUERIES'], where_subquery_template)
+            else:
+                print("WHERE CLAUSE CONVERSION - Unknown where expression type: " + str(where_expression))
+                exit(1)
 
         else:
-            print("Unknown from expression type")
+            print("WHERE CLAUSE CONVERSION - Unknown from expression type: " + str(from_class))
             exit(1)
 
         self.set_in_dict(template_map, key_path+['WHERE_CLAUSE'], where_clause)
@@ -477,16 +687,118 @@ class RQGQueryHelperNew(BaseRQGQueryHelper):
 
         if select_expression == "FIELDS":
             random_select_fields = self._get_random_select_fields(from_map, conversion_map, template_map, key_path=key_path)
+            select_fields = {'FIELDS': [{'FIELD': field, 'ALIAS': ''} for field in random_select_fields], 'SUBQUERIES': []}
+            self.set_in_dict(template_map, key_path+['SELECT_FIELDS'], select_fields)
+            for field in random_select_fields:
+                select_clause += " " + field + ","
+
+        elif select_expression == "SINGLE_FIELD":
+            random_select_fields = self._get_random_select_fields(from_map, conversion_map, template_map, key_path=key_path)
+            select_fields = {'FIELDS': [{'FIELD': random_select_fields[0], 'ALIAS': ''}],
+                             'SUBQUERIES': []}
+            self.set_in_dict(template_map, key_path+['SELECT_FIELDS'], select_fields)
+            select_clause += " " + random_select_fields[0] + ","
+
+        elif select_expression == "SINGLE_AGGREGATE_FIELD":
+            random_select_fields = self._get_random_select_fields(from_map, conversion_map, template_map, key_path=key_path)
+            single_select_field = random_select_fields[0]
+            aggregate = random.choice(['AVG', 'MIN', 'MAX', 'COUNT'])
+            agg_alias = aggregate + '_' + ''.join(random.choice(string.ascii_uppercase) for _ in range(5))
+
+            select_fields = {'FIELDS': {'FIELD': single_select_field, 'ALIAS': agg_alias, 'AGGREGATE': aggregate}, 'SUBQUERIES': []}
+            self.set_in_dict(template_map, key_path+['SELECT_FIELDS'], select_fields)
+            select_clause += " " + aggregate + "(" + single_select_field + ")" + " AS " + agg_alias + ","
+
+        elif select_expression == "FIELDS_OR_SUBQUERY":
+            random_select_fields = self._get_random_select_fields(from_map, conversion_map, template_map, key_path=key_path)
+
+            num_subqueries = random.choice([1])
+            subquery_dict = {}
+            for _ in range(0, num_subqueries):
+                subquery = self._get_raw_subquery_template(type="SUBQUERY_WITH_CTE")
+                subquery_template = self._extract_clauses(subquery)
+                subquery_alias = 'SUBQUERY_' + ''.join(random.choice(string.ascii_uppercase) for _ in range(5))
+                subquery_dict[subquery_alias] = subquery_template
+
+            select_fields = {'FIELDS': [{'FIELD': field, 'ALIAS': ''} for field in random_select_fields], 'SUBQUERIES': subquery_dict}
+            self.set_in_dict(template_map, key_path+['SELECT_FIELDS'], select_fields)
+            converted_subqueries = []
+
+            subquery_dict = self.get_from_dict(template_map, key_path+['SELECT_FIELDS', 'SUBQUERIES'])
+
+            for subquery_alias in subquery_dict.keys():
+                template_map = self._convert_subquery(conversion_map, template_map, key_path=key_path+['SELECT_FIELDS', 'SUBQUERIES', subquery_alias])
+                converted_subquery_map = self.get_from_dict(template_map, key_path+['SELECT_FIELDS', 'SUBQUERIES', subquery_alias])
+                combined_subquery = "(" + self._combine_converted_clauses(converted_subquery_map) + ") AS " + subquery_alias
+                converted_subqueries.append(combined_subquery)
+
+            for field in random_select_fields+converted_subqueries:
+                select_clause += " " + field + ","
         else:
             print("Unknown select type")
             exit(1)
 
-        for field in random_select_fields:
-            select_clause += " " + field + ","
-
         select_clause = self._remove_trailing_substring(select_clause.strip(), ",")
         self.set_in_dict(template_map, key_path+['SELECT_CLAUSE'], select_clause)
         return template_map
+
+    def _get_raw_subquery_template(self, type="SIMPLE"):
+        if type == 'SIMPLE':
+            subquery = "SELECT_START SELECT FIELDS SELECT_END FROM_START FROM BUCKET_NAME FROM_END WHERE_START WHERE FIELDS_CONDITION WHERE_END"
+        elif type == "FROM_SUBQUERY_WITH_CTE":
+            subquery = "WITH_START WITH CTE_START WITH_CLAUSE_SUBQUERY CTE_END WITH_END SELECT_START SELECT FIELDS SELECT_END FROM_START FROM BUCKET_NAME FROM_END WHERE_START WHERE FIELDS_CONDITION WHERE_END"
+        elif type == "SUBQUERY_WITH_CTE":
+            subquery = "WITH_START WITH CTE_START WITH_CLAUSE_SUBQUERY CTE_END WITH_END SELECT_START SELECT SINGLE_AGGREGATE_FIELD SELECT_END FROM_START FROM WITH_CLAUSE_ALIAS FROM_END WHERE_START WHERE FIELDS_CONDITION WHERE_END"
+        elif type == "SUBQUERY_FOR_CHAINED_CTE":
+            subquery = "SELECT_START SELECT FIELDS SELECT_END FROM_START FROM CTE_ALIAS FROM_END WHERE_START WHERE CTE_FIELDS_CONDITION WHERE_END"
+        elif type == "WHERE_SUBQUERY_WITH_CTE":
+            subquery = "WITH_START WITH CTE_START WITH_CLAUSE_SUBQUERY CTE_END WITH_END SELECT_START SELECT SINGLE_FIELD SELECT_END FROM_START FROM BUCKET_NAME_WITH_ALIAS FROM_END WHERE_START WHERE FIELDS_CONDITION WHERE_END"
+        else:
+            print("Unknown subquery type")
+            exit(1)
+        return subquery
+
+    def _convert_query(self, conversion_map, template_map, key_path=[]):
+        query_template_map = self.get_from_dict(template_map, key_path)
+        query_template_keys = query_template_map.keys()
+        if "WITH_TEMPLATE" in query_template_keys:
+            template_map = self._convert_with_clause_template_n1ql(conversion_map, template_map, key_path)
+
+        if "FROM_TEMPLATE" in query_template_keys:
+            template_map = self._convert_from_clause_template_n1ql(conversion_map, template_map, key_path)
+
+        #if "LET_TEMPLATE" in query_template_keys:
+        #    template_map = self._convert_let_clause_template_n1ql(conversion_map, template_map, key_path)
+
+        if "WHERE_TEMPLATE" in query_template_keys:
+            template_map = self._convert_where_clause_template_n1ql(conversion_map, template_map, key_path)
+
+        #if "GROUPBY_TEMPLATE" in query_template_keys:
+        #    template_map = self._convert_groupby_clause_template_n1ql(conversion_map, template_map, key_path)
+
+        #if "LETTING_TEMPLATE" in query_template_keys:
+        #    template_map = self._convert_letting_clause_template_n1ql(conversion_map, template_map, key_path)
+
+        #if "HAVING_TEMPLATE" in query_template_keys:
+        #    template_map = self._convert_having_clause_template_n1ql(conversion_map, template_map, key_path)
+
+        #if "ORDERBY_TEMPLATE" in query_template_keys:
+        #    template_map = self._convert_orderby_clause_template_n1ql(conversion_map, template_map, key_path)
+
+        #if "OFFSET_TEMPLATE" in query_template_keys:
+        #    template_map = self._convert_offset_clause_template_n1ql(conversion_map, template_map, key_path)
+
+        #if "LIMIT_TEMPLATE" in query_template_keys:
+        #    template_map = self._convert_limit_clause_template_n1ql(conversion_map, template_map, key_path)
+
+        if "SELECT_TEMPLATE" in query_template_keys:
+            template_map = self._convert_select_clause_template_n1ql(conversion_map, template_map, key_path)
+
+        return template_map
+
+    def _convert_subquery(self, conversion_map, template_map, key_path=[]):
+        subquery_template = self._convert_query(conversion_map, template_map, key_path)
+        return subquery_template
 
     def _combine_converted_clauses(self, template_map, key_path=[]):
         clause_order = ["WITH_CLAUSE", "SELECT_CLAUSE", "FROM_CLAUSE", "LET_CLAUSE", "WHERE_CLAUSE", "GROUPBY_CLAUSE", "LETTING_CLAUSE",
@@ -518,11 +830,15 @@ class RQGQueryHelperNew(BaseRQGQueryHelper):
         from_class = from_map['class']
         table_map = conversion_map.get("table_map", {})
         random_fields = []
-        if from_class == "BUCKET":
+        if from_class == "BUCKET_NAME":
             from_table = from_map['left_table']
             all_fields = table_map[from_table]["fields"].keys()
             random_fields = self._random_sample(all_fields)
-
+        elif from_class == "BUCKET_NAME_WITH_ALIAS":
+            from_table = from_map['left_table']
+            all_fields = table_map[from_table]["fields"].keys()
+            random_fields = self._random_sample(all_fields)
+            random_fields = [from_map['left_table_alias'] + "." + random_field for random_field in random_fields]
         elif from_class == "WITH_ALIAS":
             from_table = from_map['left_table']
             all_fields = self.get_from_dict(template_map, key_path + ['WITH_FIELDS', from_table])
@@ -548,6 +864,13 @@ class RQGQueryHelperNew(BaseRQGQueryHelper):
             all_fields = [field_tuple[0] for field_tuple in target_fields]
             random_fields = self._random_sample(all_fields)
             random_fields = [from_table_alias + "." + field for field in random_fields]
+
+        elif from_class == "SUBQUERY_CTE":
+            subquery_alias = from_map['subquery_alias']
+            subquery_fields = from_map['subquery_template']['SELECT_FIELDS']['FIELDS']
+            all_fields = [field_tuple['FIELD'] for field_tuple in subquery_fields]
+            random_fields = self._random_sample(all_fields)
+            random_fields = [subquery_alias + "." + field for field in random_fields]
 
         elif from_class == "TABLE_AND_CTE_JOIN":
             left_table = from_map['left_table']
@@ -586,7 +909,7 @@ class RQGQueryHelperNew(BaseRQGQueryHelper):
             random_fields = [field[0] + "." + field[1] for field in random_fields]
 
         else:
-            print("Unknown from type for select clause conversion")
+            print("Unknown from type for select clause conversion: " + str(from_class))
             exit(1)
 
         return random_fields
@@ -606,22 +929,22 @@ class RQGQueryHelperNew(BaseRQGQueryHelper):
 
     def _random_constant(self, field=None):
         if field:
-            if field == "int_field1":
+            if "int_field1" in field:
                 random_constant = random.randrange(36787, 99912344, 1000000)
-            elif field == "bool_field1":
+            elif "bool_field1" in field:
                 random_constant = random.choice([True, False])
-            elif field == "char_field1":
-                random_constant = ''.join(random.choice(string.ascii_uppercase + string.ascii_lowercase) for _ in range(1))
-                random_constant = "'%s'" %random_constant
-            elif field == "datetime_field1":
-                random_constant = "'%s'" % self._random_datetime()
-            elif field == "decimal_field1":
-                random_constant = random.randrange(16, 9971, 10)
-            elif field == "primary_key_id":
-                random_constant = "'%s'" % random.randrange(1, 9999, 10)
-            elif field == "varchar_field1":
+            elif "varchar_field1" in field:
                 random_constant = ''.join(random.choice(string.ascii_uppercase + string.ascii_lowercase) for _ in range(5))
                 random_constant = "'%s'" %random_constant
+            elif "char_field1" in field:
+                random_constant = ''.join(random.choice(string.ascii_uppercase + string.ascii_lowercase) for _ in range(1))
+                random_constant = "'%s'" %random_constant
+            elif "datetime_field1" in field:
+                random_constant = "'%s'" % self._random_datetime()
+            elif "decimal_field1" in field:
+                random_constant = random.randrange(16, 9971, 10)
+            elif "primary_key_id" in field:
+                random_constant = "'%s'" % random.randrange(1, 9999, 10)
             else:
                 print("Unknown field type: " + str(field))
                 exit(1)
