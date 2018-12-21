@@ -4335,6 +4335,19 @@ class RestConnection(object):
         return json.loads(content)
 
     '''
+            composite status of a handler
+    '''
+    def get_composite_eventing_status(self):
+        authorization = base64.encodestring('%s:%s' % (self.username, self.password))
+        url = "/api/v1/status"
+        api = self.eventing_baseUrl + url
+        headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
+        status, content, header = self._http_request(api, 'GET', headers=headers)
+        if not status:
+            raise Exception(content)
+        return json.loads(content)
+
+    '''
              Get Eventing processing stats
     '''
     def get_event_processing_stats(self, name, eventing_map=None):

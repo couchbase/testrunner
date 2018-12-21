@@ -3,6 +3,7 @@ import logging
 import random
 import datetime
 import os
+
 from TestInput import TestInputSingleton
 from couchbase_helper.tuq_helper import N1QLHelper
 from lib.couchbase_helper.documentgenerator import BlobGenerator
@@ -252,25 +253,9 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         #     print j["execution_stats"]["on_update_success"]
         #     print j["failure_stats"]["n1ql_op_exception_count"]
 
-    def deploy_function(self, body, deployment_fail=False, wait_for_bootstrap=True):
+    def deploy_function(self, body, deployment_fail=False, wait_for_bootstrap=True,pause_resume=False,pause_resume_number=1):
         body['settings']['deployment_status'] = True
         body['settings']['processing_status'] = True
-        # # save the function so that it appears in UI
-        # content = self.rest.save_function(body['appname'], body)
-        # # deploy the function
-        # log.info("Deploying the following handler code")
-        # log.info("\n{0}".format(body['appcode']))
-        # content1 = self.rest.deploy_function(body['appname'], body)
-        # log.info("deploy Application : {0}".format(content1))
-        # if deployment_fail:
-        #     res = json.loads(content1)
-        #     if not res["compile_success"]:
-        #         return
-        #     else:
-        #         raise Exception("Deployment is expected to be failed but no message of failure")
-        # if wait_for_bootstrap:
-        #     # wait for the function to come out of bootstrap state
-        #     self.wait_for_bootstrap_to_complete(body['appname'])
         if self.print_eventing_handler_code_in_logs:
             log.info("Deploying the following handler code : {0}".format(body['appname']))
             log.info("\n{0}".format(body['appcode']))
@@ -285,6 +270,9 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         if wait_for_bootstrap:
             # wait for the function to come out of bootstrap state
             self.wait_for_bootstrap_to_complete(body['appname'])
+        if pause_resume and pause_resume_number > 0:
+            self.pause_resume(body,pause_resume_number)
+
 
     def undeploy_and_delete_function(self, body):
         self.undeploy_function(body)
@@ -315,7 +303,7 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         log.info("Delete Application : {0}".format(body['appname']))
         return content1
 
-    def pause_function(self, body):
+    def pause_function(self, body,wait_for_pause=True):
         body['settings']['deployment_status'] = True
         body['settings']['processing_status'] = False
         # save the function so that it is visible in UI
@@ -323,17 +311,22 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         # undeploy the function
         content1 = self.rest.set_settings_for_function(body['appname'], body['settings'])
         log.info("Pause Application : {0}".format(body['appname']))
+        if wait_for_pause:
+            self.wait_for_handler_state(body['appname'], "paused")
 
-    def resume_function(self, body):
+    def resume_function(self, body,wait_for_resume=True):
         body['settings']['deployment_status'] = True
         body['settings']['processing_status'] = True
-        body['settings'].pop('dcp_stream_boundary')
+        if "dcp_stream_boundary" in body['settings']:
+            body['settings'].pop('dcp_stream_boundary')
         #body['settings']['dcp_stream_boundary'] = "from_prior"
         # save the function so that it is visible in UI
         content = self.rest.save_function(body['appname'], body)
         # undeploy the function
         content1 = self.rest.set_settings_for_function(body['appname'], body['settings'])
         log.info("Resume Application : {0}".format(body['appname']))
+        if wait_for_resume:
+            self.wait_for_handler_state(body['appname'], "deployed")
 
     def refresh_rest_server(self):
         eventing_nodes_list = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
@@ -546,3 +539,23 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
 
         if count > 20 and doc_count != result:
             raise Exception("All documents are not update in expected time")
+
+    def pause_resume(self,body,num):
+        for i in range(num):
+            self.pause_function(body)
+            self.sleep(30)
+            self.resume_function(body)
+
+
+    def wait_for_handler_state(self, name,status,iterations=20):
+        self.sleep(10, message="Waiting for {} to {}...".format(name,status))
+        result = self.rest.get_composite_eventing_status()
+        count = 0
+        composite_status = None
+        while composite_status != status and count < iterations:
+            self.sleep(20)
+            result = self.rest.get_composite_eventing_status()
+            for i in range(len(result['apps'])):
+                if result['apps'][i]['name'] == name:
+                    composite_status = result['apps'][i]['composite_status']
+            count+=1
