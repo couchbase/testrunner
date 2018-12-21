@@ -3883,23 +3883,28 @@ class RemoteMachineShellConnection:
         # Start server
         self.start_couchbase()
 
-    def execute_cluster_backup(self, login_info="Administrator:password", backup_location="/tmp/backup",
-                               command_options='', cluster_ip="", cluster_port="8091", delete_backup=True):
+    def execute_cluster_backup(self, login_info="", backup_location="/tmp/backup",
+                               command_options='', cluster_ip="",
+                               cluster_port="8091", delete_backup=True):
         if self.nonroot:
-            backup_command = "/home/%s%scbbackup" % (self.master.ssh_username,
-                                                    LINUX_COUCHBASE_BIN_PATH)
+            backup_command = "/home/{0}{1}cbbackup"\
+                             .format(self.input.membase_settings.ssh_username,
+                              LINUX_COUCHBASE_BIN_PATH)
         else:
-            backup_command = "%scbbackup" % (LINUX_COUCHBASE_BIN_PATH)
+            backup_command = "{0}cbbackup".format(LINUX_COUCHBASE_BIN_PATH)
         backup_file_location = backup_location
-        # TODO: define WIN_COUCHBASE_BIN_PATH and implement a new function under RestConnectionHelper to use nodes/self info to get os info
+        """
+          TODO: define WIN_COUCHBASE_BIN_PATH and implement a new function under
+          RestConnectionHelper to use nodes/self info to get os info
+        """
         self.extract_remote_info()
         if self.info.type.lower() == 'windows':
-            backup_command = "\"%scbbackup.exe\"" % (WIN_COUCHBASE_BIN_PATH_RAW)
-            backup_file_location = "C:%s" % (backup_location)
+            backup_command = "\"{0}cbbackup.exe\"".format(WIN_COUCHBASE_BIN_PATH_RAW)
+            backup_file_location = "C:{0}".format(backup_location)
             output, error = self.execute_command("taskkill /F /T /IM cbbackup.exe")
             self.log_command_output(output, error)
         if self.info.distribution_type.lower() == 'mac':
-            backup_command = "%scbbackup" % (MAC_COUCHBASE_BIN_PATH)
+            backup_command = "{0}cbbackup".format(MAC_COUCHBASE_BIN_PATH)
 
         command_options_string = ""
         if command_options is not '':
@@ -3910,35 +3915,50 @@ class RemoteMachineShellConnection:
         cluster_ip = cluster_ip or self.ip
         cluster_port = cluster_port or self.port
 
-        if '-m accu' not in command_options_string and '-m diff' not in command_options_string and delete_backup:
+        if '-m accu' not in command_options_string and \
+           '-m diff' not in command_options_string and delete_backup:
             self.delete_files(backup_file_location)
             self.create_directory(backup_file_location)
 
-        command = "%s %s%s@%s:%s %s %s" % (backup_command, "http://", login_info,
-                                           cluster_ip, cluster_port, backup_file_location, command_options_string)
+        command = "{0} http://{1}:{2} -u {3} -p {4} {5} {6}"\
+                                      .format(backup_command, cluster_ip, cluster_port,
+                                              self.input.membase_settings.rest_username,
+                                              self.input.membase_settings.rest_password,
+                                              backup_file_location, command_options_string)
         if self.info.type.lower() == 'windows':
-            command = "cmd /c START \"\" \"%s\" \"%s%s@%s:%s\" \"%s\" %s" % (backup_command, "http://", login_info,
-                                               cluster_ip, cluster_port, backup_file_location, command_options_string)
+            command = "cmd /c START \"\" \"{0}\" \"http://{1}:{2}\" -u {3} -p {4} \"{5}\" {6}"\
+                                      .format(backup_command, cluster_ip, cluster_port,
+                                              self.input.membase_settings.rest_username,
+                                              self.input.membase_settings.rest_password,
+                                              backup_file_location, command_options_string)
 
         output, error = self.execute_command(command)
         self.log_command_output(output, error)
 
     def restore_backupFile(self, login_info, backup_location, buckets):
-        restore_command = "%scbrestore" % (LINUX_COUCHBASE_BIN_PATH)
+        restore_command = "{0}scbrestore".format(LINUX_COUCHBASE_BIN_PATH)
         backup_file_location = backup_location
         self.extract_remote_info()
         if self.info.type.lower() == 'windows':
-            restore_command = "\"%scbrestore.exe\"" % (WIN_COUCHBASE_BIN_PATH_RAW)
-            backup_file_location = "C:%s" % (backup_location)
+            restore_command = "\"{0}cbrestore.exe\"".format(WIN_COUCHBASE_BIN_PATH_RAW)
+            backup_file_location = "C:{0}".format(backup_location)
         if self.info.distribution_type.lower() == 'mac':
-            restore_command = "%scbrestore" % (MAC_COUCHBASE_BIN_PATH)
+            restore_command = "{0}cbrestore".format(MAC_COUCHBASE_BIN_PATH)
         outputs = errors = []
         for bucket in buckets:
-            command = "%s %s %s%s@%s:%s %s %s" % (restore_command, backup_file_location, "http://",
-                                                  login_info, self.ip, self.port, "-b", bucket)
+            command = "{0} {1} http://{2}:{3} -u {4} -p {5} -b {6}"\
+                          .format(restore_command, backup_file_location,
+                                  self.ip, self.port,
+                                  self.input.membase_settings.rest_username,
+                                  self.input.membase_settings.rest_password,
+                                  bucket)
             if self.info.type.lower() == 'windows':
-                command = "cmd /c \"%s\" \"%s\" \"%s%s@%s:%s\" %s %s" % (restore_command, backup_file_location, "http://",
-                                                      login_info, self.ip, self.port, "-b", bucket)
+                command = "cmd /c \"{0}\" \"{1}\" \"http://{2}:{3}\" -u {4} -p {5} -b {6}"\
+                          .format(restore_command, backup_file_location,
+                                  self.ip, self.port,
+                                  self.input.membase_settings.rest_username,
+                                  self.input.membase_settings.rest_password,
+                                  bucket)
             output, error = self.execute_command(command)
             self.log_command_output(output, error)
             outputs.extend(output)
