@@ -747,7 +747,7 @@ class GenericLoadingTask(Thread, Task):
             value = json.dumps(value)
 
         try:
-            self.client.set(key, value, self.exp, self.flag, collection=self.collection)
+            self.client.set(key, self.exp, self.flag, value, collection=self.collection)
 
             if self.only_store_hash:
                 value = str(crc32.crc32_hash(value))
@@ -803,7 +803,7 @@ class GenericLoadingTask(Thread, Task):
             self.set_exception(error)
 
         try:
-            self.client.set(key, value, self.exp, self.flag, collection=self.collection)
+            self.client.set(key, self.exp, self.flag, value, collection=self.collection)
             if self.only_store_hash:
                 value = str(crc32.crc32_hash(value))
             partition.set(key, value, self.exp, self.flag)
