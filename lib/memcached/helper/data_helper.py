@@ -975,7 +975,7 @@ class VBucketAwareMemcached(object):
         return self._send_op(self.memcached(key).get_sd, key, path, cas=cas, collection=collection)
 
     @aware_call
-    def set(self, key, value, exp, flags, collection=None):
+    def set(self, key, exp, flags, value, collection=None):
         return self._send_op(self.memcached(key).set, key, exp, flags, value, collection=collection)
 
     @aware_call
@@ -1424,7 +1424,7 @@ class KVStoreAwareSmartClient(VBucketAwareMemcached):
         self.store_enabled = store_enabled
         self._rlock = threading.Lock()
 
-    def set(self, key, value, ttl=-1,flag=0, collection=None):
+    def set(self, key, value, ttl=-1, flag=0, collection=None):
         self._rlock.acquire()
         try:
             if ttl >= 0:
