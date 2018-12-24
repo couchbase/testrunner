@@ -308,8 +308,9 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
     def pause_function(self, body,wait_for_pause=True):
         body['settings']['deployment_status'] = True
         body['settings']['processing_status'] = False
+        self.refresh_rest_server()
         # save the function so that it is visible in UI
-        content = self.rest.save_function(body['appname'], body)
+        #content = self.rest.save_function(body['appname'], body)
         # undeploy the function
         content1 = self.rest.set_settings_for_function(body['appname'], body['settings'])
         log.info("Pause Application : {0}".format(body['appname']))
@@ -321,9 +322,10 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         body['settings']['processing_status'] = True
         if "dcp_stream_boundary" in body['settings']:
             body['settings'].pop('dcp_stream_boundary')
+        self.refresh_rest_server()
         #body['settings']['dcp_stream_boundary'] = "from_prior"
         # save the function so that it is visible in UI
-        content = self.rest.save_function(body['appname'], body)
+        #content = self.rest.save_function(body['appname'], body)
         # undeploy the function
         content1 = self.rest.set_settings_for_function(body['appname'], body['settings'])
         log.info("Resume Application : {0}".format(body['appname']))
