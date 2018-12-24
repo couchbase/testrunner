@@ -61,6 +61,8 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
                                       item_flag=self.item_flag, n1ql_port=self.n1ql_port,
                                       full_docs_list=self.full_docs_list, log=self.log, input=self.input,
                                       master=self.master, use_rest=True)
+        self.pause_resume = self.input.param('pause_resume', False)
+        self.pause_resume_number = self.input.param('pause_resume_number', 1)
 
     def tearDown(self):
         # catch panics and print it in the test log
