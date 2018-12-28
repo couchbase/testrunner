@@ -407,7 +407,7 @@ class EventingBucket(EventingBaseTest):
         stats_src = RestConnection(self.master).get_bucket_stats(bucket=self.src_bucket_name)
         # Wait for eventing to catch up with all the update mutations and verify results
         # Wait for eventing to catch up with all the update mutations and verify results after rebalance
-        if self.handler_code == HANDLER_CODE.BUCKET_OP_WITH_SOURCE_BUCKET_MUTATION:
+        if self.is_sbm:
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2, skip_stats_validation=True)
         else:
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
@@ -416,7 +416,7 @@ class EventingBucket(EventingBaseTest):
                   batch_size=self.batch_size, op_type='delete')
         # Wait for eventing to catch up with all the delete mutations and verify results
         # Wait for eventing to catch up with all the update mutations and verify results after rebalance
-        if self.handler_code == HANDLER_CODE.BUCKET_OP_WITH_SOURCE_BUCKET_MUTATION:
+        if self.is_sbm:
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         else:
             self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)

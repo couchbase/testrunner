@@ -75,6 +75,8 @@ class EventingRebalance(EventingBaseTest):
             self.handler_code = HANDLER_CODE.N1QL_OPS_WITHOUT_TIMERS
         elif handler_code == 'source_bucket_mutation':
             self.handler_code = HANDLER_CODE.BUCKET_OP_WITH_SOURCE_BUCKET_MUTATION
+        elif handler_code == 'source_bucket_mutation_with_timers':
+            self.handler_code = HANDLER_CODE.BUCKET_OP_SOURCE_BUCKET_MUTATION_WITH_TIMERS
         else:
             self.handler_code = HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE
         force_disable_new_orchestration = self.input.param('force_disable_new_orchestration', False)
@@ -122,7 +124,7 @@ class EventingRebalance(EventingBaseTest):
         if self.pause_resume:
             self.resume_function(body)
         # Wait for eventing to catch up with all the update mutations and verify results after rebalance
-        if self.handler_code == HANDLER_CODE.BUCKET_OP_WITH_SOURCE_BUCKET_MUTATION:
+        if self.is_sbm:
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016*2, skip_stats_validation=True)
         else:
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
@@ -135,7 +137,7 @@ class EventingRebalance(EventingBaseTest):
             self.resume_function(body)
         # Wait for eventing to catch up with all the delete mutations and verify results
         # This is required to ensure eventing works after rebalance goes through successfully
-        if self.handler_code == HANDLER_CODE.BUCKET_OP_WITH_SOURCE_BUCKET_MUTATION:
+        if self.is_sbm:
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         else:
             self.verify_eventing_results(self.function_name,0, skip_stats_validation=True)
@@ -170,7 +172,7 @@ class EventingRebalance(EventingBaseTest):
         if self.pause_resume:
             self.resume_function(body)
         # Wait for eventing to catch up with all the update mutations and verify results after rebalance
-        if self.handler_code == HANDLER_CODE.BUCKET_OP_WITH_SOURCE_BUCKET_MUTATION:
+        if self.is_sbm:
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2, skip_stats_validation=True)
         else:
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
@@ -183,7 +185,7 @@ class EventingRebalance(EventingBaseTest):
             self.resume_function(body)
         # Wait for eventing to catch up with all the delete mutations and verify results
         # This is required to ensure eventing works after rebalance goes through successfully
-        if self.handler_code == HANDLER_CODE.BUCKET_OP_WITH_SOURCE_BUCKET_MUTATION:
+        if self.is_sbm:
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         else:
             self.verify_eventing_results(self.function_name,0, skip_stats_validation=True)
@@ -221,7 +223,7 @@ class EventingRebalance(EventingBaseTest):
         if self.pause_resume:
             self.resume_function(body)
         # Wait for eventing to catch up with all the update mutations and verify results after rebalance
-        if self.handler_code == HANDLER_CODE.BUCKET_OP_WITH_SOURCE_BUCKET_MUTATION:
+        if self.is_sbm:
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2, skip_stats_validation=True)
         else:
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
@@ -234,7 +236,7 @@ class EventingRebalance(EventingBaseTest):
             self.resume_function(body)
         # Wait for eventing to catch up with all the delete mutations and verify results
         # This is required to ensure eventing works after rebalance goes through successfully
-        if self.handler_code == HANDLER_CODE.BUCKET_OP_WITH_SOURCE_BUCKET_MUTATION:
+        if self.is_sbm:
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         else:
             self.verify_eventing_results(self.function_name,0, skip_stats_validation=True)
@@ -270,7 +272,7 @@ class EventingRebalance(EventingBaseTest):
         if self.pause_resume:
             self.resume_function(body)
         # Wait for eventing to catch up with all the update mutations and verify results after rebalance
-        if self.handler_code == HANDLER_CODE.BUCKET_OP_WITH_SOURCE_BUCKET_MUTATION:
+        if self.is_sbm:
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2, skip_stats_validation=True)
         else:
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
@@ -283,7 +285,7 @@ class EventingRebalance(EventingBaseTest):
             self.resume_function(body)
         # Wait for eventing to catch up with all the delete mutations and verify results
         # This is required to ensure eventing works after rebalance goes through successfully
-        if self.handler_code == HANDLER_CODE.BUCKET_OP_WITH_SOURCE_BUCKET_MUTATION:
+        if self.is_sbm:
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         else:
             self.verify_eventing_results(self.function_name,0, skip_stats_validation=True)
@@ -311,7 +313,7 @@ class EventingRebalance(EventingBaseTest):
         if self.pause_resume:
             self.resume_function(body)
         # Wait for eventing to catch up with all the update mutations and verify results after rebalance
-        if self.handler_code == HANDLER_CODE.BUCKET_OP_WITH_SOURCE_BUCKET_MUTATION:
+        if self.is_sbm:
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2, skip_stats_validation=True)
         else:
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
@@ -324,7 +326,7 @@ class EventingRebalance(EventingBaseTest):
             self.resume_function(body)
         # Wait for eventing to catch up with all the delete mutations and verify results
         # This is required to ensure eventing works after rebalance goes through successfully
-        if self.handler_code == HANDLER_CODE.BUCKET_OP_WITH_SOURCE_BUCKET_MUTATION:
+        if self.is_sbm:
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         else:
             self.verify_eventing_results(self.function_name,0, skip_stats_validation=True)
@@ -354,7 +356,7 @@ class EventingRebalance(EventingBaseTest):
         if self.pause_resume:
             self.resume_function(body)
         # Wait for eventing to catch up with all the update mutations and verify results after rebalance
-        if self.handler_code == HANDLER_CODE.BUCKET_OP_WITH_SOURCE_BUCKET_MUTATION:
+        if self.is_sbm:
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2, skip_stats_validation=True)
         else:
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
@@ -367,7 +369,7 @@ class EventingRebalance(EventingBaseTest):
             self.resume_function(body)
         # Wait for eventing to catch up with all the delete mutations and verify results
         # This is required to ensure eventing works after rebalance goes through successfully
-        if self.handler_code == HANDLER_CODE.BUCKET_OP_WITH_SOURCE_BUCKET_MUTATION:
+        if self.is_sbm:
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         else:
             self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
@@ -393,7 +395,7 @@ class EventingRebalance(EventingBaseTest):
         if self.pause_resume:
             self.resume_function(body)
         # Wait for eventing to catch up with all the update mutations and verify results after rebalance
-        if self.handler_code == HANDLER_CODE.BUCKET_OP_WITH_SOURCE_BUCKET_MUTATION:
+        if self.is_sbm:
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2, skip_stats_validation=True)
         else:
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
@@ -406,7 +408,7 @@ class EventingRebalance(EventingBaseTest):
             self.resume_function(body)
         # Wait for eventing to catch up with all the delete mutations and verify results
         # This is required to ensure eventing works after rebalance goes through successfully
-        if self.handler_code == HANDLER_CODE.BUCKET_OP_WITH_SOURCE_BUCKET_MUTATION:
+        if self.is_sbm:
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         else:
             self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
@@ -432,7 +434,7 @@ class EventingRebalance(EventingBaseTest):
         if self.pause_resume:
             self.resume_function(body)
         # Wait for eventing to catch up with all the update mutations and verify results after rebalance
-        if self.handler_code == HANDLER_CODE.BUCKET_OP_WITH_SOURCE_BUCKET_MUTATION:
+        if self.is_sbm:
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2, skip_stats_validation=True)
         else:
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
@@ -445,7 +447,7 @@ class EventingRebalance(EventingBaseTest):
             self.resume_function(body)
         # Wait for eventing to catch up with all the delete mutations and verify results
         # This is required to ensure eventing works after rebalance goes through successfully
-        if self.handler_code == HANDLER_CODE.BUCKET_OP_WITH_SOURCE_BUCKET_MUTATION:
+        if self.is_sbm:
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         else:
             self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
@@ -475,7 +477,7 @@ class EventingRebalance(EventingBaseTest):
         if self.pause_resume:
             self.resume_function(body)
         # Wait for eventing to catch up with all the update mutations and verify results after rebalance
-        if self.handler_code == HANDLER_CODE.BUCKET_OP_WITH_SOURCE_BUCKET_MUTATION:
+        if self.is_sbm:
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2, skip_stats_validation=True)
         else:
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
@@ -488,7 +490,7 @@ class EventingRebalance(EventingBaseTest):
             self.resume_function(body)
         # Wait for eventing to catch up with all the delete mutations and verify results
         # This is required to ensure eventing works after rebalance goes through successfully
-        if self.handler_code == HANDLER_CODE.BUCKET_OP_WITH_SOURCE_BUCKET_MUTATION:
+        if self.is_sbm:
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         else:
             self.verify_eventing_results(self.function_name,0, skip_stats_validation=True)
@@ -685,7 +687,7 @@ class EventingRebalance(EventingBaseTest):
             if self.pause_resume:
                 self.resume_function(body)
             # Wait for eventing to catch up with all the update mutations and verify results after rebalance
-            if self.handler_code == HANDLER_CODE.BUCKET_OP_WITH_SOURCE_BUCKET_MUTATION:
+            if self.is_sbm:
                 self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2,
                                              skip_stats_validation=True)
             else:
@@ -695,7 +697,7 @@ class EventingRebalance(EventingBaseTest):
                       batch_size=self.batch_size, op_type='delete')
             # Wait for eventing to catch up with all the delete mutations and verify results
             # This is required to ensure eventing works after rebalance goes through successfully
-            if self.handler_code == HANDLER_CODE.BUCKET_OP_WITH_SOURCE_BUCKET_MUTATION:
+            if self.is_sbm:
                 self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
             else:
                 self.verify_eventing_results(self.function_name,0, skip_stats_validation=True)
@@ -739,7 +741,7 @@ class EventingRebalance(EventingBaseTest):
             if self.pause_resume:
                 self.resume_function(body)
             # Wait for eventing to catch up with all the update mutations and verify results after rebalance
-            if self.handler_code == HANDLER_CODE.BUCKET_OP_WITH_SOURCE_BUCKET_MUTATION:
+            if self.is_sbm:
                 self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2,
                                              skip_stats_validation=True)
             else:
@@ -749,7 +751,7 @@ class EventingRebalance(EventingBaseTest):
                       batch_size=self.batch_size, op_type='delete')
             # Wait for eventing to catch up with all the delete mutations and verify results
             # This is required to ensure eventing works after rebalance goes through successfully
-            if self.handler_code == HANDLER_CODE.BUCKET_OP_WITH_SOURCE_BUCKET_MUTATION:
+            if self.is_sbm:
                 self.verify_eventing_results(self.function_name, self.docs_per_day * 2016,
                                              skip_stats_validation=True)
             else:
@@ -782,7 +784,7 @@ class EventingRebalance(EventingBaseTest):
         if self.pause_resume:
             self.resume_function(body)
         # Wait for eventing to catch up with all the update mutations and verify results after rebalance
-        if self.handler_code == HANDLER_CODE.BUCKET_OP_WITH_SOURCE_BUCKET_MUTATION:
+        if self.is_sbm:
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2, skip_stats_validation=True)
         else:
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
@@ -805,7 +807,7 @@ class EventingRebalance(EventingBaseTest):
             self.resume_function(body)
         # Wait for eventing to catch up with all the delete mutations and verify results
         # This is required to ensure eventing works after rebalance goes through successfully
-        if self.handler_code == HANDLER_CODE.BUCKET_OP_WITH_SOURCE_BUCKET_MUTATION:
+        if self.is_sbm:
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         else:
             self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
@@ -828,7 +830,7 @@ class EventingRebalance(EventingBaseTest):
         if self.pause_resume:
             self.resume_function(body)
         # Wait for eventing to catch up with all the update mutations and verify results after rebalance
-        if self.handler_code == HANDLER_CODE.BUCKET_OP_WITH_SOURCE_BUCKET_MUTATION:
+        if self.is_sbm:
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2, skip_stats_validation=True)
         else:
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
@@ -862,7 +864,7 @@ class EventingRebalance(EventingBaseTest):
         if self.pause_resume:
             self.resume_function(body)
         # Wait for eventing to catch up with all the update mutations and verify results after rebalance
-        if self.handler_code == HANDLER_CODE.BUCKET_OP_WITH_SOURCE_BUCKET_MUTATION:
+        if self.is_sbm:
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2, skip_stats_validation=True)
         else:
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
@@ -881,7 +883,7 @@ class EventingRebalance(EventingBaseTest):
             self.resume_function(body)
         # Wait for eventing to catch up with all the delete mutations and verify results
         # This is required to ensure eventing works after rebalance goes through successfully
-        if self.handler_code == HANDLER_CODE.BUCKET_OP_WITH_SOURCE_BUCKET_MUTATION:
+        if self.is_sbm:
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         else:
             self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
@@ -904,7 +906,7 @@ class EventingRebalance(EventingBaseTest):
         if self.pause_resume:
             self.resume_function(body)
         # Wait for eventing to catch up with all the update mutations and verify results after rebalance
-        if self.handler_code == HANDLER_CODE.BUCKET_OP_WITH_SOURCE_BUCKET_MUTATION:
+        if self.is_sbm:
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2, skip_stats_validation=True)
         else:
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
@@ -944,12 +946,12 @@ class EventingRebalance(EventingBaseTest):
         rebalance.result()
         task.result()
         # Wait for eventing to catch up with all the create mutations and verify results
-        if self.handler_code == HANDLER_CODE.BUCKET_OP_WITH_SOURCE_BUCKET_MUTATION:
+        if self.is_sbm:
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2, skip_stats_validation=True)
         else:
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         self.dst_bucket_name = self.dst_bucket_name1
-        if self.handler_code == HANDLER_CODE.BUCKET_OP_WITH_SOURCE_BUCKET_MUTATION:
+        if self.is_sbm:
             self.verify_eventing_results(self.function_name+"_1", self.docs_per_day * 2016 * 2, skip_stats_validation=True)
         else:
             self.verify_eventing_results(self.function_name+"_1", self.docs_per_day * 2016, skip_stats_validation=True)
