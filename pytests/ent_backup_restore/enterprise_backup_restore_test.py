@@ -3156,6 +3156,12 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         finally:
             if "ephemeral" in self.bucket_type:
                 self.log.info("reset storage mode back to original")
+                shell = RemoteMachineShellConnection(self.backupset.cluster_host)
+                shell.enable_diag_eval_on_non_local_hosts()
+                shell.disconnect()
+                shell = RemoteMachineShellConnection(self.backupset.restore_cluster_host)
+                shell.enable_diag_eval_on_non_local_hosts()
+                shell.disconnect()
                 self._reset_storage_mode(rest_src, self.cluster_storage_mode)
                 self._reset_storage_mode(rest_target, self.cluster_storage_mode)
 
