@@ -563,3 +563,5 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
                 if result['apps'][i]['name'] == name:
                     composite_status = result['apps'][i]['composite_status']
             count+=1
+        if count == iterations:
+            raise Exception('Eventing took lot of time for handler {} to {}'.format(name,status))

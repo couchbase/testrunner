@@ -61,6 +61,10 @@ class EventingRecovery(EventingBaseTest):
                                           )
             self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
             self.handler_code = HANDLER_CODE.N1QL_OPS_WITH_TIMERS
+        elif handler_code == 'source_bucket_mutation':
+            self.handler_code = HANDLER_CODE.BUCKET_OP_WITH_SOURCE_BUCKET_MUTATION
+        elif handler_code == 'source_bucket_mutation_with_timers':
+            self.handler_code = HANDLER_CODE.BUCKET_OP_SOURCE_BUCKET_MUTATION_WITH_TIMERS
         else:
             self.handler_code = HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE
 
@@ -71,22 +75,36 @@ class EventingRecovery(EventingBaseTest):
         eventing_node = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
         body = self.create_save_function_body(self.function_name, self.handler_code)
         self.deploy_function(body)
+        if self.pause_resume:
+            self.pause_function(body)
         # load some data
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
+        if self.pause_resume:
+            self.resume_function(body)
         # kill eventing consumer when eventing is processing mutations
         self.kill_consumer(eventing_node)
         self.wait_for_bootstrap_to_complete(body['appname'])
         # Wait for eventing to catch up with all the update mutations and verify results
-        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        if self.is_sbm:
+            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2, skip_stats_validation=True)
+        else:
+            self.verify_eventing_results(self.function_name,self.docs_per_day * 2016, skip_stats_validation=True)
+        if self.pause_resume:
+            self.pause_function(body)
         # delete all documents
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size, op_type='delete')
+        if self.pause_resume:
+            self.resume_function(body)
         # kill eventing consumer when eventing is processing mutations
         self.kill_consumer(eventing_node)
-        # Wait for eventing to catch up with all the delete mutations and verify results
-        self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         self.wait_for_bootstrap_to_complete(body['appname'])
+        # Wait for eventing to catch up with all the delete mutations and verify results
+        if self.is_sbm:
+            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 , skip_stats_validation=True)
+        else:
+            self.verify_eventing_results(self.function_name,0, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
         # intentionally added , as it requires some time for eventing-consumers to shutdown
         self.sleep(60)
@@ -97,23 +115,42 @@ class EventingRecovery(EventingBaseTest):
         eventing_node = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
         body = self.create_save_function_body(self.function_name, self.handler_code)
         self.deploy_function(body)
+        #pause handler
+        if self.pause_resume:
+            self.pause_function(body)
         # load some data
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
         # kill eventing producer when eventing is processing mutations
         self.kill_producer(eventing_node)
-        self.wait_for_bootstrap_to_complete(body['appname'])
+        if self.pause_resume:
+            self.wait_for_handler_state(body['appname'], "paused")
+            self.resume_function(body)
+        else:
+            self.wait_for_bootstrap_to_complete(body['appname'])
         # Wait for eventing to catch up with all the update mutations and verify results
-        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        if self.is_sbm:
+            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2, skip_stats_validation=True)
+        else:
+            self.verify_eventing_results(self.function_name,self.docs_per_day * 2016, skip_stats_validation=True)
+        if self.pause_resume:
+            self.pause_function(body)
         # delete all documents
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size, op_type='delete')
         # kill eventing producer when eventing is processing mutations
         self.kill_producer(eventing_node)
-        self.wait_for_bootstrap_to_complete(body['appname'])
+        if self.pause_resume:
+            self.wait_for_handler_state(body['appname'], "paused")
+            self.resume_function(body)
+        else:
+            self.wait_for_bootstrap_to_complete(body['appname'])
         # Wait for eventing to catch up with all the delete mutations and verify results
         # See MB-30772
-        #self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+        if self.is_sbm:
+            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2, skip_stats_validation=True)
+        else:
+            self.verify_eventing_results(self.function_name,0, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
         # intentionally added , as it requires some time for eventing-consumers to shutdown
         self.sleep(60)
@@ -125,6 +162,9 @@ class EventingRecovery(EventingBaseTest):
         eventing_node = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
         body = self.create_save_function_body(self.function_name, self.handler_code)
         self.deploy_function(body)
+        # pause handler
+        if self.pause_resume:
+            self.pause_function(body)
         # load some data
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
@@ -132,9 +172,15 @@ class EventingRecovery(EventingBaseTest):
         for node in [kv_node, eventing_node]:
             self.kill_memcached_service(node)
         self.warmup_check()
+        if self.pause_resume:
+            self.wait_for_handler_state(body['appname'], "paused")
+            self.resume_function(body)
         # Wait for eventing to catch up with all the update mutations and verify results
         # See MB-27115
         # self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        # pause handler
+        if self.pause_resume:
+            self.pause_function(body)
         # delete all documents
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size, op_type='delete')
@@ -142,6 +188,9 @@ class EventingRecovery(EventingBaseTest):
         for node in [kv_node, eventing_node]:
             self.kill_memcached_service(node)
         self.sleep(120)
+        if self.pause_resume:
+            self.wait_for_handler_state(body['appname'], "paused")
+            self.resume_function(body)
         # Wait for eventing to catch up with all the delete mutations and verify results
         # See MB-27115
         # self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
@@ -156,22 +205,40 @@ class EventingRecovery(EventingBaseTest):
         eventing_node = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
         body = self.create_save_function_body(self.function_name, self.handler_code)
         self.deploy_function(body)
+        # pause handler
+        if self.pause_resume:
+            self.pause_function(body)
         # load some data
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
         # kill erlang on kv and eventing when eventing is processing mutations
         for node in [kv_node, eventing_node]:
             self.kill_erlang_service(node)
+        if self.pause_resume:
+            self.wait_for_handler_state(body['appname'], "paused")
+            self.resume_function(body)
         # Wait for eventing to catch up with all the update mutations and verify results
-        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        if self.is_sbm:
+            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2, skip_stats_validation=True)
+        else:
+            self.verify_eventing_results(self.function_name,self.docs_per_day * 2016, skip_stats_validation=True)
+        # pause handler
+        if self.pause_resume:
+            self.pause_function(body)
         # delete all documents
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size, op_type='delete')
         # kill erlang on kv and eventing when eventing is processing mutations
         for node in [kv_node, eventing_node]:
             self.kill_erlang_service(node)
+        if self.pause_resume:
+            self.wait_for_handler_state(body['appname'], "paused")
+            self.resume_function(body)
         # Wait for eventing to catch up with all the delete mutations and verify results
-        self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+        if self.is_sbm:
+            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        else:
+            self.verify_eventing_results(self.function_name,0, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
         # intentionally added , as it requires some time for eventing-consumers to shutdown
         self.sleep(60)
@@ -186,19 +253,37 @@ class EventingRecovery(EventingBaseTest):
         # load some data
         task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
                                                 self.buckets[0].kvs[1], 'create', compression=self.sdk_compression)
+        # pause handler
+        if self.pause_resume:
+            self.pause_function(body)
         # reboot eventing node when it is processing mutations
         self.reboot_server(eventing_node)
         task.result()
+        # pause handler
+        if self.pause_resume:
+            self.resume_function(body)
         # Wait for eventing to catch up with all the update mutations and verify results
-        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        if self.is_sbm:
+            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2, skip_stats_validation=True)
+        else:
+            self.verify_eventing_results(self.function_name,self.docs_per_day * 2016, skip_stats_validation=True)
         # delete all documents
         task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, gen_load_non_json_del,
                                                 self.buckets[0].kvs[1], 'delete', compression=self.sdk_compression)
+        # pause handler
+        if self.pause_resume:
+            self.pause_function(body)
         # reboot eventing node when it is processing mutations
         self.reboot_server(eventing_node)
         task.result()
+        # pause handler
+        if self.pause_resume:
+            self.resume_function(body)
         # Wait for eventing to catch up with all the delete mutations and verify results
-        self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+        if self.is_sbm:
+            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        else:
+            self.verify_eventing_results(self.function_name,0, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
         # intentionally added , as it requires some time for eventing-consumers to shutdown
         self.sleep(60)
@@ -218,7 +303,11 @@ class EventingRecovery(EventingBaseTest):
                       batch_size=self.batch_size)
             self.sleep(180)
             self.stop_firewall_on_node(eventing_node)
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016)
+            if self.is_sbm:
+                self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2,
+                                             skip_stats_validation=True)
+            else:
+                self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         except Exception:
             self.stop_firewall_on_node(eventing_node)
         finally:
@@ -232,7 +321,10 @@ class EventingRecovery(EventingBaseTest):
         # firewall stop/start
         self.sleep(60)
         # Wait for eventing to catch up with all the delete mutations and verify results
-        self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+        if self.is_sbm:
+            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        else:
+            self.verify_eventing_results(self.function_name,0, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
 
     def test_reboot_n1ql_node_when_eventing_node_is_querying(self):
@@ -365,11 +457,29 @@ class EventingRecovery(EventingBaseTest):
             body = self.create_save_function_body(self.function_name, self.handler_code,
                                                   worker_count=3)
             self.deploy_function(body)
+            # pause handler
+            if self.pause_resume:
+                self.pause_function(body)
+                self.sleep(30)
+                self.resume_function(body)
             # Wait for eventing to catch up with all the update mutations and verify results
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+            if self.is_sbm:
+                self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2,
+                                             skip_stats_validation=True)
+            else:
+                self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+            # pause handler
+            if self.pause_resume:
+                self.pause_function(body)
             self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                       batch_size=self.batch_size, op_type='delete')
-            self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+            if self.pause_resume:
+                self.resume_function(body)
+            if self.is_sbm:
+                self.verify_eventing_results(self.function_name, self.docs_per_day * 2016,
+                                             skip_stats_validation=True)
+            else:
+                self.verify_eventing_results(self.function_name,0, skip_stats_validation=True)
             self.undeploy_and_delete_function(body)
         finally:
             self.change_time_zone(kv_node, timezone="America/Los_Angeles")
@@ -392,6 +502,37 @@ class EventingRecovery(EventingBaseTest):
         self.log.info("Killing memcached on {0}".format(kv_node[1]))
         shell = RemoteMachineShellConnection(kv_node[1])
         shell.kill_memcached()
+        # Start persistence on Node B
+        self.log.info("Starting persistence on {0}".
+                      format(kv_node[0]))
+        mem_client = MemcachedClientHelper.direct_client(kv_node[0],
+                                                         self.src_bucket_name)
+        mem_client.start_persistence()
+        self.wait_for_bootstrap_to_complete(body['appname'])
+        stats_src = RestConnection(self.master).get_bucket_stats(bucket=self.src_bucket_name)
+        log.info(stats_src)
+        self.verify_eventing_results(self.function_name, stats_src["curr_items"], skip_stats_validation=True)
+
+    def test_partial_rollback_pause_resume(self):
+        kv_node = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
+        log.info("kv nodes:{0}".format(kv_node))
+        for node in kv_node:
+            mem_client = MemcachedClientHelper.direct_client(node, self.src_bucket_name)
+            mem_client.stop_persistence()
+        body = self.create_save_function_body(self.function_name, self.handler_code,
+                                              worker_count=3)
+        try:
+            task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
+                                                    self.buckets[0].kvs[1], 'create', compression=self.sdk_compression)
+        except Exception as e:
+            log.info("error while loading data")
+        self.deploy_function(body)
+        if self.pause_resume:
+            self.pause_function(body)
+        # Kill memcached on Node A
+        self.log.info("Killing memcached on {0}".format(kv_node[1]))
+        shell = RemoteMachineShellConnection(kv_node[1])
+        shell.kill_memcached()
 
         # Start persistence on Node B
         self.log.info("Starting persistence on {0}".
@@ -399,8 +540,11 @@ class EventingRecovery(EventingBaseTest):
         mem_client = MemcachedClientHelper.direct_client(kv_node[0],
                                                          self.src_bucket_name)
         mem_client.start_persistence()
-        # Wait for bootstrap to complete
-        self.wait_for_bootstrap_to_complete(body['appname'])
+        if self.pause_resume:
+            self.wait_for_handler_state(body['appname'], "paused")
+            self.resume_function(body)
+        else:
+            self.wait_for_bootstrap_to_complete(body['appname'])
         stats_src = RestConnection(self.master).get_bucket_stats(bucket=self.src_bucket_name)
         log.info(stats_src)
         self.verify_eventing_results(self.function_name, stats_src["curr_items"], skip_stats_validation=True)
@@ -414,11 +558,30 @@ class EventingRecovery(EventingBaseTest):
             body = self.create_save_function_body(self.function_name, self.handler_code,
                                                   worker_count=3)
             self.deploy_function(body)
+            # pause handler
+            if self.pause_resume:
+                self.pause_function(body)
+                self.sleep(30)
+                self.resume_function(body)
             # Wait for eventing to catch up with all the update mutations and verify results
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+            if self.is_sbm:
+                self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2,
+                                             skip_stats_validation=True)
+            else:
+                self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+            # pause handler
+            if self.pause_resume:
+                self.pause_function(body)
             self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                       batch_size=self.batch_size, op_type='delete')
-            self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+            # resume handler
+            if self.pause_resume:
+                self.resume_function(body)
+            if self.is_sbm:
+                self.verify_eventing_results(self.function_name, self.docs_per_day * 2016,
+                                             skip_stats_validation=True)
+            else:
+                self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
             self.undeploy_and_delete_function(body)
         finally:
             self.change_time_zone(ev_node, timezone="America/Los_Angeles")
