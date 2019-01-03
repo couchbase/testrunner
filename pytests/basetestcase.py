@@ -1153,6 +1153,10 @@ class BaseTestCase(unittest.TestCase):
         if len(self.buckets) > 1:
             batch_size = 1
         for bucket in self.buckets:
+            try :
+                len(self.collection_name[bucket.name])
+            except KeyError:
+                self.collection_name[bucket.name] =[]
             if bucket.type == 'memcached':
                 continue
             #self.collection_bucket=self.collection_name[bucket]
