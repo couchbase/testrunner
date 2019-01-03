@@ -5,26 +5,26 @@ class QueryMiscTests(QueryTests):
 
     def setUp(self):
         super(QueryMiscTests, self).setUp()
-        self.log.info("==============  QueriesIndexTests setup has started ==============")
-        self.log.info("==============  QueriesIndexTests setup has completed ==============")
+        self.log.info("==============  QueryMiscTests setup has started ==============")
+        self.log.info("==============  QueryMiscTests setup has completed ==============")
         self.log_config_info()
 
     def suite_setUp(self):
         super(QueryMiscTests, self).suite_setUp()
-        self.log.info("==============  QueriesIndexTests suite_setup has started ==============")
-        self.log.info("==============  QueriesIndexTests suite_setup has completed ==============")
+        self.log.info("==============  QueryMiscTests suite_setup has started ==============")
+        self.log.info("==============  QueryMiscTests suite_setup has completed ==============")
         self.log_config_info()
 
     def tearDown(self):
         self.log_config_info()
-        self.log.info("==============  QueriesIndexTests tearDown has started ==============")
-        self.log.info("==============  QueriesIndexTests tearDown has completed ==============")
+        self.log.info("==============  QueryMiscTests tearDown has started ==============")
+        self.log.info("==============  QueryMiscTests tearDown has completed ==============")
         super(QueryMiscTests, self).tearDown()
 
     def suite_tearDown(self):
         self.log_config_info()
-        self.log.info("==============  QueriesIndexTests suite_tearDown has started ==============")
-        self.log.info("==============  QueriesIndexTests suite_tearDown has completed ==============")
+        self.log.info("==============  QueryMiscTests suite_tearDown has started ==============")
+        self.log.info("==============  QueryMiscTests suite_tearDown has completed ==============")
         super(QueryMiscTests, self).suite_tearDown()
 
     '''MB-32120'''
