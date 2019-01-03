@@ -482,7 +482,7 @@ class QueryINDEXUNNESTTests(QueryTests):
             explain_plan = self.run_cbq_query(explain_query)
             plan = self.ExplainPlanHelper(explain_plan)
             self.assertTrue('1-mail@couchbase.com' in str(plan['~children'][0]['scan']['spans'])
-                            and 'Developer' in str(plan['~children'][0]['scan']['spans'])
+                            and 'Developer' not in str(plan['~children'][0]['scan']['spans'])
                             and 'South' not in str(plan['~children'][0]['scan']['spans']),
                             "The non-array index keys are not being used")
 
