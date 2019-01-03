@@ -504,6 +504,8 @@ class EventingRebalance(EventingBaseTest):
         gen_load_del = copy.deepcopy(self.gens_load)
         body = self.create_save_function_body(self.function_name, self.handler_code)
         self.deploy_function(body)
+        if self.pause_resume:
+            self.pause_function(body)
         # load some data
         self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
                                          self.buckets[0].kvs[1], 'create', compression=self.sdk_compression)
@@ -526,6 +528,8 @@ class EventingRebalance(EventingBaseTest):
         # Wait for eventing to catch up with all the delete mutations and verify results
         # This is required to ensure eventing works after rebalance goes through successfully
         stats_src = RestConnection(self.master).get_bucket_stats(bucket=self.src_bucket_name)
+        if self.pause_resume:
+            self.resume_function(body)
         try:
             self.verify_eventing_results(self.function_name, stats_src["curr_items"], skip_stats_validation=True,
                                          timeout=240)
@@ -533,12 +537,17 @@ class EventingRebalance(EventingBaseTest):
             log.info(str(ex))
             # data mismatch is expected in case of a failover
             pass
+        if self.pause_resume:
+            self.pause_function(body)
         try:
             # delete json documents
             self.load(gen_load_del, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                       batch_size=self.batch_size, op_type='delete')
-        except:
+        except Exception, ex:
+            log.info(str(ex))
             pass
+        if self.pause_resume:
+            self.resume_function(body)
         try:
             # Wait for eventing to catch up with all the delete mutations and verify results
             # This is required to ensure eventing works after failover/recovery/rebalance goes through successfully
@@ -556,6 +565,8 @@ class EventingRebalance(EventingBaseTest):
         kv_server = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=False)
         body = self.create_save_function_body(self.function_name, self.handler_code)
         self.deploy_function(body)
+        if self.pause_resume:
+            self.pause_function(body)
         # load some data
         task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
                                                 self.buckets[0].kvs[1], 'create', compression=self.sdk_compression)
@@ -577,6 +588,8 @@ class EventingRebalance(EventingBaseTest):
             self.log.info(msg.format(result))
         # This is intenionally added
         self.sleep(60)
+        if self.pause_resume:
+            self.resume_function(body)
         try:
             stats_src = RestConnection(self.master).get_bucket_stats(bucket=self.src_bucket_name)
             self.verify_eventing_results(self.function_name, stats_src["curr_items"], skip_stats_validation=True,
@@ -585,12 +598,16 @@ class EventingRebalance(EventingBaseTest):
             log.info(str(ex))
             # data mismatch is expected in case of a failover
             pass
+        if self.pause_resume:
+            self.pause_function(body)
         try:
             # delete json documents
             self.load(gen_load_del, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                       batch_size=self.batch_size, op_type='delete')
         except:
             pass
+        if self.pause_resume:
+            self.resume_function(body)
         try :
             # Wait for eventing to catch up with all the delete mutations and verify results
             # This is required to ensure eventing works after failover/recovery/rebalance goes through successfully
@@ -606,6 +623,8 @@ class EventingRebalance(EventingBaseTest):
         eventing_server = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
         body = self.create_save_function_body(self.function_name, self.handler_code)
         self.deploy_function(body)
+        if self.pause_resume:
+            self.pause_function(body)
         # load some data
         task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
                                                 self.buckets[0].kvs[1], 'create', compression=self.sdk_compression)
@@ -624,6 +643,8 @@ class EventingRebalance(EventingBaseTest):
             self.log.info(msg.format(result))
         # This is intenionally added
         self.sleep(60)
+        if self.pause_resume:
+            self.resume_function(body)
         try:
             # Wait for eventing to catch up with all the delete mutations and verify results
             # This is required to ensure eventing works after rebalance goes through successfully
@@ -634,12 +655,16 @@ class EventingRebalance(EventingBaseTest):
             log.info(str(ex))
             # data mismatch is expected in case of a failover
             pass
+        if self.pause_resume:
+            self.pause_function(body)
         try:
             # delete json documents
             self.load(gen_load_del, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                       batch_size=self.batch_size, op_type='delete')
         except:
             pass
+        if self.pause_resume:
+            self.resume_function(body)
         try:
             # Wait for eventing to catch up with all the delete mutations and verify results
             # This is required to ensure eventing works after failover/recovery/rebalance goes through successfully
@@ -925,6 +950,8 @@ class EventingRebalance(EventingBaseTest):
                                               HANDLER_CODE.BUCKET_OPS_ON_UPDATE,
                                               worker_count=3)
         self.deploy_function(body)
+        if self.pause_resume:
+            self.pause_function(body)
         # deploy the second function
         body1 = self.create_save_function_body(self.function_name + "_1",
                                                HANDLER_CODE.BUCKET_OPS_WITH_CRON_TIMER_WITH_SECOND_BUCKET,
@@ -937,6 +964,8 @@ class EventingRebalance(EventingBaseTest):
         self.rest.add_node(self.master.rest_username, self.master.rest_password,
                            self.servers[self.nodes_init].ip, self.servers[self.nodes_init].port,
                            services=["eventing"])
+        if self.pause_resume:
+            self.pause_function(body1)
         # load some data
         task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
                                                 self.buckets[0].kvs[1], 'create', compression=self.sdk_compression)
@@ -945,6 +974,9 @@ class EventingRebalance(EventingBaseTest):
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
         task.result()
+        if self.pause_resume:
+            self.resume_function(body)
+            self.resume_function(body1)
         # Wait for eventing to catch up with all the create mutations and verify results
         if self.is_sbm:
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2, skip_stats_validation=True)
@@ -964,6 +996,8 @@ class EventingRebalance(EventingBaseTest):
         eventing_node = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
         body = self.create_save_function_body(self.function_name, self.handler_code)
         self.deploy_function(body)
+        if self.pause_resume:
+            self.pause_function(body)
         try:
             # load some data
             task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
@@ -988,6 +1022,8 @@ class EventingRebalance(EventingBaseTest):
         # delete json documents
         self.load(gen_load_del, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size, op_type='delete')
+        if self.pause_resume:
+            self.resume_function(body)
         # Wait for eventing to catch up with all the delete mutations and verify results
         # This is required to ensure eventing works after rebalance goes through successfully
         self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
@@ -999,6 +1035,8 @@ class EventingRebalance(EventingBaseTest):
         eventing_node = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
         body = self.create_save_function_body(self.function_name, self.handler_code)
         self.deploy_function(body)
+        if self.pause_resume:
+            self.pause_function(body)
         try:
             # load some data
             task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
@@ -1029,6 +1067,8 @@ class EventingRebalance(EventingBaseTest):
         # delete json documents
         self.load(gen_load_del, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size, op_type='delete')
+        if self.pause_resume:
+            self.resume_function(body)
         # Wait for eventing to catch up with all the delete mutations and verify results
         # This is required to ensure eventing works after rebalance goes through successfully
         self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
@@ -1040,6 +1080,8 @@ class EventingRebalance(EventingBaseTest):
         eventing_node = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
         body = self.create_save_function_body(self.function_name, self.handler_code)
         self.deploy_function(body)
+        if self.pause_resume:
+            self.pause_function(body)
         try:
             # load some data
             task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
@@ -1070,6 +1112,8 @@ class EventingRebalance(EventingBaseTest):
         # delete json documents
         self.load(gen_load_del, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size, op_type='delete')
+        if self.pause_resume:
+            self.resume_function(body)
         # Wait for eventing to catch up with all the delete mutations and verify results
         # This is required to ensure eventing works after rebalance goes through successfully
         try:
@@ -1085,6 +1129,8 @@ class EventingRebalance(EventingBaseTest):
         eventing_nodes = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
         body = self.create_save_function_body(self.function_name, self.handler_code)
         self.deploy_function(body)
+        if self.pause_resume:
+            self.pause_function(body)
         try:
             # load some data
             task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
@@ -1119,6 +1165,8 @@ class EventingRebalance(EventingBaseTest):
         # delete json documents
         self.load(gen_load_del, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size, op_type='delete')
+        if self.pause_resume:
+            self.resume_function(body)
         # Wait for eventing to catch up with all the delete mutations and verify results
         # This is required to ensure eventing works after rebalance goes through successfully
         self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
@@ -1128,6 +1176,8 @@ class EventingRebalance(EventingBaseTest):
         body = self.create_save_function_body(self.function_name, self.handler_code)
         # deploy a function
         self.deploy_function(body)
+        if self.pause_resume:
+            self.pause_function(body)
         # Get all eventing nodes
         nodes_out_list = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
         # rebalance out all eventing nodes
@@ -1145,6 +1195,8 @@ class EventingRebalance(EventingBaseTest):
         # load data
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
+        if self.pause_resume:
+            self.resume_function(body)
         # Wait for eventing to catch up with all the update mutations and verify results after rebalance
         self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         # delete json documents
@@ -1163,6 +1215,8 @@ class EventingRebalance(EventingBaseTest):
         server_failed_over = self.servers[self.server_failed_over]
         body = self.create_save_function_body(self.function_name, self.handler_code)
         self.deploy_function(body)
+        if self.pause_resume:
+            self.pause_function(body)
         try:
             # load some data
             task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
@@ -1189,6 +1243,8 @@ class EventingRebalance(EventingBaseTest):
             # data load might fail because of hard failover
             pass
         self.sleep(60)
+        if self.pause_resume:
+            self.resume_function(body)
         try:
             stats_src = RestConnection(self.master).get_bucket_stats(bucket=self.src_bucket_name)
             # Wait for eventing to catch up with all the update mutations and verify results after rebalance
@@ -1318,6 +1374,8 @@ class EventingRebalance(EventingBaseTest):
             body = self.create_save_function_body(self.function_name + str(i), self.handler_code)
             body_array.append(body)
             self.deploy_function(body)
+            if self.pause_resume:
+                self.pause_function(body)
         # load some data
         task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
                                                 self.buckets[0].kvs[1], 'create', compression=self.sdk_compression)
@@ -1331,6 +1389,9 @@ class EventingRebalance(EventingBaseTest):
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
         task.result()
+        if self.pause_resume:
+            for i in range(self.num_functions):
+                self.resume_function(body)
         # This needs to be skipped in case of doc timers as multiple doc timers can't process same doc
         if not self.skip_validation:
             try:
