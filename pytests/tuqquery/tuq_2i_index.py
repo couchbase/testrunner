@@ -472,13 +472,13 @@ class QueriesIndexTests(QueryTests):
                 plan2 = self.ExplainPlanHelper(actual_result)
                 self.assertTrue(plan2['~children'][0]['index']==idx5)
             finally:
-                self.query = 'delete from {0} where meta().id = {1}'.format(bucket.name, "k01")
+                self.query = 'delete from {0} where meta().id = {1}'.format(bucket.name, "'k01'")
                 self.run_cbq_query()
-                self.query = 'delete from {0} where meta().id = {1}'.format(bucket.name, "k02")
+                self.query = 'delete from {0} where meta().id = {1}'.format(bucket.name, "'k02'")
                 self.run_cbq_query()
-                self.query = 'delete from {0} where meta().id = {1}'.format(bucket.name, "k03")
+                self.query = 'delete from {0} where meta().id = {1}'.format(bucket.name, "'k03'")
                 self.run_cbq_query()
-                self.query = 'delete from {0} where meta().id = {1}'.format(bucket.name, "k04")
+                self.query = 'delete from {0} where meta().id = {1}'.format(bucket.name, "'k04'")
                 self.run_cbq_query()
                 self.query = "DROP PRIMARY INDEX ON %s" % bucket.name
                 self.run_cbq_query()
@@ -1868,8 +1868,17 @@ class QueriesIndexTests(QueryTests):
                 self.assertTrue((scan1['#operator'] == 'IntersectScan') or
                                 (scan1['#operator'] == 'UnionScan' and scan1['scans'][0]['#operator'] == 'IntersectScan' and scan1['scans'][1]['#operator'] == 'IntersectScan'),
                                 "Single InteresectScan or UnionScan of two IntersectScans not being used")
-                result1 =plan['~children'][0]['~children'][0]['scans'][0]['scan']['index']
-                result2 =plan['~children'][0]['~children'][0]['scans'][1]['scan']['index']
+
+                if 'scan' in plan['~children'][0]['~children'][0]['scans'][0]:
+                    result1 =plan['~children'][0]['~children'][0]['scans'][0]['scan']['index']
+                else:
+                    result1 =plan['~children'][0]['~children'][0]['scans'][0]['scans'][0]['scan']['index']
+
+                if 'scan' in plan['~children'][0]['~children'][0]['scans'][1]:
+                    result2 =plan['~children'][0]['~children'][0]['scans'][1]['scan']['index']
+                else:
+                    result2 =plan['~children'][0]['~children'][0]['scans'][1]['scans'][0]['scan']['index']
+
                 self.assertTrue(result1 == idx2 or result1 == idx)
                 self.assertTrue(result2 == idx or result2 == idx2)
                 self.run_cbq_query()
