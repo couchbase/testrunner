@@ -292,6 +292,9 @@ VBUCKET = '\x00\x00'
 # subdoc extras format - path len
 REQ_PKT_SD_EXTRAS= ">HB"
 
+# subdoc extras format - path len, expiration
+REQ_PKT_SD_EXTRAS_EXPIRY= ">HBI"
+
 # magic, opcode, keylen, extralen, datatype, status, bodylen, opaque, cas
 RES_PKT_FMT = ">BBHBBHIIQ"
 

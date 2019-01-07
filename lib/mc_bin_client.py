@@ -21,7 +21,7 @@ import zlib
 from memcacheConstants import REQ_MAGIC_BYTE, RES_MAGIC_BYTE
 from memcacheConstants import REQ_PKT_FMT, RES_PKT_FMT, MIN_RECV_PACKET, REQ_PKT_SD_EXTRAS, SUBDOC_FLAGS_MKDIR_P
 from memcacheConstants import SET_PKT_FMT, DEL_PKT_FMT, INCRDECR_RES_FMT, INCRDECR_RES_WITH_UUID_AND_SEQNO_FMT, META_CMD_FMT
-from memcacheConstants import TOUCH_PKT_FMT, GAT_PKT_FMT, GETL_PKT_FMT
+from memcacheConstants import TOUCH_PKT_FMT, GAT_PKT_FMT, GETL_PKT_FMT, REQ_PKT_SD_EXTRAS_EXPIRY
 from memcacheConstants import COMPACT_DB_PKT_FMT
 import memcacheConstants
 import logger
@@ -172,7 +172,10 @@ class MemcachedClient(object):
             opaque = self.r.randint(0, 2**32)
         if create == True:
             createFlag = SUBDOC_FLAGS_MKDIR_P
-        extraHeader = struct.pack(REQ_PKT_SD_EXTRAS, len(path), createFlag)
+        if expiry == 0:
+            extraHeader = struct.pack(REQ_PKT_SD_EXTRAS, len(path), createFlag)
+        else:
+            extraHeader = struct.pack(REQ_PKT_SD_EXTRAS_EXPIRY, len(path), createFlag, expiry)
         body = path
         if val != None:
             body += str(val)
