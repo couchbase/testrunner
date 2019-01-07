@@ -592,7 +592,8 @@ class EventingRebalance(EventingBaseTest):
             self.resume_function(body)
         try:
             stats_src = RestConnection(self.master).get_bucket_stats(bucket=self.src_bucket_name)
-            self.verify_eventing_results(self.function_name, stats_src["curr_items"], skip_stats_validation=True,
+            if not self.is_sbm:
+                self.verify_eventing_results(self.function_name, stats_src["curr_items"], skip_stats_validation=True,
                                          timeout=240)
         except Exception, ex:
             log.info(str(ex))
@@ -611,7 +612,8 @@ class EventingRebalance(EventingBaseTest):
         try :
             # Wait for eventing to catch up with all the delete mutations and verify results
             # This is required to ensure eventing works after failover/recovery/rebalance goes through successfully
-            self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True, timeout=240)
+            if not self.is_sbm:
+                self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True, timeout=240)
         except Exception, ex:
             log.info(str(ex))
             # data mismatch is expected in case of a delete as Onupdate would have extra mutations in destination
@@ -649,7 +651,8 @@ class EventingRebalance(EventingBaseTest):
             # Wait for eventing to catch up with all the delete mutations and verify results
             # This is required to ensure eventing works after rebalance goes through successfully
             stats_src = RestConnection(self.master).get_bucket_stats(bucket=self.src_bucket_name)
-            self.verify_eventing_results(self.function_name, stats_src["curr_items"], skip_stats_validation=True,
+            if not self.is_sbm:
+                self.verify_eventing_results(self.function_name, stats_src["curr_items"], skip_stats_validation=True,
                                          timeout=240)
         except Exception, ex:
             log.info(str(ex))
@@ -668,7 +671,8 @@ class EventingRebalance(EventingBaseTest):
         try:
             # Wait for eventing to catch up with all the delete mutations and verify results
             # This is required to ensure eventing works after failover/recovery/rebalance goes through successfully
-            self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True, timeout=240)
+            if not self.is_sbm:
+                self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True, timeout=240)
         except Exception, ex:
             log.info(str(ex))
             # data mismatch is expected in case of a delete as Onupdate would have extra mutations in destination
@@ -1026,7 +1030,8 @@ class EventingRebalance(EventingBaseTest):
             self.resume_function(body)
         # Wait for eventing to catch up with all the delete mutations and verify results
         # This is required to ensure eventing works after rebalance goes through successfully
-        self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+        if not self.is_sbm:
+            self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
 
     def test_erl_crash_on_kv_and_eventing_node_during_eventing_rebalance(self):
@@ -1071,7 +1076,8 @@ class EventingRebalance(EventingBaseTest):
             self.resume_function(body)
         # Wait for eventing to catch up with all the delete mutations and verify results
         # This is required to ensure eventing works after rebalance goes through successfully
-        self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+        if not self.is_sbm:
+            self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
 
     def test_reboot_of_kv_and_eventing_node_during_eventing_rebalance(self):
@@ -1117,7 +1123,8 @@ class EventingRebalance(EventingBaseTest):
         # Wait for eventing to catch up with all the delete mutations and verify results
         # This is required to ensure eventing works after rebalance goes through successfully
         try:
-            self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True, timeout=240)
+            if not self.is_sbm:
+                self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True, timeout=240)
         except Exception, ex:
             log.info(str(ex))
             # data mismatch is expected in case of a failover
@@ -1169,7 +1176,8 @@ class EventingRebalance(EventingBaseTest):
             self.resume_function(body)
         # Wait for eventing to catch up with all the delete mutations and verify results
         # This is required to ensure eventing works after rebalance goes through successfully
-        self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+        if not self.is_sbm:
+            self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
 
     def test_rebalance_out_all_eventing_nodes_and_rebalance_in_eventing_node_and_functions_should_be_restored(self):
@@ -1198,13 +1206,19 @@ class EventingRebalance(EventingBaseTest):
         if self.pause_resume:
             self.resume_function(body)
         # Wait for eventing to catch up with all the update mutations and verify results after rebalance
-        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        if self.is_sbm:
+            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2, skip_stats_validation=True)
+        else:
+            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         # delete json documents
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size, op_type='delete')
         # Wait for eventing to catch up with all the delete mutations and verify results
         # This is required to ensure eventing works after rebalance goes through successfully
-        self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+        if self.is_sbm:
+            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        else:
+            self.verify_eventing_results(self.function_name,0, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
 
     def test_kv_eventing_failover_and_kv_eventing_rebalance_simultaneously(self):
@@ -1248,7 +1262,8 @@ class EventingRebalance(EventingBaseTest):
         try:
             stats_src = RestConnection(self.master).get_bucket_stats(bucket=self.src_bucket_name)
             # Wait for eventing to catch up with all the update mutations and verify results after rebalance
-            self.verify_eventing_results(self.function_name, stats_src["curr_items"], skip_stats_validation=True,
+            if not self.is_sbm:
+                self.verify_eventing_results(self.function_name, stats_src["curr_items"], skip_stats_validation=True,
                                          timeout=240)
         except Exception, ex:
             log.info(str(ex))
@@ -1263,7 +1278,8 @@ class EventingRebalance(EventingBaseTest):
         try:
             # Wait for eventing to catch up with all the delete mutations and verify results
             # This is required to ensure eventing works after rebalance goes through successfully
-            self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True, timeout=240)
+            if not self.is_sbm:
+                self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True, timeout=240)
         except Exception, ex:
             log.info(str(ex))
             # data mismatch is expected in case of a delete as Onupdate would have extra mutations in destination
