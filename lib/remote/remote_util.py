@@ -932,7 +932,13 @@ class RemoteMachineShellConnection:
             command_1 = "/sbin/iptables -F"
             command_2 = "/sbin/iptables -t nat -F"
             if self.nonroot:
-                log.info("\n Non root or non sudo has no right to disable firewall")
+                self.connect_with_user(user="root")
+                log.info("\n Non root or non sudo has no right to disable firewall, switching over to root")
+                output, error = self.execute_command(command_1)
+                self.log_command_output(output, error)
+                output, error = self.execute_command(command_2)
+                self.log_command_output(output, error)
+                self.connect_with_user(user=self.username)
                 return
             output, error = self.execute_command(command_1)
             self.log_command_output(output, error)
