@@ -18,13 +18,31 @@ import sys
 import time
 import zlib
 
-from memcacheConstants import REQ_MAGIC_BYTE, RES_MAGIC_BYTE
+from memcacheConstants import REQ_MAGIC_BYTE, RES_MAGIC_BYTE, ALT_REQ_MAGIC_BYTE, ALT_RES_MAGIC_BYTE, ALT_RES_PKT_FMT
 from memcacheConstants import REQ_PKT_FMT, RES_PKT_FMT, MIN_RECV_PACKET, REQ_PKT_SD_EXTRAS, SUBDOC_FLAGS_MKDIR_P
 from memcacheConstants import SET_PKT_FMT, DEL_PKT_FMT, INCRDECR_RES_FMT, INCRDECR_RES_WITH_UUID_AND_SEQNO_FMT, META_CMD_FMT
 from memcacheConstants import TOUCH_PKT_FMT, GAT_PKT_FMT, GETL_PKT_FMT, REQ_PKT_SD_EXTRAS_EXPIRY
 from memcacheConstants import COMPACT_DB_PKT_FMT
 import memcacheConstants
 import logger
+def decodeCollectionID(key):
+    # A leb128 varint encodes the CID
+    data = array.array('B', key)
+    cid = data[0] & 0x7f
+    end = 1
+    if (data[0] & 0x80) == 0x80:
+        shift =7
+        for end in range(1, len(data)):
+            cid |= ((data[end] & 0x7f) << shift)
+            if (data[end] & 0x80) == 0:
+                break
+            shift = shift + 7
+
+        end = end + 1
+        if end == len(data):
+            #  We should of stopped for a stop byte, not the end of the buffer
+            raise exceptions.ValueError("encoded key did not contain a stop byte")
+    return cid, key[end:]
 
 class MemcachedError(exceptions.Exception):
     """Error raised when a command fails."""
@@ -124,8 +142,26 @@ class MemcachedClient(object):
                 raise exceptions.EOFError("Timeout waiting for socket recv. from {0}".format(self.host))
 
         assert len(response) == MIN_RECV_PACKET
-        magic, cmd, keylen, extralen, dtype, errcode, remaining, opaque, cas = \
-            struct.unpack(RES_PKT_FMT, response)
+
+        # Peek at the magic so we can support alternative-framing
+        magic = struct.unpack(">B", response[0:1])[0]
+        assert (magic in (RES_MAGIC_BYTE, REQ_MAGIC_BYTE, ALT_RES_MAGIC_BYTE, ALT_REQ_MAGIC_BYTE)), "Got magic: 0x%x" % magic
+
+        cmd = 0
+        frameextralen = 0
+        keylen = 0
+        extralen = 0
+        dtype = 0
+        errcode = 0
+        remaining = 0
+        opaque = 0
+        cas = 0
+        if magic == ALT_RES_MAGIC_BYTE or magic == ALT_REQ_MAGIC_BYTE:
+            magic, cmd, frameextralen, keylen, extralen, dtype, errcode, remaining, opaque, cas = \
+                struct.unpack(ALT_RES_PKT_FMT, response)
+        else:
+            magic, cmd, keylen, extralen, dtype, errcode, remaining, opaque, cas = \
+                struct.unpack(RES_PKT_FMT, response)
 
         rv = ""
         while remaining > 0:
@@ -138,11 +174,11 @@ class MemcachedClient(object):
                 remaining -= len(data)
             else:
                 raise exceptions.EOFError("Timeout waiting for socket recv. from {0}".format(self.host))
-        assert (magic in (RES_MAGIC_BYTE, REQ_MAGIC_BYTE)), "Got magic: %d" % magic
-        return cmd, errcode, opaque, cas, keylen, extralen, rv
+
+        return cmd, errcode, opaque, cas, keylen, extralen, dtype, rv, frameextralen
 
     def _handleKeyedResponse(self, myopaque):
-        cmd, errcode, opaque, cas, keylen, extralen, rv = self._recvMsg()
+        cmd, errcode, opaque, cas, keylen, extralen, dtype, rv, frameextralen = self._recvMsg()
         assert myopaque is None or opaque == myopaque, \
             "expected opaque %x, got %x" % (myopaque, opaque)
         if errcode != 0:
@@ -153,10 +189,10 @@ class MemcachedClient(object):
                 msg = "{name} : {desc} : {rv}".format(rv=rv, **err)
 
             raise MemcachedError(errcode,  msg)
-        return cmd, opaque, cas, keylen, extralen, rv
+        return cmd, opaque, cas, keylen, extralen, rv, frameextralen
 
     def _handleSingleResponse(self, myopaque):
-        cmd, opaque, cas, keylen, extralen, data = self._handleKeyedResponse(myopaque)
+        cmd, opaque, cas, keylen, extralen, data, frameextralen = self._handleKeyedResponse(myopaque)
         return opaque, cas, data
 
     def _doCmd(self, cmd, key, val, extraHeader='', cas=0, collection=None,extended_meta_data='',extraHeaderLength=None):
@@ -736,7 +772,7 @@ class MemcachedClient(object):
         done = False
         rv = {}
         while not done:
-            cmd, opaque, cas, klen, extralen, data = self._handleKeyedResponse(None)
+            cmd, opaque, cas, klen, extralen, data, frameextralen = self._handleKeyedResponse(None)
             if klen:
                 rv[data[0:klen]] = data[klen:]
             else:

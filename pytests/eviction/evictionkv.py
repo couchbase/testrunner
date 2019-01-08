@@ -13,6 +13,7 @@ from membase.api.rest_client import RestConnection
 from membase.helper.bucket_helper import BucketOperationHelper
 from memcached.helper.data_helper import MemcachedClientHelper
 from remote.remote_util import RemoteMachineShellConnection
+from dcp_bin_client import DcpClient
 
 
 class EvictionKV(EvictionBase):
@@ -581,3 +582,126 @@ class EphemeralBucketsOOM(EvictionBase, DCPBase):
         item_count = rest.get_bucket(self.buckets[0]).stats.itemCount
         self.log.info('The number of items is {0}'.format(item_count))
         self.assertEquals(set([]), set(keys_that_were_accessed).intersection(deleted_keys))
+
+class EvictionDCP(EvictionBase, DCPBase):
+
+    def setUp(self):
+        super(EvictionDCP, self).setUp()
+        self.dcp_client = DcpClient(self.master.ip, int(11210))
+        self.dcp_client.sasl_auth_plain(self.master.rest_username, self.master.rest_password)
+        self.dcp_client.bucket_select('default')
+        self.dcp_client.open_producer(name='eviction', delete_times=True)
+
+        self.rest = RestConnection(self.servers[0])
+        self.client = MemcachedClientHelper.direct_client(self.master, 'default')
+
+    def tearDown(self):
+        super(EvictionDCP, self).tearDown()
+
+    def test_stream_eviction(self):
+        # eviction.evictionkv.EvictionDCP.test_stream_eviction,dgm_run=True,eviction_policy=fullEviction
+
+        vbuckets = self.rest.get_vbuckets()
+
+        doc_gen = BlobGenerator('dcpdata', 'dcpdata-', self.value_size, end=self.num_items)
+        self._load_all_buckets(self.master, doc_gen, "create", 10)
+        # sleep for 10 seconds
+        time.sleep(10)
+        # get the item count
+        item_count = self.rest.get_bucket(self.buckets[0]).stats.itemCount
+        self.assertEquals(item_count, self.num_items)
+
+        expired_keys = []
+        # check if all the keys expired
+        keys=[]
+        for i in range(1000):
+            keys.append("dcpdata" + str(i))
+        time.sleep(10)
+        for key in keys:
+            try:
+                self.client.get(key=key)
+                msg = "expiry was set to {0} but key: {1} did not expire after waiting for {2}+ seconds"
+                self.log.info(msg.format(10, key, 10))
+            except mc_bin_client.MemcachedError as error:
+                self.assertEquals(error.status, 1)
+
+        for vb in vbuckets[0:self.vbuckets]:
+            vbucket = vb.id
+            vb_uuid, _, high_seqno = self.vb_info(self.servers[0], vbucket, bucket=self.buckets[0])
+            stream = self.dcp_client.stream_req(vbucket, 0, 0, high_seqno, vb_uuid)
+            self.dcp_client.general_control("enable_expiry_opcode", "true")
+
+            responses = stream.run()
+            for i in responses:
+                if i['opcode'] == constants.CMD_EXPIRATION:
+                    expired_keys.append(i['key'])
+
+
+        item_count = self.rest.get_bucket(self.buckets[0]).stats.itemCount
+        self.assertEquals(item_count, 0)
+        check_values = set(keys).intersection(expired_keys) # check if any key is not expired
+        self.assertEquals(len(check_values), self.num_items)
+
+    def test_stream_deletioneviction(self):
+        # eviction.evictionkv.EvictionDCP.test_stream_deletioneviction,dgm_run=True,eviction_policy=fullEviction
+        # delete some keys and expire other keys
+        vbuckets = self.rest.get_vbuckets()
+        KEY_ROOT = 'dcpdata'
+
+        doc_gen = BlobGenerator(KEY_ROOT, 'dcpdata-', self.value_size, end=self.num_items)
+        self._load_all_buckets(self.master, doc_gen, "create", 40)
+        time.sleep(10)
+
+        # get the item count
+        item_count = self.rest.get_bucket(self.buckets[0]).stats.itemCount
+        self.assertEquals(item_count, self.num_items)
+
+        keys=[]
+        for i in range(1000):
+            keys.append("dcpdata" + str(i))
+
+        # delete few keys
+        keys_to_be_deleted=[]
+        for i in range(100):
+            int = random.randint(0, 1000)
+            key = KEY_ROOT + str(int)
+            try:
+                self.client.delete(key)
+                keys_to_be_deleted.append(key)
+                keys.remove(key)
+            except mc_bin_client.MemcachedError as error:
+                self.assertEquals(error.status, 1) # if key is already deleted then ignore the error
+
+        expired_keys = []
+        deleted_keys = []
+        time.sleep(40)
+
+        # check if other the keys expired
+        for key in keys:
+            try:
+                self.client.get(key=key)
+                msg = "expiry was set to {0} but key: {1} did not expire after waiting for {2}+ seconds"
+                self.log.info(msg.format(40, key, 40))
+            except mc_bin_client.MemcachedError as error:
+                self.assertEquals(error.status, 1)
+
+        for vb in vbuckets[0:self.vbuckets]:
+            vbucket = vb.id
+            vb_uuid, _, high_seqno = self.vb_info(self.servers[0], vbucket, bucket=self.buckets[0])
+            stream = self.dcp_client.stream_req(vbucket, 0, 0, high_seqno, vb_uuid)
+            self.dcp_client.general_control("enable_expiry_opcode", "true")
+
+            responses = stream.run()
+            for i in responses:
+                if i['opcode'] == constants.CMD_EXPIRATION:
+                    expired_keys.append(i['key'])
+                elif i['opcode'] == constants.CMD_DELETION:
+                    deleted_keys.append(i['key'])
+
+
+        item_count = self.rest.get_bucket(self.buckets[0]).stats.itemCount
+        self.assertEquals(item_count, 0)
+        self.assertEquals(len(keys_to_be_deleted), len(deleted_keys))
+        self.assertEquals(len(keys), len(expired_keys))
+
+
