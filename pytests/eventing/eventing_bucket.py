@@ -247,6 +247,8 @@ class EventingBucket(EventingBaseTest):
         gen_load_copy = copy.deepcopy(self.gens_load)
         body = self.create_save_function_body(self.function_name, self.handler_code)
         self.deploy_function(body)
+        if self.pause_resume:
+            self.pause_function(body)
         # load some data
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
@@ -256,16 +258,28 @@ class EventingBucket(EventingBaseTest):
         # metadata bucket can be used for other purposes as well
         task = self.cluster.async_load_gen_docs(self.master, self.metadata_bucket_name, gen_load_copy,
                                                 self.buckets[0].kvs[1], "create", compression=self.sdk_compression)
+        if self.pause_resume:
+            self.resume_function(body)
         # Wait for eventing to catch up with all the update mutations and verify results
-        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        if self.is_sbm:
+            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2, skip_stats_validation=True)
+        else:
+            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         task.result()
+        if self.pause_resume:
+            self.pause_function(body)
         # delete all documents
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size, op_type='delete')
         # start compacting source, metadata and destination buckets
         self.bucket_compaction()
+        if self.pause_resume:
+            self.resume_function(body)
         # Wait for eventing to catch up with all the delete mutations and verify results
-        self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+        if self.is_sbm:
+            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        else:
+            self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
 
     def test_source_and_destination_bucket_interchanged(self):
@@ -318,6 +332,8 @@ class EventingBucket(EventingBaseTest):
         body = self.create_save_function_body(self.function_name, self.handler_code)
         # deploy function
         self.deploy_function(body)
+        if self.pause_resume:
+            self.pause_function(body)
         # load data
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
@@ -328,6 +344,8 @@ class EventingBucket(EventingBaseTest):
         except:
             # since some of the docs are already ejected by eventing, load method will fails, hence ignoring failure
             pass
+        if self.pause_resume:
+            self.resume_function(body)
         # Wait for eventing to catch up with all the delete mutations and verify results
         stats_src = RestConnection(self.master).get_bucket_stats(bucket=self.src_bucket_name)
         self.verify_eventing_results(self.function_name, stats_src["curr_items"], skip_stats_validation=True)
@@ -400,20 +418,28 @@ class EventingBucket(EventingBaseTest):
                                                                    bucket_params=bucket_params))
         for task in tasks:
             task.result()
-        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                      batch_size=self.batch_size)
         body = self.create_save_function_body(self.function_name, self.handler_code)
-        self.deploy_function(body)
         stats_src = RestConnection(self.master).get_bucket_stats(bucket=self.src_bucket_name)
+        self.deploy_function(body)
+        if self.pause_resume:
+            self.pause_function(body)
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        if self.pause_resume:
+            self.resume_function(body)
         # Wait for eventing to catch up with all the update mutations and verify results
         # Wait for eventing to catch up with all the update mutations and verify results after rebalance
         if self.is_sbm:
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2, skip_stats_validation=True)
         else:
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        if self.pause_resume:
+            self.pause_function(body)
         # delete all documents
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size, op_type='delete')
+        if self.pause_resume:
+            self.resume_function(body)
         # Wait for eventing to catch up with all the delete mutations and verify results
         # Wait for eventing to catch up with all the update mutations and verify results after rebalance
         if self.is_sbm:
