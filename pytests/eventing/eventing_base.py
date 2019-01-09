@@ -540,6 +540,7 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
                 self.log.info("deleted docs:{}  expected doc: {}".format(result,doc_count))
             else:
                 self.log.info("updated docs:{}  expected doc: {}".format(result, doc_count))
+            count=count+1
 
         if count > 20 and doc_count != result:
             raise Exception("All documents are not updated/deleted in expected time")
