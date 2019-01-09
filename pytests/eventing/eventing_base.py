@@ -523,15 +523,17 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
                      "============================================================================================="
                      "\n\n".format(eventing_node.ip, out))
 
-    def verify_source_bucket_mutation(self,doc_count,deletes=False):
+    def verify_source_bucket_mutation(self,doc_count,deletes=False,timeout=600):
         # query = "create primary index on {}".format(self.src_bucket_name)
         # self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_node)
+        num_nodes = self.refresh_rest_server()
+        eventing_nodes = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
         count=0
         result=0
         while count <= 20 and doc_count != result:
-            self.sleep(10)
+            self.sleep(timeout / 20, message="Waiting for eventing to process all dcp mutations...")
             if deletes:
-                query="select raw(count(*)) from {} where doc_deleted = 1".format(self.src_bucket_name)
+                    query="select raw(count(*)) from {} where doc_deleted = 1".format(self.src_bucket_name)
             else:
                 query="select raw(count(*)) from {} where updated_field = 1".format(self.src_bucket_name)
             result_set=self.n1ql_helper.run_cbq_query(query=query,server=self.n1ql_node)
@@ -543,7 +545,25 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
             count=count+1
 
         if count > 20 and doc_count != result:
-            raise Exception("All documents are not updated/deleted in expected time")
+            total_dcp_backlog = 0
+            timers_in_past = 0
+            lcb = {}
+            # TODO : Use the following stats in a meaningful way going forward. Just printing them for debugging.
+            for eventing_node in eventing_nodes:
+                rest_conn = RestConnection(eventing_node)
+                out = rest_conn.get_all_eventing_stats()
+                total_dcp_backlog += out[0]["events_remaining"]["dcp_backlog"]
+                if "TIMERS_IN_PAST" in out[0]["event_processing_stats"]:
+                    timers_in_past += out[0]["event_processing_stats"]["TIMERS_IN_PAST"]
+                total_lcb_exceptions = out[0]["lcb_exception_stats"]
+                host = eventing_node.ip
+                lcb[host] = total_lcb_exceptions
+                full_out = rest_conn.get_all_eventing_stats(seqs_processed=True)
+                log.info(
+                    "Stats for Node {0} is \n{1} ".format(eventing_node.ip, json.dumps(out, sort_keys=True, indent=4)))
+                log.debug("Full Stats for Node {0} is \n{1} ".format(eventing_node.ip,
+                                                                     json.dumps(full_out, sort_keys=True, indent=4)))
+            raise Exception("Eventing has not processed all the mutation in expected time, docs:{}  expected doc: {}".format(result, doc_count))
 
     def pause_resume(self,body,num):
         for i in range(num):
