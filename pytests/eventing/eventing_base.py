@@ -528,7 +528,7 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         # self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_node)
         count=0
         result=0
-        while count < 20 and doc_count != result:
+        while count <= 20 and doc_count != result:
             self.sleep(10)
             if deletes:
                 query="select raw(count(*)) from {} where doc_deleted = 1".format(self.src_bucket_name)
@@ -542,7 +542,7 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
                 self.log.info("updated docs:{}  expected doc: {}".format(result, doc_count))
 
         if count > 20 and doc_count != result:
-            raise Exception("All documents are not update in expected time")
+            raise Exception("All documents are not updated/deleted in expected time")
 
     def pause_resume(self,body,num):
         for i in range(num):
