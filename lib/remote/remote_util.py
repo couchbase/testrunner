@@ -3505,7 +3505,10 @@ class RemoteMachineShellConnection:
                 if info.domain[0][0]:
                     log.info("domain name of this {0} is {1}"
                          .format(self.ip, info.domain[0][0]))
-                    return "{0}.{1}".format(info.hostname[0], info.domain[0][0])
+                    if info.domain[0][0] in info.hostname[0]:
+                        return "{0}".format(info.hostname[0])
+                    else:
+                        return "{0}.{1}".format(info.hostname[0], info.domain[0][0])
                 else:
                     mesg = "Need to set domain name in server {0} like 'sc.couchbase.com'"\
                                                                            .format(self.ip)
