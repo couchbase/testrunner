@@ -19,7 +19,7 @@ from testconstants import COUCHBASE_VERSION_2_WITH_REL
 from testconstants import COUCHBASE_RELEASE_FROM_VERSION_3,\
                           COUCHBASE_RELEASE_FROM_SPOCK
 from testconstants import COUCHBASE_FROM_VERSION_3, COUCHBASE_FROM_SPOCK,\
-                          COUCHBASE_FROM_MAD_HATTER
+                          COUCHBASE_FROM_MAD_HATTER, COUCHBASE_FROM_601
 from testconstants import CB_RELEASE_REPO
 from testconstants import CB_LATESTBUILDS_REPO
 from testconstants import CE_EE_ON_SAME_FOLDER
@@ -377,7 +377,8 @@ class BuildQuery(object):
                         elif "ubuntu 16.04" in os_version.lower():
                             os_name = "ubuntu16.04"
                         elif "ubuntu 18.04" in os_version.lower():
-                            if build_version[:5] in COUCHBASE_FROM_MAD_HATTER:
+                            if build_version[:5] in COUCHBASE_FROM_MAD_HATTER or \
+                                build_version[:5] in COUCHBASE_FROM_601:
                                 os_name = "ubuntu18.04"
                             else:
                                 self.fail("ubuntu 18.04 doesn't support version %s "
@@ -438,7 +439,8 @@ class BuildQuery(object):
                         elif "ubuntu 16.04" in os_version.lower():
                             os_name = "ubuntu16.04"
                         elif "ubuntu 18.04" in os_version.lower():
-                            if build_version[:5] in COUCHBASE_FROM_MAD_HATTER:
+                            if build_version[:5] in COUCHBASE_FROM_MAD_HATTER or \
+                                build_version[:5] in COUCHBASE_FROM_601:
                                 os_name = "ubuntu18.04"
                             else:
                                 self.fail("ubuntu 18.04 doesn't support version %s "
@@ -534,6 +536,7 @@ class BuildQuery(object):
             build = query.create_build_url(version, deliverable_type, architecture_type, \
                                            edition_type, repo, toy, distribution_version, \
                                            distribution_type)
+
             return build, changes
         else:
             page = None
@@ -850,7 +853,8 @@ class BuildQuery(object):
                 elif "ubuntu 16.04" in distribution_version:
                     os_name = "ubuntu16.04"
                 elif "ubuntu 18.04" in distribution_version.lower():
-                    if version[:5] in COUCHBASE_FROM_MAD_HATTER:
+                    if version[:5] in COUCHBASE_FROM_MAD_HATTER or \
+                        version[:5] in COUCHBASE_FROM_601:
                         os_name = "ubuntu18.04"
                     else:
                         self.fail("ubuntu 18.04 doesn't support version %s "
