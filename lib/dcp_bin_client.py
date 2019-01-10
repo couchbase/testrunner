@@ -28,6 +28,9 @@ class DcpClient(MemcachedClient):
         # open_producer defines if collections are being streamed
         self.collections = False
 
+        # initialize delete_times as false
+        self.delete_times = False
+
         # Option to print out opcodes received
         self._opcode_dump = False
 
