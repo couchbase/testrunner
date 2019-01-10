@@ -299,3 +299,53 @@ class EventingLifeCycle(EventingBaseTest):
         self.rest.stop_eventing_debugger(self.function_name)
         # undeploy and delete the function
         self.undeploy_and_delete_function(body)
+
+    def test_pause_resume_undeploy_delete(self):
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OP_WITH_SOURCE_BUCKET_MUTATION)
+        self.deploy_function(body)
+        self.pause_function(body)
+        self.resume_function(body)
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2, skip_stats_validation=True)
+        self.undeploy_and_delete_function(body)
+
+    def test_pause_undeploy_delete(self):
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_ON_UPDATE)
+        self.deploy_function(body)
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        self.pause_function(body)
+        self.undeploy_and_delete_function(body)
+
+    def test_eventing_debugger_pause_resume(self):
+        count = 0
+        match = False
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_ON_UPDATE)
+        self.deploy_function(body)
+        self.pause_function(body)
+        #enable debugger
+        self.rest.enable_eventing_debugger()
+        # Start eventing debugger
+        out1 = self.rest.start_eventing_debugger(self.function_name)
+        log.info(" Started eventing debugger : {0}".format(out1))
+        # do some mutations
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        # get debugger url
+        pattern = re.compile(r'chrome-devtools://devtools/bundled/js_app.html(.*)')
+        while count < 10:
+            out2 = self.rest.get_eventing_debugger_url(self.function_name)
+            matched = re.match(pattern, out2)
+            if matched:
+                log.info("Got debugger url : {0}{1}".format(matched.group(0), matched.group(1)))
+                match = True
+                break
+            count += 1
+            self.sleep(30)
+        if not match:
+            self.fail("Debugger url was not generated even after waiting for 300 secs...    ")
+        # stop debugger
+        self.rest.stop_eventing_debugger(self.function_name)
+        # undeploy and delete the function
+        self.undeploy_and_delete_function(body)
