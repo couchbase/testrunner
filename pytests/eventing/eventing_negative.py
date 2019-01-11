@@ -343,3 +343,46 @@ class EventingNegative(EventingBaseTest):
             if "ERR_INVALID_CONFIG" not in str(e):
                 log.info(str(e))
                 self.fail("Deployment is expected to be failed but succeeded with user_prefix greater than 16 chars")
+
+    def test_pause_when_function_not_deployed(self):
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_ON_UPDATE)
+        body['settings']['deployment_status'] = False
+        body['settings']['processing_status'] = False
+        self.rest.create_function(body['appname'], body)
+        try:
+            self.pause_function(body)
+            self.fail("application is paused even before deployment")
+        except Exception as e:
+            if "ERR_APP_NOT_BOOTSTRAPPED" not in str(e):
+                log.info(str(e))
+                self.fail("Not correct exception thrown")
+
+    def test_pause_when_function_is_deploying(self):
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_ON_UPDATE)
+        self.rest.create_function(body['appname'], body)
+        try:
+            self.pause_function(body)
+            self.fail("application is paused even before deployment")
+        except Exception as e:
+            if "ERR_APP_NOT_BOOTSTRAPPED" not in str(e):
+                log.info(str(e))
+                self.fail("Not correct exception thrown")
+
+    def test_delete_when_resume_in_progress(self):
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_ON_UPDATE)
+        self.deploy_function(body)
+        self.pause_function(body)
+        self.resume_function(body,wait_for_resume=False)
+        try:
+            self.delete_function(body)
+            self.fail("application is paused even before deployment")
+        except Exception as e:
+            if "ERR_APP_NOT_UNDEPLOYED" not in str(e):
+                log.info(str(e))
+                self.fail("Not correct exception thrown")
