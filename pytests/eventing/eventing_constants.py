@@ -41,6 +41,7 @@ class HANDLER_CODE:
     N1QL_UPDATE_DELETE = 'handler_code/n1ql_update_delete.js'
     N1QL_ITERATOR = 'handler_code/n1ql_iterator.js'
     N1QL_ITERATORS = 'handler_code/n1ql_iterators.js'
+    N1QL_SOURCE_INSERT = 'handler_code/n1ql_insert_source_bucket.js'
     SRC_AND_DST_BUCKET_ARE_SAME = 'handler_code/src_and_dst_bucket_are_same.js'
     BUCKET_OP_READ_SOURCE_BUCKET = 'handler_code/bucket_op_read_source_bucket.js'
     BUCKET_OP_WITH_RAND = 'handler_code/bucket_op_rand.js'

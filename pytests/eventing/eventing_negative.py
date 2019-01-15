@@ -386,3 +386,15 @@ class EventingNegative(EventingBaseTest):
             if "ERR_APP_NOT_UNDEPLOYED" not in str(e):
                 log.info(str(e))
                 self.fail("Not correct exception thrown")
+
+    def test_n1ql_DML_with_source_bucket(self):
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.N1QL_SOURCE_INSERT)
+        try:
+            self.deploy_function(body)
+            self.fail("application is deployed for insert on source bucket")
+        except Exception as e:
+            if "Can not execute DML query on bucket" not in str(e):
+                log.info(str(e))
+                self.fail("Not correct exception thrown")
