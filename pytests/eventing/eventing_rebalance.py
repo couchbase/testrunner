@@ -1406,7 +1406,7 @@ class EventingRebalance(EventingBaseTest):
         rebalance.result()
         task.result()
         if self.pause_resume:
-            for i in range(self.num_functions):
+            for body in body_array:
                 self.resume_function(body)
         # This needs to be skipped in case of doc timers as multiple doc timers can't process same doc
         if not self.skip_validation:
