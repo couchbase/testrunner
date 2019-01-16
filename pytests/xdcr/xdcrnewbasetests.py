@@ -2685,8 +2685,7 @@ class XDCRNewBaseTest(unittest.TestCase):
 
 
         self.__set_free_servers()
-        if str(self.__class__).find('upgradeXDCR') == -1 and str(self.__class__).find('lww') == -1\
-                and str(self.__class__).find('capiXDCR') == -1:
+        if str(self.__class__).find('upgradeXDCR') == -1 and str(self.__class__).find('lww') == -1:
             self.__create_buckets()
 
         if self._replicator_role:
