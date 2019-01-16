@@ -124,15 +124,27 @@ class EventingBucket(EventingBaseTest):
                         msg="eventing-consumer processes are not cleaned up even after undeploying the function")
 
     def test_eventing_with_with_the_couchbase_buckets_in_heavy_dgm(self):
-        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                  batch_size=self.batch_size)
+        gen_load_del = copy.deepcopy(self.gens_load)
+        # load some data
+        task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
+                                                self.buckets[0].kvs[1], 'create', compression=self.sdk_compression)
         body = self.create_save_function_body(self.function_name, self.handler_code)
         self.deploy_function(body)
+        if self.pause_resume:
+            self.pause_function(body)
+        task.result()
+        if self.pause_resume:
+            self.resume_function(body)
         # Wait for eventing to catch up with all the update mutations and verify results
         self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         # delete all documents
-        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                  batch_size=self.batch_size, op_type='delete')
+        task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, gen_load_del,
+                                                self.buckets[0].kvs[1], 'delete', compression=self.sdk_compression)
+        if self.pause_resume:
+            self.pause_function(body)
+            self.sleep(30)
+            self.resume_function(body)
+        task.result()
         # Wait for eventing to catch up with all the delete mutations and verify results
         self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
@@ -173,18 +185,30 @@ class EventingBucket(EventingBaseTest):
         body = self.create_save_function_body(self.function_name, self.handler_code,
                                               dcp_stream_boundary="from_now")
         self.deploy_function(body)
+        if self.pause_resume:
+            self.pause_function(body)
         # load documents on the source bucket
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
+        if self.pause_resume:
+            self.resume_function(body)
         # Wait for eventing to catch up with all the update mutations and verify results
-        self.verify_eventing_results(self.function_name,
-                                     self.docs_per_day * 2016,  # since we have deployed with dcp boundary from_now
-                                     skip_stats_validation=True)
+        if self.is_sbm:
+            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2, skip_stats_validation=True)
+        else:
+            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        if self.pause_resume:
+            self.pause_function(body)
         # delete all documents
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size, op_type='delete')
+        if self.pause_resume:
+            self.resume_function(body)
         # Wait for eventing to catch up with all the delete mutations and verify results
-        self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+        if self.is_sbm:
+            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        else:
+            self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
         # intentionally added , as it requires some time for eventing-consumers to shutdown
         self.sleep(30)
