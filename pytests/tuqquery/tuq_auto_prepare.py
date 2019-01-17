@@ -30,6 +30,167 @@ class QueryAutoPrepareTests(QueryTests):
         self.log.info("==============  QueryAutoPrepareTests suite_tearDown has completed ==============")
         super(QueryAutoPrepareTests, self).suite_tearDown()
 
+    ''' Helper function to see if the prepared statements are fully prepared '''
+    def check_prepared_finished(self):
+        prepared_statements = self.run_cbq_query('select * from system:prepareds')
+        return prepared_statements['metrics']['resultCount']
+
+    ''' Helper function that executes the steps involved in running prepared queries with positional/named params'''
+    def prepared_common(self, query='', named=False, name='', args=''):
+        if named:
+            if name == '':
+                name = 'named'
+            prepared_query = 'PREPARE %s FROM %s' % (name, query)
+        else:
+            prepared_query = 'PREPARE %s' % (query)
+
+        self.shell.execute_command("%s -u Administrator:password %s:%s/query/service -d statement='%s'"
+                                    % (self.curl_path, self.master.ip, self.n1ql_port, prepared_query))
+
+        # Make sure that the prepared statement got prepared on all active nodes (2)
+        self.with_retry(lambda: self.check_prepared_finished(), eval=2, delay=1, tries=30)
+
+        # execute the non prepared version of the query to compare results
+        curl_output = self.shell.execute_command("%s -u Administrator:password %s:%s/query/service -d statement='%s&%s'"
+                                                 % (self.curl_path, self.master.ip, self.n1ql_port, query, args))
+        expected_results = self.convert_list_to_json(curl_output[0])
+
+        for i in range(self.nodes_init):
+            if named:
+                # execute the prepared statement
+                curl_output = self.shell.execute_command(
+                    "%s -u Administrator:password %s:%s/query/service -d 'prepared =\"%s\"&%s'"
+                    % (self.curl_path, self.servers[i].ip, self.n1ql_port, name, args))
+                prepared_results = self.convert_list_to_json(curl_output[0])
+            else:
+                # pull the prepared_name to execute it and ensure it returns the correct results
+                node_prepared_name = self.run_cbq_query(
+                    'select * from system:prepareds where node = "%s:%s"' % (self.servers[i].ip, self.servers[i].port))
+                prepared_name = node_prepared_name['results'][0]['prepareds']['name']
+
+                # execute the prepared statement
+                curl_output = self.shell.execute_command(
+                    "%s -u Administrator:password %s:%s/query/service -d 'prepared =\"%s\"&%s'"
+                    % (self.curl_path, self.servers[i].ip, self.n1ql_port, prepared_name, args))
+                prepared_results = self.convert_list_to_json(curl_output[0])
+
+
+            self.assertEqual(sorted(prepared_results), sorted(expected_results),
+                             "Results are not equal server number %s is not returning correct results" % str(i))
+
+    ''' Test anonmyous prepareds with named parameters '''
+    def test_anonymous_prepared_named_parameters(self):
+        query = 'select * from default where name=$name and join_day=$join_day'
+        args = '$name=\"employee-8\"&$join_day=8'
+        self.prepared_common(query=query, args=args)
+
+    ''' Test named parameters with a prepared statement explicitly named'''
+    def test_named_prepared_named_parameters(self):
+        query = 'select * from default where name=$name and join_mo=$join_mo'
+        args = '$name=\"employee-9\"&$join_mo=10'
+        self.prepared_common(query=query, named=True, name='named', args=args)
+
+
+    ''' Test anonmyous prepareds with named parameters '''
+    def test_anonymous_prepared_positional_parameters_dollar(self):
+        query = 'select * from default where name=$1 and join_day=$2'
+        args = 'args=[\"employee-8\",8]'
+        self.prepared_common(query=query,args=args)
+
+        args = '$1=\"employee-8\"&$2=8'
+        self.prepared_common(query=query,args=args)
+
+    ''' Test named parameters with a prepared statement explicitly named'''
+    def test_named_prepared_positional_parameters_dollar(self):
+        query = 'select * from default where name=$1 and join_mo=$2'
+        args = 'args=[\"employee-9\",10]'
+        self.prepared_common(query=query, named=True, name='named', args=args)
+
+        args = '$1=\"employee-9\"&$2=10'
+        self.prepared_common(query=query, named=True, name='named', args=args)
+
+    ''' Test anonmyous prepareds with named parameters '''
+    def test_anonymous_prepared_positional_parameters_question_mark(self):
+        query = 'select * from default where name=? and join_day=?'
+        args = 'args=[\"employee-8\",8]'
+        self.prepared_common(query=query,args=args)
+
+    ''' Test named parameters with a prepared statement explicitly named'''
+    def test_named_prepared_positional_parameters_question_mark(self):
+        query = 'select * from default where name=? and join_mo=?'
+        args = 'args=[\"employee-9\",10]'
+        self.prepared_common(query=query, named=True, name='named', args=args)
+
+    ''' Test that you can attempt to prepare the same prepared statement twice'''
+    def test_duplicate_prepare(self):
+        self.run_cbq_query(query="PREPARE P1 FROM select * from default limit 5", server=self.servers[0])
+        self.run_cbq_query(query="PREPARE P1 FROM select * from default limit 5", server=self.servers[0])
+        self.with_retry(lambda: self.check_prepared_finished(), eval=2, delay=1, tries=30)
+
+    ''' Test if you can force a prepared statement to be reprepared'''
+    def test_prepare_force(self):
+        self.run_cbq_query(query="PREPARE P1 FROM select * from default limit 5", server=self.servers[0])
+        self.run_cbq_query(query="PREPARE FORCE P1 FROM select * from default limit 5", server=self.servers[0])
+        self.with_retry(lambda: self.check_prepared_finished(), eval=2, delay=1, tries=30)
+
+
+    ''' Test that you can prepare two statements with different names but the same text'''
+    def test_different_prepared(self):
+        self.run_cbq_query(query="PREPARE P1 FROM select * from default limit 5", server=self.servers[0])
+        self.run_cbq_query(query="PREPARE P2 FROM select * from default limit 5", server=self.servers[0])
+
+        self.with_retry(lambda: self.check_prepared_finished(), eval=4, delay=1, tries=30)
+
+        prepared_name = self.run_cbq_query('select * from system:prepareds where name = "P1" ')
+        self.assertEqual(prepared_name['metrics']['resultCount'], self.nodes_init)
+
+        second_prepared_name = self.run_cbq_query('select * from system:prepareds where name = "P2" ')
+        self.assertEqual(second_prepared_name['metrics']['resultCount'], self.nodes_init)
+
+    ''' Try to prepare two separate queries under one name, should error'''
+    def test_negative_prepare(self):
+        try:
+            self.run_cbq_query(query="PREPARE P1 FROM select * from default limit 5", server=self.servers[0])
+            self.run_cbq_query(query="PREPARE P1 FROM select * from default limit 10", server=self.servers[0])
+        except CBQError as ex:
+            self.log.error(ex)
+            self.assertTrue(str(ex).find("Unable to add name: duplicate name: P1") != -1,
+                            "Error is incorrect.")
+
+    ''' Try to prepare a query with a syntax error in it '''
+    def test_prepare_syntax_error(self):
+        try:
+            self.run_cbq_query(query="PREPARE P1 FROM select * fro default", server=self.servers[0])
+        except CBQError as ex:
+            self.log.error(ex)
+            self.assertTrue(str(ex).find("syntax error - at fro") != -1,
+                            "Error is incorrect.")
+    ''' Change query settings so that normal queries are automatically cached'''
+    def test_auto_prepare(self):
+        # Set the queries run to be automatically prepared
+        self.shell.execute_command("%s -u Administrator:password %s:%s/admin/settings -d '{\"auto-prepare\":true}'"
+                                   % (self.curl_path, self.master.ip, self.n1ql_port))
+
+        self.run_cbq_query('select * from default', server=self.master)
+        self.run_cbq_query('select * from default limit 10', server=self.master)
+
+        # Ensure the two above queries were automatically prepared
+        query_1 = self.run_cbq_query('select * from system:prepareds where statement = "select * from default"')
+        query_2 = self.run_cbq_query('select * from system:prepareds where statement = "select * from default limit 10"')
+
+        self.assertEqual(query_1['metrics']['resultCount'], 1)
+        self.assertEqual(query_2['metrics']['resultCount'], 1)
+
+        self.run_cbq_query('select * from default',server=self.master)
+        self.run_cbq_query('select * from default limit 10', server=self.master)
+
+        # Make sure the uses goes up since these queries are already prepared
+        query_1 = self.run_cbq_query('select * from system:prepareds where statement = "select * from default"')
+        query_2 = self.run_cbq_query('select * from system:prepareds where statement = "select * from default limit 10"')
+
+        self.assertEqual(query_1['results'][0]['prepareds']['uses'], 2)
+        self.assertEqual(query_2['results'][0]['prepareds']['uses'], 2)
+
     '''Test auto-prepare, prepare on first node, check if it is prepared on both nodes and that it can be executed on 
        both nodes'''
     def test_basic_auto_prepare(self):
@@ -198,6 +359,7 @@ class QueryAutoPrepareTests(QueryTests):
         finally:
             self.run_cbq_query(query="DROP INDEX default.idx")
 
+    ''' Test that if a node is in the cluster but not currently taking traffic, it will not recieve the auto-prepare'''
     def test_add_node_no_rebalance(self):
         services_in = ["index", "n1ql", "kv"]
         # rebalance in a node
@@ -207,18 +369,27 @@ class QueryAutoPrepareTests(QueryTests):
         self.sleep(30)
         self.run_cbq_query(query="PREPARE p1 from select * from default limit 5", server=self.servers[0])
         self.sleep(5)
-        nodes = rest.node_statuses()
-        rest.rebalance(otpNodes=[node.id for node in nodes], ejectedNodes=[])
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [],[])
+        reached = RestHelper(self.rest).rebalance_reached()
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        rebalance.result()
         self.sleep(30)
-        for i in range(self.nodes_init + 1):
-            try:
-                self.run_cbq_query(query="execute p1", server=self.servers[i])
-            except CBQError,ex:
-                self.assertTrue("No such prepared statement: p1" in str(ex), "There error should be no such prepared "
-                                                                             "statement, it really is %s" % ex)
-                self.log.info(ex)
-                self.log.info("node: %s:%s does not have the statement" % (self.servers[i].ip, self.servers[i].port))
+        try:
+            for i in range(self.nodes_init + 1):
+                try:
+                    self.run_cbq_query(query="execute p1", server=self.servers[i])
+                except CBQError,ex:
+                    self.assertTrue("No such prepared statement: p1" in str(ex), "There error should be no such prepared "
+                                                                                 "statement, it really is %s" % ex)
+                    self.log.info(ex)
+                    self.log.info("node: %s:%s does not have the statement" % (self.servers[i].ip, self.servers[i].port))
+        finally:
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], to_remove=[self.servers[self.nodes_init]])
+            reached = RestHelper(self.rest).rebalance_reached()
+            self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+            rebalance.result()
 
+    ''' If you drop a server the prepareds on that node should be removed'''
     def test_server_drop(self):
         self.with_retry(lambda: self.ensure_primary_indexes_exist(), eval=None, delay=3, tries=5)
         # try to move index to self.servers[0]
@@ -248,6 +419,7 @@ class QueryAutoPrepareTests(QueryTests):
                 self.log.info(ex)
                 self.log.info("node: %s:%s does not have the statement" % (self.servers[i].ip, self.servers[i].port))
 
+    ''' Test that you can execute a prepared statement on a node freshly added, meaning it has no prepareds on it'''
     def test_rebalance_in_query_node(self):
         self.with_retry(lambda: self.ensure_primary_indexes_exist(), eval=None, delay=3, tries=5)
         self.run_cbq_query(query="PREPARE p1 from select * from default limit 5", server=self.servers[0])
@@ -261,17 +433,24 @@ class QueryAutoPrepareTests(QueryTests):
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
         self.sleep(30)
-        for i in range(self.nodes_init + 1):
-            self.run_cbq_query(query="execute '[%s:%s]p1'" % (self.servers[0].ip, self.servers[0].port), server=self.servers[i])
+        try:
+            for i in range(self.nodes_init + 1):
+                self.run_cbq_query(query="execute '[%s:%s]p1'" % (self.servers[0].ip, self.servers[0].port), server=self.servers[i])
+        finally:
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], to_remove=[self.servers[self.nodes_init]])
+            reached = RestHelper(self.rest).rebalance_reached()
+            self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+            rebalance.result()
 
+    ''' Test that prepared works on swap rebalance, meaning that the node being added in does not have the prepared'''
     def test_query_swap_rebalance(self):
         self.run_cbq_query(query="PREPARE p1 from select * from default limit 5", server=self.servers[0])
         self.sleep(5)
         for i in range(self.nodes_init):
             if not self.servers[i] == self.servers[1]:
                 self.run_cbq_query(query="execute p1", server=self.servers[i])
-        nodes_out_list = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
-        to_add_nodes = [self.servers[self.nodes_init + 2]]
+        nodes_out_list = self.servers[1]
+        to_add_nodes = [self.servers[self.nodes_init + 1]]
         to_remove_nodes = [nodes_out_list]
         services_in = ["index", "n1ql", "data"]
         self.log.info(self.servers[:self.nodes_init])
@@ -280,12 +459,23 @@ class QueryAutoPrepareTests(QueryTests):
         reached = RestHelper(self.rest).rebalance_reached()
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
-        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init + 2], [], to_remove_nodes)
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init + 1], [], to_remove_nodes)
         reached = RestHelper(self.rest).rebalance_reached()
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
         self.sleep(30)
-        for i in range(self.nodes_init):
-            if not self.servers[i] == self.servers[1]:
-                self.run_cbq_query(query="execute '[%s:%s]p1'" % (self.servers[2].ip, self.servers[2].port),
-                                               server=self.servers[i])
+        try:
+            for i in range(self.nodes_init):
+                if not self.servers[i] == self.servers[1]:
+                    self.run_cbq_query(query="execute '[%s:%s]p1'" % (self.servers[2].ip, self.servers[2].port),
+                                                   server=self.servers[i])
+        finally:
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], to_remove=to_add_nodes)
+            reached = RestHelper(self.rest).rebalance_reached()
+            self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+            rebalance.result()
+
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], to_remove_nodes, [], services=services_in)
+            reached = RestHelper(self.rest).rebalance_reached()
+            self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+            rebalance.result()
