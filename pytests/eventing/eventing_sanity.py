@@ -173,7 +173,7 @@ class EventingSanity(EventingBaseTest):
         # delete all documents
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size, op_type='delete')
-        self.verify_source_bucket_mutation(self.docs_per_day * 2016,deletes=True)
+        self.verify_source_bucket_mutation(self.docs_per_day * 2016,deletes=True,timeout=1200)
         self.undeploy_and_delete_function(body)
 
     def test_source_doc_mutations_with_timers(self):
@@ -189,7 +189,7 @@ class EventingSanity(EventingBaseTest):
         # delete all documents
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size, op_type='delete')
-        self.verify_source_bucket_mutation(self.docs_per_day * 2016,deletes=True)
+        self.verify_source_bucket_mutation(self.docs_per_day * 2016,deletes=True,timeout=1200)
         self.undeploy_and_delete_function(body)
 
     def test_source_bucket_mutations(self):
