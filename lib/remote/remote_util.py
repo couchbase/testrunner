@@ -3361,6 +3361,29 @@ class RemoteMachineShellConnection:
                 arch = "local"
                 ext = "local"
                 filenames = []
+            """ for Amazon Linux 2 only"""
+            for name in filenames:
+                if name == 'system-release':
+                    # it's a amazon linux 2_distro . let's download this file
+                    filename = 'amazon-linux2-release-{0}'.format(uuid.uuid4())
+                    sftp.get(localpath=filename, remotepath='/etc/system-release')
+                    file = open(filename)
+                    etc_issue = ''
+                    # let's only read the first line
+                    for line in file.xreadlines():
+                        # for SuSE that has blank first line
+                        if line.rstrip('\n'):
+                            etc_issue = line
+                            break
+                            # strip all extra characters
+                    etc_issue = etc_issue.rstrip('\n').rstrip(' ').rstrip('\\l').rstrip(' ').rstrip('\\n').rstrip(' ')
+                    os_distro = 'Amazon Linux 2'
+                    os_version = etc_issue
+                    is_linux_distro = True
+                    file.close()
+                    # now remove this file
+                    os.remove(filename)
+                    break
             """ for centos 7 only """
             for name in filenames:
                 if name == "redhat-release":
@@ -3434,7 +3457,8 @@ class RemoteMachineShellConnection:
                    "Debian"  : "deb",
                    "openSUSE": "rpm",
                    "SUSE"    : "rpm",
-                   "Oracle Linux": "rpm"}.get(os_distro, '')
+                   "Oracle Linux": "rpm",
+                    "Amazon Linux 2": "rpm"}.get(os_distro, '')
             arch = {'i686': 'x86',
                     'i386': 'x86'}.get(os_arch, os_arch)
 
