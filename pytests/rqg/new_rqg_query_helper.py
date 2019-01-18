@@ -92,6 +92,8 @@ class RQGQueryHelperNew(BaseRQGQueryHelper):
             return self._convert_sql_template_for_common_table_expression
         elif test_name == 'ansi_joins':
             return self._convert_sql_template_for_ansi_join
+        elif test_name == 'window_functions':
+            return self._convert_sql_template_for_window_functions
         else:
             print("Unknown test name")
             exit(1)
@@ -1202,6 +1204,143 @@ class RQGQueryHelperNew(BaseRQGQueryHelper):
                         "CREATE INDEX {0} ON {1}({2}) USING GSI".format(aggregate_pushdown_index_name, table_name, self._convert_list(skip_range_scan_index_fields_in_order, "numeric"))
         return aggregate_pushdown_index_name, create_aggregate_pushdown_index
 
+    def _convert_sql_template_for_window_functions(self, query_template, conversion_map):
+        table_map = conversion_map.get("table_map", {})
+        sql, n1ql = self._sql_template_to_value_for_window_functions(query_template)
+
+        if "IS MISSING" in sql:
+            sql = sql.replace("IS MISSING", "IS NULL")
+
+        map = {"n1ql": n1ql,
+                "sql": sql,
+                "bucket": str(",".join(table_map.keys())),
+                "expected_result": None,
+                "indexes": {}
+              }
+        return map
+
+    def _sql_template_to_value_for_window_functions(self, sql):
+        sql_map = {}
+        sql_map['window_function_name'] = ''
+        sql_map['window_function_arguments'] = ''
+        sql_map['nthval_from'] = ''
+        sql_map['nulls_treatment'] = ''
+        sql_map['window_partition'] = ''
+        sql_map['window_order'] = ''
+        sql_map['window_frame'] = ''
+        sql_map['window_frame_exclusion'] = ''
+
+        n1ql_map = {}
+        n1ql_map['window_function_name'] = ''
+        n1ql_map['window_function_arguments'] = ''
+        n1ql_map['nthval_from'] = ''
+        n1ql_map['nulls_treatment'] = ''
+        n1ql_map['window_partition'] = ''
+        n1ql_map['window_order'] = ''
+        n1ql_map['window_frame'] = ''
+        n1ql_map['window_frame_exclusion'] = ''
+
+        if 'WINDOW_FUNCTION_NAME_START' in sql:
+            sql_map['window_function_name'] = sql[sql.find('WINDOW_FUNCTION_NAME_START')+len('WINDOW_FUNCTION_NAME_START'):sql.find('WINDOW_FUNCTION_NAME_END')]
+            n1ql_map['window_function_name'] = sql[sql.find('WINDOW_FUNCTION_NAME_START')+len('WINDOW_FUNCTION_NAME_START'):sql.find('WINDOW_FUNCTION_NAME_END')]
+
+
+        if 'WINDOW_FUNCTION_ARGUMENTS_START' in sql:
+            if sql_map['window_function_name'].strip() in ['PERCENT_RANK', 'RANK', 'DENSE_RANK', 'CUME_DIST', 'ROW_NUMBER']:
+                sql_map['window_function_arguments'] = ''
+            elif sql_map['window_function_name'].strip() in ['NTH_VALUE']:
+                sql_map['window_function_arguments'] = ' decimal_field1, 2 '
+            elif sql_map['window_function_name'].strip() in ['NTILE']:
+                sql_map['window_function_arguments'] = ' 10 '
+            else:
+                sql_map['window_function_arguments'] = sql[sql.find('WINDOW_FUNCTION_ARGUMENTS_START')+len('WINDOW_FUNCTION_ARGUMENTS_START'):sql.find('WINDOW_FUNCTION_ARGUMENTS_END')]
+
+            if n1ql_map['window_function_name'].strip() in ['PERCENT_RANK', 'RANK', 'DENSE_RANK', 'CUME_DIST', 'ROW_NUMBER']:
+                n1ql_map['window_function_arguments'] = ''
+            elif n1ql_map['window_function_name'].strip() in ['NTH_VALUE']:
+                n1ql_map['window_function_arguments'] = ' decimal_field1, 2 '
+            elif n1ql_map['window_function_name'].strip() in ['NTILE']:
+                n1ql_map['window_function_arguments'] = ' 10 '
+            else:
+                n1ql_map['window_function_arguments'] = sql[sql.find('WINDOW_FUNCTION_ARGUMENTS_START') + len(
+                    'WINDOW_FUNCTION_ARGUMENTS_START'):sql.find('WINDOW_FUNCTION_ARGUMENTS_END')]
+
+        if 'NTHVAL_FROM_START' in sql:
+            sql_map['nthval_from'] = sql[sql.find('NTHVAL_FROM_START')+len('NTHVAL_FROM_START'):sql.find('NTHVAL_FROM_END')]
+            if sql_map['nthval_from'].strip() == 'FROM FIRST':
+                sql_map['window_order'] = 'ORDER BY DECIMAL_FIELD1 ASC'
+            if sql_map['nthval_from'].strip() == 'FROM LAST':
+                sql_map['window_order'] = 'ORDER BY DECIMAL_FIELD1 DESC'
+            sql_map['nthval_from'] = ''
+
+            # works only for NTH_VALUE
+            n1ql_map['nthval_from'] = sql[sql.find('NTHVAL_FROM_START')+len('NTHVAL_FROM_START'):sql.find('NTHVAL_FROM_END')]
+            if n1ql_map['window_function_name'].strip() in ['LEAD', 'NTILE', 'LAG', 'LAST_VALUE', 'COUNTN', 'STDDEV_SAMP', 'CUME_DIST', 'ROW_NUMBER', 'COUNT',
+                                                            'DENSE_RANK', 'FIRST_VALUE', 'MIN', 'VARIANCE', 'AVG', 'STDDEV', 'RANK', 'MAX', 'PERCENT_RANK',
+                                                            'STDDEV_POP', 'SUM', 'ARRAY_AGG', 'VAR_SAMP', 'VAR_POP', 'MEAN']:
+                n1ql_map['nthval_from'] = ''
+
+        if 'NULLS_TREATMENT_START' in sql:
+            sql_map['nulls_treatment'] = ''
+
+            # works only for nth_value
+            if n1ql_map['window_function_name'].strip() in ['PERCENT_RANK', 'LEAD', 'FIRST_VALUE', 'NTILE', 'ROW_NUMBER', 'LAG', 'LAST_VALUE', 'AVG',
+                                                            'ARRAY_AGG', 'CUME_DIST', 'RANK', 'COUNT', 'STDDEV_SAMP', 'SUM', 'MIN', 'STDDEV', 'MAX', 'VAR_SAMP',
+                                                            'COUNTN', 'VARIANCE', 'DENSE_RANK', 'STDDEV_POP', 'MEAN', 'VAR_POP']:
+                n1ql_map['nulls_treatment'] = ''
+            else:
+                n1ql_map['nulls_treatment'] = sql[sql.find('NULLS_TREATMENT_START') + len('NULLS_TREATMENT_START'):sql.find(
+                    'NULLS_TREATMENT_END')]
+
+        if 'WINDOW_PARTITION_START' in sql:
+            sql_map['window_partition'] = sql[sql.find('WINDOW_PARTITION_START')+len('WINDOW_PARTITION_START'):sql.find('WINDOW_PARTITION_END')]
+
+            n1ql_map['window_partition'] = sql[sql.find('WINDOW_PARTITION_START') + len('WINDOW_PARTITION_START'):sql.find(
+                'WINDOW_PARTITION_END')]
+
+        if 'WINDOW_ORDER_START' in sql:
+            sql_map['window_order'] = sql[sql.find('WINDOW_ORDER_START')+len('WINDOW_ORDER_START'):sql.find('WINDOW_ORDER_END')]
+            if sql_map['window_function_name'].strip() in ['RANK', 'DENSE_RANK', 'PERCENT_RANK', 'CUME_DIST', 'LAG', 'NTILE', 'LEAD'] and sql_map['window_order'].strip() == '':
+                sql_map['window_order'] = ' ORDER BY DECIMAL_FIELD1 '
+
+            n1ql_map['window_order'] = sql[sql.find('WINDOW_ORDER_START') + len('WINDOW_ORDER_START'):sql.find(
+                'WINDOW_ORDER_END')]
+            if n1ql_map['window_function_name'].strip() in ['RANK', 'DENSE_RANK', 'PERCENT_RANK', 'CUME_DIST', 'LAG',
+                                                           'NTILE', 'LEAD'] and n1ql_map['window_order'].strip() == '':
+                n1ql_map['window_order'] = ' ORDER BY DECIMAL_FIELD1 '
+
+        if 'WINDOW_FRAME_START' in sql:
+            sql_map['window_frame'] = sql[sql.find('WINDOW_FRAME_START')+len('WINDOW_FRAME_START'):sql.find('WINDOW_FRAME_END')]
+            if sql_map['window_function_name'].strip() in ['ROW_NUMBER', 'LEAD', 'CUME_DIST', 'LAG', 'PERCENT_RANK', 'DENSE_RANK', 'NTILE', 'RANK']:
+                sql_map['window_frame'] = ''
+            if sql_map['window_function_name'].strip() in ['FIRST_VALUE', 'LAST_VALUE', 'NTH_VALUE', 'ARRAY_AGG', 'VAR_POP', 'VAR_SAMP', 'AVG', 'STDDEV_POP', 'MIN',
+                                                           'STDDEV_SAMP', 'COUNT', 'COUNTN', 'STDDEV', 'MAX', 'VARIANCE', 'MEAN', 'SUM'] and sql_map['window_order'].strip() == '':
+                sql_map['window_order'] = ' ORDER BY DECIMAL_FIELD1 '
+
+            n1ql_map['window_frame'] = sql[sql.find('WINDOW_FRAME_START')+len('WINDOW_FRAME_START'):sql.find('WINDOW_FRAME_END')]
+            if n1ql_map['window_function_name'].strip() in ['ROW_NUMBER', 'LEAD', 'CUME_DIST', 'LAG', 'PERCENT_RANK', 'DENSE_RANK', 'NTILE', 'RANK']:
+                n1ql_map['window_frame'] = ''
+            if n1ql_map['window_function_name'].strip() in ['FIRST_VALUE', 'LAST_VALUE', 'NTH_VALUE', 'ARRAY_AGG', 'VAR_POP', 'VAR_SAMP', 'AVG', 'STDDEV_POP', 'MIN',
+                                                            'STDDEV_SAMP', 'COUNT', 'COUNTN', 'STDDEV', 'MAX', 'VARIANCE', 'MEAN', 'SUM'] and n1ql_map['window_order'].strip() == '':
+                n1ql_map['window_order'] = ' ORDER BY DECIMAL_FIELD1 '
+
+        if 'WINDOW_FRAME_EXCLUSION_START' in sql:
+            sql_map['window_frame_exclusion'] = sql[sql.find('WINDOW_FRAME_EXCLUSION_START')+len('WINDOW_FRAME_EXCLUSION_START'):sql.find('WINDOW_FRAME_EXCLUSION_END')]
+            if sql_map['window_frame'].strip() == '':
+                sql_map['window_frame_exclusion'] = ''
+
+            n1ql_map['window_frame_exclusion'] = sql[sql.find('WINDOW_FRAME_EXCLUSION_START')+len('WINDOW_FRAME_EXCLUSION_START'):sql.find('WINDOW_FRAME_EXCLUSION_END')]
+            if n1ql_map['window_frame'].strip() == '':
+                n1ql_map['window_frame_exclusion'] = ''
+
+        converted_sql = 'SELECT char_field1, decimal_field1, '+sql_map['window_function_name']+'('+sql_map['window_function_arguments']+')'+' '+sql_map['nthval_from']+' '+sql_map['nulls_treatment']+\
+                        ' OVER('+sql_map['window_partition']+' '+sql_map['window_order']+' '+sql_map['window_frame']+' '+sql_map['window_frame_exclusion']+') as wf FROM simple_table'
+
+        converted_n1ql = 'SELECT char_field1, decimal_field1, '+n1ql_map['window_function_name']+'('+n1ql_map['window_function_arguments']+')'+' '+n1ql_map['nthval_from']+' '+n1ql_map['nulls_treatment']+\
+                        ' OVER('+n1ql_map['window_partition']+' '+n1ql_map['window_order']+' '+n1ql_map['window_frame']+' '+n1ql_map['window_frame_exclusion']+') as wf FROM simple_table'
+
+        return converted_sql.lower(), converted_n1ql.lower()
+
     ''' Main function to convert templates into SQL and N1QL queries for GROUP BY clause field aliases '''
     def _convert_sql_template_for_group_by_aliases(self, query_template, conversion_map):
         table_map = conversion_map.get("table_map", {})
@@ -1260,10 +1399,10 @@ class RQGQueryHelperNew(BaseRQGQueryHelper):
         transform function. '''
     def _apply_group_by_aliases(self, sql_template_map={}, n1ql_template_map={}, table_map={}):
 
-        string_field_names = self._search_fields_of_given_type(["varchar", "text", "tinytext", "char"], table_map)
-        numeric_field_names = self._search_fields_of_given_type(["int", "mediumint", "double", "float", "decimal"], table_map)
-        datetime_field_names = self._search_fields_of_given_type(["datetime"], table_map)
-        bool_field_names = self._search_fields_of_given_type(["tinyint"], table_map)
+        string_field_names = self._search_fields_of_given_type(["varchar", "text", "tinytext", "char", "character"], table_map)
+        numeric_field_names = self._search_fields_of_given_type(["int", "mediumint", "double", "float", "decimal", "numeric"], table_map)
+        datetime_field_names = self._search_fields_of_given_type(["datetime", "timestamp without time zone"], table_map)
+        bool_field_names = self._search_fields_of_given_type(["tinyint", "boolean"], table_map)
 
         converted_sql_map = copy.deepcopy(sql_template_map)
         converted_n1ql_map = copy.deepcopy(n1ql_template_map)

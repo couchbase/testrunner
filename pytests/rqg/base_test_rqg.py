@@ -17,6 +17,7 @@ import shutil
 from os import listdir
 from os.path import isfile, join
 import traceback
+from rqg_postgres_client import RQGPostgresClient
 
 class BaseRQGTests(BaseTestCase):
     def setUp(self):
@@ -44,7 +45,8 @@ class BaseRQGTests(BaseTestCase):
             self.crud_batch_size = self.input.param("crud_batch_size", 1)
             self.record_failure = self.input.param("record_failure", False)
             self.failure_record_path = self.input.param("failure_record_path", "/tmp")
-            self.use_mysql = self.input.param("use_mysql", True)
+            self.use_mysql = self.input.param("use_mysql", False)
+            self.use_postgres = self.input.param("use_postgres", False)
             self.initial_loading_to_cb = self.input.param("initial_loading_to_cb", True)
             self.change_bucket_properties = self.input.param("change_bucket_properties", False)
             self.database = self.input.param("database", "flightstats")
@@ -542,8 +544,8 @@ class BaseRQGTests(BaseTestCase):
         except Exception, ex:
             self.log.info(ex)
             crud_ops_run_result = {"success": False, "result": str(ex)}
-            client._close_mysql_connection()
-        client._close_mysql_connection()
+            client._close_connection()
+        client._close_connection()
         if crud_ops_run_result is None:
             query_index_run = self._run_queries_and_verify_crud(n1ql_query=verification_query, sql_query=verification_query, expected_result=None, table_name=table_name)
         else:
@@ -607,7 +609,12 @@ class BaseRQGTests(BaseTestCase):
     def _gen_expected_result(self, sql="", test=49):
         sql_result = []
         try:
-            client = RQGMySQLClient(database=self.database, host=self.mysql_url, user_id=self.user_id, password=self.password)
+            client = None
+            if self.use_mysql:
+                client = RQGMySQLClient(database=self.database, host=self.mysql_url, user_id=self.user_id, password=self.password)
+            elif self.use_postgres:
+                client = RQGPostgresClient()
+
             if test == 51:
                 columns = []
                 rows = []
@@ -617,7 +624,7 @@ class BaseRQGTests(BaseTestCase):
                 sql_result = client._gen_json_from_results_repeated_columns(columns, rows)
             else:
                 sql_result = client._gen_json_from_results(columns, rows)
-            client._close_mysql_connection()
+            client._close_connection()
         except Exception, ex:
             self.log.info(ex)
             traceback.print_exc()
@@ -652,14 +659,19 @@ class BaseRQGTests(BaseTestCase):
 
             # Run SQL Query
             sql_result = expected_result
-            client = RQGMySQLClient(database=self.database, host=self.mysql_url, user_id=self.user_id, password=self.password)
+            client = None
+            if self.use_mysql:
+                client = RQGMySQLClient(database=self.database, host=self.mysql_url, user_id=self.user_id, password=self.password)
+            elif self.use_postgres:
+                client = RQGPostgresClient()
+
             if expected_result is None:
                 columns, rows = client._execute_query(query=sql_query)
                 if self.aggregate_pushdown:
                     sql_result = client._gen_json_from_results_repeated_columns(columns, rows)
                 else:
                     sql_result = client._gen_json_from_results(columns, rows)
-            client._close_mysql_connection()
+            client._close_connection()
             self.log.info(" result from n1ql query returns {0} items".format(len(n1ql_result)))
             self.log.info(" result from sql query returns {0} items".format(len(sql_result)))
 
@@ -702,7 +714,7 @@ class BaseRQGTests(BaseTestCase):
             if expected_result is None:
                 columns, rows = client._execute_query(query=sql_query)
                 sql_result = client._gen_json_from_results(columns, rows)
-            client._close_mysql_connection()
+            client._close_connection()
             self.log.info(" result from n1ql query returns {0} items".format(len(n1ql_result)))
             self.log.info(" result from sql query returns {0} items".format(len(sql_result)))
 
@@ -791,6 +803,10 @@ class BaseRQGTests(BaseTestCase):
             self._initialize_mysql_client()
             if not self.generate_input_only:
                 self._setup_and_load_buckets()
+        elif self.use_postgres:
+            self._initialize_postgres_client()
+            if not self.generate_input_only:
+                self._setup_and_load_buckets()
         else:
             self.log.info(" Will load directly from file snap-shot")
             if self.populate_with_replay:
@@ -814,7 +830,7 @@ class BaseRQGTests(BaseTestCase):
         fields = ['primary_key_id','bool_field1','char_field1','datetime_field1','decimal_field1',
                   'int_field1','varchar_field1']
         if self.create_secondary_indexes:
-            if self.use_mysql:
+            if self.use_mysql or self.use_postgres:
                 self.sec_index_map = self.client._gen_index_combinations_for_tables(partitioned_indexes=self.partitioned_indexes)
             else:
                 self.sec_index_map = self._extract_secondary_index_map_from_file(self.secondary_index_info_path)
@@ -910,6 +926,10 @@ class BaseRQGTests(BaseTestCase):
             self._copy_table_for_merge()
         else:
             self.client = RQGMySQLClient(database=self.database, host=self.mysql_url, user_id=self.user_id, password=self.password)
+
+    def _initialize_postgres_client(self):
+        self.client = RQGPostgresClient()
+        self.client.reset_database_add_data()
 
     def _copy_table_for_merge(self):
         table_list = self.client._get_table_list()
@@ -1157,7 +1177,7 @@ class BaseRQGTests(BaseTestCase):
         f_write_index_file = open(secondary_index_path+"/secondary_index_definitions.txt",'w')
         client = RQGMySQLClient(database=self.database, host=self.mysql_url, user_id=self.user_id, password=self.password)
         client.dump_database(data_dump_path=database_dump)
-        client._close_mysql_connection()
+        client._close_connection()
         f_write_index_file.write(json.dumps(self.sec_index_map))
         f_write_index_file.close()
         while not failure_record_queue.empty():

@@ -2,6 +2,8 @@ from base_test_rqg import BaseRQGTests
 from new_rqg_mysql_client import RQGMySQLClientNew
 from new_rqg_query_helper import RQGQueryHelperNew
 import threading
+from rqg_mysql_client import RQGMySQLClient
+from rqg_postgres_client import RQGPostgresClient
 import traceback
 
 class RQGTestsNew(BaseRQGTests):
@@ -140,7 +142,7 @@ class RQGTestsNew(BaseRQGTests):
             traceback.print_exc()
             return {"success": False, "result": str(ex)}
         finally:
-            client._close_mysql_connection()
+            client._close_connection()
 
     def _gen_json_from_results(self, columns, rows):
         data = []
@@ -248,7 +250,75 @@ class RQGTestsNew(BaseRQGTests):
             if self.subquery:
                 self.client.reset_database_add_data(database=self.database, items=self.items, sql_file_definiton_path=path, populate_data=populate_data, number_of_tables=1)
             else:
-                 self.client.reset_database_add_data(database=self.database, items=self.items, sql_file_definiton_path=path, populate_data=populate_data, number_of_tables=self.number_of_buckets)
+                self.client.reset_database_add_data(database=self.database, items=self.items, sql_file_definiton_path=path, populate_data=populate_data, number_of_tables=self.number_of_buckets)
             self._copy_table_for_merge()
         else:
             self.client = RQGMySQLClientNew(database=self.database, host=self.mysql_url, user_id=self.user_id, password=self.password)
+
+    def _run_queries_and_verify(self, aggregate=False, subquery=False, n1ql_query=None, sql_query=None, expected_result=None):
+        if not self.create_primary_index:
+            n1ql_query = n1ql_query.replace("USE INDEX(`#primary` USING GSI)", " ")
+        if self.prepared:
+            n1ql_query = "PREPARE " + n1ql_query
+        self.log.info(" SQL QUERY :: {0}".format(sql_query))
+        self.log.info(" N1QL QUERY :: {0}".format(n1ql_query))
+        # Run n1ql query
+        if self.test_name and self.test_name == 'window_functions':
+            hints = []
+        else:
+            hints = self.query_helper._find_hints(sql_query)
+
+        for i, item in enumerate(hints):
+            if "simple_table" in item:
+                hints[i] = hints[i].replace("simple_table", self.database+"_"+"simple_table")
+        try:
+            if subquery:
+                query_params = {'timeout': '1200s'}
+            else:
+                query_params={}
+            actual_result = self.n1ql_helper.run_cbq_query(query=n1ql_query, server=self.n1ql_server, query_params=query_params, scan_consistency="request_plus")
+            if self.prepared:
+                name = actual_result["results"][0]['name']
+                prepared_query = "EXECUTE '%s'" % name
+                self.log.info(" N1QL QUERY :: {0}".format(prepared_query))
+                actual_result = self.n1ql_helper.run_cbq_query(query=prepared_query, server=self.n1ql_server, query_params=query_params, scan_consistency="request_plus")
+            n1ql_result = actual_result["results"]
+
+            # Run SQL Query
+            sql_result = expected_result
+
+            client = None
+            if self.use_mysql:
+                client = RQGMySQLClient(database=self.database, host=self.mysql_url, user_id=self.user_id, password=self.password)
+            elif self.use_postgres:
+                client = RQGPostgresClient()
+
+            if expected_result is None:
+                columns, rows = client._execute_query(query=sql_query)
+                if self.aggregate_pushdown:
+                    sql_result = client._gen_json_from_results_repeated_columns(columns, rows)
+                else:
+                    sql_result = client._gen_json_from_results(columns, rows)
+            client._close_connection()
+            self.log.info(" result from n1ql query returns {0} items".format(len(n1ql_result)))
+            self.log.info(" result from sql query returns {0} items".format(len(sql_result)))
+
+            if len(n1ql_result) != len(sql_result):
+                self.log.info("number of results returned from sql and n1ql are different")
+                self.log.info("sql query is {0}".format(sql_query))
+                self.log.info("n1ql query is {0}".format(n1ql_query))
+
+                if (len(sql_result) == 0 and len(n1ql_result) == 1) or (len(n1ql_result) == 0 and len(sql_result) == 1) or (len(sql_result) == 0):
+                        return {"success": True, "result": "Pass"}
+                return {"success": False, "result": str("different results")}
+            try:
+                self.n1ql_helper._verify_results_rqg(subquery, aggregate, sql_result=sql_result, n1ql_result=n1ql_result, hints=hints, aggregate_pushdown=self.aggregate_pushdown)
+            except Exception, ex:
+                self.log.info(ex)
+                traceback.print_exc()
+                return {"success": False, "result": str(ex)}
+            return {"success": True, "result": "Pass"}
+        except Exception, ex:
+            self.log.info(ex)
+            traceback.print_exc()
+            return {"success": False, "result": str(ex)}

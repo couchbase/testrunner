@@ -381,7 +381,7 @@ class RQGASTERIXTests(BaseTestCase):
             user_id = self.user_id, password = self.password)
             columns, rows = client._execute_query(query = sql)
             sql_result = self.client._gen_json_from_results(columns, rows)
-            client._close_mysql_connection()
+            client._close_connection()
             client = None
         except Exception, ex:
             self.log.info(ex)
@@ -694,7 +694,7 @@ class RQGASTERIXTests(BaseTestCase):
         client = MySQLClient(database = self.database, host = self.mysql_url,
             user_id = self.user_id, password = self.password)
         client.dump_database(data_dump_path = database_dump)
-        client._close_mysql_connection()
+        client._close_connection()
         f_write_index_file.write(json.dumps(self.sec_index_map))
         f_write_index_file.close()
         while not failure_record_queue.empty():
