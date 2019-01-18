@@ -363,6 +363,13 @@ class BuildQuery(object):
                                 os_name = "suse12"
                         elif "oracle linux" in os_version.lower():
                             os_name = "oel6"
+                        elif "amazon linux 2" in os_version.lower():
+                            if build_version[:5] in COUCHBASE_FROM_MAD_HATTER or \
+                                            build_version[:5] in COUCHBASE_FROM_601:
+                                os_name = "amzn2"
+                            else:
+                                self.fail("Amazon Linux 2 doesn't support version %s "
+                                                                % build_version[:5])
                         else:
                             os_name = "centos6"
                         build.url = "{6}{0}/{1}-{4}-{5}.{2}.{3}"\
@@ -425,6 +432,13 @@ class BuildQuery(object):
                                 os_name = "suse12"
                         elif "oracle linux" in os_version.lower():
                             os_name = "oel6"
+                        elif "amazon linux 2" in os_version.lower():
+                            if build_version[:5] in COUCHBASE_FROM_MAD_HATTER or \
+                                            build_version[:5] in COUCHBASE_FROM_601:
+                                os_name = "amzn2"
+                            else:
+                                self.fail("Amazon Linux 2 doesn't support version %s "
+                                                                % build_version[:5])
                         else:
                             os_name = "centos6"
                         build.url = "{6}{0}/{1}-{4}-{5}.{2}.{3}"\
@@ -665,7 +679,7 @@ class BuildQuery(object):
                     build_info = build_info.replace("-amd64", "")
                 del_words = ["centos6", "debian7", "debian8", "debian9",
                              "ubuntu12.04", "ubuntu14.04", "ubuntu16.04", "ubuntu18.04",
-                             "windows", "macos", "centos7", "suse11", "suse12"]
+                             "windows", "macos", "centos7", "suse11", "suse12", "amzn2"]
                 if build_info.startswith("couchbase-server"):
                     build.product = build_info.split("-")
                     build.product = "-".join([i for i in build.product \
@@ -840,6 +854,17 @@ class BuildQuery(object):
                 build.name = edition_type + "-" + build.product_version + \
                    "-" + os_name + "." + build.architecture_type + \
                    "." + build.deliverable_type
+            elif "amazon linux release 2" in distribution_version:
+                if version[:5] in COUCHBASE_FROM_MAD_HATTER or \
+                                version[:5] in COUCHBASE_FROM_601:
+                    build.distribution_version = "amazon linux 2"
+                    os_name = "amzn2"
+                    build.name = edition_type + "-" + build.product_version + \
+                     "-" + os_name + "." + build.architecture_type + \
+                        "." + build.deliverable_type
+                else:
+                    self.fail("Amazon Linux 2 doesn't support version %s "
+                              % version[:5])
             else:
                 os_name = ""
                 joint_char = "-"
