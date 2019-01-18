@@ -7,6 +7,8 @@ import copy, json
 import random
 import time
 import mc_bin_client
+import couchbase.subdocument as SD
+from sdk_client import SDKClient
 
 class SubdocSimpleDataset(SubdocBaseTest):
     def setUp(self):
@@ -382,6 +384,56 @@ class SubdocSimpleDataset(SubdocBaseTest):
     def test_upsert_replace_array_mix(self):
         self.json =  self.generate_simple_data_mix_arrays()
         self.dict_upsert_replace_verify(self.json, "test_upsert_replace_array_mix")
+
+    def test_xattr_compression(self):
+        # MB-32669
+        # subdoc.subdoc_simple_dataset.SubdocSimpleDataset.test_xattr_compression,compression=active
+        mc = MemcachedClient(self.master.ip, 11210)
+        mc.sasl_auth_plain(self.master.rest_username, self.master.rest_password)
+        mc.bucket_select('default')
+
+        self.key="test_xattr_compression"
+        self.nesting_level = 5
+        array = {
+            'i_add': 0,
+            'i_sub': 1,
+            'a_i_a': [0, 1],
+            'ai_sub': [0, 1]
+        }
+        base_json = self.generate_json_for_nesting()
+        nested_json = self.generate_nested(base_json, array, self.nesting_level)
+        jsonDump = json.dumps(nested_json)
+        stats = mc.stats()
+        self.assertEquals(stats['ep_compression_mode'], 'active')
+
+        scheme = "http"
+        host="{0}:{1}".format(self.master.ip,self.master.port)
+        self.sdk_client=SDKClient(scheme=scheme,hosts = [host], bucket = "default")
+
+        self.sdk_client.set(self.key, value=jsonDump, ttl=60)
+        rv = self.sdk_client.cb.mutate_in(self.key, SD.upsert('my.attr', "value",
+                                                 xattr=True,
+                                                 create_parents=True), ttl=60)
+        self.assertTrue(rv.success)
+
+
+
+        # wait for it to persist and then evict the key
+        persisted = 0
+        while persisted == 0:
+                opaque, rep_time, persist_time, persisted, cas = mc.observe(self.key)
+
+        mc.evict_key(self.key)
+        time.sleep(65)
+        try:
+            self.client.get(self.key)
+            self.fail("the key should get expired")
+        except mc_bin_client.MemcachedError as error:
+            self.assertEquals(error.status, 1)
+
+        stats = mc.stats()
+        self.assertEquals(int(stats['curr_items']), 0)
+        self.assertEquals(int(stats['curr_temp_items']), 0)
 
 # SD_REPLACE - Replace Operations
 
