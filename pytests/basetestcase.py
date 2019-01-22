@@ -2705,8 +2705,8 @@ class BaseTestCase(unittest.TestCase):
         output, error = remote.enable_diag_eval_on_non_local_hosts()
         if output is not None:
             if "ok" not in output:
-                self.log.error("Error in enabling diag/eval on non-local hosts on {}".format(self.master.ip))
-                raise Exception("Error in enabling diag/eval on non-local hosts on {}".format(self.master.ip))
+                self.log.error("Error in enabling diag/eval on non-local hosts on {}: Error: {}".format(self.master.ip, error))
+                raise Exception("Error in enabling diag/eval on non-local hosts on {}: Error: {}".format(self.master.ip, error))
             else:
                 self.log.info(
                     "Enabled diag/eval for non-local hosts from {}".format(
