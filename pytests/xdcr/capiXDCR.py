@@ -34,16 +34,15 @@ class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):
         self.upgrade_build_type = self._input.param('upgrade_build_type', self.initial_build_type)
         self.master = self.src_master
         self.rest = RestConnection(self.src_master)
+        self.esrest_conn = EsRestConnection(self.dest_master)
 
     def tearDown(self):
         super(Capi, self).tearDown()
 
     def _verify_es_results(self, bucket='default'):
-        esrest_conn = EsRestConnection(self.dest_master)
-        es_docs = esrest_conn.all_docs()
+        es_docs = self.esrest_conn.all_docs()
         self.log.info("Retrieved ES Docs")
-        rest_conn = RestConnection(self.src_master)
-        memcached_conn = VBucketAwareMemcached(rest_conn, bucket)
+        memcached_conn = VBucketAwareMemcached(self.rest, bucket)
         self.log.info("Comparing CB and ES data")
         for doc in es_docs:
             es_data = doc['doc']
@@ -74,7 +73,7 @@ class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):
 
         self.src_cluster.pause_all_replications()
 
-        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}',  xrange(100), start=0, end=self._num_items)
+        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}', xrange(100), start=0, end=self._num_items)
         self.src_cluster.load_all_buckets_from_generator(gen)
 
         self.async_perform_update_delete()
@@ -88,7 +87,7 @@ class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):
     def test_capi_with_pause_resume(self):
         self.setup_xdcr()
 
-        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}',  xrange(100), start=0, end=self._num_items)
+        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}', xrange(100), start=0, end=self._num_items)
         self.src_cluster.async_load_all_buckets_from_generator(gen)
 
         self.src_cluster.pause_all_replications()
@@ -105,15 +104,16 @@ class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):
 
         self.src_cluster.pause_all_replications()
 
-        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}',  xrange(100), start=0, end=self._num_items)
+        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}', xrange(100), start=0, end=self._num_items)
         self.src_cluster.load_all_buckets_from_generator(gen)
 
         self.src_cluster.resume_all_replications()
+        self._wait_for_replication_to_catchup()
         self.sleep(120)
 
         vb0_node = None
         nodes = self.src_cluster.get_nodes()
-        ip = VBucketAwareMemcached(rest_conn,'default').vBucketMap[0].split(':')[0]
+        ip = VBucketAwareMemcached(self.rest, 'default').vBucketMap[0].split(':')[0]
         for node in nodes:
             if ip == node.ip:
                 vb0_node = node
@@ -121,7 +121,8 @@ class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):
             raise XDCRCheckpointException("Error determining the node containing active vb0")
         vb0_conn = RestConnection(vb0_node)
         try:
-            checkpoint_record = vb0_conn.get_recent_xdcr_vb_ckpt(repl_id)
+            repl = vb0_conn.get_replication_for_buckets('default', 'default')
+            checkpoint_record = vb0_conn.get_recent_xdcr_vb_ckpt(repl['id'])
             self.log.info("Checkpoint record : {0}".format(checkpoint_record))
         except Exception as e:
             raise XDCRCheckpointException("Error retrieving last checkpoint document - {0}".format(e))
@@ -133,7 +134,7 @@ class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):
 
         self.src_cluster.pause_all_replications()
 
-        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}',  xrange(100), start=0, end=self._num_items)
+        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}', xrange(100), start=0, end=self._num_items)
         self.src_cluster.load_all_buckets_from_generator(gen)
 
         self.perform_update_delete()
@@ -150,7 +151,7 @@ class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):
 
         self.src_cluster.pause_all_replications()
 
-        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}',  xrange(100), start=0, end=self._num_items)
+        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}', xrange(100), start=0, end=self._num_items)
         self.src_cluster.load_all_buckets_from_generator(gen)
 
         self.src_cluster.resume_all_replications()
@@ -183,7 +184,7 @@ class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):
 
         self.src_cluster.pause_all_replications()
 
-        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}',  xrange(100), start=0, end=self._num_items)
+        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}', xrange(100), start=0, end=self._num_items)
         self.src_cluster.load_all_buckets_from_generator(gen)
 
         self.src_cluster.resume_all_replications()
@@ -200,7 +201,7 @@ class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):
 
         self.src_cluster.pause_all_replications()
 
-        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}',  xrange(100), start=0, end=self._num_items)
+        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}', xrange(100), start=0, end=self._num_items)
         self.src_cluster.load_all_buckets_from_generator(gen)
 
         self.src_cluster.resume_all_replications()
@@ -216,7 +217,7 @@ class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):
 
         self.src_cluster.pause_all_replications()
 
-        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}',  xrange(100), start=0, end=self._num_items)
+        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}', xrange(100), start=0, end=self._num_items)
         self.src_cluster.load_all_buckets_from_generator(gen)
 
         self.src_cluster.resume_all_replications()
@@ -247,7 +248,7 @@ class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):
         self.setup_xdcr()
 
         self.src_cluster.pause_all_replications()
-        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}',  xrange(100), start=0, end=self._num_items)
+        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}', xrange(100), start=0, end=self._num_items)
         self.src_cluster.load_all_buckets_from_generator(gen)
 
         self.src_cluster.resume_all_replications()
@@ -281,20 +282,20 @@ class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):
 
         self.src_cluster.pause_all_replications()
 
-        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}',  xrange(100), start=0, end=self._num_items)
+        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}', xrange(100), start=0, end=self._num_items)
         self.src_cluster.load_all_buckets_from_generator(gen)
 
         self.src_cluster.resume_all_replications()
 
         self._wait_for_replication_to_catchup()
 
-        goxdcr_log = NodeHelper.get_goxdcr_log_dir(self.src_master)\
+        goxdcr_log = NodeHelper.get_goxdcr_log_dir(self.src_master) \
                      + '/goxdcr.log*'
         for node in self.src_cluster.get_nodes():
             count = NodeHelper.check_goxdcr_log(
-                            node,
-                            "malformed HTTP response",
-                            goxdcr_log)
+                node,
+                "malformed HTTP response",
+                goxdcr_log)
             self.assertEqual(count, 0, "malformed HTTP response error message found in " + str(node.ip))
             self.log.info("malformed HTTP response error message not found in " + str(node.ip))
 
@@ -308,7 +309,7 @@ class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):
         self.setup_xdcr()
         self.src_cluster.pause_all_replications()
 
-        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}',  xrange(100), start=0, end=self._num_items)
+        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}', xrange(100), start=0, end=self._num_items)
         self.src_cluster.load_all_buckets_from_generator(gen)
 
         self.perform_update_delete()
@@ -327,7 +328,7 @@ class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):
         self._join_all_clusters()
         self.src_cluster.pause_all_replications()
 
-        gen = DocumentGenerator('es', '{{"key":"value"}}',  xrange(100), start=0, end=self._num_items)
+        gen = DocumentGenerator('es', '{{"key":"value"}}', xrange(100), start=0, end=self._num_items)
         self.src_cluster.load_all_buckets_from_generator(gen)
 
         self.perform_update_delete()
@@ -349,7 +350,7 @@ class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):
         rest_conn = RestConnection(self.src_master)
         rest_conn.pause_resume_repl_by_id(repl_id, REPL_PARAM.PAUSE_REQUESTED, 'true')
 
-        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}',  xrange(100), start=0, end=self._num_items)
+        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}', xrange(100), start=0, end=self._num_items)
         self.src_cluster.load_all_buckets_from_generator(gen)
 
         self.perform_update_delete()
@@ -367,7 +368,7 @@ class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):
         RestConnection(upgrade_nodes[0]).get_nodes_versions()
         self.sleep(15)
         status, content = ClusterOperationHelper.find_orchestrator(upgrade_nodes[0])
-        self.assertTrue(status, msg="Unable to find orchestrator: {0}:{1}".\
+        self.assertTrue(status, msg="Unable to find orchestrator: {0}:{1}". \
                         format(status, content))
         self.log.info("after rebalance in the master is {0}".format(content))
         find_master = False
@@ -394,7 +395,7 @@ class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):
         RestConnection(upgrade_nodes[0]).get_nodes_versions()
         self.sleep(15)
         status, content = ClusterOperationHelper.find_orchestrator(upgrade_nodes[0])
-        self.assertTrue(status, msg="Unable to find orchestrator: {0}:{1}".\
+        self.assertTrue(status, msg="Unable to find orchestrator: {0}:{1}". \
                         format(status, content))
         self.log.info("after rebalance in the master is {0}".format(content))
         self.log.info("Rebalancing out all old version nodes")
@@ -406,7 +407,7 @@ class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):
         rest_conn = RestConnection(self.src_master)
         rest_conn.pause_resume_repl_by_id(repl_id, REPL_PARAM.PAUSE_REQUESTED, 'true')
 
-        gen = DocumentGenerator('es', '{{"key":"value"}}',  xrange(100), start=0, end=self._num_items)
+        gen = DocumentGenerator('es', '{{"key":"value"}}', xrange(100), start=0, end=self._num_items)
         self.src_cluster.load_all_buckets_from_generator(gen)
 
         self.perform_update_delete()
@@ -422,7 +423,7 @@ class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):
 
         self.src_cluster.pause_all_replications()
 
-        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}',  xrange(100), start=0, end=self._num_items)
+        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}', xrange(100), start=0, end=self._num_items)
         self.src_cluster.load_all_buckets_from_generator(gen)
 
         self.src_cluster.resume_all_replications()
@@ -444,7 +445,7 @@ class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):
 
         self.src_cluster.pause_all_replications()
 
-        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}',  xrange(100), start=0, end=self._num_items)
+        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}', xrange(100), start=0, end=self._num_items)
         self.src_cluster.load_all_buckets_from_generator(gen)
 
         self.src_cluster.resume_all_replications()
@@ -459,14 +460,14 @@ class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):
 
         self._wait_for_replication_to_catchup()
 
-        self._verify_es_results(bucket=bucket)
+        self._verify_es_results()
 
     def test_capi_with_memcached_crash(self):
         self.setup_xdcr()
 
         self.src_cluster.pause_all_replications()
 
-        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}',  xrange(100), start=0, end=self._num_items)
+        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}', xrange(100), start=0, end=self._num_items)
         self.src_cluster.load_all_buckets_from_generator(gen)
 
         self.src_cluster.resume_all_replications()
@@ -481,4 +482,4 @@ class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):
 
         self._wait_for_replication_to_catchup()
 
-        self._verify_es_results(bucket=bucket)
+        self._verify_es_results()
