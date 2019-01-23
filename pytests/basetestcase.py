@@ -1527,6 +1527,7 @@ class BaseTestCase(unittest.TestCase):
                     remote_client = RemoteMachineShellConnection(server)
                     remote_client.change_env_variables(dict)
                 remote_client.disconnect()
+            self.sleep(60,"waiting for server to restart")
             self.log.info("========= CHANGED ENVIRONMENT SETTING ===========")
 
     def reset_env_variables(self):
