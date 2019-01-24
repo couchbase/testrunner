@@ -3363,7 +3363,7 @@ class RemoteMachineShellConnection:
                 filenames = []
             """ for Amazon Linux 2 only"""
             for name in filenames:
-                if name == 'system-release':
+                if name == 'system-release' and os_distro == "":
                     # it's a amazon linux 2_distro . let's download this file
                     filename = 'amazon-linux2-release-{0}'.format(uuid.uuid4())
                     sftp.get(localpath=filename, remotepath='/etc/system-release')
