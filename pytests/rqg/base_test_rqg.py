@@ -346,9 +346,16 @@ class BaseRQGTests(BaseTestCase):
         return table_map
 
     def extract_query_templates(self):
-        self.test_file_path = self.unzip_template(self.test_file_path)
-        with open(self.test_file_path) as f:
-            query_template_list = f.readlines()
+        file_paths = self.test_file_path.split(":")
+        query_template_list = []
+        for file_path in file_paths:
+            file_path = self.unzip_template(file_path)
+            cur_queries_list = []
+            with open(file_path) as f:
+                cur_queries_list = f.readlines()
+            for q in cur_queries_list:
+                query_template_list.append(q)
+
         if self.total_queries is None:
             self.total_queries = len(query_template_list)
         return query_template_list
