@@ -151,7 +151,7 @@ class EventingNegative(EventingBaseTest):
                 self.log.info("deleting bucket: %s",bucket.name)
                 self.rest.delete_bucket(bucket.name)
         # Wait for function to get undeployed automatically
-        self.wait_for_undeployment(body['appname'])
+        self.wait_for_handler_state(body['appname'],"undeployed")
         # Delete the function
         self.delete_function(body)
         self.sleep(60)
@@ -173,7 +173,7 @@ class EventingNegative(EventingBaseTest):
             self.log.info("deleting bucket: %s", bucket.name)
             self.rest.delete_bucket(bucket.name)
         # Wait for function to get undeployed automatically
-        self.wait_for_undeployment(body['appname'])
+        self.wait_for_handler_state(body['appname'],"undeployed")
         # Delete the function
         self.delete_function(body)
         self.sleep(60)
@@ -194,7 +194,7 @@ class EventingNegative(EventingBaseTest):
                 self.log.info("deleting bucket: %s",bucket.name)
                 self.rest.delete_bucket(bucket.name)
         # Wait for function to get undeployed automatically
-        self.wait_for_undeployment(body['appname'])
+        self.wait_for_handler_state(body['appname'],"undeployed")
         # Delete the function
         self.delete_function(body)
         self.sleep(60)
@@ -215,7 +215,7 @@ class EventingNegative(EventingBaseTest):
                 self.log.info("deleting bucket: %s",bucket.name)
                 self.rest.delete_bucket(bucket.name)
         # Wait for function to get undeployed automatically
-        self.wait_for_undeployment(body['appname'])
+        self.wait_for_handler_state(body['appname'],"undeployed")
         # Delete the function
         self.delete_function(body)
         self.sleep(60)

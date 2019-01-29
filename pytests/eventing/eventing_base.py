@@ -292,7 +292,7 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         # return content, content1
         content = self.rest.undeploy_function(body['appname'])
         log.info("Undeploy Application : {0}".format(body['appname']))
-        self.wait_for_undeployment(body['appname'])
+        self.wait_for_handler_state(body['appname'],"undeployed")
         return content
 
     def delete_function(self, body):
@@ -573,12 +573,12 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
 
 
     def wait_for_handler_state(self, name,status,iterations=20):
-        self.sleep(10, message="Waiting for {} to {}...".format(name,status))
+        self.sleep(20, message="Waiting for {} to {}...".format(name,status))
         result = self.rest.get_composite_eventing_status()
         count = 0
         composite_status = None
         while composite_status != status and count < iterations:
-            self.sleep(20)
+            self.sleep(20,"Waiting for {} to {}...".format(name,status))
             result = self.rest.get_composite_eventing_status()
             for i in range(len(result['apps'])):
                 if result['apps'][i]['name'] == name:
