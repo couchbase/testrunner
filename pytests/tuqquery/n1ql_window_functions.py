@@ -1322,8 +1322,8 @@ class WindowFunctionsTest(QueryTests):
     '''
     def test_tcpds_6(self):
         query = "SELECT SUM(decimal_field) AS total_sum,char_field,Rank() OVER ( PARTITION BY char_field ORDER BY SUM(decimal_field) DESC) AS rank_within_parent " \
-                "FROM test_bucket WHERE char_field IN (SELECT char_field FROM (SELECT char_field,Rank() OVER ( PARTITION BY char_field ORDER BY SUM(decimal_field) DESC) AS ranking " \
-                "FROM test_bucket GROUP BY char_field) tmp1 WHERE ranking <= 5) GROUP BY char_field ORDER BY lochierarchy DESC, " \
+                "FROM test_bucket a WHERE char_field IN (SELECT char_field FROM (SELECT char_field,Rank() OVER ( PARTITION BY char_field ORDER BY SUM(decimal_field) DESC) AS ranking " \
+                "FROM test_bucket b GROUP BY char_field) tmp1 WHERE ranking <= 5) GROUP BY char_field ORDER BY lochierarchy DESC, " \
                 "CASE WHEN lochierarchy = 0 THEN s_state END, rank_within_parent LIMIT 100"
         result = self.run_cbq_query(query)
         self.assertEquals(result['status'], 'success')
