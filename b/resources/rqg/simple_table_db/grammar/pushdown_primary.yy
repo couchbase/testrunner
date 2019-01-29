@@ -94,12 +94,12 @@ func:
 numerical_agg:
     MIN |
     MAX |
-    SUM |
+    SUM |;
     aggregate_function |
     COUNT ;
 
 aggregate_function:
-    AVG | STDDEV | VARIANCE | STDDEV_SAMP | STDDEV_POP | VARIANCE_POP | VARIANCE_SAMP | MEAN ;
+    AVG | MEAN ;
 
 
 n:

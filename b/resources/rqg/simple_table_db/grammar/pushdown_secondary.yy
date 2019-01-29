@@ -46,7 +46,7 @@ sel_agg_c:
     COUNT( any_field ) | MIN( any_field ) | MAX( any_field ) | SUM( non_string_field ) | aggregate_function( non_string_field ) ;
 
 aggregate_function:
-    AVG | STDDEV | VARIANCE | STDDEV_SAMP | STDDEV_POP | VARIANCE_POP | VARIANCE_SAMP | MEAN ;
+    AVG | MEAN ;
 
 sel_non_agg:
     GROUPBY_FIELD;
