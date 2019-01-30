@@ -2080,7 +2080,7 @@ class VerifyMetaDataTask(GenericLoadingTask):
 
     def __get_meta_data(self, client, key, collection=None):
         try:
-            mc = client.memcached(key, collection=collection)
+            mc = client.memcached(key)
             meta_data = eval("{'deleted': %s, 'flags': %s, 'expiration': %s, 'seqno': %s, 'cas': %s}" % (mc.getMeta(key, collection=collection)))
             return meta_data
         except MemcachedError as error:
@@ -2154,7 +2154,7 @@ class GetMetaDataTask(GenericLoadingTask):
 
     def __get_meta_data(self, client, key, collection=None):
         try:
-            mc = client.memcached(key, collection=collection)
+            mc = client.memcached(key)
             meta_data = eval("{'deleted': %s, 'flags': %s, 'expiration': %s, 'seqno': %s, 'cas': %s}" % (mc.getMeta(key, collection=collection)))
             return meta_data
         except MemcachedError as error:
