@@ -329,22 +329,14 @@ class EventingBucket(EventingBaseTest):
         body1['depcfg']['source_bucket'] = self.dst_bucket_name
         del body1['depcfg']['buckets'][0]
         body1['depcfg']['buckets'].append({"alias": self.src_bucket_name, "bucket_name": self.src_bucket_name})
-        self.deploy_function(body1)
-        # Wait for eventing to catch up with all the create mutations and verify results
-        # See DOC-3612
-        # self.verify_eventing_results(self.function_name, self.docs_per_day * 4032, skip_stats_validation=True)
-        # self.verify_eventing_results(self.function_name + "_1", self.docs_per_day * 4032, skip_stats_validation=True,
-        #                             bucket=self.src_bucket_name)
-        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                  batch_size=self.batch_size, op_type='delete')
-        self.cluster.load_gen_docs(self.master, self.dst_bucket_name, gen_load_non_json_del, self.buckets[0].kvs[1],
-                                   'delete', compression=self.sdk_compression)
-        # See DOC-3612
-        #self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
-        #self.verify_eventing_results(self.function_name + "_1", 0, skip_stats_validation=True,
-        #                             bucket=self.src_bucket_name)
+        try:
+            self.deploy_function(body1)
+        except Exception as ex:
+            if "ERR_INTER_BUCKET_RECURSION" in str(ex):
+                pass
+            else:
+                raise Exception("No inter bucket recursion observed")
         self.undeploy_and_delete_function(body)
-        self.undeploy_and_delete_function(body1)
 
     def test_eventing_with_ephemeral_buckets_with_eviction_enabled(self):
         # delete src_bucket which will be created as part of setup

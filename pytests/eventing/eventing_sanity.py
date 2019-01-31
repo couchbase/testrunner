@@ -8,17 +8,15 @@ from membase.helper.cluster_helper import ClusterOperationHelper
 class EventingSanity(EventingBaseTest):
     def setUp(self):
         super(EventingSanity, self).setUp()
+        self.rest.set_service_memoryQuota(service='memoryQuota', memoryQuota=700)
         if self.create_functions_buckets:
             self.bucket_size = 200
             log.info(self.bucket_size)
             bucket_params = self._create_bucket_params(server=self.server, size=self.bucket_size,
-                                                       replicas=self.num_replicas)
+                                                       replicas=0)
             self.cluster.create_standard_bucket(name=self.src_bucket_name, port=STANDARD_BUCKET_PORT + 1,
                                                 bucket_params=bucket_params)
             self.src_bucket = RestConnection(self.master).get_buckets()
-            self.bucket_size = 100
-            bucket_params = self._create_bucket_params(server=self.server, size=self.bucket_size,
-                                                       replicas=self.num_replicas)
             self.cluster.create_standard_bucket(name=self.dst_bucket_name, port=STANDARD_BUCKET_PORT + 1,
                                                 bucket_params=bucket_params)
             self.cluster.create_standard_bucket(name=self.metadata_bucket_name, port=STANDARD_BUCKET_PORT + 1,
