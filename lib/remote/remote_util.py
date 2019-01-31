@@ -4768,7 +4768,10 @@ class RemoteMachineShellConnection:
             return None, "Enabling diag/eval on non-local hosts is available only post 5.5.2 or 6.0 releases"
         output, error = self.execute_command(command)
         return output, error
-
+    
+    def update_dist_type(self):
+        output, error = self.execute_command("echo '{{dist_type,inet6_tcp}}.' > {0}".format(LINUX_DIST_CONFIG))
+        self.log_command_output(output, error)
 
 class RemoteUtilHelper(object):
 
