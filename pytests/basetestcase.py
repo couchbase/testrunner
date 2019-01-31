@@ -31,6 +31,7 @@ from couchbase_helper.data_analysis_helper import *
 from testconstants import STANDARD_BUCKET_PORT
 from testconstants import MIN_COMPACTION_THRESHOLD
 from testconstants import MAX_COMPACTION_THRESHOLD
+from testconstants import LINUX_DIST_CONFIG
 from membase.helper.cluster_helper import ClusterOperationHelper
 from security.rbac_base import RbacBase
 
@@ -2244,6 +2245,10 @@ class BaseTestCase(unittest.TestCase):
                     # Delete Path
                     shell.cleanup_data_config(data_path)
                     self.start_server(node)
+                    
+                    # If Ipv6 update dist_cfg file post server restart to change distribution to IPv6
+                    if '.com' in node.ip or ':' in node.ip:
+                        rest.update_dist_type()
                 self.sleep(10)
             except Exception, ex:
                 self.log.info(ex)

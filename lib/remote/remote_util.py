@@ -4852,7 +4852,11 @@ class RemoteMachineShellConnection:
         command = "dd if=/dev/zero of={0}/disk-quota.ext3 count={1}; df -Th".format(location, count)
         output, error = self.execute_command(command)
         return output, error
-
+    
+    def update_dist_type(self):
+        output, error = self.execute_command("echo '{{dist_type,inet6_tcp}}.' > {0}".format(LINUX_DIST_CONFIG))
+        self.log_command_output(output, error)
+        
 class RemoteUtilHelper(object):
 
     @staticmethod
