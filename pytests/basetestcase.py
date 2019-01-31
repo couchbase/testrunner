@@ -2248,7 +2248,8 @@ class BaseTestCase(unittest.TestCase):
                     
                     # If Ipv6 update dist_cfg file post server restart to change distribution to IPv6
                     if '.com' in node.ip or ':' in node.ip:
-                        rest.update_dist_type()
+                        self.log.info("Updating dist_cfg for IPv6 Machines")
+                        shell.update_dist_type()
                 self.sleep(10)
             except Exception, ex:
                 self.log.info(ex)
