@@ -1182,7 +1182,11 @@ class BaseRQGTests(BaseTestCase):
         database_dump = self.data_dump_path+"/db_dump"
         os.mkdir(database_dump)
         f_write_index_file = open(secondary_index_path+"/secondary_index_definitions.txt",'w')
-        client = RQGMySQLClient(database=self.database, host=self.mysql_url, user_id=self.user_id, password=self.password)
+        client = None
+        if self.use_mysql:
+            client = RQGMySQLClient(database=self.database, host=self.mysql_url, user_id=self.user_id, password=self.password)
+        elif self.use_postgres:
+            client = RQGPostgresClient()
         client.dump_database(data_dump_path=database_dump)
         client._close_connection()
         f_write_index_file.write(json.dumps(self.sec_index_map))

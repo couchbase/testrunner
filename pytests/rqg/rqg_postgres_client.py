@@ -11,6 +11,11 @@ import psycopg2.extensions
 #from psycopg2 import
 import itertools
 import re
+import os
+import json
+import shutil
+import zipfile
+from os.path import basename
 from psycopg2 import Timestamp
 
 
@@ -336,3 +341,31 @@ class RQGPostgresClient(PostgresClient):
 
     def _close_connection(self):
         self.connection.close()
+
+    def dump_database(self, data_dump_path="/tmp"):
+        zip_path= data_dump_path+"/database_dump.zip"
+        self.database = "simple_table_db"
+        data_dump_path = data_dump_path+"/"+self.database
+        os.mkdir(data_dump_path)
+        table_key_map = self._get_primary_key_map_for_tables()
+        # Make a list of buckets that we want to create for querying
+        bucket_list = table_key_map.keys()
+        # Read Data from mysql database and populate the couchbase server
+        print "in dump database, reading data from mysql database and populating couchbase server"
+        print "bucket_list is {0}".format(bucket_list)
+        for bucket_name in bucket_list:
+            query = "select * from {0}".format(bucket_name)
+            columns, rows = self._execute_query(query = query)
+            dict = self._gen_json_from_results_with_primary_key(columns, rows, table_key_map[bucket_name])
+            # Take snap-shot of Data in
+            f = open(data_dump_path+"/"+bucket_name+".txt", 'w')
+            f.write(json.dumps(dict))
+            f.close()
+        zipf = zipfile.ZipFile(zip_path, 'w')
+        for root, dirs, files in os.walk(data_dump_path):
+            for file in files:
+                path = os.path.join(root, file)
+                filter_path = path.replace(self.database, "")
+                zipf.write(path, basename(filter_path))
+        shutil.rmtree(data_dump_path)
+
