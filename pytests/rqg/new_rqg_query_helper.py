@@ -1326,11 +1326,17 @@ class RQGQueryHelperNew(BaseRQGQueryHelper):
 
         if 'WINDOW_FRAME_EXCLUSION_START' in sql:
             sql_map['window_frame_exclusion'] = sql[sql.find('WINDOW_FRAME_EXCLUSION_START')+len('WINDOW_FRAME_EXCLUSION_START'):sql.find('WINDOW_FRAME_EXCLUSION_END')]
+
             if sql_map['window_frame'].strip() == '':
                 sql_map['window_frame_exclusion'] = ''
 
             n1ql_map['window_frame_exclusion'] = sql[sql.find('WINDOW_FRAME_EXCLUSION_START')+len('WINDOW_FRAME_EXCLUSION_START'):sql.find('WINDOW_FRAME_EXCLUSION_END')]
             if n1ql_map['window_frame'].strip() == '':
+                n1ql_map['window_frame_exclusion'] = ''
+
+            # PostgreSQL bug
+            if sql_map['window_function_name'].strip() in ['FIRST_VALUE'] and sql_map['window_frame_exclusion'].strip() == 'EXCLUDE TIES':
+                sql_map['window_frame_exclusion'] = ''
                 n1ql_map['window_frame_exclusion'] = ''
 
         converted_sql = 'SELECT char_field1, decimal_field1, '+sql_map['window_function_name']+'('+sql_map['window_function_arguments']+')'+' '+sql_map['nthval_from']+' '+sql_map['nulls_treatment']+\
