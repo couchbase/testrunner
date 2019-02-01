@@ -178,8 +178,8 @@ class QueryAutoPrepareTests(QueryTests):
         query_1 = self.run_cbq_query('select * from system:prepareds where statement = "select * from default"')
         query_2 = self.run_cbq_query('select * from system:prepareds where statement = "select * from default limit 10"')
 
-        self.assertEqual(query_1['metrics']['resultCount'], 1)
-        self.assertEqual(query_2['metrics']['resultCount'], 1)
+        self.assertEqual(query_1['metrics']['resultCount'], 1, "Count mismatch dumping results from system:prepareds: " % query_1)
+        self.assertEqual(query_2['metrics']['resultCount'], 1, "Count mismatch dumping results from system:prepareds: " % query_2)
 
         self.run_cbq_query('select * from default',server=self.master)
         self.run_cbq_query('select * from default limit 10', server=self.master)
@@ -197,7 +197,7 @@ class QueryAutoPrepareTests(QueryTests):
         self.run_cbq_query(query="PREPARE P1 FROM select * from default limit 5", server=self.servers[0])
         self.sleep(2)
         prepared_results = self.run_cbq_query(query="select * from system:prepareds")
-        self.assertEqual(prepared_results['metrics']['resultCount'], 2)
+        self.assertEqual(prepared_results['metrics']['resultCount'], 2, "Count mismatch dumping results from system:prepareds: " % prepared_results)
         query_results = self.run_cbq_query(query="execute P1", server=self.servers[0])
         self.assertEqual(query_results['metrics']['resultCount'], 5)
         query_results2 = self.run_cbq_query(query="execute P1", server=self.servers[1])
@@ -222,11 +222,12 @@ class QueryAutoPrepareTests(QueryTests):
     def test_change_index_delete_docs(self):
         try:
             self.run_cbq_query(query= "CREATE INDEX idx on default(join_day)")
+            self._wait_for_index_online("default", "idx")
             self.run_cbq_query(query="PREPARE P1 FROM select * from default WHERE join_day = 10 limit 5",
                                server=self.servers[0])
             self.sleep(2)
             prepared_results = self.run_cbq_query(query="select * from system:prepareds")
-            self.assertEqual(prepared_results['metrics']['resultCount'], 2)
+            self.assertEqual(prepared_results['metrics']['resultCount'], 2, "Count mismatch dumping results from system:prepareds: " % prepared_results)
             query_results = self.run_cbq_query(query="execute P1", server=self.servers[0])
             self.assertEqual(query_results['metrics']['resultCount'], 5)
             query_results2 = self.run_cbq_query(query="execute P1", server=self.servers[1])
@@ -234,7 +235,7 @@ class QueryAutoPrepareTests(QueryTests):
 
             self.run_cbq_query(query="DELETE FROM default LIMIT 10")
 
-            self.assertEqual(prepared_results['metrics']['resultCount'], 2)
+            self.assertEqual(prepared_results['metrics']['resultCount'], 2, "Count mismatch dumping results from system:prepareds: " % prepared_results)
             query_results = self.run_cbq_query(query="execute P1", server=self.servers[0])
             self.assertEqual(query_results['metrics']['resultCount'], 5)
             query_results2 = self.run_cbq_query(query="execute P1", server=self.servers[1])
@@ -247,26 +248,31 @@ class QueryAutoPrepareTests(QueryTests):
     def test_recreate_index(self):
         try:
             self.run_cbq_query(query="CREATE INDEX idx on default(join_day)")
+            self._wait_for_index_online("default", "idx")
             self.run_cbq_query(query="PREPARE P1 FROM select * from default WHERE join_day = 10 limit 5",
                                server=self.servers[0])
             self.sleep(2)
             prepared_results = self.run_cbq_query(query="select * from system:prepareds")
-            self.assertEqual(prepared_results['metrics']['resultCount'], 2)
+            self.assertEqual(prepared_results['metrics']['resultCount'], 2, "Count mismatch dumping results from system:prepareds: " % prepared_results)
             query_results = self.run_cbq_query(query="execute P1", server=self.servers[0])
             self.assertEqual(query_results['metrics']['resultCount'], 5)
             query_results2 = self.run_cbq_query(query="execute P1", server=self.servers[1])
             self.assertEqual(query_results2['metrics']['resultCount'], 5)
-
+        finally:
             self.run_cbq_query(query="DROP INDEX default.idx")
-            self.sleep(5)
-            self.run_cbq_query(query="CREATE INDEX idx2 on default(join_day)")
+            self.wait_for_index_drop("default", "idx", [("join_day", 0)], self.index_type.lower())
 
+
+        try:
+            self.run_cbq_query(query="CREATE INDEX idx2 on default(join_day)")
+            self._wait_for_index_online("default", "idx2")
             query_results = self.run_cbq_query(query="execute P1", server=self.servers[0])
             self.assertEqual(query_results['metrics']['resultCount'], 5)
             query_results2 = self.run_cbq_query(query="execute P1", server=self.servers[1])
             self.assertEqual(query_results2['metrics']['resultCount'], 5)
         finally:
             self.run_cbq_query(query="DROP INDEX default.idx2")
+            self.wait_for_index_drop("default", "idx2", [("join_day", 0)], self.index_type.lower())
 
     '''Run a prepared statement using primary index, then drop primary index and create a new index that the query will
        use instead'''
@@ -276,16 +282,18 @@ class QueryAutoPrepareTests(QueryTests):
                                server=self.servers[0])
             self.sleep(2)
             prepared_results = self.run_cbq_query(query="select * from system:prepareds")
-            self.assertEqual(prepared_results['metrics']['resultCount'], 2)
+            self.assertEqual(prepared_results['metrics']['resultCount'], 2, "Count mismatch dumping results from system:prepareds: " % prepared_results)
             query_results = self.run_cbq_query(query="execute P1", server=self.servers[0])
             self.assertEqual(query_results['metrics']['resultCount'], 5)
             query_results2 = self.run_cbq_query(query="execute P1", server=self.servers[1])
             self.assertEqual(query_results2['metrics']['resultCount'], 5)
-
+        finally:
             self.run_cbq_query(query="DROP PRIMARY INDEX on default")
             self.sleep(5)
-            self.run_cbq_query(query="CREATE INDEX idx on default(join_day)")
 
+        try:
+            self.run_cbq_query(query="CREATE INDEX idx on default(join_day)")
+            self._wait_for_index_online("default", "idx")
             query_results = self.run_cbq_query(query="execute P1", server=self.servers[0])
             self.assertEqual(query_results['metrics']['resultCount'], 5)
             query_results2 = self.run_cbq_query(query="execute P1", server=self.servers[1])
@@ -298,11 +306,12 @@ class QueryAutoPrepareTests(QueryTests):
     def test_alter_index(self):
         try:
             self.run_cbq_query(query="CREATE INDEX idx on default(join_day) WITH {'nodes':['%s:%s']}" % (self.servers[0].ip, self.servers[0].port))
+            self._wait_for_index_online("default", "idx")
             self.run_cbq_query(query="PREPARE P1 FROM select * from default WHERE join_day = 10 limit 5",
                                server=self.servers[0])
             self.sleep(2)
             prepared_results = self.run_cbq_query(query="select * from system:prepareds")
-            self.assertEqual(prepared_results['metrics']['resultCount'], 2)
+            self.assertEqual(prepared_results['metrics']['resultCount'], 2, "Count mismatch dumping results from system:prepareds: " % prepared_results)
             query_results = self.run_cbq_query(query="execute P1", server=self.servers[0])
             self.assertEqual(query_results['metrics']['resultCount'], 5)
             query_results2 = self.run_cbq_query(query="execute P1", server=self.servers[1])
@@ -329,7 +338,7 @@ class QueryAutoPrepareTests(QueryTests):
                                server=self.servers[0])
             self.sleep(5)
             prepared_results = self.run_cbq_query(query="select * from system:prepareds")
-            self.assertEqual(prepared_results['metrics']['resultCount'], self.nodes_init)
+            self.assertEqual(prepared_results['metrics']['resultCount'], self.nodes_init, "Count mismatch dumping results from system:prepareds: " % prepared_results)
 
             query_results = self.run_cbq_query(query="execute P1", server=self.servers[0])
             self._verify_results(query_results['results'], expected_results['results'])
