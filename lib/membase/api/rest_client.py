@@ -1190,6 +1190,12 @@ class RestConnection(object):
     # defaults at https://github.com/couchbase/goxdcr/metadata/replication_settings.go#L20-L33
     def start_replication(self, replicationType, fromBucket, toCluster, rep_type="xmem", toBucket=None, xdcr_params={}):
         toBucket = toBucket or fromBucket
+
+        # Key based filtering deprecated starting 6.5.0-2216. Filter expression updated accordingly.
+        for key, val in xdcr_params.items():
+            if key == 'filterExpression':
+                xdcr_params[key] = "REGEXP_CONTAINS(META().id, " + "\"" + val + "\")"
+
         msg = "starting {0} replication type:{1} from {2} to {3} in the remote" \
               " cluster {4} with settings {5}"
         log.info(msg.format(replicationType, rep_type, fromBucket, toBucket,
