@@ -322,6 +322,7 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         body['settings']['processing_status'] = True
         if "dcp_stream_boundary" in body['settings']:
             body['settings'].pop('dcp_stream_boundary')
+        log.info("Settings after deleting dcp_stream_boundary : {0}".format(body['settings']))
         self.refresh_rest_server()
         #body['settings']['dcp_stream_boundary'] = "from_prior"
         # save the function so that it is visible in UI
