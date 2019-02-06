@@ -282,9 +282,9 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
             server = self.get_nodes_from_services_map(service_type = "n1ql")
             self.n1ql_helper.run_cbq_query(query = self.query, server = server)
         except Exception, ex:
-            msg="Keyspace not found keyspace not_present_bucket - cause: No bucket named not_present_bucket"
+            msg="Keyspace not found in CB datastore keyspace not_present_bucket - cause: No bucket named not_present_bucket"
             self.assertTrue(msg in str(ex),
-                " 5000 error not recived as expected {0}".format(ex))
+                " 12003 error not recived as expected {0}".format(ex))
 
     def test_failure_drop_index_non_existing_bucket(self):
         query_definition = QueryDefinition(
@@ -298,9 +298,9 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
             server = self.get_nodes_from_services_map(service_type = "n1ql")
             self.n1ql_helper.run_cbq_query(query = self.query, server = server)
         except Exception, ex:
-            msg="Keyspace not found keyspace not_present_bucket - cause: No bucket named not_present_bucket"
+            msg="Keyspace not found in CB datastore keyspace not_present_bucket - cause: No bucket named not_present_bucket"
             self.assertTrue(msg in str(ex),
-                " 5000 error not recived as expected {0}".format(ex))
+                " 12003 error not recived as expected {0}".format(ex))
 
     def test_failure_drop_index_non_existing_index(self):
         query_definition = QueryDefinition(
@@ -396,7 +396,7 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
                 BucketOperationHelper.delete_bucket_or_assert(serverInfo=self.master, bucket=bucket.name)
                 build_task.result()
         except Exception as ex:
-            msg = "Keyspace not found keyspace"
+            msg = "Keyspace not found in CB datastore keyspace default - cause: No bucket named default"
             self.assertIn(msg, str(ex), str(ex))
             log.info("Error while building index Expected...")
 
