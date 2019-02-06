@@ -16,5 +16,6 @@
   "disable_eventing": false,
   "filter_vbuckets": {"enabled": false, "list": []},
   "create_missing_buckets": false,
-  "disable_analytics": false
+  "disable_analytics": false,
+  "disable_ft_alias": false
 }
