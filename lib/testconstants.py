@@ -59,9 +59,14 @@ COUCHBASE_FROM_WATSON = ["0.0.0",
                          "4.6.5", "4.7.0", "5.0.0", "5.0.1", "5.0.2", "5.1.0", "5.1.1",
                          "5.1.2", "5.1.3", "5.5.0", "5.5.1", "5.5.2", "5.5.3", "5.5.4",
                          "6.0.0", "6.0.1", "6.5.0"]
+"""
+    If new version is greater than 5.0.0, we need to add new version to constant
+    COUCHBASE_FROM_SPOCK below so that windows will get correct build (msi) to un/install
+"""
 COUCHBASE_FROM_SPOCK = ["0.0.0", "4.7.0", "5.0.0", "5.0.1", "5.0.2", "5.1.0", "5.1.1",
                         "5.1.2", "5.1.3", "5.5.0", "5.5.1", "5.5.2", "5.5.3", "5.5.4",
                         "6.0.0", "6.0.1", "6.5.0"]
+
 COUCHBASE_FROM_VULCAN = ["0.0.0", "5.5.0", "5.5.1", "5.5.2", "5.5.3", "5.5.4", "6.0.0", "6.0.1",
                          "6.5.0"]
 COUCHBASE_FROM_ALICE = ["0.0.0", "6.0.0", "6.0.1", "6.5.0"]
