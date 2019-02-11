@@ -145,7 +145,7 @@ class BackupRestoreValidations(BackupRestoreValidationBase):
                 split = [s for s in split if s]
                 if int(split[1]) == self.num_items:
                     items_count = True
-            if "shard" in line:
+            if "shard" in line.lower():
                 split = line.split(" ")
                 split = [s for s in split if s]
                 items += int(split[1])
