@@ -15,7 +15,7 @@ from security.rbac_base import RbacBase
 from membase.api.rest_client import RestConnection
 from memcached.helper.data_helper import MemcachedClientHelper
 from remote.remote_util import RemoteMachineShellConnection
-from testconstants import CLI_COMMANDS, COUCHBASE_FROM_SPOCK, \
+from testconstants import CLI_COMMANDS, COUCHBASE_FROM_VULCAN, COUCHBASE_FROM_SPOCK, \
                           COUCHBASE_FROM_WATSON, COUCHBASE_FROM_SHERLOCK,\
                           COUCHBASE_FROM_4DOT6
 from couchbase_helper.documentgenerator import BlobGenerator
@@ -2966,7 +2966,7 @@ class XdcrCLITest(CliBaseTest):
         options += (" --xdcr-password={0}".format(xdcr_password), "")[xdcr_password is None]
         options += (" --xdcr-secure-connection={0}".format(secure_connection))
 
-        if secure_connection != 'none' and xdcr_hostname is not None and xdcr_cert:
+        if secure_connection == 'full' and xdcr_hostname is not None and xdcr_cert:
             if wrong_cert:
                 cluster_host = "localhost"
             else:
@@ -3099,24 +3099,32 @@ class XdcrCLITest(CliBaseTest):
 
             for element in output:
                 self.log.info("element {0}".format(element))
-                if "ERROR: unable to set up xdcr remote site remote (400) Bad Request"\
-                                                                            in element:
+                if "ERROR: unable to set up xdcr remote site remote (400) Bad Request" \
+                        in element:
                     self.log.info("match {0}".format(element))
                     return True
                 elif "Error: hostname (ip) is missing" in element:
                     self.log.info("match {0}".format(element))
                     return True
                 elif self.cb_version[:5] in COUCHBASE_FROM_SPOCK:
-                    if "ERROR: _ - Error checking if target cluster supports SANs in cerificates."\
-                                                                                        in element:
+                    if "ERROR: _ - Error checking if target cluster supports SANs in cerificates." \
+                            in element:
                         self.log.info("match {0}".format(element))
                         return True
                     elif "ERROR: --xdcr-hostname is required to create a cluster connections" \
-                                                                   in element:
+                            in element:
                         self.log.info("match {0}".format(element))
                         return True
                     elif "ERROR: _ - Authentication failed. Verify username and password." \
-                                                                   in element:
+                            in element:
+                        self.log.info("match {0}".format(element))
+                        return True
+                    elif "ERROR: _ - certificate must be a single, PEM-encoded x509 certificate" \
+                            in element:
+                        self.log.info("match {0}".format(element))
+                        return True
+                    elif "ERROR: _ - Invalid remote cluster." \
+                            in element:
                         self.log.info("match {0}".format(element))
                         return True
             self.assertFalse("output string did not match")
@@ -3184,7 +3192,8 @@ class XdcrCLITest(CliBaseTest):
         source_nozzles = self.input.param("source_nozzles", None)
         target_nozzles = self.input.param("target_nozzles", None)
         filter_expression = self.input.param("filter_expression", None)
-        max_replication_lag = self.input.param("max_replication_lag", None)
+        if filter_expression:
+            filter_expression = "REGEXP_CONTAINS(META().id, " + "\"" + filter_expression + "\")"
         timeout_perc_cap = self.input.param("timeout_perc_cap", None)
         _, _, xdcr_cluster_name, xdcr_hostname, _, _ = self.__xdcr_setup_create()
         cli_command = "xdcr-replicate"
