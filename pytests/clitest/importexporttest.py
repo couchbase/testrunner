@@ -1300,6 +1300,8 @@ class ImportExportTests(CliBaseTest):
                         if output:
                             key_value = output[0]
                             key_value = ast.literal_eval(key_value)
+                            if isinstance( key_value["json"], str):
+                                key_value["json"] = ast.literal_eval(key_value["json"])
                             if not isinstance( key_value["json"]["age"], int):
                                 self.fail("Failed to put inferred type into docs %s"
                                           % src_data[x])
