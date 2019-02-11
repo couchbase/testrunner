@@ -690,8 +690,8 @@ class ImportExportTests(CliBaseTest):
             password = server.rest_password
         if self.sample_file is not None:
             cmd = "cbimport"
-            imp_cmd_str = "%s%s%s %s -c %s -u %s -p %s -b %s -d %s -f sample"\
-                             % (self.cli_command_path, cmd, self.cmd_ext, self.imex_type,
+            imp_cmd_str = "{0}{1}{2} {3} -c {4} -u {5} -p {6} -b {7} -d file://{8} -f sample"\
+                             .format(self.cli_command_path, cmd, self.cmd_ext, self.imex_type,
                                          server.ip, username, password, self.sample_file,
                                                                       sample_file_path)
             output, error = self.shell.execute_command(imp_cmd_str)
