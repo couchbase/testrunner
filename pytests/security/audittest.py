@@ -24,6 +24,7 @@ from security.auditmain import audit
 from security.ldaptest import ldaptest
 import socket
 log = logger.Logger.get_logger()
+from ep_mc_bin_client import MemcachedClient
 
 
 class auditTest(BaseTestCase):
@@ -130,6 +131,22 @@ class auditTest(BaseTestCase):
             rest.flush_bucket(expectedResults['bucket_name'])
 
         self.checkConfig(self.eventID, self.master, expectedResults)
+
+    def test_bucket_select_audit(self):
+        # security.audittest.auditTest.test_bucket_select_audit,default_bucket=false,id=20492
+        rest = RestConnection(self.master)
+        rest.create_bucket(bucket='TestBucket', ramQuotaMB=100)
+        time.sleep(30)
+        mc = MemcachedClient(self.master.ip, 11210)
+        mc.sasl_auth_plain(self.master.rest_username, self.master.rest_password)
+        mc.bucket_select('TestBucket')
+
+        expectedResults = {"bucket":"TestBucket","description":"The specified bucket was selected","id":self.eventID,"name":"select bucket" \
+                           ,"peername":"127.0.0.1:46539","real_userid":{"domain":"memcached","user":"@ns_server"},"sockname":"127.0.0.1:11209"}
+        Audit = audit(eventID=self.eventID, host=self.master)
+        actualEvent = Audit.returnEvent(self.eventID)
+        Audit.validateData(actualEvent, expectedResults)
+
 
 
     def test_clusterOps(self):
