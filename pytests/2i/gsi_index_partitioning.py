@@ -3888,10 +3888,11 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         index_map = self.get_index_map()
         self.log.info(index_map)
 
-        if node_out == self.index_servers[0]:
-            rest = RestConnection(self.index_servers[1])
-        else:
-            rest = self.rest
+        if self.node_out > 0:
+            if node_out == self.index_servers[0]:
+                rest = RestConnection(self.index_servers[1])
+            else:
+                rest = self.rest
 
         index_metadata = rest.get_indexer_metadata()
         self.log.info("Indexer Metadata After Build:")

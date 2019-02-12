@@ -28,7 +28,7 @@ class GSIUnhandledIndexItems(BaseSecondaryIndexingTests):
         for bucket in self.buckets:
             testuser.append({'id': bucket.name, 'name': bucket.name, 'password': 'password'})
             rolelist.append({'id': bucket.name, 'name': bucket.name, 'roles': 'admin'})
-        self.add_built_in_server_user(testuser=testuser, rolelist=rolelist)
+            self.add_built_in_server_user(testuser=testuser, rolelist=rolelist)
 
     def tearDown(self):
         super(GSIUnhandledIndexItems, self).tearDown()

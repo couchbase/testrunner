@@ -207,7 +207,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
                 server=self.n1ql_node)
         except Exception, ex:
             log.info(str(ex))
-            if "Create index cannot proceed due to rebalance in progress" not in str(ex):
+            if "Create index or Alter replica cannot proceed due to rebalance in progress" not in str(ex):
                 self.fail("index creation did not fail with expected error : {0}".format(str(ex)))
         else:
             self.fail("index creation did not fail as expected")
@@ -1253,6 +1253,8 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
                 self.fail("rebalance failed with some unexpected error : {0}".format(str(ex)))
         else:
             self.fail("rebalance did not fail after erl crash")
+        # Allow time for the cluster to recover from the failure
+        self.sleep(60)
         self.run_operation(phase="after")
 
     def test_memcache_crash_on_kv_node_during_gsi_rebalance(self):
@@ -2268,7 +2270,8 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         nodes_out_list = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
         # rebalance out a node
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], nodes_out_list)
-        self.run_operation(phase="during")
+        # Queries running while this rebalance operation is going on will fail as the only indexer node is going out.
+        #self.run_operation(phase="during")
         reached = RestHelper(self.rest).rebalance_reached()
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
