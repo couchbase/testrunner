@@ -516,7 +516,7 @@ class CouchbaseCLI:
     def setting_notification(self, enable):
         options = self._get_default_options()
         if enable is not None:
-            options += " --enable-notification " + str(enable)
+            options += " --enable-notifications " + str(enable)
 
         remote_client = RemoteMachineShellConnection(self.server)
         stdout, stderr = remote_client.couchbase_cli("setting-notification",
