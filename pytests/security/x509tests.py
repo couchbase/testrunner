@@ -14,6 +14,7 @@ import os, subprocess
 import copy
 from couchbase.cluster import Cluster
 from couchbase.cluster import PasswordAuthenticator
+from ep_mc_bin_client import MemcachedClient
 
 
 class x509tests(BaseTestCase):
@@ -182,6 +183,19 @@ class x509tests(BaseTestCase):
             except Exception, ex:
                 self.log.info("Expection is  -{0}".format(ex))
         return result
+
+    def test_bucket_select_audit(self):
+        # security.x509tests.x509tests.test_bucket_select_audit
+        eventID = 20492
+        mc = MemcachedClient(self.master.ip, 11210)
+        mc.sasl_auth_plain(self.master.rest_username, self.master.rest_password)
+        mc.bucket_select('default')
+
+        expectedResults = {"bucket":"default","description":"The specified bucket was selected","id":20492,"name":"select bucket" \
+                           ,"peername":"127.0.0.1:46539","real_userid":{"domain":"memcached","user":"@ns_server"},"sockname":"127.0.0.1:11209"}
+        Audit = audit(eventID=eventID, host=self.master)
+        actualEvent = Audit.returnEvent(eventID)
+        Audit.validateData(actualEvent, expectedResults)
 
     def test_basic_ssl_test(self):
         x509main(self.master).setup_master()
