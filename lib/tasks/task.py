@@ -1344,8 +1344,7 @@ class ESRunQueryCompare(Task):
                         if fts_status['successful'] == 0 and \
                                 (list(set(fts_status['errors'].values())) ==
                                     [u'context deadline exceeded'] or
-                                list(set(fts_status['errors'].values())) ==
-                                    [u'TooManyClauses[maxClauseCount is set to 1024]']):
+                                "TooManyClauses" in str(list(set(fts_status['errors'].values())))):
                             # too many clauses in the query for fts to process
                             self.log.info("FTS chose not to run this big query"
                                           "...skipping ES validation")
