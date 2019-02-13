@@ -47,7 +47,7 @@ def decodeCollectionID(key):
 class MemcachedError(exceptions.Exception):
     """Error raised when a command fails."""
 
-    def __init__(self, status, msg):
+    def __init__(self, status, msg=None):
         error_msg = error_to_str(status)
         supermsg = 'Memcached error #' + `status` + ' ' + `error_msg`
         if msg: supermsg += ":  " + msg
