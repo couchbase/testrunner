@@ -19,5 +19,6 @@ generator_methods = {
     # misc
     "string-reserved": "rand_reserved",
     "date": "date_time",
-    "tabs": "tabs"
+    "tabs": "tabs",
+    "name": "rand_name"
 }

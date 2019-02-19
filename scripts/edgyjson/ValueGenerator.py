@@ -1,7 +1,7 @@
 import random
 import string
 import sys
-import time
+import requests
 import datetime
 import collections
 
@@ -120,3 +120,10 @@ class ValueGenerator(object):
 
     def tabs(self, len_min=1, len_max=10):
         return "\t" * random.randint(int(len_min), int(len_max))
+
+    def rand_name(self):
+        name = None
+            #requests.get('http://uinames.com/api')
+        if not name:
+            return "Chuck Norris"
+        return name.json()

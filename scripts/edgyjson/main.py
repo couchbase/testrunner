@@ -19,12 +19,13 @@ import constants
 # Example usage: python main.py -ip 192.168.56.111 -u Administrator -p password -b default -n 5
 
 class JSONDoc(object):
-    def __init__(self, server, username, password, bucket, startseqnum, encoding, num_docs, template):
+    def __init__(self, server, username, password, bucket, startseqnum, randkey, encoding, num_docs, template):
         self.json_objs_dict = {}
         self.template_file = template
         self.encoding = encoding
         self.num_docs = num_docs
         self.startseqnum = startseqnum
+        self.randkey = randkey
         logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
         local = False
         if not server or len(server) < 2:
@@ -63,7 +64,7 @@ class JSONDoc(object):
 
     def printDoc(self):
         for i in range(self.startseqnum, self.startseqnum + self.num_docs):
-            logging.info("generating doc: " + i)
+            logging.info("generating doc: " + str(i))
             self.createContent()
             try:
                 current_dir = os.path.dirname(__file__)
@@ -92,7 +93,14 @@ class JSONDoc(object):
                 else:
                     argsdict = {}
                 val = getattr(valuegen, constants.generator_methods[key])(**argsdict)
-                self.json_objs_dict[key] = val
+                if self.randkey:
+                    func_list = [func for func in dir(valuegen) if
+                                 callable(getattr(valuegen, func)) and not func.startswith("__")]
+                    key = getattr(globals()['ValueGenerator'](), random.choice(func_list))()
+                    # Discard rand keys that are lists or dicts
+                    while isinstance(key,list) or isinstance(key, dict):
+                        key = getattr(globals()['ValueGenerator'](), random.choice(func_list))()
+            self.json_objs_dict[key] = val
 
     def parseargs(self, argsstr):
         argsindex = argsstr.split(',')
@@ -114,6 +122,7 @@ if __name__ == "__main__":
     parser.add_argument('--password', '-p', help='Server password', type=str)
     parser.add_argument('--bucket', '-b', help='Bucket name', type=str)
     parser.add_argument('--startseqnum', '-s', help="Starting document ID prefix", type=int, default=1)
+    parser.add_argument('--randkey', '-rk', help="Randomize keys", type=bool, default=False)
     parser.add_argument('--encoding', '-e', help="JSON Encoding format : utf-8, utf-16, utf-32", type=str,
                         default="utf-8")
     parser.add_argument('--numdocs', '-n', help="Number of documents to generate", type=int, default=1)
@@ -123,5 +132,5 @@ if __name__ == "__main__":
     if args.server and (args.user is None or args.password is None or args.bucket is None):
         logging.error("username, password and bucket name are required")
         sys.exit(0)
-    JSONDoc(args.server, args.user, args.password, args.bucket, args.startseqnum, args.encoding, args.numdocs,
+    JSONDoc(args.server, args.user, args.password, args.bucket, args.startseqnum, args.randkey, args.encoding, args.numdocs,
             args.template)
