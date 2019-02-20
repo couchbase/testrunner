@@ -11,7 +11,7 @@ import math
 import crc32
 import traceback
 import testconstants
-from httplib import IncompleteRead
+from http.client import IncompleteRead
 from threading import Thread
 from memcacheConstants import ERR_NOT_FOUND,NotFoundError
 from membase.api.rest_client import RestConnection, Bucket, RestHelper
@@ -33,7 +33,8 @@ from testconstants import MIN_KV_QUOTA, INDEX_QUOTA, FTS_QUOTA, COUCHBASE_FROM_4
 from multiprocessing import Process, Manager, Semaphore
 import memcacheConstants
 
-
+def cmp(a, b):
+    return (a > b) - (a < b)
 try:
     CHECK_FLAG = False
     if (testconstants.TESTRUNNER_CLIENT in os.environ.keys()) and os.environ[testconstants.TESTRUNNER_CLIENT] == testconstants.PYTHON_SDK:
@@ -270,7 +271,7 @@ class BucketCreateTask(Task):
 
         authType = 'none' if self.password is None else 'sasl'
 
-        if int(info.port) in xrange(9091, 9991):
+        if int(info.port) in range(9091, 9991):
             try:
                 self.port = info.port
                 rest.create_bucket(bucket=self.bucket)
@@ -327,7 +328,7 @@ class BucketCreateTask(Task):
 
     def check(self, task_manager):
         try:
-            if self.bucket_type == 'memcached' or int(self.port) in xrange(9091, 9991):
+            if self.bucket_type == 'memcached' or int(self.port) in range(9091, 9991):
                 self.set_result(True)
                 self.state = FINISHED
                 return
@@ -402,7 +403,7 @@ class RebalanceTask(Task):
 
         try:
             self.rest = RestConnection(self.servers[0])
-        except ServerUnavailableException, e:
+        except ServerUnavailableException as e:
             self.log.error(e)
             self.state = FINISHED
             self.set_exception(e)
@@ -452,10 +453,10 @@ class RebalanceTask(Task):
                 node_index += 1
             if self.use_hostnames:
                 self.rest.add_node(master.rest_username, master.rest_password,
-                                   node.hostname, node.port, services = services_for_node)
+                                   node.hostname, node.port, services =services_for_node)
             else:
                 self.rest.add_node(master.rest_username, master.rest_password,
-                                   node.ip, node.port, services = services_for_node)
+                                   node.ip, node.port, services =services_for_node)
 
     def start_rebalance(self, task_manager):
         nodes = self.rest.node_statuses()
@@ -550,7 +551,7 @@ class RebalanceTask(Task):
             for removed in self.to_remove:
                 try:
                     rest = RestConnection(removed)
-                except ServerUnavailableException, e:
+                except ServerUnavailableException as e:
                     self.log.error(e)
                     continue
                 start = time.time()
@@ -562,7 +563,7 @@ class RebalanceTask(Task):
                             break
                         else:
                             time.sleep(0.1)
-                    except (ServerUnavailableException, IncompleteRead), e:
+                    except (ServerUnavailableException, IncompleteRead) as e:
                         self.log.error(e)
             result = True
             for node in set(self.to_remove) - set(success_cleaned):
@@ -631,11 +632,11 @@ class StatsWaitTask(Task):
         self.set_result(True)
 
     def _stringify_servers(self):
-        return ''.join([`server.ip + ":" + str(server.port)` for server in self.servers])
+        return ''.join(['server.ip + ":" + str(server.port)' for server in self.servers])
 
     def _get_connection(self, server, admin_user='cbadminbucket',admin_pass='password'):
         if not self.conns.has_key(server):
-            for i in xrange(3):
+            for i in range(3):
                 try:
                     self.conns[server] = MemcachedClientHelper.direct_client(server, self.bucket, admin_user=admin_user,
                                                                              admin_pass=admin_pass)
@@ -1690,7 +1691,7 @@ class ValidateDataTask(GenericLoadingTask):
             else:
                 value = json.dumps(value)
                 if d != json.loads(value):
-                    print "the collection is {} for which the value is failing".format(collection)
+                    print ("the collection is {} for which the value is failing".format(collection))
                     self.state = FINISHED
                     self.set_exception(Exception('Key: %s, Bad result: %s != %s for key %s' % (key, json.dumps(d), value, key)))
             if CHECK_FLAG and o != flag:
@@ -1854,12 +1855,12 @@ class BatchedValidateDataTask(GenericLoadingTask):
         partition_keys_dic = self.kv_store.acquire_partitions(keys, bucket, collection=collection)
         try:
             key_vals = self.client.getMulti(keys, parallel=True, timeout_sec=self.timeout_sec, collection=collection)
-        except ValueError, error:
+        except ValueError as error:
             self.state = FINISHED
             self.kv_store.release_partitions(partition_keys_dic.keys())
             self.set_exception(error)
             return
-        except BaseException, error:
+        except BaseException as error:
         # handle all other exception, for instance concurrent.futures._base.TimeoutError
             self.state = FINISHED
             self.kv_store.release_partitions(partition_keys_dic.keys())
@@ -2318,7 +2319,7 @@ class ViewCreateTask(Task):
                        "username" : self.rest.username,
                        "password" : self.rest.password}
 
-            for count in xrange(retry_count):
+            for count in range(retry_count):
                 try:
                     rest_node = RestConnection(server_info)
                     content, meta = rest_node.get_ddoc(self.bucket, self.design_doc_name)
@@ -2803,7 +2804,7 @@ class MonitorViewQueryResultsTask(Task):
                                         len(self.results.get(u'rows', []))))
                 self.state = CHECKING
                 task_manager.schedule(self)
-        except QueryViewException, ex:
+        except QueryViewException as ex:
             self.log.error("During query run (ddoc=%s, query=%s, server=%s) error is: %s" % (
                                 self.design_doc_name, self.query, self.servers[0].ip, str(ex)))
             if self.error and str(ex).find(self.error) != -1:
@@ -2838,7 +2839,7 @@ class MonitorViewQueryResultsTask(Task):
                 if self.results and self.results.get(u'rows', []):
                     res['results'] = self.results
                 self.set_result(res)
-        except Exception, ex:
+        except Exception as ex:
             if self.current_retry == self.retries:
                 self.state = CHECKING
                 self.log.error("view %s, query %s: verifying results" % (
@@ -2950,7 +2951,7 @@ class MonitorViewQueryResultsTask(Task):
                     self.set_result({"passed" : True,
                                      "errors" : []})
         # catch and set all unexpected exceptions
-        except Exception, e:
+        except Exception as e:
             self.state = FINISHED
             self.log.error("Exception caught %s" % str(e))
             self.set_exception(e)
@@ -3358,7 +3359,7 @@ class ViewCompactionTask(Task):
                 self.state = FINISHED
             else:
                 # Sometimes the compacting is not started immediately
-                for i in xrange(17):
+                for i in range(17):
                     time.sleep(3)
                     if self._is_compacting():
                         task_manager.schedule(self, 2)
@@ -3476,7 +3477,7 @@ class GenerateExpectedViewResultsTask(Task):
             self.log.info("Finished generating expected query results")
             self.state = CHECKING
             task_manager.schedule(self)
-        except Exception, ex:
+        except Exception as ex:
             self.state = FINISHED
             self.set_unexpected_exception(e)
 
@@ -3693,7 +3694,7 @@ class GenerateExpectedViewResultsTask(Task):
                             groups[key]['min'] = min(row['value'], groups[key]['min'])
                             groups[key]['sumsqr'] += row['value'] ** 2
             expected_rows = []
-            for group, value in groups.iteritems():
+            for group, value in groups.items():
                 if isinstance(group, str) and group.find("[") == 0:
                     group = group[1:-1].split(",")
                     group = [int(k) for k in group]
@@ -3789,13 +3790,13 @@ class ViewQueryVerificationTask(Task):
 
             self.state = FINISHED
             self.set_result(rc_status)
-        except Exception, ex:
+        except Exception as ex:
             self.state = FINISHED
             try:
                 max_example_result = max(100, len(self.results['rows'] - 1))
                 self.log.info("FIRST %s RESULTS for view %s : %s" % (max_example_result , self.view_name,
                                                                      self.results['rows'][max_example_result]))
-            except Exception, inner_ex:
+            except Exception as inner_ex:
                  self.log.error(inner_ex)
             self.set_result({"passed" : False,
                              "errors" : "ERROR: %s" % ex})
@@ -4000,7 +4001,7 @@ class MonitorDBFragmentationTask(Task):
             else:
                 # try again
                 task_manager.schedule(self, 2)
-        except Exception, ex:
+        except Exception as ex:
             self.state = FINISHED
             self.set_result(False)
             self.set_exception(ex)
@@ -4029,7 +4030,7 @@ class CBRecoveryTask(Task):
             self.shell = RemoteMachineShellConnection(src_server)
             self.info = self.shell.extract_remote_info()
             self.rest = RestConnection(dest_server)
-        except Exception, e:
+        except Exception as e:
             self.log.error(e)
             self.state = FINISHED
             self.set_exception(e)
@@ -4282,7 +4283,7 @@ class MonitorViewCompactionTask(ViewCompactionTask):
                     self.set_result(True)
                 self.state = FINISHED
             else:
-                for i in xrange(10):
+                for i in range(10):
                     time.sleep(3)
                     if self._is_compacting():
                         task_manager.schedule(self, 2)
@@ -4365,7 +4366,7 @@ class MonitorDiskSizeFragmentationTask(Task):
                 task_manager.schedule(self, 5)
             self.log.info("New and Current Disk size is {0} {1}".format(new_disk_size, self.curr_disk_size))
             self.curr_disk_size = new_disk_size
-        except Exception, ex:
+        except Exception as ex:
             self.state = FINISHED
             self.set_result(False)
             self.set_exception(ex)
@@ -4380,7 +4381,7 @@ class CancelBucketCompactionTask(Task):
         self.statuses = {}
         try:
             self.rest = RestConnection(server)
-        except ServerUnavailableException, e:
+        except ServerUnavailableException as e:
             self.log.error(e)
             self.state = FINISHED
             self.set_exception(e)
@@ -4403,7 +4404,7 @@ class CancelBucketCompactionTask(Task):
             last_status = self.statuses.get(node.id)
             try:
                 rest = RestConnection(node)
-            except ServerUnavailableException, e:
+            except ServerUnavailableException as e:
                 self.log.error(e)
                 self.state = FINISHED
                 self.set_exception(e)
@@ -4454,7 +4455,7 @@ class EnterpriseBackupTask(Task):
         self.error = []
         try:
             self.remote_client = RemoteMachineShellConnection(self.backup_host)
-        except Exception, e:
+        except Exception as e:
             self.log.error(e)
             self.state = FINISHED
             self.set_exception(e)
@@ -4474,7 +4475,7 @@ class EnterpriseBackupTask(Task):
             command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, args)
             self.output, self.error = self.remote_client.execute_command(command)
             self.state = CHECKING
-        except Exception, e:
+        except Exception as e:
             self.log.error("Backup cluster failed for unknown reason")
             self.set_exception(e)
             self.state = FINISHED
@@ -4519,7 +4520,7 @@ class EnterpriseRestoreTask(Task):
         self.end = end
         try:
             self.remote_client = RemoteMachineShellConnection(self.backup_host)
-        except Exception, e:
+        except Exception as e:
             self.log.error(e)
             self.state = FINISHED
             self.set_exception(e)
@@ -4548,7 +4549,7 @@ class EnterpriseRestoreTask(Task):
             command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, args)
             self.output, self.error = self.remote_client.execute_command(command)
             self.state = CHECKING
-        except Exception, e:
+        except Exception as e:
             self.log.error("Restore failed for unknown reason")
             self.set_exception(e)
             self.state = FINISHED
@@ -4583,7 +4584,7 @@ class EnterpriseMergeTask(Task):
         self.end = end
         try:
             self.remote_client = RemoteMachineShellConnection(self.backup_host)
-        except Exception, e:
+        except Exception as e:
             self.log.error(e)
             self.state = FINISHED
             self.set_exception(e)
@@ -4603,7 +4604,7 @@ class EnterpriseMergeTask(Task):
             command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, args)
             self.output, self.error = self.remote_client.execute_command(command)
             self.state = CHECKING
-        except Exception, e:
+        except Exception as e:
             self.log.error("Merge failed for unknown reason")
             self.set_exception(e)
             self.state = FINISHED
@@ -4637,7 +4638,7 @@ class EnterpriseCompactTask(Task):
         self.backups = backups
         try:
             self.remote_client = RemoteMachineShellConnection(self.backup_host)
-        except Exception, e:
+        except Exception as e:
             self.log.error(e)
             self.state = FINISHED
             self.set_exception(e)
@@ -4649,7 +4650,7 @@ class EnterpriseCompactTask(Task):
             command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, args)
             self.output, self.error = self.remote_client.execute_command(command)
             self.state = CHECKING
-        except Exception, e:
+        except Exception as e:
             self.log.error("Compact failed for unknown reason")
             self.set_exception(e)
             self.state = FINISHED

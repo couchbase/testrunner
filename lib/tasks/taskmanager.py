@@ -1,5 +1,5 @@
 import time
-import Queue
+import queue as Queue
 
 from threading import Thread
 from tasks.task import Task
@@ -47,5 +47,5 @@ class TaskManager(Thread):
                 try:
                     task = self.readyq.get()
                     task.cancel()
-                except Exception, ex:
+                except Exception as ex:
                     raise ex

@@ -61,7 +61,7 @@ class SocketHelper:
         """
         try:
             return SocketHelper.send_bytes(skt, buf, timeout)
-        except Exception, e:
+        except Exception as e:
             logging.error(e)
 
         return -1
@@ -73,7 +73,7 @@ class SocketHelper:
         """
         try:
             return SocketHelper.recv_bytes(skt, length, timeout)
-        except Exception, e:
+        except Exception as e:
             logging.error(e)
 
         return None

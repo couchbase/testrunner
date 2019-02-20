@@ -13,7 +13,7 @@ from TestInput import TestInputParser
 
 
 def usage(error=None):
-    print """\
+    print("""\
 Syntax: getcoredumps.py [options]
 
 Options
@@ -25,7 +25,7 @@ Available keys:
 
 Example:
  getcoredumps.py -i cluster.ini -p path=/tmp/nosql
-"""
+""")
     sys.exit(error)
 
 
@@ -44,19 +44,19 @@ class Getcoredumps(object):
             info = remote.extract_remote_info()
             if info.type.lower() != 'windows':
                 core_files = []
-                print "looking for crashes on {0} ... ".format(info.ip)
-                print "erl_crash files under /opt/{0}/var/lib/{0}/".format(server_type)
+                print("looking for crashes on {0} ... ".format(info.ip))
+                print("erl_crash files under /opt/{0}/var/lib/{0}/".format(server_type))
                 core_files.extend(remote.file_starts_with("/opt/{0}/var/lib/{0}/".format(server_type), "erl_crash"))
-                print "core* files under /opt/{0}/var/lib/{0}/".format(server_type)
+                print("core* files under /opt/{0}/var/lib/{0}/".format(server_type))
                 core_files.extend(remote.file_starts_with("/opt/{0}/var/lib/{0}/".format(server_type), "core"))
-                print "core* files under /tmp/"
+                print("core* files under /tmp/")
                 core_files.extend(remote.file_starts_with("/tmp/", "core"))
-                print "breakpad *dmp files under /opt/{0}/var/lib/{0}/".format(server_type)
+                print("breakpad *dmp files under /opt/{0}/var/lib/{0}/".format(server_type))
                 core_files.extend(remote.file_ends_with("/opt/{0}/var/lib/{0}/".format(server_type), ".dmp"))
                 if core_files:
-                    print "found crashes on {0}: {1}".format(info.ip, core_files)
+                    print("found crashes on {0}: {1}".format(info.ip, core_files))
                 else:
-                    print "crashes not found on {0}".format(info.ip)
+                    print("crashes not found on {0}".format(info.ip))
                 i = 0
                 for core_file in core_files:
                     if core_file.find('erl_crash.dump') != -1:
@@ -64,23 +64,23 @@ class Getcoredumps(object):
                         erl_crash_file_name = "erlang-{0}-{1}.log".format(self.server.ip, i)
                         remote_path, file_name = os.path.dirname(core_file), os.path.basename(core_file)
                         if remote.get_file(remote_path, file_name, os.path.join(self.path, erl_crash_file_name)):
-                            print 'downloaded core file : {0}'.format(core_file)
+                            print('downloaded core file : {0}'.format(core_file))
                             i += 1
                     elif core_file.find('.dmp') != -1:
                         breakpad_crash_file_name = "breakpad-{0}-{1}.dmp".format(self.server.ip, i)
                         remote_path, file_name = os.path.dirname(core_file), os.path.basename(core_file)
                         if remote.get_file(remote_path, file_name, os.path.join(self.path, breakpad_crash_file_name)):
-                            print 'downloaded breakpad .dmp file : {0}'.format(core_file)
+                            print('downloaded breakpad .dmp file : {0}'.format(core_file))
                             i += 1
                     else:
                         command = "/opt/{0}/bin/tools/cbanalyze-core".format(server_type)
                         core_file_name = "core-{0}-{1}.log".format(self.server.ip, i)
                         core_log_output = "/tmp/{0}".format(core_file_name)
                         output, _ = remote.execute_command('{0} {1} -f {2}'.format(command, core_file, core_log_output))
-                        print output
+                        print(output)
                         remote_path, file_name = os.path.dirname(core_log_output), os.path.basename(core_log_output)
                         if remote.get_file(remote_path, file_name, os.path.join(self.path, core_file_name)):
-                            print 'downloaded core backtrace : {0}'.format(core_log_output)
+                            print('downloaded core backtrace : {0}'.format(core_log_output))
                             i += 1
                 if i > 0:
                     command = "mkdir -p /tmp/backup_crash/{0};" \
@@ -89,18 +89,18 @@ class Getcoredumps(object):
                               "mv -f /opt/{1}/var/lib/{1}/*.dmp /tmp/backup_crash/{0};" \
                               "mv -f /opt/{1}/var/lib/{1}/crash/*.dmp /tmp/backup_crash/{0};".\
                         format(stamp, server_type)
-                    print "put all crashes on {0} in backup folder: /tmp/backup_crash/{1}".format(self.server.ip, stamp)
+                    print("put all crashes on {0} in backup folder: /tmp/backup_crash/{1}".format(self.server.ip, stamp))
                     remote.execute_command(command)
                     output, error = remote.execute_command("ls -la /tmp/backup_crash/{0}".format(stamp))
                     for o in output:
-                        print o
+                        print(o)
                     remote.disconnect()
                     return True
                 if remote:
                     remote.disconnect()
                 return False
         except Exception as ex:
-            print ex
+            print(ex)
             return False
 
 
@@ -119,34 +119,34 @@ class Clearcoredumps(object):
             info = remote.extract_remote_info()
             if info.type.lower() != 'windows':
                 core_files = []
-                print "looking for Erlang/Memcached crashes on {0} ... ".format(info.ip)
+                print("looking for Erlang/Memcached crashes on {0} ... ".format(info.ip))
                 core_files.extend(remote.file_starts_with("/opt/{0}/var/lib/{0}/".format(server_type), "erl_crash"))
                 core_files.extend(remote.file_starts_with("/opt/{0}/var/lib/{0}/".format(server_type), "core"))
                 core_files.extend(remote.file_starts_with("/tmp/", "core"))
                 core_files.extend(remote.file_ends_with("/opt/{0}/var/lib/{0}/crash".format(server_type), ".dmp"))
                 if core_files:
-                    print "found dumps on {0}: {1}".format(info.ip, core_files)
+                    print("found dumps on {0}: {1}".format(info.ip, core_files))
                     command = "mkdir -p /tmp/backup_crash/{0};" \
                               "mv -f /tmp/core* /tmp/backup_crash/{0};" \
                               "mv -f /opt/{1}/var/lib/{1}/erl_crash.dump* /tmp/backup_crash/{0}; " \
                               "mv -f /opt/{1}/var/lib/{1}/crash/*.dmp /tmp/backup_crash/{0};".\
                         format(stamp, server_type)
-                    print "Moved all dumps on {0} to backup folder: /tmp/backup_crash/{1}".format(self.server.ip, stamp)
+                    print("Moved all dumps on {0} to backup folder: /tmp/backup_crash/{1}".format(self.server.ip, stamp))
                     remote.execute_command(command)
                     output, error = remote.execute_command("ls -la /tmp/backup_crash/{0}".format(stamp))
                     for o in output:
-                        print o
+                        print(o)
                     for core_file in core_files:
                         remote_path, file_name = os.path.dirname(core_file), os.path.basename(core_file)
                         if remote.delete_file(remote_path, file_name):
-                            print 'deleted core file : {0}'.format(core_file)
+                            print('deleted core file : {0}'.format(core_file))
                     remote.disconnect()
                 else:
-                    print "dump files not found on {0}".format(info.ip)
+                    print("dump files not found on {0}".format(info.ip))
                     if remote:
                         remote.disconnect()
         except Exception as ex:
-            print ex
+            print(ex)
 
 def main():
     try:
@@ -160,7 +160,7 @@ def main():
             usage("ERROR: no servers specified. Please use the -i parameter.")
     except IndexError:
         usage()
-    except getopt.GetoptError, error:
+    except getopt.GetoptError as error:
         usage("ERROR: " + str(error))
 
     file_path = input.param("path", ".")
@@ -174,10 +174,10 @@ def main():
         while remote_thread.isAlive() and run_time < 1200:
             time.sleep(15)
             run_time += 15
-            print "Waiting for another 15 seconds (time-out after 20 min)"
+            print("Waiting for another 15 seconds (time-out after 20 min)")
         if run_time == 1200:
-            print "collect core dumps hung on this node. Jumping to next node"
-        print "collect core dumps info done"
+            print("collect core dumps hung on this node. Jumping to next node")
+        print("collect core dumps info done")
 
     for remote_thread in remote_threads:
         remote_thread.join(120)

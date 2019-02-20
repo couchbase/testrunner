@@ -69,8 +69,7 @@ class SecondaryIndexingStatsConfigTests(BaseSecondaryIndexingTests):
             else:
                 count = int(count)
             shell.disconnect()
-            self.assertGreater(count, 0, "Password leak found in Indexer {"
-                                         "0}".format(server.ip))
+            self.assertGreater(count, 0, "Password leak found in Indexer {0}".format(server.ip))
 
     def test_get_index_settings(self):
         #Check Index Settings

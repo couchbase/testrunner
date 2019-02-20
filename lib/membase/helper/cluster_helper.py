@@ -9,7 +9,7 @@ import memcacheConstants
 import logger
 import testconstants
 import time
-import Queue
+import queue as Queue
 from threading import Thread
 import traceback
 
@@ -247,7 +247,7 @@ class ClusterOperationHelper(object):
         nodes = rest.node_statuses()
         master_id = rest.get_nodes_self().id
         for node in nodes:
-            if int(node.port) in xrange(9091, 9991):
+            if int(node.port) in range(9091, 9991):
                 rest.eject_node(node)
                 nodes.remove(node)
 

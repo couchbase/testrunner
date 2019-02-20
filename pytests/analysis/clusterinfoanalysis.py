@@ -282,11 +282,11 @@ class DataAnalysisTests(BaseTestCase):
         nodeMap = {}
         logic = True
         output = ""
-        print map1
+        print (map1)
         for bucket in map1.keys():
             for node in map1[bucket].keys():
                 for vbucket in map1[bucket][node].keys():
-                    print map1[bucket][node][vbucket].keys()
+                    print (map1[bucket][node][vbucket].keys())
                     uuid = map1[bucket][node][vbucket]['uuid']
                     if vbucket in map.keys():
                         if  map[vbucket] != uuid:

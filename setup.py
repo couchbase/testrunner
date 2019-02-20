@@ -34,7 +34,7 @@ setup(
     keywords=["encoding", "i18n", "xml"],
     classifiers=[
         "Programming Language :: Python",
-        "Programming Language :: Python :: 2.6",
+        "Programming Language :: Python :: 3.7",
         "Development Status :: 5 - Production/Stable",
         "Environment :: Other Environment",
         "Intended Audience :: Developers",

@@ -37,7 +37,7 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
                     task.result()
                 self.async_multi_drop_index(
                     buckets=self.buckets, query_definitions=self.load_query_definitions)
-            except Exception, ex:
+            except Exception as ex:
                 log.info(ex)
         super(SecondaryIndexingRecoveryTests, self).tearDown()
 
@@ -62,7 +62,7 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             self._check_all_bucket_items_indexed()
             post_recovery_tasks = self.async_run_operations(phase="after")
             self._run_tasks([post_recovery_tasks])
-        except Exception, ex:
+        except Exception as ex:
             log.info(str(ex))
             raise
 
@@ -86,7 +86,7 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             self._check_all_bucket_items_indexed()
             post_recovery_tasks = self.async_run_operations(phase="after")
             self._run_tasks([post_recovery_tasks])
-        except Exception, ex:
+        except Exception as ex:
             log.info(str(ex))
             raise
 
@@ -110,7 +110,7 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             self._check_all_bucket_items_indexed()
             post_recovery_tasks = self.async_run_operations(phase="after")
             self._run_tasks([post_recovery_tasks])
-        except Exception, ex:
+        except Exception as ex:
             log.info(str(ex))
             raise
 
@@ -165,7 +165,7 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             self._check_all_bucket_items_indexed()
             post_recovery_tasks = self.async_run_operations(phase="after")
             self._run_tasks([post_recovery_tasks])
-        except Exception, ex:
+        except Exception as ex:
             log.info(str(ex))
             raise
 
@@ -198,7 +198,7 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             self._check_all_bucket_items_indexed()
             post_recovery_tasks = self.async_run_operations(phase="after")
             self._run_tasks([post_recovery_tasks])
-        except Exception, ex:
+        except Exception as ex:
             log.info(str(ex))
             raise
 
@@ -229,7 +229,7 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             self._check_all_bucket_items_indexed()
             post_recovery_tasks = self.async_run_operations(phase="after")
             self._run_tasks([post_recovery_tasks])
-        except Exception, ex:
+        except Exception as ex:
             log.info(str(ex))
             raise
 
@@ -249,7 +249,7 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             self._run_tasks([kvOps_tasks, mid_recovery_tasks])
             post_recovery_tasks = self.async_run_operations(phase="after")
             self._run_tasks([post_recovery_tasks])
-        except Exception, ex:
+        except Exception as ex:
             log.info(str(ex))
             raise
         finally:
@@ -283,7 +283,7 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             self._check_all_bucket_items_indexed()
             post_recovery_tasks = self.async_run_operations(phase="after")
             self._run_tasks([post_recovery_tasks])
-        except Exception, ex:
+        except Exception as ex:
             log.info(str(ex))
             raise
 
@@ -318,7 +318,7 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             self._check_all_bucket_items_indexed()
             post_recovery_tasks = self.async_run_operations(phase="after")
             self._run_tasks([post_recovery_tasks])
-        except Exception, ex:
+        except Exception as ex:
             log.info(str(ex))
             raise
 
@@ -361,7 +361,7 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             self._check_all_bucket_items_indexed()
             post_recovery_tasks = self.async_run_operations(phase="after")
             self._run_tasks([post_recovery_tasks])
-        except Exception, ex:
+        except Exception as ex:
             log.info(str(ex))
             raise
 
@@ -418,7 +418,7 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             self._check_all_bucket_items_indexed()
             post_recovery_tasks = self.async_run_operations(phase="after")
             self._run_tasks([post_recovery_tasks])
-        except Exception, ex:
+        except Exception as ex:
             log.info(str(ex))
             raise
 
@@ -442,7 +442,7 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
                 try:
                     self.query_using_index(bucket=bucket,
                                            query_definition=query)
-                except Exception, ex:
+                except Exception as ex:
                     msg = "queryport.indexNotFound"
                     if msg in str(ex):
                         continue
@@ -481,7 +481,7 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             self._check_all_bucket_items_indexed()
             post_recovery_tasks = self.async_run_operations(phase="after")
             self._run_tasks([post_recovery_tasks])
-        except Exception, ex:
+        except Exception as ex:
             log.info(str(ex))
             raise
         finally:
@@ -502,7 +502,7 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             self._run_tasks([kvOps_tasks, mid_recovery_tasks])
             post_recovery_tasks = self.async_run_operations(phase="after")
             self._run_tasks([post_recovery_tasks])
-        except Exception, ex:
+        except Exception as ex:
             log.info(str(ex))
             raise
         finally:
@@ -684,8 +684,8 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         log.info("index_map: {0}".format(index_map))
         for index_node in self.index_nodes_out:
             host = "{0}:8091".format(index_node.ip)
-            for index in index_map.itervalues():
-                for keys, vals in index.iteritems():
+            for index in index_map.values():
+                for keys, vals in index.items():
                     if vals["hosts"] == host:
                         lost_indexes.append(keys)
         log.info("Lost Indexes: {0}".format(lost_indexes))

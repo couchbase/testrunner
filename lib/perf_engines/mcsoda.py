@@ -9,7 +9,7 @@ import struct
 import random
 import threading
 import multiprocessing
-import Queue
+import queue as Queue
 import logging
 import logging.config
 from collections import deque
@@ -792,7 +792,7 @@ class Store(object):
             try:
                 bucket = round(self.histo_bucket(delta), 6)
                 histo[bucket] = histo.get(bucket, 0) + 1
-            except TypeError, error:
+            except TypeError as error:
                 self.save_error(error)
                 log.error(error)
 
@@ -877,7 +877,7 @@ class StoreMemcachedBinary(Store):
     def inflight_send(self, inflight_msg):
         try:
             self.conn.s.sendall(inflight_msg)
-        except socket.error, error:
+        except socket.error as error:
             self.retries += 1
             self.save_error(error)
             log.error("%s, retries = %s", error, self.retries)
@@ -896,7 +896,7 @@ class StoreMemcachedBinary(Store):
             try:
                 cmd, keylen, extralen, errcode, datalen, opaque, val, buf = \
                     self.recvMsg()
-            except Exception, error:
+            except Exception as error:
                 self.retries += 1
                 self.save_error(error)
                 log.error("%s, retries = %s", error, self.retries)
@@ -921,7 +921,7 @@ class StoreMemcachedBinary(Store):
         try:
             self.flush()
             return True
-        except ServerUnavailableException, error:
+        except ServerUnavailableException as error:
             self.save_error(error)
             log.error(error)
             self.queue = list()
@@ -1183,7 +1183,7 @@ class StoreMembaseBinary(StoreMemcachedBinary):
                     self.save_error("socket timeout")
                     log.error("socket timeout")
                     break
-                except Exception, error:
+                except Exception as error:
                     self.save_error(error)
                     log.error(error)
                     break
@@ -1223,13 +1223,13 @@ class StoreMembaseBinary(StoreMemcachedBinary):
                             if errcode == ERR_ENOMEM:
                                 log.error("errorcode = ENOMEM")
                             # Don't log backoffs due to ETMPFAIL/EBUSY
-                    except Exception, error:
+                    except Exception as error:
                         self.save_error(error)
                         log.error(error)
                         reset_my_awareness = True
                         backoff = True
                 conn.recvBuf = recvBuf
-            except Exception, error:
+            except Exception as error:
                 self.save_error(error)
                 log.error(error)
                 reset_my_awareness = True
@@ -1248,7 +1248,7 @@ class StoreMembaseBinary(StoreMemcachedBinary):
         if reset_my_awareness:
             try:
                 self.awareness.reset()
-            except Exception, error:
+            except Exception as error:
                 self.save_error("awareness.reset: {0}".format(error))
                 log.error("awareness.reset: %s", error)
 

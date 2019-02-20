@@ -145,7 +145,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
             self.n1ql_helper.run_cbq_query(
                 query=create_index_statement,
                 server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
 
         index_names = []
@@ -184,7 +184,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_statement,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             self.fail("index creation failed with error : {0}".format(str(ex)))
 
@@ -216,7 +216,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_statement,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             self.fail("index creation failed with error : {0}".format(str(ex)))
 
@@ -248,7 +248,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_statement,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             self.fail("index creation failed with error : {0}".format(str(ex)))
 
@@ -277,7 +277,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_statement,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             self.fail("index creation failed with error : {0}".format(str(ex)))
 
@@ -331,7 +331,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
 
                 self.n1ql_helper.run_cbq_query(query=create_index_statement,
                                                server=self.n1ql_node)
-            except Exception, ex:
+            except Exception as ex:
                 self.log.info(str(ex))
 
             self.sleep(10)
@@ -366,7 +366,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
 
                 self.n1ql_helper.run_cbq_query(query=create_index_statement,
                                                server=self.n1ql_node)
-            except Exception, ex:
+            except Exception as ex:
                 self.log.info(str(ex))
 
             self.sleep(10)
@@ -398,7 +398,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
             self.n1ql_helper.run_cbq_query(
                 query=create_index_statement,
                 server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
 
         numpartition_values_str = ["abc", "2018-03-04 18:02:37"]
@@ -410,7 +410,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
                 self.n1ql_helper.run_cbq_query(
                     query=create_index_statement,
                     server=self.n1ql_node)
-            except Exception, ex:
+            except Exception as ex:
                 self.log.info(str(ex))
             else:
                 self.fail(
@@ -426,7 +426,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
                 self.n1ql_helper.run_cbq_query(
                     query=create_index_statement,
                     server=self.n1ql_node)
-            except Exception, ex:
+            except Exception as ex:
                 self.log.info(str(ex))
             else:
                 self.fail(
@@ -438,7 +438,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
             self.n1ql_helper.run_cbq_query(
                 query=create_index_statement,
                 server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             self.fail(
                 "Index did not get created with an double value for num_partition value : 47.6789")
@@ -457,7 +457,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
             self.n1ql_helper.run_cbq_query(
                 query=create_index_statement,
                 server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
 
         index_metadata = self.rest.get_indexer_metadata()
@@ -481,7 +481,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
             self.n1ql_helper.run_cbq_query(
                 query=create_index_statement,
                 server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
 
         index_metadata = self.rest.get_indexer_metadata()
@@ -528,7 +528,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
             self.n1ql_helper.run_cbq_query(
                 query=create_index_statement,
                 server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             self.fail("Failed to create index with one node failed")
 
@@ -561,7 +561,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
             self.n1ql_helper.run_cbq_query(
                 query=create_index_statement,
                 server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             self.fail("Failed to create index with one node failed")
         finally:
@@ -651,7 +651,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
             else:
                 self.log.info(
                     "Cannot retrieve index metadata since one node is down")
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
         finally:
             self.stop_firewall_on_node(node_out)
@@ -706,7 +706,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
             else:
                 self.log.info(
                     "Cannot retrieve index metadata since one node is down")
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
         finally:
             self.stop_firewall_on_node(node_out)
@@ -734,7 +734,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             self.fail("index creation failed with error : {0}".format(str(ex)))
 
@@ -772,7 +772,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         try:
             self.n1ql_helper.run_cbq_query(query=build_index_query,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             self.fail("index building failed with error : {0}".format(str(ex)))
 
@@ -811,7 +811,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             self.fail("index creation failed with error : {0}".format(str(ex)))
 
@@ -846,7 +846,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         try:
             self.n1ql_helper.run_cbq_query(query=build_index_query,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             self.fail("index building failed with error : {0}".format(str(ex)))
 
@@ -910,7 +910,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             self.fail("index creation failed with error : {0}".format(str(ex)))
 
@@ -974,7 +974,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             self.fail("index creation failed with error : {0}".format(str(ex)))
 
@@ -1004,7 +1004,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
             self.sleep(10)
             self.n1ql_helper.run_cbq_query(query=build_index_query,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             if not "Index build will be retried in background" in str(ex):
                 self.fail("index building failed with error : {0}".format(str(ex)))
@@ -1049,7 +1049,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             self.fail(
                 "index creation failed with error : {0}".format(str(ex)))
@@ -1089,7 +1089,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         try:
             self.n1ql_helper.run_cbq_query(query=drop_index_query,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             self.fail(
                 "Drop index failed with error : {0}".format(str(ex)))
@@ -1124,7 +1124,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
                                            server=self.n1ql_node)
             self.n1ql_helper.run_cbq_query(query=create_primary_index_statement,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             self.fail(
                 "index creation failed with error : {0}".format(str(ex)))
@@ -1178,7 +1178,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             self.fail(
                 "index creation failed with error : {0}".format(str(ex)))
@@ -1214,7 +1214,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         try:
             self.n1ql_helper.run_cbq_query(query=drop_index_query,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             self.fail(
                 "Drop index failed with error : {0}".format(str(ex)))
@@ -1259,7 +1259,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             self.fail("index creation failed with error : {0}".format(
                 str(ex)))
@@ -1315,7 +1315,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             self.fail(
                 "index creation failed with error : {0}".format(str(ex)))
@@ -1348,7 +1348,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
             self.sleep(10)
             self.n1ql_helper.run_cbq_query(query=drop_index_query,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as  ex:
             self.log.info(str(ex))
             if not "the operation will automaticaly retry after cluster is back to normal" in str(ex):
                 self.fail(
@@ -1382,7 +1382,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             self.fail(
                 "index creation failed with error : {0}".format(str(ex)))
@@ -1449,7 +1449,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             self.fail(
                 "index creation failed with error : {0}".format(str(ex)))
@@ -1532,7 +1532,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             self.fail(
                 "index creation failed with error : {0}".format(str(ex)))
@@ -1552,7 +1552,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         try:
             self.n1ql_helper.run_cbq_query(query=scan_query,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             if self.num_index_replicas == 0:
                 if self.expected_err_msg in str(ex):
@@ -1572,7 +1572,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             self.fail(
                 "index creation failed with error : {0}".format(str(ex)))
@@ -1586,7 +1586,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         try:
             self.n1ql_helper.run_cbq_query(query=scan_query,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(
                 "Scan failed as one indexer node was experiencing network partititioning. Error : %s",
                 str(ex))
@@ -1599,7 +1599,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         try:
             self.n1ql_helper.run_cbq_query(query=scan_query,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             if self.num_index_replicas:
                 if self.expected_err_msg in str(ex):
@@ -1640,7 +1640,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
             self.n1ql_helper.run_cbq_query(
                 query=create_partitioned_index3_query,
                 server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             self.fail(
                 "index creation failed with error : {0}".format(str(ex)))
@@ -1750,7 +1750,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
                     failures += 1
                     self.log.info(
                         "*** This query does not return same results for partitioned and non-partitioned indexes.")
-            except Exception, ex:
+            except Exception as ex:
                 self.log.info(str(ex))
 
         self.log.info(
@@ -1768,7 +1768,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             if self.expected_err_msg not in str(ex):
                 self.fail(
@@ -1836,7 +1836,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
             self.n1ql_helper.run_cbq_query(
                 query=create_partitioned_index_query,
                 server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             self.fail(
                 "index creation failed with error : {0}".format(str(ex)))
@@ -1888,7 +1888,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
             self.n1ql_helper.run_cbq_query(
                 query=create_partitioned_index_query,
                 server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             self.fail(
                 "index creation failed with error : {0}".format(str(ex)))
@@ -1917,7 +1917,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
             self.n1ql_helper.run_cbq_query(
                 query=create_partitioned_index_query,
                 server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             self.fail(
                 "index creation failed with error : {0}".format(str(ex)))
@@ -1974,7 +1974,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
             self.n1ql_helper.run_cbq_query(
                 query=create_partitioned_index_query,
                 server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             self.fail(
                 "index creation failed with error : {0}".format(str(ex)))
@@ -2032,7 +2032,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
             self.n1ql_helper.run_cbq_query(
                 query=create_partitioned_index_query,
                 server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             self.fail(
                 "index creation failed with error : {0}".format(str(ex)))
@@ -2063,7 +2063,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
             self.n1ql_helper.run_cbq_query(
                 query=create_partitioned_index_query,
                 server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             self.fail(
                 "index creation failed with error : {0}".format(str(ex)))
@@ -2094,7 +2094,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
             self.n1ql_helper.run_cbq_query(
                 query=create_partitioned_index_query,
                 server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             self.fail(
                 "index creation failed with error : {0}".format(str(ex)))
@@ -2134,7 +2134,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
             self.n1ql_helper.run_cbq_query(
                 query=create_partitioned_index_query,
                 server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             self.fail(
                 "index creation failed with error : {0}".format(str(ex)))
@@ -2174,7 +2174,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
             self.n1ql_helper.run_cbq_query(
                 query=create_partitioned_index_query,
                 server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             self.fail(
                 "index creation failed with error : {0}".format(str(ex)))
@@ -2215,7 +2215,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
             self.n1ql_helper.run_cbq_query(
                 query=create_partitioned_index_query,
                 server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             self.fail(
                 "index creation failed with error : {0}".format(str(ex)))
@@ -2244,7 +2244,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
             self.n1ql_helper.run_cbq_query(
                 query=create_partitioned_index_query,
                 server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             self.fail(
                 "index creation failed with error : {0}".format(str(ex)))
@@ -2282,7 +2282,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
             self.n1ql_helper.run_cbq_query(
                 query=create_primary_index_statement,
                 server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
 
         self.sleep(30)
@@ -2381,7 +2381,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
             self.n1ql_helper.run_cbq_query(
                 query=create_primary_index_statement,
                 server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
 
         self.sleep(30)
@@ -2490,7 +2490,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
             self.n1ql_helper.run_cbq_query(
                 query=create_primary_index_statement,
                 server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
 
         self.sleep(30)
@@ -2586,7 +2586,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
             self.n1ql_helper.run_cbq_query(
                 query=create_primary_index_statement,
                 server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
 
         self.sleep(30)
@@ -2630,7 +2630,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
             self.assertTrue(reached, "rebalance failed, stuck or did not complete")
             rebalance.result()
             t1.join()
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
 
         self.sleep(30)
@@ -2688,7 +2688,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
             self.n1ql_helper.run_cbq_query(
                 query=create_primary_index_statement,
                 server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
 
         self.sleep(30)
@@ -2790,7 +2790,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
             self.n1ql_helper.run_cbq_query(
                 query=create_primary_index_statement,
                 server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
 
         self.sleep(30)
@@ -2897,7 +2897,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
             self.n1ql_helper.run_cbq_query(
                 query=create_primary_index_statement,
                 server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
 
         self.sleep(30)
@@ -2977,7 +2977,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
             self.n1ql_helper.run_cbq_query(
                 query=create_index_statement,
                 server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
 
         self.sleep(30)
@@ -3045,7 +3045,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
             self.n1ql_helper.run_cbq_query(
                 query=create_index_statement,
                 server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
 
         self.sleep(30)
@@ -3093,7 +3093,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
                                                                  self,
                                                                  wait_if_warmup=True)
             rebalance.result()
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
 
         # Rerun rebalance
@@ -3153,7 +3153,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
             self.n1ql_helper.run_cbq_query(
                 query=create_index_statement,
                 server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
 
         self.sleep(30)
@@ -3203,7 +3203,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
                                                                  self,
                                                                  wait_if_warmup=True)
             rebalance.result()
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
 
         # Rerun Rebalance
@@ -3259,7 +3259,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
             self.n1ql_helper.run_cbq_query(
                 query=create_index_statement,
                 server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
 
         index_metadata = self.rest.get_indexer_metadata()
@@ -3357,7 +3357,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
             self.n1ql_helper.run_cbq_query(
                 query=create_index_statement,
                 server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
 
         index_metadata = self.rest.get_indexer_metadata()
@@ -3450,7 +3450,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
                                            server=self.n1ql_node)
             self.n1ql_helper.run_cbq_query(query=create_index_query4,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             self.fail(
                 "index creation failed with error : {0}".format(str(ex)))
@@ -3473,7 +3473,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             self.fail(
                 "index creation failed with error : {0}".format(str(ex)))
@@ -3537,7 +3537,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
                                            server=self.n1ql_node)
             self.n1ql_helper.run_cbq_query(query=create_index_query5,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             self.fail(
                 "index creation failed with error : {0}".format(str(ex)))
@@ -3578,7 +3578,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
             self.n1ql_helper.run_cbq_query(
                 query=create_primary_index_statement,
                 server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
 
         self.sleep(30)
@@ -3670,7 +3670,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
             self.n1ql_helper.run_cbq_query(
                 query=create_primary_index_statement,
                 server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
 
         self.sleep(30)
@@ -3761,7 +3761,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             self.fail(
                 "index creation failed with error : {0}".format(str(ex)))
@@ -3774,7 +3774,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         try:
             result_before = self.n1ql_helper.run_cbq_query(query=scan_query, min_output_size=10000000,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             self.fail("Scan failed")
 
@@ -3788,7 +3788,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         try:
             result_after = self.n1ql_helper.run_cbq_query(query=scan_query, min_output_size=10000000,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             self.fail("Scan failed")
 
@@ -3837,7 +3837,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
             for index in index_details:
                 self.n1ql_helper.run_cbq_query(query=index["definition"],
                                                server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             self.fail("index creation failed with error : {0}".format(str(ex)))
 
@@ -3950,7 +3950,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
             for index in index_details:
                 self.n1ql_helper.run_cbq_query(query=index["definition"],
                                                server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             self.fail("index creation failed with error : {0}".format(str(ex)))
 
@@ -3977,7 +3977,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
             remote.stop_couchbase()
             self.sleep(30, "Allow node to be marked as a failed node")
             self._create_backup(kv_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
         finally:
             remote = RemoteMachineShellConnection(node_out)
@@ -4026,7 +4026,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
             for index in index_details:
                 self.n1ql_helper.run_cbq_query(query=index["definition"],
                                                server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             self.fail("index creation failed with error : {0}".format(str(ex)))
 
@@ -4064,7 +4064,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
             remote.stop_couchbase()
             self.sleep(30, "Allow node to be marked as a failed node")
             self._create_restore(kv_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
         finally:
             remote = RemoteMachineShellConnection(node_out)
@@ -4098,7 +4098,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
             for index in index_details:
                 self.n1ql_helper.run_cbq_query(query=index["definition"],
                                                server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             self.fail("index creation failed with error : {0}".format(str(ex)))
 
@@ -4182,7 +4182,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
                 total_items_processed = \
                     index_stats[node][bucket_name][index_name][
                         "num_docs_processed"]
-            except Exception, ex:
+            except Exception as ex:
                 self.log.info(str(ex))
 
         self.log.info(
@@ -4675,7 +4675,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
             try:
                 self.n1ql_helper.run_cbq_query(query=query,
                                                server=self.n1ql_node)
-            except Exception, ex:
+            except Exception as ex:
                 self.log.info(str(ex))
                 raise Exception("query failed")
             self.sleep(1)

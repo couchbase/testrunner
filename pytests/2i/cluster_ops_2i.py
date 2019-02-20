@@ -20,7 +20,7 @@ class SecondaryIndexingClusterOpsTests(BaseSecondaryIndexingTests):
             query_with_explain = self.run_query_with_explain, query = self.run_query)
         #Remove bucket and recreate it
         for bucket in self.buckets:
-        	self.rest.delete_bucket(bucket.name)
+            self.rest.delete_bucket(bucket.name)
         #Verify the result set is empty
         self.verify_index_absence(query_definitions = self.query_definitions, buckets = self.buckets)
 
@@ -67,7 +67,7 @@ class SecondaryIndexingClusterOpsTests(BaseSecondaryIndexingTests):
                 self.multi_query_using_index_with_emptyresult(
                     query_definitions=self.query_definitions, buckets=self.buckets)
                 rollback_exception = False
-            except Exception, ex:
+            except Exception as ex:
                 msg = "Indexer rollback"
                 if msg not in str(ex):
                     rollback_exception = False
@@ -83,7 +83,7 @@ class SecondaryIndexingClusterOpsTests(BaseSecondaryIndexingTests):
             query_with_explain = self.run_query_with_explain, query = self.run_query)
         #Remove bucket and recreate it
         for bucket in self.buckets:
-        	self.rest.delete_bucket(bucket.name)
+            self.rest.delete_bucket(bucket.name)
         self.sleep(2)
         #Flush bucket and recreate it
         self._bucket_creation()
@@ -111,7 +111,7 @@ class SecondaryIndexingClusterOpsTests(BaseSecondaryIndexingTests):
             rebalance.result()
             # get the items in the index and check if the data loss is reflected correctly
             self.sleep(2)
-        except Exception, ex:
+        except Exception as ex:
             raise
         finally:
             self.run_multi_operations(buckets = self.buckets,
@@ -140,7 +140,7 @@ class SecondaryIndexingClusterOpsTests(BaseSecondaryIndexingTests):
             # run compaction and analyze results
             self.run_multi_operations(buckets = self.buckets, query_definitions = self.query_definitions,
                 create_index = True, drop_index = False, query_with_explain = True, query = True)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             raise
         finally:

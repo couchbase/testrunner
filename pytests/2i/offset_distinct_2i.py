@@ -259,7 +259,7 @@ class SecondaryIndexingOffsetTests(BaseSecondaryIndexingTests):
                                     total docs returned does not comply with definition of offset and limit.
                                 '''
                                 self.assertEqual(len(multiscan_result), expected_doc)
-                            except Exception, ex:
+                            except Exception as  ex:
                                 log.info(str(ex))
 
     def test_with_offset_limit_and_with_array_indexes(self):
@@ -334,7 +334,7 @@ class SecondaryIndexingOffsetTests(BaseSecondaryIndexingTests):
         scan_contents.append([{"Seek": None,
                                "Filter": [{"Low": "A", "High": "Z"},
                                           {"Low": 0, "High": 100}]}])
-        for i in xrange(0, self.docs_per_day / 10 + 1):
+        for i in range(0, self.docs_per_day / 10 + 1):
             for bucket in self.buckets:
                 if not id_map:
                     id_map = self.create_index_using_rest(bucket, query_definition)

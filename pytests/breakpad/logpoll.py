@@ -3,7 +3,7 @@ import re
 import time
 import subprocess
 import select
-import Queue
+import queue as Queue
 import threading
 import constants
 
@@ -59,7 +59,7 @@ class NSLogPoller(threading.Thread):
             msg = f.readline()
             while msg:
                 if constants.NS_EXITED_STR in msg: # ns exited
-                  print msg
+                  print (msg)
                   ns_running = False
                   break
                 m = re.search(' /.*/n_'+str(self.index)+'/.*dmp', msg)
@@ -67,20 +67,20 @@ class NSLogPoller(threading.Thread):
                     dmp_path = m.group(0).lstrip()
                     if dmp_path not in existing_dumps:
                         existing_dumps[dmp_path] = True
-                        print dmp_path
+                        print (dmp_path)
                         self.dump_q.put(dmp_path)
 
                 if self.mc_flag and constants.MC_STARTED_STR in msg:
-                    print msg
+                    print (msg)
                     self.event_q.put(msg)
                 if self.compact_flag and constants.COMPACT_STARTED_STR in msg:
-                    print msg
+                    print (msg)
                     self.event_q.put(msg)
                 if self.ns_started_flag and constants.NS_STARTED_STR in msg:
-                    print msg
+                    print (msg)
                     self.event_q.put(msg)
                 if self.rebalance_flag and constants.REBALANCE_STARTED_STR in msg:
-                    print msg
+                    print (msg)
                     self.event_q.put(msg)
 
                 # next msg

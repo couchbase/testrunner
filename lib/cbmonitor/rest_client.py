@@ -1,5 +1,5 @@
 import sys
-import urllib
+import urllib.parse as urllib
 import logging
 
 sys.path.append('lib')

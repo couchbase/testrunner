@@ -246,7 +246,7 @@ class SecondaryIndexMemdbOomTests(BaseSecondaryIndexingTests):
             self._verify_bucket_count_with_index_count(self.load_query_definitions)
             self.multi_query_using_index(buckets=self.buckets,
                                                       query_definitions=self.load_query_definitions)
-        except Exception, ex:
+        except Exception as ex:
             log.info(str(ex))
         finally:
             log.info("Starting Couchbase on {0}".format(kv_node.ip))
@@ -321,7 +321,7 @@ class SecondaryIndexMemdbOomTests(BaseSecondaryIndexingTests):
             task.result()
         if self.defer_build:
             log.info("Building Indexes...")
-            for key, val in index_info.iteritems():
+            for key, val in index_info.items():
                 task = self.async_build_index(bucket=key, index_list=val)
                 build_tasks.append(task)
         self.sleep(10)
@@ -360,7 +360,7 @@ class SecondaryIndexMemdbOomTests(BaseSecondaryIndexingTests):
                                            query_template="", groups=["simple"])
         try:
             self.create_index(self.buckets[0].name, query_definition, self.deploy_node_info)
-        except Exception, ex:
+        except Exception as ex:
             log.info("{0}".format(str(ex)))
 
     def test_oom_create_index(self):
@@ -376,7 +376,7 @@ class SecondaryIndexMemdbOomTests(BaseSecondaryIndexingTests):
         try:
             task = self.async_create_index(self.buckets[0].name, query_definition)
             task.result()
-        except Exception, ex:
+        except Exception as ex:
             log.info("Cannot Create Index om Paused Indexer as expected")
             log.info("{0}".format(str(ex)))
 
@@ -429,8 +429,8 @@ class SecondaryIndexMemdbOomTests(BaseSecondaryIndexingTests):
         host = "{0}:8091".format(self.oomServer.ip)
         rest = RestConnection(self.oomServer)
         index_status = rest.get_index_status()
-        for index in index_status.itervalues():
-            for vals in index.itervalues():
+        for index in index_status.values():
+            for vals in index.values():
                 if vals["status"].lower() != "paused":
                     if vals["hosts"] == host:
                         return False

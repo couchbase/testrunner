@@ -2,9 +2,9 @@
 
 import base64
 import gzip
-from httplib import BadStatusLine
+from http.client import BadStatusLine
 import os
-import urllib2
+import urllib
 import sys
 import threading
 from os.path import basename, splitext
@@ -13,14 +13,16 @@ from pprint import pprint
 sys.path = ["lib", "pytests", "pysystests"] + sys.path
 
 if sys.hexversion < 0x02060000:
-    print "Testrunner requires version 2.6+ of python"
+    print("Testrunner requires version 2.6+ of python")
     sys.exit()
 
 import re
 import time
 import unittest
 import logging.config
-from threading import Thread, Event
+# import _thread as Thread
+from threading import  Thread
+from threading import  Event
 from xunit import XUnitTestResult
 from TestInput import TestInputParser, TestInputSingleton
 from optparse import OptionParser, OptionGroup
@@ -32,13 +34,13 @@ import shutil
 
 
 def usage(err=None):
-    print """\
-Syntax: testrunner [options]
-
-Examples:
-  ./testrunner -i tmp/local.ini -t performance.perf.DiskDrainRate
-  ./testrunner -i tmp/local.ini -t performance.perf.DiskDrainRate.test_9M
-"""
+#     print("""\
+# Syntax: testrunner [options]
+#
+# Examples:
+#   ./testrunner -i tmp/local.ini -t performance.perf.DiskDrainRate
+#   ./testrunner -i tmp/local.ini -t performance.perf.DiskDrainRate.test_9M
+# """)
     sys.exit(0)
 
 
@@ -114,19 +116,19 @@ def append_test(tests, name):
         "test_restore_with_rbac" not in name and \
         "test_backup_with_rbac" not in name and \
          name.find('*') > 0:
-        for t in unittest.TestLoader().loadTestsFromName(name.rstrip('.*')):
+        for t in unittest.TestLoader.loadTestsFromName(name.rstrip('.*')):
             tests.append(prefix + '.' + t._testMethodName)
     else:
         tests.append(name)
 
 
 def locate_conf_file(filename):
-    print "filename: %s" % filename
+    print("filename: %s" % filename)
     if filename:
         if os.path.exists(filename):
-            return file(filename)
+            return open(filename,'r')
         if os.path.exists("conf{0}{1}".format(os.sep, filename)):
-            return file("conf{0}{1}".format(os.sep, filename))
+            return open("conf{0}{1}".format(os.sep, filename),'r')
         return None
 
 
@@ -153,6 +155,7 @@ def parse_conf_file(filename, tests, params):
             ....
     """
     f = locate_conf_file(filename)
+    # print("------------- locate_conf_file----------%s" %f)
     if not f:
         usage("unable to locate configuration file: " + filename)
     prefix = None
@@ -162,7 +165,7 @@ def parse_conf_file(filename, tests, params):
             continue
         if stripped.endswith(":"):
             prefix = stripped.split(":")[0]
-            print "prefix: {0}".format(prefix)
+            print("prefix: {0}".format(prefix))
             continue
         name = stripped
         if prefix and prefix.lower() == "params":
@@ -192,16 +195,17 @@ def create_headers(username, password):
 
 def get_server_logs(input, path):
     for server in input.servers:
-        print "grabbing diags from ".format(server.ip)
+        print("grabbing diags from ".format(server.ip))
         diag_url = "http://{0}:{1}/diag".format(server.ip, server.port)
-        print diag_url
+        print(diag_url)
 
         try:
-            req = urllib2.Request(diag_url)
+            req = urllib.request.Request(diag_url)
             req.headers = create_headers(input.membase_settings.rest_username,
                                          input.membase_settings.rest_password)
             filename = "{0}/{1}-diag.txt".format(path, server.ip)
-            page = urllib2.urlopen(req)
+            page = urllib.request.urlopen(req)
+
             with open(filename, 'wb') as output:
                 os.write(1, "downloading {0} ...".format(server.ip))
                 while True:
@@ -217,40 +221,40 @@ def get_server_logs(input, path):
             zipped.close()
 
             os.remove(filename)
-            print "downloaded and zipped diags @ : {0}".format("{0}.gz".format(filename))
-        except urllib2.URLError:
-            print "unable to obtain diags from %s" % diag_url
+            print("downloaded and zipped diags @ : {0}".format("{0}.gz".format(filename)))
+        except urllib.error.URLError:
+            print("unable to obtain diags from %s" % diag_url)
         except BadStatusLine:
-            print "unable to obtain diags from %s" % diag_url
+            print("unable to obtain diags from %s" % diag_url)
         except Exception as e:
-            print "unable to obtain diags from %s %s" % (diag_url, e)
+            print("unable to obtain diags from %s %s" % (diag_url, e))
 
 def get_logs_cluster_run(input, path, ns_server_path):
-    print "grabbing logs (cluster-run)"
+    print("grabbing logs (cluster-run)")
     path = path or "."
     logs_path = ns_server_path + os.sep + "logs"
     try:
         shutil.make_archive(path + os.sep + "logs", 'zip', logs_path)
     except Exception as e:
-        print "NOT POSSIBLE TO GRAB LOGS (CLUSTER_RUN)"
+        print("NOT POSSIBLE TO GRAB LOGS (CLUSTER_RUN)")
 
 def get_cbcollect_info(input, path):
     for server in input.servers:
-        print "grabbing cbcollect from {0}".format(server.ip)
+        print("grabbing cbcollect from {0}".format(server.ip))
         path = path or "."
         try:
             cbcollectRunner(server, path).run()
         except Exception as e:
-            print "NOT POSSIBLE TO GRAB CBCOLLECT FROM {0}: {1}".format(server.ip, e)
+            print("NOT POSSIBLE TO GRAB CBCOLLECT FROM {0}: {1}".format(server.ip, e))
 
 def get_couch_dbinfo(input, path):
     for server in input.servers:
-        print "grabbing dbinfo from {0}".format(server.ip)
+        print("grabbing dbinfo from {0}".format(server.ip))
         path = path or "."
         try:
             couch_dbinfo_Runner(server, path).run()
         except Exception as e:
-            print "NOT POSSIBLE TO GRAB dbinfo FROM {0}: {1}".format(server.ip, e)
+            print("NOT POSSIBLE TO GRAB dbinfo FROM {0}: {1}".format(server.ip, e))
 
 def clear_old_core_dumps(_input, path):
     for server in _input.servers:
@@ -258,47 +262,98 @@ def clear_old_core_dumps(_input, path):
         try:
             Clearcoredumps(server, path).run()
         except Exception as e:
-            print "Unable to clear core dumps on {0} : {1}".format(server.ip, e)
+            print("Unable to clear core dumps on {0} : {1}".format(server.ip, e))
 
 def get_core_dumps(_input, path):
     ret = False
     for server in _input.servers:
-        print "grabbing core dumps files from {0}".format(server.ip)
+        print("grabbing core dumps files from {0}".format(server.ip))
         path = path or "."
         try:
             if Getcoredumps(server, path).run():
                 ret = True
         except Exception as e:
-            print "NOT POSSIBLE TO GRAB CORE DUMPS FROM {0} : {1}".\
-                format(server.ip, e)
+            print("NOT POSSIBLE TO GRAB CORE DUMPS FROM {0} : {1}".\
+                format(server.ip, e))
     return ret
 
+def perform_cb_collect(_input, log_path=None):
+    import logger
+    log = logger.Logger.get_logger()
+    for node in _input.servers:
+        params = dict()
+        if len(_input.servers) != 1:
+            params['nodes'] = 'ns_1@' + node.ip
+        else:
+            # In case of single node we have to pass ip as below
+            params['nodes'] = 'ns_1@' + '127.0.0.1'
+
+        log.info('Collecting log on node ' + node.ip)
+        rest = RestConnection(node)
+        status, _, _ = rest.perform_cb_collect(params)
+        time.sleep(10)  # This is needed as it takes a few seconds before the collection start
+        log.info('CB collect status on %s is %s' % (node.ip, status))
+
+        log.info('Polling active task endpoint to check CB collect status')
+        if status is True:
+            cb_collect_response = {}
+            while True:
+                content = rest.active_tasks()
+                for response in content:
+                    if response['type'] == 'clusterLogsCollection':
+                        cb_collect_response = response
+                        break
+                if cb_collect_response['status'] == 'completed':
+                    log.info(cb_collect_response)
+                    break
+                else:
+                    time.sleep(10)  # CB collect in progress, wait for 10 seconds and check progress again
+
+            log.info('Copy CB collect ZIP file to Client')
+            remote_client = RemoteMachineShellConnection(node)
+            cb_collect_path = cb_collect_response['perNode'][params['nodes']]['path']
+            zip_file_copied = remote_client.get_file(os.path.dirname(cb_collect_path), os.path.basename(cb_collect_path),
+                                                     log_path)
+            log.info('%s node cb collect zip coped on client : %s' % (node.ip, zip_file_copied))
+
+            if zip_file_copied:
+                remote_client.execute_command("rm -f %s" % cb_collect_path)
+                remote_client.disconnect()
 
 class StoppableThreadWithResult(Thread):
     """Thread class with a stop() method. The thread itself has to check
     regularly for the stopped() condition."""
 
     def __init__(self, group=None, target=None, name=None,
-                 args=(), kwargs=None, verbose=None):
+                 args=(), kwargs=None, daemon=None):
         super(StoppableThreadWithResult, self).__init__(group=group, target=target,
-                        name=name, args=args, kwargs=kwargs, verbose=verbose)
-        self._stop = Event()
+                                                        name=name, args=args, kwargs=kwargs)
+        self.tstop = threading.Event()
+        self.tTarget = target
+        self.tArgs = args
+        self.tKwargs = kwargs
+        self.tReturn= None
 
     def stop(self):
-        self._stop.set()
-        self._Thread__stop()
+        self.tstop.set()
+        # self._Thread__stop()
 
     def stopped(self):
-        return self._stop.isSet()
+        return self.tstop.is_set()
 
     def run(self):
-        if self._Thread__target is not None:
-            self._return = self._Thread__target(*self._Thread__args,
-                                                **self._Thread__kwargs)
+        # print self.tTarget, type(self.tTarget)
+        if self.tTarget is not None:
+            if self.tKwargs is not None:
+                self.tReturn = self.tTarget(*self.tArgs, **self.tKwargs)
+            else:
+                self.tReturn = self.tTarget(*self.tArgs)
+
 
     def join(self, timeout=None):
         Thread.join(self, timeout=None)
-        return self._return
+        return self.tReturn
+
 
 def main():
 
@@ -310,7 +365,7 @@ def main():
     # ensure command line params get higher priority
     runtime_test_params.update(TestInputSingleton.input.test_params)
     TestInputSingleton.input.test_params = runtime_test_params
-    print "Global Test input params:"
+    print("Global Test input params:")
     pprint(TestInputSingleton.input.test_params)
 
     xunit = XUnitTestResult()
@@ -325,9 +380,9 @@ def main():
     results = []
     case_number = 1
     if "GROUP" in runtime_test_params:
-        print "Only cases in GROUPs '{0}' will be executed".format(runtime_test_params["GROUP"])
+        print("Only cases in GROUPs '{0}' will be executed".format(runtime_test_params["GROUP"]))
     if "EXCLUDE_GROUP" in runtime_test_params:
-        print "Cases from GROUPs '{0}' will be excluded".format(runtime_test_params["EXCLUDE_GROUP"])
+        print("Cases from GROUPs '{0}' will be excluded".format(runtime_test_params["EXCLUDE_GROUP"]))
 
     if TestInputSingleton.input.param("get-delays", False):
         # start measure_sched_delays on all servers
@@ -347,12 +402,12 @@ def main():
         if "GROUP" in runtime_test_params and "ALL" not in runtime_test_params["GROUP"].split(";"):
             if 'GROUP' not in params:         # params is the .conf file parameters.
                 # this test is not in any groups so we do not run it
-                print "test '{0}' skipped, a group was requested and this is not any groups".format(name)
+                print("test '{0}' skipped, a group was requested and this is not any groups".format(name))
                 continue
 
             # there is a group for this test case, if that group is not specified at run time then do not run it
             elif len( set(runtime_test_params["GROUP"].split(";")) & set(params["GROUP"].split(";")) ) == 0:
-                print "test '{0}' skipped, is not in the requested group".format(name)
+                print("test '{0}' skipped, is not in the requested group".format(name))
                 continue
             else:
                 pass # the test was in requested group, will run it
@@ -360,7 +415,7 @@ def main():
         elif "EXCLUDE_GROUP" in runtime_test_params:
             if 'GROUP' in params and \
                 len(set(runtime_test_params["EXCLUDE_GROUP"].split(";")) & set(params["GROUP"].split(";"))) > 0:
-                    print "test '{0}' skipped, is in an excluded group".format(name)
+                    print("test '{0}' skipped, is in an excluded group".format(name))
                     continue
 
 
@@ -372,9 +427,9 @@ def main():
         log_config_filename = r'{0}'.format(os.path.join(logs_folder, "test.logging.conf"))
         create_log_file(log_config_filename, test_log_file, options.loglevel)
         logging.config.fileConfig(log_config_filename)
-        print "Logs will be stored at {0}".format(logs_folder)
-        print "\n.{3}testrunner -i {0} -p {1} -t {2}\n"\
-              .format(arg_i or "", arg_p or "", name, os.sep)
+        print("Logs will be stored at {0}".format(logs_folder))
+        print("\n.{3}testrunner -i {0} -p {1} -t {2}\n"\
+              .format(arg_i or "", arg_p or "", name, os.sep))
         name = name.split(",")[0]
 
         # Update the test params for each test
@@ -382,17 +437,19 @@ def main():
         TestInputSingleton.input.test_params.update(runtime_test_params)
         TestInputSingleton.input.test_params["case_number"] = case_number
         TestInputSingleton.input.test_params["logs_folder"] = logs_folder
-        print "Test Input params:"
+        print("Test Input params:")
         print(TestInputSingleton.input.test_params)
         if "get-coredumps" in TestInputSingleton.input.test_params:
             if TestInputSingleton.input.param("get-coredumps", True):
                 clear_old_core_dumps(TestInputSingleton.input, logs_folder)
         if case_number == 1:
-            before_suite_name = "%s.%s" % (name[:name.rfind('.')], BEFORE_SUITE)
+            print("BEFORE PRINTING BEFORE_SUITE_NAME")
+            before_suite_name = "BEFORE_SUIT_NAME : %s.%s" % (name[:name.rfind('.')], BEFORE_SUITE)
+            print("\n\n\nBEFORE PRINTING BEFORE_SUITE_NAME _____ %s \n\n\n"% before_suite_name)
             try:
-                print "Run before suite setup for %s" % name
-                suite = unittest.TestLoader().loadTestsFromName(before_suite_name)
-                result = unittest.TextTestRunner(verbosity=2).run(suite)
+                # print("Run before suite setup for NAME  %s" % name)
+                suite = unittest.TestLoader.loadTestsFromName(before_suite_name,name =name)
+                result = unittest.TextTestRunner(verbosity=2).run(suite())
                 if "get-coredumps" in TestInputSingleton.input.test_params:
                     if TestInputSingleton.input.param("get-coredumps", True):
                         if get_core_dumps(TestInputSingleton.input, logs_folder):
@@ -404,15 +461,15 @@ def main():
             except AttributeError as ex:
                 pass
         try:
-            suite = unittest.TestLoader().loadTestsFromName(name)
-        except AttributeError, e:
-            print "Test {0} was not found: {1}".format(name, e)
+            suite = unittest.TestLoader().loadTestsFromName( name=name)
+        except AttributeError as e:
+            print("Test {0} was not found: {1}".format(name, e))
             result = unittest.TextTestRunner(verbosity=2)._makeResult()
-            result.errors = [(name, e.message)]
-        except SyntaxError, e:
-            print "SyntaxError in {0}: {1}".format(name, e)
+            result.errors = [(name, str(e))]
+        except SyntaxError as e:
+            print("SyntaxError in {0}: {1}".format(name, e))
             result = unittest.TextTestRunner(verbosity=2)._makeResult()
-            result.errors = [(name, e.message)]
+            result.errors = [(name, str(e))]
         else:
             test_timeout = TestInputSingleton.input.param("test_timeout", None)
             t = StoppableThreadWithResult(target=unittest.TextTestRunner(verbosity=2).run,
@@ -431,10 +488,10 @@ def main():
             if not result:
                 for t in threading.enumerate():
                     if t != threading.current_thread():
-                        t._Thread__stop()
+                        t.join()
                 result = unittest.TextTestRunner(verbosity=2)._makeResult()
                 case_number += 1000
-                print ("========TEST WAS STOPPED DUE TO  TIMEOUT=========")
+                print("========TEST WAS STOPPED DUE TO  TIMEOUT=========")
                 result.errors = [(name, "Test was stopped due to timeout")]
         time_taken = time.time() - start_time
 
@@ -484,29 +541,30 @@ def main():
             results.append({"result": "pass", "name": name, "time": time_taken})
         xunit.write("{0}{2}report-{1}".format(os.path.dirname(logs_folder), str_time, os.sep))
         xunit.print_summary()
-        print "testrunner logs, diags and results are available under {0}".format(logs_folder)
+        print("testrunner logs, diags and results are available under {0}".format(logs_folder))
         case_number += 1
         if (result.failures or result.errors) and \
                 TestInputSingleton.input.param("stop-on-failure", False):
-            print "test fails, all of the following tests will be skipped!!!"
+            print("test fails, all of the following tests will be skipped!!!")
             break
 
     after_suite_name = "%s.%s" % (name[:name.rfind('.')], AFTER_SUITE)
     try:
-        print "Run after suite setup for %s" % name
-        suite = unittest.TestLoader().loadTestsFromName(after_suite_name)
-        result = unittest.TextTestRunner(verbosity=2).run(suite)
+
+        print("Run after suite setup for %s" % name)
+        suite = unittest.TestLoader.loadTestsFromName( after_suite_name, name=name)
+        result = unittest.TextTestRunner(verbosity=2).run(suite())
     except AttributeError as ex:
         pass
     if "makefile" in TestInputSingleton.input.test_params:
-        # print out fail for those tests which failed and do sys.exit() error code
+        # printout fail for those tests which failed and do sys.exit() error code
         fail_count = 0
         for result in results:
             if result["result"] == "fail":
-                print result["name"], " fail "
+                print(result["name"], " fail ")
                 fail_count += 1
             else:
-                print result["name"], " pass"
+                print(result["name"], " pass")
         if fail_count > 0:
             sys.exit(1)
 
@@ -517,11 +575,15 @@ def main():
     # terminate any non main thread - these were causing hangs
     for t in threading.enumerate():
         if t.name != 'MainThread':
-            print 'Thread', t.name, 'was not properly terminated, will be terminated now.'
+            print('Thread', t.name, 'was not properly terminated, will be terminated now.')
             if hasattr(t, 'shutdown'):
+                # print("in this condition 1")
                 t.shutdown(True)
+                # t.join()
             else:
-                t._Thread__stop()
+                # print("in this condition 2")
+                sys.exit()
+
 
 
 def watcher():
@@ -538,7 +600,7 @@ def watcher():
             if rc > 0:
                 sys.exit(rc)
         except KeyboardInterrupt:
-            print 'KeyBoardInterrupt'
+            print('KeyBoardInterrupt')
             p.terminate()
     else:
         child = os.fork()
@@ -549,7 +611,7 @@ def watcher():
             if rc > 0:
                 sys.exit( rc )
         except KeyboardInterrupt:
-            print 'KeyBoardInterrupt'
+            print('KeyBoardInterrupt')
             try:
                 os.kill(child, signal.SIGKILL)
             except OSError:

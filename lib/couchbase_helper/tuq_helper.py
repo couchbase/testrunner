@@ -15,6 +15,9 @@ from membase.api.exception import CBQError, ReadDocumentException
 from membase.api.rest_client import RestConnection
 import copy
 
+def cmp(a, b):
+    return (a > b) - (a < b)
+
 class N1QLHelper():
     def __init__(self, version=None, master=None, shell=None,  max_verify=0, buckets=[], item_flag=0,
                  n1ql_port=8093, full_docs_list=[], log=None, input=None, database=None, use_rest=None):
@@ -84,14 +87,14 @@ class N1QLHelper():
             if "#primary" in query:
                 query = query.replace("'#primary'", '\\"#primary\\"')
             query = "select curl('POST', " + url + ", {'data' : 'statement=%s'})" % query
-            print query
+            print (query)
             output = shell.execute_commands_inside(cmd, query, "", "", "", "", "")
-            print "-"*128
-            print output
+            print ("-"*128)
+            print (output)
             new_curl = json.dumps(output[47:])
             string_curl = json.loads(new_curl)
             result = json.loads(string_curl)
-            print result
+            print (result)
         if isinstance(result, str) or 'errors' in result:
             error_result = str(result)
             length_display = len(error_result)
@@ -153,8 +156,8 @@ class N1QLHelper():
                                 x['char_field1'] != y['char_field1'] or \
                                 x['int_field1'] != y['int_field1'] or \
                                 x['bool_field1'] != y['bool_field1']:
-                    print "actual_result is %s" % actual_result
-                    print "expected result is %s" % expected_result
+                    print ("actual_result is %s" % actual_result)
+                    print ("expected result is %s" % expected_result)
                     extra_msg = self._get_failure_message(expected_result, actual_result)
                     raise Exception(msg+"\n "+extra_msg)
         else:
@@ -280,7 +283,7 @@ class N1QLHelper():
             if value == '':
                 return 0
             value = int(val.split("(")[1].split(")")[0])
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(ex)
         finally:
             return value
@@ -349,7 +352,7 @@ class N1QLHelper():
                 couchbase_path = testconstants.WIN_COUCHBASE_BIN_PATH
             if self.input.tuq_client and "sherlock_path" in self.input.tuq_client:
                 couchbase_path = "%s/bin" % self.input.tuq_client["sherlock_path"]
-                print "PATH TO SHERLOCK: %s" % couchbase_path
+                print ("PATH TO SHERLOCK: %s" % couchbase_path)
             if os == 'windows':
                 cmd = "cd %s; " % (couchbase_path) +\
                 "./cbq-engine.exe -datastore http://%s:%s/ >/dev/null 2>&1 &" % (server.ip, server.port)
@@ -386,7 +389,7 @@ class N1QLHelper():
         actual_result = []
         for item in result:
             curr_item = {}
-            for key, value in item.iteritems():
+            for key, value in item.items():
                 if isinstance(value, list) or isinstance(value, set):
                     curr_item[key] = sorted(value)
                 else:
@@ -416,7 +419,7 @@ class N1QLHelper():
                 check = self._is_index_in_list(bucket.name, "#primary", server = server)
                 if check:
                     self.run_cbq_query(server=server)
-            except Exception, ex:
+            except Exception as ex:
                 self.log.error('ERROR during index creation %s' % str(ex))
 
     def create_primary_index(self, using_gsi=True, server=None):
@@ -438,7 +441,7 @@ class N1QLHelper():
                             raise Exception(" Timed-out Exception while building primary index for bucket {0} !!!".format(bucket.name))
                     else:
                         raise Exception(" Primary Index Already present, This looks like a bug !!!")
-                except Exception, ex:
+                except Exception as ex:
                     self.log.error('ERROR during index creation %s' % str(ex))
                     raise ex
 
@@ -468,7 +471,7 @@ class N1QLHelper():
                     else:
                         raise Exception(
                             " Primary Index Already present, This looks like a bug !!!")
-                except Exception, ex:
+                except Exception as ex:
                     self.log.error('ERROR during index creation %s' % str(ex))
                     raise ex
 
@@ -506,7 +509,7 @@ class N1QLHelper():
                 else:
                     return "ran query with success and validated results", True
                 check = True
-            except Exception, ex:
+            except Exception as ex:
                 if next_time - init_time > timeout or try_count >= max_try:
                     return ex, False
             finally:
@@ -686,7 +689,7 @@ class N1QLHelper():
                 map[val["_id"]] = val
             keys = map.keys()
             keys.sort()
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(ex)
             raise
         if len(duplicate_keys) > 0:
@@ -801,11 +804,11 @@ class N1QLHelper():
         for node in host_names_after_rebalance:
             index_distribution_map_after_rebalance[node] = index_distribution_map_after_rebalance.get(node, 0) + 1
         self.log.info("Distribution of indexes before rebalance")
-        for k, v in index_distribution_map_before_rebalance.iteritems():
-            print k, v
+        for k, v in index_distribution_map_before_rebalance.items():
+            print (k, v)
         self.log.info("Distribution of indexes after rebalance")
-        for k, v in index_distribution_map_after_rebalance.iteritems():
-            print k, v
+        for k, v in index_distribution_map_after_rebalance.items():
+            print (k, v)
 
     def verify_replica_indexes(self, index_names, index_map, num_replicas, expected_nodes=None):
         # 1. Validate count of no_of_indexes
@@ -824,7 +827,7 @@ class N1QLHelper():
                 try:
                     index_replica_hostname, index_replica_id = self.get_index_details_using_index_name(
                         index_replica_name, index_map)
-                except Exception, ex:
+                except Exception as ex:
                     self.log.info(str(ex))
                     raise Exception(str(ex))
 
@@ -867,7 +870,7 @@ class N1QLHelper():
                 index_replica_name = index_name + " (replica {0})".format(str(i))
                 try:
                     index_replica_status, index_replica_progress = self.get_index_status_using_index_name(index_replica_name, index_map)
-                except Exception, ex:
+                except Exception as ex:
                     self.log.info(str(ex))
                     raise Exception(str(ex))
 
@@ -881,14 +884,14 @@ class N1QLHelper():
                     self.log.info("index_name = %s, defer_build = %s, index_replica_status = %s" % (index_replica_name, defer_build, index_status))
 
     def get_index_details_using_index_name(self, index_name, index_map):
-        for key in index_map.iterkeys():
+        for key in index_map.keys():
             if index_name in index_map[key].keys():
                 return index_map[key][index_name]['hosts'], index_map[key][index_name]['id']
             else:
                 raise Exception ("Index does not exist - {0}".format(index_name))
 
     def get_index_status_using_index_name(self, index_name, index_map):
-        for key in index_map.iterkeys():
+        for key in index_map.keys():
             if index_name in index_map[key].keys():
                 return index_map[key][index_name]['status'], \
                        index_map[key][index_name]['progress']

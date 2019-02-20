@@ -76,8 +76,8 @@ class BreakpadVerifyDumpTests(BreakpadBase):
             assert rc, "Did not kill mc"
             # get restart msg
 	    msg = logp.getEventQItem()
-	    assert msg
-            crashes += 1
+        assert msg
+        crashes += 1
 
         logp.setMcEventFlag(False)
         while True:

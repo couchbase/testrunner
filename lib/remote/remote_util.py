@@ -2,7 +2,7 @@ import os
 import re
 import sys
 import copy
-import urllib
+import urllib.request as urllib
 import uuid
 import time
 import logging
@@ -686,7 +686,7 @@ class RemoteMachineShellConnection:
 
     def configure_log_location(self, new_log_location):
         mv_logs = testconstants.LINUX_LOG_PATH + '/' + new_log_location
-        print " MV LOGS %s" % mv_logs
+        print(" MV LOGS %s" % mv_logs)
         error_log_tag = "error_logger_mf_dir"
         # ADD NON_ROOT user config_details
         log.info("CHANGE LOG LOCATION TO %s".format(mv_logs))
@@ -1336,7 +1336,7 @@ class RemoteMachineShellConnection:
             sftp.get(rem_path, des_path)
         except IOError as e:
             if e:
-                print e
+                print(e)
             log.error('Can not copy file')
         finally:
             sftp.close()
@@ -1698,7 +1698,7 @@ class RemoteMachineShellConnection:
         sftp = self._ssh_client.open_sftp()
         try:
             sftp.stat(remote_path)
-        except IOError, e:
+        except IOError as e:
             if e[0] == 2:
                 log.info("Directory at {0} DOES NOT exist. We will create on here".format(remote_path))
                 sftp.mkdir(remote_path)
@@ -1748,7 +1748,7 @@ class RemoteMachineShellConnection:
         log.info('/tmp/{0} or /tmp/{1}'.format(build.name, build.product))
         command = ''
         if self.info.type.lower() == 'windows':
-                print "build name in couchbase upgrade    ", build.product_version
+                print("build name in couchbase upgrade    ", build.product_version)
                 self.couchbase_upgrade_win(self.info.architecture_type, \
                                      self.info.windows_name, build.product_version)
                 log.info('********* continue upgrade process **********')
@@ -2688,11 +2688,11 @@ class RemoteMachineShellConnection:
                 if self.nonroot:
                     """ check if old files from root install left in server """
                     if self.file_exists(LINUX_CB_PATH + "etc/couchdb/", "local.ini.debsave"):
-                        print " ***** ERROR: ***** \n"\
+                        print(" ***** ERROR: ***** \n"\
                               "Couchbase Server files was left by root install at %s .\n"\
                               "Use root user to delete them all at server %s "\
                               " (rm -rf /opt/couchbase) to remove all couchbase folder.\n" \
-                              % (LINUX_CB_PATH, self.ip)
+                              % (LINUX_CB_PATH, self.ip))
                         sys.exit(1)
                     self.stop_server()
                 else:
@@ -2719,10 +2719,10 @@ class RemoteMachineShellConnection:
                 if self.nonroot:
                     """ check if old files from root install left in server """
                     if self.file_exists(LINUX_CB_PATH + "etc/couchdb/", "local.ini.rpmsave"):
-                        print "Couchbase Server files was left by root install at %s .\n"\
+                        print("Couchbase Server files was left by root install at %s .\n"\
                                "Use root user to delete them all at server %s "\
                                " (rm -rf /opt/couchbase) to remove all couchbase folder.\n" \
-                               % (LINUX_CB_PATH, self.ip)
+                               % (LINUX_CB_PATH, self.ip))
                         sys.exit(1)
                     self.stop_server()
                 else:
@@ -3140,7 +3140,7 @@ class RemoteMachineShellConnection:
             p = Popen(main_command , shell=True, stdout=PIPE, stderr=PIPE)
             stdout, stderro = p.communicate()
             output = stdout
-            print output
+            print(output)
             time.sleep(1)
         # for cmd in subcommands:
         #       log.info("running command {0} inside {1} ({2})".format(
@@ -3296,7 +3296,7 @@ class RemoteMachineShellConnection:
                     file = open(filename)
                     etc_issue = ''
                     # let's only read the first line
-                    for line in file.xreadlines():
+                    for line in file.readlines():
                         # for SuSE that has blank first line
                         if line.rstrip('\n'):
                             etc_issue = line
@@ -3372,7 +3372,7 @@ class RemoteMachineShellConnection:
                         var, err = p.communicate()
                     file = open(filename)
                     redhat_release = ''
-                    for line in file.xreadlines():
+                    for line in file.readlines():
                         redhat_release = line
                         break
                     redhat_release = redhat_release.rstrip('\n').rstrip('\\l').rstrip('\\n')
@@ -3425,7 +3425,7 @@ class RemoteMachineShellConnection:
                 text, err = p.communicate()
                 os_arch = ''
             for line in text:
-                os_arch += line
+                os_arch += str(line)
                 # at this point we should know if its a linux or windows ditro
             ext = { 'Ubuntu' : "deb",
                    'CentOS'  : "rpm",
@@ -3691,7 +3691,7 @@ class RemoteMachineShellConnection:
             for line in output:
                 size = line.strip().split('\t')
                 if size[0].isdigit():
-                    print size[0]
+                    print(size[0])
                     return size[0]
                 else:
                     return 0
@@ -4665,9 +4665,9 @@ class RemoteMachineShellConnection:
                 else:
                     log.info("*** You need to set rest password at ini file ***")
                     rest_password = "password"
-            except Exception, ex:
+            except Exception as ex:
                 if ex:
-                    print ex
+                    print(ex)
                 pass
             self.extract_remote_info()
             if self.info.type.lower() != 'windows':
@@ -4715,7 +4715,7 @@ class RemoteMachineShellConnection:
 
     def stop_current_python_running(self, mesg):
         os.system("ps aux | grep python | grep %d " % os.getpid())
-        print mesg
+        print(mesg)
         self.sleep(5, "==== delay kill pid %d in 5 seconds to printout message ==="\
                                                                       % os.getpid())
         os.system('kill %d' % os.getpid())

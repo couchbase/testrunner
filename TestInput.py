@@ -2,7 +2,7 @@ import getopt
 import re
 from builds.build_query import BuildQuery
 import logger
-import ConfigParser
+import configparser
 import os
 import collections
 
@@ -129,7 +129,7 @@ class TestInputParser():
         ini_file = ''
         for option, argument in opts:
             if option == '-h':
-                print 'usage'
+                print('usage')
                 return
             if option == '-i':
                 has_ini = True
@@ -139,7 +139,7 @@ class TestInputParser():
                 # converts to a dictionary of the form {"p1":"v1,v2","p2":"v3","p3":"v4,v5,v6"}
                 argument_split = [a.strip() for a in re.split("[,]?([^,=]+)=", argument)[1:]]
                 pairs = dict(zip(argument_split[::2], argument_split[1::2]))
-                for pair in pairs.iteritems():
+                for pair in pairs.items():
                     if pair[0] == "vbuckets":
                         # takes in a string of the form "1-100,140,150-160"
                         # converts to an array with all those values inclusive
@@ -179,7 +179,7 @@ class TestInputParser():
         servers = []
         ips = []
         input = TestInput()
-        config = ConfigParser.ConfigParser()
+        config = configparser.ConfigParser()
         config.read(file)
         sections = config.sections()
         global_properties = {}
@@ -442,7 +442,7 @@ class TestInputParser():
             need_help = False
             for option, argument in opts:
                 if option == "-h":
-                    print 'usage...'
+                    print('usage...')
                     need_help = True
                     break
             if need_help:

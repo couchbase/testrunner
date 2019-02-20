@@ -105,7 +105,7 @@ class SecondaryIndexingLoadBalancingTests(BaseSecondaryIndexingTests):
                 self.assertTrue(expected_index_count_per_node == total_indexes_per_node,
                  " Index not correctly distributed || expected :: {0} != actual :: {1} \n with index map is {2} ".format(
                     expected_index_count_per_node,total_indexes_per_node,index_map))
-        except Exception, ex:
+        except Exception as ex:
             raise
         finally:
             self.run_multi_operations(buckets = self.buckets, query_definitions = self.query_definitions, create_index = False, drop_index = True)
@@ -134,7 +134,7 @@ class SecondaryIndexingLoadBalancingTests(BaseSecondaryIndexingTests):
                 self.assertTrue(expected_index_count_per_node == total_indexes_per_node,
                  " Index not correctly distributed || expected :: {0} != actual :: {1} \n with index map is {2} ".format(
                     expected_index_count_per_node, total_indexes_per_node,index_map))
-        except Exception, ex:
+        except Exception as ex:
             raise
         finally:
             self.run_multi_operations(buckets = self.buckets, query_definitions = self.query_definitions, create_index = False, drop_index = True)
@@ -165,7 +165,7 @@ class SecondaryIndexingLoadBalancingTests(BaseSecondaryIndexingTests):
                 self.assertTrue(expected_index_count_per_node == total_indexes_per_node,
                  " Index not correctly distributed || expected :: {0} != actual :: {1} \n with index map is {2} ".format(
                     expected_index_count_per_node,total_indexes_per_node,index_map))
-        except Exception, ex:
+        except Exception as ex:
             raise
         finally:
             self.run_multi_operations(buckets = self.buckets, query_definitions = delete_query_definitions, create_index = False, drop_index = True)
@@ -220,7 +220,7 @@ class SecondaryIndexingLoadBalancingTests(BaseSecondaryIndexingTests):
                             count += 1
                         self.assertTrue(index_map[node][bucket_name][index_name]['total_scan_duration']  > 0,
                                         " scan did not happen at node {0}".format(node))
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             raise
         finally:

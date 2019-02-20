@@ -83,7 +83,7 @@ class LoadThread(threading.Thread):
         self.limit_time = int(load_info['limit_info'].get('time', 0))
         self.limit_size = int(load_info['limit_info'].get('size', 0) / threads)
         self.poxi = self._poxi()
-        print "now connected to {0} memcacheds".format(len(self.poxi.memcacheds))
+        print ("now connected to {0} memcacheds".format(len(self.poxi.memcacheds)))
         # connect
         #self.server should be vbucketaware memcached
 #        self.server = mc_bin_client.MemcachedClient(self.server_ip, self.server_port)
@@ -133,9 +133,9 @@ class LoadThread(threading.Thread):
             # do the actual work
             operation = self.get_operation()
             if operation == 'set':
-                key = self.name + '_' + `self.get_mutation_key()`
+                key = self.name + '_' + 'self.get_mutation_key()'
                 try:
-#                    print `self.mutation_index` + " : " + `self.get_mutation_key()`
+#                    print 'self.mutation_index' + " : " + 'self.get_mutation_key()'
                     self.poxi.memcached(key).set(key, 0, 0, self.get_data())
                     self.operations += 1
                     self.backoff -= 1
@@ -160,7 +160,7 @@ class LoadThread(threading.Thread):
                 except mc_bin_client.MemcachedError as e:
                     self.poxi.done()
                     self.poxi = self._poxi()
-                    print "now connected to {0} memcacheds".format(len(self.poxi.memcacheds))
+                    print ("now connected to {0} memcacheds".format(len(self.poxi.memcacheds)))
                     if self.backoff < 0:
                         self.backoff = 0
                     if self.backoff > 30:
@@ -170,11 +170,11 @@ class LoadThread(threading.Thread):
 #                    if e.status == 134:
 #                        time.sleep(self.backoff)
 #                    else:
-#                        print `time.time()` + ' ' + self.name + ' set(' + `self.backoff` + ') ',
+#                        print 'time.time()' + ' ' + self.name + ' set(' + 'self.backoff' + ') ',
 #                        print e
 #                        time.sleep(self.backoff)
             elif operation == 'get':
-                key = self.name + '_' + `self.get_get_key()`
+                key = self.name + '_' + 'self.get_get_key()'
                 try:
                     vdata = self.poxi.memcached(key).get(key)
                     self.operations += 1
@@ -184,16 +184,16 @@ class LoadThread(threading.Thread):
                         data_expected = self.get_data(max(self.get_mutation_indexes(self.get_get_key())))
                         if data != data_expected:
                             self.value_failures += 1
-                            raise
+                            raise e
                     except Exception as e:
-                        print e
-                        print "create: " + `self.create`
-                        print "nocreate: " + `self.nocreate`
-                        print "get_index: " + `self.get_index`
-                        print "get_key: " + `self.get_get_key()`
-                        print "mutation_index_max: " + `self.mutation_index_max`
-                        print "mutation_indexes: " + `self.get_mutation_indexes(self.get_get_key())`
-                        print "getting data for mutation index: " + `max(self.get_mutation_indexes(self.get_get_key()))`
+                        print (e)
+                        print ("create: " + 'self.create')
+                        print "nocreate: " + 'self.nocreate'
+                        print "get_index: " + 'self.get_index'
+                        print "get_key: " + 'self.get_get_key()'
+                        print "mutation_index_max: " + 'self.mutation_index_max'
+                        print "mutation_indexes: " + 'self.get_mutation_indexes(self.get_get_key())'
+                        print "getting data for mutation index: " + 'max(self.get_mutation_indexes(self.get_get_key()))'
                         print "got:      \'" + data + "\'"
                         raise ValueError
                     self.get_index += 1
@@ -203,8 +203,8 @@ class LoadThread(threading.Thread):
                     if self.backoff > 30:
                         self.backoff = 30
                     self.backoff += 1
-                    print `time.time()` + ' ' + self.name + ' get(' + `self.backoff` + ') ',
-                    print e
+                    print ('time.time()' + ' ' + self.name + ' get(' + 'self.backoff' + ') ')
+                    print (e)
                     time.sleep(self.backoff)
 
             end_time = time.time()
@@ -256,10 +256,10 @@ class LoadThread(threading.Thread):
         valuesize = self.valuesize_sequence[index % len(self.valuesize_sequence)]
         if self.cache_data:
             if not valuesize in self.data_cache:
-                self.data_cache[valuesize] = (str(uuid.uuid3(self.uuid,`index`)) * (1+valuesize/36))[:valuesize]
-            return `index` + self.data_cache[valuesize]
+                self.data_cache[valuesize] = (str(uuid.uuid3(self.uuid,'index')) * (1+valuesize/36))[:valuesize]
+            return 'index' + self.data_cache[valuesize]
         else:
-            return (str(uuid.uuid3(self.uuid,`index`)) * (1+valuesize/36))[:valuesize]
+            return (str(uuid.uuid3(self.uuid,'index')) * (1+valuesize/36))[:valuesize]
 
     # mutation_index -> mutation_data : based on create/nocreate
     # shortcut for getting the expected size of a mutation without generating the data

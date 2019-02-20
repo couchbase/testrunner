@@ -23,10 +23,10 @@ import memcacheConstants
 class TapConnection(object):
     def __init__(self, server, port, callback, clientId=None, opts={}):
         self.wbuf = self._createTapCall(clientId, opts)
-        print self.wbuf
+        print (self.wbuf)
         self.callback = callback
         self.identifier = (server.ip, port)
-        print 'tap connection : {0} {1}'.format(server.ip, port)
+        print ('tap connection : {0} {1}'.format(server.ip, port))
         self.s = socket.socket()
         self.s.connect_ex((server.ip, port))
         sent = self.s.send(self.wbuf)
@@ -69,7 +69,7 @@ class TapConnection(object):
                 try:
                     status, cas, response = cmdVal
                 except ValueError:
-                    print "Got", cmdVal
+                    print ("Got", cmdVal)
                     raise
                 dtype = 0
                 extralen = memcacheConstants.EXTRA_HDR_SIZES.get(cmd, 0)
@@ -88,7 +88,7 @@ class TapConnection(object):
         cas = 0
 
         extraHeader, val = self._encodeOpts(opts)
-        print "opts: ", extraHeader, val
+        print ("opts: ", extraHeader, val)
 
         msg = struct.pack(REQ_PKT_FMT, REQ_MAGIC_BYTE,
                           memcacheConstants.CMD_TAP_CONNECT,
@@ -125,11 +125,11 @@ class TapConnection(object):
         self.callback(self.identifier, cmd, extra, key, vb, val, cas)
 
     def handle_connect(self):
-        print "connected..."
+        print ("connected...")
 
 
     def handle_close(self):
-        print "handle_close"
+        print ("handle_close") 
         self.close()
 
 

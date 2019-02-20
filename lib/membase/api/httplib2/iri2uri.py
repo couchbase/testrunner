@@ -12,7 +12,7 @@ __license__ = "MIT"
 __history__ = """
 """
 
-import urlparse
+import urllib.parse as urlparse
 
 
 # Convert an IRI to a URI following the rules in RFC 3987

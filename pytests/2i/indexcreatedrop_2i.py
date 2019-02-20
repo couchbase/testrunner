@@ -75,7 +75,7 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
                     self.log.info(" verifying node {0}".format(node))
                     self.assertTrue(verification_map[node][bucket.name] in index_map[node][bucket.name].keys(), \
                         "for bucket {0} and node {1}, could not find key {2} in {3}".format(bucket.name, node, verification_map[node][bucket.name],index_map))
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(ex)
             raise
         finally:
@@ -99,7 +99,7 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
                 tasks.append(self.async_create_index(self.buckets[0], query_definition, deploy_node_info = deploy_node_info))
             for task in tasks:
                 task.result()
-        except Exception, ex:
+        except Exception as  ex:
             msg =  "index test_deployment_plan_defer_build_same_name_index already exist"
             self.assertTrue(msg in str(ex),ex)
 
@@ -129,7 +129,7 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
                 tasks.append(self.async_monitor_index(bucket = "default", index_name = index_name))
             for task in tasks:
                 task.result()
-        except Exception, ex:
+        except Exception as  ex:
             msg =  "Index test_deployment_plan_defer_build_same_name_index already exist"
             self.assertTrue(msg in str(ex), ex)
 
@@ -142,7 +142,7 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
             for task in tasks:
                 task.result()
             self.assertTrue(False, " Created indexes concurrently, should have failed! ")
-        except Exception, ex:
+        except Exception as  ex:
             msg = "Build Already In Progress"
             self.assertTrue(msg in str(ex),ex)
 
@@ -151,7 +151,7 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
         self.query = "DROP PRIMARY INDEX ON {0} using gsi".format(self.buckets[0].name)
         try:
             self.n1ql_helper.run_cbq_query(query = self.query, server = server)
-        except Exception, ex:
+        except Exception as  ex:
             self.log.info(ex)
         query_definitions = []
         servers = self.get_nodes_from_services_map(service_type = "index", get_all_nodes = True)
@@ -174,7 +174,7 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
 
             self.query = "DROP PRIMARY INDEX ON {0} using gsi".format(self.buckets[0].name)
             self.n1ql_helper.run_cbq_query(query = self.query, server = server)
-        except Exception, ex:
+        except Exception as  ex:
             self.log.info(ex)
             raise
 
@@ -190,7 +190,7 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
             # create index
             server = self.get_nodes_from_services_map(service_type = "n1ql")
             self.n1ql_helper.run_cbq_query(query = self.query, server = server)
-        except Exception, ex:
+        except Exception as  ex:
             self.log.info(ex)
             raise
 
@@ -206,7 +206,7 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
             # create index
             server = self.get_nodes_from_services_map(service_type = "n1ql")
             self.n1ql_helper.run_cbq_query(query = self.query, server = server)
-        except Exception, ex:
+        except Exception as  ex:
             self.log.info(ex)
             raise
 
@@ -227,7 +227,7 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
             self.query = query_definition.generate_index_create_query(bucket = self.buckets[0].name,
             use_gsi_for_secondary = True, gsi_type=self.gsi_type)
             self.n1ql_helper.run_cbq_query(query = self.query, server = server)
-        except Exception, ex:
+        except Exception as  ex:
             self.log.info(ex)
             raise
         finally:
@@ -247,7 +247,7 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
             # create index
             server = self.get_nodes_from_services_map(service_type = "n1ql")
             self.n1ql_helper.run_cbq_query(query = self.query, server = server)
-        except Exception, ex:
+        except Exception as  ex:
             msg="Expression not indexable"
             self.assertTrue(msg in str(ex),
                 " 5000 error not recived as expected {0}".format(ex))
@@ -264,7 +264,7 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
             # create index
             server = self.get_nodes_from_services_map(service_type = "n1ql")
             self.n1ql_helper.run_cbq_query(query = self.query, server = server)
-        except Exception, ex:
+        except Exception as  ex:
             msg="Keyspace not_present_bucket name not found - cause: Bucket not_present_bucket not found"
             self.assertTrue(msg in str(ex),
                 " 5000 error not recived as expected {0}".format(ex))
@@ -281,7 +281,7 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
             # create index
             server = self.get_nodes_from_services_map(service_type = "n1ql")
             self.n1ql_helper.run_cbq_query(query = self.query, server = server)
-        except Exception, ex:
+        except Exception as  ex:
             msg="Keyspace not found keyspace not_present_bucket - cause: No bucket named not_present_bucket"
             self.assertTrue(msg in str(ex),
                 " 5000 error not recived as expected {0}".format(ex))
@@ -297,7 +297,7 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
             # create index
             server = self.get_nodes_from_services_map(service_type = "n1ql")
             self.n1ql_helper.run_cbq_query(query = self.query, server = server)
-        except Exception, ex:
+        except Exception as  ex:
             msg="Keyspace not found keyspace not_present_bucket - cause: No bucket named not_present_bucket"
             self.assertTrue(msg in str(ex),
                 " 5000 error not recived as expected {0}".format(ex))
@@ -313,7 +313,7 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
             # create index
             server = self.get_nodes_from_services_map(service_type = "n1ql")
             self.n1ql_helper.run_cbq_query(query = self.query, server = server)
-        except Exception, ex:
+        except Exception as  ex:
             msg="GSI index test_failure_create_index_existing_index not found"
             self.assertTrue(msg in str(ex),
                 " 5000 error not recived as expected {0}".format(ex))
@@ -332,7 +332,7 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
             self.n1ql_helper.run_cbq_query(query = self.query, server = server)
             # create same index again
             self.n1ql_helper.run_cbq_query(query = self.query, server = server)
-        except Exception, ex:
+        except Exception as  ex:
             self.assertTrue("index test_failure_create_index_existing_index already exist" in str(ex),
                 " 5000 error not recived as expected {0}".format(ex))
         finally:
@@ -354,7 +354,7 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
         try:
             res = self.n1ql_helper.run_cbq_query(query = self.query, server = self.n1ql_node)
             self.log.info(res)
-        except Exception, ex:
+        except Exception as  ex:
             msg = "cause: Encountered transient error.  Index creation will be retried in background."
             self.log.info(ex)
             self.assertTrue(msg in str(ex), ex)
@@ -374,7 +374,7 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
             self.query = self.query_definitions[0].generate_index_drop_query(bucket = self.buckets[0].name, use_gsi_for_secondary = self.use_gsi_for_secondary, use_gsi_for_primary = self.use_gsi_for_primary)
             self.n1ql_helper.run_cbq_query(query = self.query, server = self.n1ql_node)
             self.log.info(" non-existant indexes cannot be dropped ")
-        except Exception, ex:
+        except Exception as  ex:
             self.log.info(ex)
             msg = "GSI index {0} not found".format(self.query_definitions[0].index_name)
             self.assertTrue(msg in str(ex), ex)
@@ -417,7 +417,7 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
             task = self.async_create_index(self.buckets[0].name, query_definition)
             task.result()
             self.assertTrue(False, "Duplicate index should not be allowed when index node is down")
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(ex)
             remote = RemoteMachineShellConnection(servr_out)
             remote.start_server()

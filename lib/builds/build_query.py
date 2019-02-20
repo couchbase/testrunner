@@ -3,10 +3,10 @@
 # map a version # -> rpm url
 from datetime import datetime
 import time
-import urllib2
+import urllib
 import re
 import socket
-import BeautifulSoup
+from bs4 import BeautifulSoup
 import testconstants
 import logger
 import traceback
@@ -577,15 +577,15 @@ class BuildQuery(object):
                         build.url = '%s/%s' % (build_page, build_id)
                         builds.append(build)
                 except Exception as e:
-                    print "ERROR in creating build/change info for: Build_id: %s , Build_Description: %s" % (build_id, build_description)
-                    print traceback.print_exc(file=sys.stderr)
+                    print("ERROR in creating build/change info for: Build_id: %s , Build_Description: %s" % (build_id, build_description))
+                    print(traceback.print_exc(file=sys.stderr))
                     #raise e : Skipping parsing for this build information,
                     #Eventually, It will fail with build not found error at install.py:240
             for build in builds:
                 for change in changes:
                     if change.build_number == build.product_version:
                         build.change = change
-                        """ print 'change : ', change.url,change.build_number """
+                        """ print'change : ', change.url,change.build_number """
                         break
             return builds, changes
 
@@ -1064,15 +1064,15 @@ class BuildQuery(object):
 #q = BuildQuery()
 #builds, changes = q.get_latest_builds()
 #for build in builds:
-#    print build.product,' ',build.time ,' ',build.deliverable_type,' ',build.product_version ,'',build.size,'',build.architecture_type
+#    print(build.product,' ',build.time ,' ',build.deliverable_type,' ',build.product_version ,'',build.size,'',build.architecture_type)
 #    if build.change:
 #        change = build.change
-#        print change.name,change.build_number,change.time,change.url
+#        printchange.name,change.build_number,change.time,change.url
 
 #for change in changes:
-#    print change.name,change.build_number,change.time
+#    print(change.name,change.build_number,change.time)
 
 #builds = q.get_membase_latest_builds()
 #for build in builds:
-#    print build.product,' ',build.time ,' ',build.deliverable_type,' ',build.product_version ,'',build.size,'',build.architecture_type
+#    print(build.product,' ',build.time ,' ',build.deliverable_type,' ',build.product_version ,'',build.size,'',build.architecture_type)
 

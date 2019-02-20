@@ -38,13 +38,13 @@ except ImportError:
 
     md = md5.new()
 import email
-import email.Utils
-import email.Message
-import StringIO
+import email.utils
+import email.message
+from io import StringIO
 import gzip
 import zlib
-import httplib
-import urlparse
+import http.client as httplib
+from  urllib.parse import urlparse as urlparse
 import base64
 import os
 import copy
@@ -71,7 +71,7 @@ except ImportError:
     socks = None
 
 if sys.version_info >= (2, 3):
-    from iri2uri import iri2uri
+    from lib.membase.api.httplib2.iri2uri import iri2uri
 else:
     def iri2uri(uri):
         return uri
@@ -95,11 +95,11 @@ if sys.version_info < (2, 4):
 def HTTPResponse__getheaders(self):
     """Return list of (header, value) tuples."""
     if self.msg is None:
-        raise httplib.ResponseNotReady()
+        raise http.client.ResponseNotReady()
     return self.msg.items()
 
 if not hasattr(httplib.HTTPResponse, 'getheaders'):
-    httplib.HTTPResponse.getheaders = HTTPResponse__getheaders
+    http.client.HTTPResponse.getheaders = HTTPResponse__getheaders
 
 # All exceptions raised here derive from HttpLib2Error
 class HttpLib2Error(Exception): pass
@@ -766,28 +766,28 @@ class HTTPConnectionWithTimeout(httplib.HTTPConnection):
                     self.sock.settimeout(self.timeout)
                     # End of difference from httplib.
                 if self.debuglevel > 0:
-                    print "connect: (%s, %s)" % (self.host, self.port)
+                    print("connect: (%s, %s)" % (self.host, self.port))
                 self.sock.connect(sa)
-            except socket.error, msg:
+            except socket.error as msg:
                 if self.debuglevel > 0:
-                    print 'connect fail:', (self.host, self.port)
+                    print('connect fail:', (self.host, self.port))
                 if self.sock:
                     self.sock.close()
                 self.sock = None
                 continue
             break
         if not self.sock:
-            raise socket.error, msg
+            raise (socket.error, msg)
 
 
-class HTTPSConnectionWithTimeout(httplib.HTTPSConnection):
+class HTTPSConnectionWithout(httplib.HTTPSConnection):
     "This class allows communication via SSL."
 
     def __init__(self, host, port=None, key_file=None, cert_file=None,
                  strict=None, timeout=None, proxy_info=None):
         self.timeout = timeout
         self.proxy_info = proxy_info
-        httplib.HTTPSConnection.__init__(self, host, port=port, key_file=key_file,
+        http.client.HTTPSConnection.__init__(self, host, port=port, key_file=key_file,
                                          cert_file=cert_file, strict=strict)
 
     def connect(self):
@@ -802,7 +802,7 @@ class HTTPSConnectionWithTimeout(httplib.HTTPSConnection):
             sock.settimeout(self.timeout)
         sock.connect((self.host, self.port))
         ssl = socket.ssl(sock, self.key_file, self.cert_file)
-        self.sock = httplib.FakeSocket(sock, ssl)
+        self.sock = http.client.FakeSocket(sock, ssl)
 
 
 class Http(object):
@@ -891,7 +891,7 @@ the same interface as FileCache."""
             except socket.gaierror:
                 conn.close()
                 raise ServerNotFoundError("Unable to find the server at %s" % conn.host)
-            except httplib.HTTPException, e:
+            except http.client.HTTPException as e:
                 if not i:
                     conn.close()
                     conn.connect()
@@ -1124,7 +1124,7 @@ a string that contains the response entity body.
             else:
                 (response, content) = self._request(conn, authority, uri, request_uri, method, body, headers,
                                                     redirections, cachekey)
-        except Exception, e:
+        except Exception as e:
             if self.force_exception_to_status_code:
                 if isinstance(e, HttpLib2ErrorWithResponse):
                     response = e.response
@@ -1194,4 +1194,5 @@ class Response(dict):
         if name == 'dict':
             return self
         else:
-            raise AttributeError, name
+            raise (AttributeError, name)
+

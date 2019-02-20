@@ -78,7 +78,7 @@ class OpsChangeCasTests(CasBaseTest):
 
                         o_new, cas_new, d_new = client.memcached(key).get(key)
                         if cas_old == cas_new:
-                            print 'cas did not change'
+                            print ('cas did not change')
                             cas_error_collection.append(cas_old)
 
                         if ops == 'update':

@@ -1,7 +1,7 @@
-from ldap_user import LdapUser
-from internal_user import InternalUser
+from pytests.security.ldap_user import LdapUser
+from pytests.security.internal_user import InternalUser
 from remote.remote_util import RemoteMachineShellConnection
-import urllib
+import urllib.parse as urllib
 import json
 
 class RbacBase:
@@ -95,7 +95,7 @@ class RbacBase:
 
     def check_user_permission(self,user,password,user_per_list,rest):
         response = rest.check_user_permission(user,password,user_per_list)
-        print response
+        print (response)
         return response
 
 

@@ -2,8 +2,8 @@
 
 import time
 
-from obs_def import ObserveKeyState, ObserveStatus
-from obs_helper import SyncDict
+from lib.perf_engines.libobserve.obs_def import ObserveKeyState, ObserveStatus
+from lib.perf_engines.libobserve.obs_helper import SyncDict
 
 class Observable:
 
@@ -62,7 +62,7 @@ class Observer:
     def _observe_blocking(self):
         self._observables.wait_not_empty()
 
-        print "<%s> self._observables %s" % (self.__class__.__name__, self._observables)
+        print ("<%s> self._observables %s" % (self.__class__.__name__, self._observables))
 
         if not self._send():
             return False
@@ -84,17 +84,17 @@ class Observer:
         @param observables must be a iterable collections of Observable
         """
         if not observables:
-            print "<%s> invalid argument observables: %s" \
-                    % (self.__class__.__name__, observables)
+            print ("<%s> invalid argument observables: %s" \
+                    % (self.__class__.__name__, observables))
             return
 
         if self._observables.empty():
-            print "<%s> load observables = %s" % (self.__class__.__name__, observables)
+            print ("<%s> load observables = %s" % (self.__class__.__name__, observables))
             for obs in observables:
                 self._observables.put(obs.key, obs)
 
     def clear_observables(self):
-        print "clear observables : %s" % self._observables
+        print ("clear observables : %s" % self._observables)
         self._observables.clear()
 
     def update_observables(self, responses):
@@ -103,7 +103,7 @@ class Observer:
         using key_state as filter
         """
         if not responses:
-            print "<%s> empty responses" % self.__class__.__name__
+            print ("<%s> empty responses" % self.__class__.__name__)
             return True
 
         if self._observables.empty():
@@ -129,12 +129,12 @@ class Observer:
                         obs.remove_server(server, repl=True,
                                           stats=(obs.cas == res_key.cas))
                 elif res_key.key_state == ObserveKeyState.OBS_IMPOSSIBLE:
-                    print "<%s> invalid key_state %x from repl sever" \
-                        % (self.__class__.__name__, server)
+                    print ("<%s> invalid key_state %x from repl sever" \
+                        % (self.__class__.__name__, server))
                     obs.remove_server(server, repl=True, stats=False)
             else:
-                print "<%s> invalid server: %s" \
-                    % (self.__class__.__name__, server)
+                print ("<%s> invalid server: %s" \
+                    % (self.__class__.__name__, server))
                 obs.status = ObserveStatus.OBS_ERROR
 
             if obs.persist_count <= 0 and \

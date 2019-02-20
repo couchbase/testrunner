@@ -777,7 +777,7 @@ class RebalanceWithPillowFight(BaseTestCase):
         if errors:
             self.log.info("Printing missing keys:")
         for error in errors:
-            print error
+            print (error)
         if self.num_items != rest.get_active_key_count(bucket):
             self.fail("FATAL: Data loss detected!! Docs loaded : {0}, docs present: {1}".
                           format(self.num_items, rest.get_active_key_count(bucket) ))

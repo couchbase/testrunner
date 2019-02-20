@@ -2,7 +2,7 @@
 
 import struct
 
-from obs_def import ObservePktFmt, OBS_OPCODE
+from lib.perf_engines.libobserve.obs_def import ObservePktFmt, OBS_OPCODE
 from memcacheConstants import REQ_MAGIC_BYTE
 
 class ObserveRequestKey:

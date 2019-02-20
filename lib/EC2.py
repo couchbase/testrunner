@@ -9,7 +9,7 @@
 
 import base64
 import hmac
-import httplib
+import http.client as httplib
 import re
 import sys
 import time

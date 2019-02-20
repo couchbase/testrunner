@@ -70,7 +70,7 @@ class KVStore(object):
         if collection:
             key=None
             itr=self._hash(key,bucket, collection)
-            print "For bucket {} and collection {} the itr is {}".format(bucket, collection,itr)
+            print ("For bucket {} and collection {} the itr is {}".format(bucket, collection,itr))
             self.cache[itr]["lock"].acquire()
             partition = self.cache[itr]["partition"]
             valid_keys.extend(partition.valid_key_set())

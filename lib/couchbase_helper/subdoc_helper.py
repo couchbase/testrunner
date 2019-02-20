@@ -108,7 +108,7 @@ class SubdocHelper():
                   })
               operation_index += 1
             elif operation["mutate"] and new_path == None:
-              print "mutation failed"
+              print ("mutation failed")
         if operation_index == max_number_operations:
           return operation_definition
       return operation_definition
@@ -339,19 +339,19 @@ class SubdocHelper():
     def show_all_operations(self, ops = []):
       operation_index = 0
       for operation in ops:
-        print "++++++++++++++++++ OPERATION {0} ++++++++++++++++++++++".format(operation_index)
+        print ("++++++++++++++++++ OPERATION {0} ++++++++++++++++++++++".format(operation_index))
         operation_index += 1
         for field in operation.keys():
-          print "{0} :: {1}".format(field, operation[field])
+          print ("{0} :: {1}".format(field, operation[field]))
 
     def show_all_paths(self, pairs, data_set):
       for path in pairs.keys():
         parse_path_data = self.parse_and_get_data(data_set, path)
-        print "PATH = {0} || VALUE = {1} || PARSE PATH = {2} ".format(path, pairs[path], parse_path_data)
+        print ("PATH = {0} || VALUE = {1} || PARSE PATH = {2} ".format(path, pairs[path], parse_path_data))
         key, ops_info = self.pick_operations(parse_path_data)
-        print key
-        print "Run python operation {0}".format(ops_info["python"])
-        print "Run equivalent subdoc api operation {0}".format(ops_info["subdoc_api"])
+        print (key)
+        print ("Run python operation {0}".format(ops_info["python"]))
+        print ("Run equivalent subdoc api operation {0}".format(ops_info["subdoc_api"]))
 
     def gen_input_file(self, file_name = "sample_json.txt", number_of_test_cases = 100):
       dump_file = open(file_name, 'wb')

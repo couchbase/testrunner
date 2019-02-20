@@ -11,7 +11,7 @@ import os
 
 
 def usage(error=None):
-    print """\
+    print("""\
 Syntax: measure_sched_delays.py [options]
 
 Options
@@ -24,7 +24,7 @@ Available keys:
 
 Example:
  measure_sched_delays.py -i cluster.ini -p path=/tmp/measure-sched-delays,task=start
-"""
+""")
     sys.exit(error)
 
 
@@ -102,7 +102,7 @@ def main():
             usage("ERROR: no servers specified. Please use the -i parameter.")
     except IndexError:
         usage()
-    except getopt.GetoptError, error:
+    except getopt.GetoptError as error:
         usage("ERROR: " + str(error))
 
     tool_path = input.param("path", "/tmp/measure-sched-delays")
@@ -119,8 +119,8 @@ def main():
             delays.fetch_logs()
         else:
             usage("ERROR: task was not specified correctly")
-    except BaseException, e:
-        print e
+    except BaseException as e:
+        print(e)
 
 if __name__ == "__main__":
     main()

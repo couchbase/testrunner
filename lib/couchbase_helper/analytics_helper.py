@@ -279,7 +279,7 @@ class AnalyticsHelper():
             if value == '':
                 return 0
             value = int(val.split("(")[1].split(")")[0])
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(ex)
         finally:
             return value
@@ -352,7 +352,7 @@ class AnalyticsHelper():
                 couchbase_path = testconstants.WIN_COUCHBASE_BIN_PATH
             if self.input.tuq_client and "sherlock_path" in self.input.tuq_client:
                 couchbase_path = "%s/bin" % self.input.tuq_client["sherlock_path"]
-                print "PATH TO SHERLOCK: %s" % couchbase_path
+                print ("PATH TO SHERLOCK: %s" % couchbase_path)
             if os == 'windows':
                 cmd = "cd %s; " % (couchbase_path) +\
                 "./cbq-engine.exe -datastore http://%s:%s/ >/dev/null 2>&1 &" %(
@@ -423,7 +423,7 @@ class AnalyticsHelper():
                 check = self._is_index_in_list(bucket.name, "#primary", server = server)
                 if check:
                     self.run_analytics_query(server = server)
-            except Exception, ex:
+            except Exception as ex:
                 self.log.error('ERROR during index creation %s' % str(ex))
 
     def create_primary_index(self, using_gsi = True, server = None):
@@ -446,7 +446,7 @@ class AnalyticsHelper():
                         raise Exception(" Timed-out Exception while building primary index for bucket {0} !!!".format(bucket.name))
                 else:
                     raise Exception(" Primary Index Already present, This looks like a bug !!!")
-            except Exception, ex:
+            except Exception as ex:
                 self.log.error('ERROR during index creation %s' % str(ex))
                 raise ex
 
@@ -476,7 +476,7 @@ class AnalyticsHelper():
                 else:
                     return "ran query with success and validated results" , True
                 check = True
-            except Exception, ex:
+            except Exception as ex:
                 if (next_time - init_time > timeout or try_count >= max_try):
                     return ex, False
             finally:
@@ -531,10 +531,10 @@ class AnalyticsHelper():
             #if os == "linux":
             cmd = "%s/cbq  -engine=http://%s:8093/" % (testconstants.LINUX_COUCHBASE_BIN_PATH,server.ip)
             output = shell.execute_commands_inside(cmd,query,"","","","","")
-            print "--------------------------------------------------------------------------------------------------------------------------------"
-            print output
+            print ("--------------------------------------------------------------------------------------------------------------------------------")
+            print (output)
             result = json.loads(output)
-            print result
+            print (result)
             result = self._parse_query_output(output)
         if isinstance(result, str) or 'errors' in result:
             error_result = str(result)
@@ -707,7 +707,7 @@ class AnalyticsHelper():
                 map[val["_id"]] = val
             keys = map.keys()
             keys.sort()
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(ex)
             raise
         if len(duplicate_keys) > 0:

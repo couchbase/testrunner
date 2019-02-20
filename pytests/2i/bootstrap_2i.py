@@ -16,7 +16,7 @@ class SecondaryIndexingBootstrapTests(BaseSecondaryIndexingTests):
             self._run_aync_tasks()
             rebalance.result()
             self.run_after_operations()
-        except Exception, ex:
+        except Exception as ex:
             raise
 
     def test_rebalance_out(self):
@@ -26,7 +26,7 @@ class SecondaryIndexingBootstrapTests(BaseSecondaryIndexingTests):
             self._run_aync_tasks()
             rebalance.result()
             self.run_after_operations()
-        except Exception, ex:
+        except Exception as ex:
             raise
 
     def test_rebalance_in_out(self):
@@ -38,7 +38,7 @@ class SecondaryIndexingBootstrapTests(BaseSecondaryIndexingTests):
             self._run_aync_tasks()
             rebalance.result()
             self.run_after_operations()
-        except Exception, ex:
+        except Exception as ex:
             raise
 
     def test_rebalance_with_stop_start(self):
@@ -59,7 +59,7 @@ class SecondaryIndexingBootstrapTests(BaseSecondaryIndexingTests):
                                    self.nodes_out_list, services=self.services_in)
             rebalance.result()
             self.run_after_operations()
-        except Exception, ex:
+        except Exception as ex:
             raise
 
     def test_failover(self):
@@ -78,7 +78,7 @@ class SecondaryIndexingBootstrapTests(BaseSecondaryIndexingTests):
             tasks = self.async_run_operations(buckets=self.buckets, phase="in_between")
             self._run_aync_tasks()
             self.run_after_operations()
-        except Exception, ex:
+        except Exception as ex:
             raise
 
     def test_failover_add_back(self):
@@ -111,7 +111,7 @@ class SecondaryIndexingBootstrapTests(BaseSecondaryIndexingTests):
             self._run_aync_tasks()
             rebalance.result()
             self.run_after_operations()
-        except Exception, ex:
+        except Exception as ex:
             raise
 
     def test_autofailover(self):
@@ -128,7 +128,7 @@ class SecondaryIndexingBootstrapTests(BaseSecondaryIndexingTests):
             self._run_aync_tasks()
             rebalance.result()
             self.run_after_operations()
-        except Exception, ex:
+        except Exception as ex:
             raise
         finally:
             remote.start_server()
@@ -142,7 +142,7 @@ class SecondaryIndexingBootstrapTests(BaseSecondaryIndexingTests):
                 self.start_firewall_on_node(node)
             self._run_aync_tasks()
             self.run_after_operations()
-        except Exception, ex:
+        except Exception as ex:
             raise
         finally:
             for node in self.nodes_out_list:

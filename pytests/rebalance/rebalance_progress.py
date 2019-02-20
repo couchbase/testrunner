@@ -171,7 +171,7 @@ class RebalanceProgressTests(RebalanceBaseTest):
                     if current_stat['docsTotal'] != previous_stat['docsTotal']:
                         self.log.warn("docsTotal for node %s changed! Previous stat %s. Actual: %s" % (
                                           server.ip, current_stat, previous_stat))
-                except Exception, ex:
+                except Exception as ex:
                     if previous_stat['docsTotal'] != 0 and current_stat['docsTotal'] == 0:
                         command = "sys:get_status({global, ns_rebalance_observer})."
                         self.log.info("posting: %s" % command)
@@ -211,7 +211,7 @@ class RebalanceProgressTests(RebalanceBaseTest):
                         detailed_progress["bucket"] = task["detailedProgress"]["bucket"]
                         detailed_progress["buckets_count"] = task["detailedProgress"]["bucketsCount"]
                         break
-                    except Exception, ex:
+                    except Exception as ex:
                         self.log.warn("Didn't get statistics %s" % str(ex))
         return detailed_progress
 

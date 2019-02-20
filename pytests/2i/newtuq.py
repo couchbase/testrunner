@@ -87,7 +87,7 @@ class QueryTests(BaseTestCase):
             try:
                 self.n1ql_helper.create_primary_index(using_gsi=self.use_gsi_for_primary,
                  server=self.n1ql_node)
-            except Exception, ex:
+            except Exception as  ex:
                 self.log.info(ex)
                 raise ex
 
@@ -117,7 +117,7 @@ class QueryTests(BaseTestCase):
             if self.dataset == "array":
                 return self.generate_docs_array(num_items, start)
             return getattr(self, 'generate_docs_' + self.dataset)(num_items, start)
-        except Exception, ex:
+        except Exception as  ex:
             self.log.info(str(ex))
             self.fail("There is no dataset %s, please enter a valid one" % self.dataset)
 
@@ -136,7 +136,7 @@ class QueryTests(BaseTestCase):
                 return self.generate_ops(num_items, start, json_generator.generate_docs_bigdata)
             if self.dataset == "array":
                 return self.generate_ops(num_items, start, json_generator.generate_all_type_documents_for_gsi)
-        except Exception, ex:
+        except Exception as  ex:
             self.log.info(ex)
             self.fail("There is no dataset %s, please enter a valid one" % self.dataset)
 

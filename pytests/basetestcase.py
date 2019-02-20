@@ -7,11 +7,12 @@ import string
 import random
 import logging
 import json
-import commands
+# import commands
+import subprocess
 import mc_bin_client
 import traceback
 import re
-
+# import pyhdb
 
 from memcached.helper.data_helper import VBucketAwareMemcached
 from couchbase_helper.documentgenerator import BlobGenerator
@@ -25,7 +26,7 @@ from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
 from membase.helper.rebalance_helper import RebalanceHelper
 from memcached.helper.data_helper import MemcachedClientHelper
-from remote.remote_util import RemoteMachineShellConnection, RemoteUtilHelper
+from lib.remote.remote_util import RemoteMachineShellConnection, RemoteUtilHelper
 from membase.api.exception import ServerUnavailableException
 from couchbase_helper.data_analysis_helper import *
 from testconstants import STANDARD_BUCKET_PORT
@@ -100,6 +101,7 @@ class BaseTestCase(unittest.TestCase):
             self.cbas_node = self.cbas_servers[0]
                             
         try:
+            print("\n\n\n enter outter try ")
             self.skip_setup_cleanup = self.input.param("skip_setup_cleanup", False)
             self.vbuckets = self.input.param("vbuckets", 1024)
             self.collection=self.input.param("collection", False)
@@ -211,7 +213,7 @@ class BaseTestCase(unittest.TestCase):
                 self.sasl_bucket_priority = self.sasl_bucket_priority.split(":")
             if self.standard_bucket_priority is not None:
                 self.standard_bucket_priority = self.standard_bucket_priority.split(":")
-
+            print("\n\n\n SETUP => STARTED\n\n\n\n")
             self.log.info("==============  basetestcase setup was started for test #{0} {1}==============" \
                           .format(self.case_number, self._testMethodName))
             if not self.skip_buckets_handle and not self.skip_init_check_cbserver:
@@ -303,7 +305,8 @@ class BaseTestCase(unittest.TestCase):
                                 str(self.__class__).find('failover.failovertests.FailoverTests') != -1 or \
                                 str(self.__class__).find('observe.observeseqnotests.ObserveSeqNoTests') != -1 or \
                                 str(self.__class__).find('epengine.lwwepengine.LWW_EP_Engine') != -1:
-
+                    print("\n\n\n\n")
+                    print("first if")
                     self.services = self.get_services(self.servers, self.services_init)
                     # rebalance all nodes into the cluster before each test
                     self.cluster.rebalance(self.servers[:self.num_servers], self.servers[1:self.num_servers], [],
@@ -314,16 +317,21 @@ class BaseTestCase(unittest.TestCase):
                                            self.servers[1:self.nodes_init], \
                                            [], \
                                            services=self.services)
+                    print("\n\n2nd if")
                 elif str(self.__class__).find('ViewQueryTests') != -1 and \
                         not self.input.param("skip_rebalance", False):
                     self.services = self.get_services(self.servers, self.services_init)
                     self.cluster.rebalance(self.servers, self.servers[1:],
                                            [], services=self.services)
+                    print("\n\n3nd if")
+                print("\n\n\n------------------\n\n\n")
                 self.setDebugLevel(service_type="index")
                 if not self.disable_diag_eval_on_non_local_host:
                     self.enable_diag_eval_on_non_local_hosts()
-            except BaseException, e:
+                    print("in if")
+            except BaseException as e:
                 # increase case_number to retry tearDown in setup for the next test
+
                 self.case_number += 1000
                 traceback.print_exc()
                 self.fail(e)
@@ -360,7 +368,8 @@ class BaseTestCase(unittest.TestCase):
             if str(self.__class__).find('upgrade_tests') == -1 and \
                             str(self.__class__).find('newupgradetests') == -1 and not self.skip_bucket_setup:
                 self._bucket_creation()
-            self.log.info("==============  basetestcase setup was finished for test #{0} {1} =============="
+            print("\n\n\n SETUP => DONE\n\n\n\n")
+            self.log.info("\n\n\n\n\n==============  basetestcase setup was finished for test #{0} {1} ==============\n\n\n\n\n\n\n\n"
                           .format(self.case_number, self._testMethodName))
 
             if not self.skip_init_check_cbserver:
@@ -368,10 +377,13 @@ class BaseTestCase(unittest.TestCase):
                 if not status:
                     self.sleep(10)
             self.print_cluster_stats()
-        except Exception, e:
+        except Exception as e:
+            pass
+            '''
             traceback.print_exc()
             self.cluster.shutdown(force=True)
             self.fail(e)
+            '''
 
     def print_cluster_stats(self):
         cluster_stats = RestConnection(self.master).get_cluster_stats()
@@ -384,7 +396,7 @@ class BaseTestCase(unittest.TestCase):
         """Collect cbcollectinfo logs for all the servers in the cluster.
         """
         path = TestInputSingleton.input.param("logs_folder", "/tmp")
-        print "grabbing cbcollect from {0}".format(server.ip)
+        print ("grabbing cbcollect from {0}".format(server.ip))
         path = path or "."
         try:
             cbcollectRunner(server, path).run()
@@ -428,7 +440,7 @@ class BaseTestCase(unittest.TestCase):
                                 output, _ = shell.execute_command("ps -aef|grep %s" %
                                                                   TestInputSingleton.input.param('get_trace', None))
                                 output = shell.execute_command("pstack %s" % output[0].split()[1].strip())
-                                print output[0]
+                                print (output[0])
                             except:
                                 pass
                     if self.input.param('BUGS', False):
@@ -438,7 +450,7 @@ class BaseTestCase(unittest.TestCase):
 
 
 
-                self.log.info("==============  basetestcase cleanup was started for test #{0} {1} ==============" \
+                self.log.info("\n\n\n\n==============  basetestcase cleanup was started for test #{0} {1} ==============\n\n\n\n" \
                               .format(self.case_number, self._testMethodName))
                 rest = RestConnection(self.master)
                 alerts = rest.get_alerts()
@@ -1209,14 +1221,14 @@ class BaseTestCase(unittest.TestCase):
         ref_view.name = (prefix, ref_view.name)[prefix is None]
         if different_map:
             views = []
-            for i in xrange(count):
+            for i in range(count):
                 views.append(View(ref_view.name + str(i),
                                   'function (doc, meta) {'
                                   'emit(meta.id, "emitted_value%s");}' % str(i),
                                   None, is_dev_ddoc))
             return views
         else:
-            return [View(ref_view.name + str(i), ref_view.map_func, None, is_dev_ddoc) for i in xrange(count)]
+            return [View(ref_view.name + str(i), ref_view.map_func, None, is_dev_ddoc) for i in range(count)]
 
     def _load_doc_data_all_buckets(self, data_op="create", batch_size=1000, gen_load=None):
         # initialize the template for document generator
@@ -1249,7 +1261,7 @@ class BaseTestCase(unittest.TestCase):
                 self._verify_all_buckets(master, timeout=timeout, max_verify=max_verify,
                                          only_store_hash=only_store_hash, replica_to_read=replica_to_read,
                                          batch_size=batch_size, collection_name=collection)
-            except ValueError, e:
+            except ValueError as e:
                 """ get/verify stats if 'ValueError: Not able to get values
                                              for following keys' was gotten """
                 self._verify_stats_all_buckets(servers, timeout=(timeout or 120), collection=collection)
@@ -1377,7 +1389,7 @@ class BaseTestCase(unittest.TestCase):
             server = self.master
         if expected_rows is None:
             expected_rows = self.num_items
-        for i in xrange(num_views):
+        for i in range(num_views):
             tasks.append(self.cluster.async_query_view(server, prefix + ddoc_name,
                                                        self.default_view_name + str(i), query,
                                                        expected_rows, bucket, retry_time))
@@ -1385,7 +1397,7 @@ class BaseTestCase(unittest.TestCase):
             for task in tasks:
                 task.result(wait_time)
         except Exception as e:
-            print e;
+            print (e)
             for task in tasks:
                 task.cancel()
             raise Exception("unable to get expected results for view queries during {0} sec".format(wait_time))
@@ -1439,7 +1451,7 @@ class BaseTestCase(unittest.TestCase):
                     self.log.error("unable to create memcached client due to {0}.".format(ex))
         while gen_load.has_next():
             key, value = gen_load.next()
-            for v in xrange(1024):
+            for v in range(1024):
                 try:
                     client.set(key, 0, 0, value, v, collection=collection)
                     break
@@ -1582,7 +1594,7 @@ class BaseTestCase(unittest.TestCase):
                 try:
                     rest = RestConnection(server)
                     rest.force_eject_node()
-                except BaseException, e:
+                except BaseException as e:
                     self.log.error(e)
 
     def set_upr_flow_control(self, flow=True, servers=[]):
@@ -1708,13 +1720,13 @@ class BaseTestCase(unittest.TestCase):
         """ Method to print map results - Used only for debugging purpose """
         output = ""
         for bucket in map.keys():
-            print "----- Bucket {0} -----".format(bucket)
+            print ("----- Bucket {0} -----".format(bucket))
             for node in map[bucket].keys():
-                print "-------------Node {0}------------".format(node)
+                print ("-------------Node {0}------------".format(node))
                 for vbucket in map[bucket][node].keys():
-                    print "   for vbucket {0}".format(vbucket)
+                    print ("   for vbucket {0}".format(vbucket))
                     for key in map[bucket][node][vbucket].keys():
-                        print "            :: for key {0} = {1}".format(key, map[bucket][node][vbucket][key])
+                        print ("            :: for key {0} = {1}".format(key, map[bucket][node][vbucket][key]))
 
     def get_meta_data_set_all(self, dest_server, kv_store=1):
         """ Method to get all meta data set for buckets and from the servers """
@@ -2244,7 +2256,7 @@ class BaseTestCase(unittest.TestCase):
                     shell.cleanup_data_config(data_path)
                     self.start_server(node)
                 self.sleep(10)
-            except Exception, ex:
+            except Exception as ex:
                 self.log.info(ex)
 
     def kill_server_memcached(self, node):
@@ -2287,7 +2299,7 @@ class BaseTestCase(unittest.TestCase):
             master = self.master
         rest = RestConnection(master)
         map = rest.get_nodes_services()
-        for key, val in map.iteritems():
+        for key, val in map.items():
             for service in val:
                 if service not in self.services_map.keys():
                     self.services_map[service] = []
@@ -2297,7 +2309,7 @@ class BaseTestCase(unittest.TestCase):
         list_nodes_services = {}
         rest = RestConnection(self.master)
         map = rest.get_nodes_services()
-        for k, v in map.iteritems():
+        for k, v in map.items():
             if "8091" in k:
                 k = k.replace(":8091", "")
             if len(v) == 1:
@@ -2629,7 +2641,7 @@ class BaseTestCase(unittest.TestCase):
             for x in range(1, number_of_times):
                 for bucket in self.buckets:
                     RestConnection(self.master).compact_bucket(bucket.name)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(ex)
 
     def get_kv_nodes(self, servers=None, master=None):
@@ -2671,9 +2683,9 @@ class BaseTestCase(unittest.TestCase):
                 if max_expiry_range != None:
                     expiry = random.randint(1, max_expiry_range)
                 o, c, d = client.set(key, expiry, 0, json.dumps(data_set[key]))
-        except Exception, ex:
-            print 'WARN======================='
-            print ex
+        except Exception as ex:
+            print ('WARN=======================')
+            print (ex)
 
     def run_mc_bin_client(self, number_of_times=500000, max_expiry_range=30):
         data_map = {}
@@ -2683,7 +2695,7 @@ class BaseTestCase(unittest.TestCase):
         for bucket in self.buckets:
             try:
                 self._load_data_in_buckets_using_mc_bin_client(bucket, data_map, max_expiry_range)
-            except Exception, ex:
+            except Exception as ex:
                 self.log.info(ex)
 
     '''
@@ -2691,7 +2703,7 @@ class BaseTestCase(unittest.TestCase):
     '''
 
     def getLocalIPAddress(self):
-        status, ipAddress = commands.getstatusoutput(
+        status, ipAddress = subprocess.getstatusoutput(
             "ifconfig eth0 | grep 'inet addr:' | cut -d: -f2 |awk '{print $1}'")
         return ipAddress
 
@@ -2703,6 +2715,13 @@ class BaseTestCase(unittest.TestCase):
         """
         remote = RemoteMachineShellConnection(self.master)
         output, error = remote.enable_diag_eval_on_non_local_hosts()
+
+        # print("--------------output : ")
+        # print( output)
+        # print("\n\n error: " )
+        # print( error )
+        # print("\n\n --------------")
+        output = output[0].decode('utf-8')
         if output is not None:
             if "ok" not in output:
                 self.log.error("Error in enabling diag/eval on non-local hosts on {}".format(self.master.ip))

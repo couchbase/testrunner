@@ -47,7 +47,7 @@ class SecondaryIndexingScanTests(BaseSecondaryIndexingTests):
             self.run_doc_ops()
             self._query_explain_in_async()
             self._verify_index_map()
-        except Exception, ex:
+        except Exception as  ex:
             self.log.info(ex)
             raise
         finally:
@@ -62,7 +62,7 @@ class SecondaryIndexingScanTests(BaseSecondaryIndexingTests):
             # runs operations
             self._run_tasks(kvops_tasks)
             self._query_explain_in_async()
-        except Exception, ex:
+        except Exception as  ex:
             self.log.info(ex)
             raise
         finally:
@@ -119,7 +119,7 @@ class SecondaryIndexingScanTests(BaseSecondaryIndexingTests):
             self._run_tasks(kvops_tasks)
             self._run_tasks(query_tasks)
             self._run_tasks(drop_tasks)
-        except Exception, ex:
+        except Exception as  ex:
             self.log.info(ex)
             if not scan_vectors:
                 msg = "No scan_vector value"
@@ -151,7 +151,7 @@ class SecondaryIndexingScanTests(BaseSecondaryIndexingTests):
             self.run_doc_ops()
             self._verify_primary_index_count()
             self._query_explain_in_async()
-        except Exception, ex:
+        except Exception as  ex:
             self.log.info(ex)
             raise
 
@@ -246,7 +246,7 @@ class SecondaryIndexingScanTests(BaseSecondaryIndexingTests):
                         scan_consistency = self.scan_consistency,
                         scan_vectors = scan_vectors)
                 self._run_tasks(tasks)
-        except Exception, ex:
+        except Exception as  ex:
             self.log.info(ex)
             if self.scan_consistency == "at_plus" and not scan_vectors:
                 msg = "No scan_vector value"
@@ -312,7 +312,7 @@ class SecondaryIndexingScanTests(BaseSecondaryIndexingTests):
                         scan_consistency = self.scan_consistency,
                         scan_vectors = scan_vectors)
                 self._run_tasks(tasks)
-        except Exception, ex:
+        except Exception as  ex:
             self.log.info(ex)
             if self.scan_consistency == "at_plus" and not scan_vectors:
                 msg = "No scan_vector value"
@@ -344,7 +344,7 @@ class SecondaryIndexingScanTests(BaseSecondaryIndexingTests):
                 create_index = False, drop_index = False,
                 query_with_explain = False, query = self.run_query)
             self.fail(" querying without indexes and primary indexes is not allowed")
-        except Exception, ex:
+        except Exception as  ex:
             msg = "No primary index on keyspace default. Use CREATE PRIMARY INDEX to create one."
             self.assertTrue(msg in str(ex),"did not recieve message as expected : {0}".format(ex))
 

@@ -1,5 +1,5 @@
 import copy
-from documentgenerator import  DocumentGenerator
+from lib.couchbase_helper.documentgenerator import DocumentGenerator
 import re
 import datetime
 import json
@@ -1035,7 +1035,7 @@ class JsonGenerator:
         command += " -o {0}".format(dest_path)
         if pod_path != None:
             command += " {0}".format(pod_path)
-        print "Will run the following command: {0}".format(command)
+        print ("Will run the following command: {0}".format(command))
         # run command and generate temp file
         os.system(command)
         # read file and generate list

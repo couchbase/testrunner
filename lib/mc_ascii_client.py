@@ -5,17 +5,17 @@ Ascii memcached test client.
 
 import socket
 import select
-import exceptions
+from builtins import Exception as exceptions
 
 import memcacheConstants
 
-class MemcachedError(exceptions.Exception):
+class MemcachedError(exceptions):
     """Error raised when a command fails."""
 
     def __init__(self, status, msg):
-        supermsg='Memcached error #' + `status`
+        supermsg='Memcached error #' + 'status'
         if msg: supermsg += ":  " + msg
-        exceptions.Exception.__init__(self, supermsg)
+        exceptions.__init__(self, supermsg)
 
         self.status=status
         self.msg=msg
@@ -103,7 +103,7 @@ class MemcachedAsciiClient(object):
         error = ""
         while msg.split(" ")[0] == "STAT" or \
                 msg.split(" ")[0] == "VERSION":
-            print "msg:",msg
+            print("msg:",msg)
             kind = msg.split(" ")[0]
             key = msg.split(" ")[1]
             if kind == "VERSION":
