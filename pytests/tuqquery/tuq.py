@@ -514,17 +514,35 @@ class QueryTests(BaseTestCase):
 
         self.assertEqual(has_errors, False)
 
-    def is_index_present(self, bucket_name, index_name, fields_set, using):
-        desired_index = (index_name, bucket_name,
-                         frozenset([field for field in fields_set]),
-                         "online", using)
+    def is_index_present(self, bucket_name, index_name, fields_set=None, using=None, status="online"):
         query_response = self.run_cbq_query("SELECT * FROM system:indexes")
-        current_indexes = [(i['indexes']['name'],
-                            i['indexes']['keyspace_id'],
-                            frozenset([(key.replace('`', '').replace('(', '').replace(')', '').replace('meta.id', 'meta().id'), j)
-                                       for j, key in enumerate(i['indexes']['index_key'], 0)]),
-                            i['indexes']['state'],
-                            i['indexes']['using']) for i in query_response['results']]
+        if fields_set is None and using is None:
+            if status is "any":
+                desired_index = (index_name, bucket_name)
+                current_indexes = [(i['indexes']['name'],
+                                    i['indexes']['keyspace_id']) for i in query_response['results']]
+            else:
+                desired_index = (index_name, bucket_name, status)
+                current_indexes = [(i['indexes']['name'],
+                                i['indexes']['keyspace_id'],
+                                i['indexes']['state']) for i in query_response['results']]
+        else:
+            if status is "any":
+                desired_index = (index_name, bucket_name, frozenset([field for field in fields_set]), using)
+                current_indexes = [(i['indexes']['name'],
+                                    i['indexes']['keyspace_id'],
+                                    frozenset([(key.replace('`', '').replace('(', '').replace(')', '').replace('meta.id', 'meta().id'), j)
+                                               for j, key in enumerate(i['indexes']['index_key'], 0)]),
+                                    i['indexes']['using']) for i in query_response['results']]
+            else:
+                desired_index = (index_name, bucket_name, frozenset([field for field in fields_set]), status, using)
+                current_indexes = [(i['indexes']['name'],
+                                i['indexes']['keyspace_id'],
+                                frozenset([(key.replace('`', '').replace('(', '').replace(')', '').replace('meta.id', 'meta().id'), j)
+                                           for j, key in enumerate(i['indexes']['index_key'], 0)]),
+                                i['indexes']['state'],
+                                i['indexes']['using']) for i in query_response['results']]
+
         if desired_index in current_indexes:
             return True
         else:
@@ -537,11 +555,45 @@ class QueryTests(BaseTestCase):
         for index in cur_indexes:
             self._wait_for_index_online(index['bucket'], index['name'])
 
+    def wait_for_index_status_bulk(self, bucket_index_status_list):
+        for item in bucket_index_status_list:
+            bucket = item[0]
+            index_name = item[1]
+            index_status = item[2]
+            self.wait_for_index_status(bucket, index_name, index_status)
+
+    def drop_index(self, bucket, index):
+        self.run_cbq_query("drop index %s.%s" % (bucket, index))
+        self.wait_for_index_drop(bucket, index)
+
+    def drop_all_indexes(self, bucket=None, leave_primary=True):
+        current_indexes = self.get_parsed_indexes()
+        if bucket is not None:
+            current_indexes = [index for index in current_indexes if index['bucket'] == bucket]
+        if leave_primary:
+            current_indexes = [index for index in current_indexes if index['is_primary'] is False]
+        for index in current_indexes:
+            bucket = index['bucket']
+            index_name = index['name']
+            self.run_cbq_query("drop index %s.%s" % (bucket, index_name))
+        for index in current_indexes:
+            bucket = index['bucket']
+            index_name = index['name']
+            self.wait_for_index_drop(bucket, index_name)
+
+    def wait_for_index_status(self, bucket_name, index_name, status):
+        self.with_retry(lambda: self.is_index_present(bucket_name, index_name, status=status), eval=True, delay=1, tries=30)
+
     def wait_for_index_present(self, bucket_name, index_name, fields_set, using):
         self.with_retry(lambda: self.is_index_present(bucket_name, index_name, fields_set, using), eval=True, delay=1, tries=30)
 
-    def wait_for_index_drop(self, bucket_name, index_name, fields_set, using):
-        self.with_retry(lambda: self.is_index_present(bucket_name, index_name, fields_set, using), eval=False, delay=1, tries=30)
+    def wait_for_index_drop(self, bucket_name, index_name, fields_set=None, using=None):
+        self.with_retry(lambda: self.is_index_present(bucket_name, index_name, fields_set=fields_set, using=using, status="any"), eval=False, delay=1, tries=30)
+
+    def get_index_count(self, bucket, state):
+        results = self.run_cbq_query("SELECT  count(*) as num_indexes FROM system:indexes WHERE keyspace_id = '%s' and state = '%s'" % (bucket, state))
+        num_indexes = results['results'][0]['num_indexes']
+        return num_indexes
 
     def get_parsed_indexes(self):
         query_response = self.run_cbq_query("SELECT * FROM system:indexes")
