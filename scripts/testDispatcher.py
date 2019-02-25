@@ -241,6 +241,8 @@ def main():
 #     if options.framework.lower() == "jython":
     if framework == "jython":
         launchStringBase = launchStringBase + '-jython'
+    if framework == "TAF":
+        launchStringBase = launchStringBase + '-TAF'
     elif options.jenkins is not None:
         launchStringBase = launchStringBase + '-' + options.jenkins
 
