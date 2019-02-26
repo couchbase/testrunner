@@ -145,6 +145,12 @@ class NodeInitializeTask(Task):
         """ Adjust KV RAM to correct value when there is INDEX
             and FTS services added to node from Watson  """
         index_quota = INDEX_QUOTA
+        cluster_setting = rest.cluster_status()
+        fts_quota = FTS_QUOTA
+        if cluster_setting:
+            if cluster_setting["ftsMemoryQuota"] and \
+                int(cluster_setting["ftsMemoryQuota"]) >= 256:
+                fts_quota = int(cluster_setting["ftsMemoryQuota"])
         kv_quota = int(info.mcdMemoryReserved * 2/3)
         if self.index_quota_percent:
                 index_quota = self.index_quota
@@ -161,10 +167,10 @@ class NodeInitializeTask(Task):
                 self.log.info("set index quota to node %s " % self.server.ip)
                 rest.set_service_memoryQuota(service='indexMemoryQuota', memoryQuota=index_quota)
             if "fts" in set_services:
-                self.log.info("quota for fts service will be %s MB" % (FTS_QUOTA))
-                kv_quota -= FTS_QUOTA
+                self.log.info("quota for fts service will be %s MB" % (fts_quota))
+                kv_quota -= fts_quota
                 self.log.info("set both index and fts quota at node %s "% self.server.ip)
-                rest.set_service_memoryQuota(service='ftsMemoryQuota', memoryQuota=FTS_QUOTA)
+                rest.set_service_memoryQuota(service='ftsMemoryQuota', memoryQuota=fts_quota)
             if "cbas" in set_services:
                 self.log.info("quota for cbas service will be %s MB" % (CBAS_QUOTA))
                 kv_quota -= CBAS_QUOTA
