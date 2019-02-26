@@ -909,7 +909,23 @@ class QueryTests(BaseTestCase):
               % (result_no_prepare[:100], result_no_prepare[-100:], result_with_prepare[:100], result_with_prepare[-100:])
         self.assertTrue(sorted(result_no_prepare) == sorted(result_with_prepare), msg)
 
-    def run_cbq_query(self, query=None, min_output_size=10, server=None, query_params={}, is_prepared=False, encoded_plan=None):
+    def run_cbq_query_curl(self, query=None, server=None):
+        if query is None:
+            query = self.query
+        if server is None:
+            server = self.master
+
+        shell = RemoteMachineShellConnection(server)
+        cmd = (self.curl_path+" -u "+self.master.rest_username+":"+self.master.rest_password+" http://"+server.ip+":"+server.n1ql_port+"/query/service -d " \
+                  "statement="+query)
+
+        output, error = shell.execute_command(cmd)
+        json_output_str = ''
+        for s in output:
+            json_output_str += s
+        return json.loads(json_output_str)
+
+    def run_cbq_query(self, query=None, min_output_size=10, server=None, query_params={}, is_prepared=False, encoded_plan=None, username=None, password=None):
         if query is None:
             query = self.query
         if server is None:
@@ -918,8 +934,9 @@ class QueryTests(BaseTestCase):
                 server = self.tuq_client
         cred_params = {'creds': []}
         rest = RestConnection(server)
-        username = rest.username
-        password = rest.password
+        if username is None and password is None:
+            username = rest.username
+            password = rest.password
         cred_params['creds'].append({'user': username, 'pass': password})
         for bucket in self.buckets:
             if bucket.saslPassword:

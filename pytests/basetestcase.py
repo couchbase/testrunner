@@ -2164,7 +2164,7 @@ class BaseTestCase(unittest.TestCase):
         else:
             pre_spock = not cluster_compatibility
         if pre_spock:
-            self.log.info("Atleast one of the nodes in the cluster is "
+            self.log.info("At least one of the nodes in the cluster is "
                           "pre 5.0 version. Hence not creating rbac user "
                           "for the cluster. RBAC is a 5.0 feature.")
             return
