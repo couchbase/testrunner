@@ -64,6 +64,8 @@ Available keys:
  storage_mode=plasma        Sets indexer storage mode
  enable_ipv6=False          Enable ipv6 mode in ns_server
  ntp=True                   Check if ntp is installed. Default is true. Set ntp=False, in case systemctl is not allowed, such as in docker container
+ fts_quota=256              Set quota for fts services.  It must be equal or greater 256.  If fts_quota does not pass,
+                            it will take FTS_QUOTA value in lib/testconstants.py
 
 
 Examples:
