@@ -296,6 +296,7 @@ class Installer(object):
             if 'enable_ipv6' in params and params['enable_ipv6']:
                 build_repo = build_repo.replace(CB_DOWNLOAD_SERVER,
                                                 CB_DOWNLOAD_SERVER_FQDN)
+
             for name in names:
                 if version[:5] in releases_version:
                     build = BuildQuery().find_membase_release_build(
@@ -518,6 +519,12 @@ class CouchbaseServerInstaller(Installer):
                     init_nodes = params["init_nodes"]
                 else:
                     init_nodes = "True"
+
+                if 'fts_quota' in params and int(params['fts_quota']) >= 256:
+                    fts_quota = int(params['fts_quota'])
+                else:
+                    fts_quota = FTS_QUOTA
+
                 if (isinstance(init_nodes, bool) and init_nodes) or \
                         (isinstance(init_nodes, str) and init_nodes.lower() == "true"):
                     if not server.services:
@@ -543,10 +550,10 @@ class CouchbaseServerInstaller(Installer):
                             log.info("set index quota to node %s " % server.ip)
                             rest.set_service_memoryQuota(service='indexMemoryQuota', memoryQuota=INDEX_QUOTA)
                         if "fts" in set_services:
-                            log.info("quota for fts service will be %s MB" % (FTS_QUOTA))
-                            kv_quota -= FTS_QUOTA
+                            log.info("quota for fts service will be %s MB" % (fts_quota))
+                            kv_quota -= fts_quota
                             log.info("set both index and fts quota at node %s "% server.ip)
-                            rest.set_service_memoryQuota(service='ftsMemoryQuota', memoryQuota=FTS_QUOTA)
+                            rest.set_service_memoryQuota(service='ftsMemoryQuota', memoryQuota=fts_quota)
                         if "cbas" in set_services:
                             log.info("quota for cbas service will be %s MB" % (CBAS_QUOTA))
                             kv_quota -= CBAS_QUOTA
@@ -677,6 +684,11 @@ class CouchbaseServerInstaller(Installer):
             start_server = False
         else:
             fts_query_limit = None
+
+        if 'fts_quota' in params and int(params["fts_quota"]) >= 256:
+            fts_quota = int(params["fts_quota"])
+        else:
+            fts_quota = FTS_QUOTA
 
         if "enable_ipv6" in params:
             enable_ipv6 = params["enable_ipv6"]
