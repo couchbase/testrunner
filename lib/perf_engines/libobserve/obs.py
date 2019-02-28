@@ -148,7 +148,7 @@ class Observer:
         return self._observables.size()
 
     def reskey_generator(self, responses):
-        for server, reses in responses.iteritems():
+        for server, reses in responses.items():
             for res in reses:
                 if res.__class__.__name__ == "ObserveResponse":
                     for res_key in res.keys:
@@ -159,7 +159,7 @@ class Observer:
         Generate observables, using status as filter
         not thread safe.
         """
-        for obs in self._observables.dict.itervalues():
+        for obs in self._observables.dict.values():
             if obs.status == status:
                 yield obs
 

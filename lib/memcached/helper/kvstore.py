@@ -50,10 +50,10 @@ class KVStore(object):
         elif isinstance(key, int):
             self.cache[self._hash(key)]["lock"].release()
         else:
-            raise(Exception("Bad key"))
+            raise Exception
 
     def acquire_random_partition(self, has_valid=True, collection=None):
-        seed = random.choice(range(self.num_locks))
+        seed = random.choice(list(range(self.num_locks)))
         for itr in range(self.num_locks):
             part_num = (seed + itr) % self.num_locks
             self.cache[part_num]["lock"].acquire()
@@ -174,7 +174,7 @@ class Partition(object):
 
     def get_random_deleted_key(self):
         try:
-            return random.choice(self.__deleted.keys())
+            return random.choice(list(self.__deleted.keys()))
         except IndexError:
             return None
 
@@ -185,17 +185,17 @@ class Partition(object):
         return None
 
     def valid_key_set(self):
-        valid_keys = copy.copy(self.__valid.keys())
+        valid_keys = copy.copy(list(self.__valid.keys()))
         [self.__expire_key(key) for key in valid_keys]
-        return self.__valid.keys()
+        return list(self.__valid.keys())
 
     def deleted_key_set(self):
-        valid_keys = copy.copy(self.__valid.keys())
+        valid_keys = copy.copy(list(self.__valid.keys()))
         [self.__expire_key(key) for key in valid_keys]
-        return self.__deleted.keys()
+        return list(self.__deleted.keys())
 
     def expired_key_set(self):
-        valid_keys = copy.copy(self.__valid.keys())
+        valid_keys = copy.copy(list(self.__valid.keys()))
         [self.__expire_key(key) for key in valid_keys]
         return self.__expired_keys
 
@@ -244,8 +244,8 @@ class Partition(object):
         return key in self.__expired_keys
 
     def __len__(self):
-        [self.__expire_key(key) for key in self.__valid.keys()]
-        return len(self.__valid.keys())
+        [self.__expire_key(key) for key in list(self.__valid.keys())]
+        return len(list(self.__valid.keys()))
 
     def __eq__(self, other):
         if isinstance(other, Partition):

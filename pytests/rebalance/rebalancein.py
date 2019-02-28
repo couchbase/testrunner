@@ -158,17 +158,21 @@ class RebalanceInTests(RebalanceBaseTest):
         gen_create = BlobGenerator('mike', 'mike-', self.value_size, start=self.num_items + 1, end=self.num_items * 3/2)
         servs_in = [self.servers[i + self.nodes_init] for i in range(self.nodes_in)]
         tasks = [self.cluster.async_rebalance(self.servers[:self.nodes_init], servs_in, [])]
+        print("\n\n\nEntering Test case\n\n\n")
         if(self.doc_ops is not None):
             # define which doc's ops will be performed during rebalancing
             # allows multiple of them but one by one
             if("update" in self.doc_ops):
                 tasks += self._async_load_all_buckets(self.master, self.gen_update, "update", 0)
             if("create" in self.doc_ops):
+                print("Entering the doc ops")
                 tasks += self._async_load_all_buckets(self.master, gen_create, "create", 0)
+                print("The tasks are",tasks)
             if("delete" in self.doc_ops):
                 tasks += self._async_load_all_buckets(self.master, gen_delete, "delete", 0)
         for task in tasks:
             task.result()
+        print("Exiting Test case")
         self.verify_cluster_stats(self.servers[:self.nodes_in + self.nodes_init])
         self.verify_unacked_bytes_all_buckets()
 
@@ -277,7 +281,7 @@ class RebalanceInTests(RebalanceBaseTest):
         servs_in = self.servers[self.nodes_init:self.nodes_init + self.nodes_in]
         rebalance = self.cluster.async_rebalance(self.servers[:1], servs_in, [])
         self.sleep(5)
-        rest_cons = [RestConnection(self.servers[i]) for i in xrange(self.nodes_init)]
+        rest_cons = [RestConnection(self.servers[i]) for i in range(self.nodes_init)]
         result = []
         num_iter = 0
         # get random keys for each node during rebalancing
@@ -303,7 +307,7 @@ class RebalanceInTests(RebalanceBaseTest):
 
         rebalance.result()
         # get random keys for new added nodes
-        rest_cons = [RestConnection(self.servers[i]) for i in xrange(self.nodes_init + self.nodes_in)]
+        rest_cons = [RestConnection(self.servers[i]) for i in range(self.nodes_init + self.nodes_in)]
         list_threads = []
         for rest in rest_cons:
               t = Thread(target=rest.get_random_key,
@@ -413,7 +417,7 @@ class RebalanceInTests(RebalanceBaseTest):
 
         for bucket in self.buckets:
             self.perform_verify_queries(num_views, prefix, ddoc_name, query, bucket=bucket, wait_time=timeout, expected_rows=expected_rows)
-        for i in xrange(iterations_to_try):
+        for i in range(iterations_to_try):
             servs_in = self.servers[self.nodes_init:self.nodes_init + self.nodes_in]
             rebalance = self.cluster.async_rebalance([self.master], servs_in, [])
             self.sleep(self.wait_timeout / 5)
@@ -573,7 +577,7 @@ class RebalanceInTests(RebalanceBaseTest):
 
         fragmentation_monitor.result()
 
-        for i in xrange(3):
+        for i in range(3):
             active_tasks = self.cluster.async_monitor_active_task(self.master, "indexer", "_design/" + ddoc_name, wait_task=False)
             for active_task in active_tasks:
                 result = active_task.result()
@@ -740,7 +744,7 @@ class RebalanceWithPillowFight(BaseTestCase):
         while self.num_items > batch_end:
             batch_end = batch_start + batch_size
             keys = []
-            for i in xrange(batch_start, batch_end, 1):
+            for i in range(batch_start, batch_end, 1):
                 keys.append(str(i).rjust(20, '0'))
             try:
                 bkt.get_multi(keys)
@@ -777,7 +781,7 @@ class RebalanceWithPillowFight(BaseTestCase):
         if errors:
             self.log.info("Printing missing keys:")
         for error in errors:
-            print (error)
+            print(error)
         if self.num_items != rest.get_active_key_count(bucket):
             self.fail("FATAL: Data loss detected!! Docs loaded : {0}, docs present: {1}".
                           format(self.num_items, rest.get_active_key_count(bucket) ))

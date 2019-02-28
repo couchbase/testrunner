@@ -236,14 +236,10 @@ class RestConnection(object):
         if int(port) in range(9091, 9100):
             # return elastic search rest connection
             from membase.api.esrest_client import EsRestConnection
-            obj = object.__new__(EsRestConnection)
-            # print("__________________TYPE________________%s" % type(obj))
-            # obj.server_info(serverInfo)
+            obj = object.__new__(EsRestConnection, serverInfo)
         else:
             # default
             obj = object.__new__(self)
-            # print("__________________TYPE________________%s" % type(obj))
-            # obj.server_info(serverInfo)
         return obj
 
     def __init__(self, serverInfo):
@@ -257,12 +253,12 @@ class RestConnection(object):
             self.fts_port = 8094
             self.query_port = 8093
             self.eventing_port = 8096
-            if "index_port" in serverInfo.keys():
+            if "index_port" in list(serverInfo.keys()):
                 self.index_port = serverInfo["index_port"]
-            if "fts_port" in serverInfo.keys():
+            if "fts_port" in list(serverInfo.keys()):
                 if serverInfo['fts_port']:
                     self.fts_port = serverInfo["fts_port"]
-            if "eventing_port" in serverInfo.keys():
+            if "eventing_port" in list(serverInfo.keys()):
                 if serverInfo['eventing_port']:
                     self.eventing_port = serverInfo["eventing_port"]
             self.hostname = ''
@@ -354,7 +350,7 @@ class RestConnection(object):
             self.capiBaseUrl = self.baseUrl + "/couchBase"
         else:
             for iteration in range(5):
-                if "couchApiBase" not in http_res.keys():
+                if "couchApiBase" not in list(http_res.keys()):
                     if self.is_cluster_mixed():
                         self.capiBaseUrl = self.baseUrl + "/couchBase"
                         return
@@ -391,7 +387,7 @@ class RestConnection(object):
 
     def is_cluster_mixed(self):
             http_res, success = self.init_http_request(self.baseUrl + 'pools/default')
-            if http_res == u'unknown pool':
+            if http_res == 'unknown pool':
                 return False
             try:
                 versions = list(set([node["version"][:1] for node in http_res["nodes"]]))
@@ -421,7 +417,7 @@ class RestConnection(object):
 
     def is_enterprise_edition(self):
         http_res, success = self.init_http_request(self.baseUrl + 'pools/default')
-        if http_res == u'unknown pool':
+        if http_res == 'unknown pool':
             return False
         editions = []
         community_nodes = []
@@ -1309,7 +1305,7 @@ class RestConnection(object):
                 wanted_node.print_UI_logs()
             except Exception as ex:
                 self.log(ex)
-            if content.find('Prepare join failed. Node is already part of cluster') >= 0:
+            if content.find(bytes('Prepare join failed. Node is already part of cluster', encoding='UTF8')) >= 0:
                 raise ServerAlreadyJoinedException(nodeIp=self.ip,
                                                    remoteIp=remoteIp)
             elif content.find('Prepare join failed. Joining node to itself is not allowed') >= 0:
@@ -1719,7 +1715,7 @@ class RestConnection(object):
         for index_stats in json_parsed:
             bucket = index_stats["Index"].split(":")[0]
             index_name = index_stats["Index"].split(":")[1]
-            if not bucket in index_storage_stats.keys():
+            if not bucket in list(index_storage_stats.keys()):
                 index_storage_stats[bucket] = {}
             index_storage_stats[bucket][index_name] = index_stats["Stats"]
         return index_storage_stats
@@ -1730,7 +1726,7 @@ class RestConnection(object):
         status, content, header = self._http_request(api, timeout=timeout)
         if status:
             json_parsed = json.loads(content)
-            for key in json_parsed.keys():
+            for key in list(json_parsed.keys()):
                 tokens = key.split(":")
                 val = json_parsed[key]
                 if len(tokens) == 1:
@@ -1744,7 +1740,7 @@ class RestConnection(object):
         status, content, header = self._http_request(api, timeout=timeout)
         if status:
             json_parsed = json.loads(content)
-            for key in json_parsed.keys():
+            for key in list(json_parsed.keys()):
                 tokens = key.split(":")
                 val = json_parsed[key]
                 if len(tokens) == 1:
@@ -1758,7 +1754,7 @@ class RestConnection(object):
         status, content, header = self._http_request(api, timeout=timeout)
         if status:
             json_parsed = json.loads(content)
-            for key in json_parsed.keys():
+            for key in list(json_parsed.keys()):
                 tokens = key.split(":")
                 val = json_parsed[key]
                 if len(tokens) == 1:
@@ -1783,7 +1779,7 @@ class RestConnection(object):
             json_parsed = json.loads(content)
             for map in json_parsed["indexes"]:
                 bucket_name = map['bucket'].encode('ascii', 'ignore')
-                if bucket_name not in index_map.keys():
+                if bucket_name not in list(index_map.keys()):
                     index_map[bucket_name] = {}
                 index_name = map['index'].encode('ascii', 'ignore')
                 index_map[bucket_name][index_name] = {}
@@ -1815,7 +1811,7 @@ class RestConnection(object):
                     node.ip = self.ip
                 node.port = int(key[key.rfind(":") + 1:])
                 node.replication = value['replication']
-                if 'gracefulFailoverPossible' in value.keys():
+                if 'gracefulFailoverPossible' in list(value.keys()):
                     node.gracefulFailoverPossible = value['gracefulFailoverPossible']
                 else:
                     node.gracefulFailoverPossible = False
@@ -3986,7 +3982,7 @@ class RestConnection(object):
         return json.loads(content)
 
     def full_table_scan_gsi_index_with_rest(self, id, body, username="Administrator", password="password"):
-        if "limit" not in body.keys():
+        if "limit" not in list(body.keys()):
             body["limit"] = 900000
         authorization = base64.encodebytes(('%s:%s' % (username, password)).encode('utf-8')).decode('utf-8')
         url = 'internal/index/{0}?scanall=true'.format(id)
@@ -4003,7 +3999,7 @@ class RestConnection(object):
         return json.loads(chunkless_content)
 
     def range_scan_gsi_index_with_rest(self, id, body, username="Administrator", password="password"):
-        if "limit" not in body.keys():
+        if "limit" not in list(body.keys()):
             body["limit"] = 300000
         authorization = base64.encodebytes(('%s:%s' % (username, password)).encode('utf-8')).decode('utf-8')
         url = 'internal/index/{0}?range=true'.format(id)
@@ -4302,7 +4298,7 @@ class RestConnection(object):
             raise Exception(content)
         if status:
             json_parsed = json.loads(content)
-            for key in json_parsed[0].keys(): # returns an array
+            for key in list(json_parsed[0].keys()): # returns an array
                 tokens = key.split(":")
                 val = json_parsed[0][key]
                 if len(tokens) == 1:
@@ -4363,7 +4359,7 @@ class RestConnection(object):
         status, content, header = self._http_request(api, 'GET', headers=headers)
         if status:
             json_parsed = json.loads(content)
-            for key in json_parsed.keys():
+            for key in list(json_parsed.keys()):
                 tokens = key.split(":")
                 val = json_parsed[key]
                 if len(tokens) == 1:
@@ -4384,7 +4380,7 @@ class RestConnection(object):
         status, content, header = self._http_request(api, 'GET', headers=headers)
         if status:
             json_parsed = json.loads(content)
-            for key in json_parsed.keys():
+            for key in list(json_parsed.keys()):
                 tokens = key.split(":")
                 val = json_parsed[key]
                 if len(tokens) == 1:
@@ -4426,7 +4422,7 @@ class RestConnection(object):
         status, content, header = self._http_request(api, 'GET', headers=headers)
         if status:
             json_parsed = json.loads(content)
-            for key in json_parsed.keys():
+            for key in list(json_parsed.keys()):
                 tokens = key.split(":")
                 val = json_parsed[key]
                 if len(tokens) == 1:
@@ -4772,16 +4768,16 @@ class RestParser(object):
     def parse_index_stats_response(self, parsed, index_map=None):
         if index_map == None:
             index_map = {}
-        for key in parsed.keys():
+        for key in list(parsed.keys()):
             tokens = key.split(":")
             val = parsed[key]
             if len(tokens) > 2:
                 bucket = tokens[0]
                 index_name = tokens[1]
                 stats_name = tokens[2]
-                if bucket not in index_map.keys():
+                if bucket not in list(index_map.keys()):
                     index_map[bucket] = {}
-                if index_name not in index_map[bucket].keys():
+                if index_name not in list(index_map[bucket].keys()):
                     index_map[bucket][index_name] = {}
                 index_map[bucket][index_name][stats_name] = val
         return index_map

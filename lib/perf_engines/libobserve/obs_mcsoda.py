@@ -45,8 +45,8 @@ class McsodaObserver(Observer, Thread):
         while self.ctl['run_ok']:
             self.observe()
             try:
-                self.observable_filter(ObserveStatus.OBS_UNKNOWN).next()
-                print ("<%s> sleep for %f seconds" % (self.__class__.__name__, self.backoff))
+                next(self.observable_filter(ObserveStatus.OBS_UNKNOWN))
+                print("<%s> sleep for %f seconds" % (self.__class__.__name__, self.backoff))
                 sleep(self.backoff)
                 self.backoff = min(self.backoff * 2, self.max_backoff)
             except StopIteration:
@@ -70,7 +70,7 @@ class McsodaObserver(Observer, Thread):
             server_str = "{0}:{1}".format(self.store.conn.host, self.store.conn.port)
             self.conns[server_str] = conn
         elif self.store.__class__.__name__ == "StoreMembaseBinary":
-            for memcached in self.store.awareness.memcacheds.itervalues():
+            for memcached in self.store.awareness.memcacheds.values():
                 conn = MemcachedClient(memcached.host, memcached.port)
                 server_str = "{0}:{1}".format(conn.host, conn.port)
                 self.conns[server_str] = conn
@@ -86,11 +86,11 @@ class McsodaObserver(Observer, Thread):
     def _refresh_conns(self):
         """blocking call to refresh connections based on topology change"""
         if not self.store:
-            print ("<%s> failed to refresh connections, invalid store object"\
+            print("<%s> failed to refresh connections, invalid store object"\
                 % self.__class__.__name__)
             return False
 
-        print ("<%s> refreshing connections" % self.__class__.__name__)
+        print("<%s> refreshing connections" % self.__class__.__name__)
 
         if self.store.__class__.__name__ == "StoreMembaseBinary":
             old_keys = set(self.conns)
@@ -130,7 +130,7 @@ class McsodaObserver(Observer, Thread):
     def _reconnect(self, conn):
         if not conn or\
             conn.__class__.__name__ != "MemcachedClient":
-            print ("<%s> failed to reconnect, invalid connection object"\
+            print("<%s> failed to reconnect, invalid connection object"\
                 % self.__class__.__name__)
             return False
 
@@ -169,39 +169,39 @@ class McsodaObserver(Observer, Thread):
                         self.obs_keys[server] = vals
 
         reqs = []
-        for server, keys in self.obs_keys.iteritems():
+        for server, keys in self.obs_keys.items():
             req = ObserveRequest(keys)
             pkt = req.pack()
             try:
                 self.conns[server].s.send(pkt)
             except KeyError as e:
-                print ("<%s> failed to send observe pkt : %s" % (self.__class__.__name__, e))
+                print("<%s> failed to send observe pkt : %s" % (self.__class__.__name__, e))
                 self._add_conn(server)
                 return None
             except Exception as e:
-                print ("<%s> failed to send observe pkt : %s" % (self.__class__.__name__, e))
+                print("<%s> failed to send observe pkt : %s" % (self.__class__.__name__, e))
                 self._refresh_conns()
                 return None
             reqs.append(req)
 
-        print ("reqs::")
-        print (reqs)
+        print("reqs::")
+        print(reqs)
         return reqs
 
     def _recv(self):
 
         responses = {}      # {server: [responses]}
-        for server in self.obs_keys.iterkeys():
+        for server in self.obs_keys.keys():
             hdr = ''
             while len(hdr) < ObservePktFmt.OBS_RES_HDR_LEN:
                 try:
                     hdr += self.conns[server].s.recv(ObservePktFmt.OBS_RES_HDR_LEN)
                 except KeyError as e:
-                    print ("<%s> failed to recv observe pkt : %s" % (self.__class__.__name__, e))
+                    print("<%s> failed to recv observe pkt : %s" % (self.__class__.__name__, e))
                     self._add_conn(server)
                     return None
                 except Exception as e:
-                    print ("<%s> failed to recv observe pkt: %s" % (self.__class__.__name__, e))
+                    print("<%s> failed to recv observe pkt: %s" % (self.__class__.__name__, e))
                     self._refresh_conns()
                     return None
             res = ObserveResponse()
@@ -220,8 +220,8 @@ class McsodaObserver(Observer, Thread):
 
             self.save_latency_stats(res.persist_stat/1000)
 
-            print ("res::<%s>" % server)
-            print (res)
+            print("res::<%s>" % server)
+            print(res)
             vals = responses.get(server, [])
             vals.append(res)
             responses[server] = vals
@@ -237,7 +237,7 @@ class McsodaObserver(Observer, Thread):
                 server = self.awareness.vBucketMap[vbucketid]
             return server
         elif len(self.conns) and not repl:
-            return self.conns.iterkeys().next()
+            return next(iter(self.conns.keys()))
 
         return None
 
@@ -255,7 +255,7 @@ class McsodaObserver(Observer, Thread):
                 return False
 
             if new_cas != cas:
-                print ("<%s> block_for_persistence: key: %s, "\
+                print("<%s> block_for_persistence: key: %s, "\
                     "cas: %s has been modified"\
                     % (self.__class__.__name__, key, cas))
                 return False
@@ -267,11 +267,11 @@ class McsodaObserver(Observer, Thread):
                 self.backoff = min(self.backoff * 2, self.max_backoff)
                 continue
             elif status == ObserveKeyState.OBS_NOT_FOUND:
-                print ("<%s> block_for_persistence: key: %s, cas: %s does not" \
+                print("<%s> block_for_persistence: key: %s, cas: %s does not" \
                     " exist any more" % (self.__class__.__name__, key, cas))
                 return False
             else:
-                print ("<%s> block_for_persistence: invalid key state: %x" \
+                print("<%s> block_for_persistence: invalid key state: %x" \
                     % (self.__class__.__name__, res_key.key_state))
                 return False
 
@@ -284,7 +284,7 @@ class McsodaObserver(Observer, Thread):
         @param persist : block until item has been persisted to disk
         """
         if not isinstance(num, int) or num <= 0:
-            print ("<%s> block_for_replication: invalid num %s" \
+            print("<%s> block_for_replication: invalid num %s" \
                 % (self.__class__.__name__, num))
             return False
 
@@ -298,7 +298,7 @@ class McsodaObserver(Observer, Thread):
 
         self.backoff = self.cfg.get('obs-backoff', BACKOFF)
 
-        print ("<%s> block_for_replication: repl_servers: %s,"\
+        print("<%s> block_for_replication: repl_servers: %s,"\
             " key: %s, cas: %s, vbucketid: %s" \
             % (self.__class__.__name__, repl_servers, key, cas, vbucketid))
 
@@ -356,7 +356,7 @@ class McsodaObserver(Observer, Thread):
         """
         cas = ""
         if not key:
-            print ("<%s> observe_single: invalid key" % self.__class__.__name__)
+            print("<%s> observe_single: invalid key" % self.__class__.__name__)
             return -1
 
         vbucketid = \
@@ -371,7 +371,7 @@ class McsodaObserver(Observer, Thread):
         try:
             skt = self.conns[server].s
         except KeyError:
-            print ("<%s> observe_single: KeyError: %s" \
+            print("<%s> observe_single: KeyError: %s" \
                 % (self.__class__.__name__, server))
             self._add_conn(server)
             return -1, cas
@@ -379,20 +379,19 @@ class McsodaObserver(Observer, Thread):
         try:
             SocketHelper.send_bytes(skt, pkt, timeout)
         except IOError:
-            print ("<%s> observe_single: IOError: " \
+            print("<%s> observe_single: IOError: " \
                   "failed to send observe pkt : %s" \
                   % (self.__class__.__name__, pkt))
             self._reconnect(self.conns[server])
             self._refresh_conns()
             return -1, cas
         except socket.timeout:
-            print \
-                ("<%s> observe_single: timeout: " \
+            print("<%s> observe_single: timeout: " \
                 "failed to send observe pkt : %s" \
                 % (self.__class__.__name__, pkt))
             return -1, cas
         except Exception as e:
-            print ("<%s> observe_single: failed to send observe pkt : %s" \
+            print("<%s> observe_single: failed to send observe pkt : %s" \
                 % (self.__class__.__name__, e))
             return -1, cas
 
@@ -407,22 +406,22 @@ class McsodaObserver(Observer, Thread):
             body = SocketHelper.recv_bytes(skt, res.body_len, timeout)
             res.unpack_body(body)
         except IOError:
-            print ("<%s> observe_single: IOError: failed to recv observe pkt" \
+            print("<%s> observe_single: IOError: failed to recv observe pkt" \
                 % self.__class__.__name__)
             self._reconnect(self.conns[server])
             self._refresh_conns()
             return -1, cas
         except socket.timeout:
-            print ("<%s> observe_single: timeout: failed to recv observe pkt" \
+            print("<%s> observe_single: timeout: failed to recv observe pkt" \
                 % self.__class__.__name__)
             return -1, cas
         except Exception as e:
-            print ("<%s> observe_single: failed to recv observe pkt : %s" \
+            print("<%s> observe_single: failed to recv observe pkt : %s" \
                 % (self.__class__.__name__, e))
             return -1, cas
 
         if not res:
-            print ( "<%s> observe_single: empty response" \
+            print("<%s> observe_single: empty response" \
                 % self.__class__.__name__)
             return -1, cas
 

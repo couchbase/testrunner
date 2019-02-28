@@ -15,29 +15,26 @@ log = logger.Logger.get_logger()
 #   directly import this module into tests
 
 class EsRestConnection(RestConnection):
-    # def server_info(self, serverInfo):
-    #     if isinstance(serverInfo, dict):
-    #         self.ip = serverInfo["ip"]
-    #         self.rest_username = serverInfo["username"]
-    #         self.rest_password = serverInfo["password"]
-    #         self.username = serverInfo["es_username"]
-    #         self.password = serverInfo["es_password"]
-    #         self.port = 9091 #serverInfo["port"]
-    #     else:
-    #         self.ip = serverInfo.ip
-    #         self.rest_username = serverInfo.rest_username
-    #         self.rest_password = serverInfo.rest_password
-    #         self.username = serverInfo.es_username
-    #         self.password = serverInfo.es_password
-    #         self.port = 9091 # serverInfo.port
-
-    def __init__(self,  proto = "http"):
+    def __init__(self, serverInfo, proto = "http"):
         #serverInfo can be a json object
         #only connect pyes to master es node
         #in the case that other nodes are taken down
         #because http requests will fail
         # TODO: dynamic master node detection
-
+        if isinstance(serverInfo, dict):
+            self.ip = serverInfo["ip"]
+            self.rest_username = serverInfo["username"]
+            self.rest_password = serverInfo["password"]
+            self.username = serverInfo["es_username"]
+            self.password = serverInfo["es_password"]
+            self.port = 9091 #serverInfo["port"]
+        else:
+            self.ip = serverInfo.ip
+            self.rest_username = serverInfo.rest_username
+            self.rest_password = serverInfo.rest_password
+            self.username = serverInfo.es_username
+            self.password = serverInfo.es_password
+            self.port = 9091 # serverInfo.port
 
         self.baseUrl = "http://{0}:{1}/".format(self.ip, self.port)
         self.capiBaseUrl = self.baseUrl
