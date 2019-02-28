@@ -3966,7 +3966,7 @@ class RemoteMachineShellConnection:
         self.log_command_output(output, error)
 
     def restore_backupFile(self, login_info, backup_location, buckets):
-        restore_command = "{0}scbrestore".format(LINUX_COUCHBASE_BIN_PATH)
+        restore_command = "{0}cbrestore".format(LINUX_COUCHBASE_BIN_PATH)
         backup_file_location = backup_location
         self.extract_remote_info()
         if self.info.type.lower() == 'windows':
