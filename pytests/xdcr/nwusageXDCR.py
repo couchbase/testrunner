@@ -109,7 +109,7 @@ class nwusage(XDCRNewBaseTest):
                 time_to_compare = self._extract_timestamp(matches[-1])
             else:
                 self.fail("Replication not successful")
-        nw_max = self._extract_bandwith_quota(node, time_to_compare, end_time)
+        nw_max = self._extract_bandwith_quota(node)
         self.sleep(60, 'Waiting for bandwidth usage logs..')
         # Try 3 times to extract current bandwidth usage from logs
         iter = 0
