@@ -77,7 +77,7 @@ class nwusage(XDCRNewBaseTest):
                 if item_datetime > end_datetime:
                     skip_count += 1
                     continue
-            bandwidth_usage = int(float(((item.split('{"bandwidth_usage": ')[1]).split(' ')[0]).rstrip(',')))
+            bandwidth_usage = int(float(((item.split('"bandwidth_usage": ')[1]).split(' ')[0]).rstrip(',')))
             if bandwidth_usage > nw_max:
                 self.fail(
                     "Bandwidth usage {0} is higher than Bandwidth limit {1} in {2}".format(bandwidth_usage, nw_max,
@@ -90,9 +90,15 @@ class nwusage(XDCRNewBaseTest):
         self.log.info("Stale entries :{0}, Valid entries :{1}".format(skip_count, valid_count))
         return valid_count
 
+    def _extract_bandwith_quota(self, node):
+        matches, count = NodeHelper.check_goxdcr_log(node, "bandwidth_usage_quota=" + "[0-9][0-9]*",
+                                                     print_matches=True, timeout=60)
+        bandwidth_quota = int(float(((matches[-1].split('bandwidth_usage_quota=')[1]).rstrip(' '))))
+        return bandwidth_quota
+
     def _verify_bandwidth_usage(self, node, nw_limit, no_of_nodes, event_time=None, nw_usage="[0-9][0-9]*",
                                 end_time=None):
-        nw_max = (nw_limit * 1024 * 1024) / no_of_nodes
+        #nw_max = (nw_limit * 1024 * 1024) / no_of_nodes
         if event_time:
             time_to_compare = self._extract_timestamp(event_time)
         else:
@@ -103,6 +109,7 @@ class nwusage(XDCRNewBaseTest):
                 time_to_compare = self._extract_timestamp(matches[-1])
             else:
                 self.fail("Replication not successful")
+        nw_max = self._extract_bandwith_quota(node, time_to_compare, end_time)
         self.sleep(60, 'Waiting for bandwidth usage logs..')
         # Try 3 times to extract current bandwidth usage from logs
         iter = 0
