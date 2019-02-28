@@ -1,7 +1,7 @@
 from couchbase.cluster import Cluster
 from couchbase.cluster import PasswordAuthenticator
 from couchbase.n1ql import N1QLQuery
-import urllib
+import urllib.request as urllib
 import json
 import argparse
 import sys
@@ -14,7 +14,7 @@ import paramiko
 
 
 def usage(err=None):
-    print """\
+    print ("""\
 Syntax: triage.py [options]
 
 Options
@@ -32,7 +32,7 @@ Options
 
 Examples:
   python scripts/triage.py --os CENTOS --build 6.5.0-1351 --component QUERY --user username --password password
-"""
+""")
     sys.exit(0)
 
 
@@ -136,7 +136,7 @@ def triage(os, build, component, username, password, job_list, format, ignore_li
         logs_data = {}
         try:
             logs_data = json.loads(response.read())
-        except ValueError, ve:
+        except ValueError as ve:
             a=1
 
         if (str(logs_data)) == '{}':
@@ -327,7 +327,7 @@ def print_report(failers, os, build, component, fmt):
     n=1
     connection_jobs_container = ""
 
-    print str(n) + ". Total list of failed jobs. "
+    print (str(n) + ". Total list of failed jobs. ")
     for job in failers:
         print(job['name'])
 
@@ -358,38 +358,38 @@ def print_report(failers, os, build, component, fmt):
         print("Jobs list to be restarted:")
         print(connection_jobs_container[:len(connection_jobs_container)-1])
         n = n+1
-        print
+        print()
 
     if len(no_logs_failers) > 0:
-        print str(n)+". There are failed jobs without logs."
+        print (str(n)+". There are failed jobs without logs.")
         no_logs_jobs_container = ""
         for job in no_logs_failers:
             no_logs_jobs_container = no_logs_jobs_container + job[job.find('_')+1:] + ','
         print("Jobs list to be restarted:")
         print(no_logs_jobs_container[:len(no_logs_jobs_container)-1])
         n = n+1
-        print
+        print()
 
     if len(all_the_rest_failers) > 0:
-        print str(n)+". There are failed jobs because of different errors."
+        print (str(n)+". There are failed jobs because of different errors.")
         for job in all_the_rest_failers:
             print("="*100)
-            print "JOB - "+str(job['name'])
+            print ("JOB - "+str(job['name']))
             if 'ini_file' in job.keys():
                 print(".ini file - "+str(job['ini_file']))
-            print
+            print()
             for case in job['cases']:
                 print("     CASE NAME - "+str(case['name']))
-                print
+                print()
                 if 'c' in fmt:
                     print("         config file - "+str(case['conf_file']))
-                    print
+                    print()
                 if 's' in fmt:
                     print("         stack trace - ")
                     print(""+str(case['stack_trace']))
                     print("-"*100)
                 if 'd' in fmt:
-                    print
+                    print()
                     if str(case['cmd_line']) == 'None':
                         print('         cmd line - None. If you see this, I could not identify cmd line for this test case.')
                         print('         Please send email to evgeny.makarenko@couchbase.com with subject \'Triage script - cmd error\',')
@@ -398,10 +398,10 @@ def print_report(failers, os, build, component, fmt):
                         print("         cmd line - "+str(case['cmd_line']))
                     if 'dump_file' in case.keys():
                         print("         dump file - "+str(case['dump_file']))
-                print
+                print()
             print("=" * 100)
         n = n+1
-        print
+        print ()
 
 
 def format_stack_trace(raw_stack_trace):

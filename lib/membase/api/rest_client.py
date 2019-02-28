@@ -331,7 +331,7 @@ class RestConnection(object):
         # for Node is unknown to this cluster error
         for iteration in range(5):
             http_res, success = self.init_http_request(self.baseUrl + 'nodes/self')
-            if not success and type(http_res) ==str and\
+            if not success and type(http_res) == str and\
                (http_res.find('Node is unknown to this cluster') > -1 or \
                 http_res.find('Unexpected server error, request logged') > -1):
                 log.error("Error {0} was gotten, 5 seconds sleep before retry"\
@@ -790,7 +790,9 @@ class RestConnection(object):
 
     # authorization must be a base64 string of username:password
     def _create_headers(self):
+        print("type of self.username , self.password : ", type(self.username),type(self.password))
         authorization = base64.encodebytes(('%s:%s' % (self.username, self.password)).encode('utf-8')).decode('utf-8')
+        print(" type of auth: ", type(authorization))
         return {'Content-Type': 'application/x-www-form-urlencoded',
                 'Authorization': 'Basic %s' % authorization,
                 'Accept': '*/*'}
@@ -806,10 +808,11 @@ class RestConnection(object):
         if key in headers:
             val = headers[key]
             if val.startswith("Basic "):
-                return "auth: " + base64.decodebytes(val[6:]).decode('utf-8')
+                return "auth: " + base64.b64decode(val[6:]).decode('UTF8')
         return ""
 
     def _http_request(self, api, method='GET', params='', headers=None, timeout=120):
+        print( "typeof api in _http_request : ",type(api))
         if not headers:
             headers = self._create_headers()
         end_time = time.time() + timeout
@@ -820,21 +823,26 @@ class RestConnection(object):
             try:
                 response, content = httplib2.Http(timeout=timeout).request(api, method,
                                                                            params, headers)
+                print(" the response and the content in http_request in rest_client: ", type(response),type(content))
                 if response['status'] in ['200', '201', '202']:
+                    print("in the if statement before retrun True, content, response ",type(content), type(response))
                     return True, content, response
+
                 else:
+                    print(" before the try block of interest")
                     try:
-                        json_parsed = json.loads(content)
+                        print("\n\n\n\n\n\n\n\n\n\nin json.loads() try ; type of content: ", type(content.decode('utf-8')),"\n\n\n\n\n\n\n\n" )
+                        json_parsed = json.loads(content.decode('utf-8'))
                     except ValueError as e:
                         json_parsed = {}
-                        json_parsed["error"] = "status: {0}, content: {1}"\
-                                                           .format(response['status'], content)
+                        json_parsed["error"] = "status: {0}, content: {1}"
+                    content = content.decode('utf-8')                                      .format(response['status'], content)
                     reason = "unknown"
                     if "error" in json_parsed:
                         reason = json_parsed["error"]
                     message = '{0} {1} body: {2} headers: {3} error: {4} reason: {5} {6} {7}'.\
                               format(method, api, params, headers, response['status'], reason,
-                                     content.rstrip('\n'), self._get_auth(headers))
+                                     content, self._get_auth(headers))
                     log.error(message)
                     log.debug(''.join(traceback.format_stack()))
                     return False, content, response
@@ -1308,7 +1316,7 @@ class RestConnection(object):
             if content.find(bytes('Prepare join failed. Node is already part of cluster', encoding='UTF8')) >= 0:
                 raise ServerAlreadyJoinedException(nodeIp=self.ip,
                                                    remoteIp=remoteIp)
-            elif content.find('Prepare join failed. Joining node to itself is not allowed') >= 0:
+            elif content.find(b'Prepare join failed. Joining node to itself is not allowed') >= 0:
                 raise ServerSelfJoinException(nodeIp=self.ip,
                                           remoteIp=remoteIp)
             else:
@@ -1917,6 +1925,7 @@ class RestConnection(object):
         bucket_map = {}
         api = '{0}{1}'.format(self.baseUrl, 'pools/default/buckets?basic_stats=true')
         status, content, header = self._http_request(api)
+        print("content in get_buckets_itemCount : ", type(content))
         json_parsed = json.loads(content)
         if status:
             for item in json_parsed:
@@ -2032,7 +2041,9 @@ class RestConnection(object):
             count += 1
         if count == 7:
             raise Exception("could not get node info after 30 seconds")
-        json_parsed = json.loads(content)
+
+        json_parsed = json.loads(content.decode('utf-8'))
+        print("json_parsed : 2045 ; rest_client.py ",type(content))
         if status:
             if "nodes" in json_parsed:
                 for json_node in json_parsed["nodes"]:
@@ -2234,10 +2245,14 @@ class RestConnection(object):
 
     def get_bucket(self, bucket='default', num_attempt=1, timeout=1):
         bucketInfo = None
+        # print(bucket)
         api = '%s%s%s?basic_stats=true' % (self.baseUrl, 'pools/default/buckets/', bucket)
+        print("api in rest_client 2241: ", type(api))
+        print("bucket isinstanceof Bucket in rest_client: ", isinstance(bucket, Bucket), "  ", bucket , bucketInfo )
         if isinstance(bucket, Bucket):
             api = '%s%s%s?basic_stats=true' % (self.baseUrl, 'pools/default/buckets/', bucket.name)
         status, content, header = self._http_request(api)
+        print("2254 in rest_client : content : ", type(content))
         num = 1
         while not status and num_attempt > num:
             log.error("try to get {0} again after {1} sec".format(api, timeout))
@@ -2250,7 +2265,13 @@ class RestConnection(object):
 
     def get_vbuckets(self, bucket='default'):
         b = self.get_bucket(bucket)
-        return None if not b else b.vbuckets
+        # print(" b in get_vbuckets ",b)
+        # print(" b.vbuckets in get_vbuckets ", b.vbuckets)
+        # a = not b == Null
+        if(not b):
+            print(not b," going to retrun none")
+            return None
+        return b.vbuckets
 
     def delete_bucket(self, bucket='default'):
         api = '%s%s%s' % (self.baseUrl, 'pools/default/buckets/', bucket)
@@ -3151,7 +3172,7 @@ class RestConnection(object):
     def get_nodes_data_from_cluster(self, param="nodes"):
         api = self.baseUrl + "pools/default/"
         status, content, header = self._http_request(api)
-        json_parsed = json.loads(content)
+        json_parsed = json.loads(content.decode('utf-8'))
         if status:
             if param in json_parsed:
                 return json_parsed[param]
@@ -4751,7 +4772,7 @@ class RestParser(object):
         index_map = {}
         for map in parsed["indexes"]:
             bucket_name = map['bucket'].encode('ascii', 'ignore')
-            if bucket_name not in index_map.keys():
+            if bucket_name not in list(index_map.keys()):
                 index_map[bucket_name] = {}
             index_name = map['index'].encode('ascii', 'ignore')
             index_map[bucket_name][index_name] = {}
@@ -4865,7 +4886,9 @@ class RestParser(object):
         return node
 
     def parse_get_bucket_response(self, response):
-        parsed = json.loads(response)
+        d = response.decode('utf-8')
+        parsed = json.loads(d)
+        print("parsed: ",parsed)
         return self.parse_get_bucket_json(parsed)
 
     def parse_get_bucket_json(self, parsed):

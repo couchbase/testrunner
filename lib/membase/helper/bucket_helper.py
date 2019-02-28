@@ -268,6 +268,7 @@ class BucketOperationHelper():
         ready_vbuckets = {}
         rest = RestConnection(node)
         servers = rest.get_nodes()
+        print(" in the wait_for_vbuckets_ready_state servers: ", servers)
         RestHelper(rest).vbucket_map_ready(bucket, 60)
         vbucket_count = len(rest.get_vbuckets(bucket))
         vbuckets = rest.get_vbuckets(bucket)
@@ -327,13 +328,14 @@ class BucketOperationHelper():
                                                bucket_info.saslPassword.encode('ascii'))
                         continue
 
-                    if c.find("\x01") > 0 or c.find("\x02") > 0:
+                    if c.find("\x01".encode('utf-8')) > 0 or c.find("\x02".encode('utf-8')) > 0:
                         ready_vbuckets[i] = True
                     elif i in ready_vbuckets:
                         log.warning("vbucket state changed from active to {0}".format(c))
                         del ready_vbuckets[i]
                 client.close()
-        return len(ready_vbuckets) == vbucket_count
+        a = len(ready_vbuckets) == vbucket_count
+        return a
 
     # try to insert key in all vbuckets before returning from this function
     # bucket { 'name' : 90,'password':,'port':1211'}
@@ -344,11 +346,13 @@ class BucketOperationHelper():
         log.info(msg.format(bucket, node.ip))
         all_vbuckets_ready = BucketOperationHelper.wait_for_vbuckets_ready_state(node,
                                                                                  bucket, timeout_in_seconds, log_msg)
+        print("\n\n\n\n\n\n all_vbuckets_ready", all_vbuckets_ready)
         # return (counter == vbucket_count) and all_vbuckets_ready
         return all_vbuckets_ready
 
     @staticmethod
     def verify_data(server, keys, value_equal_to_key, verify_flags, test, debug=False, bucket="default", collection=None):
+        print("\n\n")
         log = logger.Logger.get_logger()
         log_error_count = 0
         # verify all the keys

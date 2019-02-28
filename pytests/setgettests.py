@@ -19,6 +19,7 @@ class SimpleSetGetTestBase(object):
     test = None
 
     def setUp_bucket(self, unittest):
+        print("\n\n in the  setup_bucket method \n\n")
         self.log = logger.Logger.get_logger()
         self.input = TestInputSingleton.input
         unittest.assertTrue(self.input, msg="input parameters missing...")
@@ -46,6 +47,7 @@ class SimpleSetGetTestBase(object):
         RbacBase().add_user_role(role_list, RestConnection(self.master), 'builtin')
         
     def set_get_test(self, value_size, number_of_items):
+        print("\n\n in the set_get_test method")
         fixed_value = MemcachedClientHelper.create_value("S", value_size)
         specs = [("default", 0),
                 ("set-get-bucket-replica-1", 1),
@@ -102,7 +104,7 @@ class SimpleSetGetTestBase(object):
                 self.log.error("unable to verify key : {0}".format(key))
             if remaining_items:
                 self.test.fail("unable to verify {0} keys".format(len(remaining_items)))
-
+        print("\n\nAT THE END OF THE FUNCTION\n\n ")
 
     def tearDown_bucket(self):
         BucketOperationHelper.delete_all_buckets_or_assert([self.master], self.test)

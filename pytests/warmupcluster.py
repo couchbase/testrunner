@@ -89,10 +89,11 @@ class WarmUpClusterTest(unittest.TestCase):
             self.log.info("inserted {0} items".format(howmany))
             self.onenodemc.close()
         except Exception as e:
-            print e
+            print(e)
             self.fail("could not set item to bucket")
 
     def do_warmup(self):
+        print("\n ---------------------- in the warm up bucket ------------------ \n")
         howmany = self.num_of_docs
         self.input = TestInputSingleton.input
         self.servers = self.input.servers
@@ -104,6 +105,7 @@ class WarmUpClusterTest(unittest.TestCase):
 
         map = {}
         #collect curr_items from all nodes
+        print("\n ---------------- " , self.servers,"------------------\n\n\n")
         for server in self.servers:
             mc_conn = MemcachedClientHelper.direct_client(server, "default")
             map["{0}:{1}".format(server.ip, server.port)] = {}
@@ -112,12 +114,14 @@ class WarmUpClusterTest(unittest.TestCase):
 
             self.log.info(
                 "memcached {0}:{1} has {2} items".format(server.ip, server.port, mc_conn.stats("")["curr_items_tot"]))
+            print("\n\n\n it was done\n\n\n")
             mc_conn.close()
 
         # Killing Memcached
         nodes = rest.node_statuses()
 
         for node in nodes:
+            print(" ------------ in the nodes for loop ------------")
             _node = {"ip": node.ip, "port": node.port, "username": self.servers[0].rest_username,
                      "password": self.servers[0].rest_password}
             _mc = MemcachedClientHelper.direct_client(_node, "default")
@@ -153,6 +157,7 @@ class WarmUpClusterTest(unittest.TestCase):
                 self.fail("memcached did not start {0}:{1}".format(server.ip, server.port))
 
         for server in self.servers:
+            print("\n\n in the server loop\n\n")
             mc = MemcachedClientHelper.direct_client(server, "default")
             expected_curr_items_tot = map["{0}:{1}".format(server.ip, server.port)]["curr_items_tot"]
             now_items = 0

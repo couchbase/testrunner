@@ -68,7 +68,7 @@ class QueryHelperTests(BaseTestCase):
             if self.dataset == "array":
                 return self.generate_docs_array(num_items, start)
             return getattr(self, 'generate_docs_' + self.dataset)(num_items, start)
-        except Exception, ex:
+        except Exception as ex:
             log.info(str(ex))
             self.fail("There is no dataset %s, please enter a valid one" % self.dataset)
 
@@ -79,7 +79,7 @@ class QueryHelperTests(BaseTestCase):
                 return self.generate_ops(num_items, start, json_generator.generate_docs_simple)
             if self.dataset == "array":
                 return self.generate_ops(num_items, start, json_generator.generate_all_type_documents_for_gsi)
-        except Exception, ex:
+        except Exception as ex:
             log.info(ex)
             self.fail("There is no dataset %s, please enter a valid one" % self.dataset)
 
@@ -235,7 +235,7 @@ class QueryHelperTests(BaseTestCase):
                                                            server=self.n1ql_server)
                 self.assertFalse(check, "index {0} failed to be "
                                         "deleted".format(query_definition.index_name))
-        except Exception, ex:
+        except Exception as ex:
                 log.info(ex)
                 query = "select * from system:indexes"
                 actual_result = self.n1ql_helper.run_cbq_query(query=query,

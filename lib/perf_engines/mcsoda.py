@@ -1472,13 +1472,13 @@ def final_report(cur, store, total_time):
         total_cmds = cur.get('cur-gets', 0) + cur.get('cur-sets', 0)
     log.info("ops/sec: %s" % (total_cmds / float(total_time)))
     if store.errors:
-        log.warn("errors:\n%s", json.dumps(store.errors, indent=4))
+        log.warning("errors:\n%s", json.dumps(store.errors, indent=4))
 
 
 def run(cfg, cur, protocol, host_port, user, pswd, stats_collector=None,
         stores=None, ctl=None, heartbeat=0, why="", bucket="default", backups=None, collection=None):
     if isinstance(cfg['min-value-size'], str):
-        cfg['min-value-size'] = string.split(cfg['min-value-size'], ",")
+        cfg['min-value-size'] = cfg['min-value-size'].split(",")
     if not isinstance(cfg['min-value-size'], list):
         cfg['min-value-size'] = [cfg['min-value-size']]
 
@@ -1498,7 +1498,7 @@ def run(cfg, cur, protocol, host_port, user, pswd, stats_collector=None,
 
     threads = []
 
-    for i in range(cfg.get('threads', 1)):
+    for i in list(range(cfg.get('threads', 1))):
         store = None
         if stores and i < len(stores):
             store = stores[i]
@@ -1654,7 +1654,7 @@ def main(argv, cfg_defaults=None, cur_defaults=None, protocol=None, stores=None,
         print("")
         print("optional key=val's and their defaults:")
         for d in [cfg_defaults, cur_defaults]:
-            for k in sorted(d.iterkeys()):
+            for k in sorted(list(d.keys())):
                 print("  %s = %s %s" %
                       (string.ljust(k, 18), string.ljust(str(d[k][0]), 5), d[k][1]))
         print("")
@@ -1667,7 +1667,7 @@ def main(argv, cfg_defaults=None, cur_defaults=None, protocol=None, stores=None,
     err = {}
 
     for (o, d) in [(cfg, cfg_defaults), (cur, cur_defaults)]:  # Parse key=val pairs.
-        for (dk, dv) in d.iteritems():
+        for (dk, dv) in list(d.items()):
             o[dk] = dv[0]
         for kv in argv[2:]:
             s = (kv + '=').split('=')[0:-1]
@@ -1701,7 +1701,7 @@ def main(argv, cfg_defaults=None, cur_defaults=None, protocol=None, stores=None,
         cfg['max-creates'] = cfg.get('max-items', 0)
 
     for o in [cfg, cur]:
-        for k in sorted(o.iterkeys()):
+        for k in sorted(list(o.keys())):
             log.info("    %s = %s" % (string.ljust(k, 20), o[k]))
 
     protocol = protocol or '-'.join(((["memcached"] +

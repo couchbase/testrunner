@@ -105,7 +105,7 @@ class MemorySanity(BaseTestCase):
                            int(mc.stats()["vb_active_perc_mem_resident"]) > resident_ratio) and \
                         time.time() < end_time:
             self.log.info("Resident ratio is %s" % mc.stats()["vb_active_perc_mem_resident"])
-            gen = DocumentGenerator('test_docs', '{{"age": {0}}}', xrange(5),
+            gen = DocumentGenerator('test_docs', '{{"age": {0}}}', list(range(5)),
                                     start=self.num_items, end=(self.num_items + delta_items))
             self._load_all_buckets(self.master, gen, 'create', 0)
             self.num_items += delta_items

@@ -1,4 +1,4 @@
-from Queue import Empty
+from queue import Empty
 from multiprocessing import Queue
 from threading import Thread
 import unittest
@@ -166,8 +166,8 @@ class ExpiryTests(unittest.TestCase):
                         queue.get(False, 5)
                         deletes_seen += 1
                     except Empty:
-                        print "exception thrown"
-                        print "how many deletes_seen ? {0}".format(deletes_seen)
+                        print ("exception thrown")
+                        print ("how many deletes_seen ? {0}".format(deletes_seen))
                         was_empty += 1
                 self.assertEquals(deletes_seen, 0, msg="some some deletes")
                 self.log.info("seen {0} CMD_TAP_DELETE".format(deletes_seen))
@@ -205,7 +205,7 @@ class TapListener(Thread):
 
 
     def tap(self):
-        print "starting tap process"
+        print ("starting tap process")
         t = TapConnection(self.server, 11210, callback=self.callback, clientId=str(uuid.uuid4()),
                           opts={memcacheConstants.TAP_FLAG_BACKFILL: 0xffffffff})
         while True and not self.aborted:

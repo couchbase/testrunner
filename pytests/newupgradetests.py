@@ -1,4 +1,4 @@
-import Queue
+import queue as Queue
 import copy, json
 from newupgradebasetest import NewUpgradeBaseTest
 from remote.remote_util import RemoteMachineShellConnection, RemoteUtilHelper
@@ -82,7 +82,7 @@ class SingleNodeUpgradeTests(NewUpgradeBaseTest):
                 output, error = self._upgrade(upgrade_version, self.master, info=info)
                 if str(output).find(error) != -1 or str(error).find(error) != -1:
                     raise Exception(error)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info("Exception %s appeared as expected" % ex)
             self.log.info("Check that old version is working fine")
             self.verification([self.master])
@@ -98,7 +98,7 @@ class Upgrade_Utils(NewUpgradeBaseTest):
         self.queue = Queue.Queue()
 
     def tearDown(self):
-        print "teardown done"
+        print ("teardown done")
 
     def add_and_rebalance(self):
         self._install(self.servers[:self.nodes_init])
@@ -323,7 +323,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                 for server in servers_with_not_default:
                     rest = RestConnection(server)
                     node = rest.get_nodes_self()
-                    print node.storage[0]
+                    print (node.storage[0])
                     self.assertEqual(node.storage[0].path.lower(), data_path.lower(),
                                      "Server %s. Data path expected:%s, actual %s." % (
                                          server.ip, data_path, node.storage[0].path))
@@ -1080,7 +1080,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         try:
             self.operations(self.servers[self.nodes_init:self.num_servers], services="kv,kv,index,n1ql")
             self.sleep(timeout=300)
-        except Exception, ex:
+        except Exception as ex:
             # do nothing, the bucket is created
             self.log.info("bucket is created")
 
@@ -2912,7 +2912,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
             else:
                 self.cluster.rebalance(servers, servers_in, [])
                 self.cluster.rebalance(servers, [], servers_out)
-        except Exception, ex:
+        except Exception as ex:
             rebalance_fail = True
         finally:
             self.sleep(self.sleep_time)
@@ -2935,14 +2935,14 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
             if errors:
                 self.log.info("Printing missing keys : ")
             for error in errors:
-                print error
+                print (error)
             if errors:
                 self.check_dataloss_with_cbc_hash(load_host, bucket, missing_keys)
             if self.loader == "pillowfight":
                 if errors_replica:
                     self.log.info("Printing missing keys in replica : ")
                 for error in errors_replica:
-                    print error
+                    print (error)
                 if errors_replica:
                     self.check_dataloss_with_cbc_hash(load_host, bucket, missing_keys_replica)
             if num_items != rest.get_active_key_count(bucket):
@@ -2969,8 +2969,8 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
 
     def view_queries(self, iterations):
         query = {"connectionTimeout": 60000}
-        for count in xrange(iterations):
-            for i in xrange(self.view_num):
+        for count in list(range(iterations)):
+            for i in list(range(self.view_num)):
                 self.cluster.query_view(self.master, self.ddocs[0].name,
                                         self.default_view_name + str(i), query,
                                         expected_rows=None, bucket="default", retry_time=2)

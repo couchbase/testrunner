@@ -150,14 +150,14 @@ class SimpleSetMembaseBucketDefaultPort(unittest.TestCase):
         key_test = 'has_key'
         valuesList = ['0', '000', '4', '678', '6560987', '32456754', '0000000000', '00001000']
         exp_time = 0
-        flagsList = [0, 0000, 00001, 34532, 453456, 0001000, 1100111100, 4294967295]
+        flagsList = [0, 0000, 0o00001, 34532, 453456, 0o0001000, 1100111100, 4294967295]
         self.memcapableTestBase.set_test(key_test, exp_time, flagsList, valuesList)
 
     def test_set_neg_int_value_pos_flag_key_never_expired(self):
         key_test = 'has_key'
         valuesList = ['-0', '-000', '-4', '-678', '-6560987', '-32456754', '-0000000000', '-00001000']
         exp_time = 0
-        flagsList = [0, 0000, 00001, 34532, 453456, 0001000, 1100111100, 4294967295]
+        flagsList = [0, 0000, 0o00001, 34532, 453456, 0o0001000, 1100111100, 4294967295]
         self.memcapableTestBase.set_test(key_test, exp_time, flagsList, valuesList)
 
     def test_set_pos_float_value_pos_flag_key_never_expired(self):
@@ -165,7 +165,7 @@ class SimpleSetMembaseBucketDefaultPort(unittest.TestCase):
         valuesList = ['0.00', '000.0', '4.6545', '678.87967', '6560987.0', '32456754.090987', '0000000000.0000001',
                       '00001000.008']
         exp_time = 0
-        flagsList = [0, 0000, 00001, 34532, 453456, 0001000, 1100111100, 4294967295]
+        flagsList = [0, 0000, 0o00001, 34532, 453456, 0o0001000, 1100111100, 4294967295]
         self.memcapableTestBase.set_test(key_test, exp_time, flagsList, valuesList)
 
     def test_set_neg_float_value_pos_flag_key_never_expired(self):
@@ -173,7 +173,7 @@ class SimpleSetMembaseBucketDefaultPort(unittest.TestCase):
         valuesList = ['-0.00', '-000.0', '-4.6545', '-678.87967', '-6560987.0', '-32456754.090987',
                       '-0000000000.0000001', '-00001000.008']
         exp_time = 0
-        flagsList = [0, 0000, 00001, 34532, 453456, 0001000, 1100111100, 4294967295]
+        flagsList = [0, 0000, 0o00001, 34532, 453456, 0o0001000, 1100111100, 4294967295]
         self.memcapableTestBase.set_test(key_test, exp_time, flagsList, valuesList)
 
 
@@ -274,7 +274,7 @@ class GetlTests(unittest.TestCase):
             mc.getl(key, getl_timeout)
         except Exception as ex:
             if getl_timeout < 0:
-                print ex
+                print (ex)
             else:
                 raise
         self.log.info("get key {0} which is locked now".format(key))
@@ -287,9 +287,9 @@ class GetlTests(unittest.TestCase):
                 mc.set(key, 0, 0, '*')
                 break
             except Exception as ex:
-                print ex
+                print (ex)
             time.sleep(1)
-            print i
+            print (i)
             i += 1
         if getl_timeout > 30:
             self.log.info("sleep for {0} seconds".format(30))

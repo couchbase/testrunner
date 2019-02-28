@@ -5,7 +5,7 @@ Copyright (c) 2007  Dustin Sallings <dustin@spy.net>
 """
 
 import array
-import exceptions
+from builtins import Exception as exceptions
 import hmac
 import json
 import random
@@ -20,8 +20,8 @@ import logger
 from memcacheConstants import REQ_MAGIC_BYTE, RES_MAGIC_BYTE
 from memcacheConstants import REQ_PKT_FMT, RES_PKT_FMT, MIN_RECV_PACKET
 from memcacheConstants import SET_PKT_FMT, DEL_PKT_FMT, INCRDECR_RES_FMT
-from memcacheConstants import TOUCH_PKT_FMT, GAT_PKT_FMT, GETL_PKT_FMT
-from memcacheConstants import COMPACT_DB_PKT_FMT
+# from memcacheConstants import TOUCH_PKT_FMT, GAT_PKT_FMT, GETL_PKT_FMT
+# from memcacheConstants import COMPACT_DB_PKT_FMT
 import memcacheConstants
 
 def parse_address(addr):
@@ -408,7 +408,7 @@ class MemcachedClient(object):
         """Start a plan auth session."""
         try:
             self.sasl_auth_start('CRAM-MD5', '')
-        except MemcachedError, e:
+        except MemcachedError as e:
             if e.status != memcacheConstants.ERR_AUTH_CONTINUE:
                 raise
             challenge = e.msg
@@ -424,7 +424,7 @@ class MemcachedClient(object):
         return self._doCmd(memcacheConstants.CMD_START_PERSISTENCE, '', '')
 
     def set_param(self, vbucket, key, val, type):
-        print "setting param:", key, val
+        print ("setting param:", key, val)
         self.vbucketId = vbucket
         type = struct.pack(memcacheConstants.SET_PARAM_FMT, type)
         return self._doCmd(memcacheConstants.CMD_SET_PARAM, key, val, type)
@@ -509,7 +509,7 @@ class MemcachedClient(object):
             try:
                 opaque, cas, data = self._handleSingleResponse(None)
                 done = opaque == terminal
-            except MemcachedError, e:
+            except MemcachedError as e:
                 failed.append(e)
 
         return failed
@@ -535,7 +535,7 @@ class MemcachedClient(object):
             try:
                 opaque, cas, data = self._handleSingleResponse(None)
                 done = opaque == terminal
-            except MemcachedError, e:
+            except MemcachedError as e:
                 failed.append(e)
 
         return failed
@@ -593,7 +593,7 @@ class MemcachedClient(object):
 
         d = {}
 
-        for k,v in errmap['errors'].iteritems():
+        for k,v in list(errmap['errors'].items()):
             d[int(k, 16)] = v
 
         errmap['errors'] = d
@@ -639,7 +639,7 @@ class MemcachedClient(object):
             # expect scope.collection for name API
             try:
                 collection = self.collection_map[collection]
-            except KeyError, e:
+            except KeyError as e:
                 self.log.info("Error: cannot map collection \"{}\" to an ID".format(collection))
                 self.log.info("name API expects \"scope.collection\" as the key")
                 raise e

@@ -22,7 +22,7 @@ class MoxiTests(BaseTestCase):
         try:
             self.assertTrue(self.master != self.moxi_server, 'There are not enough vms!')
             self._stop_moxi()
-        except Exception, ex:
+        except Exception as ex:
             self.tearDown()
             raise ex
 
@@ -146,7 +146,7 @@ class MoxiTests(BaseTestCase):
                 self._run_moxi(self.master, bucket, option=option)
                 mc1 = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 mc1.connect((self.moxi_server.ip, int(self.moxi_port)))
-                mc1.sendall(set_packet)
+                mc1.sendall(set_packet.encode('utf-8'))
                 self.log.info("key status: %s " % mc1.recv(1024))
                 mc1.close()
 

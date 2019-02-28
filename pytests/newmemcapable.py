@@ -105,11 +105,11 @@ class GetrTests(BaseTestCase):
                 self.verify_cluster_stats(servrs, only_store_hash=False,
                                           replica_to_read=self.replica_to_read, batch_size=1,
                                           timeout=(self.wait_timeout * 10))
-        except Exception, ex:
+        except Exception as  ex:
             if self.error and str(ex).find(self.error) != -1:
                 self.log.info("Expected error %s appeared as expected" % self.error)
             else:
-                print traceback.format_exc()
+                print (traceback.format_exc())
                 raise ex
         if self.rebalance == GetrTests.DURING_REBALANCE:
             rebalance.result()
@@ -131,7 +131,7 @@ class GetrTests(BaseTestCase):
         self.expire_pager([self.master])
         try:
             self._load_all_buckets(self.master, gen_1, 'read_replica', self.expiration, batch_size=1)
-        except Exception, ex:
+        except Exception as  ex:
             if self.error and str(ex).find(self.error) != -1:
                 self.log.info("Expected error %s appeared as expected" % self.error)
             else:
@@ -149,7 +149,7 @@ class GetrTests(BaseTestCase):
         client = VBucketAwareMemcached(RestConnection(self.master), self.default_bucket_name)
         try:
             o, c, d = client.getr(key)
-        except Exception, ex:
+        except Exception as  ex:
             if self.error and str(ex).find(self.error) != -1:
                 self.log.info("Expected error %s appeared as expected" % self.error)
             else:
@@ -179,7 +179,7 @@ class GetrTests(BaseTestCase):
             task_delete_bucket = self.cluster.async_bucket_delete(self.master, bucket_delete.name)
             task_verify.result()
             task_delete_bucket.result()
-        except Exception, ex:
+        except Exception as  ex:
             task_delete_bucket.result()
             if self.error and str(ex).find(self.error) != -1:
                 self.log.info("Expected error %s appeared as expected" % self.error)
@@ -190,7 +190,7 @@ class GetrTests(BaseTestCase):
                 self.fail("Expected error %s didn't appear as expected" % self.error)
 
     def getr_rebalance_test(self):
-        gen = DocumentGenerator('test_docs', '{{"age": {0}}}', xrange(5),
+        gen = DocumentGenerator('test_docs', '{{"age": {0}}}', list(range(5)),
                                       start=0, end=self.num_items)
         self.perform_docs_ops(self.master, [gen], 'create')
         self.log.info("Checking replica read")
@@ -207,7 +207,7 @@ class GetrTests(BaseTestCase):
 
     def getr_negative_corrupted_vbucket_test(self):
         vbucket_state = self.input.param("vbucket_state", '')
-        gen = DocumentGenerator('test_docs', '{{"age": {0}}}', xrange(5),
+        gen = DocumentGenerator('test_docs', '{{"age": {0}}}', list(range(5)),
                                 start=0, end=self.num_items)
         self.perform_docs_ops(self.master, [gen], 'create')
         self.log.info("Checking replica read")
@@ -232,7 +232,7 @@ class GetrTests(BaseTestCase):
                     msg += "Correct vbucket %s, wrong vbucket %s" % (vBucketId, wrong_vbucket)
                 self.log.info(msg)
                 client._send_op(mem_to_read.getr, key)
-            except Exception, ex:
+            except Exception as  ex:
                 if self.error and str(ex).find(self.error) != -1:
                     self.log.info("Expected error %s appeared as expected" % self.error)
                 else:

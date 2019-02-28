@@ -164,6 +164,7 @@ class RebalanceInTests(RebalanceBaseTest):
             # allows multiple of them but one by one
             if("update" in self.doc_ops):
                 tasks += self._async_load_all_buckets(self.master, self.gen_update, "update", 0)
+            self.doc_ops = self.doc_ops[0].split(';')
             if("create" in self.doc_ops):
                 print("Entering the doc ops")
                 tasks += self._async_load_all_buckets(self.master, gen_create, "create", 0)

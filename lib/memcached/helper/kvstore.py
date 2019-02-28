@@ -121,7 +121,10 @@ class KVStore(object):
         if collection:
             name= str(bucket) + "." + str(collection)
             return zlib.crc32(name) % self.num_locks
-        return zlib.crc32(key) % self.num_locks
+
+
+        a = zlib.crc32(key).encode('utf-8') % self.num_locks
+        return bytes(a, encoding="utf-8")
 
 class Partition(object):
     def __init__(self, part_id):

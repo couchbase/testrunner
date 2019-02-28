@@ -46,8 +46,8 @@ class CbmonitorClient(RestConnection):
 
         params = [('build', build), ('testcase', testcase), ('env', env)]
         params += reduce(lambda x, y: x + y,
-                         map(lambda (k, v): [('metric', k), ('value', v)],
-                         metrics.iteritems()))
+                         map(lambda k,v : [('metric', k), ('value', v)],
+                         list(metrics.items())))
 
         try:
             self._http_request(api, 'POST', urllib.urlencode(params),

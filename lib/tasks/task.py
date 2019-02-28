@@ -13,7 +13,7 @@ import traceback
 import testconstants
 from http.client import IncompleteRead
 from threading import Thread
-from memcacheConstants import ERR_NOT_FOUND,NotFoundError
+from memcacheConstants import ERR_NOT_FOUND
 from membase.api.rest_client import RestConnection, Bucket, RestHelper
 from membase.api.exception import BucketCreationException
 from membase.helper.bucket_helper import BucketOperationHelper
@@ -328,25 +328,31 @@ class BucketCreateTask(Task):
 
     def check(self, task_manager):
         try:
+
             if self.bucket_type == 'memcached' or int(self.port) in range(9091, 9991):
                 self.set_result(True)
                 self.state = FINISHED
                 return
-            if BucketOperationHelper.wait_for_memcached(self.server, self.bucket):
+            print("before BucketOperationHelper")
+            ret_val = BucketOperationHelper.wait_for_memcached(self.server, self.bucket)
+            print("ret_val in task.py @336 : ", ret_val)
+            if ret_val:
                 self.log.info("bucket '{0}' was created with per node RAM quota: {1}".format(self.bucket, self.size))
                 self.set_result(True)
                 self.state = FINISHED
                 return
             else:
                 self.log.warn("vbucket map not ready after try {0}".format(self.retries))
-                if self.retries >= 5:
+                if self.retries >= 25:
                     self.set_result(False)
                     self.state = FINISHED
                     return
         except Exception as e:
+            import traceback
+            traceback.print_exc()
             self.log.error("Unexpected error: %s" % str(e))
             self.log.warn("vbucket map not ready after try {0}".format(self.retries))
-            if self.retries >= 5:
+            if self.retries >= 15:
                 self.state = FINISHED
                 self.set_exception(e)
         self.retries = self.retries + 1
@@ -1150,6 +1156,9 @@ class LoadDocumentsGeneratorsTask(LoadDocumentsTask):
             # get partitions created by child process
             rv =  self.shared_kvstore_queue.get()
             if rv["err"] is not None:
+                # temp_data = bytes( rv["err"], encoding='utf-8')
+                print("------------"*20,"\nrv['err'] is :", rv['err'],type(rv['err']),"\n","------------"*20)
+
                 raise Exception(rv["err"])
 
             # merge child partitions with parent
@@ -1725,7 +1734,7 @@ class ValidateDataTask(GenericLoadingTask):
                 self.state = FINISHED
                 self.set_exception(error)
         except Exception as error:
-            if error.rc != NotFoundError:
+            if error.rc != ERR_NOT_FOUND :
                 self.state = FINISHED
                 self.set_exception(error)
         self.kv_store.release_partition(key,bucket, collection=collection)
@@ -1805,7 +1814,7 @@ class ValidateDataWithActiveAndReplicaTask(GenericLoadingTask):
                 self.state = FINISHED
                 self.set_exception(error)
         except Exception as error:
-            if error.rc != NotFoundError:
+            if error.rc != ERR_NOT_FOUND :
                 self.state = FINISHED
                 self.set_exception(error)
         self.kv_store.release_partition(key,bucket, collection=collection)
@@ -1911,7 +1920,7 @@ class BatchedValidateDataTask(GenericLoadingTask):
                 self.kv_store.release_partition(key,bucket, collection=collection)
                 self.set_exception(error)
         except Exception as error:
-            if error.rc != NotFoundError:
+            if error.rc != ERR_NOT_FOUND :
                 self.state = FINISHED
                 self.kv_store.release_partition(key,bucket, collection=collection)
                 self.set_exception(error)
@@ -3520,7 +3529,7 @@ class GenerateExpectedViewResultsTask(Task):
                     filter_expr = r'\A{0}.*'.format(self.type_filter["filter_expr"])
                     if re.match(filter_expr, val[self.type_filter["filter_what"]]) is None:
                         continue
-                if isinstance(val_emit_key, unicode):
+                if isinstance(val_emit_key, str):
                     val_emit_key = val_emit_key.encode('utf-8')
                 if not self.is_reduced or self.view.red_func == "_count" or self.custom_red_fn:
                     self.emitted_rows.append({'id' : _id, 'key' : val_emit_key})
@@ -5147,8 +5156,7 @@ class NodeDownTimerTask(Task):
                         self.set_result(True)
                         break
                 except Exception as e:
-                    self.log.warning("Unexpected exception caught {"
-                                     "}".format(e))
+                    self.log.warning("Unexpected exception caught {" "}".format(e))
                     self.state = FINISHED
                     self.set_result(True)
                     break

@@ -5,6 +5,7 @@ Ascii memcached test client.
 
 import socket
 import select
+import struct
 from builtins import Exception as exceptions
 
 import memcacheConstants
@@ -238,5 +239,5 @@ class MemcachedAsciiClient(object):
     def flush(self, timebomb=0):
         """Flush all storage in a memcached instance."""
         return self._doCmd(memcacheConstants.CMD_FLUSH, '', '',
-            struct.pack(memcacheConstants.FLUSH_PKT_FMT, timebomb))
+            struct.pack('utf-8',memcacheConstants.FLUSH_PKT_FMT, timebomb))
 

@@ -29,7 +29,7 @@ class ObserveTests(BaseTestCase):
         try:
             self.log.info("Observe Rebalance Started")
             self.cluster.rebalance(self.servers[:1], self.servs_in, [])
-        except Exception, e:
+        except Exception as e:
             pass
             #self.tearDown()
             #self.fail(e)
@@ -96,9 +96,9 @@ class ObserveTests(BaseTestCase):
 
     def _get_node(self, server_ip_port):
         server_ip = server_ip_port.split(":")
-        print server_ip[0]
+        print ("server_ip[0]: ",server_ip[0])
         for server in self.servers:
-            print server.ip
+            print ("server_ip: ",server.ip)
             if server.ip == server_ip[0]:
                 return server
             else:
@@ -107,7 +107,7 @@ class ObserveTests(BaseTestCase):
 
     def _create_multi_set_batch(self):
         key_val = {}
-        keys = ["observe%s" % (i) for i in xrange(self.num_items)]
+        keys = ["observe%s" % (i) for i in list(range(self.num_items))]
         for key in keys:
             key_val[key] = "multiset"
         return key_val
@@ -127,7 +127,7 @@ class ObserveTests(BaseTestCase):
             if self.mutate_by == "multi_set":
                 key_val = self._create_multi_set_batch()
                 client.setMulti(0, 0, key_val)
-            keys = ["observe%s" % (i) for i in xrange(self.num_items)]
+            keys = ["observe%s" % (i) for i in list(range(self.num_items))]
             for key in keys:
                 mutated = False
                 while not mutated and count < 60:
@@ -222,7 +222,7 @@ class ObserveTests(BaseTestCase):
             self.log.info("Deleting Parallel 0- %s number of items" % (self.num_items / 2))
             tasks = self._async_load_doc_data_all_buckets('delete', 0, self.num_items / 2)
             query_set = "false"
-        keys = ["observe%s" % (i) for i in xrange(self.num_items)]
+        keys = ["observe%s" % (i) for i in list(range(self.num_items))]
         self.key_count = 0
         self.max_time = 0
         self.client = VBucketAwareMemcached(RestConnection(self.master), self.default_bucket_name)

@@ -17,7 +17,7 @@ from mc_bin_client import MemcachedClient, MemcachedError
 from mc_ascii_client import MemcachedAsciiClient
 from memcached.helper.old_kvstore import ClientKeyValueStore
 from membase.api.rest_client import RestConnection, RestHelper, Bucket, vBucket
-from memcacheConstants import ERR_NOT_FOUND, ERR_NOT_MY_VBUCKET, ERR_ETMPFAIL, ERR_EINVAL, ERR_2BIG
+from memcacheConstants import ERR_NOT_FOUND, ERR_NOT_MY_VBUCKET, ERR_ETMPFAIL, ERR_EINVAL, ERR_E2BIG
 import json
 import sys
 from perf_engines import mcsoda
@@ -412,7 +412,23 @@ class MemcachedClientHelper(object):
         return
 
 
-class MutationThread(threading.Thread):
+class MutationThread(Thread):
+    def __init__(self, serverInfo,keys,
+                 op,
+                 seed,
+                 name='default',
+                 collection=None):
+        threading.Thread.__init__(self)
+        self.log = logger.Logger.get_logger()
+        self.serverInfo = serverInfo
+        self.name = name
+        self.collection=collection
+        self.keys = keys
+        self.op = op
+        self.seed = seed
+        self._mutated_count = 0
+        self._rejected_count = 0
+        self._rejected_keys = []
     def run(self, collection=None):
         values = DocumentGenerator.make_docs(len(self.keys),
                 {"name": "user-${prefix}", "payload": "memcached-json-${prefix}-${padding}",
@@ -437,23 +453,6 @@ class MutationThread(threading.Thread):
         self.log.info("mutation failed {0} times".format(self._rejected_count))
         client.close()
 
-    def __init__(self, serverInfo,
-                 keys,
-                 op,
-                 seed,
-                 name='default',
-                 collection=None):
-        threading.Thread.__init__(self)
-        self.log = logger.Logger.get_logger()
-        self.serverInfo = serverInfo
-        self.name = name
-        self.collection=collection
-        self.keys = keys
-        self.op = op
-        self.seed = seed
-        self._mutated_count = 0
-        self._rejected_count = 0
-        self._rejected_keys = []
 
 
 class ReaderThread(object):
@@ -498,7 +497,7 @@ class ReaderThread(object):
 
 # mutation ? let' do two cycles , first run and then try to mutate all those itesm
 # and return
-class WorkerThread(threading.Thread):
+class WorkerThread(Thread):
     # too flags : stop after x errors
     # slow down after every seeing y errors
     # value_list is a list of document generators
@@ -515,7 +514,7 @@ class WorkerThread(threading.Thread):
                  delete_ratio=0,
                  expiry_ratio=0,
                  collection=None):
-        threading.Thread.__init__(self)
+        Thread.__init__(self)
         self.log = logger.Logger.get_logger()
         self.serverInfo = serverInfo
         self.name = name
@@ -1154,7 +1153,7 @@ class VBucketAwareMemcached(object):
                 try:
                     rec_caller_fn(exp, flags, keyval, pause, timeout - pause, collection=collection)  # Start all over again for these key vals.
                 except MemcachedError as error:
-                    if error.status == ERR_2BIG:
+                    if error.status == ERR_E2BIG:
                         self.log.info("<MemcachedError #%d ``%s''>" % (error.status, error.msg))
                         return []
                     else:

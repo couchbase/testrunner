@@ -79,7 +79,7 @@ class SwapRebalanceBase(unittest.TestCase):
             self.log.info("==============  SwapRebalanceBase setup was finished for test #{0} {1} =============="
                       .format(self.case_number, self._testMethodName))
             SwapRebalanceBase._log_start(self)
-        except Exception, e:
+        except Exception as e:
             self.cluster_helper.shutdown()
             self.fail(e)
 
@@ -439,7 +439,7 @@ class SwapRebalanceBase(unittest.TestCase):
             times = 2
             if self.cluster_run:
                 times = 20
-            for i in xrange(times):
+            for i in list(range(times)):
                 try:
                     _mc = MemcachedClientHelper.direct_client(master, bucket)
                     pid = _mc.stats()["pid"]
@@ -555,7 +555,7 @@ class SwapRebalanceBase(unittest.TestCase):
         add_back_servers = []
         nodes = rest.get_nodes()
         for server in nodes:
-            if isinstance(server.ip, unicode):
+            if isinstance(server.ip, str):
                 add_back_servers.append(server)
         final_add_back_servers = []
         for server in self.servers:

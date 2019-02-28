@@ -240,6 +240,9 @@ class BaseTestCase(unittest.TestCase):
 
             # avoid any cluster operations in setup for new upgrade
             #  & upgradeXDCR tests
+            print(self.__class__)
+
+            print("__class__" ,self.__class__)
             if str(self.__class__).find('newupgradetests') != -1 or \
                             str(self.__class__).find('upgradeXDCR') != -1 or \
                             str(self.__class__).find('Upgrade_EpTests') != -1 or \

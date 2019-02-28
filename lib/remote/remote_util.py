@@ -3189,7 +3189,7 @@ class RemoteMachineShellConnection:
             log.info("running command.raw on {0}: {1}".format(self.ip, command))
         output = []
         error = []
-        temp = ''
+        temp = b''
         if self.remote and self.use_sudo or use_channel:
             channel = self._ssh_client.get_transport().open_session()
             channel.get_pty()

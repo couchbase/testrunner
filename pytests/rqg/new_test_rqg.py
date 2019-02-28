@@ -130,12 +130,12 @@ class RQGTestsNew(BaseRQGTests):
 
             try:
                 self._verify_results_rqg_new(sql_result=sql_result, n1ql_result=n1ql_result)
-            except Exception, ex:
+            except Exception as ex:
                 self.log.info(ex)
                 traceback.print_exc()
                 return {"success": False, "result": str(ex)}
             return {"success": True, "result": "Pass"}
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(ex)
             traceback.print_exc()
             return {"success": False, "result": str(ex)}
@@ -183,7 +183,7 @@ class RQGTestsNew(BaseRQGTests):
             else:
                 return int(round(value, 0))
         else:
-            return unicode(value)
+            return str(value)
 
     def _verify_results_rqg_new(self, n1ql_result=[], sql_result=[]):
         new_n1ql_result = []

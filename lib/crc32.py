@@ -73,6 +73,7 @@ crc32tab = [
 
 
 def crc32_hash(key):
+
     crc = pow(2, 32) - 1
     for ch in key:
         crc = (crc >> 8) ^ crc32tab[int((crc ^ ord(ch)) & 0xff)]

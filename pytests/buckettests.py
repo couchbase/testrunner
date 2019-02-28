@@ -147,9 +147,9 @@ class CreateBucketTests(BaseTestCase):
                                         services= ["index,kv,n1ql"])
             init_node = self.cluster.async_init_node(self.master,
                                             services = ["index,kv,n1ql"])
-        except Exception, e:
+        except Exception as e:
             if e:
-                print e
+                print (e)
         self.sleep(10)
         self.log.info("Add new user after reset node! ")
         self.add_built_in_server_user(node=self.master)

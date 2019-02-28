@@ -40,7 +40,7 @@ class SaslTest(BaseTestCase):
                 ret = client.sasl_auth_plain(bucket, password)[2]
             else:
                 self.fail("Invalid auth mechanism {0}".format(self.auth_mech))
-        except MemcachedError, e:
+        except MemcachedError as e:
             ret = e[0].split(' for vbucket')[0]
         client.close()
         return ret

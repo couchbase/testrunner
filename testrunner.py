@@ -187,7 +187,7 @@ def parse_conf_file(filename, tests, params):
 
 
 def create_headers(username, password):
-    authorization = base64.encodestring('%s:%s' % (username, password))
+    authorization = base64.encodebytes('%s:%s' % (username, password))
     return {'Content-Type': 'application/x-www-form-urlencoded',
             'Authorization': 'Basic %s' % authorization,
             'Accept': '*/*'}
@@ -197,7 +197,7 @@ def get_server_logs(input, path):
     for server in input.servers:
         print("grabbing diags from ".format(server.ip))
         diag_url = "http://{0}:{1}/diag".format(server.ip, server.port)
-        print(diag_url)
+        print("diag_url",diag_url)
 
         try:
             req = urllib.request.Request(diag_url)

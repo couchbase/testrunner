@@ -77,7 +77,7 @@ class Getcoredumps(object):
                         core_file_name = "core-{0}-{1}.log".format(self.server.ip, i)
                         core_log_output = "/tmp/{0}".format(core_file_name)
                         output, _ = remote.execute_command('{0} {1} -f {2}'.format(command, core_file, core_log_output))
-                        print(output)
+                        print("output: getcoredumps;80",output)
                         remote_path, file_name = os.path.dirname(core_log_output), os.path.basename(core_log_output)
                         if remote.get_file(remote_path, file_name, os.path.join(self.path, core_file_name)):
                             print('downloaded core backtrace : {0}'.format(core_log_output))

@@ -261,7 +261,7 @@ ENT_BKRS_FTS = "https://s3-us-west-1.amazonaws.com/qebucket/testrunner/data/entb
 WIN_UNZIP = "https://s3-us-west-1.amazonaws.com/qebucket/testrunner/win-cmd/unzip.exe"
 WIN_PSSUSPEND = "https://s3-us-west-1.amazonaws.com/qebucket/testrunner/win-cmd/pssuspend.exe"
 # the maximum number of processes to allow under high_throughput data loading
-THROUGHPUT_CONCURRENCY = 4
+THROUGHPUT_CONCURRENCY = 1
 # determine wether or not to use high throughput
 ALLOW_HTP = True
 IS_CONTAINER = False
