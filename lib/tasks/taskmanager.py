@@ -24,6 +24,8 @@ class TaskManager(Thread):
 
     def run(self):
         while (self.running == True or self.readyq.empty() != True or self.sleepq.empty() != True):
+            self.temp_Q = self.readyq.empty()
+            # print("\n\n\n\n","--"*20 , " temp_Q: ", self.temp_Q,"--"*20,"\n\n\n\n")
             if self.readyq.empty():
                 time.sleep(1)
             else:

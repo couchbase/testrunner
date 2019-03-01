@@ -80,7 +80,7 @@ class DocumentGenerator(KVGenerator):
         seed = self.itr
         doc_args = []
         for arg in self.args:
-            value = arg[seed % len(arg)]
+            value = arg[int(seed % len(arg))]
             doc_args.append(value)
             seed /= len(arg)
         doc = self.template.format(*doc_args).replace('\'', '"').replace('True',

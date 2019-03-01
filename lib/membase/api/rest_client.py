@@ -709,8 +709,9 @@ class RestConnection(object):
             api = self.capiBaseUrl + '/%s/_design/%s' % (bucket.name, name)
 
         status, content, header = self._http_request(api, headers=self._create_capi_headers())
-        json_parsed = json.loads(content)
+        # json_parsed = json.loads(content.decode('utf-8'))
         meta_parsed = ""
+        json_parsed={}
         if status:
             # in dp4 builds meta data is in content, not in header
             if 'x-couchbase-meta' in header:
@@ -836,7 +837,7 @@ class RestConnection(object):
                     except ValueError as e:
                         json_parsed = {}
                         json_parsed["error"] = "status: {0}, content: {1}"
-                    content = content.decode('utf-8')                                      .format(response['status'], content)
+                    # content = content.decode('utf-8')                                      .format(response['status'], content)
                     reason = "unknown"
                     if "error" in json_parsed:
                         reason = json_parsed["error"]

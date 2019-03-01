@@ -89,7 +89,7 @@ class Task(Future):
 
     def set_unexpected_exception(self, e, suffix = ""):
         self.log.error("Unexpected exception [{0}] caught".format(e) + suffix)
-        self.log.error(''.join(traceback.format_stack()))
+        self.log.error(''.join(str(traceback.format_stack())))
         self.set_exception(e)
 
 class NodeInitializeTask(Task):
@@ -2201,6 +2201,7 @@ class ViewCreateTask(Task):
     def execute(self, task_manager):
 
         try:
+
             # appending view to existing design doc
             content, meta = self.rest.get_ddoc(self.bucket, self.design_doc_name)
             ddoc = DesignDocument._init_from_json(self.design_doc_name, content)
@@ -2282,7 +2283,7 @@ class ViewCreateTask(Task):
                 self._check_ddoc_replication_on_nodes()
 
         except QueryViewException as e:
-            if e.message.find('not_found') or e.message.find('view_undefined') > -1:
+            if e._message.find('not_found') or e.message.find('view_undefined') > -1:
                 task_manager.schedule(self, 2)
             else:
                 self.state = FINISHED
