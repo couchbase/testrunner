@@ -16,7 +16,7 @@ log = logger.Logger.get_logger()
 class rbacPermissionList():
 
     def _create_headers(self,username,password,capi=False):
-        authorization = base64.encodestring('%s:%s' % (username, password))
+        authorization = base64.encodebytes(('%s:%s' % (username, password)).encode('utf-8').decode('utf-8'))
         if capi:
             return {'Content-Type': 'application/json',
                     'Authorization': 'Basic %s' % authorization,
@@ -61,10 +61,10 @@ class rbacPermissionList():
                 json_acceptable_string = params.replace("'", "\"")
                 if capi:
                     params = json_acceptable_string
-                    print params
+                    print(params)
                 else:
                     params = json.loads(json_acceptable_string)
-                    params = urllib.urlencode(params)
+                    params = urllib.parse.urlencode(params)
             else:
                 params = ""
             restClient = RestConnection(host)
@@ -77,7 +77,7 @@ class rbacPermissionList():
 
         for list in list_return:
             if int(list['result']) not in httpCode:
-                print "Return HTTP Code does not match with expected -- {0} and actual - {1}".format(list['result'],httpCode)
+                print ("Return HTTP Code does not match with expected -- {0} and actual - {1}".format(list['result'],httpCode))
                 return_list.append(list)
                 flag = 'False'
                 return_value = {
@@ -630,7 +630,7 @@ class rbacPermissionList():
             result = self._return_http_code(create_server_group,username,password,host=host,port=port, httpCode=httpCode, user_role=user_role)
 
         except:
-            print "Issues with Server Group add test case"
+            print ("Issues with Server Group add test case")
 
 
 

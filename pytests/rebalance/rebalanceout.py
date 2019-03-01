@@ -229,7 +229,7 @@ class RebalanceOutTests(RebalanceBaseTest):
     def rebalance_out_get_random_key(self):
         servs_out = [self.servers[self.num_servers - i - 1] for i in range(self.nodes_out)]
         # get random keys for new added nodes
-        rest_cons = [RestConnection(self.servers[i]) for i in xrange(self.num_servers)]
+        rest_cons = [RestConnection(self.servers[i]) for i in list(range(self.num_servers))]
         list_threads = []
         for rest in rest_cons:
               t = Thread(target=rest.get_random_key,
@@ -239,7 +239,7 @@ class RebalanceOutTests(RebalanceBaseTest):
               t.start()
         [t.join() for t in list_threads]
 
-        rest_cons = [RestConnection(self.servers[i]) for i in xrange(self.num_servers - self.nodes_out)]
+        rest_cons = [RestConnection(self.servers[i]) for i in list(range(self.num_servers - self.nodes_out))]
         rebalance = self.cluster.async_rebalance(self.servers[:self.num_servers], [], servs_out)
         self.sleep(2)
         result = []
@@ -303,7 +303,7 @@ class RebalanceOutTests(RebalanceBaseTest):
             try:
                 for task in tasks:
                     task.result()
-            except Exception, ex:
+            except Exception as ex:
                 for task in tasks:
                     task.cancel()
                 raise ex
@@ -407,7 +407,7 @@ class RebalanceOutTests(RebalanceBaseTest):
             # run queries to create indexes
             self.cluster.query_view(self.master, prefix + ddoc_name, view.name, query, timeout=self.wait_timeout * 2)
 
-        for i in xrange(3):
+        for i in list(range(3)):
             active_tasks = self.cluster.async_monitor_active_task(self.servers, "indexer", "_design/" + prefix + ddoc_name, wait_task=False)
             for active_task in active_tasks:
                 result = active_task.result()
@@ -520,7 +520,7 @@ class RebalanceOutTests(RebalanceBaseTest):
                 try:
                     self.log.info("query view {0}/{1}".format(prefix + ddoc_name, view.name))
                     self.cluster.query_view(self.master, prefix + ddoc_name, view.name, query)
-                except SetViewInfoNotFound, e:
+                except SetViewInfoNotFound as e:
                     self.log.warn("exception on self.cluster.query_view")
                     fragmentation_monitor.cancel()
                     raise e

@@ -164,7 +164,7 @@ class x509tests(BaseTestCase):
                 if cb is not None:
                     result = True
                     return result, cb
-            except Exception, ex:
+            except Exception as ex:
                 self.log.info("Expection is  -{0}".format(ex))
         elif self.sdk_version == 'vulcan':
             self.add_built_in_server_user([{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'password': 'password'}], \
@@ -179,7 +179,7 @@ class x509tests(BaseTestCase):
                 if cb is not None:
                     result = True
                     return result, cb
-            except Exception, ex:
+            except Exception as ex:
                 self.log.info("Expection is  -{0}".format(ex))
         return result
 
@@ -246,7 +246,7 @@ class x509tests(BaseTestCase):
         x509main(self.master).setup_master()
         try:
             rest.add_node('Administrator', 'password', servs_inout.ip)
-        except Exception, ex:
+        except Exception as ex:
             ex = str(ex)
             # expected_result  = "Error adding node: " + servs_inout.ip + " to the cluster:" + self.master.ip + " - [\"Prepare join failed. Error applying node certificate. Unable to read certificate chain file\"]"
             expected_result = "Error adding node: " + servs_inout.ip + " to the cluster:" + self.master.ip
@@ -414,7 +414,7 @@ class x509tests(BaseTestCase):
             replication_id = restCluster1.start_replication('continuous', 'default', remote_cluster_name)
             if replication_id is not None:
                 self.assertTrue(True, "Replication was not created successfully")
-        except Exception, ex:
+        except Exception as ex:
             self.log.info("Exception is -{0}".format(ex))
         finally:
             restCluster2.delete_bucket()
@@ -709,7 +709,7 @@ class x509tests(BaseTestCase):
             cb = Bucket(connection_string, password='password')
             if cb is not None:
                 result = True
-        except Exception, ex:
+        except Exception as ex:
             self.log.info("Exception is -{0}".format(ex))
         self.assertTrue(result, "Cannot create a client connection with server")
 
@@ -1081,7 +1081,7 @@ class x509_upgrade(NewUpgradeBaseTest):
                 if cb is not None:
                     result = True
                     return result, cb
-            except Exception, ex:
+            except Exception as ex:
                 self.log.info("Expection is  -{0}".format(ex))
         elif sdk_version == 'vulcan':
             self.add_built_in_server_user([{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'password': 'password'}], \
@@ -1096,7 +1096,7 @@ class x509_upgrade(NewUpgradeBaseTest):
                 if cb is not None:
                     result = True
                     return result, cb
-            except Exception, ex:
+            except Exception as ex:
                 self.log.info("Expection is  -{0}".format(ex))
         return result
 

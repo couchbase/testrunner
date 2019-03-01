@@ -227,7 +227,7 @@ class SubdocXattrSdkTest(SubdocBaseTest):
                 self.log.error("xattr %s value: %s" % (key, rv[key]))
                 self.fail("key must not contain a character: " + ch)
             except Exception as e:
-                print e.message
+                print (e.message)
                 self.assertTrue(e.message in ['Subcommand failure',
                                               'key must not contain a character: ;'])
 
@@ -553,7 +553,7 @@ class SubdocXattrSdkTest(SubdocBaseTest):
 
         self.client.upsert(k, {})
 
-        for i in xrange(5):
+        for i in list(range(5)):
             # Try to upsert a single xattr
             rv = self.client.mutate_in(k, SD.upsert('my_attr', 'value',
                                                     xattr=True,
@@ -580,7 +580,7 @@ class SubdocXattrSdkTest(SubdocBaseTest):
 
         self.client.upsert(k, {})
         # use xattr like a counters
-        for i in xrange(5):
+        for i in list(range(5)):
             rv = self.client.mutate_in(k, SD.upsert('my_attr', i,
                                                     xattr=True,
                                                     create_parents=True))
@@ -850,26 +850,26 @@ class SubdocXattrSdkTest(SubdocBaseTest):
                 self.log.info("using key %s" % key)
                 rv = self.client.mutate_in(k, SD.upsert(key, 1,
                                                         xattr=True))
-                print rv
+                print (rv)
                 self.assertTrue(rv.success)
                 rv = self.client.lookup_in(k, SD.get(key, xattr=True))
-                print rv
+                print (rv)
                 self.assertTrue(rv.exists(key))
                 self.assertEqual(1, rv[key])
                 self.log.info("successfully set xattr with key %s" % key)
             except Exception as e:
                 ok = False
                 self.log.info("unable to set xattr with key %s" % key)
-                print e
+                print (e)
         self.assertTrue(ok, "unable to set xattr with some name. See logs above")
 
     def test_upsert_nums(self):
         k = 'xattr'
         self.client.upsert(k, {})
-        for i in xrange(100):
+        for i in list(range(100)):
             rv = self.client.mutate_in(k, SD.upsert('n' + str(i), i, xattr=True))
             self.assertTrue(rv.success)
-        for i in xrange(100):
+        for i in list(range(100)):
             rv = self.client.lookup_in(k, SD.get('n' + str(i), xattr=True))
             self.assertTrue(rv.exists('n' + str(i)))
             self.assertEqual(i, rv['n' + str(i)])
@@ -1436,7 +1436,7 @@ class XattrImportExportTests(ImportExportTests, SubdocBaseTest):
         for bucket in self.buckets:
             self.client = SDKClient(scheme="couchbase", hosts=[self.master.ip],
                                     bucket=bucket.name, uhm_options='timeout=3').cb
-            for i in xrange(self._num_items):
+            for i in list(range(self._num_items)):
                 key = 'k_%s_%s' % (i, str(self.master.ip))
                 value = {'xattr_%s' % i: 'value%s' % i}
                 self.client.upsert(key, value)
@@ -1668,7 +1668,7 @@ class XattrEnterpriseBackupRestoreTest(SubdocBaseTest):
         for bucket in self.buckets:
             self.client = SDKClient(scheme="couchbase", hosts=[self.master.ip],
                                     bucket=bucket.name).cb
-            for i in xrange(self._num_items):
+            for i in list(range(self._num_items)):
                 key = 'k_%s_%s' % (i, str(self.master.ip))
                 value = {'xattr_%s' % i: 'value%s' % i}
                 self.client.upsert(key, value)
@@ -1686,7 +1686,7 @@ class XattrEnterpriseBackupRestoreTest(SubdocBaseTest):
         for bucket in self.buckets:
             self.client = SDKClient(scheme="couchbase", hosts=[self.master.ip],
                                     bucket=bucket.name).cb
-            for i in xrange(self._num_items):
+            for i in list(range(self._num_items)):
                 key = 'k_%s_%s' % (i, str(self.master.ip))
                 rv = self.client.lookup_in(key, SD.get('xattr_%s%s' % (postfix_xattr_value, i), xattr=True))
                 self.assertTrue(rv.exists('xattr_%s' % i))
