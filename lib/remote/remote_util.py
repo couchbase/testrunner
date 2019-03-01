@@ -211,7 +211,9 @@ class RemoteMachineShellConnection:
 
     def __init__(self, serverInfo):
         # let's create a connection
+
         self.username = serverInfo.ssh_username
+        print("type of severInfo : ", type(serverInfo))
         self.password = serverInfo.ssh_password
         self.ssh_key = serverInfo.ssh_key
         self.input = TestInput.TestInputParser.get_test_input(sys.argv)
@@ -223,6 +225,7 @@ class RemoteMachineShellConnection:
         elif self.username != "Administrator":
             self.use_sudo = False
             self.nonroot = True
+        a = serverInfo.port
         self._ssh_client = paramiko.SSHClient()
         self.ip = serverInfo.ip
         self.remote = (self.ip != "localhost" and self.ip != "127.0.0.1")

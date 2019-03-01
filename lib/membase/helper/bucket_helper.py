@@ -1,5 +1,10 @@
 import copy
-from builtins import Exception as exceptions
+import builtins as exceptions
+
+
+exceptions_list = sorted(n for n, e in vars(exceptions).items()
+                         if isinstance(e, type) and
+                            issubclass(e, BaseException))
 import time
 import uuid
 import zlib
@@ -301,7 +306,7 @@ class BucketOperationHelper():
                     bucket_info.saslPassword.encode('ascii'))
                 else:
                     client.sasl_auth_plain(admin_user, admin_pass)
-                    bucket = bucket.encode('ascii')
+                    bucket = str(bucket)
                     client.bucket_select(bucket)
                 for i in server_dict[every_ip_port]:
                     try:
@@ -315,7 +320,7 @@ class BucketOperationHelper():
                             continue
                         log.error("%s: %s" % (log_msg, ex_msg))
                         continue
-                    except EOFError:
+                    except exceptions.EOFError:
                         # The client was disconnected for some reason. This can
                         # happen just after the bucket REST API is returned (before
                         # the buckets are created in each of the memcached processes.)
@@ -328,14 +333,13 @@ class BucketOperationHelper():
                                                bucket_info.saslPassword.encode('ascii'))
                         continue
 
-                    if c.find("\x01".encode('utf-8')) > 0 or c.find("\x02".encode('utf-8')) > 0:
+                    if int(c.find(b"\x01")) > 0 or int(c.find(b"\x02")) > 0:
                         ready_vbuckets[i] = True
                     elif i in ready_vbuckets:
                         log.warning("vbucket state changed from active to {0}".format(c))
                         del ready_vbuckets[i]
                 client.close()
-        a = len(ready_vbuckets) == vbucket_count
-        return a
+        return len(ready_vbuckets) == vbucket_count
 
     # try to insert key in all vbuckets before returning from this function
     # bucket { 'name' : 90,'password':,'port':1211'}

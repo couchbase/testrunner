@@ -1229,7 +1229,7 @@ class VBucketAwareMemcached(object):
         return keys_vals
 
 
-    def _getMulti_parallel(self, keys_lst, pause_sec=1, timeout_sec=5, collection=None):
+    def _getMulti_parallel(self, keys_lst, pause_sec=1, timeout_sec=15, collection=None):
         server_keys = self._get_server_keys_dic(keys_lst)
         tasks = []
         import concurrent.futures
@@ -1291,7 +1291,7 @@ class VBucketAwareMemcached(object):
 
 
     def _get_vBucket_id(self, key, collection=None):
-        return (zlib.crc32(key) >> 16) & (len(self.vBucketMap) - 1)
+        return (zlib.crc32(key.encode("utf-8")) >> 16) & (len(self.vBucketMap) - 1)
 
 
     def delete(self, key, collection=None):
