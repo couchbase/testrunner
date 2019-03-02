@@ -786,6 +786,11 @@ class XDCReplication:
             self.__test_xdcr_params.update(
                 dict(zip(argument_split[::2], argument_split[1::2]))
             )
+        if 'filter_expression' in self.__test_xdcr_params:
+            filter_chars = {"comma": ',', "star": '*', "dot": '.', "hyphen": '\-'}
+            for _ in filter_chars:
+                self.__test_xdcr_params['filter_expression'] = self.__test_xdcr_params['filter_expression']\
+                    .replace(_, filter_chars[_])
 
     def __convert_test_to_xdcr_params(self):
         xdcr_params = {}
