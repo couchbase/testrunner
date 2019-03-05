@@ -2573,7 +2573,7 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
                       Total dir and files:
                         bucket-config.json  data  full-text.json  gsi.json
                         range.json views.json """
-                backup_folder_content = ["bucket-config.json", "data",
+                backup_folder_content = ["analytics.json","bucket-config.json", "data",
                                          "full-text.json", "gsi.json",
                                           "range.json", "views.json"]
                 for bucket in self.buckets:
