@@ -82,6 +82,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.backupset.overwrite_user_env = self.input.param("overwrite-user-env", False)
         self.backupset.overwrite_passwd_env = self.input.param("overwrite-passwd-env", False)
         self.replace_ttl_with = self.input.param("replace-ttl-with", None)
+        self.num_shards = self.input.param("num_shards", None)
         self.bk_with_ttl = self.input.param("bk-with-ttl", None)
         self.backupset.user_env_with_prompt = \
                         self.input.param("user-env-with-prompt", False)
@@ -400,6 +401,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             args += " --threads %s " % threads_count
         if self.backupset.backup_compressed:
             args += " --value-compression compressed"
+        if self.num_shards is not None:
+            args += " --shards {0} ".format(self.num_shards)
 
         user_env = ""
         password_env = ""
@@ -420,7 +423,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                                                    password_env, user_env)
 
         output, error = remote_client.execute_command(command)
-        remote_client.log_command_output(output, error)
+        if self.debug_logs:
+            remote_client.log_command_output(output, error)
 
         if error or (output and "Backup successfully completed" not in output):
             return output, error
@@ -514,7 +518,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         if self.backupset.disable_bucket_config:
             args += " --disable-bucket-config {0}".format(self.backupset.disable_bucket_config)
         if self.backupset.disable_views:
-            args += " --disable-views {0}".format(self.backupset.disable_views)
+            args += " --disable-views "
         if self.backupset.disable_gsi_indexes:
             args += " --disable-gsi-indexes {0}".format(self.backupset.disable_gsi_indexes)
         if self.backupset.disable_ft_indexes:
@@ -1114,15 +1118,23 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         return cert_file_location
 
     def _create_views(self):
+        self.log.info("Create views")
         default_map_func = "function (doc) {\n  emit(doc._id, doc);\n}"
         default_view_name = "test"
         default_ddoc_name = "ddoc_test"
         prefix = "dev_"
         query = {"full_set": "true", "stale": "false", "connection_timeout": 60000}
-        view = View(default_view_name, default_map_func)
-        task = self.cluster.async_create_view(self.backupset.cluster_host,
-                                              default_ddoc_name, view, "default")
-        task.result()
+        rest = RestConnection(self.backupset.cluster_host)
+        bucket_name = "default"
+        buckets = rest.get_buckets()
+        if len(buckets) > 0:
+            for bucket in buckets:
+                view = View(default_view_name, default_map_func)
+                task = self.cluster.async_create_view(self.backupset.cluster_host,
+                                              default_ddoc_name, view, bucket.name)
+                task.result()
+        else:
+            self.fail("No bucket found")
 
     def validate_backup_views(self, server_host):
         """
@@ -1134,12 +1146,18 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                                                                self.buckets)
         def_check = ['"id": "_design/dev_ddoc_test"',
             '"json": { "views": { "test": { "map": "function (doc) {\\n  emit(doc._id, doc);\\n}" } } }']
-        if bk_views_def:
-            self.log.info("Validate views function")
-            for x in def_check:
-                if x not in bk_views_def:
-                    return False, "Missing %s in views definition" % x
-            return True, "Views function validated"
+        if not self.backupset.disable_views:
+            if bk_views_def:
+                self.log.info("Validate views function")
+                for x in def_check:
+                    if x not in bk_views_def:
+                        return False, "Missing {0} in views definition".format(x)
+                return True, "Views function validated"
+        else:
+            if bk_views_def is None:
+                return False, "Views function does not backup as expected"
+            else:
+                return True, "disable-view flag does not work"
 
     def get_database_file_info(self):
         """
@@ -1192,21 +1210,23 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         if "5" <= rest.get_nodes_version()[:1]:
             gsi_type = "plasma"
         gsi_type += " -auth {0}:{1} ".format(username, password)
-        cmd = "cbindex -type create -bucket default -using {0} -index ".format(gsi_type)
-        cmd += "{0} -fields=Num1".format(self.gsi_names[0])
+        buckets = rest.get_buckets()
         shell = RemoteMachineShellConnection(self.backupset.cluster_host)
-        command = "{0}/{1}".format(self.cli_command_location, cmd)
-        self.log.info("Create gsi indexes")
-        output, error = shell.execute_command(command)
-        self.sleep(5)
+        for bucket in buckets:
+            cmd = "cbindex -type create -bucket {0} -using {1} -index ".format(bucket.name, gsi_type)
+            cmd += "{0} -fields=Num1".format(self.gsi_names[0])
+            command = "{0}/{1}".format(self.cli_command_location, cmd)
+            self.log.info("Create gsi indexes")
+            output, error = shell.execute_command(command)
+            self.sleep(5)
 
-        if self.debug_logs:
-            self.log.info("\noutput gsi: {0}".format(output))
-        cmd = "cbindex -type create -bucket default -using {0} -index ".format(gsi_type)
-        cmd += "{0} -fields=Num2".format(self.gsi_names[1])
-        command = "{0}/{1}".format(self.cli_command_location, cmd)
-        shell.execute_command(command)
-        self.sleep(5)
+            if self.debug_logs:
+                self.log.info("\noutput gsi: {0}".format(output))
+            cmd = "cbindex -type create -bucket {0} -using {1} -index ".format(bucket.name, gsi_type)
+            cmd += "{0} -fields=Num2".format(self.gsi_names[1])
+            command = "{0}/{1}".format(self.cli_command_location, cmd)
+            shell.execute_command(command)
+            self.sleep(5)
         shell.disconnect()
 
     def verify_gsi(self):
@@ -1615,6 +1635,29 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             return sorted(ordered(x) for x in obj)
         else:
             return obj
+
+    def _validate_num_files(self, extension_name, num_shards, bucket_name):
+        """
+           Validate number of file in backup repo
+        """
+        num_files_matched = False
+        mesg = ""
+        cmd = "ls {0}/backup/201*/{1}*/data/ | ".format(self.backupset.directory, bucket_name)
+        cmd += "grep{0} {1} | wc -l ".format(self.cmd_ext, extension_name)
+        shell = RemoteMachineShellConnection(self.backupset.backup_host)
+        output, error = shell.execute_command(cmd)
+        if num_shards is None:
+            num_shards = 1024
+        self.log.info("\n**** Verify number of files with extension {0} *****"\
+                                                         .format(extension_name))
+        if output and int(output[0]) != int(num_shards):
+            mesg = "number of shards do not match.  Pass: {0} vs actual: {1}"\
+                                                 .format(num_shards, output[0])
+        else:
+            num_files_matched = True
+            self.log.info("Number of shards with extension {0} is {1}"\
+                                                 .format(extension_name, output[0]))
+        return num_files_matched, mesg
 
 
 class Backupset:

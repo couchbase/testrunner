@@ -3654,3 +3654,73 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                 self.undeploy_and_delete_function(body)
             self.rest = RestConnection(self.master)
 
+    def test_cbbackupmgr_with_n_vbuckets_per_shard(self):
+        """
+            In Mad-Hatter, by default, cbbackupmgr will create a forestdb file per vbucket.
+            But user could modify this number of file by flag --shards <number of file>
+            By default, if --shards does not pass, it will create 1024 forestdb files.
+            Requirement:
+              ini file has config of cluster
+        """
+        if self.cb_version[:3] < "6.5":
+            self.fail("This test only works for version 6.5 later")
+        if self.create_gsi:
+            self.create_indexes()
+        if self.create_views:
+            self._create_views()
+        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
+        if self.replace_ttl == "expired":
+            if self.bk_with_ttl:
+                self._load_all_buckets(self.master, gen, "create", int(self.bk_with_ttl))
+            else:
+                self._load_all_buckets(self.master, gen, "create", 0)
+        else:
+            self._load_all_buckets(self.master, gen, "create", 0)
+        self.backup_create()
+        error_messages = ["Expected argument for option: --shards",
+                          "Error backing up cluster:",
+                          "Unable to process value for flag: --shards"]
+        if self.should_fail:
+            error_found = False
+            output, error = self.backup_cluster()
+            for error in error_messages:
+                if self._check_output(error, output):
+                    error_found = True
+                    self.log.info("\n**** This is negative test for --shards flag with value '{0}'"
+                                                                          .format(self.num_shards))
+                    break
+            if not error_found:
+                self.fail("--shards flag does not work correctly")
+        else:
+            self.backup_cluster_validate()
+            if self.create_views:
+                if not self.backupset.disable_views:
+                    view_status, view_mesg = \
+                                 self.validate_backup_views(self.backupset.backup_host)
+                    if view_status:
+                        self.log.info(view_mesg)
+                    else:
+                        self.fail(view_mesg)
+                else:
+                    view_status, view_mesg = \
+                                 self.validate_backup_views(self.backupset.backup_host)
+                    if not view_status:
+                        self.log.info(view_mesg)
+                    else:
+                        self.fail(view_mesg)
+            if self.bk_with_ttl:
+                self.sleep(int(self.bk_with_ttl) + 10, "wait items to be expired in backup")
+
+        if not self.should_fail:
+            result, mesg = self._validate_num_files(".fdb", self.num_shards, self.buckets[0].name)
+            if not result:
+                self.fail(mesg)
+            if self.do_verify:
+                compare_function = "=="
+                if self.replace_ttl_with:
+                    compare_function = "<="
+                self.backup_restore_validate(compare_uuid=False, seqno_compare_function=compare_function)
+            else:
+                self.backup_restore()
+            if self.create_gsi:
+                self.verify_gsi()
