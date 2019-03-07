@@ -3131,7 +3131,7 @@ class RemoteMachineShellConnection:
 
         return self.execute_command_raw(command, debug=debug, use_channel=use_channel)
 
-    def execute_command_raw(self, command, debug=True, use_channel=False, timeout=420):
+    def execute_command_raw(self, command, debug=True, use_channel=False, timeout=600):
         if debug:
             log.info("running command.raw on {0}: {1}".format(self.ip, command))
         output = []
