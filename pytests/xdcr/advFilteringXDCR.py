@@ -46,6 +46,7 @@ class XDCRAdvFilterTests(XDCRNewBaseTest):
                     bucket=bucket, startseqnum=random.randrange(1, 10000000, 1),
                     randkey=False, encoding="utf-8",
                     num_docs=num_docs, template="mix.json")
+            self.sleep(30, "Waiting for docs to be loaded")
         except Exception as e:
             self.fail(
                 "Errors encountered while loading data: {0}".format(e.message))
@@ -148,6 +149,7 @@ class XDCRAdvFilterTests(XDCRNewBaseTest):
                 cluster.warmup_node()
             time.sleep(60)
 
+        self.sleep(30)
         self.perform_update_delete()
 
         rdirection = self._input.param("rdirection", "unidirection")
