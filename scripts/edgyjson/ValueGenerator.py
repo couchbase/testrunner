@@ -1,10 +1,11 @@
+import io
 import random
 import string
 import sys
 import requests
 import datetime
 import collections
-
+import constants
 
 class ValueGenerator(object):
 
@@ -15,42 +16,7 @@ class ValueGenerator(object):
         return random.choice(["NULL", "null", "Null", None])
 
     def rand_reserved(self):
-        keyword = random.choice([
-            'ALL', 'ALTER', 'ANALYZE', 'AND', 'ANY', 'ARRAY', 'AS', 'ASC', \
-            'BEGIN', 'BETWEEN', 'BINARY', 'BOOLEAN', 'BREAK', 'BUCKET', 'BUILD', 'BY', \
-            'CALL', 'CASE', 'CAST', 'CLUSTER', 'COLLATE', 'COLLECTION', 'COMMIT', 'CONNECT', 'CONTINUE', 'CORRELATE',
-            'COVER', \
-            'CREATE', \
-            'DATABASE', 'DATASET', 'DATASTORE', 'DECLARE', 'DECREMENT', 'DELETE', 'DERIVED', 'DESC', 'DESCRIBE',
-            'DISTINCT', \
-            'DO', 'DROP', \
-            'EACH', 'ELEMENT', 'ELSE', 'END', 'EVERY', 'EXCEPT', 'EXCLUDE', 'EXECUTE', 'EXISTS', 'EXPLAIN', \
-            'FALSE', 'FETCH', 'FIRST', 'FLATTEN', 'FOR', 'FORCE', 'FROM', 'FUNCTION', \
-            'GRANT', 'GROUP', 'GSI', \
-            'HAVING', \
-            'IF', 'IGNORE', 'ILIKE', 'IN', 'INCLUDE', 'INCREMENT', 'INDEX', 'INFER', 'INLINE', 'INNER', 'INSERT',
-            'INTERSECT', \
-            'INTO', 'IS', \
-            'JOIN', \
-            'KEY', 'KEYS', 'KEYSPACE', 'KNOWN', \
-            'LAST', 'LEFT', 'LET', 'LETTING', 'LIKE', 'LIMIT', 'LSM', \
-            'MAP', 'MAPPING', 'MATCHED', 'MATERIALIZED', 'MERGE', 'MINUS', 'MISSING', \
-            'NAMESPACE', 'NEST', 'NOT', 'NULL', 'NUMBER', \
-            'OBJECT', 'OFFSET', 'ON', 'OPTION', 'OR', 'ORDER', 'OUTER', 'OVER', 'PARSE', 'PARTITION', 'PASSWORD',
-            'PATH',
-            'POOL', \
-            'PREPARE', 'PRIMARY', 'PRIVATE', 'PRIVILEGE', 'PROCEDURE', 'PUBLIC', \
-            'RAW', 'REALM', 'REDUCE', 'RENAME', 'RETURN', 'RETURNING', 'REVOKE', 'RIGHT', 'ROLE', 'ROLLBACK', \
-            'SATISFIES', 'SCHEMA', 'SELECT', 'SELF', 'SEMI', 'SET', 'SHOW', 'SOME', 'START', 'STATISTICS', 'STRING',
-            'SYSTEM', \
-            'THEN', 'TO', 'TRANSACTION', 'TRIGGER', 'TRUE', 'TRUNCATE', \
-            'UNDER', 'UNION', 'UNIQUE', 'UNKNOWN', 'UNNEST', 'UNSET', 'UPDATE', 'UPSERT', 'USE', 'USER', 'USING', \
-            'VALIDATE', 'VALUE', 'VALUED', 'VALUES', 'VIA', 'VIEW', \
-            'WHEN', 'WHERE', 'WHILE', 'WITH', 'WITHIN', \
-            'WORK', \
-            'XOR'
-        ])
-        return keyword
+        return random.choice(constants.niql_reserved_keywords)
 
     def rand_string(self, len_min=0, len_max=10):
         self.len_min = int(len_min)
@@ -115,15 +81,21 @@ class ValueGenerator(object):
             # Insurance against maximum recursion depth exceeded exception
             return {{{}}}
 
-    def empty_doc(self):
-        return {}
+    def empty(self, type="string"):
+        return constants.empty[type]
 
     def tabs(self, len_min=1, len_max=10):
         return "\t" * random.randint(int(len_min), int(len_max))
 
-    def rand_name(self):
-        name = None
-            #requests.get('http://uinames.com/api')
-        if not name:
-            return "Chuck Norris"
-        return name.json()
+    def string_num(self, len_min=1, len_max=10):
+        self.len_min = int(len_min)
+        self.len_max = int(len_max)
+        return ''.join(random.choice(
+            string.digits
+           ) for _ in xrange(random.randint(self.len_min, self.len_max)))
+
+    # def rand_name(self):
+    #     name = requests.get('http://uinames.com/api')
+    #     if not name:
+    #         return "Chuck Norris"
+    #     return name.json()

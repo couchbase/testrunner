@@ -19,7 +19,7 @@ import constants
 # Example usage: python main.py -ip 192.168.56.111 -u Administrator -p password -b default -n 5
 
 class JSONDoc(object):
-    def __init__(self, server, username, password, bucket, startseqnum, randkey, encoding, num_docs, template):
+    def __init__(self, server, username, password, bucket, startseqnum=1, randkey=False, encoding="utf-8", num_docs=1, template="mix.json"):
         self.json_objs_dict = {}
         self.template_file = template
         self.encoding = encoding
@@ -49,18 +49,19 @@ class JSONDoc(object):
             authenticator = PasswordAuthenticator(self.username, self.password)
             cluster.authenticate(authenticator)
             cb = cluster.open_bucket(self.bucket)
+            cb.timeout = 100
         except Exception as e:
             logging.error("Connection error\n" + traceback.format_exc())
-        ttls = [0, 60, 120, 180, 240, 300, 360, 3600, 7200]
+        json_docs = {}
         for i in range(self.startseqnum, self.startseqnum + self.num_docs):
             logging.info("generating doc: " + str(i))
             self.createContent()
-            dockey = "edgyjson-" + str(i) + "-" + str(datetime.datetime.now())[:19]
-            try:
-                cb.upsert(str(dockey), self.json_objs_dict, ttl=random.choice(ttls))
-                logging.info("upsert: " + dockey)
-            except Exception as e:
-                logging.error("Upload error\n" + traceback.format_exc())
+            dockey = "edgyjson-" + str(i)
+            json_docs[dockey] = self.json_objs_dict
+        try:
+            cb.upsert_multi(json_docs)
+        except Exception as e:
+            logging.error("Upload error\n" + traceback.format_exc())
 
     def printDoc(self):
         for i in range(self.startseqnum, self.startseqnum + self.num_docs):
@@ -98,7 +99,7 @@ class JSONDoc(object):
                                  callable(getattr(valuegen, func)) and not func.startswith("__")]
                     key = getattr(globals()['ValueGenerator'](), random.choice(func_list))()
                     # Discard rand keys that are lists or dicts
-                    while isinstance(key,list) or isinstance(key, dict):
+                    while isinstance(key, list) or isinstance(key, dict):
                         key = getattr(globals()['ValueGenerator'](), random.choice(func_list))()
             self.json_objs_dict[key] = val
 
