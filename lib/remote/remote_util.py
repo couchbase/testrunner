@@ -4104,6 +4104,22 @@ class RemoteMachineShellConnection:
         if r and r!=['']:
             log.error("Command didn't run successfully. Error: {0}".format(r))
         return o, r
+    
+    def set_tracing_for_ups(self, bucket_name):
+        self.extract_remote_info()
+        path = LINUX_COUCHBASE_BIN_PATH
+        if self.info.type.lower() == 'windows':
+            path = WIN_COUCHBASE_BIN_PATH
+        output, error = self.execute_command_raw('%smcctl -h localhost:11210 -u Administrator -P password set trace.config "buffer-mode:ring;buffer-size:67108864;enabled-categories:couchstore_write"' % (path))
+        self.log_command_output(output, error)
+        output, error = self.execute_command_raw('%smcctl -h localhost:11210 -u Administrator -P password get trace.config' % (path))
+        self.log_command_output(output, error)
+        output, error = self.execute_command_raw('%scbepctl localhost:11210 -u Administrator -p password -b %s set flush_param couchstore_tracing true' % (path, bucket_name))
+        self.log_command_output(output, error)
+        output, error = self.execute_command_raw('%scbepctl localhost:11210 -u Administrator -p password -b %s set flush_param couchstore_write_validation true' % (path, bucket_name))
+        self.log_command_output(output, error)
+        output, error = self.execute_command_raw('%scbepctl localhost:11210 -u Administrator -p password -b %s set flush_param couchstore_mprotect true' % (path, bucket_name))
+        self.log_command_output(output, error)
 
     def remove_win_backup_dir(self):
         win_paths = [WIN_CB_PATH, testconstants.WIN_MB_PATH]

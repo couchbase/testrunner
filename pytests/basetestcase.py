@@ -569,6 +569,13 @@ class BaseTestCase(unittest.TestCase):
                                                              enable_replica_index=self.enable_replica_index,
                                                              eviction_policy=self.eviction_policy, lww=self.lww)
             self.cluster.create_default_bucket(default_params)
+            
+            enable_tracing_ups = self.input.param("enable_tracing_ups",False)
+            if enable_tracing_ups:
+                self.log.info('UPS: Enable couchstore_trac, couchstore_write_validation and couchstore_mprotect')
+                shell = RemoteMachineShellConnection(self.master)
+                shell.set_tracing_for_ups(self.default_bucket_name)
+
             self.buckets.append(Bucket(name="default", authType="sasl", saslPassword="",
                                        num_replicas=self.num_replicas, bucket_size=self.bucket_size,
                                        eviction_policy=self.eviction_policy, lww=self.lww,
