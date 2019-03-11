@@ -763,42 +763,47 @@ class DataCollector(object):
         status = False
         for bucket in buckets:
             backup_data[bucket.name] = {}
-            output, error = conn.execute_command("ls %s/backup/201*/%s*/data "\
-                                                        % (backup_dir, bucket.name))
-            if "shard_0.fdb" in output:
+            print "---- Collecting data in backup repo"
+            cmd1 = "ls {0}/backup/201*/{1}*/data | grep \.fdb | wc -l "\
+                                                 .format(backup_dir, bucket.name)
+            data_files, error = conn.execute_command(cmd1)
+            if data_files and (int(data_files[0]) > 0 and int(data_files[0]) <= 1024):
                 if master_key == "random_keys":
                     master_key = ".\{12\}$"
-                cmd = "%sforestdb_dump%s --plain-meta "\
-                      "%s/backup/201*/%s*/data/shard_0.fdb | grep -A 8 '^Doc\sID:\s%s' "\
-                                                    % (cli_command, cmd_ext,\
-                                                       backup_dir, bucket.name, master_key)
-                dump_output, error = conn.execute_command(cmd)
-                if dump_output:
-                    """ remove empty element """
-                    dump_output = [x.strip(' ') for x in dump_output]
-                    """ remove '--' element """
-                    dump_output = [ x for x in dump_output if not "--" in x ]
-                    print "Start extracting data from database file"
-                    key_ids       =  [x.split(":")[1].strip(' ') for x in dump_output[0::9]]
-                    key_partition =  [x.split(":")[1].strip(' ') for x in dump_output[1::9]]
-                    key_status    =  [x.split(":")[-1].strip(' ') for x in dump_output[6::9]]
-                    key_value = []
-                    for x in dump_output[8::9]:
-                        if x.split(":",1)[1].strip(' ').startswith("{"):
-                            key_value.append(x.split(":",1)[1].strip())
-                        else:
-                            key_value.append(x.split(":")[-1].strip(' '))
-                    for idx, key in enumerate(key_ids):
-                        backup_data[bucket.name][key] = \
+                dump_output = []
+                for i in range(0, int(data_files[0]) - 1):
+                    cmd2 = "{0}forestdb_dump{1} --plain-meta "\
+                      "{2}/backup/201*/{3}*/data/shard_{4}.fdb | grep -A 8 '^Doc\sID:\s{5}' "\
+                                                      .format(cli_command, cmd_ext,\
+                                                       backup_dir, bucket.name, i, master_key)
+                    output, error = conn.execute_command(cmd2, debug=False)
+                    if output:
+                        """ remove empty element """
+                        output = [x.strip(' ') for x in output]
+                        """ remove '--' element """
+                        output = [ x for x in output if not "--" in x ]
+                        key_ids       =  [x.split(":")[1].strip(' ') for x in output[0::9]]
+                        key_partition =  [x.split(":")[1].strip(' ') for x in output[1::9]]
+                        key_status    =  [x.split(":")[-1].strip(' ') for x in output[6::9]]
+                        key_value = []
+                        for x in output[8::9]:
+                            if x.split(":",1)[1].strip(' ').startswith("{"):
+                                key_value.append(x.split(":",1)[1].strip())
+                            else:
+                                key_value.append(x.split(":")[-1].strip(' '))
+                        for idx, key in enumerate(key_ids):
+                            backup_data[bucket.name][key] = \
                                {"KV store name":key_partition[idx], "Status":key_status[idx],
                                 "Value":key_value[idx]}
-                    print "Done get data from backup file"
-                    status = True
-                else:
-                    print "Data base is empty"
+                        status = True
+
+                if not backup_data[bucket.name]:
+                    print "Data base of bucket {0} is empty".format(bucket.name)
                     return  backup_data, status
+                print "---- Done extract data from {0} backup files in backup repo of bucket {1}"\
+                                                                   .format(data_files, bucket.name)
             else:
-                raise Exception("Could not find file shard_0.fdb at %s" % server.ip)
+                raise Exception("Could not find file shard*.fdb at {0}".format(server.ip))
         return backup_data, status
 
     def get_views_definition_from_backup_file(self, server, backup_dir, buckets):
