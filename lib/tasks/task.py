@@ -730,14 +730,15 @@ class GenericLoadingTask(Thread, Task):
 
     def run(self):
         while self.has_next() and not self.done():
-            next(self)
+            self.next()
         self.state = FINISHED
         self.set_result(True)
 
     def has_next(self):
         raise NotImplementedError()
 
-    def __next__(self):
+    def next(self):
+
         raise NotImplementedError
 
     def _unlocked_create(self, partition, key, value, is_base64_value=False):

@@ -1206,7 +1206,7 @@ class VBucketAwareMemcached(object):
         return server_keyval
 
 
-    def getMulti(self, keys_lst, pause_sec=1, timeout_sec=5, parallel=True,collection=None):
+    def  getMulti(self, keys_lst, pause_sec=1, timeout_sec=5, parallel=True,collection=None):
         if parallel:
             try:
 
