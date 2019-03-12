@@ -941,6 +941,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         """
         data_matched = True
         data_collector = DataCollector()
+        self.sleep(5, "Wait for all shards are written")
         bk_file_data, _ = data_collector.get_kv_dump_from_backup_file(server_host,
                                       self.cli_command_location, self.cmd_ext,
                                       self.backupset.directory, master_key,
@@ -950,21 +951,19 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         if regex_pattern is not None:
             pattern = re.compile("%s" % regex_pattern)
             for bucket in self.buckets:
+                key_in_file_match_regex = 0
                 regex_backup_data[bucket.name] = {}
                 self.log.info("Extract keys with regex pattern '%s' either in key or body"
                                                                           % regex_pattern)
                 for key in restore_file_data[bucket.name]:
-                    if self.debug_logs: print "key in backup file of bucket %s:  %s" \
+                    if self.debug_logs:
+                        print "key in backup file of bucket %s:  %s" \
                                                                % (bucket.name, key)
                     if validate_keys:
                         if pattern.search(key):
                             regex_backup_data[bucket.name][key] = \
                                      restore_file_data[bucket.name][key]
-                        if self.debug_logs:
-                            print "\nKeys in backup file of bucket %s that matches "\
-                                        "pattern '%s'" % (bucket.name, regex_pattern)
-                            for x in regex_backup_data[bucket.name]:
-                                print x
+                            key_in_file_match_regex += 1
                     else:
                         if self.debug_logs:
                             print "value of key in backup file  ",\
@@ -972,13 +971,16 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                         if pattern.search(restore_file_data[bucket.name][key]["Value"]):
                             regex_backup_data[bucket.name][key] = \
                                          restore_file_data[bucket.name][key]
-                        if self.debug_logs:
-                            print "\nKeys and value in backup file of bucket %s "\
-                                  " that matches pattern '%s'" \
-                                    % (bucket.name, regex_pattern)
-                            for x in regex_backup_data[bucket.name]:
-                                print "key: ", x
-                                print "value: ", regex_backup_data[bucket.name][x]["Value"]
+                            key_in_file_match_regex += 1
+                if self.debug_logs:
+                    print "\nKeys and value in backup file of bucket {0} \
+                           that matches pattern '{1}'" \
+                            .format(bucket.name, regex_pattern)
+                    for x in regex_backup_data[bucket.name]:
+                        print "key: ", x
+                        print "value: ", regex_backup_data[bucket.name][x]["Value"]
+                self.log.info("Total keys matched in bk file of bucket {0} is {1}"
+                                      .format(bucket.name, key_in_file_match_regex))
                 restore_file_data = regex_backup_data
 
         buckets_data = {}
@@ -1001,8 +1003,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                 else:
                     value = ",".join(value.split(',')[4:5])
                 buckets_data[bucket.name][key] = value
-            self.log.info("*** Compare data in bucket and in backup file of bucket %s ***"
-                                                                            % bucket.name)
+            self.log.info("*** Compare data in bucket and in backup file of bucket {0} ***"
+                                                                      .format(bucket.name))
             failed_persisted_bucket = []
             ready = RebalanceHelper.wait_for_stats_on_all(self.backupset.cluster_host,
                                                           bucket.name, 'ep_queue_size',
@@ -1010,33 +1012,46 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             if not ready:
                 failed_persisted_bucket.append(bucket.name)
             if failed_persisted_bucket:
-                self.fail("Buckets %s did not persisted." % failed_persisted_bucket)
+                self.fail("Buckets {0} did not persisted.".format(failed_persisted_bucket))
             count = 0
             key_count = 0
             for key in buckets_data[bucket.name]:
                 if restore_file_data[bucket.name]:
-                    if buckets_data[bucket.name][key] != restore_file_data[bucket.name][key]["Value"]:
-                        if count < 20:
-                            self.log.error("Data does not match at key %s. bucket: %s != %s file"
-                                           % (key, buckets_data[bucket.name][key],
-                                              restore_file_data[bucket.name][key]["Value"]))
-                            data_matched = False
-                            count += 1
+                    try:
+                        if restore_file_data[bucket.name][key]:
+                            if buckets_data[bucket.name][key] \
+                                          != restore_file_data[bucket.name][key]["Value"]:
+                                if count < 20:
+                                    self.log.error("Data does not match at key {0}.\
+                                                bucket: {1} != {2} file"\
+                                        .format(key, buckets_data[bucket.name][key],
+                                            restore_file_data[bucket.name][key]["Value"]))
+                                    data_matched = False
+                                    count += 1
+                                else:
+                                    raise Exception ("Data not match in backup bucket {0}"\
+                                                               .format(bucket.name))
+                            key_count += 1
                         else:
-                            raise Exception ("Data not match in backup bucket %s" % bucket.name)
-                    key_count += 1
+                            raise Exception("Key {0} has no value: {1}"
+                                    .format(key, restore_file_data[bucket.name][key]))
+                    except Exception as e:
+                        if e:
+                            print e
+                            raise Exception("\nMissing key: {0}".format(key))
                 else:
-                    raise Exception("Database file is empty")
+                    raise Exception("Database file of bucket {0} is empty"
+                                                     .format(bucket.name))
             if len(restore_file_data[bucket.name]) != key_count:
-                raise Exception ("Total key counts do not match.  Backup %s != %s bucket"
-                                  % (restore_file_data[bucket.name], key_count))
-            self.log.info("******** Data macth in backup file and bucket %s ******** "
-                                                                        % bucket.name)
+                raise Exception ("Total key counts do not match.  Backup {0} != {1} bucket"\
+                                         .format(restore_file_data[bucket.name], key_count))
+            self.log.info("******** Data macth in backup file and bucket {0} ******** "\
+                                                                   .format(bucket.name))
             print "Bucket: ", bucket.name
             print "Total items in backup file:   ", len(bk_file_data[bucket.name])
             if regex_pattern is not None:
-                print "Total items to be restored with regex pattern '%s' is %s "\
-                                         % (regex_pattern,len(restore_file_data[bucket.name]))
+                print "Total items to be restored with regex pattern '{0}' is {1} "\
+                                                   .format(regex_pattern, key_count)
             print "Total items in bucket should be:   ", key_count
             rest = RestConnection(server_bucket[0])
             actual_keys = rest.get_active_key_count(bucket.name)
