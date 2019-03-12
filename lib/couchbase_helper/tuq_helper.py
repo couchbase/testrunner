@@ -807,39 +807,56 @@ class N1QLHelper():
         for k, v in index_distribution_map_after_rebalance.iteritems():
             print k, v
 
-    def verify_replica_indexes(self, index_names, index_map, num_replicas, expected_nodes=None):
+    def verify_replica_indexes(self, index_names, index_map, num_replicas, expected_nodes=None, dropped_replica=False, replicaId=None):
         # 1. Validate count of no_of_indexes
         # 2. Validate index names
         # 3. Validate index replica have the same id
         # 4. Validate index replicas are on different hosts
 
         nodes = []
+        skip_replica_check = False
         for index_name in index_names:
             index_host_name, index_id = self.get_index_details_using_index_name(index_name, index_map)
             nodes.append(index_host_name)
 
             for i in range(0, num_replicas):
-                index_replica_name = index_name + " (replica {0})".format(str(i+1))
-
+                if dropped_replica:
+                    if not i+1 == replicaId:
+                        index_replica_name = index_name + " (replica {0})".format(str(i+1))
+                    else:
+                        skipped_index = index_name + " (replica {0})".format(str(i+1))
+                        skip_replica_check = True
+                else:
+                    index_replica_name = index_name + " (replica {0})".format(str(i + 1))
                 try:
-                    index_replica_hostname, index_replica_id = self.get_index_details_using_index_name(
-                        index_replica_name, index_map)
+                    if not skip_replica_check:
+                        index_replica_hostname, index_replica_id = self.get_index_details_using_index_name(
+                            index_replica_name, index_map)
                 except Exception, ex:
                     self.log.info(str(ex))
                     raise Exception(str(ex))
 
-                self.log.info("Hostnames : %s , %s" % (index_host_name, index_replica_hostname))
-                self.log.info("Index IDs : %s, %s" % (index_id, index_replica_id))
+                if not skip_replica_check:
+                    self.log.info("Hostnames : %s , %s" % (index_host_name, index_replica_hostname))
+                    self.log.info("Index IDs : %s, %s" % (index_id, index_replica_id))
 
-                nodes.append(index_replica_hostname)
+                    nodes.append(index_replica_hostname)
 
-                if index_id != index_replica_id:
-                    self.log.info("Index ID for main index and replica indexes not same")
-                    raise Exception("index id different for replicas")
+                    if index_id != index_replica_id:
+                        self.log.info("Index ID for main index and replica indexes not same")
+                        raise Exception("index id different for replicas")
 
-                if index_host_name == index_replica_hostname:
-                    self.log.info("Index hostname for main index and replica indexes are same")
-                    raise Exception("index hostname same for replicas")
+                    if index_host_name == index_replica_hostname:
+                        self.log.info("Index hostname for main index and replica indexes are same")
+                        raise Exception("index hostname same for replicas")
+                else:
+                    try:
+                        index_replica_hostname, index_replica_id = self.get_index_details_using_index_name(
+                            skipped_index, index_map)
+                    except Exception, ex:
+                        self.log.info(str(ex))
+                        continue
+                    self.assertFalse(True, "Replica is still present when it should have been dropped")
 
         if expected_nodes:
             expected_nodes = expected_nodes.sort()

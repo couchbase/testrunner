@@ -1788,6 +1788,15 @@ class RestConnection(object):
                 index_map[bucket_name][index_name] = {}
                 index_map[bucket_name][index_name]['id'] = map['id']
         return index_map
+
+    def get_index_statements(self, timeout=120):
+        api = self.index_baseUrl + 'getIndexStatement'
+        index_map = {}
+        status,content,header = self._http_request(api, timeout=timeout)
+        if status:
+            json_parsed = json.loads(content)
+        return json_parsed
+
     # returns node data for this host
     def get_nodes_self(self, timeout=120):
         node = None

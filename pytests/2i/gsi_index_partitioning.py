@@ -4239,15 +4239,26 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
             return isIndexPresent and isNumPartitionsCorrect and isDeferBuildCorrect
 
     # Description : Checks if same host contains same partitions from different replica, and also if for each replica, if the partitions are distributed across nodes
-    def validate_partition_map(self, index_metadata, index_name, num_replica,
-                               num_partitions):
+    def validate_partition_map(self, index_metadata, index_name, num_replica, num_partitions,dropped_replica=False, replicaId=0):
         index_names = []
         index_names.append(index_name)
+        hosts = []
 
-        hosts = index_metadata["status"][0]["hosts"]
+        # hosts = index_metadata["status"][0]["hosts"]
+        for index in index_metadata['status']:
+            for host in index['hosts']:
+                if host not in hosts:
+                    hosts.append(host)
+
 
         for i in range(1, num_replica + 1):
-            index_names.append(index_name + " (replica {0})".format(str(i)))
+            if dropped_replica:
+                if not i == replicaId:
+                    index_names.append(index_name + " (replica {0})".format(str(i)))
+                else:
+                    dropped_replica_name = index_name + " (replica {0})".format(str(i))
+            else:
+                index_names.append(index_name + " (replica {0})".format(str(i)))
 
         partition_validation_per_host = True
         for host in hosts:
@@ -4259,14 +4270,10 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
 
             self.log.info(
                 "List of partitions on {0} : {1}".format(host, pmap_host))
-            if len(set(pmap_host)) != num_partitions:
+            if len(set(pmap_host)) != len(pmap_host):
                 partition_validation_per_host &= False
                 self.log.info(
-                    "Partitions on {0} for all replicas are not correct".format(
-                        host))
-                self.log.info(
-                    "Len(partitions on {0}) : {1}, Num Partitions : {2}".format(
-                        len(set(pmap_host)), host, num_partitions))
+                    "Partitions on {0} for all replicas are not correct, host contains duplicate partitions".format(host))
 
         partitions_distributed_for_index = True
         for idx_name in index_names:
@@ -4279,7 +4286,9 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
 
                     partitions_distributed_for_index &= (
                         totalPartitions == num_partitions)
-
+                if dropped_replica:
+                    if index['name'] == dropped_replica_name:
+                        partitions_distributed_for_index = False
         return partition_validation_per_host & partitions_distributed_for_index
 
     def validate_partition_distribution_after_cluster_ops(self, index_name,
