@@ -1,19 +1,17 @@
 import argparse
-import json
-import os
-import sys
-import random
 import datetime
+import json
 import logging
+import os
+import random
+import sys
 import traceback
 
 from couchbase.cluster import Cluster
 from couchbase.cluster import PasswordAuthenticator
-from couchbase.exceptions import NotFoundError
-from couchbase.bucket import Bucket
 
-from ValueGenerator import ValueGenerator
 import constants
+from ValueGenerator import ValueGenerator
 
 
 # Example usage: python main.py -ip 192.168.56.111 -u Administrator -p password -b default -n 5

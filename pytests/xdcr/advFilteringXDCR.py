@@ -10,7 +10,7 @@ from xdcrnewbasetests import XDCRNewBaseTest
 class XDCRAdvFilterTests(XDCRNewBaseTest):
 
     def setUp(self):
-        XDCRNewBaseTest.setUp(self)
+        super(XDCRAdvFilterTests, self).setUp()
         self.src_cluster = self.get_cb_cluster_by_name('C1')
         self.dest_cluster = self.get_cb_cluster_by_name('C2')
         self.src_master = self.src_cluster.get_master_node()
@@ -24,6 +24,7 @@ class XDCRAdvFilterTests(XDCRNewBaseTest):
         else:
             self.setup_xdcr()
             self.load_data()
+
 
     def tearDown(self):
         XDCRNewBaseTest.tearDown(self)
@@ -39,10 +40,12 @@ class XDCRAdvFilterTests(XDCRNewBaseTest):
             clusters.append(self.get_cb_cluster_by_name(cluster_name))
         return clusters
 
-    def load_data(self, bucket="default"):
+    def load_data(self, server=None, bucket="default"):
         try:
             num_docs = self._input.param("items", 10)
-            JSONDoc(server=self.src_master.ip, username="Administrator", password="password",
+            if not server:
+                server = self.src_master.ip
+            JSONDoc(server=server, username="Administrator", password="password",
                     bucket=bucket, startseqnum=random.randrange(1, 10000000, 1),
                     randkey=False, encoding="utf-8",
                     num_docs=num_docs, template="mix.json")
@@ -53,6 +56,7 @@ class XDCRAdvFilterTests(XDCRNewBaseTest):
 
     def __execute_query(self, server, query):
         try:
+            self.log.info("Executing {0} on {1}".format(query, server.ip))
             res = RestConnection(server).query_tool(query)
             if "COUNT" in query:
                 return (int(res["results"][0]['$1']))
@@ -155,6 +159,7 @@ class XDCRAdvFilterTests(XDCRNewBaseTest):
         rdirection = self._input.param("rdirection", "unidirection")
         replications = self.src_rest.get_replications()
         self.verify_results(replications)
-        # if rdirection == "bidirection":
-        #     replications = self.dest_rest.get_replications()
-        #     self.verify_results(replications)
+        if rdirection == "bidirection":
+            self.load_data(server=self.dest_master.ip)
+            replications = self.dest_rest.get_replications()
+            self.verify_results(replications)
