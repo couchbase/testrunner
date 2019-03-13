@@ -856,7 +856,7 @@ class N1QLHelper():
                     except Exception, ex:
                         self.log.info(str(ex))
                         continue
-                    self.assertFalse(True, "Replica is still present when it should have been dropped")
+                    self.fail("Replica is still present when it should have been dropped")
 
         if expected_nodes:
             expected_nodes = expected_nodes.sort()
