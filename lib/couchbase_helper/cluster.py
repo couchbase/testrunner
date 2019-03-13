@@ -1244,8 +1244,9 @@ class Cluster(object):
         status = _task.result()
         return status
 
-    def async_backup_cluster(self, cluster_host, backup_host, directory='', name='', resume=False, purge=False,
-                             no_progress_bar=False, cli_command_location='', cb_version=None):
+    def async_backup_cluster(self, cluster_host, backup_host, directory='', name='',
+                             resume=False, purge=False, no_progress_bar=False,
+                             cli_command_location='', cb_version=None, num_shards=''):
         """
         Asynchronously starts backup cluster
 
@@ -1259,8 +1260,9 @@ class Cluster(object):
         :param cli_command_location: command location with respect to os
         :return: task with the output or error message
         """
-        _task = EnterpriseBackupTask(cluster_host, backup_host, directory, name, resume, purge,
-                                     no_progress_bar, cli_command_location, cb_version)
+        _task = EnterpriseBackupTask(cluster_host, backup_host, directory, name, resume,
+                                     purge, no_progress_bar, cli_command_location, cb_version,
+                                     num_shards)
         self.task_manager.schedule(_task)
         return _task
 

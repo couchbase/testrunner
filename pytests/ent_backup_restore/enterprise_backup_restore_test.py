@@ -3661,6 +3661,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             By default, if --shards does not pass, it will create 1024 forestdb files.
             Requirement:
               ini file has config of cluster
+              to test with memcached restart, pass param force_kill_memcached=True
+
         """
         if self.cb_version[:3] < "6.5":
             self.fail("This test only works for version 6.5 later")
@@ -3692,7 +3694,10 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             if not error_found:
                 self.fail("--shards flag does not work correctly")
         else:
-            self.backup_cluster_validate()
+            if self.force_kill_memcached:
+                self.bk_with_memcached_crash_and_restart()
+            else:
+                self.backup_cluster_validate()
             if self.create_views:
                 if not self.backupset.disable_views:
                     view_status, view_mesg = \

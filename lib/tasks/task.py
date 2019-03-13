@@ -4438,7 +4438,7 @@ class CancelBucketCompactionTask(Task):
 class EnterpriseBackupTask(Task):
 
     def __init__(self, cluster_host, backup_host, directory='', name='', resume=False, purge=False,
-                 no_progress_bar=False, cli_command_location='', cb_version=None):
+                 no_progress_bar=False, cli_command_location='', cb_version=None, num_shards=''):
         Task.__init__(self, "enterprise_backup_task")
         self.cluster_host = cluster_host
         self.backup_host = backup_host
@@ -4450,6 +4450,7 @@ class EnterpriseBackupTask(Task):
         self.cli_command_location = cli_command_location
         self.cb_version = cb_version
         self.cluster_flag = "--host"
+        self.num_shards=num_shards
         """ from couchbase version 4.6.x, --host flag is not supported """
         if self.cb_version is None:
             raise Exception("Need to pass Couchbase version to run correctly bk/rt ")
@@ -4466,10 +4467,12 @@ class EnterpriseBackupTask(Task):
 
     def execute(self, task_manager):
         try:
-            args = "backup --archive {0} --repo {1} {6} http://{2}:{3} --username {4} --password {5}". \
-            format(self.directory, self.name, self.cluster_host.ip,
+            args = "backup --archive {0} --repo {1} {6} http://{2}:{3}\
+                           --username {4} --password {5} {7} "\
+                   .format(self.directory, self.name, self.cluster_host.ip,
                    self.cluster_host.port, self.cluster_host.rest_username,
-                   self.cluster_host.rest_password, self.cluster_flag)
+                   self.cluster_host.rest_password, self.cluster_flag,
+                   self.num_shards)
             if self.resume:
                 args += " --resume"
             if self.purge:

@@ -874,6 +874,55 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         conn.disconnect()
         return deleted_key_status
 
+    def bk_with_memcached_crash_and_restart(self):
+        num_shards = ""
+        if self.num_shards is not None:
+            num_shards += " --shards {0} ".format(self.num_shards)
+        backup_result = self.cluster.async_backup_cluster(
+                                           cluster_host=self.backupset.cluster_host,
+                                           backup_host=self.backupset.backup_host,
+                                           directory=self.backupset.directory,
+                                           name=self.backupset.name,
+                                           resume=self.backupset.resume,
+                                           purge=self.backupset.purge,
+                                           no_progress_bar=self.no_progress_bar,
+                                           cli_command_location=self.cli_command_location,
+                                           cb_version=self.cb_version,
+                                           num_shards=num_shards)
+        self.sleep(5)
+        conn_bk = RemoteMachineShellConnection(self.backupset.cluster_host)
+        conn_bk.pause_memcached(timesleep=8)
+        conn_bk.unpause_memcached()
+        conn_bk.disconnect()
+        output = backup_result.result(timeout=200)
+        if self.debug_logs:
+            if output:
+                print "\nOutput from backup cluster: %s " % output
+            else:
+                self.fail("No output printout.")
+        self.assertTrue(self._check_output("Backup successfully completed", output),
+                        "Backup failed with memcached crash and restart within 180 seconds")
+        self.log.info("Backup succeeded with memcached crash and restart within 180 seconds")
+        self.sleep(20)
+        conn = RemoteMachineShellConnection(self.backupset.backup_host)
+        command = "ls -tr {0}/{1} | tail -1".format(self.backupset.directory,
+                                                    self.backupset.name)
+        o, e = conn.execute_command(command)
+        if o:
+            self.backups.append(o[0])
+        conn.log_command_output(o, e)
+        self.number_of_backups_taken += 1
+        self.store_vbucket_seqno()
+        self.validation_helper.store_keys(self.cluster_to_backup, self.buckets,
+                                          self.number_of_backups_taken,
+                                          self.backup_validation_files_location)
+        self.validation_helper.store_latest(self.cluster_to_backup, self.buckets,
+                                            self.number_of_backups_taken,
+                                            self.backup_validation_files_location)
+        self.validation_helper.store_range_json(self.buckets, self.number_of_backups_taken,
+                                         self.backup_validation_files_location, merge=True)
+        conn.disconnect()
+
     def backup_merge(self):
         self.log.info("backups before merge: " + str(self.backups))
         self.log.info("number_of_backups_taken before merge: " \
@@ -1887,51 +1936,6 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         for task in ops_tasks:
             task.result()
 
-    def backup_with_memcached_crash_and_restart(self):
-        backup_result = self.cluster.async_backup_cluster(
-                                           cluster_host=self.backupset.cluster_host,
-                                           backup_host=self.backupset.backup_host,
-                                           directory=self.backupset.directory,
-                                           name=self.backupset.name,
-                                           resume=self.backupset.resume,
-                                           purge=self.backupset.purge,
-                                           no_progress_bar=self.no_progress_bar,
-                                           cli_command_location=self.cli_command_location,
-                                           cb_version=self.cb_version)
-        self.sleep(5)
-        conn_bk = RemoteMachineShellConnection(self.backupset.cluster_host)
-        conn_bk.pause_memcached(timesleep=8)
-        conn_bk.unpause_memcached()
-        conn_bk.disconnect()
-        output = backup_result.result(timeout=200)
-        if self.debug_logs:
-            if output:
-                print "\nOutput from backup cluster: %s " % output
-            else:
-                self.fail("No output printout.")
-        self.assertTrue(self._check_output("Backup successfully completed", output),
-                        "Backup failed with memcached crash and restart within 180 seconds")
-        self.log.info("Backup succeeded with memcached crash and restart within 180 seconds")
-        self.sleep(20)
-        conn = RemoteMachineShellConnection(self.backupset.backup_host)
-        command = "ls -tr {0}/{1} | tail -1".format(self.backupset.directory,
-                                                    self.backupset.name)
-        o, e = conn.execute_command(command)
-        if o:
-            self.backups.append(o[0])
-        conn.log_command_output(o, e)
-        self.number_of_backups_taken += 1
-        self.store_vbucket_seqno()
-        self.validation_helper.store_keys(self.cluster_to_backup, self.buckets,
-                                          self.number_of_backups_taken,
-                                          self.backup_validation_files_location)
-        self.validation_helper.store_latest(self.cluster_to_backup, self.buckets,
-                                            self.number_of_backups_taken,
-                                            self.backup_validation_files_location)
-        self.validation_helper.store_range_json(self.buckets, self.number_of_backups_taken,
-                                         self.backup_validation_files_location, merge=True)
-        conn.disconnect()
-
     def _check_output(self, word_check, output):
         found = False
         if len(output) >=1 :
@@ -2765,6 +2769,12 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
                 self.backup_merge_actions[action](self)
                 self.log.info("Finished {} action for {}th time.".format(
                     action, i + 1))
+
+    def backup_with_memcached_crash_and_restart(self):
+        """
+           call bk_with_memcached_crash_and_restart in EnterpriseBackupRestoreBase
+        """
+        return self.bk_with_memcached_crash_and_restart()
 
     def set_meta_purge_interval(self):
         rest = RestConnection(self.master)
