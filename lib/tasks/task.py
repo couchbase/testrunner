@@ -462,6 +462,7 @@ class RebalanceTask(Task):
             else:
                 self.rest.add_node(master.rest_username, master.rest_password,
                                    node.ip, node.port, services = services_for_node)
+            node_index=0
 
     def start_rebalance(self, task_manager):
         nodes = self.rest.node_statuses()
