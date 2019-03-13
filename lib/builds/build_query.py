@@ -22,7 +22,6 @@ from testconstants import COUCHBASE_FROM_VERSION_3, COUCHBASE_FROM_SPOCK,\
                           COUCHBASE_FROM_MAD_HATTER, COUCHBASE_FROM_601
 from testconstants import CB_RELEASE_REPO
 from testconstants import CB_LATESTBUILDS_REPO
-from testconstants import CE_EE_ON_SAME_FOLDER
 
 
 class MembaseBuild(object):
@@ -471,10 +470,6 @@ class BuildQuery(object):
                         os_architecture, deliverable_type, build_details,
                         CB_LATESTBUILDS_REPO)
         # This points to the Internal s3 account to look for release builds
-        """ add ce folder in community version from 3.0.2 release """
-        if "community" in product and build_version[:5] not in CE_EE_ON_SAME_FOLDER:
-            build.url = build.url.replace("couchbase-server-community", \
-                                          "ce/couchbase-server-community")
         if is_amazon:
             """
                 for centos only
