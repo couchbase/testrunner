@@ -76,6 +76,8 @@ class EventingTools(EventingBaseTest, EnterpriseBackupRestoreBase, NewUpgradeBas
         self.backupset.restore_cluster_host = self.servers[1]
         self.backupset.restore_cluster_host_username = self.servers[1].rest_username
         self.backupset.restore_cluster_host_password = self.servers[1].rest_password
+        self.num_shards = self.input.param("num_shards", None)
+        self.debug_logs = self.input.param("debug-logs", False)
         cmd = 'curl -g %s:8091/diag/eval -u Administrator:password ' % self.master.ip
         cmd += '-d "path_config:component_path(bin)."'
         bin_path = subprocess.check_output(cmd, shell=True)
