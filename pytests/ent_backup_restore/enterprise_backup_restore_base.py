@@ -83,6 +83,9 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.backupset.overwrite_passwd_env = self.input.param("overwrite-passwd-env", False)
         self.replace_ttl_with = self.input.param("replace-ttl-with", None)
         self.num_shards = self.input.param("num_shards", None)
+        self.force_restart_erlang = self.input.param("force_restart_erlang", False)
+        self.force_restart_couchbase_server = \
+                          self.input.param("force_restart_couchbase_server", False)
         self.bk_with_ttl = self.input.param("bk-with-ttl", None)
         self.backupset.user_env_with_prompt = \
                         self.input.param("user-env-with-prompt", False)
@@ -922,6 +925,142 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.validation_helper.store_range_json(self.buckets, self.number_of_backups_taken,
                                          self.backup_validation_files_location, merge=True)
         conn.disconnect()
+
+    def bk_with_erlang_crash_and_restart(self):
+        num_shards = ""
+        if self.num_shards is not None:
+            num_shards += " --shards {0} ".format(self.num_shards)
+        backup_result = self.cluster.async_backup_cluster(
+                                           cluster_host=self.backupset.cluster_host,
+                                           backup_host=self.backupset.backup_host,
+                                           directory=self.backupset.directory,
+                                           name=self.backupset.name,
+                                           resume=self.backupset.resume,
+                                           purge=self.backupset.purge,
+                                           no_progress_bar=self.no_progress_bar,
+                                           cli_command_location=self.cli_command_location,
+                                           cb_version=self.cb_version,
+                                           num_shards=num_shards)
+        self.sleep(10)
+        conn = RemoteMachineShellConnection(self.backupset.cluster_host)
+        conn.kill_erlang()
+        conn.start_couchbase()
+        output = backup_result.result(timeout=200)
+        self.assertTrue(self._check_output("Backup successfully completed", output),
+                        "Backup failed with erlang crash and restart within 180 seconds")
+        self.log.info("Backup succeeded with erlang crash and restart within 180 seconds")
+        self.sleep(30)
+        conn.disconnect()
+        conn = RemoteMachineShellConnection(self.backupset.backup_host)
+        command = "ls -tr {0}/{1} | tail -1".format(self.backupset.directory,
+                                                    self.backupset.name)
+        o, e = conn.execute_command(command)
+        if o:
+            self.backups.append(o[0])
+        conn.log_command_output(o, e)
+        self.number_of_backups_taken += 1
+        self.store_vbucket_seqno()
+        self.validation_helper.store_keys(self.cluster_to_backup, self.buckets,
+                                          self.number_of_backups_taken,
+                                          self.backup_validation_files_location)
+        self.validation_helper.store_latest(self.cluster_to_backup, self.buckets,
+                                            self.number_of_backups_taken,
+                                            self.backup_validation_files_location)
+        self.validation_helper.store_range_json(self.buckets, self.number_of_backups_taken,
+                                                self.backup_validation_files_location)
+        conn.disconnect()
+
+    def bk_with_cb_server_stop_and_restart(self):
+        num_shards = ""
+        if self.num_shards is not None:
+            num_shards += " --shards {0} ".format(self.num_shards)
+        backup_result = self.cluster.async_backup_cluster(
+                                           cluster_host=self.backupset.cluster_host,
+                                           backup_host=self.backupset.backup_host,
+                                           directory=self.backupset.directory,
+                                           name=self.backupset.name,
+                                           resume=self.backupset.resume,
+                                           purge=self.backupset.purge,
+                                           no_progress_bar=self.no_progress_bar,
+                                           cli_command_location=self.cli_command_location,
+                                           cb_version=self.cb_version,
+                                           num_shards=num_shards)
+        self.sleep(10)
+        conn = RemoteMachineShellConnection(self.backupset.cluster_host)
+        conn.stop_couchbase()
+        conn.start_couchbase()
+        output = backup_result.result(timeout=200)
+        self.assertTrue(self._check_output("Backup successfully completed", output),
+                        "Backup failed with couchbase stop and start within 180 seconds")
+        self.log.info("Backup succeeded with couchbase stop and start within 180 seconds")
+        self.sleep(30)
+        conn.disconnect()
+        conn = RemoteMachineShellConnection(self.backupset.backup_host)
+        command = "ls -tr {0}/{1} | tail -1".format(self.backupset.directory,
+                                                    self.backupset.name)
+        o, e = conn.execute_command(command)
+        if o:
+            self.backups.append(o[0])
+        conn.log_command_output(o, e)
+        self.number_of_backups_taken += 1
+        self.store_vbucket_seqno()
+        self.validation_helper.store_keys(self.cluster_to_backup, self.buckets,
+                                          self.number_of_backups_taken,
+                                          self.backup_validation_files_location)
+        self.validation_helper.store_latest(self.cluster_to_backup, self.buckets,
+                                            self.number_of_backups_taken,
+                                            self.backup_validation_files_location)
+        self.validation_helper.store_range_json(self.buckets, self.number_of_backups_taken,
+                                                self.backup_validation_files_location)
+        conn.disconnect()
+
+    def bk_with_stop_and_resume(self):
+        old_backup_name = ""
+        new_backup_name = ""
+        num_shards = ""
+        if self.num_shards is not None:
+            num_shards += " --shards {0} ".format(self.num_shards)
+        backup_result = self.cluster.async_backup_cluster(
+                                           cluster_host=self.backupset.cluster_host,
+                                           backup_host=self.backupset.backup_host,
+                                           directory=self.backupset.directory,
+                                           name=self.backupset.name,
+                                           resume=False,
+                                           purge=self.backupset.purge,
+                                           no_progress_bar=self.no_progress_bar,
+                                           cli_command_location=self.cli_command_location,
+                                           cb_version=self.cb_version,
+                                           num_shards=num_shards)
+        self.sleep(3)
+        conn = RemoteMachineShellConnection(self.backupset.cluster_host)
+        conn.kill_erlang(self.os_name)
+        output = backup_result.result(timeout=200)
+        self.log.info(str(output))
+        status, output, message = self.backup_list()
+        if not status:
+            self.fail(message)
+        for line in output:
+            if re.search("\d{4}-\d{2}-\d{2}T\d{2}_\d{2}_\d{2}.\d+-\d{2}_\d{2}", line):
+                old_backup_name = re.search("\d{4}-\d{2}-\d{2}T\d{2}_\d{2}"
+                                            "_\d{2}.\d+-\d{2}_\d{2}", line).group()
+                self.log.info("Backup name before resume: " + old_backup_name)
+        conn.start_couchbase()
+        conn.disconnect()
+        self.sleep(30)
+        output, error = self.backup_cluster()
+        if error or not self._check_output("Backup successfully completed", output):
+            self.fail("Taking cluster backup failed.")
+        status, output, message = self.backup_list()
+        if not status:
+            self.fail(message)
+        for line in output:
+            if re.search("\d{4}-\d{2}-\d{2}T\d{2}_\d{2}_\d{2}.\d+-\d{2}_\d{2}", line):
+                new_backup_name = re.search("\d{4}-\d{2}-\d{2}T\d{2}_\d{2}"
+                                            "_\d{2}.\d+-\d{2}_\d{2}", line).group()
+                self.log.info("Backup name after resume: " + new_backup_name)
+        self.assertEqual(old_backup_name, new_backup_name,
+                         "Old backup name and new backup name are not same when resume is used")
+        self.log.info("Old backup name and new backup name are same when resume is used")
 
     def backup_merge(self):
         self.log.info("backups before merge: " + str(self.backups))
@@ -1946,74 +2085,6 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
                     break
         return found
 
-    def backup_with_erlang_crash_and_restart(self):
-        backup_result = self.cluster.async_backup_cluster(cluster_host=self.backupset.cluster_host,
-                                                          backup_host=self.backupset.backup_host,
-                                                          directory=self.backupset.directory, name=self.backupset.name,
-                                                          resume=self.backupset.resume, purge=self.backupset.purge,
-                                                          no_progress_bar=self.no_progress_bar,
-                                                          cli_command_location=self.cli_command_location,
-                                                          cb_version=self.cb_version)
-        self.sleep(10)
-        conn = RemoteMachineShellConnection(self.backupset.cluster_host)
-        conn.kill_erlang()
-        conn.start_couchbase()
-        output = backup_result.result(timeout=200)
-        self.assertTrue(self._check_output("Backup successfully completed", output),
-                        "Backup failed with erlang crash and restart within 180 seconds")
-        self.log.info("Backup succeeded with erlang crash and restart within 180 seconds")
-        self.sleep(30)
-        conn.disconnect()
-        conn = RemoteMachineShellConnection(self.backupset.backup_host)
-        command = "ls -tr {0}/{1} | tail -1".format(self.backupset.directory, self.backupset.name)
-        o, e = conn.execute_command(command)
-        if o:
-            self.backups.append(o[0])
-        conn.log_command_output(o, e)
-        self.number_of_backups_taken += 1
-        self.store_vbucket_seqno()
-        self.validation_helper.store_keys(self.cluster_to_backup, self.buckets, self.number_of_backups_taken,
-                                          self.backup_validation_files_location)
-        self.validation_helper.store_latest(self.cluster_to_backup, self.buckets, self.number_of_backups_taken,
-                                            self.backup_validation_files_location)
-        self.validation_helper.store_range_json(self.buckets, self.number_of_backups_taken,
-                                                self.backup_validation_files_location)
-        conn.disconnect()
-
-    def backup_with_cb_server_stop_and_restart(self):
-        backup_result = self.cluster.async_backup_cluster(cluster_host=self.backupset.cluster_host,
-                                                          backup_host=self.backupset.backup_host,
-                                                          directory=self.backupset.directory, name=self.backupset.name,
-                                                          resume=self.backupset.resume, purge=self.backupset.purge,
-                                                          no_progress_bar=self.no_progress_bar,
-                                                          cli_command_location=self.cli_command_location,
-                                                          cb_version=self.cb_version)
-        self.sleep(10)
-        conn = RemoteMachineShellConnection(self.backupset.cluster_host)
-        conn.stop_couchbase()
-        conn.start_couchbase()
-        output = backup_result.result(timeout=200)
-        self.assertTrue(self._check_output("Backup successfully completed", output),
-                        "Backup failed with couchbase stop and start within 180 seconds")
-        self.log.info("Backup succeeded with couchbase stop and start within 180 seconds")
-        self.sleep(30)
-        conn.disconnect()
-        conn = RemoteMachineShellConnection(self.backupset.backup_host)
-        command = "ls -tr {0}/{1} | tail -1".format(self.backupset.directory, self.backupset.name)
-        o, e = conn.execute_command(command)
-        if o:
-            self.backups.append(o[0])
-        conn.log_command_output(o, e)
-        self.number_of_backups_taken += 1
-        self.store_vbucket_seqno()
-        self.validation_helper.store_keys(self.cluster_to_backup, self.buckets, self.number_of_backups_taken,
-                                          self.backup_validation_files_location)
-        self.validation_helper.store_latest(self.cluster_to_backup, self.buckets, self.number_of_backups_taken,
-                                            self.backup_validation_files_location)
-        self.validation_helper.store_range_json(self.buckets, self.number_of_backups_taken,
-                                                self.backup_validation_files_location)
-        conn.disconnect()
-
     def merge(self):
         """
         Merge all the existing backups in the backupset.
@@ -2775,6 +2846,18 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
            call bk_with_memcached_crash_and_restart in EnterpriseBackupRestoreBase
         """
         return self.bk_with_memcached_crash_and_restart()
+
+    def backup_with_erlang_crash_and_restart(self):
+        """
+           call bk_with_erlang_crash_and_restart in EnterpriseBackupRestoreBase
+        """
+        return self.bk_with_erlang_crash_and_restart()
+
+    def backup_with_cb_server_stop_and_restart(self):
+        """
+           call bk_with_cb_server_stop_and_restart in EnterpriseBackupRestoreBase
+        """
+        return self.bk_with_cb_server_stop_and_restart()
 
     def set_meta_purge_interval(self):
         rest = RestConnection(self.master)

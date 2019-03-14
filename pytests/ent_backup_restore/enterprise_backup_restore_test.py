@@ -2197,48 +2197,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                             end=self.num_items)
         self._load_all_buckets(self.master, gen, "create", 0)
         self.backup_create()
-        old_backup_name = ""
-        new_backup_name = ""
-        backup_result = self.cluster.async_backup_cluster(
-            cluster_host=self.backupset.cluster_host,
-            backup_host=self.backupset.backup_host,
-            directory=self.backupset.directory,
-            name=self.backupset.name,
-            resume=False,
-            purge=self.backupset.purge,
-            no_progress_bar=self.no_progress_bar,
-            cli_command_location=self.cli_command_location,
-            cb_version=self.cb_version)
-        self.sleep(3)
-        conn = RemoteMachineShellConnection(self.backupset.cluster_host)
-        conn.kill_erlang(self.os_name)
-        output = backup_result.result(timeout=200)
-        self.log.info(str(output))
-        status, output, message = self.backup_list()
-        if not status:
-            self.fail(message)
-        for line in output:
-            if re.search("\d{4}-\d{2}-\d{2}T\d{2}_\d{2}_\d{2}.\d+-\d{2}_\d{2}", line):
-                old_backup_name = re.search("\d{4}-\d{2}-\d{2}T\d{2}_\d{2}"
-                                            "_\d{2}.\d+-\d{2}_\d{2}", line).group()
-                self.log.info("Backup name before resume: " + old_backup_name)
-        conn.start_couchbase()
-        conn.disconnect()
-        self.sleep(30)
-        output, error = self.backup_cluster()
-        if error or not self._check_output("Backup successfully completed", output):
-            self.fail("Taking cluster backup failed.")
-        status, output, message = self.backup_list()
-        if not status:
-            self.fail(message)
-        for line in output:
-            if re.search("\d{4}-\d{2}-\d{2}T\d{2}_\d{2}_\d{2}.\d+-\d{2}_\d{2}", line):
-                new_backup_name = re.search("\d{4}-\d{2}-\d{2}T\d{2}_\d{2}"
-                                            "_\d{2}.\d+-\d{2}_\d{2}", line).group()
-                self.log.info("Backup name after resume: " + new_backup_name)
-        self.assertEqual(old_backup_name, new_backup_name,
-                         "Old backup name and new backup name are not same when resume is used")
-        self.log.info("Old backup name and new backup name are same when resume is used")
+        self.bk_with_stop_and_resume()
 
     def test_backup_restore_with_deletes(self):
         """
@@ -3696,8 +3655,16 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         else:
             if self.force_kill_memcached:
                 self.bk_with_memcached_crash_and_restart()
+            elif self.force_restart_erlang:
+                self.bk_with_erlang_crash_and_restart()
+            elif self.force_restart_couchbase_server:
+                self.bk_with_cb_server_stop_and_restart()
+            elif self.backupset.resume:
+                """ this test needs 100K or greater to run.  items=100000  """
+                self.bk_with_stop_and_resume()
             else:
                 self.backup_cluster_validate()
+
             if self.create_views:
                 if not self.backupset.disable_views:
                     view_status, view_mesg = \
@@ -3713,6 +3680,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                         self.log.info(view_mesg)
                     else:
                         self.fail(view_mesg)
+
             if self.bk_with_ttl:
                 self.sleep(int(self.bk_with_ttl) + 10, "wait items to be expired in backup")
 
