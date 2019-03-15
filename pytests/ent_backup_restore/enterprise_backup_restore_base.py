@@ -60,6 +60,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.backupset = Backupset()
         self.cmd_ext = ""
         self.should_fail = self.input.param("should-fail", False)
+        self.restore_should_fail = self.input.param("restore_should_fail", False)
         self.database_path = COUCHBASE_DATA_PATH
 
         cmd =  'curl -g {0}:8091/diag/eval -u {1}:{2} '.format(self.master.ip,
@@ -83,6 +84,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.backupset.overwrite_passwd_env = self.input.param("overwrite-passwd-env", False)
         self.replace_ttl_with = self.input.param("replace-ttl-with", None)
         self.num_shards = self.input.param("num_shards", None)
+        self.shards_action = self.input.param("shards_action", None)
         self.force_restart_erlang = self.input.param("force_restart_erlang", False)
         self.force_restart_couchbase_server = \
                           self.input.param("force_restart_couchbase_server", False)
@@ -695,7 +697,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         if "Error restoring cluster" in output[0] or "Unable to process value" in output[0] \
             or "Expected argument for option" in output[0]:
             if not self.should_fail:
-                self.fail("Failed to restore cluster")
+                if not self.restore_should_fail:
+                    self.fail("Failed to restore cluster")
             else:
                 self.log.info("This test is for negative test")
         res = output
@@ -1862,6 +1865,36 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                                                  .format(extension_name, output[0]))
         return num_files_matched, mesg
 
+    def _shards_modification(self, action):
+        shell = RemoteMachineShellConnection(self.backupset.backup_host)
+        for bucket in self.buckets:
+            num_shards = 0
+            cmd = "ls {0}/backup/201*/{1}*/data/ | grep{2} .fdb | wc -l"\
+                           .format(self.backupset.directory, bucket.name, self.cmd_ext)
+            output, error = shell.execute_command(cmd)
+            if output and int(output[0]) > 0:
+                num_shards = int(output[0])
+            if action == "remove":
+                self.log.info("Remove a shard in backup repo")
+                cmd = "rm -f {0}/backup/201*/{1}*/data/shard_1.fdb  "\
+                             .format(self.backupset.directory, bucket.name)
+                output, error = shell.execute_command(cmd)
+            if action == "duplicate":
+                self.log.info("Duplicate one shard in backup repo")
+                cmd = "cd {0}/backup/201*/{1}*/data/; cp shard_1.fdb shard_{2}.fdb"\
+                                                      .format(self.backupset.directory,
+                                                       bucket.name, num_shards + 1)
+                output, error = shell.execute_command(cmd)
+            if action == "corrupted":
+                """ This test needs set to 20 shards to make sure all shards have data """
+                if num_shards > 20:
+                    self.fail("This test needs to set 20 shards to run")
+                if num_shards > 0:
+                    self.log.info("Corrupted a shard in backup repo")
+                    cmd = "cd {0}/backup/201*/{1}*/data/; echo 'Hello world' > shard_1.fdb"\
+                                              .format(self.backupset.directory, bucket.name)
+                    output, error = shell.execute_command(cmd)
+        shell.disconnect()
 
 class Backupset:
     def __init__(self):

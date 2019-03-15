@@ -3621,7 +3621,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             Requirement:
               ini file has config of cluster
               to test with memcached restart, pass param force_kill_memcached=True
-
+              to test with shards action, you need param restore_should_fail=True
         """
         if self.cb_version[:3] < "6.5":
             self.fail("This test only works for version 6.5 later")
@@ -3685,15 +3685,24 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                 self.sleep(int(self.bk_with_ttl) + 10, "wait items to be expired in backup")
 
         if not self.should_fail:
-            result, mesg = self._validate_num_files(".fdb", self.num_shards, self.buckets[0].name)
-            if not result:
-                self.fail(mesg)
-            if self.do_verify:
-                compare_function = "=="
-                if self.replace_ttl_with:
-                    compare_function = "<="
-                self.backup_restore_validate(compare_uuid=False, seqno_compare_function=compare_function)
+            if self.restore_should_fail:
+                if self.shards_action is not None:
+                    self._shards_modification(self.shards_action)
+                    output, error = self.backup_restore()
+                if not self._check_output("Error restoring cluster", output):
+                    self.fail("Restore should fail due to {0} shard".format(self.shards_action))
             else:
-                self.backup_restore()
-            if self.create_gsi:
-                self.verify_gsi()
+                result, mesg = self._validate_num_files(".fdb", self.num_shards, self.buckets[0].name)
+                if not result:
+                    self.fail(mesg)
+                self._shards_modification(self.shards_action)
+                if self.do_verify:
+                    compare_function = "=="
+                    if self.replace_ttl_with:
+                        compare_function = "<="
+                    self.backup_restore_validate(compare_uuid=False,
+                                                 seqno_compare_function=compare_function)
+                else:
+                    self.backup_restore()
+                if self.create_gsi:
+                    self.verify_gsi()
