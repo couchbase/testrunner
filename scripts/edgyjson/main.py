@@ -67,7 +67,7 @@ class JSONDoc(object):
             self.createContent()
             try:
                 current_dir = os.path.dirname(__file__)
-                dockey = "edgyjson:" + str(i) + ":" + str(datetime.datetime.now())[:19] + ".json"
+                dockey = "edgyjson-" + str(i) + ".json"
                 output = os.path.join(current_dir, "output/", dockey)
                 with open(output, 'w') as f:
                     f.write(json.dumps(self.json_objs_dict, indent=3).encode(self.encoding, "ignore"))
