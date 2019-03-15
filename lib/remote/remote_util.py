@@ -1967,11 +1967,18 @@ class RemoteMachineShellConnection:
                 else:
                     self.check_pkgconfig(self.info.deliverable_type, openssl)
                     if force:
-                        output, error = self.execute_command('{0}rpm -Uvh --force /tmp/{1}'\
-                                                .format(environment, build.name), debug=False)
+                        # temporary fix for bzip2 - need to be redone
+                        # output, error = self.execute_command('{0}rpm -Uvh --force /tmp/{1}'\
+                        #                        .format(environment, build.name), debug=False)
+                        output, error = self.execute_command("yes | yum localinstall -y /tmp/{0}" \
+                                                             .format(build.name), debug=False)
                     else:
-                        output, error = self.execute_command('{0}rpm -i /tmp/{1}'\
-                                                .format(environment, build.name), debug=False)
+                        # temporary fix for bzip2 - need to be redone
+                        # output, error = self.execute_command('{0}rpm -i /tmp/{1}'\
+                        #                        .format(environment, build.name), debug=False)
+                        output, error = self.execute_command("yes | yum localinstall -y /tmp/{0}" \
+                                                             .format(build.name), debug=False)
+
             elif self.info.deliverable_type == 'deb':
                 if self.nonroot:
                     op, er = self.execute_command('cd %s; dpkg-deb -x %s %s '
