@@ -2,6 +2,7 @@ import copy
 import json
 from threading import Thread
 
+import Geohash
 from membase.helper.cluster_helper import ClusterOperationHelper
 from remote.remote_util import RemoteMachineShellConnection
 
@@ -1585,12 +1586,23 @@ class StableTopFTS(FTSBaseTest):
         for i in range(self.num_queries):
             fts_query, es_query = FTSESQueryGenerator.construct_geo_location_query()
             print fts_query
+            # If query has geo co-ordinates in form of an object
             if "lon" in fts_query["location"]:
                 lon = fts_query["location"]["lon"]
                 lat = fts_query["location"]["lat"]
-            else:
+            # If query has geo co-ordinates in form of a list
+            elif isinstance(fts_query["location"],list):
                 lon = fts_query["location"][0]
                 lat = fts_query["location"][1]
+            # If query has geo co-ordinates in form of a string or geohash
+            elif isinstance(fts_query["location"],str):
+                # If the location is in string format
+                if "," in fts_query["location"]:
+                    lon = fts_query["location"].split(",")[0]
+                    lat = fts_query["location"].split(",")[1]
+                else:
+                    lat = Geohash.decode(fts_query["location"])[0]
+                    lon = Geohash.decode(fts_query["location"])[1]
             unit = fts_query["distance"][-2:]
             sort_fields = [
                 {

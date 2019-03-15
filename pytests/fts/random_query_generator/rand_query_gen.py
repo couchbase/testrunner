@@ -4,6 +4,7 @@ import json
 #sys.path.append("/Users/apiravi/testrunner")
 from emp_querables import EmployeeQuerables
 from wiki_queryables import WikiQuerables
+import Geohash
 
 class DATASET:
     FIELDS = {'emp': {'str': ["name", "dept", "manages_reports",
@@ -562,10 +563,25 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
             }
         }
 
-        if bool(random.getrandbits(1)):
+        case = random.randint(0, 3)
+
+        # Geo Location as array
+        if case == 1:
             fts_query['location'] = [lon, lat]
             es_query['filter']['geo_distance']['geo'] = [lon, lat]
 
+        # Geo Location as string
+        if case == 2:
+            fts_query['location'] = "{0},{1}".format(lon, lat)
+            es_query['filter']['geo_distance']['geo'] = "{0},{1}".format(lon, lat)
+
+        # Geo Location as Geohash
+        if case == 3:
+            geohash = Geohash.encode(lat, lon, precision=random.randint(3, 8))
+            fts_query['location'] = geohash
+            es_query['filter']['geo_distance']['geo'] = geohash
+
+        # Geo Location as an object of lat and lon if case == 0
         return fts_query, es_query
 
     @staticmethod
