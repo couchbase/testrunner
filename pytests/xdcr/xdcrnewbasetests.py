@@ -3564,6 +3564,54 @@ class XDCRNewBaseTest(unittest.TestCase):
         self.log.info("sleep for {0} secs. {1} ...".format(timeout, message))
         time.sleep(timeout)
 
+    def __execute_query(self, server, query):
+        try:
+            res = RestConnection(server).query_tool(query)
+            if "COUNT" in query:
+                return (int(res["results"][0]['$1']))
+            else:
+                return 0
+        except Exception as e:
+            self.fail(
+                "Errors encountered while executing query {0} on {1} : {2}".format(query, server, e.message))
+
+    def _create_index(self, server, bucket):
+        query_check_index_exists = "SELECT COUNT(*) FROM system:indexes " \
+                                   "WHERE name='" + bucket + "_index'"
+        if not self.__execute_query(server, query_check_index_exists):
+            self.__execute_query(server, "CREATE PRIMARY INDEX " + bucket + "_index "
+                                 + "ON " + bucket)
+
+    def _get_doc_count(self, server, filter_exp, bucket):
+        doc_count = self.__execute_query(server, "SELECT COUNT(*) FROM "
+                                         + bucket +
+                                         " WHERE " + filter_exp)
+        return doc_count if doc_count else 0
+
+    def verify_filtered_items(self, replications):
+        for repl in replications:
+            # Assuming src and dest bucket of the replication have the same name
+            bucket = repl['source']
+            self._create_index(self.src_master, bucket)
+            self._create_index(self.dest_master, bucket)
+            if repl['filterExpression']:
+                filter_exp = repl['filterExpression']
+            src_count = self._get_doc_count(self.src_master, filter_exp, bucket)
+            dest_count = self._get_doc_count(self.dest_master, filter_exp, bucket)
+            if src_count != dest_count:
+                self.fail("Doc count {0} on {1} does not match "
+                          "doc count {2} on {3} "
+                          "after applying filter {4}"
+                          .format(src_count, self.src_master.ip,
+                                  dest_count, self.dest_master.ip,
+                                  filter_exp))
+            self.log.info("Doc count {0} on {1} matches "
+                          "doc count {2} on {3} "
+                          "after applying filter {4}"
+                          .format(src_count, self.src_master.ip,
+                                  dest_count, self.dest_master.ip,
+                                  filter_exp))
+
     def verify_results(self, skip_verify_data=[], skip_verify_revid=[]):
         """Verify data between each couchbase and remote clusters.
         Run below steps for each source and destination cluster..
