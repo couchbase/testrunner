@@ -1970,14 +1970,14 @@ class RemoteMachineShellConnection:
                         # temporary fix for bzip2 - need to be redone
                         # output, error = self.execute_command('{0}rpm -Uvh --force /tmp/{1}'\
                         #                        .format(environment, build.name), debug=False)
-                        output, error = self.execute_command("yes | yum localinstall -y /tmp/{0}" \
-                                                             .format(build.name), debug=False)
+                        output, error = self.execute_command("yes | {0}yum localinstall -y /tmp/{1}" \
+                                                             .format(environment, build.name), debug=False)
                     else:
                         # temporary fix for bzip2 - need to be redone
                         # output, error = self.execute_command('{0}rpm -i /tmp/{1}'\
                         #                        .format(environment, build.name), debug=False)
-                        output, error = self.execute_command("yes | yum localinstall -y /tmp/{0}" \
-                                                             .format(build.name), debug=False)
+                        output, error = self.execute_command("yes | {0}yum localinstall -y /tmp/{1}" \
+                                                             .format(environment, build.name), debug=False)
 
             elif self.info.deliverable_type == 'deb':
                 if self.nonroot:
