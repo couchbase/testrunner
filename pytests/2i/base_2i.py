@@ -834,6 +834,28 @@ class BaseSecondaryIndexingTests(QueryTests):
             check = check or (next_time - init_time > timeout)
         return check
 
+    def wait_until_specific_index_online(self, index_name = '', timeout=600):
+        rest = RestConnection(self.master)
+        init_time = time.time()
+        check = False
+        next_time = init_time
+        while not check:
+            index_status = rest.get_index_status()
+            log.info(index_status)
+            for index_info in index_status.values():
+                for idx_name in index_info.keys():
+                    if idx_name == index_name:
+                        for index_state in index_info.values():
+                            if index_state["status"] == "Ready":
+                                check = True
+                            else:
+                                check = False
+                                time.sleep(1)
+                                next_time = time.time()
+                                break
+            check = check or (next_time - init_time > timeout)
+        return check
+
     def get_dgm_for_plasma(self, indexer_nodes=None, memory_quota=256):
         """
         Internal Method to create OOM scenario
