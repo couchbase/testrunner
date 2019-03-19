@@ -53,6 +53,13 @@ class HANDLER_CODE:
     BUCKET_OP_WITH_SOURCE_BUCKET_MUTATION= 'handler_code/bucket_op_with_source_bucket_mutation.js'
     BUCKET_OP_SOURCE_BUCKET_MUTATION_WITH_TIMERS= 'handler_code/bucket_op_source_bucket_mutation_with_timer.js'
 
+class HANDLER_CODE_CURL:
+    BUCKET_OP_WITH_CURL = 'handler_code/curl/bucket_op_curl.js'
+    BUCKET_OP_WITH_CURL_GET= 'handler_code/curl/bucket_op_curl_get.js'
+    BUCKET_OP_WITH_CURL_POST= 'handler_code/curl/bucket_op_curl_post.js'
+    BUCKET_OP_WITH_CURL_PUT= 'handler_code/curl/bucket_op_curl_put.js'
+    BUCKET_OP_WITH_CURL_DELETE= 'handler_code/curl/bucket_op_curl_delete.js'
+
 class HANDLER_CODE_ERROR:
     N1QL_SYNTAX='handler_code/handler_code_error/n1ql_syntax.js'
     GLOBAL_VARIABLE='handler_code/handler_code_error/global_variable.js'

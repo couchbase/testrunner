@@ -63,6 +63,12 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
                                       master=self.master, use_rest=True)
         self.pause_resume = self.input.param('pause_resume', False)
         self.pause_resume_number = self.input.param('pause_resume_number', 1)
+        self.is_curl=self.input.param('curl',False)
+        self.hostname = self.input.param('host', 'https://postman-echo.com/')
+        self.curl_username = self.input.param('curl_user', None)
+        self.curl_password = self.input.param('curl_password', None)
+        self.auth_type = self.input.param('auth_type', 'no-auth')
+        self.url = self.input.param('path', None)
 
     def tearDown(self):
         # catch panics and print it in the test log

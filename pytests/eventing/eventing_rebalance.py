@@ -4,7 +4,7 @@ from lib.couchbase_helper.tuq_helper import N1QLHelper
 from lib.membase.api.rest_client import RestConnection, RestHelper
 from lib.remote.remote_util import RemoteMachineShellConnection
 from lib.testconstants import STANDARD_BUCKET_PORT
-from pytests.eventing.eventing_constants import HANDLER_CODE
+from pytests.eventing.eventing_constants import HANDLER_CODE, HANDLER_CODE_CURL
 from pytests.eventing.eventing_base import EventingBaseTest
 import logging
 
@@ -77,6 +77,14 @@ class EventingRebalance(EventingBaseTest):
             self.handler_code = HANDLER_CODE.BUCKET_OP_WITH_SOURCE_BUCKET_MUTATION
         elif handler_code == 'source_bucket_mutation_with_timers':
             self.handler_code = HANDLER_CODE.BUCKET_OP_SOURCE_BUCKET_MUTATION_WITH_TIMERS
+        elif handler_code == 'bucket_op_curl_get':
+            self.handler_code = HANDLER_CODE_CURL.BUCKET_OP_WITH_CURL_GET
+        elif handler_code == 'bucket_op_curl_post':
+            self.handler_code = HANDLER_CODE_CURL.BUCKET_OP_WITH_CURL_POST
+        elif handler_code == 'bucket_op_curl_put':
+            self.handler_code = HANDLER_CODE_CURL.BUCKET_OP_WITH_CURL_PUT
+        elif handler_code == 'bucket_op_curl_delete':
+            self.handler_code = HANDLER_CODE_CURL.BUCKET_OP_WITH_CURL_DELETE
         else:
             self.handler_code = HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE
         force_disable_new_orchestration = self.input.param('force_disable_new_orchestration', False)
@@ -108,6 +116,10 @@ class EventingRebalance(EventingBaseTest):
         body = self.create_save_function_body(self.function_name, self.handler_code,
                                               sock_batch_size=sock_batch_size, worker_count=worker_count,
                                               cpp_worker_thread_count=cpp_worker_thread_count)
+        if self.is_curl:
+            body['depcfg']['curl'] = []
+            body['depcfg']['curl'].append({"hostname": self.hostname, "value": "server", "auth_type": self.auth_type,
+                                           "username": self.curl_username, "password": self.curl_password,"cookies": "disallow"})
         self.deploy_function(body)
         # load data
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
@@ -157,6 +169,10 @@ class EventingRebalance(EventingBaseTest):
         body = self.create_save_function_body(self.function_name, self.handler_code,
                                               sock_batch_size=sock_batch_size, worker_count=worker_count,
                                               cpp_worker_thread_count=cpp_worker_thread_count)
+        if self.is_curl:
+            body['depcfg']['curl'] = []
+            body['depcfg']['curl'].append({"hostname": self.hostname, "value": "server", "auth_type": self.auth_type,
+                                           "username": self.curl_username, "password": self.curl_password,"cookies": "disallow"})
         self.deploy_function(body)
         # load data
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
@@ -206,6 +222,10 @@ class EventingRebalance(EventingBaseTest):
         body = self.create_save_function_body(self.function_name, self.handler_code,
                                               sock_batch_size=sock_batch_size, worker_count=worker_count,
                                               cpp_worker_thread_count=cpp_worker_thread_count)
+        if self.is_curl:
+            body['depcfg']['curl'] = []
+            body['depcfg']['curl'].append({"hostname": self.hostname, "value": "server", "auth_type": self.auth_type,
+                                           "username": self.curl_username, "password": self.curl_password,"cookies": "disallow"})
         self.deploy_function(body)
         # load data
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
