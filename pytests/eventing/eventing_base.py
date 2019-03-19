@@ -69,6 +69,7 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         self.curl_password = self.input.param('curl_password', None)
         self.auth_type = self.input.param('auth_type', 'no-auth')
         self.url = self.input.param('path', None)
+        self.cookies = self.input.param('cookies','disallow')
 
     def tearDown(self):
         # catch panics and print it in the test log

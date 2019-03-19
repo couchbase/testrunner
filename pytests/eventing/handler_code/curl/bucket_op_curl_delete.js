@@ -1,14 +1,13 @@
 function OnUpdate(doc, meta) {
     var request = {
-	path : 'put?param=text',
+	path : 'delete?param=text',
 	headers: {
     "cache-control": "no-cache",
     "Postman-Token": "a3e931fe-8fe2-413c-be82-546062d28377"
-    },
-    body: "This is expected to be sent back as part of response body."
+    }
     };
     try {
-    	var response = curl("PUT", server, request);
+    	var response = curl("DELETE", server, request);
     	log('response body received from server:', response.body);
     	log('response headers received from server:', response.headers);
     	log('response status received from server:', response.status);
@@ -26,15 +25,14 @@ function OnUpdate(doc, meta) {
 
 function OnDelete(meta) {
     var request = {
-	path : 'put?param=text',
+	path : 'delete?param=text',
 	headers: {
     "cache-control": "no-cache",
     "Postman-Token": "a3e931fe-8fe2-413c-be82-546062d28377"
-    },
-    body: "This is expected to be sent back as part of response body."
+    }
     };
     try {
-    	var response = curl("PUT", server, request);
+    	var response = curl("DELETE", server, request);
     	log('response body received from server:', response.body);
     	log('response headers received from server:', response.headers);
     	log('response status received from server:', response.status);
