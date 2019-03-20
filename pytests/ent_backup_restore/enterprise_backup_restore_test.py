@@ -606,7 +606,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                                     "/" + self.buckets[0].name + "-*" \
                                                                  "/bucket-config.json"
         remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
-        self.log.info("Remore } in bucket-config.json to make it invalid json ")
+        self.log.info("Remove } in bucket-config.json to make it invalid json ")
         remote_client.execute_command("sed -i 's/}//' %s " % backup_bucket_config_path)
         self.log.info("Start to merge backup")
         self.backupset.start = randrange(1, self.backupset.number_of_backups)
@@ -967,15 +967,15 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             subcommand = ""
         else:
             subcommand = self.input.param("subcommand", None)
-        cmd = "%scbbackupmgr%s " % (self.cli_command_location, self.cmd_ext)
+        cmd = "{0}cbbackupmgr{1} ".format(self.cli_command_location, self.cmd_ext)
         if display_option == "--help":
             display_option = self.long_help_flag
         elif display_option == "-h":
             self.long_help_flag = self.short_help_flag
-        cmd += " %s %s " % (subcommand, display_option)
+        cmd += " {0} {1} ".format(subcommand, display_option)
 
         shell = RemoteMachineShellConnection(self.backupset.cluster_host)
-        output, error = shell.execute_command("%s " % (cmd))
+        output, error = shell.execute_command("{0} ".format(cmd))
         self.log.info("Verify print out help message")
         if display_option == "-h":
             if subcommand == "":
@@ -985,7 +985,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                 content = ['cbbackupmgr help [<command>] [<args>]', '',
                            '  archivelayout   View the archive directory layout structure']
             else:
-                content = ['cbbackupmgr %s [<args>]' % subcommand, '',
+                content = ['cbbackupmgr {0} [<args>]'.format(subcommand), '',
                            'Required Flags:']
             self.validate_help_content(output[:3], content)
         elif display_option == "--help":
@@ -997,9 +997,12 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             else:
                 subcmd_cap = subcommand.upper()
                 content = \
-                    ['CBBACKUPMGR-%s(1) Backup Manual CBBACKUPMGR-%s(1)'
-                     % (subcmd_cap, subcmd_cap)]
+                    ['CBBACKUPMGR-{0}(1) Backup Manual CBBACKUPMGR-{1}(1)'\
+                     .format(subcmd_cap, subcmd_cap)]
                 self.validate_help_content(output, content)
+            if self.bkrs_flag is not None:
+                self.assertTrue(self._check_output(self.bkrs_flag, output),
+                                 "Missing flag {0} in help content".format(self.bkrs_flag))
         shell.disconnect()
 
     def test_backup_restore_with_optional_flags(self):
@@ -1532,10 +1535,13 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.backupset.directory = "/cbqe3043/entbackup"
         self.backup_create()
         conn = RemoteMachineShellConnection(self.backupset.backup_host)
-        output, error = conn.execute_command("dd if=/dev/zero of=/cbqe3043/file bs=18M count=1")
+        output, error = conn.execute_command("dd if=/dev/zero of=/cbqe3043/file bs=256M count=50")
         conn.log_command_output(output, error)
         output, error = self.backup_cluster()
         while self._check_output("Backup successfully completed", output):
+            gen = BlobGenerator("ent-backup{0}{0}".format(randint(1,10000)), "ent-backup-",
+                                 self.value_size, end=self.num_items)
+            self._load_all_buckets(self.master, gen, "create", 0)
             output, error = self.backup_cluster()
         error_msg = "Error backing up cluster: Unable to read data because range.json is corrupt,"
         self.assertTrue(self._check_output(error_msg, output),
@@ -3622,6 +3628,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
               ini file has config of cluster
               to test with memcached restart, pass param force_kill_memcached=True
               to test with shards action, you need param restore_should_fail=True
+              self.backupset.number_of_backups = self.input.param("number_of_backups", 1)
         """
         if self.cb_version[:3] < "6.5":
             self.fail("This test only works for version 6.5 later")
@@ -3629,6 +3636,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             self.create_indexes()
         if self.create_views:
             self._create_views()
+        self.bk_merged = False
+        self.first_bk_num_shards = self.num_shards
         gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
         if self.replace_ttl == "expired":
             if self.bk_with_ttl:
@@ -3663,7 +3672,33 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                 """ this test needs 100K or greater to run.  items=100000  """
                 self.bk_with_stop_and_resume()
             else:
-                self.backup_cluster_validate()
+                if self.backupset.number_of_backups > 1:
+                    count = 0
+                    for i in range(1, self.backupset.number_of_backups + 1):
+                        if self.multi_num_shards:
+                            self.num_shards = randint(int(self.num_shards),1023)
+                            if count == 0:
+                                self.first_bk_num_shards = self.num_shards
+                        self.backup_cluster_validate()
+                        self.log.info("Update docs")
+                        self._load_all_buckets(self.master, gen, "update", self.expires)
+                        count += 1
+                    self._shards_modification(self.shards_action)
+                    self.backupset.start = 1
+                    self.backupset.end = self.backupset.number_of_backups
+                    result, output, _ = self.backup_merge()
+                    if self.merge_should_fail:
+                        if result:
+                           self.fail("merge should fail since shard is '{0}'"
+                                                 .format(self.shards_action))
+                        else:
+                            self.log.info("This is negative test in shards modification")
+                            return
+                    elif result:
+                        self.bk_merged = True
+                else:
+                    self.backup_cluster_validate()
+                    self._compare_vbuckets_each_shard()
 
             if self.create_views:
                 if not self.backupset.disable_views:
@@ -3692,10 +3727,15 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                 if not self._check_output("Error restoring cluster", output):
                     self.fail("Restore should fail due to {0} shard".format(self.shards_action))
             else:
+                if self.multi_num_shards:
+                    self.num_shards = self.first_bk_num_shards
                 result, mesg = self._validate_num_files(".fdb", self.num_shards, self.buckets[0].name)
                 if not result:
                     self.fail(mesg)
                 self._shards_modification(self.shards_action)
+                if self.bk_merged:
+                    self.backupset.start = 0
+                    self.backupset.end = 0
                 if self.do_verify:
                     compare_function = "=="
                     if self.replace_ttl_with:
@@ -3706,3 +3746,20 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                     self.backup_restore()
                 if self.create_gsi:
                     self.verify_gsi()
+
+    def test_bkrs_with_n_vbuckets_per_shard_and_move_repo(self):
+        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
+        self._load_all_buckets(self.master, gen, "create", 0)
+        self.backup_create()
+        self.backup_cluster_validate()
+        self.log.info("Copy repo to new location")
+        shell = RemoteMachineShellConnection(self.backupset.backup_host)
+        new_path = "{0}newbkrs".format(self.tmp_path)
+        original_path = self.backupset.directory
+        shell.execute_command("cp -r {0} {1} ".format(self.backupset.directory, new_path))
+        self.backupset.directory = new_path #+ "/"
+        self.backup_restore_validate(compare_uuid=False,
+                                    seqno_compare_function="==")
+        shell.execute_command("rm -rf {0}".format(new_path))
+        self.backupset.directory = original_path
+        shell.disconnect()

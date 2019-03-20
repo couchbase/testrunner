@@ -1,7 +1,7 @@
 import copy
 import os, shutil, ast, re, subprocess
 import json
-import urllib
+import urllib, datetime
 
 from basetestcase import BaseTestCase
 from couchbase_helper.data_analysis_helper import DataCollector
@@ -61,6 +61,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.cmd_ext = ""
         self.should_fail = self.input.param("should-fail", False)
         self.restore_should_fail = self.input.param("restore_should_fail", False)
+        self.merge_should_fail = self.input.param("merge_should_fail", False)
         self.database_path = COUCHBASE_DATA_PATH
 
         cmd =  'curl -g {0}:8091/diag/eval -u {1}:{2} '.format(self.master.ip,
@@ -68,10 +69,11 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                                                               self.master.rest_password)
         cmd += '-d "path_config:component_path(bin)."'
         bin_path  = subprocess.check_output(cmd, shell=True)
-        if "bin" not in bin_path:
-            self.fail("Check if cb server install on %s" % self.master.ip)
-        else:
-            self.cli_command_location = bin_path.replace('"','') + "/"
+        if not self.skip_init_check_cbserver:
+            if "bin" not in bin_path:
+                self.fail("Check if cb server install on %s" % self.master.ip)
+            else:
+                self.cli_command_location = bin_path.replace('"','') + "/"
 
         self.debug_logs = self.input.param("debug-logs", False)
         self.backupset.directory = self.input.param("dir", "/tmp/entbackup")
@@ -84,7 +86,9 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.backupset.overwrite_passwd_env = self.input.param("overwrite-passwd-env", False)
         self.replace_ttl_with = self.input.param("replace-ttl-with", None)
         self.num_shards = self.input.param("num_shards", None)
+        self.multi_num_shards = self.input.param("multi_num_shards", False)
         self.shards_action = self.input.param("shards_action", None)
+        self.bkrs_flag = self.input.param("bkrs_flag", None)
         self.force_restart_erlang = self.input.param("force_restart_erlang", False)
         self.force_restart_couchbase_server = \
                           self.input.param("force_restart_couchbase_server", False)
@@ -1848,7 +1852,9 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         """
         num_files_matched = False
         mesg = ""
-        cmd = "ls {0}/backup/201*/{1}*/data/ | ".format(self.backupset.directory, bucket_name)
+        now = datetime.datetime.now()
+        cmd = "ls {0}/backup/{1}*/{2}*/data/ | ".format(self.backupset.directory, now.year,
+                                                        bucket_name)
         cmd += "grep{0} {1} | wc -l ".format(self.cmd_ext, extension_name)
         shell = RemoteMachineShellConnection(self.backupset.backup_host)
         output, error = shell.execute_command(cmd)
@@ -1869,21 +1875,45 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         shell = RemoteMachineShellConnection(self.backupset.backup_host)
         for bucket in self.buckets:
             num_shards = 0
-            cmd = "ls {0}/backup/201*/{1}*/data/ | grep{2} .fdb | wc -l"\
-                           .format(self.backupset.directory, bucket.name, self.cmd_ext)
-            output, error = shell.execute_command(cmd)
+            now = datetime.datetime.now()
+            backup_date = now.year
+            cmd1 = "cd {0}/backup/; ls  | grep{2} '07_00' "\
+                           .format(self.backupset.directory, backup_date, self.cmd_ext)
+            output, error = shell.execute_command(cmd1)
+
+            if output and len(output) >= 1:
+                output = [s.replace(':', '') for s in output]
+                output.sort()
+            if self.backupset.number_of_backups > 1:
+                if not self.bk_merged:
+                    backup_date = output[1]
+                else:
+                    backup_date = output[0]
+            else:
+                backup_date = output[0]
+
+            cmd2 = "ls {0}/backup/{1}/{2}*/data/ | grep{3} .fdb | wc -l"\
+                           .format(self.backupset.directory, backup_date,
+                                   bucket.name, self.cmd_ext)
+            output, error = shell.execute_command(cmd2)
             if output and int(output[0]) > 0:
                 num_shards = int(output[0])
+
             if action == "remove":
                 self.log.info("Remove a shard in backup repo")
-                cmd = "rm -f {0}/backup/201*/{1}*/data/shard_1.fdb  "\
-                             .format(self.backupset.directory, bucket.name)
+                cmd = "cd {0}/backup/{1}*/{2}*/data/; rm -f shard_1.fdb  "\
+                             .format(self.backupset.directory,backup_date, bucket.name)
+
+                output, error = shell.execute_command(cmd)
+                cmd = "cd {0}/backup/{1}*/{2}*/data/; ls | grep{3} .fdb | wc -l"\
+                             .format(self.backupset.directory, backup_date, bucket.name,
+                                     self.cmd_ext)
                 output, error = shell.execute_command(cmd)
             if action == "duplicate":
                 self.log.info("Duplicate one shard in backup repo")
-                cmd = "cd {0}/backup/201*/{1}*/data/; cp shard_1.fdb shard_{2}.fdb"\
+                cmd = "cd {0}/backup/{1}*/{2}*/data/; cp shard_1.fdb shard_{3}.fdb"\
                                                       .format(self.backupset.directory,
-                                                       bucket.name, num_shards + 1)
+                                                       backup_date, bucket.name, num_shards + 1)
                 output, error = shell.execute_command(cmd)
             if action == "corrupted":
                 """ This test needs set to 20 shards to make sure all shards have data """
@@ -1891,9 +1921,32 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                     self.fail("This test needs to set 20 shards to run")
                 if num_shards > 0:
                     self.log.info("Corrupted a shard in backup repo")
-                    cmd = "cd {0}/backup/201*/{1}*/data/; echo 'Hello world' > shard_1.fdb"\
-                                              .format(self.backupset.directory, bucket.name)
+                    cmd = "cd {0}/backup/{1}*/{2}*/data/; echo 'Hello world' > shard_1.fdb"\
+                                              .format(self.backupset.directory, backup_date,
+                                                      bucket.name)
                     output, error = shell.execute_command(cmd)
+        shell.disconnect()
+
+    def _compare_vbuckets_each_shard(self):
+        vbuckets_per_shard = {}
+        now = datetime.datetime.now()
+        shell = RemoteMachineShellConnection(self.backupset.backup_host)
+        for bucket in self.buckets:
+            vbuckets_per_shard[bucket.name] = {}
+            print "---- Collecting vbuckets in each shard in backup repo"
+            cmd1 = "ls {0}/backup/{1}*/{2}*/data | grep \.fdb | wc -l "\
+                                 .format(self.backupset.directory, now.year, bucket.name)
+            num_shards, error = shell.execute_command(cmd1)
+
+            if num_shards and int(num_shards[0]) > 0:
+                for i in range(0, int(num_shards[0])):
+                    cmd2 = "{0}forestdb_dump{1} --plain-meta "\
+                      "{2}/backup/{3}*/{4}*/data/shard_{5}.fdb | grep partition | wc -l "\
+                                              .format(self.cli_command_location, self.cmd_ext,\
+                                                      self.backupset.directory, now.year,\
+                                                      bucket.name, i)
+                    output, error = shell.execute_command(cmd2, debug=False)
+                    vbuckets_per_shard[bucket.name][i] = int(output[0])
         shell.disconnect()
 
 class Backupset:

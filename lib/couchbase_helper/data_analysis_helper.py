@@ -1,4 +1,4 @@
-import os, time
+import os, time, datetime
 import os.path
 import uuid
 from remote.remote_util import RemoteMachineShellConnection
@@ -761,11 +761,12 @@ class DataCollector(object):
         conn = RemoteMachineShellConnection(server)
         backup_data = {}
         status = False
+        now = datetime.datetime.now()
         for bucket in buckets:
             backup_data[bucket.name] = {}
             print "---- Collecting data in backup repo"
-            cmd1 = "ls {0}/backup/201*/{1}*/data | grep \.fdb | wc -l "\
-                                                 .format(backup_dir, bucket.name)
+            cmd1 = "ls {0}/backup/{1}*/{2}*/data | grep \.fdb | wc -l "\
+                                            .format(backup_dir, now.year, bucket.name)
             data_files, error = conn.execute_command(cmd1)
             if data_files and (int(data_files[0]) > 0 and int(data_files[0]) <= 1024):
                 if master_key == "random_keys":
@@ -773,9 +774,10 @@ class DataCollector(object):
                 dump_output = []
                 for i in range(0, int(data_files[0]) - 1):
                     cmd2 = "{0}forestdb_dump{1} --plain-meta "\
-                      "{2}/backup/201*/{3}*/data/shard_{4}.fdb | grep -A 8 '^Doc\sID:\s{5}' "\
+                      "{2}/backup/{3}*/{4}*/data/shard_{5}.fdb | grep -A 8 '^Doc\sID:\s{6}' "\
                                                       .format(cli_command, cmd_ext,\
-                                                       backup_dir, bucket.name, i, master_key)
+                                                       backup_dir, now.year, bucket.name,\
+                                                       i, master_key)
                     output, error = conn.execute_command(cmd2, debug=False)
                     if output:
                         """ remove empty element """
