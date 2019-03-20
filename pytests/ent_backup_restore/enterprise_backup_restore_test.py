@@ -1,4 +1,4 @@
-import re, copy, json
+import re, copy, json, subprocess
 from random import randrange, randint
 from threading import Thread
 
@@ -2335,8 +2335,32 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.vbuckets = self.initial_vbuckets
         if len(servers) != 4:
             self.fail("\nThis test needs exactly 4 nodes to run! ")
+
         self._install(servers)
-        self.sleep(5, "wait for node ready")
+        count = 0
+        nodes_fail_to_install = []
+        for server in servers:
+            ready = RestHelper(RestConnection(server)).is_ns_server_running(60)
+            if ready:
+                count += 1
+            else:
+                nodes_fail_to_install.append(server.ip)
+        if count < len(servers):
+            self.fail("Some servers may not install Couchbase server: {0}"\
+                                          .format(nodes_fail_to_install))
+
+        if not self.disable_diag_eval_on_non_local_host:
+            self.enable_diag_eval_on_non_local_hosts()
+        cmd =  'curl -g {0}:8091/diag/eval -u {1}:{2} '.format(self.master.ip,
+                                                              self.master.rest_username,
+                                                              self.master.rest_password)
+        cmd += '-d "path_config:component_path(bin)."'
+        bin_path  = subprocess.check_output(cmd, shell=True)
+        if "bin" not in bin_path:
+            self.fail("Check if cb server install on %s" % self.master.ip)
+        else:
+            self.cli_command_location = bin_path.replace('"','') + "/"
+
         gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size,
                             end=self.num_items)
         rebalance = self.cluster.async_rebalance(servers[:self.nodes_init],
