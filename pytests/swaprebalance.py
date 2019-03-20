@@ -444,11 +444,16 @@ class SwapRebalanceBase(unittest.TestCase):
                     _mc = MemcachedClientHelper.direct_client(master, bucket)
                     pid = _mc.stats()["pid"]
                     break
-                except EOFError as e:
+                except (EOFError, KeyError) as e:
                     self.log.error("{0}.Retry in 2 sec".format(e))
                     SwapRebalanceBase.sleep(self, 2)
         if pid is None:
-            self.fail("impossible to get a PID")
+            # sometimes pid is not returned by mc.stats()
+            shell = RemoteMachineShellConnection(master)
+            pid = shell.get_memcache_pid()
+            shell.disconnect()
+            if pid is None:
+                self.fail("impossible to get a PID")
         command = "os:cmd(\"kill -9 {0} \")".format(pid)
         self.log.info(command)
         killed = rest.diag_eval(command)
