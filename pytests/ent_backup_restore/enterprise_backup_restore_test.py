@@ -294,11 +294,14 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self._take_n_backups(n=2)
         incr_names = 0
         backup_name = False
+        warnning_mesg = "is either empty or it got interrupted"
         self.backupset.backup_list_name = "backup"
         status, output, message = self.backup_list()
         if not status:
             self.fail(message)
         for line in output:
+            if warnning_mesg in line:
+                continue
             if self.backupset.backup_list_name in line:
                 backup_name = True
             if self.backups[0] in line:
@@ -316,6 +319,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         if not status:
             self.fail(message)
         for line in output:
+            if warnning_mesg in line:
+                continue
             if self.backupset.backup_list_name in line:
                 backup_name = True
             if self.backups[2] in line:
@@ -334,6 +339,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         if not status:
             self.fail(message)
         for line in output:
+            if warnning_mesg in line:
+                continue
             if self.backupset.backup_incr_backup in line:
                 name = True
             if self.buckets[0].name in line:
@@ -353,9 +360,11 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         if not status:
             self.fail(message)
         for line in output:
+            if warnning_mesg in line:
+                continue
             if self.buckets[0].name in line:
                 name = True
-            if "shard" in line:
+            if "shard" in line.lower():
                 split = line.split(" ")
                 split = [s for s in split if s]
                 items += int(split[1])
@@ -1575,8 +1584,6 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                             "Memcached bucket found in backup list output after backup")
         self.log.info("Memcached bucket not found in backup list output after backup as expected")
         self.backup_restore()
-        if self.create_gsi:
-            self.verify_gsi()
 
     def test_backup_with_erlang_crash_and_restart(self):
         """
