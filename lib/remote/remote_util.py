@@ -1966,18 +1966,25 @@ class RemoteMachineShellConnection:
                                                                  LINUX_COUCHBASE_BIN_PATH))
                 else:
                     self.check_pkgconfig(self.info.deliverable_type, openssl)
-                    if force:
-                        # temporary fix for bzip2 - need to be redone
-                        # output, error = self.execute_command('{0}rpm -Uvh --force /tmp/{1}'\
-                        #                        .format(environment, build.name), debug=False)
-                        output, error = self.execute_command("yes | {0}yum localinstall -y /tmp/{1}" \
-                                                             .format(environment, build.name), debug=False)
+                    #TODO how to supply INSTALL_DONT_START_SERVER param to zypper
+                    if "SUSE" in self.info.distribution_type:
+                        output, error = self.execute_command("zypper -n install /tmp/{0}".format(build.name))
+                        self.log_command_output(output, error)
                     else:
-                        # temporary fix for bzip2 - need to be redone
-                        # output, error = self.execute_command('{0}rpm -i /tmp/{1}'\
-                        #                        .format(environment, build.name), debug=False)
-                        output, error = self.execute_command("yes | {0}yum localinstall -y /tmp/{1}" \
-                                                             .format(environment, build.name), debug=False)
+                        if force:
+                            # temporary fix for bzip2 - need to be redone
+                            # output, error = self.execute_command('{0}rpm -Uvh --force /tmp/{1}'\
+                            #                        .format(environment, build.name), debug=False)
+                            output, error = self.execute_command("yes | {0}yum localinstall -y /tmp/{1}" \
+                                                                 .format(environment, build.name), debug=False)
+                            self.log_command_output(output, error)
+                        else:
+                            # temporary fix for bzip2 - need to be redone
+                            # output, error = self.execute_command('{0}rpm -i /tmp/{1}'\
+                            #                        .format(environment, build.name), debug=False)
+                            output, error = self.execute_command("yes | {0}yum localinstall -y /tmp/{1}" \
+                                                                 .format(environment, build.name), debug=False)
+                            self.log_command_output(output, error)
 
             elif self.info.deliverable_type == 'deb':
                 if self.nonroot:
