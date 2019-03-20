@@ -160,6 +160,14 @@ class SwapRebalanceBase(unittest.TestCase):
             info = rest.get_nodes_self()
             available_ram = info.memoryQuota * node_ram_ratio
             rest.create_bucket(bucket=name, ramQuotaMB=int(available_ram), replicaNumber=replica)
+            
+            enable_tracing_ups = self.input.param("enable_tracing_ups", False)
+            if enable_tracing_ups:
+                self.log.info('UPS: Enable couchstore_trac, couchstore_write_validation and couchstore_mprotect')
+                shell = RemoteMachineShellConnection(master)
+                shell.set_tracing_for_ups(name)
+                shell.disconnect()
+                
             ready = BucketOperationHelper.wait_for_memcached(master, name)
             self.assertTrue(ready, msg="wait_for_memcached failed")
         self.assertTrue(helper.bucket_exists(name),
