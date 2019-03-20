@@ -1915,10 +1915,9 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                                             no_progress_bar=self.no_progress_bar,
                                             cli_command_location=self.cli_command_location,
                                             cb_version=self.cb_version)
-            self.sleep(10)
             conn = RemoteMachineShellConnection(self.backupset.restore_cluster_host)
             conn.kill_erlang(self.os_name)
-            output = restore_result.result(timeout=200)
+            output = restore_result.result(timeout=300)
             self.assertTrue(self._check_output(
                 "Error restoring cluster: Not all data was sent to Couchbase", output),
                 "Expected error message not thrown by Restore 180 seconds after erlang crash")
@@ -1957,7 +1956,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             self.sleep(10)
             conn = RemoteMachineShellConnection(self.backupset.restore_cluster_host)
             conn.stop_couchbase()
-            output = restore_result.result(timeout=200)
+            output = restore_result.result(timeout=300)
             self.assertTrue(self._check_output(
                 "Error restoring cluster: Not all data was sent to Couchbase due to connectivity issues.", output),
                 "Expected error message not thrown by Restore 180 seconds after couchbase-server stop")
@@ -1986,7 +1985,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             conn.pause_memcached(self.os_name)
             output, error = self.backup_restore()
             self.assertTrue(self._check_output(
-                "Error restoring cluster: Not all data was sent to Couchbase", output),
+                "Error restoring cluster: failed to connect", output),
                 "Expected error message not thrown by Restore 180 seconds after memcached crash")
             self.log.info("Expected error thrown by Restore 180 seconds after memcached crash")
         except Exception as ex:
