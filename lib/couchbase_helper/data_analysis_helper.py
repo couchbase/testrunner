@@ -772,7 +772,7 @@ class DataCollector(object):
                 if master_key == "random_keys":
                     master_key = ".\{12\}$"
                 dump_output = []
-                for i in range(0, int(data_files[0]) - 1):
+                for i in range(0, int(data_files[0])):
                     cmd2 = "{0}forestdb_dump{1} --plain-meta "\
                       "{2}/backup/{3}*/{4}*/data/shard_{5}.fdb | grep -A 8 '^Doc\sID:\s{6}' "\
                                                       .format(cli_command, cmd_ext,\
