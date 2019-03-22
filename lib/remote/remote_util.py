@@ -1966,10 +1966,13 @@ class RemoteMachineShellConnection:
                                                                  LINUX_COUCHBASE_BIN_PATH))
                 else:
                     self.check_pkgconfig(self.info.deliverable_type, openssl)
-                    #TODO how to supply INSTALL_DONT_START_SERVER param to zypper
                     if "SUSE" in self.info.distribution_type:
-                        output, error = self.execute_command("zypper -n install /tmp/{0}".format(build.name))
-                        self.log_command_output(output, error)
+			if environment:
+			    output, error = self.execute_command("export {0};zypper -n install /tmp/{1}".format(environment.strip(), build.name))
+			    self.log_command_output(output, error)
+			else:
+                            output, error = self.execute_command("zypper -n install /tmp/{0}".format(build.name))
+                            self.log_command_output(output, error)
                     else:
                         if force:
                             # temporary fix for bzip2 - need to be redone
