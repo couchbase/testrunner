@@ -84,7 +84,8 @@ class EventingRecovery(EventingBaseTest):
             self.resume_function(body)
         # kill eventing consumer when eventing is processing mutations
         self.kill_consumer(eventing_node)
-        self.wait_for_bootstrap_to_complete(body['appname'])
+        self.wait_for_handler_state(body['appname'],"deployed")
+        self.sleep(30)
         # Wait for eventing to catch up with all the update mutations and verify results
         if self.is_sbm:
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2, skip_stats_validation=True)
