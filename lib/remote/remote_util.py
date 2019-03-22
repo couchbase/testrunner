@@ -228,9 +228,8 @@ class RemoteMachineShellConnection:
         self.remote = (self.ip != "localhost" and self.ip != "127.0.0.1")
         self.port = serverInfo.port
         self._ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        msg = 'connecting to {0} with username:{1} password:{2} ssh_key:{3}'
-        log.info(msg.format(serverInfo.ip, serverInfo.ssh_username,
-                            serverInfo.ssh_password, serverInfo.ssh_key))
+        msg = 'connecting to {0} with username:{1} '
+        log.info(msg.format(serverInfo.ip, serverInfo.ssh_username))
         # added attempts for connection because of PID check failed.
         # RNG must be re-initialized after fork() error
         # That's a paramiko bug
@@ -3566,6 +3565,13 @@ class RemoteMachineShellConnection:
             o, r = self.execute_command_raw('cat /proc/cpuinfo', debug=False)
         if o:
             return o
+
+    def get_ip_address(self):
+        info = self.extract_remote_info()
+        if info.type.lower() != 'windows':
+            cmd = "ifconfig | grep -Po 'inet \K[\d.]+'"
+            o, r = self.execute_command_raw(cmd)
+        return o
 
     def get_ram_info(self, win_info=None, mac=False):
         if win_info:

@@ -2332,7 +2332,8 @@ class BaseTestCase(unittest.TestCase):
                 index_map = RestConnection(server).get_index_stats(index_map=index_map)
         return index_map
 
-    def get_nodes_from_services_map(self, service_type="n1ql", get_all_nodes=False, servers=None, master=None):
+    def get_nodes_from_services_map(self, service_type="n1ql", get_all_nodes=False,
+                                    servers=None, master=None):
         if not servers:
             servers = self.servers
         if not master:
@@ -2366,14 +2367,22 @@ class BaseTestCase(unittest.TestCase):
                         nodeList = v1.list_pod_for_all_namespaces(watch=False)
 
                         for node in nodeList.items:
-                            if node.metadata.namespace == currNamespace and node.status.pod_ip == server.ip:
+                            if node.metadata.namespace == currNamespace and \
+                               node.status.pod_ip == server.ip:
                                 ip = node.status.pod_ip
                                 break
                     elif "couchbase.com" in server.ip and "couchbase.com" not in ip:
                         node = TestInputServer()
                         node.ip = ip
-                        node.ssh_username = server.ssh_username
-                        node.ssh_password = server.ssh_password
+                        """ match node.ip to server in ini file to get correct credential """
+                        for server in servers:
+                            shell = RemoteMachineShellConnection(server)
+                            ips = shell.get_ip_address()
+                            if node.ip in ips:
+                                node.ssh_username = server.ssh_username
+                                node.ssh_password = server.ssh_password
+                                break
+
                         shell = RemoteMachineShellConnection(node)
                         hostname = shell.get_full_hostname()
                         self.log.info("convert IP: {0} to hostname: {1}" \
