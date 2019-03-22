@@ -59,6 +59,11 @@ class HANDLER_CODE_CURL:
     BUCKET_OP_WITH_CURL_POST= 'handler_code/curl/bucket_op_curl_post.js'
     BUCKET_OP_WITH_CURL_PUT= 'handler_code/curl/bucket_op_curl_put.js'
     BUCKET_OP_WITH_CURL_DELETE= 'handler_code/curl/bucket_op_curl_delete.js'
+    TIMER_OP_WITH_CURL_GET = 'handler_code/curl/timer_op_curl_get.js'
+    TIMER_OP_WITH_CURL_POST = 'handler_code/curl/timer_op_curl_post.js'
+    TIMER_OP_WITH_CURL_PUT = 'handler_code/curl/timer_op_curl_put.js'
+    TIMER_OP_WITH_CURL_DELETE = 'handler_code/curl/timer_op_curl_delete.js'
+
 
 class HANDLER_CODE_ERROR:
     N1QL_SYNTAX='handler_code/handler_code_error/n1ql_syntax.js'
