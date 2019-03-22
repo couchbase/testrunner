@@ -1,5 +1,6 @@
 import copy
 import json
+import random
 from threading import Thread
 
 import Geohash
@@ -1598,21 +1599,39 @@ class StableTopFTS(FTSBaseTest):
             elif isinstance(fts_query["location"],str):
                 # If the location is in string format
                 if "," in fts_query["location"]:
-                    lon = fts_query["location"].split(",")[0]
-                    lat = fts_query["location"].split(",")[1]
+                    lon = int(fts_query["location"].split(",")[0])
+                    lat = int(fts_query["location"].split(",")[1])
                 else:
-                    lat = Geohash.decode(fts_query["location"])[0]
-                    lon = Geohash.decode(fts_query["location"])[1]
+                    lat = int(Geohash.decode(fts_query["location"])[0])
+                    lon = int(Geohash.decode(fts_query["location"])[1])
             unit = fts_query["distance"][-2:]
+
+            location = None
+            case = random.randint(0, 3)
+
+            # Geo location as an object
+            if case == 0:
+                location = {"lon": lon,
+                        "lat": lat}
+            # Geo Location as array
+            if case == 1:
+                location = [lon, lat]
+
+            # Geo Location as string
+            if case == 2:
+                location = "{0},{1}".format(lat, lon)
+
+            # Geo Location as Geohash
+            if case == 3:
+                geohash = Geohash.encode(lat, lon, precision=random.randint(3, 8))
+                location = geohash
+
             sort_fields = [
                 {
                     "by": "geo_distance",
                     "field": "geo",
                     "unit": unit,
-                    "location": {
-                        "lon": lon,
-                        "lat": lat
-                    }
+                    "location": location
                 }
             ]
 

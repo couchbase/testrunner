@@ -572,8 +572,8 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
 
         # Geo Location as string
         if case == 2:
-            fts_query['location'] = "{0},{1}".format(lon, lat)
-            es_query['filter']['geo_distance']['geo'] = "{0},{1}".format(lon, lat)
+            fts_query['location'] = "{0},{1}".format(lat, lon)
+            es_query['filter']['geo_distance']['geo'] = "{0},{1}".format(lat, lon)
 
         # Geo Location as Geohash
         if case == 3:
