@@ -787,10 +787,16 @@ class XDCReplication:
                 dict(zip(argument_split[::2], argument_split[1::2]))
             )
         if 'filter_expression' in self.__test_xdcr_params:
-            filter_chars = {"comma": ',', "star": '*', "dot": '.', "equals": '='}
-            for _ in filter_chars:
-                self.__test_xdcr_params['filter_expression'] = self.__test_xdcr_params['filter_expression']\
-                    .replace(_, filter_chars[_])
+            if self.__test_xdcr_params['filter_expression']:
+                import urllib
+                masked_input = {"comma": ',', "star": '*', "dot": '.', "equals": '='}
+                need_to_encode = ['+']
+                for _ in masked_input:
+                    self.__test_xdcr_params['filter_expression'] = self.__test_xdcr_params['filter_expression']\
+                        .replace(_, masked_input[_])
+                for _ in need_to_encode:
+                    self.__test_xdcr_params['filter_expression'] = self.__test_xdcr_params['filter_expression'] \
+                        .replace(_, urllib.quote_plus(_))
 
     def __convert_test_to_xdcr_params(self):
         xdcr_params = {}
@@ -3588,12 +3594,13 @@ class XDCRNewBaseTest(unittest.TestCase):
                                          " WHERE " + filter_exp)
         return doc_count if doc_count else 0
 
-    def verify_filtered_items(self, replications):
+    def verify_filtered_items(self, replications, skip_index=False):
         for repl in replications:
             # Assuming src and dest bucket of the replication have the same name
             bucket = repl['source']
-            self._create_index(self.src_master, bucket)
-            self._create_index(self.dest_master, bucket)
+            if not skip_index:
+                self._create_index(self.src_master, bucket)
+                self._create_index(self.dest_master, bucket)
             if repl['filterExpression']:
                 filter_exp = repl['filterExpression']
             src_count = self._get_doc_count(self.src_master, filter_exp, bucket)
