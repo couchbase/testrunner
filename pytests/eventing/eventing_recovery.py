@@ -9,7 +9,7 @@ from lib.membase.api.rest_client import RestConnection
 from lib.remote.remote_util import RemoteMachineShellConnection
 from lib.testconstants import STANDARD_BUCKET_PORT
 from lib.memcached.helper.data_helper import MemcachedClientHelper
-from pytests.eventing.eventing_constants import HANDLER_CODE
+from pytests.eventing.eventing_constants import HANDLER_CODE, HANDLER_CODE_CURL
 from pytests.eventing.eventing_base import EventingBaseTest
 import logging
 import time
@@ -65,6 +65,22 @@ class EventingRecovery(EventingBaseTest):
             self.handler_code = HANDLER_CODE.BUCKET_OP_WITH_SOURCE_BUCKET_MUTATION
         elif handler_code == 'source_bucket_mutation_with_timers':
             self.handler_code = HANDLER_CODE.BUCKET_OP_SOURCE_BUCKET_MUTATION_WITH_TIMERS
+        elif handler_code == 'bucket_op_curl_get':
+            self.handler_code = HANDLER_CODE_CURL.BUCKET_OP_WITH_CURL_GET
+        elif handler_code == 'bucket_op_curl_post':
+            self.handler_code = HANDLER_CODE_CURL.BUCKET_OP_WITH_CURL_POST
+        elif handler_code == 'bucket_op_curl_put':
+            self.handler_code = HANDLER_CODE_CURL.BUCKET_OP_WITH_CURL_PUT
+        elif handler_code == 'bucket_op_curl_delete':
+            self.handler_code = HANDLER_CODE_CURL.BUCKET_OP_WITH_CURL_DELETE
+        elif handler_code == 'timer_op_curl_get':
+            self.handler_code = HANDLER_CODE_CURL.TIMER_OP_WITH_CURL_GET
+        elif handler_code == 'timer_op_curl_post':
+            self.handler_code = HANDLER_CODE_CURL.TIMER_OP_WITH_CURL_POST
+        elif handler_code == 'timer_op_curl_put':
+            self.handler_code = HANDLER_CODE_CURL.TIMER_OP_WITH_CURL_PUT
+        elif handler_code == 'timer_op_curl_delete':
+            self.handler_code = HANDLER_CODE_CURL.TIMER_OP_WITH_CURL_DELETE
         else:
             self.handler_code = HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE
 
@@ -74,6 +90,10 @@ class EventingRecovery(EventingBaseTest):
     def test_killing_eventing_consumer_when_eventing_is_processing_mutations(self):
         eventing_node = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
         body = self.create_save_function_body(self.function_name, self.handler_code)
+        if self.is_curl:
+            body['depcfg']['curl'] = []
+            body['depcfg']['curl'].append({"hostname": self.hostname, "value": "server", "auth_type": self.auth_type,
+                                           "username": self.curl_username, "password": self.curl_password,"cookies": self.cookies})
         self.deploy_function(body)
         if self.pause_resume:
             self.pause_function(body)
@@ -115,6 +135,10 @@ class EventingRecovery(EventingBaseTest):
     def test_killing_eventing_producer_when_eventing_is_processing_mutations(self):
         eventing_node = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
         body = self.create_save_function_body(self.function_name, self.handler_code)
+        if self.is_curl:
+            body['depcfg']['curl'] = []
+            body['depcfg']['curl'].append({"hostname": self.hostname, "value": "server", "auth_type": self.auth_type,
+                                           "username": self.curl_username, "password": self.curl_password,"cookies": self.cookies})
         self.deploy_function(body)
         #pause handler
         if self.pause_resume:
@@ -162,6 +186,10 @@ class EventingRecovery(EventingBaseTest):
         kv_node = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=False)
         eventing_node = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
         body = self.create_save_function_body(self.function_name, self.handler_code)
+        if self.is_curl:
+            body['depcfg']['curl'] = []
+            body['depcfg']['curl'].append({"hostname": self.hostname, "value": "server", "auth_type": self.auth_type,
+                                           "username": self.curl_username, "password": self.curl_password,"cookies": self.cookies})
         self.deploy_function(body)
         # pause handler
         if self.pause_resume:
@@ -205,6 +233,10 @@ class EventingRecovery(EventingBaseTest):
         kv_node = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=False)
         eventing_node = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
         body = self.create_save_function_body(self.function_name, self.handler_code)
+        if self.is_curl:
+            body['depcfg']['curl'] = []
+            body['depcfg']['curl'].append({"hostname": self.hostname, "value": "server", "auth_type": self.auth_type,
+                                           "username": self.curl_username, "password": self.curl_password,"cookies": self.cookies})
         self.deploy_function(body)
         # pause handler
         if self.pause_resume:
@@ -250,6 +282,10 @@ class EventingRecovery(EventingBaseTest):
         gen_load_non_json_del = copy.deepcopy(self.gens_load)
         eventing_node = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
         body = self.create_save_function_body(self.function_name, self.handler_code)
+        if self.is_curl:
+            body['depcfg']['curl'] = []
+            body['depcfg']['curl'].append({"hostname": self.hostname, "value": "server", "auth_type": self.auth_type,
+                                           "username": self.curl_username, "password": self.curl_password,"cookies": self.cookies})
         self.deploy_function(body)
         # load some data
         task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
@@ -294,6 +330,10 @@ class EventingRecovery(EventingBaseTest):
     def test_network_partitioning_eventing_node_when_its_processing_mutations(self):
         eventing_node = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
         body = self.create_save_function_body(self.function_name, self.handler_code)
+        if self.is_curl:
+            body['depcfg']['curl'] = []
+            body['depcfg']['curl'].append({"hostname": self.hostname, "value": "server", "auth_type": self.auth_type,
+                                           "username": self.curl_username, "password": self.curl_password,"cookies": self.cookies})
         self.deploy_function(body)
         try:
             # partition the eventing node when its processing mutations
@@ -331,6 +371,10 @@ class EventingRecovery(EventingBaseTest):
     def test_reboot_n1ql_node_when_eventing_node_is_querying(self):
         n1ql_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
         body = self.create_save_function_body(self.function_name, HANDLER_CODE.N1QL_INSERT_ON_UPDATE)
+        if self.is_curl:
+            body['depcfg']['curl'] = []
+            body['depcfg']['curl'].append({"hostname": self.hostname, "value": "server", "auth_type": self.auth_type,
+                                           "username": self.curl_username, "password": self.curl_password,"cookies": self.cookies})
         self.deploy_function(body)
         # load some data
         task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
@@ -355,6 +399,10 @@ class EventingRecovery(EventingBaseTest):
     def test_killing_erlang_on_n1ql_node_when_eventing_node_is_querying(self):
         n1ql_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
         body = self.create_save_function_body(self.function_name, HANDLER_CODE.N1QL_INSERT_ON_UPDATE)
+        if self.is_curl:
+            body['depcfg']['curl'] = []
+            body['depcfg']['curl'].append({"hostname": self.hostname, "value": "server", "auth_type": self.auth_type,
+                                           "username": self.curl_username, "password": self.curl_password,"cookies": self.cookies})
         self.deploy_function(body)
         # load some data
         task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
@@ -379,6 +427,10 @@ class EventingRecovery(EventingBaseTest):
         n1ql_node = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
         eventing_node = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
         body = self.create_save_function_body(self.function_name, HANDLER_CODE.N1QL_UPDATE_DELETE)
+        if self.is_curl:
+            body['depcfg']['curl'] = []
+            body['depcfg']['curl'].append({"hostname": self.hostname, "value": "server", "auth_type": self.auth_type,
+                                           "username": self.curl_username, "password": self.curl_password,"cookies": self.cookies})
         self.deploy_function(body)
         # load some data
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
@@ -406,6 +458,10 @@ class EventingRecovery(EventingBaseTest):
     def test_network_partitioning_eventing_node_with_n1ql_when_its_processing_mutations(self):
         eventing_node = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
         body = self.create_save_function_body(self.function_name, HANDLER_CODE.N1QL_UPDATE_DELETE)
+        if self.is_curl:
+            body['depcfg']['curl'] = []
+            body['depcfg']['curl'].append({"hostname": self.hostname, "value": "server", "auth_type": self.auth_type,
+                                           "username": self.curl_username, "password": self.curl_password,"cookies": self.cookies})
         self.deploy_function(body)
         try:
             # partition the eventing node when its processing mutations
@@ -438,6 +494,11 @@ class EventingRecovery(EventingBaseTest):
                       batch_size=self.batch_size)
             body = self.create_save_function_body(self.function_name, self.handler_code,
                                                   worker_count=3)
+            if self.is_curl:
+                body['depcfg']['curl'] = []
+                body['depcfg']['curl'].append(
+                    {"hostname": self.hostname, "value": "server", "auth_type": self.auth_type,
+                     "username": self.curl_username, "password": self.curl_password, "cookies": self.cookies})
             self.deploy_function(body)
             # Wait for eventing to catch up with all the update mutations and verify results
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
@@ -457,6 +518,11 @@ class EventingRecovery(EventingBaseTest):
                       batch_size=self.batch_size)
             body = self.create_save_function_body(self.function_name, self.handler_code,
                                                   worker_count=3)
+            if self.is_curl:
+                body['depcfg']['curl'] = []
+                body['depcfg']['curl'].append(
+                    {"hostname": self.hostname, "value": "server", "auth_type": self.auth_type,
+                     "username": self.curl_username, "password": self.curl_password, "cookies": self.cookies})
             self.deploy_function(body)
             # pause handler
             if self.pause_resume:
@@ -493,6 +559,10 @@ class EventingRecovery(EventingBaseTest):
             mem_client.stop_persistence()
         body = self.create_save_function_body(self.function_name, self.handler_code,
                                               worker_count=3)
+        if self.is_curl:
+            body['depcfg']['curl'] = []
+            body['depcfg']['curl'].append({"hostname": self.hostname, "value": "server", "auth_type": self.auth_type,
+                                           "username": self.curl_username, "password": self.curl_password,"cookies": self.cookies})
         try:
             task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
                                                     self.buckets[0].kvs[1], 'create', compression=self.sdk_compression)
@@ -522,6 +592,10 @@ class EventingRecovery(EventingBaseTest):
             mem_client.stop_persistence()
         body = self.create_save_function_body(self.function_name, self.handler_code,
                                               worker_count=3)
+        if self.is_curl:
+            body['depcfg']['curl'] = []
+            body['depcfg']['curl'].append({"hostname": self.hostname, "value": "server", "auth_type": self.auth_type,
+                                           "username": self.curl_username, "password": self.curl_password,"cookies": self.cookies})
         try:
             task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
                                                     self.buckets[0].kvs[1], 'create', compression=self.sdk_compression)
@@ -558,6 +632,11 @@ class EventingRecovery(EventingBaseTest):
                       batch_size=self.batch_size)
             body = self.create_save_function_body(self.function_name, self.handler_code,
                                                   worker_count=3)
+            if self.is_curl:
+                body['depcfg']['curl'] = []
+                body['depcfg']['curl'].append(
+                    {"hostname": self.hostname, "value": "server", "auth_type": self.auth_type,
+                     "username": self.curl_username, "password": self.curl_password, "cookies": self.cookies})
             self.deploy_function(body)
             # pause handler
             if self.pause_resume:
@@ -609,6 +688,10 @@ class EventingRecovery(EventingBaseTest):
         body = self.create_save_function_body(self.function_name, self.handler_code,
                                               sock_batch_size=sock_batch_size, worker_count=worker_count,
                                               cpp_worker_thread_count=cpp_worker_thread_count)
+        if self.is_curl:
+            body['depcfg']['curl'] = []
+            body['depcfg']['curl'].append({"hostname": self.hostname, "value": "server", "auth_type": self.auth_type,
+                                           "username": self.curl_username, "password": self.curl_password,"cookies": self.cookies})
         self.deploy_function(body)
         # load data
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
@@ -666,6 +749,10 @@ class EventingRecovery(EventingBaseTest):
         body = self.create_save_function_body(self.function_name, self.handler_code,
                                               sock_batch_size=sock_batch_size, worker_count=worker_count,
                                               cpp_worker_thread_count=cpp_worker_thread_count)
+        if self.is_curl:
+            body['depcfg']['curl'] = []
+            body['depcfg']['curl'].append({"hostname": self.hostname, "value": "server", "auth_type": self.auth_type,
+                                           "username": self.curl_username, "password": self.curl_password,"cookies": self.cookies})
         self.deploy_function(body)
         # load data
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,

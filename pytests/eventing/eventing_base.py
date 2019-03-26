@@ -206,7 +206,7 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         # wait for bucket operations to complete and verify it went through successfully
         count = 0
         stats_dst = self.rest.get_bucket_stats(bucket)
-        while stats_dst["curr_items"] != expected_dcp_mutations and count < 10:
+        while stats_dst["curr_items"] != expected_dcp_mutations and count < 20:
             message = "Waiting for handler code {2} to complete bucket operations... Current : {0} Expected : {1}".\
                       format(stats_dst["curr_items"], expected_dcp_mutations,name)
             self.sleep(timeout/20, message=message)
