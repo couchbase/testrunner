@@ -1383,6 +1383,9 @@ class ImportExportTests(CliBaseTest):
                     exports = export_file.read()
                     exports = ast.literal_eval(exports)
                     exports.sort(key=lambda k: k['name'])
+                    if exports and isinstance(exports[0]["index"], str):
+                        for x in samples:
+                            x["index"] = str(x["index"])
 
                     if self.debug_logs:
                         print "\nSample list data: %s" % samples
