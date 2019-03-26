@@ -1014,7 +1014,8 @@ class FTSIndex:
                                                           highlight_style=None,
                                                           highlight_fields=None,
                                                           consistency_level='',
-                                                          consistency_vectors={}):
+                                                          consistency_vectors={},
+                                                          score=''):
         max_matches = TestInputSingleton.input.param("query_max_matches", 10000000)
         query_json = copy.deepcopy(QUERY.JSON)
         # query is a unicode dict
@@ -1047,6 +1048,8 @@ class FTSIndex:
             del query_json['ctl']['consistency']['vectors']
         elif consistency_vectors != {}:
             query_json['ctl']['consistency']['vectors'] = consistency_vectors
+        if score != '':
+            query_json['score'] = "none"
         return query_json
 
     def construct_facets_definition(self):
@@ -1108,7 +1111,7 @@ class FTSIndex:
                       return_raw_hits=False, sort_fields=None,
                       explain=False, show_results_from_item=0, highlight=False,
                       highlight_style=None, highlight_fields=None, consistency_level='',
-                      consistency_vectors={}, timeout=60000, rest=None):
+                      consistency_vectors={}, timeout=60000, rest=None, score=''):
         """
         Takes a query dict, constructs a json, runs and returns results
         """
@@ -1121,7 +1124,8 @@ class FTSIndex:
                                                     highlight_fields=highlight_fields,
                                                     consistency_level=consistency_level,
                                                     consistency_vectors=consistency_vectors,
-                                                    timeout=timeout)
+                                                    timeout=timeout,
+                                                    score=score)
 
         hits = -1
         matches = []

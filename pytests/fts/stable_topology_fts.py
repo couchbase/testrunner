@@ -1,3 +1,5 @@
+# coding=utf-8
+
 import copy
 import json
 import random
@@ -1763,3 +1765,251 @@ class StableTopFTS(FTSBaseTest):
         for index in self._cb_cluster.get_indexes():
             self.generate_random_queries(index, 5, self.query_types)
             self.run_query_and_compare(index)
+
+    # This test is to validate if the value for score is 0 for all docs when score=none is specified in the search query.
+    def test_score_none(self):
+        # Create bucket, create index
+        self.load_data()
+        self.wait_till_items_in_bucket_equal(items=self._num_items / 2)
+        index = self.create_index(
+            self._cb_cluster.get_bucket_by_name('default'),
+            "default_index")
+        self.wait_for_indexing_complete()
+        zero_results_ok = True
+        expected_hits = int(self._input.param("expected_hits", 0))
+        default_query = {"match": "Safiya", "field": "name"}
+        query = eval(self._input.param("query", str(default_query)))
+        if expected_hits:
+            zero_results_ok = False
+        if isinstance(query, str):
+            query = json.loads(query)
+
+        try:
+            for index in self._cb_cluster.get_indexes():
+                hits, contents, _, _ = index.execute_query(query=query,
+                                                           zero_results_ok=zero_results_ok,
+                                                           expected_hits=expected_hits,
+                                                           return_raw_hits=True,
+                                                           score="none")
+
+                self.log.info("Hits: %s" % hits)
+                self.log.info("Content: %s" % contents)
+                result = True
+                if hits == expected_hits:
+                    for doc in contents:
+                        # Check if the score of the doc is 0.
+                        if "score" in doc:
+                            self.assertEqual(doc["score"], 0, "Score is not 0 for doc {0}".format(doc["id"]))
+                        else:
+                            self.fail("Score key not present in search results for doc {0}".format(doc["id"]))
+                    if not result:
+                        self.fail(
+                            "Testcase failed. Actual results do not match expected.")
+                else:
+                    self.fail("No. of hits not matching expected hits. Hits = {0}, Expected Hits = {1}".format(hits,
+                                                                                                               expected_hits))
+        except Exception as err:
+            self.log.error(err)
+            self.fail("Testcase failed: " + err.message)
+
+    # This test checks the correctness of search results from queries with score=none and without score=none.
+    def test_result_correctness_score_none(self):
+        # Create bucket, create index
+        self.load_data()
+        self.wait_till_items_in_bucket_equal(items=self._num_items / 2)
+        index = self.create_index(
+            self._cb_cluster.get_bucket_by_name('default'),
+            "default_index")
+        self.wait_for_indexing_complete()
+        zero_results_ok = True
+        expected_hits = int(self._input.param("expected_hits", 0))
+        default_query = {"match": "Safiya", "field": "name"}
+        query = eval(self._input.param("query", str(default_query)))
+        if expected_hits:
+            zero_results_ok = False
+        if isinstance(query, str):
+            query = json.loads(query)
+
+        try:
+            for index in self._cb_cluster.get_indexes():
+                hits, doc_ids_with_score_none, _, _ = index.execute_query(query=query,
+                                                           zero_results_ok=zero_results_ok,
+                                                           return_raw_hits=False,
+                                                           score="none")
+
+                self.log.info("Hits: %s" % hits)
+                self.log.info("Docs: %s" % doc_ids_with_score_none)
+                doc_ids_with_score_none.sort()
+                hits, doc_ids_without_score_none, _, _ = index.execute_query(query=query,
+                                                                          zero_results_ok=zero_results_ok,
+                                                                          return_raw_hits=False)
+
+                self.log.info("Hits: %s" % hits)
+                self.log.info("Docs: %s" % doc_ids_without_score_none)
+                doc_ids_without_score_none.sort()
+                self.assertListEqual(doc_ids_with_score_none, doc_ids_without_score_none, "Doc Ids not equal")
+
+        except Exception as err:
+            self.log.error(err)
+            self.fail("Testcase failed: " + err.message)
+
+    # Tests the ASCII folding filter with different types of accented characters
+    def test_ascii_folding_filter(self):
+        # Reference for test data : http://www.jarte.com/help_new/accent_marks_diacriticals_and_special_characters.html
+        test_data = [
+            {"text": "Ápple"},
+            {"text": "Àpple"},
+            {"text": "Äpple"},
+            {"text": "Âpple"},
+            {"text": "Ãpple"},
+            {"text": "Åpple"},
+            {"text": "ápple"},
+            {"text": "àpple"},
+            {"text": "äpple"},
+            {"text": "âpple"},
+            {"text": "ãpple"},
+            {"text": "åpple"},
+            {"text": "Ðodge"},
+            {"text": "ðodge"},
+            {"text": "Élephant"},
+            {"text": "élephant"},
+            {"text": "Èlephant"},
+            {"text": "èlephant"},
+            {"text": "Ëlephant"},
+            {"text": "ëlephant"},
+            {"text": "Êlephant"},
+            {"text": "êlephant"},
+            {"text": "Íceland"},
+            {"text": "íceland"},
+            {"text": "Ìceland"},
+            {"text": "ìceland"},
+            {"text": "Ïceland"},
+            {"text": "ïceland"},
+            {"text": "Îceland"},
+            {"text": "îceland"},
+            {"text": "Órange"},
+            {"text": "órange"},
+            {"text": "Òrange"},
+            {"text": "òrange"},
+            {"text": "Örange"},
+            {"text": "örange"},
+            {"text": "Ôrange"},
+            {"text": "ôrange"},
+            {"text": "Õrange"},
+            {"text": "õrange"},
+            {"text": "Ørange"},
+            {"text": "ørange"},
+            {"text": "Únicorn"},
+            {"text": "únicorn"},
+            {"text": "Ùnicorn"},
+            {"text": "ùnicorn"},
+            {"text": "Ünicorn"},
+            {"text": "ünicorn"},
+            {"text": "Ûnicorn"},
+            {"text": "ûnicorn"},
+            {"text": "Ýellowstone"},
+            {"text": "ýellowstone"},
+            {"text": "Ÿellowstone"},
+            {"text": "ÿellowstone"},
+            {"text": "Ñocturnal"},
+            {"text": "ñocturnal"},
+            {"text": "Çelcius"},
+            {"text": "çelcius"},
+            {"text": "Œlcius"},
+            {"text": "œlcius"},
+            {"text": "Šmall"},
+            {"text": "šmall"},
+            {"text": "Žebra"},
+            {"text": "žebra"},
+            {"text": "Æsthetic"},
+            {"text": "æsthetic"},
+            {"text": "Þhonetic"},
+            {"text": "þhonetic"},
+            {"text": "Discuß"},
+            {"text": "ÆꜴ"}
+
+        ]
+
+        search_terms = [
+            {"term": "apple", "expected_hits": 6},
+            {"term": "Apple", "expected_hits": 6},
+            {"term": "dodge", "expected_hits": 1},
+            {"term": "Dodge", "expected_hits": 1},
+            {"term": "Elephant", "expected_hits": 4},
+            {"term": "elephant", "expected_hits": 4},
+            {"term": "iceland", "expected_hits": 4},
+            {"term": "Iceland", "expected_hits": 4},
+            {"term": "orange", "expected_hits": 6},
+            {"term": "Orange", "expected_hits": 6},
+            {"term": "unicorn", "expected_hits": 4},
+            {"term": "Unicorn", "expected_hits": 4},
+            {"term": "yellowstone", "expected_hits": 2},
+            {"term": "Yellowstone", "expected_hits": 2},
+            {"term": "nocturnal", "expected_hits": 1},
+            {"term": "Nocturnal", "expected_hits": 1},
+            {"term": "celcius", "expected_hits": 1},
+            {"term": "Celcius", "expected_hits": 1},
+            {"term": "oelcius", "expected_hits": 1},
+            {"term": "OElcius", "expected_hits": 1},
+            {"term": "small", "expected_hits": 1},
+            {"term": "Small", "expected_hits": 1},
+            {"term": "zebra", "expected_hits": 1},
+            {"term": "Zebra", "expected_hits": 1},
+            {"term": "aesthetic", "expected_hits": 1},
+            {"term": "AEsthetic", "expected_hits": 1},
+            {"term": "thhonetic", "expected_hits": 1},
+            {"term": "THhonetic", "expected_hits": 1},
+            {"term": "Discuss", "expected_hits": 1},
+            {"term": "AEAO", "expected_hits": 1}
+        ]
+
+        self.create_test_dataset(self._master, test_data)
+        self.wait_till_items_in_bucket_equal(items=len(test_data))
+
+        index = self.create_index(
+            self._cb_cluster.get_bucket_by_name('default'),
+            "default_index")
+        self.wait_for_indexing_complete()
+
+        # Update index to have the child field "text"
+        index.add_child_field_to_default_mapping("text", "text")
+        index.index_definition['uuid'] = index.get_uuid()
+        index.update()
+
+        # Update index to have a custom analyzer which uses the ascii folding filter as a char filter
+        index.index_definition["params"]["mapping"]["analysis"] = {}
+        index.index_definition["params"]["mapping"]["analysis"] = json.loads(
+            "{\"analyzers\": {\"asciiff\": {\"char_filters\": [\"asciifolding\"],\"tokenizer\": \"letter\",\"type\": \"custom\" }}}")
+
+        index.index_definition["params"]["mapping"]["default_analyzer"] = "asciiff"
+
+        index.index_definition['uuid'] = index.get_uuid()
+        index.update()
+        self.wait_for_indexing_complete()
+
+        # Run queries
+        try:
+            for index in self._cb_cluster.get_indexes():
+                all_queries_passed = True
+                failed_search_terms = []
+                for search_term in search_terms:
+                    self.log.info("=============== Querying for term {0} ===============".format(search_term["term"]))
+                    query = {'match': search_term["term"], 'field': 'text'}
+                    expected_hits = search_term["expected_hits"]
+                    hits, contents, _, _ = index.execute_query(query=query,
+                                                               zero_results_ok=True,
+                                                               return_raw_hits=True)
+
+                    self.log.info("Hits: %s" % hits)
+                    self.log.info("Content: %s" % contents)
+
+                    if hits != expected_hits:
+                        all_queries_passed = False
+                        failed_search_terms.append(search_term["term"])
+
+                self.assertTrue(all_queries_passed,
+                                "All search terms did not return expected results. Terms for which queries failed : {0}".format(
+                                    str(failed_search_terms)))
+        except Exception as err:
+            self.log.error(err)
+            self.fail("Testcase failed: " + err.message)
