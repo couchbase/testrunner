@@ -118,7 +118,8 @@ class QueryTests(BaseTestCase):
             self.full_list = self.generate_full_docs_list(self.gens_load)
         if self.input.param("gomaxprocs", None):
             self.configure_gomaxprocs()
-        self.gen_results = TuqGenerators(self.log, self.generate_full_docs_list(self.gens_load))
+        if self.docs_per_day > 0:
+            self.gen_results = TuqGenerators(self.log, self.generate_full_docs_list(self.gens_load))
         if str(self.__class__).find('QueriesUpgradeTests') == -1:
             if not self.analytics:
                 self.create_primary_index_for_3_0_and_greater()
