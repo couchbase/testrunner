@@ -1283,12 +1283,12 @@ class RestConnection(object):
             else:
                 raise Exception("There is not zone with name: %s in cluster" % zone_name)
 
-        params = urllib.urlencode({'hostname': "{0}:{1}".format(remoteIp, port),
+        params = urllib.urlencode({'hostname': "http://{0}:{1}".format(remoteIp, port),
                                    'user': user,
                                    'password': password})
         if services != None:
             services = ','.join(services)
-            params = urllib.urlencode({'hostname': "{0}:{1}".format(remoteIp, port),
+            params = urllib.urlencode({'hostname': "http://{0}:{1}".format(remoteIp, port),
                                    'user': user,
                                    'password': password,
                                    'services': services})
