@@ -116,7 +116,8 @@ class QueryTests(BaseTestCase):
             self.full_list = self.generate_full_docs_list(self.gens_load)
         if self.input.param("gomaxprocs", None):
             self.configure_gomaxprocs()
-        self.gen_results = TuqGenerators(self.log, self.generate_full_docs_list(self.gens_load))
+        if self.docs_per_day > 0:
+            self.gen_results = TuqGenerators(self.log, self.generate_full_docs_list(self.gens_load))
         if str(self.__class__).find('QueriesUpgradeTests') == -1 and self.primary_index_created == False:
             if self.analytics == False:
                 self.create_primary_index_for_3_0_and_greater()
@@ -473,20 +474,40 @@ class QueryTests(BaseTestCase):
         # trigger failure
         self.assertEqual(has_errors, False)
 
-    def is_index_present(self, bucket_name, index_name, fields_set, using):
-        desired_index = (index_name, bucket_name,
-                         frozenset([field.split()[0].replace('`', '').replace('(', '').replace(')', '') for field in fields_set]),
-                         "online", using)
+    def is_index_present(self, bucket_name, index_name, fields_set=None, using=None, status="online"):
         query_response = self.run_cbq_query("SELECT * FROM system:indexes")
-        current_indexes = [(i['indexes']['name'],
-                            i['indexes']['keyspace_id'],
-                            frozenset([key.replace('`', '').replace('(', '').replace(')', '')
-                                       for key in i['indexes']['index_key']]),
-                            i['indexes']['state'],
-                            i['indexes']['using']) for i in query_response['results']]
+        if fields_set is None and using is None:
+            if status is "any":
+                desired_index = (index_name, bucket_name)
+                current_indexes = [(i['indexes']['name'],
+                                    i['indexes']['keyspace_id']) for i in query_response['results']]
+            else:
+                desired_index = (index_name, bucket_name, status)
+                current_indexes = [(i['indexes']['name'],
+                                    i['indexes']['keyspace_id'],
+                                    i['indexes']['state']) for i in query_response['results']]
+        else:
+            if status is "any":
+                desired_index = (index_name, bucket_name, frozenset([field for field in fields_set]), using)
+                current_indexes = [(i['indexes']['name'],
+                                    i['indexes']['keyspace_id'],
+                                    frozenset([(key.replace('`', '').replace('(', '').replace(')', '').replace('meta.id', 'meta().id'), j)
+                                               for j, key in enumerate(i['indexes']['index_key'], 0)]),
+                                    i['indexes']['using']) for i in query_response['results']]
+            else:
+                desired_index = (index_name, bucket_name, frozenset([field for field in fields_set]), status, using)
+                current_indexes = [(i['indexes']['name'],
+                                    i['indexes']['keyspace_id'],
+                                    frozenset([(key.replace('`', '').replace('(', '').replace(')', '').replace('meta.id', 'meta().id'), j)
+                                               for j, key in enumerate(i['indexes']['index_key'], 0)]),
+                                    i['indexes']['state'],
+                                    i['indexes']['using']) for i in query_response['results']]
+
         if desired_index in current_indexes:
             return True
         else:
+            self.log.info("waiting for: \n" + str(desired_index) + "\n")
+            self.log.info("current indexes: \n" + str(current_indexes) + "\n")
             return False
 
     def wait_for_all_indexes_online(self):
@@ -497,8 +518,8 @@ class QueryTests(BaseTestCase):
     def wait_for_index_present(self, bucket_name, index_name, fields_set, using):
         self.with_retry(lambda: self.is_index_present(bucket_name, index_name, fields_set, using), eval=True, delay=1, tries=30)
 
-    def wait_for_index_drop(self, bucket_name, index_name, fields_set, using):
-        self.with_retry(lambda: self.is_index_present(bucket_name, index_name, fields_set, using), eval=False, delay=1, tries=30)
+    def wait_for_index_drop(self, bucket_name, index_name, fields_set=None, using=None):
+        self.with_retry(lambda: self.is_index_present(bucket_name, index_name, fields_set=fields_set, using=using, status="any"), eval=False, delay=1, tries=30)
 
     def get_parsed_indexes(self):
         query_response = self.run_cbq_query("SELECT * FROM system:indexes")
@@ -563,6 +584,9 @@ class QueryTests(BaseTestCase):
                             self.run_cbq_query("CREATE INDEX %s ON %s(%s) USING %s" % (name, keyspace, joined_fields, using))
                     self.wait_for_index_present(keyspace, name, fields, using)
 
+    def drop_index(self, bucket, index):
+        self.run_cbq_query("drop index %s.%s" % (bucket, index))
+        self.wait_for_index_drop(bucket, index)
 ##############################################################################################
 #
 #   COMMON FUNCTIONS
