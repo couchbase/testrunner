@@ -3353,6 +3353,10 @@ class XDCRNewBaseTest(unittest.TestCase):
                       % (len(valid_keys_dest), len(deleted_keys_dest)))
 
         if filter_exp:
+            # If key based adv filter
+            if "META().id" in filter_exp:
+                filter_exp = filter_exp.split('\'')[1]
+
             filtered_src_keys = filter(
                 lambda key: re.search(str(filter_exp), key) is not None,
                 valid_keys_src
@@ -3594,29 +3598,29 @@ class XDCRNewBaseTest(unittest.TestCase):
                                          " WHERE " + filter_exp)
         return doc_count if doc_count else 0
 
-    def verify_filtered_items(self, replications, skip_index=False):
+    def verify_filtered_items(self, src_master, dest_master, replications, skip_index=False):
         for repl in replications:
             # Assuming src and dest bucket of the replication have the same name
             bucket = repl['source']
             if not skip_index:
-                self._create_index(self.src_master, bucket)
-                self._create_index(self.dest_master, bucket)
+                self._create_index(src_master, bucket)
+                self._create_index(dest_master, bucket)
             if repl['filterExpression']:
                 filter_exp = repl['filterExpression']
-            src_count = self._get_doc_count(self.src_master, filter_exp, bucket)
-            dest_count = self._get_doc_count(self.dest_master, filter_exp, bucket)
+            src_count = self._get_doc_count(src_master, filter_exp, bucket)
+            dest_count = self._get_doc_count(dest_master, filter_exp, bucket)
             if src_count != dest_count:
                 self.fail("Doc count {0} on {1} does not match "
                           "doc count {2} on {3} "
                           "after applying filter {4}"
-                          .format(src_count, self.src_master.ip,
-                                  dest_count, self.dest_master.ip,
+                          .format(src_count, src_master.ip,
+                                  dest_count, dest_master.ip,
                                   filter_exp))
             self.log.info("Doc count {0} on {1} matches "
                           "doc count {2} on {3} "
                           "after applying filter {4}"
-                          .format(src_count, self.src_master.ip,
-                                  dest_count, self.dest_master.ip,
+                          .format(src_count, src_master.ip,
+                                  dest_count, dest_master.ip,
                                   filter_exp))
 
     def verify_results(self, skip_verify_data=[], skip_verify_revid=[]):

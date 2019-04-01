@@ -56,11 +56,11 @@ class XDCRAdvFilterTests(XDCRNewBaseTest):
     def verify_results(self):
         rdirection = self._input.param("rdirection", "unidirection")
         replications = self.src_rest.get_replications()
-        self.verify_filtered_items(replications)
+        self.verify_filtered_items(self.src_master, self.dest_master, replications)
         if rdirection == "bidirection":
             self.load_data(self.dest_master.ip)
             replications = self.dest_rest.get_replications()
-            self.verify_filtered_items(replications, skip_index=True)
+            self.verify_filtered_items(self.dest_master, self.src_master, replications, skip_index=True)
 
     def test_xdcr_with_filter(self):
         tasks = []
