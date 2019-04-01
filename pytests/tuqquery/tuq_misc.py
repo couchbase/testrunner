@@ -1,4 +1,7 @@
 from tuq import QueryTests
+import threading
+import time
+import json
 
 
 class QueryMiscTests(QueryTests):
@@ -375,3 +378,82 @@ class QueryMiscTests(QueryTests):
                             self.assertTrue('No web credentials found in request.' not in response[0] and '401 Unauthorized' not in response[0])
                         if credential == "none":
                             self.assertTrue('No web credentials found in request.' in response[0] or '401 Unauthorized' in response[0])
+
+    '''https://issues.couchbase.com/browse/CBSE-6593'''
+    def test_query_cpu_max_utilization(self):
+        try:
+            self.cluster.bucket_flush(self.master, bucket="default", timeout=180000)
+            self.query = "create index idx1 on default(ln,lk)"
+            self.run_cbq_query()
+            self._wait_for_index_online("default", "idx1")
+            createdIndex = True
+
+            thread_list = []
+            for i in range(0, 250):
+                t = threading.Thread(target=self.run_insert_query)
+                t.daemon = True
+                t.start()
+                thread_list.append(t)
+
+            for t in thread_list:
+                t.join()
+
+            bucket_doc_map = {"default": 250000}
+            self.wait_for_bucket_docs(bucket_doc_map, 5, 120)
+
+            end_time = time.time() + 60
+            cpu_rdy = False
+            while time.time() < end_time:
+                cluster_stats = self.rest.get_cluster_stats()
+                node_stats = cluster_stats[str(self.master.ip) + ":8091"]
+                cpu_utilization = node_stats['cpu_utilization']
+                self.log.info("waiting for cpu utilization (" + str(cpu_utilization) + ") < 20.00")
+                if cpu_utilization < 20.00:
+                    cpu_rdy = True
+                    break
+            self.assertTrue(cpu_rdy)
+            self.log.info("cpu ready")
+
+            for i in range(0, 20):
+                t = threading.Thread(target=self.run_select_queries)
+                t.daemon = True
+                t.start()
+                thread_list.append(t)
+
+            end_time = time.time() + 65
+            cpu_stats = []
+            while time.time() < end_time:
+                cluster_stats = self.rest.get_cluster_stats()
+                node_stats = cluster_stats[str(self.master.ip) + ":8091"]
+                cpu_utilization = node_stats['cpu_utilization']
+                self.log.info("**** CPU Utilization is " + str(cpu_utilization) + "****")
+                cpu_stats.append(cpu_utilization)
+                self.sleep(1)
+
+            for t in thread_list:
+                t.join()
+
+            response, content = self.rest.get_query_vitals(self.master)
+            query_vitals = json.loads(content)
+            self.log.info("query vitals: " + str(query_vitals))
+            self.log.info("cpu utilization stats: " + str(cpu_stats))
+            self.assertTrue(query_vitals['request.per.sec.1min'] > 3)
+            for cpu_utilization in cpu_stats:
+                self.assertTrue(cpu_utilization < 99.99)
+        finally:
+            if createdIndex:
+                self.drop_index("default", "idx1")
+                self.wait_for_index_drop("default", "idx1")
+            self.cluster.bucket_flush(self.master, bucket="default", timeout=180000)
+
+    def run_insert_query(self):
+        values = 'VALUES(UUID(),{"ln":"null","lk":"null"}),'*999
+        values = values + 'VALUES(UUID(),{"ln":"null","lk":"null"});'
+        query = 'INSERT INTO default ' + values
+        self.run_cbq_query(query=query)
+
+    def run_select_queries(self):
+        end_time = time.time() + 60
+        query = 'SELECT default.* FROM default WHERE ln = "null" AND lk != "null"'
+        while time.time() < end_time:
+            res = self.run_cbq_query(query=query)
