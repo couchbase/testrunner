@@ -99,6 +99,10 @@ class StableTopFTS(FTSBaseTest):
                 self.sleep(60, "Waiting for updates to get indexed...")
             self.wait_for_indexing_complete()
         self.generate_random_queries(index, self.num_queries, self.query_types)
+        if self.run_via_n1ql:
+            n1ql_executor = self._cb_cluster
+        else:
+            n1ql_executor = None
         self.run_query_and_compare(index)
 
     def test_query_type_on_alias(self):
@@ -106,6 +110,7 @@ class StableTopFTS(FTSBaseTest):
         uses RQG
         """
         self.load_data()
+        self._cb_cluster.run_n1ql_query(query="create primary index on default")
         index = self.create_index(
             self._cb_cluster.get_bucket_by_name('default'),
             "default_index")

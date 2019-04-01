@@ -29,7 +29,7 @@ from couchbase_helper.documentgenerator import JsonDocGenerator
 from lib.membase.api.exception import FTSException
 from es_base import ElasticSearchBase
 from security.rbac_base import RbacBase
-
+from lib.couchbase_helper.tuq_helper import N1QLHelper
 
 
 class RenameNodeException(FTSException):
@@ -1586,6 +1586,7 @@ class CouchbaseCluster:
         self.__non_fts_nodes = []
         # to avoid querying certain nodes that undergo crash/reboot scenarios
         self.__bypass_fts_nodes = []
+        self.__bypass_n1ql_nodes = []
         self.__separate_nodes_on_services()
         self.__set_fts_ram_quota()
         self.sdk_compression = sdk_compression
@@ -1616,6 +1617,7 @@ class CouchbaseCluster:
 
     def __separate_nodes_on_services(self):
         self.__fts_nodes = []
+        self.__n1ql_nodes = []
         self.__non_fts_nodes = []
         service_map = RestConnection(self.__master_node).get_nodes_services()
         for node_ip, services in service_map.iteritems():
@@ -1630,6 +1632,9 @@ class CouchbaseCluster:
                     self.__fts_nodes.append(node)
                 else:
                     self.__non_fts_nodes.append(node)
+
+                if "n1ql" in services:
+                    self.__n1ql_nodes.append(node)
 
     def get_fts_nodes(self):
         self.__separate_nodes_on_services()
@@ -1693,6 +1698,17 @@ class CouchbaseCluster:
         if len(self.__fts_nodes) == 1:
             return self.__fts_nodes[0]
         return self.__fts_nodes[random.randint(0, len(self.__fts_nodes) - 1)]
+
+    def get_random_n1ql_node(self):
+        self.__separate_nodes_on_services()
+        for node in self.__bypass_n1ql_nodes:
+            self.__n1ql_nodes.remove(node)
+        if not self.__n1ql_nodes:
+            raise FTSException("No node in the cluster has 'n1ql' service"
+                               " enabled")
+        if len(self.__n1ql_nodes) == 1:
+            return self.__n1ql_nodes[0]
+        return self.__n1ql_nodes[random.randint(0, len(self.__n1ql_nodes) - 1)]
 
     def get_random_non_fts_node(self):
         return self.__non_fts_nodes[random.randint(0, len(self.__fts_nodes) - 1)]
@@ -2066,6 +2082,16 @@ class CouchbaseCluster:
         total_hits, hit_list, time_taken, status = \
             RestConnection(node).run_fts_query(index_name, query_dict, timeout=timeout)
         return total_hits, hit_list, time_taken, status
+
+    def run_n1ql_query(self, query="", node=None, timeout=70):
+        """ Runs a query defined in query_json against an index/alias and
+        a specific node
+
+        """
+        if not node:
+            node = self.get_random_n1ql_node()
+        res = RestConnection(node).query_tool(query)
+        return res
 
     def run_fts_query_with_facets(self, index_name, query_dict, node=None):
         """ Runs a query defined in query_json against an index/alias and
@@ -2549,7 +2575,7 @@ class CouchbaseCluster:
             )
         return tasks
 
-    def async_run_fts_query_compare(self, fts_index, es, query_index, es_index_name=None):
+    def async_run_fts_query_compare(self, fts_index, es, query_index, es_index_name=None, n1ql_executor=None):
         """
         Asynchronously run query against FTS and ES and compare result
         note: every task runs a single query
@@ -2557,7 +2583,8 @@ class CouchbaseCluster:
         task = self.__clusterop.async_run_fts_query_compare(fts_index=fts_index,
                                                             es_instance=es,
                                                             query_index=query_index,
-                                                            es_index_name=es_index_name)
+                                                            es_index_name=es_index_name,
+                                                            n1ql_executor=n1ql_executor)
         return task
 
     def run_expiry_pager(self, val=10):
@@ -3189,6 +3216,13 @@ class FTSBaseTest(unittest.TestCase):
                           % self.elastic_node.ip)
         else:
             self.es = None
+        self.run_via_n1ql = self._input.param("run_via_n1ql", False)
+        if self.run_via_n1ql:
+            self.n1ql = N1QLHelper(version="sherlock", shell=None,
+                                    item_flag=None, n1ql_port=8903,
+                                      full_docs_list=[], log=self.log)
+        else:
+            self.n1ql = None
         self.create_gen = None
         self.update_gen = None
         self.delete_gen = None
@@ -4056,6 +4090,8 @@ class FTSBaseTest(unittest.TestCase):
         load_tasks = self.async_load_data()
         for task in load_tasks:
             task.result()
+        if self.run_via_n1ql:
+            self._cb_cluster.run_n1ql_query("create primary index on default")
         self.log.info("Loading phase complete!")
 
     def async_load_data(self):
@@ -4079,7 +4115,7 @@ class FTSBaseTest(unittest.TestCase):
             self.create_gen)
         return load_tasks
 
-    def run_query_and_compare(self, index, es_index_name=None):
+    def run_query_and_compare(self, index=None, es_index_name=None, n1ql_executor=None):
         """
         Runs every fts query and es_query and compares them as a single task
         Runs as many tasks as there are queries
@@ -4092,7 +4128,8 @@ class FTSBaseTest(unittest.TestCase):
                 fts_index=index,
                 es=self.es,
                 es_index_name=es_index_name,
-                query_index=count))
+                query_index=count,
+                n1ql_executor=n1ql_executor))
 
         num_queries = len(tasks)
 

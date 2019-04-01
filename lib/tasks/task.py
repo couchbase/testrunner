@@ -1316,7 +1316,7 @@ class ESBulkLoadGeneratorTask(Task):
 
 
 class ESRunQueryCompare(Task):
-    def __init__(self, fts_index, es_instance, query_index, es_index_name=None):
+    def __init__(self, fts_index, es_instance, query_index, es_index_name=None, n1ql_executor=None):
         Task.__init__(self, "Query_runner_task")
         self.fts_index = fts_index
         self.fts_query = fts_index.fts_queries[query_index]
@@ -1328,6 +1328,7 @@ class ESRunQueryCompare(Task):
         self.query_index = query_index
         self.passed = True
         self.es_index_name = es_index_name or "es_index"
+        self.n1ql_executor = n1ql_executor
 
     def check(self, task_manager):
         self.state = FINISHED
@@ -1396,6 +1397,42 @@ class ESRunQueryCompare(Task):
                             msg = "FAIL: Following %s docs were not returned" \
                                   " by FTS, but ES, printing 50: %s" \
                                   % (len(es_but_not_fts), es_but_not_fts[:50])
+                        self.log.error(msg)
+                        self.passed = False
+            if self.n1ql_executor:
+                n1ql_query = "select meta().id from default where search(default, " + str(
+                    json.dumps(self.fts_query)) + ")"
+                n1ql_result = self.n1ql_executor.run_n1ql_query(query=n1ql_query)
+                n1ql_hits = n1ql_result['metrics']['resultCount']
+                n1ql_doc_ids = []
+                for res in n1ql_result['results']:
+                    n1ql_doc_ids.append(res['id'])
+                n1ql_time = n1ql_result['metrics']['elapsedTime']
+                n1ql_status = n1ql_result['status']
+
+                self.log.info("N1QL hits for query: %s is %s (took %s)" % \
+                              (json.dumps(n1ql_query,  ensure_ascii=False),
+                               n1ql_hits,
+                               n1ql_time))
+                if self.passed:
+                    if int(n1ql_hits) != int(fts_hits):
+                        msg = "FAIL: FTS hits: %s, while N1QL hits: %s"\
+                              % (fts_hits, n1ql_hits)
+                        self.log.error(msg)
+                    n1ql_but_not_fts = list(set(n1ql_doc_ids) - set(fts_doc_ids))
+                    fts_but_not_n1ql = list(set(fts_doc_ids) - set(n1ql_doc_ids))
+                    if not (n1ql_but_not_fts or fts_but_not_n1ql):
+                        self.log.info("SUCCESS: Docs returned by FTS = docs"
+                                      " returned by N1QL, doc_ids verified")
+                    else:
+                        if fts_but_not_n1ql:
+                            msg = "FAIL: Following %s doc(s) were not returned" \
+                                  " by N1QL,but FTS, printing 50: %s" \
+                                  % (len(fts_but_not_n1ql), fts_but_not_n1ql[:50])
+                        else:
+                            msg = "FAIL: Following %s docs were not returned" \
+                                  " by FTS, but N1QL, printing 50: %s" \
+                                  % (len(n1ql_but_not_fts), n1ql_but_not_fts[:50])
                         self.log.error(msg)
                         self.passed = False
             self.state = CHECKING
