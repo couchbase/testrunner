@@ -423,13 +423,13 @@ class QueryMiscTests(QueryTests):
     def test_query_cpu_max_utilization(self):
         try:
             self.cluster.bucket_flush(self.master, bucket="default", timeout=180000)
-            self.query = "create index idx1 on default(ln,(lk != 'null'))"
+            self.query = "create index idx1 on default(ln,lk)"
             self.run_cbq_query()
             self._wait_for_index_online("default", "idx1")
             createdIndex = True
 
             thread_list = []
-            for i in range(0, 100):
+            for i in range(0, 250):
                 t = threading.Thread(target=self.run_insert_query)
                 t.daemon = True
                 t.start()
@@ -438,7 +438,7 @@ class QueryMiscTests(QueryTests):
             for t in thread_list:
                 t.join()
 
-            bucket_doc_map = {"default": 100000}
+            bucket_doc_map = {"default": 250000}
             self.wait_for_bucket_docs(bucket_doc_map, 5, 120)
 
             end_time = time.time() + 60
@@ -454,19 +454,20 @@ class QueryMiscTests(QueryTests):
             self.assertTrue(cpu_rdy)
             self.log.info("cpu ready")
 
-            for i in range(0, 10):
+            for i in range(0, 20):
                 t = threading.Thread(target=self.run_select_queries)
                 t.daemon = True
                 t.start()
                 thread_list.append(t)
 
             end_time = time.time() + 65
+            cpu_stats = []
             while time.time() < end_time:
                 cluster_stats = self.rest.get_cluster_stats()
                 node_stats = cluster_stats[str(self.master.ip) + ":8091"]
                 cpu_utilization = node_stats['cpu_utilization']
                 self.log.info("**** CPU Utilization is " + str(cpu_utilization) + "****")
-                self.assertTrue(cpu_utilization < 99.00)
+                cpu_stats.append(cpu_utilization)
                 self.sleep(1)
 
             for t in thread_list:
@@ -474,8 +475,11 @@ class QueryMiscTests(QueryTests):
 
             response, content = self.rest.get_query_vitals(self.master)
             query_vitals = json.loads(content)
-            self.log.info(str(query_vitals))
-            self.assertTrue(query_vitals['request.per.sec.1min'] > 50)
+            self.log.info("query vitals: " + str(query_vitals))
+            self.log.info("cpu utilization stats: " + str(cpu_stats))
+            self.assertTrue(query_vitals['request.per.sec.1min'] > 3)
+            for cpu_utilization in cpu_stats:
+                self.assertTrue(cpu_utilization < 99.99)
         finally:
             if createdIndex:
                 self.drop_index("default", "idx1")
