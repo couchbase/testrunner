@@ -17,7 +17,7 @@ class XDCRAdvFilterTests(XDCRNewBaseTest):
         self.dest_master = self.dest_cluster.get_master_node()
         self.src_rest = RestConnection(self.src_master)
         self.dest_rest = RestConnection(self.dest_master)
-        initial_xdcr = self._input.param("initial_xdcr", False)
+        initial_xdcr = random.choice([True, False])
         if initial_xdcr:
             self.load_data()
             self.setup_xdcr()
