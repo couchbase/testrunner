@@ -3,6 +3,7 @@ import logging
 import random
 import datetime
 import os
+import socket
 
 from TestInput import TestInputSingleton
 from couchbase_helper.tuq_helper import N1QLHelper
@@ -70,6 +71,11 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         self.auth_type = self.input.param('auth_type', 'no-auth')
         self.url = self.input.param('path', None)
         self.cookies = self.input.param('cookies','disallow')
+        if self.hostname=='local':
+            host = socket.gethostname()
+            ip = socket.gethostbyname(host)
+            self.hostname= "http://"+ip+":1080/"
+            self.setup_curl()
 
     def tearDown(self):
         # catch panics and print it in the test log
@@ -79,6 +85,8 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         for bucket in buckets:
             stats = rest.get_bucket_stats(bucket)
             self.log.info("Bucket {} DGM is {}".format(bucket,stats["vb_active_resident_items_ratio"]))
+        if self.hostname == 'local':
+            self.teardown_curl()
         super(EventingBaseTest, self).tearDown()
 
     def create_save_function_body(self, appname, appcode, description="Sample Description",
@@ -596,3 +604,15 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
             count+=1
         if count == iterations:
             raise Exception('Eventing took lot of time for handler {} to {}'.format(name,status))
+
+    def setup_curl(self,):
+        o=os.system('python scripts/curl_setup.py start')
+        self.log.info("=== started docker container =======".format(o))
+        self.sleep(30)
+        o=os.system('python scripts/curl_setup.py setup')
+        self.log.info("=== setup done =======")
+        self.log.info(o)
+
+    def teardown_curl(self):
+        o = os.system('python scripts/curl_setup.py stop')
+        self.log.info("=== stopping docker container =======")

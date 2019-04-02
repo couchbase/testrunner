@@ -1,0 +1,78 @@
+[
+    {
+          "httpRequest" : {
+            "method" : "GET",
+            "path" : "/headers",
+            "headers" : {
+              "sample-header": ["test"]
+            }
+          },
+           "httpResponse" : {
+            "body" : {
+                    "type": "JSON",
+                    "json": "{\"name\":\"vikas\"}",
+                    "contentType": "application/json; charset=utf-8"
+                }
+          }
+    },
+    {
+          "httpRequest" : {
+                "method" : "POST",
+                "path" : "/post",
+                "queryStringParameters": {
+                        "param": ["text"]
+                    },
+                "headers" : {
+                  "cache-control": ["no-cache"],
+                  "Postman-Token": ["a3e931fe-8fe2-413c-be82-546062d28377"]
+                }
+          },
+          "httpResponse" : {
+                "body" : {
+                        "type": "JSON",
+                        "json": "{\"name\":\"vikas\"}",
+                        "contentType": "application/json; charset=utf-8"
+                    }
+          }
+    },
+    {
+          "httpRequest" : {
+                "method" : "PUT",
+                "path" : "/put",
+                "queryStringParameters": {
+                        "param": ["text"]
+                    },
+                "headers" : {
+                  "cache-control": ["no-cache"],
+                  "Postman-Token": ["a3e931fe-8fe2-413c-be82-546062d28377"]
+                }
+          },
+          "httpResponse" : {
+                "body" : {
+                        "type": "JSON",
+                        "json": "{\"name\":\"vikas\"}",
+                        "contentType": "application/json; charset=utf-8"
+                    }
+          }
+    },
+    {
+          "httpRequest" : {
+                "method" : "DELETE",
+                "path" : "/delete",
+                "queryStringParameters": {
+                        "param": ["text"]
+                    },
+                "headers" : {
+                  "cache-control": ["no-cache"],
+                  "Postman-Token": ["a3e931fe-8fe2-413c-be82-546062d28377"]
+                }
+          },
+          "httpResponse" : {
+                "body" : {
+                        "type": "JSON",
+                        "json": "{\"name\":\"vikas\"}",
+                        "contentType": "application/json; charset=utf-8"
+                    }
+          }
+    }
+]
