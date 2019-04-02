@@ -85,6 +85,7 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         for bucket in buckets:
             stats = rest.get_bucket_stats(bucket)
             self.log.info("Bucket {} DGM is {}".format(bucket,stats["vb_active_resident_items_ratio"]))
+        self.hostname = self.input.param('host', 'https://postman-echo.com/')
         if self.hostname == 'local':
             self.teardown_curl()
         super(EventingBaseTest, self).tearDown()
