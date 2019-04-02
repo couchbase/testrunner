@@ -1606,11 +1606,11 @@ class StableTopFTS(FTSBaseTest):
             elif isinstance(fts_query["location"],str):
                 # If the location is in string format
                 if "," in fts_query["location"]:
-                    lon = int(fts_query["location"].split(",")[0])
-                    lat = int(fts_query["location"].split(",")[1])
+                    lon = float(fts_query["location"].split(",")[0])
+                    lat = float(fts_query["location"].split(",")[1])
                 else:
-                    lat = int(Geohash.decode(fts_query["location"])[0])
-                    lon = int(Geohash.decode(fts_query["location"])[1])
+                    lat = float(Geohash.decode(fts_query["location"])[0])
+                    lon = float (Geohash.decode(fts_query["location"])[1])
             unit = fts_query["distance"][-2:]
 
             location = None
