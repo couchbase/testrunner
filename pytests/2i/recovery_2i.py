@@ -1,4 +1,6 @@
 import logging
+from threading import Thread
+import time
 
 from base_2i import BaseSecondaryIndexingTests
 from couchbase_helper.query_definitions import QueryDefinition
@@ -40,6 +42,92 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             except Exception, ex:
                 log.info(ex)
         super(SecondaryIndexingRecoveryTests, self).tearDown()
+
+    '''Test that checks if indexes that are ready during index warmup can be used'''
+    def test_use_index_during_warmup(self):
+        index_node = self.get_nodes_from_services_map(service_type="index",
+                                                         get_all_nodes=False)
+        rest = RestConnection(index_node)
+        # Change indexer snapshot for a recovery point
+        doc = {"indexer.settings.persisted_snapshot.moi.interval":60000}
+        rest.set_index_settings(doc)
+
+        create_index_query = "CREATE INDEX idx ON default(age)"
+        create_index_query2 = "CREATE INDEX idx1 ON default(age)"
+        create_index_query3 = "CREATE INDEX idx2 ON default(age)"
+        create_index_query4 = "CREATE INDEX idx3 ON default(age)"
+        create_index_query5 = "CREATE INDEX idx4 ON default(age)"
+        try:
+            self.n1ql_helper.run_cbq_query(query=create_index_query,
+                                           server=self.n1ql_node)
+            self.n1ql_helper.run_cbq_query(query=create_index_query2,
+                                           server=self.n1ql_node)
+            self.n1ql_helper.run_cbq_query(query=create_index_query3,
+                                           server=self.n1ql_node)
+            self.n1ql_helper.run_cbq_query(query=create_index_query4,
+                                           server=self.n1ql_node)
+            self.n1ql_helper.run_cbq_query(query=create_index_query5,
+                                           server=self.n1ql_node)
+        except Exception, ex:
+            self.log.info(str(ex))
+            self.fail(
+                "index creation failed with error : {0}".format(str(ex)))
+
+        self.wait_until_indexes_online()
+
+        rest.set_service_memoryQuota(service='indexMemoryQuota',
+                                          memoryQuota=256)
+
+        master_rest = RestConnection(self.master)
+
+        self.shell.execute_cbworkloadgen(master_rest.username, master_rest.password, 700000, 100, "default", 1024, '-j')
+
+        index_stats = rest.get_indexer_stats()
+        self.log.info(index_stats["indexer_state"])
+        self.assertTrue(index_stats["indexer_state"].lower() != 'warmup')
+
+        # Sleep for 60 seconds to allow a snapshot to be created
+        self.sleep(60)
+
+        t1 = Thread(target=self.monitor_index_stats, name="monitor_index_stats", args=([index_node, 60]))
+
+        t1.start()
+
+        shell = RemoteMachineShellConnection(index_node)
+        output1, error1 = shell.execute_command("killall -9 indexer")
+
+        t1.join()
+
+        use_index_query = "select * from default where age > 30"
+
+        # Results are not garunteed to be accurate so the query successfully running is all we can check
+        try:
+            results = self.n1ql_helper.run_cbq_query(query=use_index_query, server=self.n1ql_node)
+        except Exception, ex:
+            self.log.info(str(ex))
+            self.fail("query should run correctly, an index is available for use")
+
+    '''Ensure that the index is in warmup, but there is an index ready to be used'''
+    def monitor_index_stats(self, index_node=None, timeout=600):
+        index_usable = False
+        rest = RestConnection(index_node)
+        init_time = time.time()
+        next_time = init_time
+
+        while not index_usable:
+            index_stats = rest.get_indexer_stats()
+            self.log.info(index_stats["indexer_state"])
+            index_map = self.get_index_map()
+
+            if index_stats["indexer_state"].lower() == 'warmup':
+                for index in index_map['default']:
+                    if index_map['default'][index]['status'] == 'Ready':
+                        index_usable = True
+                        break
+            else:
+                next_time = time.time()
+            index_usable = index_usable or (next_time - init_time > timeout)
+        return
 
     def test_rebalance_in(self):
         pre_recovery_tasks = self.async_run_operations(phase="before")

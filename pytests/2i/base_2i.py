@@ -773,6 +773,13 @@ class BaseSecondaryIndexingTests(QueryTests):
             self.ops_map[phase]["query_explain_ops"] = False
         self.log.info(self.ops_map)
 
+    def fail_if_no_buckets(self):
+        buckets = False
+        for a_bucket in self.buckets:
+            buckets = True
+        if not buckets:
+            self.fail('FAIL: This test requires buckets')
+
     def set_indexer_logLevel(self, loglevel="info"):
         """
         :param loglevel:
