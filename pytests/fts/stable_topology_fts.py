@@ -103,7 +103,7 @@ class StableTopFTS(FTSBaseTest):
             n1ql_executor = self._cb_cluster
         else:
             n1ql_executor = None
-        self.run_query_and_compare(index)
+        self.run_query_and_compare(index, n1ql_executor=n1ql_executor)
 
     def test_query_type_on_alias(self):
         """
