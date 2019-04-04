@@ -1461,7 +1461,7 @@ class EventingRebalance(EventingBaseTest):
                 self.fail("Rebalance failed with wrong error message : {0}".format(str(ex)))
         else:
             self.fail("Rebalance succeeded when lifecycle operation is going on...")
-        self.wait_for_bootstrap_to_complete(name=self.function_name)
+        self.wait_for_handler_state(self.function_name, "deployed")
         # Wait for eventing to catch up with all the update mutations and verify results after rebalance
         self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         # Retry failed rebalance

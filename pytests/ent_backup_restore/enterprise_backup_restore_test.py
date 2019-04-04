@@ -3633,7 +3633,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                 self._verify_backup_events_definition(json.loads(bk_fxn))
             self.backup_restore()
             self.rest = RestConnection(self.backupset.restore_cluster_host)
-            self.wait_for_bootstrap_to_complete(body['appname'])
+            self.wait_for_handler_state(body['appname'], "deployed")
             rs_events_created = True
             self._verify_restore_events_definition(bk_fxn)
         except Exception as e:

@@ -291,7 +291,7 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
                 raise Exception("Deployment is expected to be failed but no message of failure")
         if wait_for_bootstrap:
             # wait for the function to come out of bootstrap state
-            self.wait_for_bootstrap_to_complete(body['appname'])
+            self.wait_for_handler_state(body['appname'], "deployed")
         if pause_resume and pause_resume_number > 0:
             self.pause_resume(body,pause_resume_number)
 
@@ -509,7 +509,7 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         for a in res:
             self.rest.undeploy_function(a)
         for a in res:
-            self.wait_for_undeployment(a)
+            self.wait_for_handler_state(a, "undeployed")
         self.rest.delete_all_function()
 
     def change_time_zone(self,server,timezone="UTC"):

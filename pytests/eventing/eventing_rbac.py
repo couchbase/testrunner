@@ -88,7 +88,7 @@ class EventingRBAC(EventingBaseTest):
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
         # Wait for bootstrap to complete
-        self.wait_for_bootstrap_to_complete(body['appname'])
+        self.wait_for_handler_state(body['appname'], "deployed")
         # Wait for eventing to catch up with all the update mutations and verify results
         self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         # delete all documents

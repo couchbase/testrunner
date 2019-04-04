@@ -120,7 +120,7 @@ class EventingRecovery(EventingBaseTest):
             self.resume_function(body)
         # kill eventing consumer when eventing is processing mutations
         self.kill_consumer(eventing_node)
-        self.wait_for_bootstrap_to_complete(body['appname'])
+        self.wait_for_handler_state(body['appname'], "deployed")
         # Wait for eventing to catch up with all the delete mutations and verify results
         if self.is_sbm:
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 , skip_stats_validation=True)
@@ -152,7 +152,7 @@ class EventingRecovery(EventingBaseTest):
             self.wait_for_handler_state(body['appname'], "paused")
             self.resume_function(body)
         else:
-            self.wait_for_bootstrap_to_complete(body['appname'])
+            self.wait_for_handler_state(body['appname'], "deployed")
         # Wait for eventing to catch up with all the update mutations and verify results
         if self.is_sbm:
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2, skip_stats_validation=True)
@@ -169,7 +169,7 @@ class EventingRecovery(EventingBaseTest):
             self.wait_for_handler_state(body['appname'], "paused")
             self.resume_function(body)
         else:
-            self.wait_for_bootstrap_to_complete(body['appname'])
+            self.wait_for_handler_state(body['appname'], "deployed")
         # Wait for eventing to catch up with all the delete mutations and verify results
         # See MB-30772
         if self.is_sbm:
@@ -579,7 +579,7 @@ class EventingRecovery(EventingBaseTest):
         mem_client = MemcachedClientHelper.direct_client(kv_node[0],
                                                          self.src_bucket_name)
         mem_client.start_persistence()
-        self.wait_for_bootstrap_to_complete(body['appname'])
+        self.wait_for_handler_state(body['appname'], "deployed")
         stats_src = RestConnection(self.master).get_bucket_stats(bucket=self.src_bucket_name)
         log.info(stats_src)
         self.verify_eventing_results(self.function_name, stats_src["curr_items"], skip_stats_validation=True)
@@ -619,7 +619,7 @@ class EventingRecovery(EventingBaseTest):
             self.wait_for_handler_state(body['appname'], "paused")
             self.resume_function(body)
         else:
-            self.wait_for_bootstrap_to_complete(body['appname'])
+            self.wait_for_handler_state(body['appname'], "deployed")
         stats_src = RestConnection(self.master).get_bucket_stats(bucket=self.src_bucket_name)
         log.info(stats_src)
         self.verify_eventing_results(self.function_name, stats_src["curr_items"], skip_stats_validation=True)
@@ -707,7 +707,7 @@ class EventingRecovery(EventingBaseTest):
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         # kill eventing consumer when eventing is processing mutations
         self.kill_consumer(eventing_node)
-        self.wait_for_bootstrap_to_complete(body['appname'])
+        self.wait_for_handler_state(body['appname'], "deployed")
         rebalance.result()
         if self.pause_resume:
             self.resume_function(body)
@@ -725,7 +725,7 @@ class EventingRecovery(EventingBaseTest):
             self.resume_function(body)
         # kill eventing consumer when eventing is processing mutations
         self.kill_consumer(eventing_node)
-        self.wait_for_bootstrap_to_complete(body['appname'])
+        self.wait_for_handler_state(body['appname'], "deployed")
         # Wait for eventing to catch up with all the delete mutations and verify results
         # This is required to ensure eventing works after rebalance goes through successfully
         if self.is_sbm:
@@ -773,7 +773,7 @@ class EventingRecovery(EventingBaseTest):
                 self.wait_for_handler_state(body['appname'], "paused")
                 self.resume_function(body)
             else:
-                self.wait_for_bootstrap_to_complete(body['appname'])
+                self.wait_for_handler_state(body['appname'], "deployed")
             rebalance.result()
         except Exception, ex:
             log.info("Rebalance failed as expected after eventing got killed: {0}".format(str(ex)))
@@ -806,7 +806,7 @@ class EventingRecovery(EventingBaseTest):
             self.wait_for_handler_state(body['appname'], "paused")
             self.resume_function(body)
         else:
-            self.wait_for_bootstrap_to_complete(body['appname'])
+            self.wait_for_handler_state(body['appname'], "deployed")
         # Wait for eventing to catch up with all the delete mutations and verify results
         # This is required to ensure eventing works after rebalance goes through successfully
         if self.is_sbm:

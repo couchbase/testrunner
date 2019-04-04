@@ -170,7 +170,7 @@ class EventingLifeCycle(EventingBaseTest):
         self.rest.save_function("test_import_function", body)  # we have hardcoded function name as it's imported
         log.info("Deploy the function")
         self.rest.deploy_function("test_import_function", body)  # we have hardcoded function name as it's imported
-        self.wait_for_bootstrap_to_complete("test_import_function")  # we have hardcoded function name as it's imported
+        self.wait_for_handler_state("test_import_function", "deployed") # we have hardcoded function name as it's imported
         # Wait for eventing to catch up with all the create mutations and verify results
         self.verify_eventing_results("test_import_function", self.docs_per_day * 2016)
         self.undeploy_delete_all_functions()
@@ -263,7 +263,7 @@ class EventingLifeCycle(EventingBaseTest):
             # Sometimes when we undeploy, it fails with "No JSON object could be decoded"
             pass
         self.sleep(120)
-        self.wait_for_undeployment(self.function_name)
+        self.wait_for_handler_state(body['appname'], "undeployed")
         # Check to ensure metada bucket does not have any documents after undeploy
         stats_meta = self.rest.get_bucket_stats(self.metadata_bucket_name)
         if stats_meta["curr_items"] != 0:

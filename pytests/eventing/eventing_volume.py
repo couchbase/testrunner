@@ -114,7 +114,7 @@ class EventingVolume(EventingBaseTest):
     def wait_for_all_boostrap_to_complete(self, functions):
         for function_name in functions:
             try:
-                self.wait_for_bootstrap_to_complete(function_name['appname'], iterations=40)
+                self.wait_for_handler_state(function_name['appname'], "deployed", iterations=40)
             except:
                 # Sometimes this API might not return json, its ok move on.
                 pass
