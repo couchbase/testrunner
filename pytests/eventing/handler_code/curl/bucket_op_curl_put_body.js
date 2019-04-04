@@ -1,9 +1,13 @@
 function OnUpdate(doc, meta) {
     var request = {
-	path : '$url'
+	path : 'put-detail',
+	headers: {
+    "sample-header":"test"
+    },
+    body: {"name":"vikas"}
     };
     try {
-    	var response = curl("GET", server, request);
+    	var response = curl("PUT", server, request);
     	log('response body received from server:', response.body);
     	log('response headers received from server:', response.headers);
     	log('response status received from server:', response.status);
@@ -18,12 +22,17 @@ function OnUpdate(doc, meta) {
 }
 
 
+
 function OnDelete(meta) {
     var request = {
-	path : '$url'
+	path : 'put-detail',
+	headers: {
+    "sample-header":"test"
+    },
+    body: {"name":"vikas"}
     };
     try {
-    	var response = curl("GET", server, request);
+    	var response = curl("PUT", server, request);
     	log('response body received from server:', response.body);
     	log('response headers received from server:', response.headers);
     	log('response status received from server:', response.status);

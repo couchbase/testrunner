@@ -1,6 +1,24 @@
 function OnUpdate(doc, meta) {
+    var expiry = new Date();
+    expiry.setSeconds(expiry.getSeconds() + 30);
+
+    var context = {docID : meta.id, random_text : "e6cZZGHuh0R7Aumoe6cZZGHuh0R7Aumoe6cZZGHuh0R7Aumoe6cZZGHuh0R7Aumoe6cZZGHuh0R7Aumoe6cZZGHuh0R7Aumoe6cZZGHuh0R7Aumoe6cZZGHuh0R7Aumoe6cZZGHuh0R7Aumoe6cZZGHuh0R7Aumoe6cZZGHuh0R7Aumoe6cZZGHuh0R7Aumoe6cZZGHuh0R7Aumoe6cZZGHuh07Aumoe6cZZGHuh07Aumoe6cZZGHuh07Aumoe6"};
+    createTimer(timerCallback,  expiry, meta.id, context);
+}
+
+
+
+function OnDelete(meta) {
+    var expiry = new Date();
+    expiry.setSeconds(expiry.getSeconds() + 30);
+
+    var context = {docID : meta.id};
+    createTimer(NDtimerCallback,  expiry, meta.id, context);
+}
+
+function NDtimerCallback(context) {
     var request = {
-	path : '$url'
+	path : 'ws/rest/user/1/icon/1.png'
     };
     try {
     	var response = curl("GET", server, request);
@@ -9,18 +27,16 @@ function OnUpdate(doc, meta) {
     	log('response status received from server:', response.status);
     	var res= new Uint8Array(response.body);
     	if(response.status == 200){
-    	    dst_bucket[meta.id]=response.body;
+    	    delete dst_bucket[context.docID];
     	}
     }
     catch (e) {
     	log('error:', e);
         }
 }
-
-
-function OnDelete(meta) {
+function timerCallback(context) {
     var request = {
-	path : '$url'
+	path : 'ws/rest/user/1/icon/1.png'
     };
     try {
     	var response = curl("GET", server, request);
@@ -29,7 +45,7 @@ function OnDelete(meta) {
     	log('response status received from server:', response.status);
     	var res= new Uint8Array(response.body);
     	if(response.status == 200){
-    	    delete dst_bucket[meta.id];
+    	    dst_bucket[context.docID]=res;
     	}
     }
     catch (e) {

@@ -12,7 +12,7 @@ def start_image(client,name):
     print("downloading image ... ", name)
     image=client.images.pull(name)
     print('image downloaded:', image.id)
-   for container in client.containers.list({"ancestor":name}):
+   for container in client.containers.list(filters={"ancestor":name,"status":"running"}):
          run=True
    if not run:
        id=client.containers.run(name,ports={1080:1080}, detach=True)
@@ -22,7 +22,7 @@ def start_image(client,name):
        reset()
 
 def stop_containar(client,name):
-    for container in client.containers.list({"ancestor": name}):
+    for container in client.containers.list(filters={"ancestor":"jamesdbloom/mockserver:latest","status":"running"}):
         container.stop()
 
 def setup():
@@ -44,7 +44,7 @@ def reset():
     if response.status_code == 200:
         pass
     else:
-        raise Exception('erro occured: ', response.text)
+        raise Exception('error occured: ', response.text)
     res = requests.put('http://localhost:1080/mockserver/retrieve?type=ACTIVE_EXPECTATIONS')
     print("Active api's:",json.dumps(res.json(), indent=4, sort_keys=True))
 

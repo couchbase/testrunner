@@ -9,9 +9,9 @@ import datetime
 
 log = logging.getLogger()
 
-class EventingCurlHttps(EventingBaseTest):
+class EventingCurl(EventingBaseTest):
         def setUp(self):
-            super(EventingCurlHttps, self).setUp()
+            super(EventingCurl, self).setUp()
             self.rest.set_service_memoryQuota(service='memoryQuota', memoryQuota=700)
             if self.create_functions_buckets:
                 self.replicas = self.input.param("replicas", 0)
@@ -34,20 +34,17 @@ class EventingCurlHttps(EventingBaseTest):
                 self.buckets = RestConnection(self.master).get_buckets()
             self.gens_load = self.generate_docs(self.docs_per_day)
             self.expiry = 3
-            handler_code = self.input.param('handler_code', 'bucket_op_curl')
-            self.hostname= self.input.param('host', 'https://postman-echo.com/')
+            self.handler_code = self.input.param('handler_code', 'bucket_op_curl')
             self.curl_username= self.input.param('curl_user',None)
             self.curl_password= self.input.param('curl_password',None)
             self.auth_type= self.input.param('auth_type','no-auth')
             self.url= self.input.param('path',None)
-            if handler_code == 'bucket_op_curl':
+            if self.handler_code == 'bucket_op_curl':
                 self.handler_code = HANDLER_CODE_CURL.BUCKET_OP_WITH_CURL
-            else:
-                self.handler_code = HANDLER_CODE.BUCKET_OP_WITH_RAND
 
         def tearDown(self):
             self.delete_temp_handler_code()
-            super(EventingCurlHttps, self).tearDown()
+            super(EventingCurl, self).tearDown()
 
         def test_curl_get(self):
             self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
@@ -84,3 +81,34 @@ class EventingCurlHttps(EventingBaseTest):
             fileList = os.listdir(dirPath)
             for fileName in fileList:
                 os.remove(dirPath + "/" + fileName)
+
+        def test_bearer_auth(self):
+            self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                      batch_size=self.batch_size)
+            body = self.create_save_function_body(self.function_name, HANDLER_CODE_CURL.BUCKET_OP_WITH_CURL_BEARER, worker_count=3)
+            body['depcfg']['curl'] = []
+            body['depcfg']['curl'].append({"hostname": self.hostname, "value": "server", "auth_type": "bearer",
+                                           "username": self.curl_username, "password": self.curl_password,
+                                           "bearer_key": "couchbase", "cookies": "disallow"})
+            self.deploy_function(body)
+            # Wait for eventing to catch up with all the create mutations and verify results
+            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016)
+            self.undeploy_and_delete_function(body)
+
+        def test_curl_with_different_handlers(self):
+            self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                      batch_size=self.batch_size)
+            body = self.create_save_function_body(self.function_name, self.handler_code,
+                                                  worker_count=3)
+            body['depcfg']['curl'] = []
+            body['depcfg']['curl'].append(
+                {"hostname": self.hostname, "value": "server", "auth_type": self.auth_type, "username": self.curl_username,
+                 "password": self.curl_password, "bearer_key": self.bearer_key, "cookies": self.cookies})
+            self.deploy_function(body)
+            # Wait for eventing to catch up with all the create mutations and verify results
+            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016,skip_stats_validation=True)
+            # delete json documents
+            self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                      batch_size=self.batch_size, op_type='delete')
+            self.verify_eventing_results(self.function_name, 0,skip_stats_validation=True)
+            self.undeploy_and_delete_function(body)

@@ -1,6 +1,6 @@
 function OnUpdate(doc, meta) {
     var request = {
-	path : '$url'
+	path : 'bearer-auth'
     };
     try {
     	var response = curl("GET", server, request);
@@ -18,9 +18,13 @@ function OnUpdate(doc, meta) {
 }
 
 
+
 function OnDelete(meta) {
     var request = {
-	path : '$url'
+	path : 'bearer-auth',
+	headers: {
+    "sample-header": "test"
+    }
     };
     try {
     	var response = curl("GET", server, request);

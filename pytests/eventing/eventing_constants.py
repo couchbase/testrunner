@@ -63,6 +63,8 @@ class HANDLER_CODE_CURL:
     TIMER_OP_WITH_CURL_POST = 'handler_code/curl/timer_op_curl_post.js'
     TIMER_OP_WITH_CURL_PUT = 'handler_code/curl/timer_op_curl_put.js'
     TIMER_OP_WITH_CURL_DELETE = 'handler_code/curl/timer_op_curl_delete.js'
+    BUCKET_OP_WITH_CURL_BEARER = 'handler_code/curl/bucket_op_curl_bearer.js'
+    BUCKET_OP_WITH_CURL_COOKIE = 'handler_code/curl/bucket_op_curl_get_cookies.js'
 
 
 class HANDLER_CODE_ERROR:

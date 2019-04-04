@@ -71,10 +71,12 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         self.auth_type = self.input.param('auth_type', 'no-auth')
         self.url = self.input.param('path', None)
         self.cookies = self.input.param('cookies','disallow')
+        self.bearer_key = self.input.param('bearer_key','')
         if self.hostname=='local':
             host = socket.gethostname()
             ip = socket.gethostbyname(host)
             self.hostname= "http://"+ip+":1080/"
+            self.log.info("local ip address:{}".format(self.hostname))
             self.setup_curl()
 
     def tearDown(self):
@@ -277,7 +279,7 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         body['settings']['deployment_status'] = True
         body['settings']['processing_status'] = True
         if self.print_eventing_handler_code_in_logs:
-            log.info("Deploying the following handler code : {0}".format(body['appname']))
+            log.info("Deploying the following handler code : {0} with {1}".format(body['appname'],body['depcfg']))
             log.info("\n{0}".format(body['appcode']))
         content1 = self.rest.create_function(body['appname'], body)
         log.info("deploy Application : {0}".format(content1))
@@ -609,7 +611,7 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
     def setup_curl(self,):
         o=os.system('python scripts/curl_setup.py start')
         self.log.info("=== started docker container =======".format(o))
-        self.sleep(30)
+        self.sleep(10)
         o=os.system('python scripts/curl_setup.py setup')
         self.log.info("=== setup done =======")
         self.log.info(o)
