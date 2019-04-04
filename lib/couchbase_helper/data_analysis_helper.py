@@ -412,7 +412,9 @@ class DataAnalyzer(object):
 class DataCollector(object):
     """ Helper Class to collect stats and data from clusters """
 
-    def collect_data(self,servers,buckets,userId="Administrator",password="password", data_path = None, perNode = True, getReplica = False, mode = "memory"):
+    def collect_data(self, servers, buckets, userId="Administrator", password="password",
+                                             data_path = None, perNode = True,
+                                             getReplica = False, mode = "memory"):
         """
             Method to extract all data information from memory or disk using cbtransfer
             The output is organized like { bucket :{ node { document-key : list of values }}}
@@ -444,10 +446,21 @@ class DataCollector(object):
             headerInfo = []
             bucketMap = {}
             if  server.ip == "127.0.0.1":
-                headerInfo,bucketMap = self.get_local_data_map_using_cbtransfer(server,buckets, data_path=data_path, userId=userId,password=password, getReplica = getReplica, mode = mode)
+                headerInfo,bucketMap = self.get_local_data_map_using_cbtransfer(server,
+                                                      buckets,
+                                                      data_path=data_path,
+                                                      userId=userId,
+                                                      password=password,
+                                                      getReplica = getReplica,
+                                                      mode = mode)
             else:
                 remote_client = RemoteMachineShellConnection(server)
-                headerInfo,bucketMap = remote_client.get_data_map_using_cbtransfer(buckets, data_path=data_path, userId=userId,password=password, getReplica = getReplica, mode = mode)
+                headerInfo,bucketMap = remote_client.get_data_map_using_cbtransfer(buckets,
+                                                         data_path=data_path,
+                                                         userId=userId,
+                                                         password=password,
+                                                         getReplica = getReplica,
+                                                         mode = mode)
                 remote_client.disconnect()
             for bucket in bucketMap.keys():
                 newMap = self.translateDataFromCSVToMap(0,bucketMap[bucket])
@@ -457,7 +470,10 @@ class DataCollector(object):
                     completeMap[bucket].update(newMap)
         return headerInfo,completeMap
 
-    def collect_vbucket_stats(self,buckets,servers,collect_vbucket = True,collect_vbucket_seqno = True,collect_vbucket_details = True,perNode = True):
+    def collect_vbucket_stats(self, buckets, servers, collect_vbucket = True,
+                                                      collect_vbucket_seqno = True,
+                                                      collect_vbucket_details = True,
+                                                      perNode = True):
         """
             Method to extract the vbuckets stats given by cbstats tool
 
@@ -475,10 +491,12 @@ class DataCollector(object):
             The output can be in two formats
 
             if we are doing per node data collection
-            Vbucket Information :: {bucket { node : [vbucket_seqno {key:value} U vbucket_details {key:value} U vbucket {key:value}]}}
+            Vbucket Information :: {bucket { node : [vbucket_seqno {key:value}
+                         U vbucket_details {key:value} U vbucket {key:value}]}}
 
             if we are not doing per node data collection
-            Vbucket Information :: {bucket : [vbucket_seqno {key:value} U vbucket_details {key:value} U vbucket {key:value}]}
+            Vbucket Information :: {bucket : [vbucket_seqno {key:value}
+                          U vbucket_details {key:value} U vbucket {key:value}]}
         """
         bucketMap = {}
         vbucket = []
@@ -592,7 +610,9 @@ class DataCollector(object):
             replica_bucketMap[bucket.name] = replica_map_data
         return active_bucketMap,replica_bucketMap
 
-    def collect_compare_dcp_stats(self,buckets,servers,perNode = True, stat_name = 'unacked_bytes', compare_value = 0,  flow_control_buffer_size = 20971520, filter_list = []):
+    def collect_compare_dcp_stats(self, buckets, servers, perNode = True,
+                                  stat_name = 'unacked_bytes', compare_value = 0,
+                                  flow_control_buffer_size = 20971520, filter_list = []):
         """
             Method to extract the failovers stats given by cbstats tool
 
@@ -634,7 +654,8 @@ class DataCollector(object):
                                     bucketMap[bucket] = False
         return bucketMap
 
-    def collect_dcp_stats(self, buckets, servers, stat_names = [], extra_key_condition = "replication"):
+    def collect_dcp_stats(self, buckets, servers, stat_names = [],
+                                extra_key_condition = "replication"):
         """
             Method to extract the failovers stats given by cbstats tool
 
@@ -708,7 +729,9 @@ class DataCollector(object):
                 bucketMap[values[index]] = value
         return bucketMap
 
-    def get_local_data_map_using_cbtransfer(self, server, buckets, data_path=None, userId="Administrator", password="password", getReplica=False, mode = "memory"):
+    def get_local_data_map_using_cbtransfer(self, server, buckets, data_path=None,
+                                                  userId="Administrator", password="password",
+                                                  getReplica=False, mode = "memory"):
         """ Get Local CSV information :: method used when running simple tests only """
         temp_path = "/tmp/"
         replicaOption = ""
@@ -728,9 +751,11 @@ class DataCollector(object):
         # Iterate per bucket and generate maps
         for bucket in buckets:
             if data_path == None:
-                options = " -b " + bucket.name + " -u " + userId + " -p " + password + " --single-node"
+                options = " -b " + bucket.name + " -u " + userId + " -p " + password + \
+                                                                   " --single-node"
             else:
-                options = " -b " + bucket.name + " -u " + userId + " -p " + password + " " + replicaOption
+                options = " -b " + bucket.name + " -u " + userId + " -p " + password + \
+                                                                   " " + replicaOption
             suffix = "_" + bucket.name + "_N%2FA.csv"
             if mode == "memory" or mode == "backup":
                suffix = "_" + bucket.name + "_" + self.ip + "%3A"+server.port+".csv"
@@ -738,7 +763,8 @@ class DataCollector(object):
             csv_path = temp_path + fileName
             dest_path = temp_path+"/"+genFileName
             destination = "csv:" + csv_path
-            bin_path=os.path.abspath(os.path.join(os.getcwd(), os.pardir))+"/install/bin/cbtransfer"
+            bin_path=os.path.abspath(os.path.join(os.getcwd(), os.pardir))+ \
+                                                   "/install/bin/cbtransfer"
             command = "{0} {1} {2} {3}".format(bin_path,source,destination,options)
             os.system(command)
             file_existed = os.path.isfile(dest_path)
