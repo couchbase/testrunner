@@ -2,7 +2,7 @@ import json
 import logging
 import random
 import datetime
-import os
+import os,sys
 import socket
 
 from TestInput import TestInputSingleton
@@ -73,12 +73,18 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         self.cookies = self.input.param('cookies','disallow')
         self.bearer_key = self.input.param('bearer_key','')
         if self.hostname=='local':
-            try:
-                import docker
-            except ImportError, e:
-                os.system("python scripts/install_docker.py")
-            host = socket.gethostname()
-            ip = socket.gethostbyname(host)
+            if not 'docker' in sys.modules:
+                o=os.system("python scripts/install_docker.py")
+                self.log.info("docker installation done: {}".format(o))
+                self.sleep(30)
+                if 'docker' in sys.modules:
+                    self.log.info("docker installation done")
+                else:
+                    raise Exception("docker installation fails with {}".format(o))
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            ip = s.getsockname()[0]
+            s.close()
             self.hostname= "http://"+ip+":1080/"
             self.log.info("local ip address:{}".format(self.hostname))
             self.setup_curl()
