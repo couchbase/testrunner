@@ -73,13 +73,15 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         self.cookies = self.input.param('cookies','disallow')
         self.bearer_key = self.input.param('bearer_key','')
         if self.hostname=='local':
-            if not 'docker' in sys.modules:
+            try:
+                import docker
+            except ImportError, e:
                 o=os.system("python scripts/install_docker.py")
                 self.log.info("docker installation done: {}".format(o))
                 self.sleep(30)
-                if 'docker' in sys.modules:
-                    self.log.info("docker installation done")
-                else:
+                try:
+                    import docker
+                except ImportError, e:
                     raise Exception("docker installation fails with {}".format(o))
             s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             s.connect(("8.8.8.8", 80))
