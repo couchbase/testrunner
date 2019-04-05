@@ -1584,7 +1584,11 @@ class StableTopFTS(FTSBaseTest):
         """
         geo_index = self.create_geo_index_and_load()
         self.generate_random_geo_queries(geo_index, self.num_queries)
-        self.run_query_and_compare(geo_index)
+        if self.run_via_n1ql:
+            n1ql_executor = self._cb_cluster
+        else:
+            n1ql_executor = None
+        self.run_query_and_compare(geo_index, n1ql_executor=n1ql_executor)
 
 
     def test_sort_geo_query(self):
