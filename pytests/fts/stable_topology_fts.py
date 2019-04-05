@@ -534,7 +534,12 @@ class StableTopFTS(FTSBaseTest):
                 self.sleep(60, "Waiting for updates to get indexed...")
             self.wait_for_indexing_complete()
         self.generate_random_queries(index, self.num_queries, self.query_types)
-        self.run_query_and_compare(index)
+        if self.run_via_n1ql:
+            n1ql_executor = self._cb_cluster
+        else:
+            n1ql_executor = None
+
+        self.run_query_and_compare(index, n1ql_executor=n1ql_executor)
 
     def test_query_string_combinations(self):
         """
