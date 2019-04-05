@@ -57,7 +57,7 @@ class EventingCurl(EventingBaseTest):
                                            "bearer_key":"","cookies":"disallow"})
             self.deploy_function(body)
             # Wait for eventing to catch up with all the create mutations and verify results
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016)
+            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016,skip_stats_validation=True)
             self.undeploy_and_delete_function(body)
 
         def get_handler_code(self,handler_code,url):

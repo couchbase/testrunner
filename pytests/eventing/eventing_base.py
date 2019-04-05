@@ -73,6 +73,10 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         self.cookies = self.input.param('cookies','disallow')
         self.bearer_key = self.input.param('bearer_key','')
         if self.hostname=='local':
+            try:
+                import docker
+            except ImportError, e:
+                os.system("python scripts/install_docker.py")
             host = socket.gethostname()
             ip = socket.gethostbyname(host)
             self.hostname= "http://"+ip+":1080/"
