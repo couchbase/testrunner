@@ -73,16 +73,7 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         self.cookies = self.input.param('cookies','disallow')
         self.bearer_key = self.input.param('bearer_key','')
         if self.hostname=='local':
-            try:
-                import docker
-            except ImportError, e:
-                o=os.system("python scripts/install_docker.py")
-                self.log.info("docker installation done: {}".format(o))
-                self.sleep(30)
-                try:
-                    import docker
-                except ImportError, e:
-                    raise Exception("docker installation fails with {}".format(o))
+            self.insall_dependencies()
             s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             s.connect(("8.8.8.8", 80))
             ip = s.getsockname()[0]
@@ -631,3 +622,15 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
     def teardown_curl(self):
         o = os.system('python scripts/curl_setup.py stop')
         self.log.info("=== stopping docker container =======")
+
+    def insall_dependencies(self):
+        try:
+            import docker
+        except ImportError, e:
+            o = os.system("python scripts/install_docker.py docker")
+            self.log.info("docker installation done: {}".format(o))
+            self.sleep(30)
+            try:
+                import docker
+            except ImportError, e:
+                raise Exception("docker installation fails with {}".format(o))

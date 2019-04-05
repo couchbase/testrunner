@@ -1,3 +1,5 @@
+import sys
+
 try:
     from pip import main as pipmain
 except:
@@ -8,4 +10,5 @@ def install(package):
 
 # Example
 if __name__ == '__main__':
-    install('docker')
+    dep = sys.argv[1]
+    install(dep)

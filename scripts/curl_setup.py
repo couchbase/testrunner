@@ -1,4 +1,4 @@
-import sys,json
+import sys,json,os
 
 import docker
 import requests
@@ -47,6 +47,7 @@ def reset():
         raise Exception('error occured: ', response.text)
     res = requests.put('http://localhost:1080/mockserver/retrieve?type=ACTIVE_EXPECTATIONS')
     print("Active api's:",json.dumps(res.json(), indent=4, sort_keys=True))
+
 
 if __name__ == "__main__":
    client = docker.from_env()
