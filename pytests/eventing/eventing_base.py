@@ -547,7 +547,9 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
                      "============================================================================================="
                      "\n\n".format(eventing_node.ip, out))
 
-    def verify_source_bucket_mutation(self,doc_count,deletes=False,timeout=600):
+    def verify_source_bucket_mutation(self,doc_count,deletes=False,timeout=600,bucket=None):
+        if bucket == None:
+            bucket=self.src_bucket_name
         # query = "create primary index on {}".format(self.src_bucket_name)
         # self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_node)
         num_nodes = self.refresh_rest_server()
@@ -557,9 +559,9 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         while count <= 20 and doc_count != result:
             self.sleep(timeout / 20, message="Waiting for eventing to process all dcp mutations...")
             if deletes:
-                    query="select raw(count(*)) from {} where doc_deleted = 1".format(self.src_bucket_name)
+                    query="select raw(count(*)) from {} where doc_deleted = 1".format(bucket)
             else:
-                query="select raw(count(*)) from {} where updated_field = 1".format(self.src_bucket_name)
+                query="select raw(count(*)) from {} where updated_field = 1".format(bucket)
             result_set=self.n1ql_helper.run_cbq_query(query=query,server=self.n1ql_node)
             result=result_set["results"][0]
             if deletes:

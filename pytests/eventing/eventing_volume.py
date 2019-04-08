@@ -75,6 +75,8 @@ class EventingVolume(EventingBaseTest):
         # Load data on source bucket
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
+        self.load(self.gens_load, buckets=self.sbm_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
         # Deploy all the functions
         functions = self.deploy_all_the_functions()
         # Wait for bootstrap to complete for all the functions
@@ -84,6 +86,8 @@ class EventingVolume(EventingBaseTest):
                                                       timeout=3600)
         # Load data on source bucket
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size, op_type='delete')
+        self.load(self.gens_load, buckets=self.sbm_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size, op_type='delete')
         # Validate the results of all the functions deployed
         self.verify_eventing_results_of_all_functions(docs_expected=0, verify_results=True,
@@ -123,15 +127,18 @@ class EventingVolume(EventingBaseTest):
         body4['depcfg']['curl'].append(
             {"hostname": self.hostname, "value": "server", "auth_type": self.auth_type, "username": self.curl_username,
              "password": self.curl_password, "cookies": self.cookies})
+        del body4['depcfg']['buckets'][0]
+        body4['depcfg']['buckets'].append(
+            {"alias": self.dst_bucket_name, "bucket_name": self.dst_bucket_name3, "access": "rw"})
         self.deploy_function(body4, wait_for_bootstrap=False)
-        self.is_sbm = True
-        self.src_bucket_name=self.sbm_bucket
         body5 = self.create_save_function_body(self.function_name + "_SBM",
                                                HANDLER_CODE.BUCKET_OP_SOURCE_DOC_MUTATION,
                                                worker_count=self.worker_count,
                                                cpp_worker_thread_count=self.cpp_worker_thread_count)
+        del body5['depcfg']['buckets'][0]
+        body5['depcfg']['buckets'].append(
+            {"alias": self.src_bucket_name, "bucket_name": self.sbm_bucket, "access": "rw"})
         self.deploy_function(body5, wait_for_bootstrap=False)
-        self.is_sbm = False
         body = [body1, body2, body3, body4, body5]
         return body
 
@@ -154,9 +161,9 @@ class EventingVolume(EventingBaseTest):
             self.verify_eventing_results(self.function_name, docs_expected, skip_stats_validation=True,
                                          bucket=self.dst_bucket_name3, timeout=timeout)
             if docs_expected == 0:
-                self.verify_source_bucket_mutation(docs_expected, timeout=timeout)
+                self.verify_source_bucket_mutation(docs_expected,deletes=True,timeout=timeout,bucket=self.sbm_bucket)
             else:
-                self.verify_source_bucket_mutation(docs_expected * 2, timeout=timeout)
+                self.verify_source_bucket_mutation(docs_expected,timeout=timeout,bucket=self.sbm_bucket)
         else:
             # Just print the stats after sleeping for 10 mins. Required to get the latest stats.
             self.sleep(timeout)
