@@ -33,6 +33,8 @@ class EventingVolume(EventingBaseTest):
                                                             replicas=self.num_replicas)
             self.cluster.create_standard_bucket(name=self.src_bucket_name, port=STANDARD_BUCKET_PORT + 1,
                                                 bucket_params=bucket_params)
+            self.cluster.create_standard_bucket(name=self.sbm_bucket, port=STANDARD_BUCKET_PORT + 1,
+                                                bucket_params=bucket_params)
             self.src_bucket = RestConnection(self.master).get_buckets()
             self.cluster.create_standard_bucket(name=self.dst_bucket_name, port=STANDARD_BUCKET_PORT + 1,
                                                 bucket_params=bucket_params)
@@ -41,8 +43,6 @@ class EventingVolume(EventingBaseTest):
             self.cluster.create_standard_bucket(name=self.dst_bucket_name2, port=STANDARD_BUCKET_PORT + 1,
                                                 bucket_params=bucket_params)
             self.cluster.create_standard_bucket(name=self.dst_bucket_name3, port=STANDARD_BUCKET_PORT + 1,
-                                                bucket_params=bucket_params)
-            self.cluster.create_standard_bucket(name=self.sbm_bucket, port=STANDARD_BUCKET_PORT + 1,
                                                 bucket_params=bucket_params)
             self.cluster.create_standard_bucket(name=self.metadata_bucket_name, port=STANDARD_BUCKET_PORT + 1,
                                                 bucket_params=bucket_params_meta)
@@ -75,8 +75,6 @@ class EventingVolume(EventingBaseTest):
         # Load data on source bucket
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
-        self.load(self.gens_load, buckets=self.sbm_bucket, flag=self.item_flag, verify_data=False,
-                  batch_size=self.batch_size)
         # Deploy all the functions
         functions = self.deploy_all_the_functions()
         # Wait for bootstrap to complete for all the functions
@@ -86,8 +84,6 @@ class EventingVolume(EventingBaseTest):
                                                       timeout=3600)
         # Load data on source bucket
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                  batch_size=self.batch_size, op_type='delete')
-        self.load(self.gens_load, buckets=self.sbm_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size, op_type='delete')
         # Validate the results of all the functions deployed
         self.verify_eventing_results_of_all_functions(docs_expected=0, verify_results=True,
