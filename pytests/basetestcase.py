@@ -1297,13 +1297,24 @@ class BaseTestCase(unittest.TestCase):
     def _kill_nodes(self, nodes, servers, bucket_name):
         self.reboot = self.input.param("reboot", False)
         if not self.reboot:
-            for node in nodes:
+            for node, server in zip(nodes, servers):
                 _node = {"ip": node.ip, "port": node.port, "username": self.servers[0].rest_username,
                          "password": self.servers[0].rest_password}
                 node_rest = RestConnection(_node)
                 _mc = MemcachedClientHelper.direct_client(_node, bucket_name)
                 self.log.info("restarted the node %s:%s" % (node.ip, node.port))
-                pid = _mc.stats()["pid"]
+                pid = None
+                try:
+                    pid = _mc.stats()["pid"]
+                    break
+                except (EOFError, KeyError) as e:
+                    if pid is None:
+                        # sometimes pid is not returned by mc.stats()
+                        shell = RemoteMachineShellConnection(server)
+                        pid = shell.get_memcache_pid()
+                        shell.disconnect()
+                        if pid is None:
+                            self.fail("impossible to get a PID")
                 command = "os:cmd(\"kill -9 {0} \")".format(pid)
                 self.log.info(command)
                 killed = node_rest.diag_eval(command)
