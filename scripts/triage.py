@@ -166,8 +166,7 @@ def triage(os, build, component, username, password, job_list, format, ignore_li
             for case in test_cases:
                 if case['status'] == 'FAILED':
                     case_data = dict()
-
-                    case_attrs = str(case['name']).split(",")
+                    case_attrs = str(case['name'].encode('utf-8')).split(",")
                     case_name = str(case_attrs[0])
 
                     case_conf_file = ''
