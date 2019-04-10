@@ -32,6 +32,7 @@ from TestInput import TestInputServer, TestInputSingleton
 from testconstants import MIN_KV_QUOTA, INDEX_QUOTA, FTS_QUOTA, COUCHBASE_FROM_4DOT6, THROUGHPUT_CONCURRENCY, ALLOW_HTP, CBAS_QUOTA, COUCHBASE_FROM_VERSION_4
 from multiprocessing import Process, Manager, Semaphore
 import memcacheConstants
+from membase.api.exception import CBQError
 
 
 try:
@@ -1336,6 +1337,7 @@ class ESRunQueryCompare(Task):
 
     def execute(self, task_manager):
         self.es_compare = True
+        should_verify_n1ql = True
         try:
             self.log.info("---------------------------------------"
                           "-------------- Query # %s -------------"
@@ -1371,6 +1373,7 @@ class ESRunQueryCompare(Task):
             except ServerUnavailableException:
                 self.log.error("ERROR: FTS Query timed out (client timeout=70s)!")
                 self.passed = False
+            es_hits = 0
             if self.es and self.es_query:
                 es_hits, es_doc_ids, es_time = self.run_es_query(self.es_query)
                 self.log.info("ES hits for query: %s on %s is %s (took %sms)" % \
@@ -1399,42 +1402,53 @@ class ESRunQueryCompare(Task):
                                   % (len(es_but_not_fts), es_but_not_fts[:50])
                         self.log.error(msg)
                         self.passed = False
-            if self.n1ql_executor:
-                n1ql_query = "select meta().id from default where search(default, " + str(
+
+            if not self.es:
+                should_verify_n1ql = True
+            else:
+                if fts_hits <= 0 and es_hits==0:
+                    should_verify_n1ql = False
+
+            if self.n1ql_executor and should_verify_n1ql:
+                n1ql_query = "select meta().id from default where type='emp' and search(default, " + str(
                     json.dumps(self.fts_query)) + ")"
                 n1ql_result = self.n1ql_executor.run_n1ql_query(query=n1ql_query)
-                n1ql_hits = n1ql_result['metrics']['resultCount']
-                n1ql_doc_ids = []
-                for res in n1ql_result['results']:
-                    n1ql_doc_ids.append(res['id'])
-                n1ql_time = n1ql_result['metrics']['elapsedTime']
-                n1ql_status = n1ql_result['status']
+                if n1ql_result['status'] == 'success':
+                    n1ql_hits = n1ql_result['metrics']['resultCount']
+                    n1ql_doc_ids = []
+                    for res in n1ql_result['results']:
+                        n1ql_doc_ids.append(res['id'])
+                    n1ql_time = n1ql_result['metrics']['elapsedTime']
 
-                self.log.info("N1QL hits for query: %s is %s (took %s)" % \
-                              (json.dumps(n1ql_query,  ensure_ascii=False),
-                               n1ql_hits,
-                               n1ql_time))
-                if self.passed:
-                    if int(n1ql_hits) != int(fts_hits):
-                        msg = "FAIL: FTS hits: %s, while N1QL hits: %s"\
-                              % (fts_hits, n1ql_hits)
-                        self.log.error(msg)
-                    n1ql_but_not_fts = list(set(n1ql_doc_ids) - set(fts_doc_ids))
-                    fts_but_not_n1ql = list(set(fts_doc_ids) - set(n1ql_doc_ids))
-                    if not (n1ql_but_not_fts or fts_but_not_n1ql):
-                        self.log.info("SUCCESS: Docs returned by FTS = docs"
-                                      " returned by N1QL, doc_ids verified")
-                    else:
-                        if fts_but_not_n1ql:
-                            msg = "FAIL: Following %s doc(s) were not returned" \
-                                  " by N1QL,but FTS, printing 50: %s" \
-                                  % (len(fts_but_not_n1ql), fts_but_not_n1ql[:50])
+                    self.log.info("N1QL hits for query: %s is %s (took %s)" % \
+                                  (json.dumps(n1ql_query,  ensure_ascii=False),
+                                   n1ql_hits,
+                                   n1ql_time))
+                    if self.passed:
+                        if int(n1ql_hits) != int(fts_hits):
+                            msg = "FAIL: FTS hits: %s, while N1QL hits: %s"\
+                                  % (fts_hits, n1ql_hits)
+                            self.log.error(msg)
+                        n1ql_but_not_fts = list(set(n1ql_doc_ids) - set(fts_doc_ids))
+                        fts_but_not_n1ql = list(set(fts_doc_ids) - set(n1ql_doc_ids))
+                        if not (n1ql_but_not_fts or fts_but_not_n1ql):
+                            self.log.info("SUCCESS: Docs returned by FTS = docs"
+                                          " returned by N1QL, doc_ids verified")
                         else:
-                            msg = "FAIL: Following %s docs were not returned" \
-                                  " by FTS, but N1QL, printing 50: %s" \
-                                  % (len(n1ql_but_not_fts), n1ql_but_not_fts[:50])
-                        self.log.error(msg)
-                        self.passed = False
+                            if fts_but_not_n1ql:
+                                msg = "FAIL: Following %s doc(s) were not returned" \
+                                          " by N1QL,but FTS, printing 50: %s" \
+                                        % (len(fts_but_not_n1ql), fts_but_not_n1ql[:50])
+                            else:
+                                msg = "FAIL: Following %s docs were not returned" \
+                                          " by FTS, but N1QL, printing 50: %s" \
+                                        % (len(n1ql_but_not_fts), n1ql_but_not_fts[:50])
+                            self.log.error(msg)
+                            self.passed = False
+                else:
+                    self.passed = False
+                    self.log.info("Skipping N1QL result validation.")
+                    self.log.error(n1ql_result["errors"][0]['msg'])
             self.state = CHECKING
             task_manager.schedule(self)
         except Exception as e:

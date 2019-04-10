@@ -1179,6 +1179,7 @@ class FTSIndex:
         try:
             hits, matches, time_taken, status, facets = \
                 self.__cluster.run_fts_query_with_facets(self.name, query_dict)
+
         except ServerUnavailableException:
             # query time outs
             raise ServerUnavailableException
@@ -4090,8 +4091,6 @@ class FTSBaseTest(unittest.TestCase):
         load_tasks = self.async_load_data()
         for task in load_tasks:
             task.result()
-        if self.run_via_n1ql:
-            self._cb_cluster.run_n1ql_query("create primary index on default")
         self.log.info("Loading phase complete!")
 
     def async_load_data(self):
