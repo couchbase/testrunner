@@ -132,6 +132,8 @@ class REPL_PARAM:
     MAX_REPLICATION_LAG = "maxExpectedReplicationLag"
     TIMEOUT_PERC = "timeoutPercentageCap"
     PAUSE_REQUESTED = "pauseRequested"
+    PRIORITY = "priority"
+    DESIRED_LATENCY = "desiredLatency"
 
 
 class TEST_XDCR_PARAM:
@@ -146,6 +148,8 @@ class TEST_XDCR_PARAM:
     LOG_LEVEL = "log_level"
     MAX_REPLICATION_LAG = "max_replication_lag"
     TIMEOUT_PERC = "timeout_percentage"
+    PRIORITY = "priority"
+    DESIRED_LATENCY = "desired_latency"
 
     @staticmethod
     def get_test_to_create_repl_param_map():
@@ -160,7 +164,10 @@ class TEST_XDCR_PARAM:
             TEST_XDCR_PARAM.BATCH_SIZE: REPL_PARAM.BATCH_SIZE,
             TEST_XDCR_PARAM.MAX_REPLICATION_LAG: REPL_PARAM.MAX_REPLICATION_LAG,
             TEST_XDCR_PARAM.TIMEOUT_PERC: REPL_PARAM.TIMEOUT_PERC,
-            TEST_XDCR_PARAM.LOG_LEVEL: REPL_PARAM.LOG_LEVEL
+            TEST_XDCR_PARAM.LOG_LEVEL: REPL_PARAM.LOG_LEVEL,
+            TEST_XDCR_PARAM.PRIORITY: REPL_PARAM.PRIORITY,
+            TEST_XDCR_PARAM.DESIRED_LATENCY: REPL_PARAM.DESIRED_LATENCY
+
         }
 
 
@@ -177,6 +184,8 @@ class XDCR_PARAM:
     XDCR_LOG_LEVEL = "xdcrLogLevel"
     XDCR_MAX_REPLICATION_LAG = "xdcrMaxExpectedReplicationLag"
     XDCR_TIMEOUT_PERC = "xdcrTimeoutPercentageCap"
+    XDCR_PRIORITY = "xdcrPriority"
+    XDCR_DESIRED_LATENCY = "xdcrDesiredLatency"
 
 
 class CHECK_AUDIT_EVENT:

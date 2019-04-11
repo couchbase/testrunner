@@ -4241,7 +4241,8 @@ class RemoteMachineShellConnection:
 
     def execute_cbstats(self, bucket, command, keyname="", vbid=0,
                                       cbadmin_user="cbadminbucket",
-                                      cbadmin_password="password"):
+                                      cbadmin_password="password",
+                                      print_results=False):
         cbstat_command = "%scbstats" % (LINUX_COUCHBASE_BIN_PATH)
         if self.nonroot:
             cbstat_command = "/home/%s%scbstats" % (self.username,
@@ -4267,7 +4268,8 @@ class RemoteMachineShellConnection:
 
 
         output, error = self.execute_command(command)
-        self.log_command_output(output, error)
+        if print_results:
+            self.log_command_output(output, error)
         return output, error
 
     def couchbase_cli(self, subcommand, cluster_host, options):
