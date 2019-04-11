@@ -5,7 +5,7 @@ import re
 
 from lib.membase.api.rest_client import RestConnection
 from lib.testconstants import STANDARD_BUCKET_PORT
-from pytests.eventing.eventing_constants import HANDLER_CODE, EXPORTED_FUNCTION
+from pytests.eventing.eventing_constants import HANDLER_CODE, EXPORTED_FUNCTION, HANDLER_CODE_CURL
 from pytests.eventing.eventing_base import EventingBaseTest, log
 
 log = logging.getLogger()
@@ -348,4 +348,61 @@ class EventingLifeCycle(EventingBaseTest):
         # stop debugger
         self.rest.stop_eventing_debugger(self.function_name)
         # undeploy and delete the function
+        self.undeploy_and_delete_function(body)
+
+    def test_eventing_debugger_curl(self):
+        count = 0
+        match = False
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE_CURL.BUCKET_OP_WITH_CURL_GET)
+        body['depcfg']['curl'] = []
+        body['depcfg']['curl'].append(
+            {"hostname": self.hostname, "value": "server", "auth_type": self.auth_type, "username": self.curl_username,
+             "password": self.curl_password, "cookies": self.cookies})
+        self.deploy_function(body)
+        #enable debugger
+        self.rest.enable_eventing_debugger()
+        # Start eventing debugger
+        out1 = self.rest.start_eventing_debugger(self.function_name)
+        log.info(" Started eventing debugger : {0}".format(out1))
+        # do some mutations
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        # get debugger url
+        pattern = re.compile(r'chrome-devtools://devtools/bundled/js_app.html(.*)')
+        while count < 10:
+            out2 = self.rest.get_eventing_debugger_url(self.function_name)
+            matched = re.match(pattern, out2)
+            if matched:
+                log.info("Got debugger url : {0}{1}".format(matched.group(0), matched.group(1)))
+                match = True
+                break
+            count += 1
+            self.sleep(30)
+        if not match:
+            self.fail("Debugger url was not generated even after waiting for 300 secs...    ")
+        # stop debugger
+        self.rest.stop_eventing_debugger(self.function_name)
+        # undeploy and delete the function
+        self.undeploy_and_delete_function(body)
+
+    def test_export_credentials(self):
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE_CURL.BUCKET_OP_WITH_CURL_GET)
+        body['depcfg']['curl'] = []
+        body['depcfg']['curl'].append(
+            {"hostname": self.hostname, "value": "server", "auth_type": self.auth_type, "username": self.curl_username,
+             "password": self.curl_password, "cookies": self.cookies})
+        self.deploy_function(body)
+        # export the function that we have created
+        output = self.rest.export_function(self.function_name)
+        # Wait for eventing to catch up with all the create mutations and verify results
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016)
+        log.info("exported function")
+        log.info(output)
+        log.info("imported function")
+        log.info(body)
+        # Validate that exported function data matches with the function that we created
+        self.assertTrue(output['depcfg']['curl'][0]['password'] == "", msg="password is not empty")
+        self.assertTrue(output['depcfg']['curl'][0]['username'] == "", msg="username is not empty")
         self.undeploy_and_delete_function(body)

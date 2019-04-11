@@ -4302,8 +4302,8 @@ class RestConnection(object):
     def export_function(self, name):
         export_map = {}
         authorization = base64.encodestring('%s:%s' % (self.username, self.password))
-        url = "_p/event/getAppTempStore/?name=" + name
-        api = self.baseUrl + url
+        url = "api/v1/export/" + name
+        api = self.eventing_baseUrl + url
         headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
         status, content, header = self._http_request(api, 'GET', headers=headers)
         if not status:
