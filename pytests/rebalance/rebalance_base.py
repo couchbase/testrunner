@@ -3,6 +3,7 @@ from couchbase_helper.document import View
 from couchbase_helper.documentgenerator import BlobGenerator
 from membase.api.exception import RebalanceFailedException
 from membase.api.rest_client import RestConnection
+import json
 
 
 class RebalanceBaseTest(BaseTestCase):
@@ -99,3 +100,24 @@ class RebalanceBaseTest(BaseTestCase):
             rest.add_node(user=serverinfo.rest_username, password=serverinfo.rest_password,
                           remoteIp=node.ip)
         self.shuffle_nodes_between_zones_and_rebalance(to_remove)
+
+    def change_retry_rebalance_settings(self, enabled=True, afterTimePeriod=300, maxAttempts=1):
+        # build the body
+        body = dict()
+        if enabled:
+            body["enabled"] = "true"
+        else:
+            body["enabled"] = "false"
+        body["afterTimePeriod"] = afterTimePeriod
+        body["maxAttempts"] = maxAttempts
+        rest = RestConnection(self.master)
+        rest.set_retry_rebalance_settings(body)
+        result = rest.get_retry_rebalance_settings()
+        self.log.info("Retry Rebalance settings changed to : {0}".format(json.loads(result)))
+
+    def reset_retry_rebalance_settings(self):
+        body = dict()
+        body["enabled"] = "false"
+        rest = RestConnection(self.master)
+        rest.set_retry_rebalance_settings(body)
+        self.log.info("Retry Rebalance settings reset ....")
