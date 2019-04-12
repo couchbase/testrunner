@@ -296,7 +296,7 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
             # wait for the function to come out of bootstrap state
             self.wait_for_handler_state(body['appname'], "deployed")
         if pause_resume and pause_resume_number > 0:
-            self.pause_resume(body,pause_resume_number)
+            self.pause_resume_n(body,pause_resume_number)
 
 
     def undeploy_and_delete_function(self, body):
@@ -591,7 +591,7 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
                                                                      json.dumps(full_out, sort_keys=True, indent=4)))
             raise Exception("Eventing has not processed all the mutation in expected time, docs:{}  expected doc: {}".format(result, doc_count))
 
-    def pause_resume(self,body,num):
+    def pause_resume_n(self,body,num):
         for i in range(num):
             self.pause_function(body)
             self.sleep(30)
