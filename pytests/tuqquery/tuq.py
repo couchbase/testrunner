@@ -516,6 +516,28 @@ class QueryTests(BaseTestCase):
 
         self.assertEqual(has_errors, False)
 
+    def wait_for_all_indexers_ready(self, indexer_port=9102, retries=60, delay=1):
+        self.log.info("waiting for all indexers to be in active state...")
+        indexer_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        i=0
+        for node in indexer_nodes:
+            self.log.info("waiting for indexer on node: " + str(node.ip))
+            node_rest = RestConnection(node)
+            indexer_url = "http://" + str(node.ip) + ":" + str(indexer_port) + "/"
+            node_ready = False
+
+            while not node_ready:
+                if i >= retries:
+                    raise Exception('indexer was not found in Active state within ' + str(retries) + ' retries for node: ' + str(node.ip))
+                indexer_stats = node_rest.get_indexer_stats(baseUrl=indexer_url)
+                self.log.info("iteration " + str(i) + " of " + str(retries))
+                self.log.info("indexer state: " + str(indexer_stats['indexer_state']))
+                if indexer_stats['indexer_state'] == "Active":
+                    node_ready = True
+                i+=1
+                self.sleep(delay)
+        self.log.info("indexers ready")
+
     def is_index_present(self, bucket_name, index_name, fields_set=None, using=None, status="online"):
         query_response = self.run_cbq_query("SELECT * FROM system:indexes")
         if fields_set is None and using is None:

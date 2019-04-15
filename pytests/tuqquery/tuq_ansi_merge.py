@@ -2,7 +2,6 @@ from tuq import QueryTests
 from membase.api.exception import CBQError
 
 
-
 class QueryANSIMERGETests(QueryTests):
     def setUp(self):
         super(QueryANSIMERGETests, self).setUp()
@@ -12,6 +11,7 @@ class QueryANSIMERGETests(QueryTests):
             self.cluster.bucket_flush(self.master, bucket=bucket,
                                   timeout=self.wait_timeout * 5)
         self.log.info("==============  QueryANSIMERGETests setup has completed ==============")
+        self.wait_for_all_indexers_ready()
         self.log_config_info()
 
     def tearDown(self):
@@ -375,13 +375,15 @@ class QueryANSIMERGETests(QueryTests):
             actual_result = self.run_cbq_query()
             self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
 
-            self.query = 'EXPLAIN MERGE INTO %s b1 USING %s b2 use index(name2) on b1.%s == b2.%s when matched then update set b1.%s == "ajay"' \
-                         % (self.buckets[0].name, self.buckets[1].name, 'name', 'name','name' )
+            self.query = 'EXPLAIN MERGE INTO %s b1 USING %s b2 use index(name2) on b1.%s == b2.%s when matched then update set b1.%s = "ajay"' \
+                         % ('default', 'standard_bucket0', 'name', 'name', 'name')
             actual_result = self.run_cbq_query()
-            self.assertEqual(actual_result['results'][0]['plan']['~children'][2]['~child']['~children'][0]['~child']['~children'][0]['index'],
+            self.assertEqual(actual_result['results'][0]['plan']['~children'][0]['index'],
                              'name2', "The incorrect index is being used")
+            self.assertEqual(actual_result['results'][0]['plan']['~children'][2]['~child']['~children'][0]['~child']['~children'][0]['index'],
+                             'name', "The incorrect index is being used")
 
-            self.query = 'MERGE INTO %s b1 USING %s b2 use index(name2) on b1.%s == b2.%s when matched then update set b1.%s == "ajay"' \
+            self.query = 'MERGE INTO %s b1 USING %s b2 use index(name2) on b1.%s == b2.%s when matched then update set b1.%s = "ajay"' \
                          % (self.buckets[0].name, self.buckets[1].name, 'name', 'name','name' )
             self.run_cbq_query()
             self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
@@ -455,6 +457,7 @@ class QueryANSIMERGETests(QueryTests):
         -Repeat the above for subquery as source instead of a keyspace'''
     def test_ansi_merge_not_match_insert_hash(self):
         try:
+
             self.run_cbq_query(query='CREATE INDEX name on default(name)')
             self.query = 'INSERT into %s (key , value) VALUES ("%s", %s)' % (self.buckets[1].name, "test",'{"name": "new1"}')
             actual_result = self.run_cbq_query()

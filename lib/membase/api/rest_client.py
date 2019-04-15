@@ -1723,8 +1723,11 @@ class RestConnection(object):
             index_storage_stats[bucket][index_name] = index_stats["Stats"]
         return index_storage_stats
 
-    def get_indexer_stats(self, timeout=120, index_map=None):
-        api = self.index_baseUrl + 'stats'
+    def get_indexer_stats(self, timeout=120, index_map=None, baseUrl=None):
+        if baseUrl is None:
+            api = self.index_baseUrl + 'stats'
+        else:
+            api = baseUrl + 'stats'
         index_map = {}
         status, content, header = self._http_request(api, timeout=timeout)
         if status:
