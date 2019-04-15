@@ -16,46 +16,65 @@ class XDCRPrioritization(XDCRNewBaseTest):
         self.src_master = self.src_cluster.get_master_node()
         self.dest_master = self.dest_cluster.get_master_node()
         self.rdirection = self._input.param("rdirection", "unidirection")
-        self.backfill = self._input.param("backfill", None)
-        if self.backfill:
+        self.initial = self._input.param("initial", False)
+        if self.initial:
             self.load_and_setup_xdcr()
         else:
             self.setup_xdcr_and_load()
 
+    def print_status(self, bucket, server, param, actual, expected, match):
+        if match:
+            self.log.info("For replication {0}->{0} "
+                          "on source {1}, actual {2}:{3} matches expected {2}:{4}". \
+                          format(bucket, server, param, actual, expected))
+        else:
+            self.fail("For replication {0}->{0} "
+                      "on source {1}, actual {2}:{3} does NOT match expected {2}:{4}". \
+                      format(bucket, server, param, actual, expected))
+
     def __verify_dcp_priority(self, server, expected_priority):
         shell = RemoteMachineShellConnection(server)
         rest = RestConnection(server)
+        match = True
         for bucket in rest.get_buckets():
-            output, error = shell.execute_cbstats(bucket, "dcp", print_results=False)
-            for stat in output:
-                if re.search("eq_dcpq:xdcr:dcp_.*" + bucket.name + ".*==:priority:", stat):
-                    actual_priority = stat.split("==:priority:")[1].lstrip()
-                    if actual_priority not in expected_priority[bucket.name]:
-                        self.fail("For replication bucket {0} -> bucket {0} "
-                                  "on source cluster {1}, expected dcp priority: {2} does not match actual priority: {3}". \
-                                  format(bucket.name, server.ip, expected_priority[bucket.name], actual_priority))
-                    else:
-                        self.log.info("For replication bucket {0} -> bucket {0} "
-                                      "on source cluster {1}, expected dcp priority: {2} matches actual priority: {3}". \
-                                      format(bucket.name, server.ip, expected_priority[bucket.name], actual_priority))
+            repl = rest.get_replication_for_buckets(bucket.name, bucket.name)
+            # Taking 10 samples of DCP priority ~5 seconds apart.
+            # cbstats takes ~4 secs + 2 seconds sleep
+            for sample in xrange(10):
+                output, error = shell.execute_cbstats(bucket, "dcp", print_results=False)
+                for stat in output:
+                    if re.search("eq_dcpq:xdcr:dcp_" + repl['id'] + ".*==:priority:", stat):
+                        actual_priority = stat.split("==:priority:")[1].lstrip()
+                        if actual_priority not in expected_priority[bucket.name]:
+                            match = False
+                        self.log.info("Sample {0}:".format(sample + 1))
+                        self.print_status(bucket.name, server.ip, "dcp priority",
+                                          actual_priority,
+                                          expected_priority[bucket.name],
+                                          match=match)
+                        time.sleep(2)
+
 
     def _verify_dcp_priority(self, server):
         expected_priority = {}
         rest = RestConnection(server)
         buckets = rest.get_buckets()
         for bucket in buckets:
-            if self.backfill:
-                 goxdcr_priority = rest.get_xdcr_param(bucket.name, bucket.name, "priority").lower()
-                 if goxdcr_priority == "low" or goxdcr_priority == "high":
-                    expected_priority[bucket.name] = goxdcr_priority
-                 elif goxdcr_priority == "medium":
-                    expected_priority[bucket.name] = ["medium", "high"]
+            if self.initial:
+                goxdcr_priority = rest.get_xdcr_param(bucket.name, bucket.name, "priority").lower()
+                # All replications start with 'medium' dcp priority
+                expected_priority[bucket.name] = ["medium"]
+                if goxdcr_priority == "low" or goxdcr_priority == "high":
+                    expected_priority[bucket.name].append(goxdcr_priority)
+                elif goxdcr_priority == "medium":
+                    expected_priority[bucket.name].append("high")
             else:
                 expected_priority[bucket.name] = "medium"
         self.__verify_dcp_priority(server, expected_priority)
 
     def _verify_goxdcr_priority(self, cluster):
         rest = RestConnection(cluster.get_master_node())
+        match = True
         for bucket in rest.get_buckets():
             param_str = self._input.param(
                 "%s@%s" %
@@ -64,13 +83,9 @@ class XDCRPrioritization(XDCRNewBaseTest):
                 expected_priority = (param_str.split('priority:')[1]).split(',')[0]
                 actual_priority = rest.get_xdcr_param(bucket.name, bucket.name, "priority")
                 if expected_priority != actual_priority:
-                    self.fail("For replication bucket {0} -> bucket {0} "
-                              "on source cluster {1}, expected goxdcr priority: {2} does not match actual goxdcr priority: {3}". \
-                              format(bucket.name, cluster.get_master_node().ip, expected_priority, actual_priority))
-                else:
-                    self.log.info("For replication bucket {0} -> bucket {0} "
-                                  "on source cluster {1}, expected goxdcr priority: {2} matches actual goxdcr priority: {3}". \
-                                  format(bucket.name, cluster.get_master_node().ip, expected_priority, actual_priority))
+                    match = False
+                self.print_status(bucket.name, cluster.get_master_node().ip, "goxdcr priority",
+                                   actual_priority, expected_priority, match=match)
 
     def verify_results(self):
         self._verify_goxdcr_priority(self.src_cluster)
@@ -82,25 +97,19 @@ class XDCRPrioritization(XDCRNewBaseTest):
     def _verify_tunable(self, cluster, input_param, repl_param):
         rest = RestConnection(cluster.get_master_node())
         buckets = rest.get_buckets()
+        match = True
         for bucket in buckets:
             param_str = self._input.param(
                 "%s@%s" %
                 (bucket.name, cluster.get_name()), None)
             if param_str:
-                expected =(param_str.split(input_param + ':')[1]).split(',')[0]
-            actual = rest.get_xdcr_param(bucket.name, bucket.name, repl_param)
-            if expected != actual:
-                    self.fail("For replication bucket {0} -> bucket {0} "
-                              "on source cluster {1}, expected {2}: {3} does not match actual {2}: {4}". \
-                              format(bucket.name, server.ip, input_param, expected, actual))
-            self.log.info("For replication bucket {0} -> bucket {0} "
-                          "on source cluster {1}, expected {2}: {3} matches actual {2}: {4}". \
-                          format(bucket.name, server.ip, input_param, expected, actual))
-
-    def test_desired_latency(self):
-        self._verify_tunable(self.src_cluster, "desired_latency", "desiredLatency")
-        if self.rdirection == "bidirection":
-            self._verify_tunable(self.dest_cluster, "desired_latency", "desiredLatency")
+                if input_param in param_str:
+                    expected = (param_str.split(input_param + ':')[1]).split(',')[0]
+                    actual = rest.get_xdcr_param(bucket.name, bucket.name, repl_param)
+                    if expected != actual:
+                        match = False
+                    self.print_status(bucket.name, cluster.get_master_node().ip, input_param, actual, expected,
+                                       match=match)
 
     def get_cluster_objects_for_input(self, input):
         """returns a list of cluster objects for input. 'input' is a string
@@ -113,6 +122,9 @@ class XDCRPrioritization(XDCRNewBaseTest):
             clusters.append(self.get_cb_cluster_by_name(cluster_name))
         return clusters
 
+    def wait_for_op_to_complete(self, duration):
+        time.sleep(duration)
+
     def test_priority(self):
         tasks = []
         rebalance_in = self._input.param("rebalance_in", None)
@@ -122,6 +134,7 @@ class XDCRPrioritization(XDCRNewBaseTest):
         graceful = self._input.param("graceful", None)
         pause = self._input.param("pause", None)
         reboot = self._input.param("reboot", None)
+        gomaxprocs = self._input.param("gomaxprocs", None)
 
         if pause:
             for cluster in self.get_cluster_objects_for_input(pause):
@@ -154,6 +167,7 @@ class XDCRPrioritization(XDCRNewBaseTest):
                     task.result()
 
         if pause:
+            self.wait_for_op_to_complete(10)
             for cluster in self.get_cluster_objects_for_input(pause):
                 for remote_cluster_refs in cluster.get_remote_clusters():
                     remote_cluster_refs.resume_all_replications()
@@ -161,9 +175,18 @@ class XDCRPrioritization(XDCRNewBaseTest):
         if reboot:
             for cluster in self.get_cluster_objects_for_input(reboot):
                 cluster.warmup_node()
-            time.sleep(60)
+            self.wait_for_op_to_complete(60)
 
-        self.sleep(30)
-        self.perform_update_delete()
+        if gomaxprocs:
+            rest = RestConnection(self.src_master)
+            rest.set_global_xdcr_param("goMaxProcs", gomaxprocs)
+            if self.rdirection == "bidirection":
+                rest = RestConnection(self.dest_master)
+                rest.set_global_xdcr_param("goMaxProcs", gomaxprocs)
 
+        self._verify_tunable(self.src_cluster, "desired_latency", "desiredLatency")
+        if self.rdirection == "bidirection":
+            self._verify_tunable(self.dest_cluster, "desired_latency", "desiredLatency")
+
+        self.async_perform_update_delete()
         self.verify_results()

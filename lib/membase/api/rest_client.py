@@ -2702,6 +2702,16 @@ class RestConnection(object):
                             format(param, value, src_bucket_name, self.ip))
         log.info("Updated {0}={1} on bucket'{2}' on {3}".format(param, value, src_bucket_name, self.ip))
 
+    def set_global_xdcr_param(self, param, value):
+        api = self.baseUrl[:-1] + "/settings/replications"
+        value = str(value).lower()
+        params = urllib.urlencode({param: value})
+        status, _, _ = self._http_request(api, "POST", params)
+        if not status:
+            raise XDCRException("Unable to set replication setting {0}={1} on node {2}".
+                            format(param, value, self.ip))
+        log.info("Updated {0}={1} on {2}".format(param, value, self.ip))
+
     # Gets per-replication setting value
     def get_xdcr_param(self, src_bucket_name,
                                     dest_bucket_name, param):
