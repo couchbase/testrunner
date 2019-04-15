@@ -35,7 +35,9 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
         self.src_bucket_name = self.input.param('src_bucket_name', 'src_bucket')
         self.eventing_log_level = self.input.param('eventing_log_level', 'INFO')
         self.dst_bucket_name = self.input.param('dst_bucket_name', 'dst_bucket')
-        self.dst_bucket_name1 = self.input.param('dst_bucket_name', 'dst_bucket1')
+        self.dst_bucket_name1 = self.input.param('dst_bucket_name1', 'dst_bucket1')
+        self.dst_bucket_curl = self.input.param('dst_bucket_curl','dst_bucket_curl')
+        self.source_bucket_mutation = self.input.param('source_bucket_mutation', 'source_bucket_mutation')
         self.metadata_bucket_name = self.input.param('metadata_bucket_name', 'metadata')
         self.gens_load = self.generate_docs(self.docs_per_day)
         self.upgrade_version = self.input.param("upgrade_version")
@@ -99,11 +101,21 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
         self.import_function(EXPORTED_FUNCTION.BUCKET_OP_WITH_TIMER)
         # Validate the data
         self.validate_eventing(self.dst_bucket_name1, self.docs_per_day * 2016)
+        #Deploy the Source bucket handler
+        self.import_function(EXPORTED_FUNCTION.SBM_BUCKET_OP)
+        # Validate the data
+        self.validate_eventing(self.source_bucket_mutation, 2*self.docs_per_day * 2016)
+        # Deploy the Source bucket handler
+        self.import_function(EXPORTED_FUNCTION.CURL_BUCKET_OP)
+        # Validate the data
+        self.validate_eventing(self.dst_bucket_curl, self.docs_per_day * 2016)
         # Delete the data on source bucket
         self.load(self.gens_load, buckets=self.src_bucket, verify_data=False, op_type='delete')
         # Validate the data for both the functions
         self.validate_eventing(self.dst_bucket_name, 0)
         self.validate_eventing(self.dst_bucket_name1, 0)
+        self.validate_eventing(self.source_bucket_mutation,0)
+        self.validate_eventing(self.dst_bucket_curl,0)
         # add data to source bucket
         self.load(self.gens_load, buckets=self.src_bucket, verify_data=False)
         # Validate the data for both the functions
@@ -112,6 +124,8 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
         # Undeploy and delete both the functions
         self.undeploy_and_delete_function("test_import_function_1")
         self.undeploy_and_delete_function("test_import_function_2")
+        self.undeploy_function('bucket_op_sbm')
+        self.undeploy_function('bucket_op_curl')
 
     def test_online_upgrade_with_regular_rebalance_with_eventing(self):
         self._install(self.servers[:self.nodes_init])
@@ -337,6 +351,12 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
                                             bucket_params=bucket_params)
         self.sleep(60)
         self.cluster.create_standard_bucket(name=self.dst_bucket_name1, port=STANDARD_BUCKET_PORT + 4,
+                                            bucket_params=bucket_params)
+        self.sleep(60)
+        self.cluster.create_standard_bucket(name=self.dst_bucket_curl, port=STANDARD_BUCKET_PORT + 4,
+                                            bucket_params=bucket_params)
+        self.sleep(60)
+        self.cluster.create_standard_bucket(name=self.source_bucket_mutation, port=STANDARD_BUCKET_PORT + 4,
                                             bucket_params=bucket_params)
         self.buckets = RestConnection(self.master).get_buckets()
 

@@ -82,3 +82,5 @@ class EXPORTED_FUNCTION:
     BUCKET_OP = 'exported_functions/bucket_op.json'
     BUCKET_OP_WITH_TIMER = 'exported_functions/bucket_op_with_timer.json'
     NEW_BUCKET_OP ='exported_functions/Function_396275055_test_export_function.json'
+    SBM_BUCKET_OP ='exported_functions/bucket_op_sbm.json'
+    CURL_BUCKET_OP='exported_functions/bucket_op_curl.json'

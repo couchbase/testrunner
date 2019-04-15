@@ -167,7 +167,7 @@ class EventingCurl(EventingBaseTest):
             self.undeploy_and_delete_function(body)
 
         def test_curl_takes_more_time(self):
-            body = self.create_save_function_body(self.function_name, self.handler_code, worker_count=3,execution_timeout=8)
+            body = self.create_save_function_body(self.function_name, self.handler_code, worker_count=3,execution_timeout=5)
             body['depcfg']['curl'] = []
             body['depcfg']['curl'].append(
                 {"hostname": self.hostname, "value": "server", "auth_type": self.auth_type, "username": self.curl_username,
