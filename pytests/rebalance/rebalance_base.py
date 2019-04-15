@@ -121,3 +121,13 @@ class RebalanceBaseTest(BaseTestCase):
         rest = RestConnection(self.master)
         rest.set_retry_rebalance_settings(body)
         self.log.info("Retry Rebalance settings reset ....")
+
+    def reboot_server(self, server):
+        self.log.info("Rebooting the server ....")
+        remote_client = RemoteMachineShellConnection(server)
+        remote_client.reboot_node()
+        remote_client.disconnect()
+        # wait for restart and warmup on all node
+        self.sleep(self.wait_timeout * 5)
+        # disable firewall on these nodes
+        self.stop_firewall_on_node(server)
