@@ -1403,15 +1403,13 @@ class ESRunQueryCompare(Task):
                         self.log.error(msg)
                         self.passed = False
 
-            if not self.es:
-                should_verify_n1ql = True
-            else:
-                if fts_hits <= 0 and es_hits==0:
-                    should_verify_n1ql = False
+            if fts_hits <= 0 and es_hits==0:
+                should_verify_n1ql = False
 
             if self.n1ql_executor and should_verify_n1ql:
                 n1ql_query = "select meta().id from default where type='emp' and search(default, " + str(
                     json.dumps(self.fts_query)) + ")"
+                self.log.info("Running N1QL query: "+str(n1ql_query))
                 n1ql_result = self.n1ql_executor.run_n1ql_query(query=n1ql_query)
                 if n1ql_result['status'] == 'success':
                     n1ql_hits = n1ql_result['metrics']['resultCount']
@@ -1447,10 +1445,14 @@ class ESRunQueryCompare(Task):
                             self.passed = False
                 else:
                     self.passed = False
-                    self.log.info("Skipping N1QL result validation.")
+                    self.log.info("N1QL query execution is failed.")
                     self.log.error(n1ql_result["errors"][0]['msg'])
             self.state = CHECKING
             task_manager.schedule(self)
+
+            if not should_verify_n1ql and self.n1ql_executor:
+                self.log.info("Skipping N1QL result validation since FTS results are - "+str(fts_hits)+" and es results are - "+str(es_hits)+".")
+
         except Exception as e:
             self.log.error(e)
             self.set_exception(e)
