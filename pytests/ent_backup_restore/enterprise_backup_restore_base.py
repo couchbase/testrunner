@@ -711,7 +711,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                     "Check the logs for more information."
         if error_str in res:
             command = "cat " + self.backupset.directory + \
-                      "/logs/backup.log | grep '" + error_str + "' -A 10 -B 100"
+                      "/logs/backup-*.log | grep '" + error_str + "' -A 10 -B 100"
             output, error = shell.execute_command(command)
             shell.log_command_output(output, error)
         if 'Required Flags:' in res:
@@ -739,12 +739,12 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             self.assertTrue(error_found, "Expected error not found: %s" % expected_error)
             return
         remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
-        command = "grep 'Transfer plan finished successfully' " + self.backupset.directory + "/logs/backup.log"
+        command = "grep 'Transfer plan finished successfully' " + self.backupset.directory + "/logs/backup-*.log"
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
         if not output:
             self.fail("Restoring backup failed.")
-        command = "grep 'Transfer failed' " + self.backupset.directory + "/logs/backup.log"
+        command = "grep 'Transfer failed' " + self.backupset.directory + "/logs/backup-*.log"
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
         if output:
@@ -1604,7 +1604,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         if output and "backup-meta.json" not in output[0]:
             self.fail("Missing file 'backup-meta.json' in backup dir")
         output, _ = shell.execute_command("ls {0}".format(logs_path + "/logs"))
-        if output and "backup.log" not in output[0]:
+        if output and ".log" not in output[0]:
             self.fail("Missing file 'backup.log' in backup logs dir")
         shell.disconnect()
 
