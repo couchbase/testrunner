@@ -180,7 +180,7 @@ class ImportExportTests(CliBaseTest):
             dgm_run=True
             active_resident_threshold=xx
         """
-        options = {"load_doc": True, "docs":"1000"}
+        options = {"load_doc": True, "docs":"{0}".format(self.num_items)}
         return self._common_imex_test("export", options)
 
     def test_export_with_secure_connection(self):
@@ -1344,7 +1344,14 @@ class ImportExportTests(CliBaseTest):
                         """ add leading zero to name value
                             like pymc39 to pymc039
                         """
-                        tmp1 = tmp[0][13:-1].zfill(3)
+                        zero_fill = 0
+                        if len(exports) >= 10 and len(exports) < 99:
+                            zero_fill = 1
+                        elif len(exports) >= 100 and len(exports) < 999:
+                            zero_fill = 2
+                        elif len(exports) >= 100 and len(exports) < 9999:
+                            zero_fill = 3
+                        tmp1 = tmp[0][13:-1].zfill(zero_fill)
                         tmp[0] = tmp[0][:13] + tmp1 + '"'
                         exports[x] = ",".join(tmp)
 
@@ -1355,13 +1362,12 @@ class ImportExportTests(CliBaseTest):
                         e = set(samples)
                         not_in_samples = [x for x in exports if x not in e]
                         print "\n data in exports not in samples  ", not_in_samples
-                    e = set(samples)
                     count = 0
                     self.log.info("Compare data with sample data")
                     for x in exports:
-                        if x in e:
+                        if x in samples:
                             count += 1
-                    if count != len(e):
+                    if count != len(samples):
                         self.fail("export and sample json count does not match")
                     elif not self.dgm_run:
                         if sorted(samples) == sorted(exports):
@@ -1383,6 +1389,7 @@ class ImportExportTests(CliBaseTest):
                     exports = export_file.read()
                     exports = ast.literal_eval(exports)
                     exports.sort(key=lambda k: k['name'])
+                    """ convert index value from int to str in MH """
                     if exports and isinstance(exports[0]["index"], str):
                         for x in samples:
                             x["index"] = str(x["index"])
