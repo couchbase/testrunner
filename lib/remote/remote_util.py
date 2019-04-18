@@ -3568,9 +3568,17 @@ class RemoteMachineShellConnection:
 
     def get_ip_address(self):
         info = self.extract_remote_info()
+        ip_type = "inet \K[\d.]"
+        ipv6_server = False
+        if "ip6" in self.ip or self.ip.startswith("["):
+            ipv6_server = True
+            ip_type = "inet6 \K[0-9a-zA-Z:]"
         if info.type.lower() != 'windows':
-            cmd = "ifconfig | grep -Po 'inet \K[\d.]+'"
+            cmd = "ifconfig | grep -Po '{0}+'".format(ip_type)
             o, r = self.execute_command_raw(cmd)
+        if ipv6_server:
+            for x in range(len(o)):
+                o[x] = "[{0}]".format(o[x])
         return o
 
     def get_ram_info(self, win_info=None, mac=False):
