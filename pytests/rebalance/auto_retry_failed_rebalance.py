@@ -25,50 +25,33 @@ class AutoRetryFailedRebalance(RebalanceBaseTest):
         self.change_retry_rebalance_settings(enabled=self.enabled, afterTimePeriod=self.afterTimePeriod,
                                              maxAttempts=self.maxAttempts)
         self.rebalance_operation = self.input.param("rebalance_operation", "rebalance_out")
+        self.disable_auto_failover = self.input.param("disable_auto_failover", True)
+        if self.disable_auto_failover:
+            self.rest.update_autofailover_settings(False, 120)
 
     def tearDown(self):
         self.reset_retry_rebalance_settings()
+        # Reset to default value
         super(AutoRetryFailedRebalance, self).tearDown()
 
     def test_auto_retry_of_failed_rebalance_where_failure_happens_before_rebalance(self):
         before_rebalance_failure = self.input.param("before_rebalance_failure", "stop_server")
         # induce the failure before the rebalance starts
-        if before_rebalance_failure == "stop_server":
-            self.stop_server(self.servers[1])
-        elif before_rebalance_failure == "enable_firewall":
-            self.start_firewall_on_node(self.servers[1])
+        self._induce_error(before_rebalance_failure)
         self.sleep(self.sleep_time)
         try:
             operation = self._rebalance_operation(self.rebalance_operation)
             operation.result()
         except Exception as e:
             self.log.info("Rebalance failed with : {0}".format(str(e)))
-            # recover from the failure before the retry of rebalance
-            if before_rebalance_failure == "stop_server":
-                self.start_server(self.servers[1])
-            elif before_rebalance_failure == "enable_firewall":
-                self.stop_firewall_on_node(self.servers[1])
-            result = json.loads(self.rest.get_pending_rebalance_info())
-            retry_after_secs = result["retry_after_secs"]
-            attempts_remaining = result["attempts_remaining"]
-            retry_rebalance = result["retry_rebalance"]
-            while retry_rebalance == "pending" and attempts_remaining:
-                # wait for the afterTimePeriod for the failed rebalance to restart
-                self.sleep(retry_after_secs, message="Waiting for the afterTimePeriod to complete")
-                result = self.rest.monitorRebalance()
-                msg = "monitoring rebalance {0}"
-                self.log.info(msg.format(result))
-                result = json.loads(self.rest.get_pending_rebalance_info())
-                self.log.info(msg.format(result))
-                retry_rebalance = result["retry_rebalance"]
-                if retry_rebalance == "not_pending":
-                    break
-                attempts_remaining = result["attempts_remaining"]
-                retry_rebalance = result["retry_rebalance"]
-                retry_after_secs = result["retry_after_secs"]
+            # Recover from the error
+            self._recover_from_error(before_rebalance_failure)
+            self._check_retry_rebalance_succeeded()
         else:
             self.fail("Rebalance did not fail as expected. Hence could not validate auto-retry feature..")
         finally:
+            if self.disable_auto_failover:
+                self.rest.update_autofailover_settings(True, 120)
             self.start_server(self.servers[1])
             self.stop_firewall_on_node(self.servers[1])
 
@@ -78,48 +61,18 @@ class AutoRetryFailedRebalance(RebalanceBaseTest):
             operation = self._rebalance_operation(self.rebalance_operation)
             self.sleep(self.sleep_time)
             # induce the failure during the rebalance
-            if during_rebalance_failure == "stop_server":
-                self.stop_server(self.servers[1])
-            elif during_rebalance_failure == "kill_memcached":
-                self.kill_server_memcached(self.servers[1])
-            elif during_rebalance_failure == "enable_firewall":
-                self.start_firewall_on_node(self.servers[1])
-            elif during_rebalance_failure == "reboot_server":
-                shell = RemoteMachineShellConnection(self.servers[1])
-                shell.reboot_node()
+            self._induce_error(during_rebalance_failure)
             operation.result()
         except Exception as e:
             self.log.info("Rebalance failed with : {0}".format(str(e)))
-            # recover from the failure before the retry of rebalance
-            if during_rebalance_failure == "stop_server":
-                self.start_server(self.servers[1])
-            elif during_rebalance_failure == "enable_firewall":
-                self.stop_firewall_on_node(self.servers[1])
-            elif during_rebalance_failure == "reboot_server":
-                # wait till node is ready after warmup
-                ClusterOperationHelper.wait_for_ns_servers_or_assert([self.servers[1]], self, wait_if_warmup=True)
-            result = json.loads(self.rest.get_pending_rebalance_info())
-            self.sleep(self.sleep_time)
-            retry_after_secs = result["retry_after_secs"]
-            attempts_remaining = result["attempts_remaining"]
-            retry_rebalance = result["retry_rebalance"]
-            while retry_rebalance == "pending" and attempts_remaining:
-                # wait for the afterTimePeriod for the failed rebalance to restart
-                self.sleep(retry_after_secs, message="Waiting for the afterTimePeriod to complete")
-                result = self.rest.monitorRebalance()
-                msg = "monitoring rebalance {0}"
-                self.log.info(msg.format(result))
-                result = json.loads(self.rest.get_pending_rebalance_info())
-                self.log.info(msg.format(result))
-                retry_rebalance = result["retry_rebalance"]
-                if retry_rebalance == "not_pending":
-                    break
-                attempts_remaining = result["attempts_remaining"]
-                retry_rebalance = result["retry_rebalance"]
-                retry_after_secs = result["retry_after_secs"]
+            # Recover from the error
+            self._recover_from_error(during_rebalance_failure)
+            self._check_retry_rebalance_succeeded()
         else:
             self.fail("Rebalance did not fail as expected. Hence could not validate auto-retry feature..")
         finally:
+            if self.disable_auto_failover:
+                self.rest.update_autofailover_settings(True, 120)
             self.start_server(self.servers[1])
             self.stop_firewall_on_node(self.servers[1])
 
@@ -139,3 +92,54 @@ class AutoRetryFailedRebalance(RebalanceBaseTest):
             operation = self.cluster.async_failover([self.master], failover_nodes=[self.servers[1]],
                                                     graceful=True)
         return operation
+
+    def _check_retry_rebalance_succeeded(self):
+        result = json.loads(self.rest.get_pending_rebalance_info())
+        self.log.info(result)
+        self.sleep(self.sleep_time)
+        retry_after_secs = result["retry_after_secs"]
+        attempts_remaining = result["attempts_remaining"]
+        retry_rebalance = result["retry_rebalance"]
+        self.log.info("Attempts remaining : {0}, Retry rebalance : {1}".format(attempts_remaining, retry_rebalance))
+        while attempts_remaining:
+            # wait for the afterTimePeriod for the failed rebalance to restart
+            self.sleep(retry_after_secs, message="Waiting for the afterTimePeriod to complete")
+            try :
+                result = self.rest.monitorRebalance()
+                msg = "monitoring rebalance {0}"
+                self.log.info(msg.format(result))
+            except Exception:
+                result = json.loads(self.rest.get_pending_rebalance_info())
+                self.log.info(result)
+                try:
+                    attempts_remaining = result["attempts_remaining"]
+                    retry_rebalance = result["retry_rebalance"]
+                    retry_after_secs = result["retry_after_secs"]
+                except KeyError:
+                    self.fail("Retrying of rebalance still did not help. All the retries exhausted...")
+                self.log.info("Attempts remaining : {0}, Retry rebalance : {1}".format(attempts_remaining,
+                                                                                       retry_rebalance))
+            else:
+                self.log.info("Retry rebalanced fixed the rebalance failure")
+                break
+
+    def _induce_error(self, error_condition):
+        if error_condition == "stop_server":
+            self.stop_server(self.servers[1])
+        elif error_condition == "enable_firewall":
+            self.start_firewall_on_node(self.servers[1])
+        elif error_condition == "kill_memcached":
+            self.kill_server_memcached(self.servers[1])
+        elif error_condition == "reboot_server":
+            shell = RemoteMachineShellConnection(self.servers[1])
+            shell.reboot_node()
+
+    def _recover_from_error(self, error_condition):
+        if error_condition == "stop_server":
+            self.start_server(self.servers[1])
+        elif error_condition == "enable_firewall":
+            self.stop_firewall_on_node(self.servers[1])
+        elif error_condition == "reboot_server":
+            # wait till node is ready after warmup
+            ClusterOperationHelper.wait_for_ns_servers_or_assert([self.servers[1]], self, wait_if_warmup=True)
+
