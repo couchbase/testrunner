@@ -124,10 +124,6 @@ class EventingRebalance(EventingBaseTest):
         body = self.create_save_function_body(self.function_name, self.handler_code,
                                               sock_batch_size=sock_batch_size, worker_count=worker_count,
                                               cpp_worker_thread_count=cpp_worker_thread_count)
-        if self.is_curl:
-            body['depcfg']['curl'] = []
-            body['depcfg']['curl'].append({"hostname": self.hostname, "value": "server", "auth_type": self.auth_type,
-                                           "username": self.curl_username, "password": self.curl_password,"cookies": self.cookies})
         self.deploy_function(body)
         # load data
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
@@ -177,10 +173,6 @@ class EventingRebalance(EventingBaseTest):
         body = self.create_save_function_body(self.function_name, self.handler_code,
                                               sock_batch_size=sock_batch_size, worker_count=worker_count,
                                               cpp_worker_thread_count=cpp_worker_thread_count)
-        if self.is_curl:
-            body['depcfg']['curl'] = []
-            body['depcfg']['curl'].append({"hostname": self.hostname, "value": "server", "auth_type": self.auth_type,
-                                           "username": self.curl_username, "password": self.curl_password,"cookies": self.cookies})
         self.deploy_function(body)
         # load data
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
@@ -230,10 +222,6 @@ class EventingRebalance(EventingBaseTest):
         body = self.create_save_function_body(self.function_name, self.handler_code,
                                               sock_batch_size=sock_batch_size, worker_count=worker_count,
                                               cpp_worker_thread_count=cpp_worker_thread_count)
-        if self.is_curl:
-            body['depcfg']['curl'] = []
-            body['depcfg']['curl'].append({"hostname": self.hostname, "value": "server", "auth_type": self.auth_type,
-                                           "username": self.curl_username, "password": self.curl_password,"cookies": self.cookies})
         self.deploy_function(body)
         # load data
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
@@ -284,10 +272,6 @@ class EventingRebalance(EventingBaseTest):
         body = self.create_save_function_body(self.function_name, self.handler_code,
                                               sock_batch_size=sock_batch_size, worker_count=worker_count,
                                               cpp_worker_thread_count=cpp_worker_thread_count)
-        if self.is_curl:
-            body['depcfg']['curl'] = []
-            body['depcfg']['curl'].append({"hostname": self.hostname, "value": "server", "auth_type": self.auth_type,
-                                           "username": self.curl_username, "password": self.curl_password,"cookies": self.cookies})
         self.deploy_function(body)
         # load data
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
@@ -330,10 +314,6 @@ class EventingRebalance(EventingBaseTest):
         body = self.create_save_function_body(self.function_name, self.handler_code,
                                               sock_batch_size=sock_batch_size, worker_count=worker_count,
                                               cpp_worker_thread_count=cpp_worker_thread_count)
-        if self.is_curl:
-            body['depcfg']['curl'] = []
-            body['depcfg']['curl'].append({"hostname": self.hostname, "value": "server", "auth_type": self.auth_type,
-                                           "username": self.curl_username, "password": self.curl_password,"cookies": self.cookies})
         self.deploy_function(body)
         # load data
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
@@ -375,10 +355,6 @@ class EventingRebalance(EventingBaseTest):
         body = self.create_save_function_body(self.function_name, self.handler_code,
                                               sock_batch_size=sock_batch_size, worker_count=worker_count,
                                               cpp_worker_thread_count=cpp_worker_thread_count)
-        if self.is_curl:
-            body['depcfg']['curl'] = []
-            body['depcfg']['curl'].append({"hostname": self.hostname, "value": "server", "auth_type": self.auth_type,
-                                           "username": self.curl_username, "password": self.curl_password,"cookies": self.cookies})
         self.deploy_function(body)
         # load data
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
@@ -419,10 +395,6 @@ class EventingRebalance(EventingBaseTest):
         gen_load_del = copy.deepcopy(self.gens_load)
         self.services_in = self.input.param("services_in")
         body = self.create_save_function_body(self.function_name, self.handler_code)
-        if self.is_curl:
-            body['depcfg']['curl'] = []
-            body['depcfg']['curl'].append({"hostname": self.hostname, "value": "server", "auth_type": self.auth_type,
-                                           "username": self.curl_username, "password": self.curl_password,"cookies": self.cookies})
         self.deploy_function(body)
         # load some data
         task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
@@ -462,10 +434,6 @@ class EventingRebalance(EventingBaseTest):
         gen_load_del = copy.deepcopy(self.gens_load)
         self.server_out = self.input.param("server_out")
         body = self.create_save_function_body(self.function_name, self.handler_code)
-        if self.is_curl:
-            body['depcfg']['curl'] = []
-            body['depcfg']['curl'].append({"hostname": self.hostname, "value": "server", "auth_type": self.auth_type,
-                                           "username": self.curl_username, "password": self.curl_password,"cookies": self.cookies})
         self.deploy_function(body)
         # load some data
         task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
@@ -506,10 +474,6 @@ class EventingRebalance(EventingBaseTest):
         self.server_out = self.input.param("server_out")
         self.services_in = self.input.param("services_in")
         body = self.create_save_function_body(self.function_name, self.handler_code)
-        if self.is_curl:
-            body['depcfg']['curl'] = []
-            body['depcfg']['curl'].append({"hostname": self.hostname, "value": "server", "auth_type": self.auth_type,
-                                           "username": self.curl_username, "password": self.curl_password,"cookies": self.cookies})
         self.deploy_function(body)
         # load some data
         task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
@@ -555,10 +519,6 @@ class EventingRebalance(EventingBaseTest):
             self.fail('failed to change autofailover_settings! See MB-7282')
         gen_load_del = copy.deepcopy(self.gens_load)
         body = self.create_save_function_body(self.function_name, self.handler_code)
-        if self.is_curl:
-            body['depcfg']['curl'] = []
-            body['depcfg']['curl'].append({"hostname": self.hostname, "value": "server", "auth_type": self.auth_type,
-                                           "username": self.curl_username, "password": self.curl_password,"cookies": self.cookies})
         self.deploy_function(body)
         if self.pause_resume:
             self.pause_function(body)
@@ -621,10 +581,6 @@ class EventingRebalance(EventingBaseTest):
         kv_server = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=False)
         body = self.create_save_function_body(self.function_name, self.handler_code)
         self.deploy_function(body)
-        if self.is_curl:
-            body['depcfg']['curl'] = []
-            body['depcfg']['curl'].append({"hostname": self.hostname, "value": "server", "auth_type": self.auth_type,
-                                           "username": self.curl_username, "password": self.curl_password,"cookies": self.cookies})
         if self.pause_resume:
             self.pause_function(body)
         # load some data
@@ -685,10 +641,6 @@ class EventingRebalance(EventingBaseTest):
         eventing_server = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
         body = self.create_save_function_body(self.function_name, self.handler_code)
         self.deploy_function(body)
-        if self.is_curl:
-            body['depcfg']['curl'] = []
-            body['depcfg']['curl'].append({"hostname": self.hostname, "value": "server", "auth_type": self.auth_type,
-                                           "username": self.curl_username, "password": self.curl_password,"cookies": self.cookies})
         if self.pause_resume:
             self.pause_function(body)
         # load some data
@@ -747,10 +699,6 @@ class EventingRebalance(EventingBaseTest):
         enable_failover = self.input.param('enable_failover', False)
         gen_load_del = copy.deepcopy(self.gens_load)
         body = self.create_save_function_body(self.function_name, self.handler_code)
-        if self.is_curl:
-            body['depcfg']['curl'] = []
-            body['depcfg']['curl'].append({"hostname": self.hostname, "value": "server", "auth_type": self.auth_type,
-                                           "username": self.curl_username, "password": self.curl_password,"cookies": self.cookies})
         self.deploy_function(body)
         # load data
         task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
@@ -805,10 +753,6 @@ class EventingRebalance(EventingBaseTest):
         enable_failover = self.input.param('enable_failover', False)
         gen_load_del = copy.deepcopy(self.gens_load)
         body = self.create_save_function_body(self.function_name, self.handler_code)
-        if self.is_curl:
-            body['depcfg']['curl'] = []
-            body['depcfg']['curl'].append({"hostname": self.hostname, "value": "server", "auth_type": self.auth_type,
-                                           "username": self.curl_username, "password": self.curl_password,"cookies": self.cookies})
         self.deploy_function(body)
         # load data
         task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
@@ -868,10 +812,6 @@ class EventingRebalance(EventingBaseTest):
         body = self.create_save_function_body(self.function_name, self.handler_code,
                                               sock_batch_size=sock_batch_size, worker_count=worker_count,
                                               cpp_worker_thread_count=cpp_worker_thread_count)
-        if self.is_curl:
-            body['depcfg']['curl'] = []
-            body['depcfg']['curl'].append({"hostname": self.hostname, "value": "server", "auth_type": self.auth_type,
-                                           "username": self.curl_username, "password": self.curl_password,"cookies": self.cookies})
         self.deploy_function(body)
         # load data
         task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
@@ -951,10 +891,6 @@ class EventingRebalance(EventingBaseTest):
         body = self.create_save_function_body(self.function_name, self.handler_code,
                                               sock_batch_size=sock_batch_size, worker_count=worker_count,
                                               cpp_worker_thread_count=cpp_worker_thread_count)
-        if self.is_curl:
-            body['depcfg']['curl'] = []
-            body['depcfg']['curl'].append({"hostname": self.hostname, "value": "server", "auth_type": self.auth_type,
-                                           "username": self.curl_username, "password": self.curl_password,"cookies": self.cookies})
         self.deploy_function(body)
         # load data
         task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
@@ -1033,10 +969,6 @@ class EventingRebalance(EventingBaseTest):
         body = self.create_save_function_body(self.function_name,
                                               HANDLER_CODE.BUCKET_OPS_ON_UPDATE,
                                               worker_count=3)
-        if self.is_curl:
-            body['depcfg']['curl'] = []
-            body['depcfg']['curl'].append({"hostname": self.hostname, "value": "server", "auth_type": self.auth_type,
-                                           "username": self.curl_username, "password": self.curl_password,"cookies": self.cookies})
         self.deploy_function(body)
         if self.pause_resume:
             self.pause_function(body)
@@ -1047,10 +979,6 @@ class EventingRebalance(EventingBaseTest):
         # this is required to deploy multiple functions at the same time
         del body1['depcfg']['buckets'][0]
         body1['depcfg']['buckets'].append({"alias": self.dst_bucket_name1, "bucket_name": self.dst_bucket_name1})
-        if self.is_curl:
-            body1['depcfg']['curl'] = []
-            body1['depcfg']['curl'].append({"hostname": self.hostname, "value": "server", "auth_type": self.auth_type,
-                                           "username": self.curl_username, "password": self.curl_password,"cookies": self.cookies})
         self.deploy_function(body1)
         # do a swap rebalance
         self.rest.add_node(self.master.rest_username, self.master.rest_password,
@@ -1087,10 +1015,6 @@ class EventingRebalance(EventingBaseTest):
         kv_node = self.servers[1]
         eventing_node = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
         body = self.create_save_function_body(self.function_name, self.handler_code)
-        if self.is_curl:
-            body['depcfg']['curl'] = []
-            body['depcfg']['curl'].append({"hostname": self.hostname, "value": "server", "auth_type": self.auth_type,
-                                           "username": self.curl_username, "password": self.curl_password,"cookies": self.cookies})
         self.deploy_function(body)
         if self.pause_resume:
             self.pause_function(body)
@@ -1131,10 +1055,6 @@ class EventingRebalance(EventingBaseTest):
         kv_node = self.servers[1]
         eventing_node = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
         body = self.create_save_function_body(self.function_name, self.handler_code)
-        if self.is_curl:
-            body['depcfg']['curl'] = []
-            body['depcfg']['curl'].append({"hostname": self.hostname, "value": "server", "auth_type": self.auth_type,
-                                           "username": self.curl_username, "password": self.curl_password,"cookies": self.cookies})
         self.deploy_function(body)
         if self.pause_resume:
             self.pause_function(body)
@@ -1181,10 +1101,6 @@ class EventingRebalance(EventingBaseTest):
         kv_node = self.servers[1]
         eventing_node = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
         body = self.create_save_function_body(self.function_name, self.handler_code)
-        if self.is_curl:
-            body['depcfg']['curl'] = []
-            body['depcfg']['curl'].append({"hostname": self.hostname, "value": "server", "auth_type": self.auth_type,
-                                           "username": self.curl_username, "password": self.curl_password,"cookies": self.cookies})
         self.deploy_function(body)
         if self.pause_resume:
             self.pause_function(body)
@@ -1236,10 +1152,6 @@ class EventingRebalance(EventingBaseTest):
         eventing_nodes = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
         body = self.create_save_function_body(self.function_name, self.handler_code)
         self.deploy_function(body)
-        if self.is_curl:
-            body['depcfg']['curl'] = []
-            body['depcfg']['curl'].append({"hostname": self.hostname, "value": "server", "auth_type": self.auth_type,
-                                           "username": self.curl_username, "password": self.curl_password,"cookies": self.cookies})
         if self.pause_resume:
             self.pause_function(body)
         try:
@@ -1286,10 +1198,6 @@ class EventingRebalance(EventingBaseTest):
 
     def test_rebalance_out_all_eventing_nodes_and_rebalance_in_eventing_node_and_functions_should_be_restored(self):
         body = self.create_save_function_body(self.function_name, self.handler_code)
-        if self.is_curl:
-            body['depcfg']['curl'] = []
-            body['depcfg']['curl'].append({"hostname": self.hostname, "value": "server", "auth_type": self.auth_type,
-                                           "username": self.curl_username, "password": self.curl_password,"cookies": self.cookies})
         # deploy a function
         self.deploy_function(body)
         if self.pause_resume:
@@ -1336,10 +1244,6 @@ class EventingRebalance(EventingBaseTest):
         gen_load_del = copy.deepcopy(self.gens_load)
         server_failed_over = self.servers[self.server_failed_over]
         body = self.create_save_function_body(self.function_name, self.handler_code)
-        if self.is_curl:
-            body['depcfg']['curl'] = []
-            body['depcfg']['curl'].append({"hostname": self.hostname, "value": "server", "auth_type": self.auth_type,
-                                           "username": self.curl_username, "password": self.curl_password,"cookies": self.cookies})
         self.deploy_function(body)
         if self.pause_resume:
             self.pause_function(body)
@@ -1413,11 +1317,6 @@ class EventingRebalance(EventingBaseTest):
             reached = RestHelper(self.rest).rebalance_reached(expected_progress)
             self.assertTrue(reached, "Rebalance failed or did not reach {0}%".format(expected_progress))
             if not RestHelper(self.rest).is_cluster_rebalanced():
-                if self.is_curl:
-                    body['depcfg']['curl'] = []
-                    body['depcfg']['curl'].append(
-                        {"hostname": self.hostname, "value": "server", "auth_type": self.auth_type,
-                         "username": self.curl_username, "password": self.curl_password, "cookies": self.cookies})
                 self.deploy_function(body)
             else:
                 self.fail("Rebalance completed before we could start deployment of function")
@@ -1442,10 +1341,6 @@ class EventingRebalance(EventingBaseTest):
         # load data
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
-        if self.is_curl:
-            body['depcfg']['curl'] = []
-            body['depcfg']['curl'].append({"hostname": self.hostname, "value": "server", "auth_type": self.auth_type,
-                                           "username": self.curl_username, "password": self.curl_password,"cookies": self.cookies})
         # deploy the function, don't wait for bootstrap to complete
         self.deploy_function(body, wait_for_bootstrap=False)
         try:

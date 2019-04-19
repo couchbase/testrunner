@@ -70,7 +70,7 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         self.curl_password = self.input.param('curl_password', None)
         self.auth_type = self.input.param('auth_type', 'no-auth')
         self.url = self.input.param('path', None)
-        self.cookies = self.input.param('cookies','disallow')
+        self.cookies = self.input.param('cookies',False)
         self.bearer_key = self.input.param('bearer_key','')
         if self.hostname=='local':
             self.insall_dependencies()
@@ -151,6 +151,11 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         if self.is_sbm:
             del body['depcfg']['buckets'][0]
             body['depcfg']['buckets'].append({"alias": self.src_bucket_name, "bucket_name": self.src_bucket_name,"access": "rw"})
+        body['depcfg']['curl'] = []
+        if self.is_curl:
+            body['depcfg']['curl'].append({"hostname": self.hostname, "value": "server", "auth_type": self.auth_type,
+                                           "username": self.curl_username, "password": self.curl_password,
+                                           "allow_cookies": self.cookies})
         return body
 
     def wait_for_bootstrap_to_complete(self, name, iterations=20):

@@ -54,10 +54,6 @@ class EventingCurl(EventingBaseTest):
                       batch_size=self.batch_size)
             temp_handler=self.get_handler_code(self.handler_code,self.url)
             body = self.create_save_function_body(self.function_name, temp_handler, worker_count=3)
-            body['depcfg']['curl'] = []
-            body['depcfg']['curl'].append({"hostname":self.hostname,"value":"server","auth_type":self.auth_type,
-                                           "username":self.curl_username,"password":self.curl_password,
-                                           "bearer_key":"","cookies":"disallow"})
             self.deploy_function(body)
             # Wait for eventing to catch up with all the create mutations and verify results
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016,skip_stats_validation=True)
@@ -89,10 +85,6 @@ class EventingCurl(EventingBaseTest):
             self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                       batch_size=self.batch_size)
             body = self.create_save_function_body(self.function_name, HANDLER_CODE_CURL.BUCKET_OP_WITH_CURL_BEARER, worker_count=3)
-            body['depcfg']['curl'] = []
-            body['depcfg']['curl'].append({"hostname": self.hostname, "value": "server", "auth_type": "bearer",
-                                           "username": self.curl_username, "password": self.curl_password,
-                                           "bearer_key": "couchbase", "cookies": "disallow"})
             self.deploy_function(body)
             # Wait for eventing to catch up with all the create mutations and verify results
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016)
@@ -103,10 +95,6 @@ class EventingCurl(EventingBaseTest):
                       batch_size=self.batch_size)
             body = self.create_save_function_body(self.function_name, self.handler_code,
                                                   worker_count=3)
-            body['depcfg']['curl'] = []
-            body['depcfg']['curl'].append(
-                {"hostname": self.hostname, "value": "server", "auth_type": self.auth_type, "username": self.curl_username,
-                 "password": self.curl_password, "bearer_key": self.bearer_key, "cookies": self.cookies})
             self.deploy_function(body)
             # Wait for eventing to catch up with all the create mutations and verify results
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016,skip_stats_validation=True)
@@ -121,10 +109,6 @@ class EventingCurl(EventingBaseTest):
             gen_load_del = copy.deepcopy(self.gens_load)
             body = self.create_save_function_body(self.function_name, self.handler_code,
                                                   worker_count=3)
-            body['depcfg']['curl'] = []
-            body['depcfg']['curl'].append(
-                {"hostname": self.hostname, "value": "server", "auth_type": self.auth_type, "username": self.curl_username,
-                 "password": self.curl_password, "bearer_key": self.bearer_key, "cookies": self.cookies})
             self.deploy_function(body)
             # load some data
             task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
@@ -153,10 +137,6 @@ class EventingCurl(EventingBaseTest):
                       batch_size=self.batch_size)
             body = self.create_save_function_body(self.function_name, self.handler_code,
                                                   worker_count=3)
-            body['depcfg']['curl'] = []
-            body['depcfg']['curl'].append(
-                {"hostname": self.hostname, "value": "server", "auth_type": self.auth_type, "username": self.curl_username,
-                 "password": self.curl_password, "bearer_key": self.bearer_key, "cookies": self.cookies})
             self.deploy_function(body)
             # Wait for eventing to catch up with all the create mutations and verify results
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016,skip_stats_validation=True)
@@ -168,10 +148,6 @@ class EventingCurl(EventingBaseTest):
 
         def test_curl_takes_more_time(self):
             body = self.create_save_function_body(self.function_name, self.handler_code, worker_count=3,execution_timeout=5)
-            body['depcfg']['curl'] = []
-            body['depcfg']['curl'].append(
-                {"hostname": self.hostname, "value": "server", "auth_type": self.auth_type, "username": self.curl_username,
-                 "password": self.curl_password, "bearer_key": self.bearer_key, "cookies": self.cookies})
             self.deploy_function(body)
             self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                       batch_size=self.batch_size)
