@@ -38,7 +38,8 @@ class QueryTests(BaseTestCase):
         if not self._testMethodName == 'suite_setUp' \
                 and str(self.__class__).find('upgrade_n1qlrbac') == -1 \
                 and str(self.__class__).find('n1ql_upgrade') == -1 \
-                and str(self.__class__).find('n1ql_fts_integration') == -1 \
+                and str(self.__class__).find('N1qlFTSIntegrationTest') == -1 \
+                and str(self.__class__).find('N1qlFTSIntegrationPhase2ClusteropsTest') == -1 \
                 and str(self.__class__).find('AggregatePushdownRecoveryClass') == -1:
             self.skip_buckets_handle = True
         else:
@@ -589,6 +590,11 @@ class QueryTests(BaseTestCase):
     def drop_index(self, bucket, index):
         self.run_cbq_query("drop index %s.%s" % (bucket, index))
         self.wait_for_index_drop(bucket, index)
+
+    def drop_index_safe(self, bucket, index):
+        if self.is_index_present(bucket_name=bucket, index_name=index):
+            self.run_cbq_query("drop index `%s`.`%s`" % (bucket, index))
+            self.wait_for_index_drop(bucket, index)
 
     def drop_all_indexes(self, bucket=None, leave_primary=True):
         current_indexes = self.get_parsed_indexes()
