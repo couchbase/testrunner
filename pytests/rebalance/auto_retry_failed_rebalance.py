@@ -76,6 +76,49 @@ class AutoRetryFailedRebalance(RebalanceBaseTest):
             self.start_server(self.servers[1])
             self.stop_firewall_on_node(self.servers[1])
 
+    def test_auto_retry_of_failed_rebalance_does_not_get_triggered_when_rebalance_is_stopped(self):
+        operation = self._rebalance_operation(self.rebalance_operation)
+        reached = RestHelper(self.rest).rebalance_reached(30)
+        self.assertTrue(reached, "Rebalance failed or did not reach {0}%".format(30))
+        self.rest.stop_rebalance(wait_timeout=self.sleep_time)
+        result = json.loads(self.rest.get_pending_rebalance_info())
+        self.log.info(result)
+        retry_rebalance = result["retry_rebalance"]
+        if retry_rebalance != "not_pending":
+            self.fail("Auto-retry succeeded even when Rebalance was stopped by user")
+
+    def test_auto_retry_cancel_of_failed_rebalance(self):
+        during_rebalance_failure = self.input.param("during_rebalance_failure", "stop_server")
+        try:
+            operation = self._rebalance_operation(self.rebalance_operation)
+            self.sleep(self.sleep_time)
+            # induce the failure during the rebalance
+            self._induce_error(during_rebalance_failure)
+            operation.result()
+        except Exception as e:
+            self.log.info("Rebalance failed with : {0}".format(str(e)))
+            # Recover from the error
+            self._recover_from_error(during_rebalance_failure)
+            result = json.loads(self.rest.get_pending_rebalance_info())
+            self.log.info(result)
+            retry_rebalance = result["retry_rebalance"]
+            rebalance_id = result["rebalance_id"]
+            if retry_rebalance != "pending":
+                self.fail("Auto-retry of failed rebalance is not triggered")
+            # cancel pending rebalance
+            self.rest.cancel_pending_rebalance(rebalance_id)
+            result = json.loads(self.rest.get_pending_rebalance_info())
+            self.log.info(result)
+            if retry_rebalance != "pending":
+                self.fail("Auto-retry of failed rebalance is not cancelled")
+        else:
+            self.fail("Rebalance did not fail as expected. Hence could not validate auto-retry feature..")
+        finally:
+            if self.disable_auto_failover:
+                self.rest.update_autofailover_settings(True, 120)
+            self.start_server(self.servers[1])
+            self.stop_firewall_on_node(self.servers[1])
+
     def _rebalance_operation(self, rebalance_operation):
         if rebalance_operation == "rebalance_out":
             operation = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], self.servers[1:])

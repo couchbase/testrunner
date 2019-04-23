@@ -4675,8 +4675,7 @@ class RestConnection(object):
         url = "controller/cancelRebalanceRetry/" + str(id)
         api = self.baseUrl + url
         headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
-        status, content, header = self._http_request(api, 'POST', headers=headers,
-                                                     params=json.dumps(body).encode("ascii", "ignore"))
+        status, content, header = self._http_request(api, 'POST', headers=headers)
 
         if not status:
             raise Exception(content)
