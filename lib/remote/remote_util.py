@@ -3383,7 +3383,7 @@ class RemoteMachineShellConnection:
                     # now remove this file
                     os.remove(filename)
                     break
-            """ for centos 7 only """
+            """ for centos 7 or rhel8 """
             for name in filenames:
                 if name == "redhat-release":
                     filename = 'redhat-release-{0}'.format(uuid.uuid4())
@@ -3400,11 +3400,17 @@ class RemoteMachineShellConnection:
                     redhat_release = redhat_release.rstrip('\n').rstrip('\\l').rstrip('\\n')
                     """ in ec2: Red Hat Enterprise Linux Server release 7.2 """
                     if redhat_release.lower().find('centos') != -1 \
-                         or redhat_release.lower().find('linux server') != -1:
+                         or redhat_release.lower().find('linux server') != -1 \
+                         or redhat_release.lower().find('red hat') != -1:
                         if redhat_release.lower().find('release 7') != -1:
                             os_distro = 'CentOS'
                             os_version = "CentOS 7"
                             is_linux_distro = True
+                        elif redhat_release.lower().find('red hat enterprise') != -1:
+                            if "8.0" in redhat_release.lower():
+                                os_distro = "Red Hat"
+                                os_version = redhat_release
+                                is_linux_distro = True
                     else:
                         log.error("Could not find OS name."
                                  "It could be unsupport OS")

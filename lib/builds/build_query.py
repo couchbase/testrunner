@@ -369,8 +369,11 @@ class BuildQuery(object):
                                             build_version[:5] in COUCHBASE_FROM_601:
                                 os_name = "amzn2"
                             else:
-                                self.fail("Amazon Linux 2 doesn't support version %s "
-                                          % build_version[:5])
+                                self.fail("Amazon Linux 2 doesn't support version {0} "\
+                                                              .format(build_version[:5]))
+                        elif "red hat" in os_version.lower():
+                            if "8.0" in os_version.lower():
+                                os_name = "rhel8"
                         else:
                             os_name = "centos6"
                         build.url = "{6}{0}/{1}-{4}-{5}.{2}.{3}"\
@@ -820,17 +823,19 @@ class BuildQuery(object):
             build_number = build.product_version.replace(version[:6],"")
             """ distribution version:    centos linux release 7.0.1406 (core)
                 distribution version:    centos release 6.5 (final)  """
-            centos_version = "centos6"
+            rpm_version = "centos6"
 
             if "centos" in distribution_version or "red hat" in distribution_version:
                 if "centos 7" in distribution_version:
-                    centos_version = "centos7"
+                    rpm_version = "centos7"
                 elif "red hat enterprise linux server release 6" in distribution_version:
-                    centos_version = "centos6"
+                    rpm_version = "centos6"
                 elif "red hat enterprise linux server release 7" in distribution_version:
-                    centos_version = "centos7"
+                    rpm_version = "centos7"
+                elif "red hat enterprise linux release 8.0" in distribution_version:
+                    rpm_version = "rhel8"
                 build.name = edition_type + "-" + build.product_version + \
-                   "-" + centos_version + "." + build.architecture_type + \
+                   "-" + rpm_version + "." + build.architecture_type + \
                    "." + build.deliverable_type
             elif "suse" in distribution_version:
                 if "suse 12" in distribution_version:
