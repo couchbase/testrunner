@@ -822,14 +822,15 @@ class BuildQuery(object):
                 distribution version:    centos release 6.5 (final)  """
             rpm_version = "centos6"
 
-            if "centos" in distribution_version or "red hat" in distribution_version:
+            if "centos" in distribution_version or "red hat" in distribution_version or \
+               "rhel" in distribution_version:
                 if "centos 7" in distribution_version:
                     rpm_version = "centos7"
                 elif "red hat enterprise linux server release 6" in distribution_version:
                     rpm_version = "centos6"
                 elif "red hat enterprise linux server release 7" in distribution_version:
                     rpm_version = "centos7"
-                elif "red hat enterprise linux release 8.0" in distribution_version:
+                elif "rhel8" in distribution_version:
                     rpm_version = "rhel8"
                 build.name = edition_type + "-" + build.product_version + \
                    "-" + rpm_version + "." + build.architecture_type + \
