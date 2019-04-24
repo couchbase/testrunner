@@ -2028,7 +2028,7 @@ class VerifyRevIdTask(GenericLoadingTask):
 
     def next(self):
         if self.itr < self.num_valid_keys:
-            self._check_key_revId(self.src_valid_keys[self.itr], self.collection)
+            self._check_key_revId(self.src_valid_keys[self.itr], collection=self.collection)
         elif self.itr < (self.num_valid_keys + self.num_deleted_keys):
             # verify deleted/expired keys
             self._check_key_revId(self.src_deleted_keys[self.itr - self.num_valid_keys],
