@@ -3409,7 +3409,7 @@ class RemoteMachineShellConnection:
                         elif redhat_release.lower().find('red hat enterprise') != -1:
                             if "8.0" in redhat_release.lower():
                                 os_distro = "Red Hat"
-                                os_version = redhat_release
+                                os_version = "rhel8"
                                 is_linux_distro = True
                     else:
                         log.error("Could not find OS name."
