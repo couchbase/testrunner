@@ -1,4 +1,6 @@
 import time
+import datetime
+import re
 
 from couchbase_helper.documentgenerator import BlobGenerator
 from lib.membase.api.rest_client import RestConnection
@@ -46,10 +48,17 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
         self.num_commit_for_chkpt_calls_so_far = 0
         self.num_successful_chkpts_so_far = 0
         self.num_failed_chkpts_so_far = 0
-        self.num_pre_replicate_calls_so_far = 0
         self.num_successful_prereps_so_far = 0
-        self.num_failed_prereps_so_far = 0
+        self.time_test_started = datetime.datetime.now()
         self.read_chkpt_history_new_vb0node()
+
+    """ Helper method to extract _pre_replicate timestamps """
+
+    def _extract_timestamp(self, logmsg):
+        # matches timestamp format : 01/Nov/2018:16:27:27
+        timestamp_str = re.search(r'\d{2}/\w{3}/\d{4}:\d{2}:\d{2}:\d{2}', logmsg)
+        timestamp = datetime.datetime.strptime(timestamp_str.group(), '%d/%b/%Y:%H:%M:%S')
+        return timestamp
 
     """ * Call everytime the active vb0 on dest moves *
         We don't install everytime a test is run so it is important to know the checkpoint history on the node.
@@ -61,26 +70,21 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
     def read_chkpt_history_new_vb0node(self):
         # since we do not install before every test, discounting already recorded checkpoints, pre-replicates"""
         self.num_commit_for_chkpt_beginning = self.num_successful_chkpts_beginning = self.num_failed_chkpts_beginning = 0
-        self.num_pre_replicates_beginning = self.num_successful_prereps_beginning = self.num_failed_prereps_beginning = 0
+        self.num_successful_prereps_beginning = 0
         # get these numbers from logs
         node = self.get_active_vb0_node(self.dest_master)
         self.num_commit_for_chkpt_beginning, self.num_successful_chkpts_beginning, self.num_failed_chkpts_beginning = \
             self.get_checkpoint_call_history(node)
-        self.num_pre_replicates_beginning, self.num_successful_prereps_beginning,self.num_failed_prereps_beginning = \
-            self.get_pre_replicate_call_history(node)
+        self.num_successful_prereps_beginning = self.get_pre_replicate_call_history(node)
         self.log.info("From previous runs on {0} : Num of commit calls : {1} ; num of successful commits : {2} \
         num of failed commits : {3}".format(node.ip, self.num_commit_for_chkpt_beginning, \
         self.num_successful_chkpts_beginning,self.num_failed_chkpts_beginning))
-        self.log.info("From previous runs on {0} : Num of pre_replicate calls : {1} ; num of successful pre_replicates : {2} \
-        num of failed pre_replicates : {3}".format(node.ip,self.num_pre_replicates_beginning, \
-                                            self.num_successful_prereps_beginning, self.num_failed_prereps_beginning ))
+        self.log.info("From previous runs on {0} : num of successful pre_replicates : {1}".format(node.ip, self.num_successful_prereps_beginning))
 
         self.num_commit_for_chkpt_calls_so_far = self.num_commit_for_chkpt_beginning
         self.num_successful_chkpts_so_far = self.num_successful_chkpts_beginning
         self.num_failed_chkpts_so_far = self.num_failed_chkpts_beginning
-        self.num_pre_replicate_calls_so_far = self.num_pre_replicates_beginning
         self.num_successful_prereps_so_far = self.num_successful_prereps_beginning
-        self.num_failed_prereps_so_far = self.num_failed_prereps_beginning
 
     """ Returns node containing active vb0 """
     def get_active_vb0_node(self, master):
@@ -179,19 +183,22 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
             total_failed_chkpts = 0
         return total_successful_chkpts + total_failed_chkpts, total_successful_chkpts, total_failed_chkpts
 
-    """ Gets total number of pre_replicate responses made from dest, number of
-        successful and failed pre_replicate calls so far on the current dest node """
+    """ Gets number of pre_replicate responses received dest->current dest node since the start of this test"""
     def get_pre_replicate_call_history(self, node):
-        total_prerep_calls = NodeHelper.check_goxdcr_log(node,
-                                                        "POST /_pre_replicate",
+        prerep_calls, count = NodeHelper.check_goxdcr_log(node,
+                                                        "POST /_goxdcr/_pre_replicate",
                                                         log_name="http_access.log",
-                                                        timeout=10)
-        total_successful_prereps = NodeHelper.check_goxdcr_log(node,
-                                                        "POST /_pre_replicate 200",
-                                                        log_name="http_access.log",
-                                                        timeout=10)
-        total_prerep_failures = total_prerep_calls - total_successful_prereps
-        return total_prerep_calls, total_successful_prereps, total_prerep_failures
+                                                        timeout=10,
+                                                        print_matches=True)
+        if count > 0:
+            total_successful_prereps = 0
+            for call in prerep_calls:
+                call_datetime = self._extract_timestamp(call)
+                # Ignore calls that happened before the test started
+                if call_datetime < self.time_test_started:
+                    continue
+                total_successful_prereps += 1
+        return total_successful_prereps
 
     """ From destination couchdb log tells if checkpointing was successful """
     def was_checkpointing_successful(self):
@@ -215,17 +222,13 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
     def was_pre_rep_successful(self):
         self.sleep(30)
         node = self.get_active_vb0_node(self.dest_master)
-        total_commit_calls, success, failures = self.get_pre_replicate_call_history(node)
+        success = self.get_pre_replicate_call_history(node)
         if success > self.num_successful_prereps_so_far :
             self.log.info("_pre_replicate was successful: last recorded success :{0} , now :{1}".
                           format(self.num_successful_prereps_so_far, success))
             self.num_successful_prereps_so_far = success
             return True
-        elif failures > self.num_failed_prereps_so_far:
-            self.log.error("_pre_replicate was NOT successful: last recorded failure :{0} , now :{1}".
-                          format(self.num_failed_prereps_so_far, failures))
-            self.num_failed_prereps_so_far = failures
-        elif total_commit_calls == self.num_pre_replicate_calls_so_far:
+        elif total_commit_calls == self.num_successful_prereps_so_far:
             self.log.error("ERROR: Pre-replication did NOT happen!")
         return False
 
@@ -303,51 +306,29 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
             count += 1
         return True
 
-    """ Verify checkpoint 404 error thrown when the dest node containing vb0 is no more a part of cluster """
+    """ Verify checkpoint topology change detection after dest node containing vb0 is no more a part of cluster """
     def mutate_and_check_error404(self, n=1):
         # get vb0 active source node
         active_src_node = self.get_active_vb0_node(self.src_master)
-        os_type = shell.extract_remote_info().distribution_type
-        if os_type.lower() == 'windows':
-            trace_log = "C:/Program Files/Couchbase/Server/var/lib/couchbase/logs/xdcr_trace.log"
-        else:
-            trace_log = "/opt/couchbase/var/lib/couchbase/logs/xdcr_trace.*"
-        num_404_errors_before_load, error = NodeHelper.check_goxdcr_log(
+        num_404_errors_before_load = NodeHelper.check_goxdcr_log(
                                             active_src_node,
-                                            "error,404",
-                                            trace_log,
+                                            "ERRO GOXDCR.CheckpointMgr: GetRemoteMemcachedConnection Operation failed after max retries",
                                             timeout=30)
-        num_get_remote_bkt_failed_before_load, error = NodeHelper.check_goxdcr_log(
-                                            active_src_node,
-                                            "get_remote_bucket_failed",
-                                            trace_log,
-                                            timeout=30)
-        self.log.info("404 errors: {0}, get_remote_bucket_failed errors : {1}".
-                      format(num_404_errors_before_load, num_get_remote_bkt_failed_before_load))
         self.sleep(60)
         self.log.info("################ New mutation:{0} ##################".format(self.key_counter+1))
         self.load_one_mutation_into_source_vb0(active_src_node)
         self.sleep(5)
-        num_404_errors_after_load, error = NodeHelper.check_goxdcr_log(
+        num_404_errors_after_load = NodeHelper.check_goxdcr_log(
                                             active_src_node,
-                                            "error,404",
-                                            trace_log,
+                                            "ERRO GOXDCR.CheckpointMgr: GetRemoteMemcachedConnection Operation failed after max retries",
                                             timeout=30)
-        num_get_remote_bkt_failed_after_load, error = NodeHelper.check_goxdcr_log(
-                                            active_src_node,
-                                            "get_remote_bucket_failed",
-                                            trace_log,
-                                            timeout=30)
-        self.log.info("404 errors: {0}, get_remote_bucket_failed errors : {1}".
-                      format(num_404_errors_after_load, num_get_remote_bkt_failed_after_load))
-        if (int(num_404_errors_after_load[0]) > int(num_404_errors_before_load[0])) or \
-           (int(num_get_remote_bkt_failed_after_load[0]) > int(num_get_remote_bkt_failed_before_load[0])):
-            self.log.info("Checkpointing error-404 verified after dest failover/rebalance out")
+        if num_404_errors_after_load > num_404_errors_before_load:
+            self.log.info("Topology change verified after dest failover/rebalance out")
             return True
         else:
             self.log.info("404 errors on source node before last load : {0}, after last node: {1}".
-                          format(int(num_404_errors_after_load[0]), int(num_404_errors_before_load[0])))
-            self.log.error("Checkpoint 404 error NOT recorded at source following dest failover or rebalance!")
+                          format(num_404_errors_before_load, num_404_errors_after_load))
+            self.log.error("Topology change NOT recorded at source following dest failover or rebalance!")
 
     """ Rebalance-out active vb0 node from a cluster """
     def rebalance_out_activevb0_node(self, master):
@@ -496,7 +477,7 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
     def test_source_bucket_delete_recreate(self):
         self.mutate_and_checkpoint(n=2)
         self.src_cluster.delete_bucket('default')
-        self.sleep(30)
+        self.sleep(60)
         self.create_buckets_on_cluster(self.src_cluster.get_name())
         RestConnection(self.src_master).start_replication(REPLICATION_TYPE.CONTINUOUS,
             'default',
