@@ -10,6 +10,7 @@ from couchbase_helper.documentgenerator import BlobGenerator
 from membase.helper.rebalance_helper import RebalanceHelper
 from remote.remote_util import RemoteMachineShellConnection
 from membase.helper.cluster_helper import ClusterOperationHelper
+from membase.helper.bucket_helper import BucketOperationHelper
 
 
 class AutoRetryFailedRebalance(RebalanceBaseTest):
@@ -87,8 +88,9 @@ class AutoRetryFailedRebalance(RebalanceBaseTest):
         if retry_rebalance != "not_pending":
             self.fail("Auto-retry succeeded even when Rebalance was stopped by user")
 
-    def test_auto_retry_cancel_of_failed_rebalance(self):
+    def test_negative_auto_retry_of_failed_rebalance_where_rebalance_will_be_cancelled(self):
         during_rebalance_failure = self.input.param("during_rebalance_failure", "stop_server")
+        post_failure_operation = self.input.param("post_failure_operation", "cancel_pending_rebalance")
         try:
             operation = self._rebalance_operation(self.rebalance_operation)
             self.sleep(self.sleep_time)
@@ -105,12 +107,67 @@ class AutoRetryFailedRebalance(RebalanceBaseTest):
             rebalance_id = result["rebalance_id"]
             if retry_rebalance != "pending":
                 self.fail("Auto-retry of failed rebalance is not triggered")
-            # cancel pending rebalance
-            self.rest.cancel_pending_rebalance(rebalance_id)
+            if post_failure_operation == "cancel_pending_rebalance":
+                # cancel pending rebalance
+                self.log.info("Cancelling rebalance Id: {0}".format(rebalance_id))
+                self.rest.cancel_pending_rebalance(rebalance_id)
+            elif post_failure_operation == "retry_failed_rebalance_manually":
+                # retry failed rebalance manually
+                self.log.info("Retrying failed rebalance Id: {0}".format(rebalance_id))
+                self.cluster.rebalance(self.servers[:self.nodes_init], [], [])
+            else:
+                self.fail("Invalid post_failure_operation option")
+            # Now check and ensure retry won't happen
             result = json.loads(self.rest.get_pending_rebalance_info())
             self.log.info(result)
-            if retry_rebalance != "pending":
+            retry_rebalance = result["retry_rebalance"]
+            if retry_rebalance != "not_pending":
                 self.fail("Auto-retry of failed rebalance is not cancelled")
+        else:
+            self.fail("Rebalance did not fail as expected. Hence could not validate auto-retry feature..")
+        finally:
+            if self.disable_auto_failover:
+                self.rest.update_autofailover_settings(True, 120)
+            self.start_server(self.servers[1])
+            self.stop_firewall_on_node(self.servers[1])
+
+    def test_negative_auto_retry_of_failed_rebalance_where_rebalance_will_not_be_cancelled(self):
+        during_rebalance_failure = self.input.param("during_rebalance_failure", "stop_server")
+        post_failure_operation = self.input.param("post_failure_operation", "create_delete_buckets")
+        try:
+            operation = self._rebalance_operation(self.rebalance_operation)
+            self.sleep(self.sleep_time)
+            # induce the failure during the rebalance
+            self._induce_error(during_rebalance_failure)
+            operation.result()
+        except Exception as e:
+            self.log.info("Rebalance failed with : {0}".format(str(e)))
+            # Recover from the error
+            self._recover_from_error(during_rebalance_failure)
+            result = json.loads(self.rest.get_pending_rebalance_info())
+            self.log.info(result)
+            retry_rebalance = result["retry_rebalance"]
+            if retry_rebalance != "pending":
+                self.fail("Auto-retry of failed rebalance is not triggered")
+            if post_failure_operation == "create_delete_buckets":
+                # delete buckets and create new one
+                BucketOperationHelper.delete_all_buckets_or_assert(servers=self.servers, test_case=self)
+                self.sleep(self.sleep_time)
+                BucketOperationHelper.create_bucket(self.master, test_case=self)
+            elif post_failure_operation == "change_replica_count":
+                # retry failed rebalance manually
+                self.log.info("Changing replica count of buckets")
+                for bucket in self.buckets:
+                    self.rest.change_bucket_props(bucket, replicaNumber=2)
+            else:
+                self.fail("Invalid post_failure_operation option")
+            # In these failure scenarios while the retry is pending, then the retry will be attempted but fail
+            try:
+                self._check_retry_rebalance_succeeded()
+            except Exception as e:
+                self.log.info(e)
+                if "Retrying of rebalance still did not help. All the retries exhausted" not in str(e):
+                    self.fail("Auto retry of failed rebalance succeeded when it was expected to fail")
         else:
             self.fail("Rebalance did not fail as expected. Hence could not validate auto-retry feature..")
         finally:
@@ -176,13 +233,21 @@ class AutoRetryFailedRebalance(RebalanceBaseTest):
         elif error_condition == "reboot_server":
             shell = RemoteMachineShellConnection(self.servers[1])
             shell.reboot_node()
+        elif error_condition == "kill_erlang":
+            shell = RemoteMachineShellConnection(self.servers[1])
+            shell.kill_erlang()
+            self.sleep(self.sleep_time * 3)
+        else:
+            self.fail("Invalid error induce option")
 
     def _recover_from_error(self, error_condition):
-        if error_condition == "stop_server":
+        if error_condition == "stop_server" or error_condition == "kill_erlang":
             self.start_server(self.servers[1])
         elif error_condition == "enable_firewall":
             self.stop_firewall_on_node(self.servers[1])
         elif error_condition == "reboot_server":
             # wait till node is ready after warmup
             ClusterOperationHelper.wait_for_ns_servers_or_assert([self.servers[1]], self, wait_if_warmup=True)
+        else:
+            self.fail("Invalid error recovery option")
 
