@@ -1748,7 +1748,7 @@ class DocumentGenerator(object):
 class LoadWithMcsoda(object):
 
     def __init__(self, master, num_docs, prefix='', bucket='default', rest_user='Administrator',
-                 rest_password="password", protocol='membase-binary', port=11211):
+                 rest_password="password", protocol='membase-binary', port=11210):
 
         rest = RestConnection(master)
         self.bucket = bucket
@@ -1784,10 +1784,13 @@ class LoadWithMcsoda(object):
         self.rest_password = rest_password
 
         if protocol == 'membase-binary':
-            self.host_port = "{0}:{1}:{2}".format(master.ip, master.port, port)
+            if master.port == str(port):
+                self.host_port = "{0}:{1}".format(master.ip, master.port)
+            else:
+                self.host_port = "{0}:{1}:{2}".format(master.ip, master.port, port)
 
         elif protocol == 'memcached-binary':
-            self.host_port = "{0}:{1}:{1}".format(master.ip, port)
+            self.host_port = "{0}:{1}".format(master.ip, port)
 
         self.ctl = { 'run_ok': True }
 
