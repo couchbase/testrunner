@@ -856,13 +856,13 @@ class N1QLHelper():
                     except Exception, ex:
                         self.log.info(str(ex))
                         continue
-                    self.fail("Replica is still present when it should have been dropped")
+                    raise Exception("Replica is still present when it should have been dropped")
 
         if expected_nodes:
             expected_nodes = expected_nodes.sort()
             nodes = nodes.sort()
             if not expected_nodes == nodes:
-                self.fail("Replicas not created on expected hosts")
+                raise Exception("Replicas not created on expected hosts")
 
     def verify_replica_indexes_build_status(self, index_map, num_replicas, defer_build=False):
 

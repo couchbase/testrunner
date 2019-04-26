@@ -492,7 +492,7 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
         try:
             error = self._alter_index_replicas(index_name=index_name_prefix, drop_replica=True, replicaId=self.replicaId)
 
-            self.sleep(5)
+            self.sleep(10)
             self.wait_until_indexes_online()
 
             if self.expected_err_msg:
@@ -502,12 +502,15 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
               index_map = self.get_index_map()
               definitions = self.rest.get_index_statements()
               indexes = self.rest.get_indexer_metadata()
+              self.log.info(indexes)
               if not self.replicaId == 0:
                   for definition in definitions:
                       if index_name_prefix in definition:
                           self.assertTrue('"num_replica":{0}'.format(self.num_index_replicas-1) in definition, "Number of replicas in the definition is wrong: %s" % definition)
                   for index in indexes['status']:
                       if index_name_prefix in index['name']:
+                          self.log.info("index replicaID: %s" % index['replicaId'])
+                          self.log.info("dropped replicaID: %s" % self.replicaId)
                           self.assertTrue(self.replicaId != index['replicaId'], '%s' % str(index['replicaId']))
                   self.n1ql_helper.verify_replica_indexes([index_name_prefix], index_map, expected_num_replicas, dropped_replica=True, replicaId=self.replicaId)
               else:
@@ -529,7 +532,7 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
         for i in range(0,self.num_index_replicas):
             error = self._alter_index_replicas(index_name=index_name_prefix, drop_replica=True, replicaId=i+1)
 
-        self.sleep(5)
+        self.sleep(10)
         self.wait_until_indexes_online()
 
         if self.expected_err_msg:
@@ -564,7 +567,7 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
 
         error = self._alter_index_replicas(index_name=index_name_prefix, drop_replica=True, replicaId=self.replicaId)
 
-        self.sleep(5)
+        self.sleep(10)
         self.wait_until_indexes_online()
 
         if self.expected_err_msg:
@@ -612,7 +615,7 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
 
             error = self._alter_index_replicas(index_name=index_name_prefix, drop_replica=True, replicaId=self.replicaId)
 
-            self.sleep(5)
+            self.sleep(10)
             self.wait_until_indexes_online()
 
             if self.expected_err_msg not in error[0]:
@@ -762,7 +765,10 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
 
         index_map = self.get_index_map()
         self.log.info(index_map)
-        self.n1ql_helper.verify_replica_indexes([index_name_prefix], index_map, expected_num_replicas)
+        if not self.same_index:
+            self.n1ql_helper.verify_replica_indexexes("idx1", index_map, expected_num_replicas)
+        else:
+            self.n1ql_helper.verify_replica_indexes([index_name_prefix], index_map, expected_num_replicas)
 
     '''Test alter index during alter index, the second alter index fails because the first alter index is still using the index'''
     def test_alter_index_concurrent_alter(self):
@@ -1020,7 +1026,7 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
         else:
             error = self._alter_index_replicas(index_name=index_name_prefix, num_replicas=expected_num_replicas)
 
-        self.sleep(5)
+        self.sleep(10)
         self.wait_until_indexes_online()
 
         index_map_before_backup = self.get_index_map()
@@ -1138,7 +1144,7 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
 
         if self.create_replica_hole:
             error = self._alter_index_replicas(index_name='idx1', drop_replica=True, replicaId=self.replicaId)
-            self.sleep(5)
+            self.sleep(10)
             self.wait_until_indexes_online()
 
         self._create_restore(kv_node)
@@ -1268,7 +1274,7 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
                 # Decrease number of replicas
                 expected_num_replicas = expected_num_replicas - 1
                 error = self._alter_index_replicas(index_name=index_name_prefix, drop_replica=True, replicaId=self.replicaId)
-                self.sleep(5)
+                self.sleep(10)
                 self.wait_until_indexes_online()
                 index_map = self.get_index_map()
                 definitions = self.rest.get_index_statements()
@@ -1304,7 +1310,7 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
 
         # Fail drop replica
         error = self._alter_index_replicas(index_name=index_name_prefix, drop_replica=True, replicaId=self.replicaId)
-        self.sleep(5)
+        self.sleep(10)
         self.wait_until_indexes_online()
         self.log.info(error)
 
@@ -1323,7 +1329,7 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
         # Decrease number of replicas
         expected_num_replicas = expected_num_replicas - 1
         error = self._alter_index_replicas(index_name=index_name_prefix, drop_replica=True, replicaId=self.replicaId)
-        self.sleep(5)
+        self.sleep(10)
         self.wait_until_indexes_online()
         index_map = self.get_index_map()
         definitions = self.rest.get_index_statements()
@@ -1359,7 +1365,7 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
 
         error = self._alter_index_replicas(index_name=index_name_prefix, drop_replica=True, replicaId=self.replicaId)
 
-        self.sleep(5)
+        self.sleep(10)
         self.wait_until_indexes_online()
 
         index_map = self.get_index_map()
