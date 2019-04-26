@@ -168,6 +168,32 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
                                                     index_map,
                                                     len(nodes) - 1, nodes)
 
+    '''Due to a bug you could force the indexer to ignore the default replica settings, ensure that the nodelist 
+       must contain enough nodes for the min number of replicas set'''
+    def test_neg_create_replica_index_with_node_list(self):
+        node_1 = self.servers[1].ip + ":" + self.servers[1].port
+        node_2 = self.servers[2].ip + ":" + self.servers[2].port
+
+        rest = RestConnection(self.servers[1])
+        rest.set_index_settings({"indexer.settings.num_replica":2})
+        self.sleep(10)
+
+        index_name_prefix = "random_index_" + str(
+            random.randint(100000, 999999))
+        create_index_query = "CREATE INDEX " + index_name_prefix + " ON default(age) USING GSI  WITH {{'nodes':['{0}','{1}']}};".format(node_1,node_2)
+        self.log.info(create_index_query)
+        try:
+            self.n1ql_helper.run_cbq_query(query=create_index_query,
+                                           server=self.n1ql_node)
+        except Exception, ex:
+            self.log.info(str(ex))
+            if self.expected_err_msg not in str(ex):
+                self.fail(
+                    "index creation did not fail with expected error : {0}".format(
+                        str(ex)))
+            else:
+                self.log.info("Index creation failed as expected")
+
     def test_create_replica_index_one_failed_node_with_node_list(self):
         node_out = self.servers[self.node_out]
         failover_task = self.cluster.async_failover(
