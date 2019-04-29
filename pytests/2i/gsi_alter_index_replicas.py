@@ -493,7 +493,8 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
             error = self._alter_index_replicas(index_name=index_name_prefix, drop_replica=True, replicaId=self.replicaId)
 
             self.sleep(30)
-            self.wait_until_indexes_online()
+            if not self.replicaId == 0:
+                self.wait_until_indexes_online()
 
             if self.expected_err_msg:
               if self.expected_err_msg not in error[0]:
