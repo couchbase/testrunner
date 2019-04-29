@@ -484,6 +484,12 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
 
         self._create_index_query(index_statement=create_index_query, index_name=index_name_prefix)
 
+        index_map = self.get_index_map()
+        definitions = self.rest.get_index_statements()
+        indexes = self.rest.get_indexer_metadata()
+        self.log.info(indexes)
+        self.log.info(definitions)
+
         if self.stop_server:
             remote = RemoteMachineShellConnection(self.servers[1])
             remote.stop_server()
@@ -504,6 +510,7 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
               definitions = self.rest.get_index_statements()
               indexes = self.rest.get_indexer_metadata()
               self.log.info(indexes)
+              self.log.info(definitions)
               if not self.replicaId == 0:
                   for definition in definitions:
                       if index_name_prefix in definition:
