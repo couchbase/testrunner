@@ -66,6 +66,7 @@ Available keys:
  ntp=True                   Check if ntp is installed. Default is true. Set ntp=False, in case systemctl is not allowed, such as in docker container
  fts_quota=256              Set quota for fts services.  It must be equal or greater 256.  If fts_quota does not pass,
                             it will take FTS_QUOTA value in lib/testconstants.py
+ debug_logs=false            If you don't want to print install logs, set this param value to false. By default, this value preset to true.
 
 
 Examples:
@@ -138,7 +139,13 @@ class Installer(object):
         #remote_client.membase_uninstall()
 
         self.msi = 'msi' in params and params['msi'].lower() == 'true'
-        remote_client.couchbase_uninstall(windows_msi=self.msi,product=params['product'])
+        if "debug_logs" in params and params["debug_logs"] in ["False", "false", False]:
+            debug_logs = False
+        else:
+            debug_logs = True
+        remote_client.couchbase_uninstall(windows_msi=self.msi,
+                                          product=params['product'],
+                                          debug_logs=debug_logs)
         remote_client.disconnect()
 
 
@@ -150,6 +157,7 @@ class Installer(object):
         names = []
         url = ''
         direct_build_url = None
+        debug_logs = True
 
         # replace "v" with version
         # replace p with product
@@ -206,6 +214,10 @@ class Installer(object):
                 msi = True
             else:
                 msi = False
+        if ok:
+            if "debug_logs" in params and params["debug_logs"] in ["False", "false", False]:
+                debug_logs = False
+
         if ok:
             mb_alias = ["membase", "membase-server", "mbs", "mb"]
             cb_alias = ["couchbase", "couchbase-server", "cb"]
@@ -641,6 +653,10 @@ class CouchbaseServerInstaller(Installer):
         log.info('********CouchbaseServerInstaller:install')
 
         self.msi = 'msi' in params and params['msi'].lower() == 'true'
+        if "debug_logs" in params and params["debug_logs"] in ["False", "false", False]:
+            debug_logs = False
+        else:
+            debug_logs = True
         start_server = True
         try:
             if "linux_repo" not in params:
@@ -744,7 +760,8 @@ class CouchbaseServerInstaller(Installer):
                                          openssl=openssl, upr=upr, xdcr_upr=xdcr_upr,
                                          fts_query_limit=fts_query_limit,
                                          cbft_env_options= cbft_env_options,
-                                         enable_ipv6=enable_ipv6)
+                                         enable_ipv6=enable_ipv6,
+                                         debug_logs=debug_logs)
                     log.info('wait 5 seconds for Couchbase server to start')
                     time.sleep(5)
                     if "rest_vbuckets" in params:

@@ -555,7 +555,7 @@ class RemoteMachineShellConnection:
                     break
         else:
             o, r = self.execute_command("killall -9 beam.smp")
-            self.log_command_output(o, r)
+            self.log_command_output(o, r, debug=False)
             all_killed = False
             count = 0
             while not all_killed and count < 6:
@@ -588,22 +588,24 @@ class RemoteMachineShellConnection:
         self.extract_remote_info()
         if self.info.type.lower() == 'windows':
             o, r = self.execute_command("taskkill /F /T /IM memcached*")
-            self.log_command_output(o, r)
+            self.log_command_output(o, r, debug=False)
         else:
-            # Changed from kill -9 $(ps aux | grep 'memcached' | awk '{print $2}' as grep was also returning eventing
+            # Changed from kill -9 $(ps aux | grep 'memcached' | awk '{print $2}'
+            # as grep was also returning eventing
             # process which was using memcached-cert
-            o, r = self.execute_command("kill -9 $(ps aux | pgrep 'memcached')")
-            self.log_command_output(o, r)
+            o, r = self.execute_command("kill -9 $(ps aux | pgrep 'memcached')"
+                                                                 , debug=False)
+            self.log_command_output(o, r, debug=False)
         return o, r
 
     def stop_memcached(self):
         self.extract_remote_info()
         if self.info.type.lower() == 'windows':
             o, r = self.execute_command("taskkill /F /T /IM memcached*")
-            self.log_command_output(o, r)
+            self.log_command_output(o, r, debug=False)
         else:
             o, r = self.execute_command("kill -SIGSTOP $(pgrep memcached)")
-            self.log_command_output(o, r)
+            self.log_command_output(o, r, debug=False)
         return o, r
 
     def start_memcached(self):
@@ -812,7 +814,7 @@ class RemoteMachineShellConnection:
             raise Exception("stopping standalone moxi is not supported on windows")
     def is_url_live(self, url):
         live_url = False
-        log.info("Check if url {0} is ok".format(url))
+        #log.info("Check if url {0} is ok".format(url))
         status = urllib.urlopen(url).getcode()
         if status == 200:
             log.info("This url {0} is live".format(url))
@@ -939,10 +941,10 @@ class RemoteMachineShellConnection:
                 self.log_command_output(output, error)
                 self.connect_with_user(user=self.username)
                 return
-            output, error = self.execute_command(command_1)
-            self.log_command_output(output, error)
-            output, error = self.execute_command(command_2)
-            self.log_command_output(output, error)
+            output, error = self.execute_command(command_1, debug=False)
+            self.log_command_output(output, error, debug=False)
+            output, error = self.execute_command(command_2, debug=False)
+            self.log_command_output(output, error, debug=False)
             self.connect_with_user(user=self.username)
 
     def download_binary(self, url, deliverable_type, filename, latest_url=None,
@@ -1014,8 +1016,8 @@ class RemoteMachineShellConnection:
                                      " rm -f * ; mv $D/* . ; rmdir $D".format(filename)
             command_root = "cd /tmp;wget -q -O {0} {1};cd /tmp;ls -lh".format(filename, url)
             file_location = "/tmp"
-            output, error = self.execute_command_raw(command1)
-            self.log_command_output(output, error)
+            output, error = self.execute_command_raw(command1, debug=False)
+            self.log_command_output(output, error, debug=False)
             if skip_md5_check:
                 if self.nonroot:
                     output, error = self.execute_command("ls -lh ")
@@ -1874,7 +1876,8 @@ class RemoteMachineShellConnection:
     """
     def install_server(self, build, startserver=True, path='/tmp', vbuckets=None,
                        swappiness=10, force=False, openssl='', upr=None, xdcr_upr=None,
-                       fts_query_limit=None, cbft_env_options=None, enable_ipv6=None):
+                       fts_query_limit=None, cbft_env_options=None, enable_ipv6=None,
+                       debug_logs=True):
 
         log.info('*****install server ***')
         server_type = None
@@ -1936,11 +1939,14 @@ class RemoteMachineShellConnection:
 
             # set default swappiness to 10 unless specify in params in all unix environment
             if self.nonroot:
-                log.info("**** use root to run script/ssh.py to execute /sbin/sysctl vm.swappiness=0 "
+                log.info("**** use root to run script/ssh.py to execute "\
+                              "/sbin/sysctl vm.swappiness=0 "\
                               "enable coredump cbenable_core_dumps.sh /tmp")
             else:
-                output, error = self.execute_command('/sbin/sysctl vm.swappiness={0}'.format(swappiness))
-                success &= self.log_command_output(output, error, track_words, debug=False)
+                output, error = self.execute_command('/sbin/sysctl vm.swappiness={0}'\
+                                                     .format(swappiness), debug=debug_logs)
+                success &= self.log_command_output(output, error, track_words,
+                                                   debug=debug_logs)
 
             if self.info.deliverable_type == 'rpm':
                 if self.nonroot:
@@ -1967,26 +1973,30 @@ class RemoteMachineShellConnection:
                     self.check_pkgconfig(self.info.deliverable_type, openssl)
                     if "SUSE" in self.info.distribution_type:
 			if environment:
-			    output, error = self.execute_command("export {0};zypper -n install /tmp/{1}".format(environment.strip(), build.name))
+			    output, error = self.execute_command("export {0};zypper -n install /tmp/{1}"
+                                                     .format(environment.strip(), build.name))
 			    self.log_command_output(output, error)
 			else:
                             output, error = self.execute_command("zypper -n install /tmp/{0}".format(build.name))
                             self.log_command_output(output, error)
                     else:
+                        rpm_cmd = "yes | {0}yum localinstall -y /tmp/{1}"
                         if force:
                             # temporary fix for bzip2 - need to be redone
                             # output, error = self.execute_command('{0}rpm -Uvh --force /tmp/{1}'\
                             #                        .format(environment, build.name), debug=False)
-                            output, error = self.execute_command("yes | {0}yum localinstall -y /tmp/{1}" \
-                                                                 .format(environment, build.name), debug=False)
-                            self.log_command_output(output, error)
+                            output, error = self.execute_command(rpm_cmd.format(environment,
+                                                                                build.name),
+                                                                                debug=debug_logs)
+                            self.log_command_output(output, error, debug=debug_logs)
                         else:
                             # temporary fix for bzip2 - need to be redone
                             # output, error = self.execute_command('{0}rpm -i /tmp/{1}'\
                             #                        .format(environment, build.name), debug=False)
-                            output, error = self.execute_command("yes | {0}yum localinstall -y /tmp/{1}" \
-                                                                 .format(environment, build.name), debug=False)
-                            self.log_command_output(output, error)
+                            output, error = self.execute_command(rpm_cmd.format(environment,
+                                                                                build.name),
+                                                                                debug=debug_logs)
+                            self.log_command_output(output, error, debug=debug_logs)
 
             elif self.info.deliverable_type == 'deb':
                 if self.nonroot:
@@ -2011,10 +2021,12 @@ class RemoteMachineShellConnection:
                     self.install_missing_lib()
                     if force:
                         output, error = self.execute_command('{0}dpkg --force-all -i /tmp/{1}'\
-                                                 .format(environment, build.name), debug=False)
+                                                 .format(environment, build.name),
+                                                         debug=debug_logs)
                     else:
                         output, error = self.execute_command('{0}dpkg -i /tmp/{1}'\
-                                                 .format(environment, build.name), debug=False)
+                                                 .format(environment, build.name),
+                                                         debug=debug_logs)
 
             if "SUSE" in self.info.distribution_type:
                 if error and error[0] == 'insserv: Service network is missed in the runlevels 2'\
@@ -2468,13 +2480,14 @@ class RemoteMachineShellConnection:
                                                                 debug=False)
             self.log_command_output(output, error)
 
-    def couchbase_uninstall(self, windows_msi=False, product=None):
+    def couchbase_uninstall(self, windows_msi=False, product=None, debug_logs=True):
         log.info('{0} *****In couchbase uninstall****'.format( self.ip))
         linux_folders = ["/var/opt/membase", "/opt/membase", "/etc/opt/membase",
                          "/var/membase/data/*", "/opt/membase/var/lib/membase/*",
                          "/opt/couchbase", "/data/*"]
         terminate_process_list = ["beam.smp", "memcached", "moxi", "vbucketmigrator",
-                                  "couchdb", "epmd", "memsup", "cpu_sup", "goxdcr", "erlang", "eventing", "erl", "godu",
+                                  "couchdb", "epmd", "memsup", "cpu_sup", "goxdcr",
+                                  "erlang", "eventing", "erl", "godu",
                                   "goport", "gosecrets", "projector"]
         self.extract_remote_info()
         log.info(self.info.distribution_type)
@@ -2765,18 +2778,18 @@ class RemoteMachineShellConnection:
                     if error:
                         server_ip = "\n\n**** Uninstalling on server: {0} ****".format(self.ip)
                         error.insert(0, server_ip)
-                    self.log_command_output(output, error)
+                    self.log_command_output(output, error, debug=debug_logs)
                     output, error = self.execute_command("pkill -u couchbase")
-                    self.log_command_output(output, error)
+                    self.log_command_output(output, error, debug=debug_logs)
                     # This line is added for debugging purposes
                     output, error = self.execute_command("ps -ef | grep couchbase")
-                    self.log_command_output(output, error)
+                    self.log_command_output(output, error, debug=debug_logs)
             self.terminate_processes(self.info, terminate_process_list)
             if not self.nonroot:
                 self.remove_folders(linux_folders)
                 self.kill_memcached()
                 output, error = self.execute_command("ipcrm")
-                self.log_command_output(output, error)
+                self.log_command_output(output, error, debug=debug_logs)
         elif self.info.distribution_type.lower() == 'mac':
             self.stop_server(os='mac')
             """ close Safari browser before uninstall """
@@ -3259,12 +3272,12 @@ class RemoteMachineShellConnection:
                 o, r = self.execute_command("kill -9 "
                    "$(ps aux | grep '{0}' |  awk '{{print $2}}') "\
                                .format(process_name), debug=False)
-                self.log_command_output(o, r)
+                self.log_command_output(o, r, debug=False)
             else:
                 o, r = self.execute_command("kill "
                     "$(ps aux | grep '{0}' |  awk '{{print $2}}') "\
                                  .format(process_name), debug=False)
-                self.log_command_output(o, r)
+                self.log_command_output(o, r, debug=False)
 
     def disconnect(self):
         self._ssh_client.close()

@@ -52,6 +52,7 @@ class NewUpgradeBaseTest(BaseTestCase):
         self.call_ftsCallable = True
         self.upgrade_versions = self.upgrade_versions.split(";")
         self.skip_cleanup = self.input.param("skip_cleanup", False)
+        self.debug_logs = self.input.param("debug_logs", False)
         self.init_nodes = self.input.param('init_nodes', True)
 
         self.is_downgrade = self.input.param('downgrade', False)
@@ -186,12 +187,14 @@ class NewUpgradeBaseTest(BaseTestCase):
         params['version'] = self.initial_version
         params['vbuckets'] = [self.initial_vbuckets]
         params['init_nodes'] = self.init_nodes
+        params['debug_logs'] = self.debug_logs
         if self.initial_build_type is not None:
             params['type'] = self.initial_build_type
         if 5 <= int(self.initial_version[:1]) or 5 <= int(self.upgrade_versions[0][:1]):
             params['fts_query_limit'] = 10000000
 
-        self.log.info("will install {0} on {1}".format(self.initial_version, [s.ip for s in servers]))
+        self.log.info("will install {0} on {1}"\
+                                .format(self.initial_version, [s.ip for s in servers]))
         InstallerJob().parallel_install(servers, params)
         if self.product in ["couchbase", "couchbase-server", "cb"]:
             success = True

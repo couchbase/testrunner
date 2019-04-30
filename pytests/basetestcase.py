@@ -243,7 +243,8 @@ class BaseTestCase(unittest.TestCase):
             if str(self.__class__).find('newupgradetests') != -1 or \
                             str(self.__class__).find('upgradeXDCR') != -1 or \
                             str(self.__class__).find('Upgrade_EpTests') != -1 or \
-                            hasattr(self, 'skip_buckets_handle') and\
+                            str(self.__class__).find('UpgradeTests') != -1 or \
+                            hasattr(self, 'skip_buckets_handle') and \
                             self.skip_buckets_handle:
                 self.log.info("any cluster operation in setup will be skipped")
                 self.primary_index_created = True
