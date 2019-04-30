@@ -66,7 +66,7 @@ class StableTopFTS(FTSBaseTest):
             self.generate_random_queries(index, self.num_queries, self.query_types)
             self.run_query_and_compare(index)
 
-    def run_default_index_query(self, query=None, expected_hits=None):
+    def run_default_index_query(self, query=None, expected_hits=None, expected_no_of_results=None):
         self.create_simple_default_index()
         zero_results_ok = True
         if not expected_hits:
@@ -78,11 +78,16 @@ class StableTopFTS(FTSBaseTest):
             if isinstance(query, str):
                 query = json.loads(query)
             zero_results_ok = True
+        if expected_no_of_results is None:
+            expected_no_of_results = self._input.param("expected_no_of_results", None)
+
         for index in self._cb_cluster.get_indexes():
-            hits, _, _, _ = index.execute_query(query,
-                                             zero_results_ok=zero_results_ok,
-                                             expected_hits=expected_hits)
+            hits, matches, _, _ = index.execute_query(query,
+                                                      zero_results_ok=zero_results_ok,
+                                                      expected_hits=expected_hits,
+                                                      expected_no_of_results=expected_no_of_results)
             self.log.info("Hits: %s" % hits)
+            self.log.info("Matches: %s" % matches)
 
     def test_query_type(self):
         """

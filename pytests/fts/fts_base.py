@@ -1016,14 +1016,19 @@ class FTSIndex:
                                                           consistency_level='',
                                                           consistency_vectors={},
                                                           score=''):
-        max_matches = TestInputSingleton.input.param("query_max_matches", 10000000)
+        max_matches = TestInputSingleton.input.param("query_max_matches", None)
+        max_limit_matches = TestInputSingleton.input.param("query_limit_matches", None)
         query_json = copy.deepcopy(QUERY.JSON)
         # query is a unicode dict
         query_json['query'] = query
         query_json['indexName'] = self.name
         query_json['explain'] = explain
-        if max_matches:
+        if max_matches is not None:
             query_json['size'] = int(max_matches)
+        else:
+            del query_json['size']
+        if max_limit_matches is not None:
+            query_json['limit'] = int(max_limit_matches)
         if show_results_from_item:
             query_json['from'] = int(show_results_from_item)
         if timeout is not None:
@@ -1111,7 +1116,7 @@ class FTSIndex:
                       return_raw_hits=False, sort_fields=None,
                       explain=False, show_results_from_item=0, highlight=False,
                       highlight_style=None, highlight_fields=None, consistency_level='',
-                      consistency_vectors={}, timeout=60000, rest=None, score=''):
+                      consistency_vectors={}, timeout=60000, rest=None, score='', expected_no_of_results=None):
         """
         Takes a query dict, constructs a json, runs and returns results
         """
@@ -1159,6 +1164,17 @@ class FTSIndex:
         if expected_hits and expected_hits == hits:
             self.__log.info("SUCCESS! Expected hits: %s, fts returned: %s"
                             % (expected_hits, hits))
+        if expected_no_of_results is not None:
+            if expected_no_of_results == doc_ids.__len__():
+                self.__log.info("SUCCESS! Expected number of results: %s, fts returned: %s"
+                            % (expected_no_of_results, doc_ids.__len__()))
+            else:
+                self.__log.info("ERROR! Expected number of results: %s, fts returned: %s"
+                                % (expected_no_of_results, doc_ids.__len__()))
+                print doc_ids
+                raise FTSException("Expected number of results: %s, fts returned: %s"
+                                   % (expected_no_of_results, doc_ids.__len__()))
+
         if not return_raw_hits:
             return hits, doc_ids, time_taken, status
         else:
@@ -3160,6 +3176,7 @@ class FTSBaseTest(unittest.TestCase):
         self.__num_stand_buckets = self._input.param("standard_buckets", 0)
         self.__eviction_policy = self._input.param("eviction_policy", 'valueOnly')
         self.__mixed_priority = self._input.param("mixed_priority", None)
+        self.expected_no_of_results = self._input.param("expected_no_of_results", None)
 
         # Public init parameters - Used in other tests too.
         # Move above private to this section if needed in future, but
