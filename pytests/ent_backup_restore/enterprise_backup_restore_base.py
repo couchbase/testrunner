@@ -710,8 +710,12 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         error_str = "Error restoring cluster: Transfer failed. "\
                     "Check the logs for more information."
         if error_str in res:
+            bk_log_file_name = "backup.log"
+            if "6.5" <= RestConnection(self.backupset.backup_host).get_nodes_version():
+                bk_log_file_name = "backup-*.log"
             command = "cat " + self.backupset.directory + \
-                      "/logs/backup-*.log | grep '" + error_str + "' -A 10 -B 100"
+                      "/logs/{0} | grep '".format(bk_log_file_name) + \
+                      error_str + "' -A 10 -B 100"
             output, error = shell.execute_command(command)
             shell.log_command_output(output, error)
         if 'Required Flags:' in res:
@@ -739,12 +743,17 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             self.assertTrue(error_found, "Expected error not found: %s" % expected_error)
             return
         remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
-        command = "grep 'Transfer plan finished successfully' " + self.backupset.directory + "/logs/backup-*.log"
+        bk_log_file_name = "backup.log"
+        if "6.5" <= RestConnection(self.backupset.backup_host).get_nodes_version():
+            bk_log_file_name = "backup-*.log"
+        command = "grep 'Transfer plan finished successfully' " + self.backupset.directory + \
+                  "/logs/{0}".format(bk_log_file_name)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
         if not output:
             self.fail("Restoring backup failed.")
-        command = "grep 'Transfer failed' " + self.backupset.directory + "/logs/backup-*.log"
+        command = "grep 'Transfer failed' " + self.backupset.directory + \
+                  "/logs/{0}".format(bk_log_file_name)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
         if output:

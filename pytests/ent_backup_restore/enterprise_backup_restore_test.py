@@ -2295,7 +2295,6 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         """ Only server from Spock needs build in user
             to access bucket and other tasks
         """
-        print "************** cb version: ", RestConnection(self.master).get_nodes_version()[:1]
         if "5" <= RestConnection(self.master).get_nodes_version()[:1]:
             self.add_built_in_server_user()
             for user in self.users_check_restore:
