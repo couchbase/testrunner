@@ -15,10 +15,10 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
     def suite_setUp(self):
         super(N1qlFTSIntegrationPhase2Test, self).suite_setUp()
 
-        self._load_test_buckets()
 
     def setUp(self):
         super(N1qlFTSIntegrationPhase2Test, self).setUp()
+        self._load_test_buckets()
 
         self.log.info("==============  N1qlFTSIntegrationPhase2Test setup has started ==============")
         self.log_config_info()
@@ -29,7 +29,8 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
         self.log_config_info()
         self.log.info("==============  N1qlFTSIntegrationPhase2Test tearDown has completed ==============")
         super(N1qlFTSIntegrationPhase2Test, self).tearDown()
-
+        if self.get_bucket_from_name("beer-sample"):
+            self.delete_bucket("beer-sample")
 
     def suite_tearDown(self):
         self.log.info("==============  N1qlFTSIntegrationPhase2Test suite_tearDown has started ==============")
@@ -111,9 +112,12 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
         bucket2_alias = test_cases[test_name]["bucket2_alias"]
         keyspace_alias = test_cases[test_name]['keyspace_param']
 
-        self.run_cbq_query("create index idx_brewery_id on `beer-sample`(brewery_id)")
-        self.run_cbq_query("create index idx_type on `beer-sample`(type)")
-        self.run_cbq_query("create index idx_code on `beer-sample`(code)")
+        if not self.is_index_present("beer-sample", "idx_brewery_id"):
+            self.run_cbq_query("create index idx_brewery_id on `beer-sample`(brewery_id)")
+        if not self.is_index_present("beer-sample", "idx_type"):
+            self.run_cbq_query("create index idx_type on `beer-sample`(type)")
+        if not self.is_index_present("beer-sample", "idx_code"):
+            self.run_cbq_query("create index idx_code on `beer-sample`(code)")
         self.wait_for_all_indexes_online()
 
         fts_query = "select t1.code, t1.state, t1.city, t2.name from `beer-sample` "+bucket1_alias+ \
@@ -166,7 +170,6 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
 
         self._remove_all_fts_indexes()
 
-
     def test_keyspace_alias_1_bucket_negative(self):
         test_name = self.input.param("test_name", '')
         if test_name == '':
@@ -185,7 +188,11 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
             self.run_cbq_query(fts_query)
         except CBQError, ex:
             self._remove_all_fts_indexes()
-            self.assertTrue("Ambiguous reference to field" in str(ex), "Unexpected error message is found - "+str(ex))
+            if test_name in ['star', 'object_values', 'array']:
+                self.assertTrue("SEARCH() function operands are invalid." in str(ex),
+                                "Unexpected error message is found - " + str(ex))
+            else:
+                self.assertTrue("Ambiguous reference to field" in str(ex), "Unexpected error message is found - "+str(ex))
 
         self._remove_all_fts_indexes()
 
@@ -230,7 +237,7 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
                 more_suitable_index.update()
         if test_cases[test_name]["expected_result"] == "fail":
             result = self.run_cbq_query(fts_query)
-            self.assertEquals(result['status'], "errors", "Running SEARCH() query without fts index is failed.")
+            self.assertEquals(result['status'], "errors", "Running SEARCH() query without fts index is successful. Should be failed.")
         elif test_cases[test_name]["expected_result"] == "success":
             result = self.run_cbq_query("explain " + fts_query)
             self._remove_all_fts_indexes()
@@ -245,7 +252,6 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
             raise Exception("Invalid test configuration! Test name should not be empty.")
 
         self.cbcluster = CouchbaseCluster(name='cluster', nodes=self.servers, log=self.log)
-        self._create_fts_index(index_name='idx_beer_sample_fts', doc_count=7303, source_name='beer-sample')
         test_cases = {
             # 10 results
             "explain": ["true", "false"],
@@ -255,7 +261,7 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
             "highlight": ["{\"style\":\"html\", \"fields\":[\"*\"]}", "{\"style\":\"html\", \"fields\":[\"name\"]}", "{\"style\":\"ansi\", \"fields\":[\"name\"]}", "{\"style\":\"ansi\", \"fields\":[\"*\"]}"],
             # 10 results
             "analyzer": ["{\"match\": \"California\", \"field\": \"state\", \"analyzer\": \"standard\"}", "{\"match\": \"California\", \"field\": \"state\", \"analyzer\": \"html\"}"],
-            # 10 results
+            # MB-34005
             "size": [10, 100],
             # 10 results
             "sort": ["[{\"by\": \"field\", \"field\": \"name\", \"mode\":\"max\", \"missing\": \"last\"}]"],
@@ -264,13 +270,17 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
         }
 
         for option_val in test_cases[test_name]:
+            self._create_fts_index(index_name='idx_beer_sample_fts', doc_count=7303, source_name='beer-sample')
             n1ql_query = "select meta().id from `beer-sample` where search(`beer-sample`, {\"field\": \"state\", \"match\":\"California\"}, {\""+test_name+"\": "+str(option_val)+"})"
-            fts_request = "'{\"query\":{\"field\": \"state\", \"match\":\"California\"}, \"size\":10000, \""+test_name+"\":"+str(option_val)+"}'"
+            if test_name == 'size':
+                fts_request = "'{\"query\":{\"field\": \"state\", \"match\":\"California\"}, \"size\":"+str(option_val)+ "}'"
+            else:
+                fts_request = "'{\"query\":{\"field\": \"state\", \"match\":\"California\"}, \"size\":10000, \""+test_name+"\":"+str(option_val)+"}'"
+
             n1ql_results = self.run_cbq_query(n1ql_query)['results']
             fts_results = self._run_fts_request(request=fts_request)
 
             self._remove_all_fts_indexes()
-
             comparison_result = self._compare_n1ql_results_against_fts(n1ql_results, fts_results)
             self.assertEquals(comparison_result, "OK", comparison_result)
 
@@ -382,8 +392,10 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
         self.cbcluster = CouchbaseCluster(name='cluster', nodes=self.servers, log=self.log)
         self._create_fts_index(index_name="idx_beer_sample_fts", doc_count=7303, source_name='beer-sample')
 
-        self.run_cbq_query("create index idx_state on `beer-sample`(state)")
-        self.run_cbq_query("create index idx_state_city on `beer-sample`(state, city)")
+        if not self.is_index_present("beer-sample", "idx_state"):
+            self.run_cbq_query("create index idx_state on `beer-sample`(state)")
+        if not self.is_index_present("beer-sample", "idx_state_city"):
+            self.run_cbq_query("create index idx_state_city on `beer-sample`(state, city)")
         self.wait_for_all_indexes_online()
 
         more_suitable_fts_index = self._create_fts_index(index_name='idx_beer_sample_fts_name', doc_count=7303, source_name='beer-sample')
@@ -399,7 +411,7 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
             },
             # MB-33677
             "use_index_gsi": {
-                "query": "explain select meta().id from `beer-sample` USE INDEX (idx_state_city using gsi) where search(`beer-sample`, {\"field\": \"state\", \"match\":\"California\"})",
+                "query": "explain select meta().id from `beer-sample` USE INDEX (idx_state_city using gsi) where search(`beer-sample`, {\"field\": \"state\", \"match\":\"California\"}) and state='California'",
                 "index": "idx_state_city"
             },
             "search_hint":{
@@ -423,8 +435,10 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
 
         if test_name == "shortest_gsi":
             self._delete_fts_index("idx_beer_sample_fts")
-            self.run_cbq_query("create index idx_name on `beer-sample`(name)")
-            self.run_cbq_query("create index idx_state_name on `beer-sample`(state, name)")
+            if not self.is_index_present("beer-sample", "idx_name"):
+                self.run_cbq_query("create index idx_name on `beer-sample`(name)")
+            if not self.is_index_present("beer-sample", "idx_state_name"):
+                self.run_cbq_query("create index idx_state_name on `beer-sample`(state, name)")
             self.wait_for_all_indexes_online()
         if test_name == "primary_gsi":
             self._delete_fts_index("idx_beer_sample_fts")
@@ -435,7 +449,6 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
             self.assertEquals(result['results'][0]['plan']['~children'][0]['#operator'], "PrimaryScan3")
         else:
             self.assertEquals(result['results'][0]['plan']['~children'][0]['index'], test_cases[test_name]["index"])
-
 
         self._remove_all_fts_indexes()
         self.drop_index_safe('beer-sample', 'idx_state')
@@ -469,29 +482,60 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
         self._remove_all_fts_indexes()
 
     def test_logical_predicates_negative(self):
-        test_cases = [" = false ", "  !=false ", " in [false] ", " in [true, 1, 2] ", " not in [false] ",
-                      " = \'xyz\' ", " <= \'xyz\' ", " >= \'xyz\' ", " > \'xyz\' ", " < \'xyz\' ", " like \'xyz\' ", " not like \'xyz\' "]
+        test_cases = {
+            "case_1":{
+                "predicate": " = false ",
+                "verification_query": "select meta().id from `beer-sample` where state is missing or state!='California'"
+            },
+            "case_2": {
+                "predicate": " !=false ",
+                "verification_query": "select meta().id from `beer-sample` where state = 'California'"
+            },
+            "case_3": {
+                "predicate": " in [false] ",
+                "verification_query": "select meta().id from `beer-sample` where state is missing or state != 'California'"
+            },
+            "case_4": {
+                "predicate": " in [true, 1, 2] ",
+                "verification_query": "select meta().id from `beer-sample` where state = 'California'"
+            },
+            "case_5": {
+                "predicate": " not in [false] ",
+                "verification_query": "select meta().id from `beer-sample` where state = 'California'"
+            },
+        }
+        test_name = self.input.param("test_name", "")
+        if test_name == "":
+            raise Exception("Test name cannot be empty.")
 
         self.cbcluster = CouchbaseCluster(name='cluster', nodes=self.servers, log=self.log)
         self._create_fts_index(index_name="idx_beer_sample_fts", doc_count=7303, source_name='beer-sample')
+        if test_name != 'special_case':
+            predicate = test_cases[test_name]['predicate']
+            verification_query = test_cases[test_name]['verification_query']
 
-        fts_request = "'{\"query\":{\"field\": \"state\", \"match\":\"California\"}, \"size\":10000}'"
+            search_query = "select meta().id from `beer-sample` where search(`beer-sample`, {\"field\": \"state\", \"match\":\"California\"}) "+ predicate
+        else:
+            search_query = "select meta().id from `beer-sample` where not(search(`beer-sample`, {\"field\": \"state\", \"match\":\"California\"})) "
+            verification_query = "select meta().id from `beer-sample` where state is missing or state != 'California'"
 
-        for test_case in test_cases:
-            n1ql_query = "select meta().id from `beer-sample` where search(`beer-sample`, {\"field\": \"state\", \"match\":\"California\"}) "+ test_case
-            n1ql_results = self.run_cbq_query(n1ql_query)['results']
-            fts_results = self._run_fts_request(request=fts_request)
-            comparison_results = self._compare_n1ql_results_against_fts(n1ql_results, fts_results)
-            self.assertEquals(comparison_results, "OK", comparison_results)
+        search_results = self.run_cbq_query(search_query)['results']
+        verification_results = self.run_cbq_query(verification_query)['results']
 
-            result = self.run_cbq_query(n1ql_query)
-            self.assertEquals(result['status'], "success")
+        search_doc_ids = []
+        for result in search_results:
+            search_doc_ids.append(result['id'])
 
-        n1ql_query = "select meta().id from `beer-sample` where not(search(`beer-sample`, {\"field\": \"state\", \"match\":\"California\"})) "
-        n1ql_results = self.run_cbq_query(n1ql_query)['results']
-        fts_results = self._run_fts_request(request=fts_request)
-        comparison_results = self._compare_n1ql_results_against_fts(n1ql_results, fts_results)
-        self.assertEquals(comparison_results, "OK", comparison_results)
+        verification_doc_ids = []
+        for result in verification_results:
+            verification_doc_ids.append(result['id'])
+
+        self.assertEquals(len(search_doc_ids), len(verification_doc_ids),
+                            "Results count does not match for test . SEARCH() - " + str(
+                                len(search_doc_ids)) + ", Verification - " + str(len(verification_doc_ids)))
+        self.assertEquals(sorted(search_doc_ids), sorted(verification_doc_ids),
+                            "Found mismatch in results for test .")
+
 
         self._remove_all_fts_indexes()
 
@@ -511,8 +555,12 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
     def test_n1ql_syntax_select_from_2_buckets(self):
         self.cbcluster = CouchbaseCluster(name='cluster', nodes=self.servers, log=self.log)
         self._create_fts_index(index_name="idx_beer_sample_fts", doc_count=7303, source_name='beer-sample')
-        self.run_cbq_query("create index idx_state on `beer-sample`(state)")
-        self.run_cbq_query("create index idx_city on `beer-sample`(city)")
+
+        if not self.is_index_present("beer-sample", "idx_state"):
+            self.run_cbq_query("create index idx_state on `beer-sample`(state)")
+        if not self.is_index_present("beer-sample", "idx_city"):
+            self.run_cbq_query("create index idx_city on `beer-sample`(city)")
+
         self.wait_for_all_indexes_online()
 
         n1ql_query = "select `beer-sample`.id, `beer-sample`.country, `beer-sample`.city, t2.name from `beer-sample` " \
@@ -525,12 +573,13 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
         self.drop_index_safe('beer-sample', 'idx_state')
         self.drop_index_safe('beer-sample', 'idx_city')
 
-
     def test_n1ql_syntax_select_from_double_search_call(self):
         self.cbcluster = CouchbaseCluster(name='cluster', nodes=self.servers, log=self.log)
         self._create_fts_index(index_name="idx_beer_sample_fts", doc_count=7303, source_name='beer-sample')
-        self.run_cbq_query("create index idx_state on `beer-sample`(state)")
-        self.run_cbq_query("create index idx_city on `beer-sample`(city)")
+        if not self.is_index_present("beer-sample", "idx_state"):
+            self.run_cbq_query("create index idx_state on `beer-sample`(state)")
+        if not self.is_index_present("beer-sample", "idx_city"):
+            self.run_cbq_query("create index idx_city on `beer-sample`(city)")
         self.wait_for_all_indexes_online()
 
         n1ql_query = "select `beer-sample`.id, `beer-sample`.country, `beer-sample`.city, t2.name from `beer-sample` " \
@@ -542,7 +591,6 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
         self._remove_all_fts_indexes()
         self.drop_index_safe('beer-sample', 'idx_state')
         self.drop_index_safe('beer-sample', 'idx_city')
-
 
     def test_n1ql_syntax_from_select(self):
         self.cbcluster = CouchbaseCluster(name='cluster', nodes=self.servers, log=self.log)
@@ -557,7 +605,7 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
 
         self._remove_all_fts_indexes()
 
-
+    #MB - 34007
     def test_n1ql_syntax_union_intersect_except(self):
         test_cases = {
             "same_buckets_same_idx": {
@@ -615,7 +663,6 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
                         "Found mismatch in results for test "+test_name+", operation - "+uie+".")
 
         self._remove_all_fts_indexes()
-
 
     def test_prepareds(self):
         test_name = self.input.param("test_name", '')
@@ -872,10 +919,21 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
                                 else:
                                     n1ql_query = "select meta().id from `beer-sample` where search(`beer-sample`, {\"query\": {\"field\": \"state\", \"match\": \"California\"}}) "+outer_sort_expression
                                     n1ql_results = self.run_cbq_query(n1ql_query)['results']
-                                    self.assertEquals(search_results, n1ql_results)
+
+                                    search_doc_ids = []
+                                    for result in search_results:
+                                        search_doc_ids.append(result['id'])
+
+                                    n1ql_doc_ids = []
+                                    for result in n1ql_results:
+                                        n1ql_doc_ids.append(result['id'])
+
+                                    self.assertEquals(len(n1ql_doc_ids), len(search_doc_ids),
+                                                      "SEARCH QUERY - " + search_query + "\nN1QL QUERY - " + n1ql_query)
+                                    self.assertEquals(sorted(search_doc_ids), sorted(n1ql_doc_ids), "SEARCH QUERY - "+search_query+"\nN1QL QUERY - "+n1ql_query)
+
 
         self._remove_all_fts_indexes()
-
 
     def test_scan_consistency(self):
         self.cbcluster = CouchbaseCluster(name='cluster', nodes=self.servers, log=self.log)
@@ -934,12 +992,193 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
             threads.remove(th)
 
 
-# ============================================ utils =================================
+    def test_joins(self):
+        tests = {
+            "inner_l":{
+                "query": "select * from `beer-sample` l join `beer-sample` r on l.city=r.city where search(l, \"city:San Francisco\")",
+                "expected_result": "positive"
+            },
+            "inner_r":{
+                "query": "select * from `beer-sample` l join `beer-sample` r on l.city=r.city where search(r, \"city:San Francisco\")",
+                "expected_result": "negative"
+            },
+            "left_l":{
+                "query": "select * from `beer-sample` l left join `beer-sample` r on l.city=r.city  where search(l, \"city:San Francisco\")",
+                "expected_result": "positive"
+            },
+            "left_r":{
+                "query": "select * from `beer-sample` l left join `beer-sample` r on l.city=r.city  where search(r, \"city:San Francisco\")",
+                "expected_result": "negative"
+            },
+            "left_outer_l":{
+                "query": "select * from `beer-sample` l left outer join `beer-sample` r on l.city=r.city  where search(l, \"city:San Francisco\")",
+                "expected_result": "positive"
+            },
+            "left_outer_r":{
+                "query": "select * from `beer-sample` l left outer join `beer-sample` r on l.city=r.city  where search(r, \"city:San Francisco\")",
+                "expected_result": "negative"
+            },
+            "right_l":{
+                "query": "select * from `beer-sample` l right join `beer-sample` r on l.city=r.city  where search(l, \"city:San Francisco\")",
+                "expected_result": "negative"
+            },
+            "right_r":{
+                "query": "select * from `beer-sample` l right join `beer-sample` r on l.city=r.city  where search(r, \"city:San Francisco\")",
+                "expected_result": "positive"
+            },
+            "right_outer_l":{
+                "query": "select * from `beer-sample` l right outer join `beer-sample` r on l.city=r.city  where search(l, \"city:San Francisco\")",
+                "expected_result": "negative"
+            },
+            "right_outer_r":{
+                "query": "select * from `beer-sample` l right outer join `beer-sample` r on l.city=r.city  where search(r, \"city:San Francisco\")",
+                "expected_result": "positive"
+            },
+            "use_hash_build_l":{
+                "query": "select * from `beer-sample` l join `beer-sample` r use hash(build) on l.city=r.city where search(l, \"city:San Francisco\")",
+                "expected_result": "positive"
+            },
+            "use_hash_build_r":{
+                "query": "select * from `beer-sample` l join `beer-sample` r use hash(build) on l.city=r.city  where search(r, \"city:San Francisco\")",
+                "expected_result": "positive"
+            },
+            "use_hash_probe_l":{
+                "query": "select * from `beer-sample` l join `beer-sample` r use hash(probe) on l.city=r.city where search(l, \"city:San Francisco\")",
+                "expected_result": "positive"
+            },
+            "use_hash_probe_r":{
+                "query": "select * from `beer-sample` l join `beer-sample` r use hash(probe) on l.city=r.city  where search(r, \"city:San Francisco\")",
+                "expected_result": "positive"
+            },
+            "use_nl_l":{
+                "query": "select * from `beer-sample` l join `beer-sample` r use nl on l.city=r.city where search(l, \"city:San Francisco\")",
+                "expected_result": "positive"
+            },
+            "use_nl_r":{
+                "query": "select * from `beer-sample` l join `beer-sample` r use nl on l.city=r.city  where search(r, \"city:San Francisco\")",
+                "expected_result": "negative"
+            },
+            "use_hash_keys_build_l": {
+                "query": "select * from `beer-sample` l join `beer-sample` r use hash(build) keys [\"512_brewing_company\"] on l.city=r.city where search(l, \"city:Austin\")",
+                "expected_result": "negative"
+            },
+            "use_hash_keys_build_r": {
+                "query": "select * from `beer-sample` l join `beer-sample` r use hash(build) keys [\"512_brewing_company\"] on l.city=r.city where search(r, \"city:Austin\")",
+                "expected_result": "negative"
+            },
+            "use_hash_keys_probe_l": {
+                "query": "select * from `beer-sample` l join `beer-sample` r use hash(probe) keys [\"512_brewing_company\"] on l.city=r.city where search(l, \"city:Austin\")",
+                "expected_result": "negative"
+            },
+            "use_hash_keys_probe_r": {
+                "query": "select * from `beer-sample` l join `beer-sample` r use hash(probe) keys [\"512_brewing_company\"] on l.city=r.city where search(r, \"city:Austin\")",
+                "expected_result": "negative"
+            },
+            "lookup_l": {
+                "query": "select * from `beer-sample` l join `beer-sample` r on keys l.brewery_id where search(l, \"city:Austin\")",
+                "expected_result": "negative"
+            },
+            "lookup_r": {
+                "query": "select * from `beer-sample` l join `beer-sample` r on keys l.brewery_id  where search(r, \"city:Austin\")",
+                "expected_result": "negative"
+            },
+            "index_l": {
+                "query": "select * from `beer-sample` l join `beer-sample` r on key r.brewery_id for l where search(l, \"city:Austin\")",
+                "expected_result": "negative"
+            },
+            "index_r": {
+                "query": "select * from `beer-sample` l join `beer-sample` r on key r.brewery_id for l where search(r, \"city:Austin\")",
+                "expected_result": "negative"
+            },
+            "in_l": {
+                "query": "select * from `beer-sample` l join `beer-sample` r on l.brewery_id in r.code where search(l, \"city:Austin\")",
+                "expected_result": "positive"
+            },
+            "in_r": {
+                "query": "select * from `beer-sample` l join `beer-sample` r on l.brewery_id in r.code where search(r, \"city:Austin\")",
+                "expected_result": "negative"
+            },
+            "any_satisfies_l": {
+                "query": "select * from `beer-sample` l join `beer-sample` r on l.address=r.address and any v in r.address satisfies (v='563 Second Street') end where search(l, \"city:Austin\")",
+                "expected_result": "positive"
+            },
+            "any_satisfies_r": {
+                "query": "select * from `beer-sample` l join `beer-sample` r on l.address=r.address and any v in r.address satisfies (v='563 Second Street') end where search(r, \"city:Austin\")",
+                "expected_result": "negative"
+            },
+
+        }
+        test_name = self.input.param("test_name", '')
+        if test_name == "":
+            raise Exception("Test name cannot be empty.")
+
+        self.cbcluster = CouchbaseCluster(name='cluster', nodes=self.servers, log=self.log)
+        fts_name_index = self._create_fts_index(index_name="idx_beer_sample_fts", doc_count=7303, source_name='beer-sample')
+
+        if not self.is_index_present("beer-sample", "beer_sample_city_idx"):
+            self.run_cbq_query("create index beer_sample_city_idx on `beer-sample` (`beer-sample`.city)")
+        if not self.is_index_present("beer-sample", "beer_sample_brewery_id_idx"):
+            self.run_cbq_query("create index beer_sample_brewery_id_idx on `beer-sample` (`beer-sample`.brewery_id)")
+        if not self.is_index_present("beer-sample", "beer_sample_address_arr_idx"):
+            self.run_cbq_query("create index beer_sample_address_arr_idx on `beer-sample` (all array v.address for v in address end)")
+        if not self.is_index_present("beer-sample", "beer_sample_address_idx"):
+            self.run_cbq_query("create index beer_sample_address_idx on `beer-sample` (`beer-sample`.address)")
+
+        self.wait_for_all_indexes_online()
+
+        n1ql_query = ""
+        if test_name == '':
+            raise Exception("Invalid test configuration! Test name should not be empty.")
+        try:
+            n1ql_query = tests[test_name]['query']
+            result = self.run_cbq_query(n1ql_query)
+            self.assertEquals(result['status'], 'success', "The following query is incorrect - "+n1ql_query)
+
+            explain_result = self.run_cbq_query("explain "+n1ql_query)
+            if tests[test_name]['expected_result'] == "positive":
+                self.assertTrue("idx_beer_sample_fts" in str(explain_result), "FTS index is not used for query: "+n1ql_query)
+            if tests[test_name]['expected_result'] == "negative":
+                self.assertTrue("idx_beer_sample_fts" not in str(explain_result),
+                                "FTS index is used for query: " + n1ql_query)
+        except CBQError, err:
+            self.log.info("Incorrect query ::"+n1ql_query+"::")
+
+        finally:
+            self.drop_index_safe('beer-sample', 'beer_sample_city_idx')
+            self.drop_index_safe('beer-sample', 'beer_sample_brewery_id_idx')
+            self.drop_index_safe('beer-sample', 'beer_sample_address_arr_idx')
+            self.drop_index_safe('beer-sample', 'beer_sample_address_idx')
+
+
+    def test_expired_docs(self):
+        self.cbcluster = CouchbaseCluster(name='cluster', nodes=self.servers, log=self.log)
+        bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
+                                                   replicas=self.num_replicas,
+                                                   enable_replica_index=self.enable_replica_index,
+                                                   eviction_policy=self.eviction_policy, bucket_priority=None,
+                                                   lww=self.lww, maxttl=360,
+                                                   compression_mode=self.compression_mode)
+
+        self.cluster.create_standard_bucket("ttl_bucket", 11222, bucket_params)
+        for i in range(0, 100, 1):
+            if i%100 == 0:
+                initial_statement = (" INSERT INTO {0} (KEY, VALUE) VALUES ('primary_key_"+str(i)+"',").format("ttl_bucket")
+                initial_statement += "{"
+                initial_statement += "'primary_key':'primary_key_"+str(i) + "','string_field': 'test_string " + str(i) + "','int_field':"+str(i)+"})"
+            else:
+                initial_statement = (" INSERT INTO {0} (KEY, VALUE) VALUES ('primary_key_"+str(i)+"',").format("ttl_bucket")
+                initial_statement += "{"
+                initial_statement += "'primary_key':'primary_key_"+str(i) + "','string_field': 'string data " + str(i) + "','int_field':"+str(i)+"})"
+            self.run_cbq_query(initial_statement)
+
+        fts_name_index = self._create_fts_index(index_name="idx_ttl_bucket_fts", doc_count=7303, source_name='ttl_bucket')
+
+
+    # ============================================ utils =================================
     def _compare_n1ql_results_against_fts(self, n1ql_results, fts_results):
         n1ql_doc_ids = []
         for result in n1ql_results:
             n1ql_doc_ids.append(result['id'])
-
         hits = fts_results['hits']
         fts_doc_ids = []
         for hit in hits:
@@ -973,16 +1212,25 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
             self.assertEquals('True', 'False', 'Wrong query - '+str(query))
 
     def _load_test_buckets(self):
-        self.rest.load_sample("beer-sample")
-        self.wait_for_buckets_status({"beer-sample": "healthy"}, 5, 120)
-        self.wait_for_bucket_docs({"beer-sample": 7303}, 5, 120)
+        if self.get_bucket_from_name("beer-sample") is None:
+            self.rest.load_sample("beer-sample")
+            self.wait_for_buckets_status({"beer-sample": "healthy"}, 5, 120)
+            self.wait_for_bucket_docs({"beer-sample": 7303}, 5, 120)
 
-        self.run_cbq_query("create index beer_sample_code_idx on `beer-sample` (`beer-sample`.code)")
-        self.run_cbq_query("create index beer_sample_brewery_id_idx on `beer-sample` (`beer-sample`.brewery_id)")
+        if not self.is_index_present("beer-sample", "beer_sample_code_idx"):
+            self.run_cbq_query("create index beer_sample_code_idx on `beer-sample` (`beer-sample`.code)")
+        if not self.is_index_present("beer-sample", "beer_sample_brewery_id_idx"):
+            self.run_cbq_query("create index beer_sample_brewery_id_idx on `beer-sample` (`beer-sample`.brewery_id)")
         self.wait_for_all_indexes_online()
 
     def _create_fts_index(self, index_name='', doc_count=0, source_name=''):
+        fts_index_type = self.input.param("fts_index_type", "scorch")
+
         fts_index = self.cbcluster.create_fts_index(name=index_name, source_name=source_name)
+        if fts_index_type == 'upside_down':
+            fts_index.update_index_to_upside_down()
+        else:
+            fts_index.update_index_to_scorch()
         indexed_doc_count = 0
         while indexed_doc_count < doc_count:
             try:
@@ -1051,7 +1299,6 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
                             "http://"+self.master.ip+":8094/api/index/idx_beer_sample_fts/query -d " + request
 
 
-
         shell = RemoteMachineShellConnection(self.master)
 
         output, error = shell.execute_command(cmd)
@@ -1065,3 +1312,4 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
         indexes = self.cbcluster.get_indexes()
         for index in indexes:
             self._delete_fts_index(index.name)
+
