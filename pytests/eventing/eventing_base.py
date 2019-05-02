@@ -69,6 +69,7 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         self.curl_username = self.input.param('curl_user', None)
         self.curl_password = self.input.param('curl_password', None)
         self.auth_type = self.input.param('auth_type', 'no-auth')
+        self.bearer_key=self.input.param('bearer_key',None)
         self.url = self.input.param('path', None)
         self.cookies = self.input.param('cookies',False)
         self.bearer_key = self.input.param('bearer_key','')
@@ -156,6 +157,8 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
             body['depcfg']['curl'].append({"hostname": self.hostname, "value": "server", "auth_type": self.auth_type,
                                            "username": self.curl_username, "password": self.curl_password,
                                            "allow_cookies": self.cookies})
+            if self.auth_type=="bearer":
+                body['depcfg']['curl'][0]['bearer_key']=self.bearer_key
         return body
 
     def wait_for_bootstrap_to_complete(self, name, iterations=20):
