@@ -145,7 +145,7 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
         try:
             error = self._alter_index_replicas(index_name=index_name_prefix, num_replicas=expected_num_replicas)
 
-            self.sleep(5)
+            self.sleep(10)
             self.wait_until_indexes_online()
 
             if self.expected_err_msg:
@@ -204,7 +204,7 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
 
         error = self._alter_index_replicas(index_name='idx1', num_replicas=expected_num_replicas)
 
-        self.sleep(5)
+        self.sleep(10)
         self.wait_until_indexes_online()
 
         self.verify_partitioned_indexes('idx1', expected_num_replicas)
@@ -294,10 +294,11 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
 
         if self.drop_replica:
             error = self._alter_index_replicas(index_name=index_name_prefix, drop_replica=True, replicaId=self.replicaId)
+            self.sleep(30)
         else:
             error = self._alter_index_replicas(index_name=index_name_prefix, num_replicas=expected_num_replicas)
+            self.sleep(10)
 
-        self.sleep(5)
         self.wait_until_indexes_online()
 
         index_map = self.get_index_map()
@@ -769,13 +770,13 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
         for thread in threads:
             thread.join()
 
-        self.sleep(5)
+        self.sleep(10)
         self.wait_until_indexes_online()
 
         index_map = self.get_index_map()
         self.log.info(index_map)
         if not self.same_index:
-            self.n1ql_helper.verify_replica_indexes("idx1", index_map, expected_num_replicas)
+            self.n1ql_helper.verify_replica_indexes(["idx1"], index_map, expected_num_replicas)
         else:
             self.n1ql_helper.verify_replica_indexes([index_name_prefix], index_map, expected_num_replicas)
 
@@ -846,7 +847,7 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
         for thread in threads:
             thread.join()
 
-        self.sleep(5)
+        self.sleep(10)
         self.wait_until_indexes_online()
 
         if self.expected_err_msg:
@@ -888,7 +889,7 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
                 self.fail("Move index failed with unexpected error: %s" % self.alter_index_error)
             self.alter_index_error = ''
         else:
-            self.sleep(5)
+            self.sleep(10)
             self.wait_until_indexes_online()
             index_map = self.get_index_map()
             definitions = self.rest.get_index_statements()
@@ -951,7 +952,7 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
         rebalance.result()
 
         error = self._alter_index_replicas(index_name=index_name_prefix, num_replicas=expected_num_replicas)
-        self.sleep(5)
+        self.sleep(10)
         self.wait_until_indexes_online()
 
         index_map = self.get_index_map()
@@ -1298,7 +1299,7 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
                 # Decrease number of replicas
                 expected_num_replicas = expected_num_replicas - 1
                 error = self._alter_index_replicas(index_name=index_name_prefix, num_replicas=expected_num_replicas)
-                self.sleep(5)
+                self.sleep(10)
                 self.wait_until_indexes_online()
                 index_map = self.get_index_map()
                 definitions = self.rest.get_index_statements()
@@ -1423,8 +1424,11 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
                              " ON default(age) USING GSI  WITH {{'num_replica': {0}}};".format(self.num_index_replicas)
 
         self._create_index_query(index_statement=create_index_query, index_name=index_name_prefix)
+        index_node = self.get_nodes_from_services_map(service_type="index",
+                                                         get_all_nodes=False)
+        rest = RestConnection(index_node)
 
-        indexes = self.rest.get_indexer_metadata()
+        indexes = rest.get_indexer_metadata()
 
         for index in indexes['status']:
             if '(replica ' in index['name'] and index['hosts'][0] != (self.master.ip + ":" + self.master.port):
@@ -1436,7 +1440,7 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
             if (server.ip + ":" + server.port) == rebalance_out_node_ip and server != self.master:
                 rebalance_out_node = server
 
-        rebalance = self.cluster.async_rebalance([self.servers[:self.nodes_init]], [], [rebalance_out_node])
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [rebalance_out_node])
         reached = RestHelper(self.rest).rebalance_reached()
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
@@ -1459,7 +1463,7 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
 
         # Replica that was removed should not be re-created because it is not a broken replica
         pre_rebalance_in_map = self.get_index_map()
-        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[rebalance_out_node]], [],services=["index"])
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [rebalance_out_node], [],services=["index"])
         reached = RestHelper(self.rest).rebalance_reached()
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
