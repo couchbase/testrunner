@@ -84,7 +84,14 @@ class CCCP(BaseTestCase):
                                                                  % (bucket.name, key))
                     config = str(ex)[str(ex).find("Not my vbucket':") \
                                                  + 16 : str(ex).find("for vbucket")]
-                    config = json.loads(config)
+                    if not config.endswith("}"):
+                        config += "}"
+                    try:
+                        config = json.loads(config)
+                    except Exception as e:
+                        if "Expecting object" in str(e):
+                            config += "}"
+                            config = json.loads(config)
                     self.verify_config(config, bucket)
                     """ from watson, only the first error contains bucket details """
                     not_my_vbucket = True
