@@ -521,7 +521,11 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
                         cli_command=cli_command, options=options, \
                         cluster_host="localhost", cluster_port=8091, \
                         user="Administrator", password="password")
-                self.assertTrue("SUCCESS: Server failed over" in output)
+                if not self._check_output("SUCCESS: Server failed over", output):
+                    if output and output[0]:
+                        raise Exception(output[0] + ". Error in command: " + cli_command)
+                    else:
+                        raise Exception("No printout with command: {0}".format(cli_command))
 
         cli_command = "server-readd"
         for num in xrange(nodes_readd):
