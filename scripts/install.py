@@ -1042,9 +1042,6 @@ class ESInstaller(object):
 class InstallerJob(object):
     def sequential_install(self, servers, params):
         installers = []
-
-
-
         for server in servers:
             _params = copy.deepcopy(params)
             _params["server"] = server
@@ -1055,14 +1052,13 @@ class InstallerJob(object):
                 installer.uninstall(_params)
                 if "product" in params and params["product"] in ["couchbase", "couchbase-server", "cb"]:
                     success = True
-                    for server in servers:
-                        shell = RemoteMachineShellConnection(server)
-                        success &= not shell.is_couchbase_installed()
-                        shell.disconnect()
-                    if not success:
-                        print "Server:{0}.Couchbase is still" + \
-                              " installed after uninstall".format(server)
-                        return success
+                    shell = RemoteMachineShellConnection(_params["server"])
+                    success &= not shell.is_couchbase_installed()
+                    shell.disconnect()
+                if not success:
+                    print "Server:{0}.Couchbase is still" + \
+                          " installed after uninstall".format(_params["server"])
+                    return success
                 print "uninstall succeeded"
             except Exception as ex:
                 print "unable to complete the uninstallation: ", ex
