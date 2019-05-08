@@ -67,10 +67,16 @@ class UpgradeTests(NewUpgradeBaseTest, EventingBaseTest):
                                       self.value_size, start=self.num_items * .5,\
                                                          end=self.num_items* 0.75)
         initial_services_setting = self.input.param("initial-services-setting", None)
+        if initial_services_setting is not None and initial_services_setting.count("kv") < 2:
+            raise Exception("This test need at least 2 kv nodes to run")
         self._install(self.servers[:self.nodes_init])
         if not self.init_nodes and initial_services_setting is not None:
-            self.initialize_nodes(self.servers[:self.nodes_init],
-                                  services=initial_services_setting)
+            if "-" in initial_services_setting:
+                initial_services = initial_services_setting.split("-")[0]
+            else:
+                initial_services = initial_services_setting
+            self.initialize_nodes([self.servers[:self.nodes_init][0]],
+                                  services=initial_services)
         self._log_start(self)
         if len(self.servers[:self.nodes_init]) > 1:
             if initial_services_setting is None:
