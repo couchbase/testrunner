@@ -4894,14 +4894,11 @@ class RestParser(object):
 
         if "services" in parsed:
             node.services = parsed["services"]
+
         if "otpNode" in parsed:
             node.id = parsed["otpNode"]
-            if parsed["otpNode"].find('@') >= 0:
-                node.ip = node.id[node.id.index('@') + 1:]
-        elif "hostname" in parsed:
-            node.ip = parsed["hostname"].split(":")[0]
-        # if raw-ipv6, include enclosing square brackets
-        if parsed["hostname"].startswith('['):
+        if "hostname" in parsed:
+            # should work for both: ipv4 and ipv6
             node.ip = parsed["hostname"].rsplit(":", 1)[0]
 
         # memoryQuota
