@@ -78,6 +78,7 @@ class NewUpgradeBaseTest(BaseTestCase):
         self.num_index_replicas = self.input.param("num_index_replica", 0)
         self.expected_err_msg = self.input.param("expected_err_msg", None)
         self.rest_settings = self.input.membase_settings
+        self.multi_nodes_services = False
         self.rest = None
         self.rest_helper = None
         self.is_ubuntu = False
@@ -226,7 +227,10 @@ class NewUpgradeBaseTest(BaseTestCase):
             if "-" in services:
                 set_services = services.split("-")
             elif "," in services:
-                set_services = services.split(",")
+                if self.multi_nodes_services:
+                    set_services = services.split()
+                else:
+                    set_services = services.split(",")
         else:
             set_services = services
         return set_services
@@ -245,7 +249,6 @@ class NewUpgradeBaseTest(BaseTestCase):
 
     def operations(self, servers, services=None):
         set_services = self.initial_services(services)
-
 
         if 4.5 > float(self.initial_version[:3]):
             self.gsi_type = "forestdb"

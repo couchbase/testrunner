@@ -72,11 +72,13 @@ class UpgradeTests(NewUpgradeBaseTest, EventingBaseTest):
         self._install(self.servers[:self.nodes_init])
         if not self.init_nodes and initial_services_setting is not None:
             if "-" in initial_services_setting:
+                self.multi_nodes_services = True
                 initial_services = initial_services_setting.split("-")[0]
             else:
                 initial_services = initial_services_setting
             self.initialize_nodes([self.servers[:self.nodes_init][0]],
                                   services=initial_services)
+        RestConnection(self.master).set_indexer_storage_mode()
         self._log_start(self)
         if len(self.servers[:self.nodes_init]) > 1:
             if initial_services_setting is None:
@@ -92,7 +94,7 @@ class UpgradeTests(NewUpgradeBaseTest, EventingBaseTest):
         else:
             self.cluster.rebalance([self.servers[0]], self.servers[1:], [],
                                          use_hostnames=self.use_hostnames)
-        self.sleep(10)
+        self.sleep(5)
         """ sometimes, when upgrade failed and node does not install couchbase
             server yet, we could not set quota at beginning of the test.  We
             have to wait to install new couchbase server to set it properly here """
