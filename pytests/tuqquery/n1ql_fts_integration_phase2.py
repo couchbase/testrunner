@@ -1212,6 +1212,9 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
             self.assertEquals('True', 'False', 'Wrong query - '+str(query))
 
     def _load_test_buckets(self):
+        if self.get_bucket_from_name("beer-sample") is not None:
+            self.rest.delete_bucket("default")
+
         if self.get_bucket_from_name("beer-sample") is None:
             self.rest.load_sample("beer-sample")
             self.wait_for_buckets_status({"beer-sample": "healthy"}, 5, 120)
