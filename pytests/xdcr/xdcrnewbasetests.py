@@ -93,8 +93,11 @@ class OPS:
 
 class EVICTION_POLICY:
     VALUE_ONLY = "valueOnly"
+    FULL_EVICTION = "fullEviction"
     NO_EVICTION = "noEviction"
-
+    NRU_EVICTION = "nruEviction"
+    CB = [VALUE_ONLY, FULL_EVICTION]
+    EPH = [NO_EVICTION, NRU_EVICTION]
 
 class BUCKET_PRIORITY:
     HIGH = "high"
@@ -1189,9 +1192,18 @@ class CouchbaseCluster:
         bucket_params['bucket_type'] = bucket_type
         bucket_params['enable_replica_index'] = enable_replica_index
         if bucket_type == "ephemeral":
-            bucket_params['eviction_policy'] = EVICTION_POLICY.NO_EVICTION
+            if eviction_policy in EVICTION_POLICY.EPH:
+                bucket_params['eviction_policy'] = eviction_policy
+            else:
+                bucket_params['eviction_policy'] = EVICTION_POLICY.NRU_EVICTION
+            if eviction_policy == EVICTION_POLICY.NRU_EVICTION:
+                if "6.0.2-" in NodeHelper.get_cb_version(server):
+                    self.set_internal_setting("AllowSourceNRUCreation", "true")
         else:
-            bucket_params['eviction_policy'] = eviction_policy
+            if eviction_policy in EVICTION_POLICY.CB:
+                bucket_params['eviction_policy'] = eviction_policy
+            else:
+                bucket_params['eviction_policy'] = EVICTION_POLICY.VALUE_ONLY
         bucket_params['bucket_priority'] = bucket_priority
         bucket_params['flush_enabled'] = flush_enabled
         bucket_params['lww'] = lww
@@ -1200,6 +1212,14 @@ class CouchbaseCluster:
 
     def set_global_checkpt_interval(self, value):
         self.set_xdcr_param("checkpointInterval",value)
+
+    def set_internal_setting(self, param, value):
+        output, _ = RemoteMachineShellConnection(self.__master_node).execute_command_raw(
+            "curl -X GET http://Administrator:password@localhost:9998/xdcr/internalSettings")
+        if not '"' + param + '":' + value in output:
+            RemoteMachineShellConnection(self.__master_node).execute_command_raw(
+                "curl http://Administrator:password@localhost:9998/xdcr/internalSettings -X POST -d " +
+                urllib.quote_plus(param +'="' + value + '"'))
 
     def __remove_all_remote_clusters(self):
         rest_remote_clusters = RestConnection(
