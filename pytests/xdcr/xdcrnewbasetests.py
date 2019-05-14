@@ -4,6 +4,7 @@ import copy
 import logger
 import logging
 import re
+import urllib
 
 from couchbase_helper.cluster import Cluster
 from membase.api.rest_client import RestConnection, Bucket
@@ -800,7 +801,6 @@ class XDCReplication:
             )
         if 'filter_expression' in self.__test_xdcr_params:
             if self.__test_xdcr_params['filter_expression']:
-                import urllib
                 masked_input = {"comma": ',', "star": '*', "dot": '.', "equals": '='}
                 need_to_encode = ['+']
                 for _ in masked_input:
@@ -1216,6 +1216,9 @@ class CouchbaseCluster:
                 bucket_params['eviction_policy'] = eviction_policy
             else:
                 bucket_params['eviction_policy'] = EVICTION_POLICY.NRU_EVICTION
+            if eviction_policy == EVICTION_POLICY.NRU_EVICTION:
+                if "6.0.2-" in NodeHelper.get_cb_version(server):
+                    self.set_internal_setting("AllowSourceNRUCreation", "true")
         else:
             if eviction_policy in EVICTION_POLICY.CB:
                 bucket_params['eviction_policy'] = eviction_policy
@@ -1231,7 +1234,12 @@ class CouchbaseCluster:
         self.set_xdcr_param("checkpointInterval",value)
 
     def set_internal_setting(self, param, value):
-        RestConnection(self.__master_node).set_internal_xdcr_param(param, value)
+        output, _ = RemoteMachineShellConnection(self.__master_node).execute_command_raw(
+            "curl -X GET http://Administrator:password@localhost:9998/xdcr/internalSettings")
+        if not '"' + param + '":' + value in output:
+            RemoteMachineShellConnection(self.__master_node).execute_command_raw(
+                "curl http://Administrator:password@localhost:9998/xdcr/internalSettings -X POST -d " +
+                urllib.quote_plus(param +'="' + value + '"'))
 
     def __remove_all_remote_clusters(self):
         rest_remote_clusters = RestConnection(
