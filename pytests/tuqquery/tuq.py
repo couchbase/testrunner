@@ -593,7 +593,7 @@ class QueryTests(BaseTestCase):
 
     def drop_index_safe(self, bucket, index):
         if self.is_index_present(bucket_name=bucket, index_name=index):
-            self.run_cbq_query("drop index `%s`.`%s`" % (bucket, index))
+            self.drop_index(bucket, index)
             self.wait_for_index_drop(bucket, index)
 
     def drop_all_indexes(self, bucket=None, leave_primary=True):
@@ -1338,6 +1338,19 @@ class QueryTests(BaseTestCase):
             self.sleep(1, 'index is pending or not in the list. sleeping... (%s)' % [item['indexes'] for item in res['results']])
         raise Exception('index %s is not online. last response is %s' % (index_name, res))
 
+    def _debug_fts_request(self, request=""):
+        cmd = "curl -XPOST -H \"Content-Type: application/json\" -u "+self.username+":"+self.password+" " \
+                            "http://"+self.master.ip+":8094/api/index/idx_beer_sample_fts/query -d " + request
+
+
+        shell = RemoteMachineShellConnection(self.master)
+
+        output, error = shell.execute_command(cmd)
+        json_output_str = ''
+        for s in output:
+            json_output_str += s
+        result =  json.loads(json_output_str)
+        return result
 
 ##############################################################################################
 #

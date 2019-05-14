@@ -614,6 +614,29 @@ class N1qlFTSIntegrationTest(QueryTests):
         n1ql_result = self.run_cbq_query("select count(*) from big_bucket where age>0")['results'][0]['$1']
         self.assertEquals(fts_result, n1ql_result, "Test is failed.")
 
+    def test_facets_query(self):
+        self.rest.load_sample("beer-sample")
+        self.wait_for_buckets_status({"beer-sample": "healthy"}, 5, 120)
+        self.wait_for_bucket_docs({"beer-sample": 7303}, 5, 120)
+        idx1 = self._create_fts_index(index_name="idx_beer_sample_fts", doc_count=7303, source_name="beer-sample")
+
+        fts_request = {"explain" : False,
+                       "fields" : ["country"],
+                       "highlight" : {},
+                       "facets": {"states": {"size": 1000, "field":"state"}},
+                       "query" : {"query": "country:'United States'"},
+                       "size":100}
+
+        query = "select * from SEARCH_QUERY(\"idx_beer_sample_fts\", " + json.dumps(fts_request) + ") a"
+        result = self.run_cbq_query(query)
+        n1ql_facets = result['results'][0]['a']['facets']
+        rest = RestConnection(self.servers[1])
+        total_hits, hits, took, status, fts_facets = \
+            rest.run_fts_query_with_facets(index_name="idx_beer_sample_fts",
+                               query_json = fts_request)
+        self.assertEquals(fts_facets['states']['terms'], n1ql_facets['states']['terms'], "Facets are not the same for n1ql and fts requests.")
+
+
     # ================================= Utils =============================
 
     def _get_services_map(self):

@@ -1477,6 +1477,55 @@ class FTSIndex:
             validation = ~validation
         return validation
 
+    def validate_snippet_highlighting_in_result_content_n1ql(self, contents, doc_id,
+                                                        field_names, terms,
+                                                        highlight_style=None):
+        '''
+        Validate the snippets and highlighting in the result content for a given
+        doc id
+        :param contents: Result contents
+        :param doc_id: Doc ID to check highlighting/snippet for
+        :param field_names: Field name for which term is to be validated
+        :param terms: search term which should be highlighted
+        :param highlight_style: Expected highlight style - ansi/html
+        :return: True/False
+        '''
+        validation = True
+        for content in contents:
+            if content['meta']['id'] == doc_id:
+                # Check if Location section is present for the document in the search results
+                if 'locations' in content['meta']:
+                    validation &= True
+                else:
+                    self.__log.info(
+                        "Locations not present in the search result")
+                    validation &= False
+
+                # Check if Fragments section is present in the document in the search results
+                # If present, check if the search term is highlighted
+                if 'fragments' in content['meta']:
+                    snippet = content['meta']['fragments'][field_names][0]
+                    # Replace the Ansi highlight tags with <mark> since the
+                    # ansi ones render themselves hence cannot be compared.
+                    if highlight_style == 'ansi':
+                        snippet = snippet.replace('\x1b[43m', '<mark>').replace(
+                            '\x1b[0m', '</mark>')
+                    search_term = '<mark>' + terms + '</mark>'
+                    found = snippet.find(search_term)
+                    if found < 0:
+                        self.__log.info("Search term not highlighted")
+                    validation &= (found>=0)
+                else:
+                    self.__log.info(
+                        "Fragments not present in the search result")
+                    validation &= False
+
+        # If the test is a negative testcase to check if snippet, flip the result
+        if TestInputSingleton.input.param("negative_test", False):
+            validation = ~validation
+        return validation
+
+
     def get_score_from_query_result_content(self, contents, doc_id):
         for content in contents:
             if content['id'] == doc_id:

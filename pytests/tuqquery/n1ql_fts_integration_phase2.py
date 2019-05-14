@@ -252,6 +252,8 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
             raise Exception("Invalid test configuration! Test name should not be empty.")
 
         self.cbcluster = CouchbaseCluster(name='cluster', nodes=self.servers, log=self.log)
+        rest = self.get_rest_client(self.servers[0].rest_username, self.servers[0].rest_password)
+
         test_cases = {
             # 10 results
             "explain": ["true", "false"],
@@ -273,15 +275,17 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
             self._create_fts_index(index_name='idx_beer_sample_fts', doc_count=7303, source_name='beer-sample')
             n1ql_query = "select meta().id from `beer-sample` where search(`beer-sample`, {\"field\": \"state\", \"match\":\"California\"}, {\""+test_name+"\": "+str(option_val)+"})"
             if test_name == 'size':
-                fts_request = "'{\"query\":{\"field\": \"state\", \"match\":\"California\"}, \"size\":"+str(option_val)+ "}'"
+                fts_request_str = "'{\"query\":{\"field\": \"state\", \"match\":\"California\"}, \"size\":"+str(option_val)+ "}'"
             else:
-                fts_request = "'{\"query\":{\"field\": \"state\", \"match\":\"California\"}, \"size\":10000, \""+test_name+"\":"+str(option_val)+"}'"
-
+                fts_request_str = "'{\"query\":{\"field\": \"state\", \"match\":\"California\"}, \"size\":10000, \""+test_name+"\":"+str(option_val)+"}'"
+            fts_request = json.loads(fts_request_str)
             n1ql_results = self.run_cbq_query(n1ql_query)['results']
-            fts_results = self._run_fts_request(request=fts_request)
+            total_hits, hits, took, status = \
+                rest.run_fts_query(index_name="idx_beer_sample_fts",
+                                   query_json=fts_request)
 
             self._remove_all_fts_indexes()
-            comparison_result = self._compare_n1ql_results_against_fts(n1ql_results, fts_results)
+            comparison_result = self._compare_n1ql_results_against_fts(n1ql_results, hits)
             self.assertEquals(comparison_result, "OK", comparison_result)
 
 
@@ -461,22 +465,26 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
         test_cases = [" = true ", " in [true] ", " in [true, true, true] "]
 
         self.cbcluster = CouchbaseCluster(name='cluster', nodes=self.servers, log=self.log)
+        rest = self.get_rest_client(self.servers[0].rest_username, self.servers[0].rest_password)
         self._create_fts_index(index_name="idx_beer_sample_fts", doc_count=7303, source_name='beer-sample')
 
-        fts_request = "'{\"query\":{\"field\": \"state\", \"match\":\"California\"}, \"size\":10000}'"
+        fts_request = {"query": {"field": "state", "match": "California"}, "size": 10000}
 
         for test_case in test_cases:
             n1ql_query = "select meta().id from `beer-sample` where search(`beer-sample`, {\"field\": \"state\", \"match\":\"California\"}) "+ test_case
 
             n1ql_results = self.run_cbq_query(n1ql_query)['results']
-            fts_results = self._run_fts_request(request=fts_request)
-            comparison_results = self._compare_n1ql_results_against_fts(n1ql_results, fts_results)
+            total_hits, hits, took, status = \
+                rest.run_fts_query(index_name="idx_beer_sample_fts",
+                                   query_json=fts_request)
+            comparison_results = self._compare_n1ql_results_against_fts(n1ql_results, hits)
             self.assertEquals(comparison_results, "OK", comparison_results)
 
         n1ql_query = "select meta().id from `beer-sample` where not(not(search(`beer-sample`, {\"field\": \"state\", \"match\":\"California\"}))) "
         n1ql_results = self.run_cbq_query(n1ql_query)['results']
-        fts_results = self._run_fts_request(request=fts_request)
-        comparison_results = self._compare_n1ql_results_against_fts(n1ql_results, fts_results)
+
+        total_hits, hits, took, status = rest.run_fts_query(index_name="idx_beer_sample_fts", query_json=fts_request)
+        comparison_results = self._compare_n1ql_results_against_fts(n1ql_results, hits)
         self.assertEquals(comparison_results, "OK", comparison_results)
 
         self._remove_all_fts_indexes()
@@ -541,13 +549,16 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
 
     def test_n1ql_syntax_select_from_let(self):
         self.cbcluster = CouchbaseCluster(name='cluster', nodes=self.servers, log=self.log)
+        rest = self.get_rest_client(self.servers[0].rest_username, self.servers[0].rest_password)
+
         self._create_fts_index(index_name="idx_beer_sample_fts", doc_count=7303, source_name='beer-sample')
 
         n1ql_query = "select meta().id from `beer-sample` let res=true where search(`beer-sample`, {\"field\": \"state\", \"match\":\"California\"})=res"
-        fts_request = "'{\"query\":{\"field\": \"state\", \"match\":\"California\"}, \"size\":10000}'"
+        fts_request = {"query":{"field": "state", "match":"California"}, "size":10000}
         n1ql_results = self.run_cbq_query(n1ql_query)['results']
-        fts_results = self._run_fts_request(request=fts_request)
-        comparison_results = self._compare_n1ql_results_against_fts(n1ql_results, fts_results)
+        total_hits, hits, took, status = rest.run_fts_query(index_name="idx_beer_sample_fts",
+                                                            query_json=fts_request)
+        comparison_results = self._compare_n1ql_results_against_fts(n1ql_results, hits)
         self.assertEquals(comparison_results, "OK", comparison_results)
 
         self._remove_all_fts_indexes()
@@ -594,13 +605,16 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
 
     def test_n1ql_syntax_from_select(self):
         self.cbcluster = CouchbaseCluster(name='cluster', nodes=self.servers, log=self.log)
+        rest = self.get_rest_client(self.servers[0].rest_username, self.servers[0].rest_password)
+
         self._create_fts_index(index_name="idx_beer_sample_fts", doc_count=7303, source_name='beer-sample')
 
         n1ql_query = "from (select meta().id mt from `beer-sample` where search(`beer-sample`, 'state:California')) as t select t.mt as id"
-        fts_request = "'{\"query\":{\"field\": \"state\", \"match\":\"California\"}, \"size\":10000}'"
+        fts_request = {"query":{"field": "state", "match":"California"}, "size":10000}
         n1ql_results = self.run_cbq_query(n1ql_query)['results']
-        fts_results = self._run_fts_request(request=fts_request)
-        comparison_results = self._compare_n1ql_results_against_fts(n1ql_results, fts_results)
+        total_hits, hits, took, status = rest.run_fts_query(index_name="idx_beer_sample_fts",
+                                                            query_json=fts_request)
+        comparison_results = self._compare_n1ql_results_against_fts(n1ql_results, hits)
         self.assertEquals(comparison_results, "OK", comparison_results)
 
         self._remove_all_fts_indexes()
@@ -883,6 +897,8 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
         outer_offset_values = ["", "10"]
 
         self.cbcluster = CouchbaseCluster(name='cluster', nodes=self.servers, log=self.log)
+        rest = self.get_rest_client(self.servers[0].rest_username, self.servers[0].rest_password)
+
         fts_name_index = self._create_fts_index(index_name="idx_beer_sample_fts", doc_count=7303, source_name='beer-sample')
 
         for inner_field in inner_sorting_field_values:
@@ -910,11 +926,14 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
                                 search_results = self.run_cbq_query(search_query)['results']
                                 if outer_sort_expression == "":
                                     if inner_sort_expression != "":
-                                        fts_request = "'{\"query\":{\"field\": \"state\", \"match\":\"California\"}, \"size\":1000,"+inner_sort_expression+"}'"
+                                        fts_request_str = "'{\"query\":{\"field\": \"state\", \"match\":\"California\"}, \"size\":1000,"+inner_sort_expression+"}'"
                                     else:
-                                        fts_request = "'{\"query\":{\"field\": \"state\", \"match\":\"California\"}, \"size\":10000}'"
-                                    fts_results = self._run_fts_request(request=fts_request)
-                                    comparison_results = self._compare_n1ql_results_against_fts(search_results, fts_results)
+                                        fts_request_str = "'{\"query\":{\"field\": \"state\", \"match\":\"California\"}, \"size\":10000}'"
+                                    fts_request = json.loads(fts_request_str)
+                                    total_hits, hits, took, status = rest.run_fts_query(
+                                        index_name="idx_beer_sample_fts",
+                                        query_json=fts_request)
+                                    comparison_results = self._compare_n1ql_results_against_fts(search_results, hits)
                                     self.assertEquals(comparison_results, "OK", comparison_results)
                                 else:
                                     n1ql_query = "select meta().id from `beer-sample` where search(`beer-sample`, {\"query\": {\"field\": \"state\", \"match\": \"California\"}}) "+outer_sort_expression
@@ -967,25 +986,20 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
     def test_drop_fts_index(self):
         self.cbcluster = CouchbaseCluster(name='cluster', nodes=self.servers, log=self.log)
         fts_name_index = self._create_fts_index(index_name="idx_beer_sample_fts", doc_count=7303, source_name='beer-sample')
-        select_query = "select meta().id from `beer-sample` where search(b, {\"query\": {\"field\": \"state\", \"match\": \"California\"}, \"sort\": [{\"by\": \"field\", \"field\": \"city\"}]})"
-        expected_count = self.run_cbq_query(select_query)['metrics']['resultCount']
+        select_query = "select * from `beer-sample` l join `beer-sample` r on l.city=r.city where search(l,\"city:San Francisco\")"
+        if not self.is_index_present("beer-sample", "beer_sample_city_idx"):
+            self.run_cbq_query("create index beer_sample_city_idx on `beer-sample` (`beer-sample`.city)")
+
         threads = []
-        for i in range(0, 20):
-            t = threading.Thread(target=self._select_parallel, args=(select_query, expected_count))
-            t.daemon = True
-            threads.append(t)
-            t.start()
-
-        t = threading.Thread(target=self._delete_fts_index, args=("idx_beer_sample_fts",))
+        t = threading.Thread(target=self._select_parallel, args=(select_query,213,))
         t.daemon = True
-        t.start()
         threads.append(t)
+        t.start()
 
-        for i in range(0, 20):
-            t = threading.Thread(target=self._select_parallel, args=(select_query,expected_count))
-            t.daemon = True
-            t.start()
-            threads.append(t)
+        t1 = threading.Thread(target=self._delete_fts_index, args=("idx_beer_sample_fts",))
+        t1.daemon = True
+        t1.start()
+        threads.append(t1)
 
         for th in threads:
             th.join()
@@ -1156,7 +1170,7 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
                                                    replicas=self.num_replicas,
                                                    enable_replica_index=self.enable_replica_index,
                                                    eviction_policy=self.eviction_policy, bucket_priority=None,
-                                                   lww=self.lww, maxttl=360,
+                                                   lww=self.lww, maxttl=60,
                                                    compression_mode=self.compression_mode)
 
         self.cluster.create_standard_bucket("ttl_bucket", 11222, bucket_params)
@@ -1171,15 +1185,20 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
                 initial_statement += "'primary_key':'primary_key_"+str(i) + "','string_field': 'string data " + str(i) + "','int_field':"+str(i)+"})"
             self.run_cbq_query(initial_statement)
 
-        fts_name_index = self._create_fts_index(index_name="idx_ttl_bucket_fts", doc_count=7303, source_name='ttl_bucket')
+        fts_name_index = self._create_fts_index(index_name="idx_ttl_bucket_fts", doc_count=100, source_name='ttl_bucket')
+
+        results_before_expiration = self.run_cbq_query("select count(*) from ttl_bucket where search(ttl_bucket, \"string_field:string\")")
+        self.assertTrue(results_before_expiration['results'][0]['$1'] > 0, "Results before expiration must be positive")
+        self.sleep(100)
+        results_after_expiration = self.run_cbq_query("select count(*) from ttl_bucket where search(ttl_bucket, \"string_field:string\")")
+        self.assertTrue(results_after_expiration['results'][0]['$1'] == 0, "Results after expiration must be zero")
 
 
     # ============================================ utils =================================
-    def _compare_n1ql_results_against_fts(self, n1ql_results, fts_results):
+    def _compare_n1ql_results_against_fts(self, n1ql_results, hits):
         n1ql_doc_ids = []
         for result in n1ql_results:
             n1ql_doc_ids.append(result['id'])
-        hits = fts_results['hits']
         fts_doc_ids = []
         for hit in hits:
             fts_doc_ids.append(hit['id'])
@@ -1212,9 +1231,6 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
             self.assertEquals('True', 'False', 'Wrong query - '+str(query))
 
     def _load_test_buckets(self):
-        if self.get_bucket_from_name("beer-sample") is not None:
-            self.rest.delete_bucket("default")
-
         if self.get_bucket_from_name("beer-sample") is None:
             self.rest.load_sample("beer-sample")
             self.wait_for_buckets_status({"beer-sample": "healthy"}, 5, 120)
@@ -1244,8 +1260,8 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
         return fts_index
 
     def _delete_fts_index(self, index_name=''):
-        shell = RemoteMachineShellConnection(self.master)
-        shell.execute_command("curl -X DELETE -u Administrator:password http://"+self.master.ip+":8094/api/index/"+index_name)
+        rest = self.get_rest_client(self.servers[0].rest_username, self.servers[0].rest_password)
+        rest.delete_fts_index(index_name)
 
     def _open_curl_access(self):
         shell = RemoteMachineShellConnection(self.master)
@@ -1297,22 +1313,15 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
         self.users['all_buckets_data_reader_null'] = {'username': 'all_buckets_data_reader_null', 'password': 'password'}
 
 
-    def _run_fts_request(self, request=""):
-        cmd = "curl -XPOST -H \"Content-Type: application/json\" -u "+self.username+":"+self.password+" " \
-                            "http://"+self.master.ip+":8094/api/index/idx_beer_sample_fts/query -d " + request
-
-
-        shell = RemoteMachineShellConnection(self.master)
-
-        output, error = shell.execute_command(cmd)
-        json_output_str = ''
-        for s in output:
-            json_output_str += s
-        result =  json.loads(json_output_str)
-        return result
 
     def _remove_all_fts_indexes(self):
         indexes = self.cbcluster.get_indexes()
+        rest = self.get_rest_client(self.servers[0].rest_username, self.servers[0].rest_password)
         for index in indexes:
-            self._delete_fts_index(index.name)
+            rest.delete_fts_index(index.name)
 
+    def get_rest_client(self, user , password):
+        rest = RestConnection(self.cbcluster.get_random_fts_node())
+        rest.username = user
+        rest.password = password
+        return rest
