@@ -4,6 +4,7 @@ import copy
 import logger
 import logging
 import re
+import urllib
 
 from couchbase_helper.cluster import Cluster
 from membase.api.rest_client import RestConnection, Bucket
