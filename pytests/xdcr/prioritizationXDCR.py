@@ -61,7 +61,7 @@ class XDCRPrioritization(XDCRNewBaseTest):
         buckets = rest.get_buckets()
         for bucket in buckets:
             if self.initial:
-                goxdcr_priority = rest.get_xdcr_param(bucket.name, bucket.name, "priority").lower()
+                goxdcr_priority = str(rest.get_xdcr_param(bucket.name, bucket.name, "priority")).lower()
                 # All replications start with 'medium' dcp priority
                 expected_priority[bucket.name] = ["medium"]
                 if goxdcr_priority == "low" or goxdcr_priority == "high":
@@ -81,7 +81,7 @@ class XDCRPrioritization(XDCRNewBaseTest):
                 (bucket.name, cluster.get_name()), None)
             if param_str:
                 expected_priority = (param_str.split('priority:')[1]).split(',')[0]
-                actual_priority = rest.get_xdcr_param(bucket.name, bucket.name, "priority")
+                actual_priority = str(rest.get_xdcr_param(bucket.name, bucket.name, "priority"))
                 if expected_priority != actual_priority:
                     match = False
                 self.print_status(bucket.name, cluster.get_master_node().ip, "goxdcr priority",
@@ -105,7 +105,7 @@ class XDCRPrioritization(XDCRNewBaseTest):
             if param_str:
                 if input_param in param_str:
                     expected = (param_str.split(input_param + ':')[1]).split(',')[0]
-                    actual = rest.get_xdcr_param(bucket.name, bucket.name, repl_param)
+                    actual = str(rest.get_xdcr_param(bucket.name, bucket.name, repl_param))
                     if expected != actual:
                         match = False
                     self.print_status(bucket.name, cluster.get_master_node().ip, input_param, actual, expected,
