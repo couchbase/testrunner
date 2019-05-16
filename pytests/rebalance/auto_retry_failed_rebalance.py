@@ -2,6 +2,7 @@ import time, os, json
 
 from threading import Thread
 import threading
+import random
 from basetestcase import BaseTestCase
 from rebalance.rebalance_base import RebalanceBaseTest
 from membase.api.exception import RebalanceFailedException
@@ -34,6 +35,11 @@ class AutoRetryFailedRebalance(RebalanceBaseTest):
         self.reset_retry_rebalance_settings()
         # Reset to default value
         super(AutoRetryFailedRebalance, self).tearDown()
+        rest = RestConnection(self.servers[0])
+        zones = rest.get_zone_names()
+        for zone in zones:
+            if zone != "Group 1":
+                rest.delete_zone(zone)
 
     def test_auto_retry_of_failed_rebalance_where_failure_happens_before_rebalance(self):
         before_rebalance_failure = self.input.param("before_rebalance_failure", "stop_server")
@@ -111,6 +117,10 @@ class AutoRetryFailedRebalance(RebalanceBaseTest):
                 # cancel pending rebalance
                 self.log.info("Cancelling rebalance Id: {0}".format(rebalance_id))
                 self.rest.cancel_pending_rebalance(rebalance_id)
+            elif post_failure_operation == "disable_auto_retry":
+                # disable the auto retry of the failed rebalance
+                self.log.info("Disable the the auto retry of the failed rebalance")
+                self.change_retry_rebalance_settings(enabled=False)
             elif post_failure_operation == "retry_failed_rebalance_manually":
                 # retry failed rebalance manually
                 self.log.info("Retrying failed rebalance Id: {0}".format(rebalance_id))
@@ -134,6 +144,11 @@ class AutoRetryFailedRebalance(RebalanceBaseTest):
     def test_negative_auto_retry_of_failed_rebalance_where_rebalance_will_not_be_cancelled(self):
         during_rebalance_failure = self.input.param("during_rebalance_failure", "stop_server")
         post_failure_operation = self.input.param("post_failure_operation", "create_delete_buckets")
+        zone_name = "Group_{0}_{1}".format(random.randint(1, 1000000000), self._testMethodName)
+        zone_name = zone_name[0:60]
+        default_zone = "Group 1"
+        moved_node = []
+        moved_node.append(self.servers[1].ip)
         try:
             operation = self._rebalance_operation(self.rebalance_operation)
             self.sleep(self.sleep_time)
@@ -155,10 +170,16 @@ class AutoRetryFailedRebalance(RebalanceBaseTest):
                 self.sleep(self.sleep_time)
                 BucketOperationHelper.create_bucket(self.master, test_case=self)
             elif post_failure_operation == "change_replica_count":
-                # retry failed rebalance manually
+                # change replica count
                 self.log.info("Changing replica count of buckets")
                 for bucket in self.buckets:
                     self.rest.change_bucket_props(bucket, replicaNumber=2)
+            elif post_failure_operation == "change_server_group":
+                # change server group
+                self.log.info("Creating new zone " + zone_name)
+                self.rest.add_zone(zone_name)
+                self.log.info("Moving {0} to new zone {1}".format(moved_node, zone_name))
+                status = self.rest.shuffle_nodes_in_zones(moved_node, default_zone, zone_name)
             else:
                 self.fail("Invalid post_failure_operation option")
             # In these failure scenarios while the retry is pending, then the retry will be attempted but fail
@@ -171,10 +192,39 @@ class AutoRetryFailedRebalance(RebalanceBaseTest):
         else:
             self.fail("Rebalance did not fail as expected. Hence could not validate auto-retry feature..")
         finally:
+            if post_failure_operation == "change_server_group":
+                status = self.rest.shuffle_nodes_in_zones(moved_node, zone_name, default_zone)
+                self.log.info("Shuffle the node back to default group . Status : {0}".format(status))
+                self.sleep(self.sleep_time)
+                self.log.info("Deleting new zone " + zone_name)
+                try:
+                    self.rest.delete_zone(zone_name)
+                except:
+                    self.log.info("Errors in deleting zone")
             if self.disable_auto_failover:
                 self.rest.update_autofailover_settings(True, 120)
             self.start_server(self.servers[1])
             self.stop_firewall_on_node(self.servers[1])
+
+    def test_auto_retry_of_failed_rebalance_with_rebalance_test_conditions(self):
+        test_failure_condition = self.input.param("test_failure_condition")
+        # induce the failure before the rebalance starts
+        self._induce_rebalance_test_condition(test_failure_condition)
+        self.sleep(self.sleep_time)
+        try:
+            operation = self._rebalance_operation(self.rebalance_operation)
+            operation.result()
+        except Exception as e:
+            self.log.info("Rebalance failed with : {0}".format(str(e)))
+            # Delete the rebalance test condition so that we recover from the error
+            self._delete_rebalance_test_condition(test_failure_condition)
+            self._check_retry_rebalance_succeeded()
+        else:
+            self.fail("Rebalance did not fail as expected. Hence could not validate auto-retry feature..")
+        finally:
+            if self.disable_auto_failover:
+                self.rest.update_autofailover_settings(True, 120)
+            self._delete_rebalance_test_condition(test_failure_condition)
 
     def _rebalance_operation(self, rebalance_operation):
         if rebalance_operation == "rebalance_out":
@@ -248,6 +298,34 @@ class AutoRetryFailedRebalance(RebalanceBaseTest):
         elif error_condition == "reboot_server":
             # wait till node is ready after warmup
             ClusterOperationHelper.wait_for_ns_servers_or_assert([self.servers[1]], self, wait_if_warmup=True)
-        else:
-            self.fail("Invalid error recovery option")
 
+    def _induce_rebalance_test_condition(self, test_failure_condition):
+        if test_failure_condition == "verify_replication":
+            set_command = 'testconditions:set({0}, {fail, \"default\"})'.format(test_failure_condition)
+        elif test_failure_condition == "backfill_done":
+            set_command = 'testconditions:set({0}, {for_vb_move, \"default\", fail})'.format(test_failure_condition)
+        else:
+            set_command = "testconditions:set({0}, fail)".format(test_failure_condition)
+        get_command = "testconditions:get({0})".format(test_failure_condition)
+        for server in self.servers:
+            rest = RestConnection(server)
+            _, content = rest.diag_eval(set_command)
+            self.log.info("Command : {0} Return : {1}".format(set_command, content))
+
+        for server in self.servers:
+            rest = RestConnection(server)
+            _, content = rest.diag_eval(get_command)
+            self.log.info("Command : {0} Return : {1}".format(get_command, content))
+
+    def _delete_rebalance_test_condition(self, test_failure_condition):
+        delete_command = "testconditions:delete({0})".format(test_failure_condition)
+        get_command = "testconditions:get({0})".format(test_failure_condition)
+        for server in self.servers:
+            rest = RestConnection(server)
+            _, content = rest.diag_eval(delete_command)
+            self.log.info("Command : {0} Return : {1}".format(delete_command, content))
+
+        for server in self.servers:
+            rest = RestConnection(server)
+            _, content = rest.diag_eval(get_command)
+            self.log.info("Command : {0} Return : {1}".format(get_command, content))
