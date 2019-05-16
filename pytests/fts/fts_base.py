@@ -3908,6 +3908,24 @@ class FTSBaseTest(unittest.TestCase):
             index_name_count_map[index.name] = docs_indexed
         return index_name_count_map
 
+    def is_index_complete(self, name):
+        """
+         Handle validation and error logging for docs indexed
+         returns a map containing index_names and docs indexed
+        """
+        for index in self._cb_cluster.get_indexes():
+            if index.name == name:
+                docs_indexed = index.get_indexed_doc_count()
+                bucket_count = self._cb_cluster.get_doc_count_in_bucket(
+                    index.source_bucket)
+
+                self.log.info("Docs in index {0}={1}, bucket docs={2}".
+                          format(index.name, docs_indexed, bucket_count))
+                if docs_indexed != bucket_count:
+                    return False
+                else:
+                    return True
+
     def setup_es(self):
         """
         Setup Elastic search - create empty index node defined under

@@ -883,6 +883,47 @@ class StableTopFTS(FTSBaseTest):
             self.log.error(err)
             self.fail("Testcase failed: "+ err.message)
 
+    def test_facets_during_index(self):
+        field_indexed = self._input.param("field_indexed",True)
+        self.load_data()
+        index = self.create_index(
+            self._cb_cluster.get_bucket_by_name('default'),
+            "default_index")
+        self.sleep(5)
+        index.add_child_field_to_default_mapping(field_name="type",
+                                                 field_type="text",
+                                                 field_alias="type",
+                                                 analyzer="keyword")
+        if field_indexed:
+            index.add_child_field_to_default_mapping(field_name="dept",
+                                                     field_type="text",
+                                                     field_alias="dept",
+                                                     analyzer="keyword")
+            index.add_child_field_to_default_mapping(field_name="salary",
+                                                     field_type="number",
+                                                     field_alias="salary")
+            index.add_child_field_to_default_mapping(field_name="join_date",
+                                                     field_type="datetime",
+                                                     field_alias="join_date")
+        index.index_definition['uuid'] = index.get_uuid()
+        index.update()
+
+        self.sleep(5)
+        query = eval(self._input.param("query", str(self.sample_query)))
+        if isinstance(query, str):
+            query = json.loads(query)
+
+        while not self.is_index_complete(index.name):
+            zero_results_ok = True
+            try:
+                hits, _, _, _, facets = index.execute_query_with_facets(query,
+                                                                            zero_results_ok=zero_results_ok)
+                self.log.info("Hits: %s" % hits)
+                self.log.info("Facets: %s" % facets)
+            except Exception as err:
+                self.log.error(err)
+                self.fail("Testcase failed: "+ err.message)
+
     def test_doc_config(self):
         # delete default bucket
         self._cb_cluster.delete_bucket("default")
@@ -1110,6 +1151,40 @@ class StableTopFTS(FTSBaseTest):
                     if not result:
                         self.fail(
                             "Testcase failed. Actual results do not match expected.")
+        except Exception as err:
+            self.log.error(err)
+            self.fail("Testcase failed: " + err.message)
+
+    def test_sorting_of_results_during_indexing(self):
+        self.load_data()
+        self.wait_till_items_in_bucket_equal(self._num_items/2)
+        index = self.create_index(
+            self._cb_cluster.get_bucket_by_name('default'),
+            "default_index")
+        #self.wait_for_indexing_complete()
+
+        self.sleep(5)
+
+        zero_results_ok = True
+        #expected_hits = int(self._input.param("expected_hits", 0))
+        default_query = {"disjuncts": [{"match": "Safiya", "field": "name"},
+                                       {"match": "Palmer", "field": "name"}]}
+        query = eval(self._input.param("query", str(default_query)))
+        if isinstance(query, str):
+            query = json.loads(query)
+
+        try:
+            for index in self._cb_cluster.get_indexes():
+                while not self.is_index_complete(index.name):
+                    sort_params = self.build_sort_params()
+                    hits, raw_hits, _, _ = index.execute_query(query = query,
+                                                               zero_results_ok=zero_results_ok,
+                                                               sort_fields=sort_params,
+                                                               return_raw_hits=True)
+
+                    self.log.info("Hits: %s" % hits)
+                    self.log.info("Doc IDs: %s" % raw_hits)
+                    #self.sleep(5)
         except Exception as err:
             self.log.error(err)
             self.fail("Testcase failed: " + err.message)
