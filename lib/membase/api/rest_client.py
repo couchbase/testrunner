@@ -1822,7 +1822,11 @@ class RestConnection(object):
                 # get otp,get status
                 node = OtpNode(id=value['otpNode'],
                                status=value['status'])
-                if node.ip == '127.0.0.1':
+                if node.ip == 'cb.local':
+                    node.ip = self.ip
+                    node.id = node.id.replace('cb.local',
+                                              self.ip.__str__())
+		if node.ip == '127.0.0.1':
                     node.ip = self.ip
                 node.port = int(key[key.rfind(":") + 1:])
                 node.replication = value['replication']

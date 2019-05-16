@@ -308,7 +308,8 @@ class BaseTestCase(unittest.TestCase):
 
                     self.services = self.get_services(self.servers, self.services_init)
                     # rebalance all nodes into the cluster before each test
-                    self.cluster.rebalance(self.servers[:self.num_servers], self.servers[1:self.num_servers], [],
+                    if self.num_servers > 1:
+                        self.cluster.rebalance(self.servers[:self.num_servers], self.servers[1:self.num_servers], [],
                                            services=self.services)
                 elif self.nodes_init > 1 and not self.skip_init_check_cbserver:
                     self.services = self.get_services(self.servers[:self.nodes_init], self.services_init)
@@ -319,7 +320,8 @@ class BaseTestCase(unittest.TestCase):
                 elif str(self.__class__).find('ViewQueryTests') != -1 and \
                         not self.input.param("skip_rebalance", False):
                     self.services = self.get_services(self.servers, self.services_init)
-                    self.cluster.rebalance(self.servers, self.servers[1:],
+                    if self.num_servers > 1:
+                        self.cluster.rebalance(self.servers, self.servers[1:],
                                            [], services=self.services)
                 self.setDebugLevel(service_type="index")
                 if not self.disable_diag_eval_on_non_local_host:
