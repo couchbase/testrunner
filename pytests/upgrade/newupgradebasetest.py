@@ -91,6 +91,7 @@ class NewUpgradeBaseTest(BaseTestCase):
         self.ddocs_num = self.input.param("ddocs_num", 1)
         self.view_num = self.input.param("view_per_ddoc", 2)
         self.is_dev_ddoc = self.input.param("is-dev-ddoc", False)
+        self.offline_failover_upgrade = self.input.param("offline_failover_upgrade", False)
         self.during_ops = None
         if "during-ops" in self.input.test_params:
             self.during_ops = self.input.param("during-ops", None).split(",")
@@ -342,21 +343,27 @@ class NewUpgradeBaseTest(BaseTestCase):
             raise Exception("Build %s for machine %s is not found" % (version, server))
         return appropriate_build
 
-    def _upgrade(self, upgrade_version, server, queue=None, skip_init=False, info=None):
+    def _upgrade(self, upgrade_version, server, queue=None, skip_init=False, info=None,
+                 save_upgrade_config=False, fts_query_limit=None, debug_logs=False):
         try:
             remote = RemoteMachineShellConnection(server)
             appropriate_build = self._get_build(server, upgrade_version, remote, info=info)
-            self.assertTrue(appropriate_build.url, msg="unable to find build {0}".format(upgrade_version))
-            self.assertTrue(remote.download_build(appropriate_build), "Build wasn't downloaded!")
-            o, e = remote.couchbase_upgrade(appropriate_build, save_upgrade_config=False, forcefully=self.is_downgrade,
-                                            fts_query_limit=10000000)
-            self.log.info("upgrade {0} to version {1} is completed".format(server.ip, upgrade_version))
-            """ remove this line when bug MB-11807 fixed """
-            if self.is_ubuntu:
+            self.assertTrue(appropriate_build.url,
+                             msg="unable to find build {0}"\
+                             .format(upgrade_version))
+            self.assertTrue(remote.download_build(appropriate_build),
+                             "Build wasn't downloaded!")
+            o, e = remote.couchbase_upgrade(appropriate_build,
+                                            save_upgrade_config=False,
+                                            forcefully=self.is_downgrade,
+                                            fts_query_limit=fts_query_limit,
+                                            debug_logs=debug_logs)
+            self.log.info("upgrade {0} to version {1} is completed"
+                          .format(server.ip, upgrade_version))
+            if 5.0 > float(self.initial_version[:3]) and self.is_centos7:
+                remote.execute_command("systemctl daemon-reload")
                 remote.start_server()
-            """ remove end here """
-            remote.disconnect()
-            self.sleep(10)
+            self.rest = RestConnection(server)
             if self.is_linux:
                 self.wait_node_restarted(server, wait_time=testconstants.NS_SERVER_TIMEOUT * 4, wait_if_warmup=True)
             else:
@@ -364,6 +371,8 @@ class NewUpgradeBaseTest(BaseTestCase):
             if not skip_init:
                 self.rest.init_cluster(self.rest_settings.rest_username, self.rest_settings.rest_password)
             self.sleep(self.sleep_time)
+            remote.disconnect()
+            self.sleep(10)
             return o, e
         except Exception, e:
             print traceback.extract_stack()
@@ -691,6 +700,31 @@ class NewUpgradeBaseTest(BaseTestCase):
                 self.dcp_rebalance_in_offline_upgrade_from_version2()
             """ set install cb version to upgrade version after done upgrade """
             self.initial_version = self.upgrade_versions[0]
+        except Exception, ex:
+            self.log.info(ex)
+            raise
+
+    def _offline_failover_upgrade(self):
+        try:
+            self.log.info("offline_failover_upgrade")
+            upgrade_version = self.upgrade_versions[0]
+            upgrade_nodes = self.servers[:self.nodes_init]
+            total_nodes = len(upgrade_nodes)
+            for server in upgrade_nodes:
+                self.rest.fail_over('ns_1@' + upgrade_nodes[total_nodes - 1].ip,
+                                                                  graceful=True)
+                self.sleep(timeout=60)
+                self.rest.set_recovery_type('ns_1@' + upgrade_nodes[total_nodes - 1].ip,
+                                                                                 "full")
+                output, error = self._upgrade(upgrade_version,
+                                              upgrade_nodes[total_nodes - 1],
+                                              fts_query_limit=10000000)
+                if "You have successfully installed Couchbase Server." not in output:
+                    self.fail("Upgrade failed. See logs above!")
+                self.cluster.rebalance(self.servers[:self.nodes_init], [], [])
+                total_nodes -= 1
+            if total_nodes == 0:
+                self.rest = RestConnection(upgrade_nodes[total_nodes])
         except Exception, ex:
             self.log.info(ex)
             raise

@@ -31,11 +31,12 @@ class UpgradeTests(NewUpgradeBaseTest, EventingBaseTest):
         self.in_between_events = self.input.param("in_between_events","").split(":")
         self.after_events = self.input.param("after_events","").split(":")
         self.before_events = self.input.param("before_events","").split(":")
-        self.upgrade_type = self.input.param("upgrade_type","online")
+        self.upgrade_type = self.input.param("upgrade_type", "online")
         self.sherlock_upgrade = self.input.param("sherlock",False)
         self.max_verify = self.input.param("max_verify", None)
         self.verify_after_events = self.input.param("verify_after_events", True)
-        self.online_upgrade_type = self.input.param("online_upgrade_type","swap")
+        self.online_upgrade_type = self.input.param("online_upgrade_type", "swap")
+        self.offline_upgrade_type = self.input.param("offline_upgrade_type", "offline_shutdown")
         self.src_bucket_name = self.input.param('src_bucket_name', 'src_bucket')
         self.eventing_log_level = self.input.param('eventing_log_level', 'INFO')
         self.dst_bucket_name = self.input.param('dst_bucket_name', 'dst_bucket')
@@ -69,6 +70,7 @@ class UpgradeTests(NewUpgradeBaseTest, EventingBaseTest):
         initial_services_setting = self.input.param("initial-services-setting", None)
         if initial_services_setting is not None and initial_services_setting.count("kv") < 2:
             raise Exception("This test need at least 2 kv nodes to run")
+        """ Install original cb server """
         self._install(self.servers[:self.nodes_init])
         if not self.init_nodes and initial_services_setting is not None:
             if "-" in initial_services_setting:
@@ -126,6 +128,54 @@ class UpgradeTests(NewUpgradeBaseTest, EventingBaseTest):
     def tearDown(self):
         super(UpgradeTests, self).tearDown()
 
+    """
+       This test_upgrade is written to upgrade from 5.x.x to 6.5.x
+       This test_upgrade function could run with many differnt test cases.  All you need is params.
+       params:
+         **** Must include when run test_upgrade in job config or in conf file ****
+         upgrade_test=True             (this param must include to run this test_upgrade)
+         skip_init_check_cbserver=true (this param will by pass check ns_server inside node)
+
+         *** these params could change its value ***
+         items=10000                   (can any number)
+         initial_version=5.5.0-2958    (original cb version in cluster.
+                                        Must be in format x.x.x-xxxx )
+         released_upgrade_version=6.5.0-3265 (upgrade cluster to Mad-Hatter.
+                                        Must be in format x.x.x-xxxx )
+         nodes_init=3                  (number of node cluster will form)
+         upgrade_type=offline          (if this param not pass, default value is online.
+                                        If value is offline, default value of
+                                        offline_upgrade_type is normal offline upgrade)
+         offline_upgrade_type=offline_failover (this param is used with upgrade_type=offline
+                                                if do offline failover, it needs to pass
+                                                offline_upgrade_type=offline_failover)
+         initialize_events=event_before_upgrade    (it must be separated with dash like
+                                        kv_ops_initialize-create_fts_index_query_compare.
+                                        Function called must be in underscore format)
+         initial-services-setting=kv,index-kv,n1ql,fts-kv,eventing,index,n1ql
+                                       Services for each node is separated with dash.
+                                       Remember, no space around comma
+                                       In example above, node 1 with services kv,index
+                                                         node 2 with services kv,n1ql,fts
+                                                         node 3 with services kv,eventing,index
+         init_nodes=False  (default value is true and will get service from ini file, disable
+                            initial-services-setting param above)
+         upgrade_services_in=same    (if not pass this param, it will get services in ini file)
+         after_events=rebalance_in-run_fts_query_and_compare   (event must separate with dash)
+         after_upgrade_services_in=kv,fts    (this param will pass services to rebalance_in a
+                                              node above.  If add 2 nodes in, it needs 2
+                                              services separated by dash.  Otherwise, it will
+                                              get service from ini file)
+
+      Here is example of an offline failover upgrade test with fts
+        -t upgrade.upgrade_tests.UpgradeTests.test_upgrade,items=5000,initial_version=5.5.0-2958,
+           nodes_init=3,initialize_events=kv_ops_initialize-create_fts_index_query_compare,
+           initial-services-setting=kv,index-kv,n1ql,fts-kv,eventing,index,n1ql,
+           upgrade_services_in=same,after_events=rebalance_in-run_fts_query_and_compare,
+           after_upgrade_services_in=kv,fts,disable_HTP=True,upgrade_test=True,init_nodes=False,
+           skip_init_check_cbserver=true,released_upgrade_version=6.5.0-3265,dgm_run=true,
+           doc-per-day=1,upgrade_type=offline,offline_upgrade_type=offline_failover
+    """
     def test_upgrade(self):
         self.event_threads = []
         self.after_event_threads = []
@@ -139,11 +189,11 @@ class UpgradeTests(NewUpgradeBaseTest, EventingBaseTest):
             self.cluster_stats(self.servers[:self.nodes_init])
             if self.before_events:
                 self.event_threads += self.run_event(self.before_events)
+
             self.log.info("\n*** Start upgrade cluster ***")
             self.event_threads += self.upgrade_event()
-            if self.upgrade_type == "online":
-                self.monitor_dcp_rebalance()
             self.finish_events(self.event_threads)
+
             self.log.info("\nWill install upgrade version to any free nodes")
             out_nodes = self._get_free_nodes()
             self.log.info("Here is free nodes {0}".format(out_nodes))
@@ -153,10 +203,12 @@ class UpgradeTests(NewUpgradeBaseTest, EventingBaseTest):
                 if event in cluster_ops:
                     self.log.info("\n\nThere are cluster ops after upgrade.  Need to "
                                   "install free nodes in upgrade version")
+                    self.initial_version = self.upgrade_versions[0]
                     self._install(out_nodes)
                     break
             self.generate_map_nodes_out_dist_upgrade(\
                                       self.after_upgrade_services_out_dist)
+
             self.log.info("\n\n*** Start operations after upgrade is done ***")
             self.add_built_in_server_user()
             if self.after_events:
@@ -910,7 +962,10 @@ class UpgradeTests(NewUpgradeBaseTest, EventingBaseTest):
             raise
 
     def offline_upgrade(self):
-        self._offline_upgrade()
+        if self.offline_upgrade_type == "offline_shutdown":
+            self._offline_upgrade()
+        elif self.offline_upgrade_type == "offline_failover":
+            self._offline_failover_upgrade()
 
     def failover_add_back(self):
         try:
