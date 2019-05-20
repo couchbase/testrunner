@@ -115,7 +115,6 @@ class StableTopFTS(FTSBaseTest):
         uses RQG
         """
         self.load_data()
-        self._cb_cluster.run_n1ql_query(query="create primary index on default")
         index = self.create_index(
             self._cb_cluster.get_bucket_by_name('default'),
             "default_index")
