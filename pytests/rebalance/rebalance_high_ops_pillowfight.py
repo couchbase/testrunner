@@ -1026,6 +1026,7 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
         reached = RestHelper(rest).rebalance_reached()
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         load_thread.join()
+        rebalance.result()
         if self.update_bucket_props:
             self.check_snap_start_corruption(servers_to_check=self.servers[:self.nodes_init])
         num_items_to_validate = self.num_items * 3

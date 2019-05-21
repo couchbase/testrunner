@@ -2820,7 +2820,7 @@ class BaseTestCase(unittest.TestCase):
                           .format(bucket.name))
             map[bucket.name] = RestHelper(RestConnection(master))\
                 ._get_vbuckets(servers, bucket_name=bucket.name)
-        self.log.info("Map: {0}".format(map))
+        #self.log.info("Map: {0}".format(map))
         return map
 
     def _validate_seq_no_stats(self, vbucket_stats):
@@ -2847,7 +2847,7 @@ class BaseTestCase(unittest.TestCase):
                         failure_dict[bucket][node][vb]["last_persisted_snap_start"] = last_persisted_snap_start
                         failure_dict[bucket][node][vb]["last_persisted_snap_end"] = last_persisted_snap_end
                         corruption = True
-            return failure_dict, corruption
+        return failure_dict, corruption
 
     def check_snap_start_corruption(self, servers_to_check=None):
         if servers_to_check is None:
