@@ -196,7 +196,8 @@ class Cluster(object):
         self.task_manager.schedule(_task)
         return _task
 
-    def async_rebalance(self, servers, to_add, to_remove, use_hostnames=False, services=None):
+    def async_rebalance(self, servers, to_add, to_remove, use_hostnames=False,
+                        services=None, sleep_before_rebalance=None):
         """Asyncronously rebalances a cluster
 
         Parameters:
@@ -207,7 +208,9 @@ class Cluster(object):
 
         Returns:
             RebalanceTask - A task future that is a handle to the scheduled task"""
-        _task = RebalanceTask(servers, to_add, to_remove, use_hostnames=use_hostnames, services=services)
+        _task = RebalanceTask(servers, to_add, to_remove,
+                              use_hostnames=use_hostnames, services=services,
+                              sleep_before_rebalance=sleep_before_rebalance)
         self.task_manager.schedule(_task)
         return _task
 

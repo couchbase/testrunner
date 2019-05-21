@@ -99,7 +99,7 @@ class BaseTestCase(unittest.TestCase):
                 self.kv_servers.append(server)
         if not self.cbas_node and len(self.cbas_servers)>=1:
             self.cbas_node = self.cbas_servers[0]
-                            
+
         try:
             self.skip_setup_cleanup = self.input.param("skip_setup_cleanup", False)
             self.vbuckets = self.input.param("vbuckets", 1024)
@@ -2195,7 +2195,7 @@ class BaseTestCase(unittest.TestCase):
         self.log.info("**** add '%s' role to '%s' user ****" % (rolelist[0]["roles"],
                                                                 testuser[0]["name"]))
         status = RbacBase().add_user_role(rolelist, RestConnection(node), 'builtin')
-        
+
         return status
 
     def get_nodes(self, server):
@@ -2259,7 +2259,7 @@ class BaseTestCase(unittest.TestCase):
                     # Delete Path
                     shell.cleanup_data_config(data_path)
                     self.start_server(node)
-                    
+
                     # If Ipv6 update dist_cfg file post server restart to change distribution to IPv6
                     if '.com' in node.ip or ':' in node.ip:
                         self.log.info("Updating dist_cfg for IPv6 Machines")
@@ -2524,7 +2524,7 @@ class BaseTestCase(unittest.TestCase):
         for task in tasks:
             task.result()
         self.num_items = items + start_items
-        
+
         if verify_data:
             self.verify_cluster_stats(self.servers[:self.nodes_init])
         self.log.info("LOAD IS FINISHED")
@@ -2835,7 +2835,6 @@ class BaseTestCase(unittest.TestCase):
             for node in nodes:
                 failure_dict[bucket][node] = dict()
                 vb_list = vbucket_stats[bucket][node].keys()
-                # self.log.info("{0} : {1} : {2} ".format(bucket, node, vb_list))
                 for vb in vb_list:
                     last_persisted_seqno = int(vbucket_stats[bucket][node][vb]["last_persisted_seqno"])
                     last_persisted_snap_start = int(vbucket_stats[bucket][node][vb]["last_persisted_snap_start"])

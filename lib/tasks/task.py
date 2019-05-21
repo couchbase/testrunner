@@ -397,8 +397,10 @@ class BucketDeleteTask(Task):
             self.set_unexpected_exception(e)
 
 class RebalanceTask(Task):
-    def __init__(self, servers, to_add=[], to_remove=[], do_stop=False, progress=30,
-                 use_hostnames=False, services=None):
+    def __init__(self, servers, to_add=[], to_remove=[],
+                 do_stop=False, progress=30,
+                 use_hostnames=False, services=None,
+                 sleep_before_rebalance=None):
         Task.__init__(self, "rebalance_task")
         self.servers = servers
         self.to_add = to_add
@@ -406,6 +408,7 @@ class RebalanceTask(Task):
         self.start_time = None
         self.services = services
         self.monitor_vbuckets_shuffling = False
+        self.sleep_before_rebalance = sleep_before_rebalance
 
         try:
             self.rest = RestConnection(self.servers[0])
@@ -440,6 +443,10 @@ class RebalanceTask(Task):
                 if self.monitor_vbuckets_shuffling:
                     self.log.info("This is swap rebalance and we will monitor vbuckets shuffling")
             self.add_nodes(task_manager)
+            if self.sleep_before_rebalance:
+                self.log.info("Sleep '{0}' secs before rebalance_start"
+                              .format(self.sleep_before_rebalance))
+                time.sleep(self.sleep_before_rebalance)
             self.start_rebalance(task_manager)
             self.state = CHECKING
             task_manager.schedule(self)
