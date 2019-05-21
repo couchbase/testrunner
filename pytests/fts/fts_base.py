@@ -1842,15 +1842,16 @@ class CouchbaseCluster:
         if available_nodes:
             nodes_to_add = []
             node_services = []
+            node_num = 0
             for index, node_service in enumerate(cluster_services):
-                if index == 0:
-                    # first node is always a data/kv node
+                if index == 0 and node_service == "kv":
                     continue
                 self.__log.info("%s will be configured with services %s" % (
-                    available_nodes[index - 1].ip,
+                    available_nodes[node_num].ip,
                     node_service))
-                nodes_to_add.append(available_nodes[index - 1])
+                nodes_to_add.append(available_nodes[node_num])
                 node_services.append(node_service)
+                node_num = node_num + 1
             try:
                 self.__clusterop.async_rebalance(
                     self.__nodes,
