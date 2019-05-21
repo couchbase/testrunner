@@ -1018,8 +1018,10 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
         failover_task.result()
 
         rest.set_recovery_type(node.id, self.recovery_type)
-        rest.add_back_node(node.id)
-
+        # Remove this. This cause even the delta recovery to become full recovery
+        # TODO: Do this to all the delta recovery testcases.
+        # rest.add_back_node(node.id)
+        
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
                                                  [], [])
 
