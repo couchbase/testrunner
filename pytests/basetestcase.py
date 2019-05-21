@@ -263,21 +263,24 @@ class BaseTestCase(unittest.TestCase):
             if not self.skip_init_check_cbserver:
                 self.log.info("initializing cluster")
                 self.reset_cluster()
-                master_services = self.get_services(self.servers[:1], \
-                                                    self.services_init, \
+                master_services = self.get_services(self.servers[:1],
+                                                    self.services_init,
                                                     start_node=0)
-                if master_services != None:
+                if master_services is not None:
                     master_services = master_services[0].split(",")
 
-                self.quota = self._initialize_nodes(self.cluster, self.servers, \
-                                                    self.disabled_consistent_view, \
-                                                    self.rebalanceIndexWaitingDisabled, \
-                                                    self.rebalanceIndexPausingDisabled, \
-                                                    self.maxParallelIndexers, \
-                                                    self.maxParallelReplicaIndexers, \
-                                                    self.port, \
-                                                    self.quota_percent, \
-                                                    services=master_services)
+                self.quota = self._initialize_nodes(
+                    self.cluster,
+                    self.servers,
+                    self.disabled_consistent_view,
+                    self.rebalanceIndexWaitingDisabled,
+                    self.rebalanceIndexPausingDisabled,
+                    self.maxParallelIndexers,
+                    self.maxParallelReplicaIndexers,
+                    self.port,
+                    self.quota_percent,
+                    services=master_services)
+
                 self.change_env_variables()
                 self.change_checkpoint_params()
 
@@ -309,13 +312,16 @@ class BaseTestCase(unittest.TestCase):
                     self.services = self.get_services(self.servers, self.services_init)
                     # rebalance all nodes into the cluster before each test
                     if self.num_servers > 1:
-                        self.cluster.rebalance(self.servers[:self.num_servers], self.servers[1:self.num_servers], [],
-                                           services=self.services)
+                        self.cluster.rebalance(
+                            self.servers[:self.num_servers],
+                            self.servers[1:self.num_servers],
+                            [],
+                            services=self.services)
                 elif self.nodes_init > 1 and not self.skip_init_check_cbserver:
                     self.services = self.get_services(self.servers[:self.nodes_init], self.services_init)
-                    self.cluster.rebalance(self.servers[:1], \
-                                           self.servers[1:self.nodes_init], \
-                                           [], \
+                    self.cluster.rebalance(self.servers[:1],
+                                           self.servers[1:self.nodes_init],
+                                           [],
                                            services=self.services)
                 elif str(self.__class__).find('ViewQueryTests') != -1 and \
                         not self.input.param("skip_rebalance", False):
@@ -362,7 +368,8 @@ class BaseTestCase(unittest.TestCase):
             self.bucket_base_params['memcached']['size'] = self.bucket_size
 
             if str(self.__class__).find('upgrade_tests') == -1 and \
-                            str(self.__class__).find('newupgradetests') == -1 and not self.skip_bucket_setup:
+                    str(self.__class__).find('newupgradetests') == -1 and \
+                    not self.skip_bucket_setup:
                 self._bucket_creation()
             self.log.info("==============  basetestcase setup was finished for test #{0} {1} =============="
                           .format(self.case_number, self._testMethodName))
@@ -395,20 +402,21 @@ class BaseTestCase(unittest.TestCase):
             TestInputSingleton.input.test_params[
                 "get-cbcollect-info"] = False
         except Exception as e:
-            self.log.error( "IMPOSSIBLE TO GRAB CBCOLLECT FROM {0}: {1}".format( server.ip, e))
+            self.log.error("IMPOSSIBLE TO GRAB CBCOLLECT FROM {0}: {1}"
+                           .format(server.ip, e))
 
     def tearDown(self):
         self.print_cluster_stats()
 
         if self.skip_setup_cleanup:
-                return
+            return
         try:
             if hasattr(self, 'skip_buckets_handle') and self.skip_buckets_handle:
                 return
-            test_failed = (hasattr(self, '_resultForDoCleanups') and \
-                           len(self._resultForDoCleanups.failures or \
+            test_failed = (hasattr(self, '_resultForDoCleanups') and
+                           len(self._resultForDoCleanups.failures or
                                self._resultForDoCleanups.errors)) or \
-                          (hasattr(self, '_exc_info') and \
+                          (hasattr(self, '_exc_info') and
                            self._exc_info()[1] is not None)
 
             if test_failed and TestInputSingleton.input.param("stop-on-failure", False) \
@@ -597,8 +605,7 @@ class BaseTestCase(unittest.TestCase):
         Returns:
             bucket_params - A dictionary containing the parameters needed to create a bucket."""
 
-
-        bucket_params = {}
+        bucket_params = dict()
         bucket_params['server'] = server
         bucket_params['replicas'] = replicas
         bucket_params['size'] = size
@@ -616,19 +623,23 @@ class BaseTestCase(unittest.TestCase):
 
     def _bucket_creation(self):
         if self.default_bucket:
-
-            default_params=self._create_bucket_params(server=self.master, size=self.bucket_size,
-                                                             replicas=self.num_replicas, bucket_type=self.bucket_type,
-                                                             enable_replica_index=self.enable_replica_index,
-                                                             eviction_policy=self.eviction_policy, lww=self.lww,
-                                                             maxttl=self.maxttl, compression_mode=self.compression_mode)
+            default_params=self._create_bucket_params(
+                server=self.master, size=self.bucket_size,
+                replicas=self.num_replicas, bucket_type=self.bucket_type,
+                enable_replica_index=self.enable_replica_index,
+                eviction_policy=self.eviction_policy, lww=self.lww,
+                maxttl=self.maxttl, compression_mode=self.compression_mode)
             self.cluster.create_default_bucket(default_params)
-            self.buckets.append(Bucket(name="default", authType="sasl", saslPassword="",
-                                       num_replicas=self.num_replicas, bucket_size=self.bucket_size,
-                                       eviction_policy=self.eviction_policy, lww=self.lww,
+            self.buckets.append(Bucket(name="default",
+                                       authType="sasl",
+                                       saslPassword="",
+                                       num_replicas=self.num_replicas,
+                                       bucket_size=self.bucket_size,
+                                       eviction_policy=self.eviction_policy,
+                                       lww=self.lww,
                                        type=self.bucket_type))
             if self.enable_time_sync:
-                self._set_time_sync_on_buckets( ['default'] )
+                self._set_time_sync_on_buckets(['default'])
 
             self.collection_name["default"]=[]
 
@@ -696,15 +707,15 @@ class BaseTestCase(unittest.TestCase):
                 bucket_priority = self.get_bucket_priority(self.sasl_bucket_priority[i])
             bucket_params['bucket_priority'] = bucket_priority
 
-            bucket_tasks.append(self.cluster.async_create_sasl_bucket(name=name,
-                                                        password=password,
-                                                        bucket_params=bucket_params))
-            self.buckets.append(Bucket(name=name, authType="sasl", saslPassword=password,
-                                                  num_replicas=self.num_replicas,
-                                                  bucket_size=self.bucket_size,
-                                                  master_id=server_id,
-                                                  eviction_policy=self.eviction_policy,
-                                                  lww=self.lww))
+            bucket_tasks.append(self.cluster.async_create_sasl_bucket(
+                name=name, password=password, bucket_params=bucket_params))
+            self.buckets.append(Bucket(name=name, authType="sasl",
+                                       saslPassword=password,
+                                       num_replicas=self.num_replicas,
+                                       bucket_size=self.bucket_size,
+                                       master_id=server_id,
+                                       eviction_policy=self.eviction_policy,
+                                       lww=self.lww))
         for task in bucket_tasks:
             task.result(self.wait_timeout * 10)
         if self.enable_time_sync:
@@ -713,7 +724,6 @@ class BaseTestCase(unittest.TestCase):
         for i in range(num_buckets):
             name = self.sasl_bucket_name + str(i)
             self.collection_name[name]=[]
-
 
     def _create_standard_buckets(self, server, num_buckets, server_id=None, bucket_size=None):
         if not num_buckets:
@@ -768,7 +778,6 @@ class BaseTestCase(unittest.TestCase):
                     collection_num = self.standard_buckets_scope[i]
                 self.create_scope_collection(scope_num=scope_num,collection_num=collection_num,bucket=name)
 
-
     def _create_buckets(self, server, bucket_list, server_id=None, bucket_size=None):
         if server_id is None:
             server_id = RestConnection(server).get_nodes_self().id
@@ -809,7 +818,6 @@ class BaseTestCase(unittest.TestCase):
         for bucket_name in bucket_list:
             self.collection_name[bucket_name]=[]
 
-
     def _create_memcached_buckets(self, server, num_buckets, server_id=None, bucket_size=None):
         if not num_buckets:
             return
@@ -842,8 +850,6 @@ class BaseTestCase(unittest.TestCase):
                                        master_id=server_id, type='memcached'));
         for task in bucket_tasks:
             task.result()
-
-
 
     def _all_buckets_delete(self, server):
         delete_tasks = []
@@ -1040,9 +1046,6 @@ class BaseTestCase(unittest.TestCase):
                                        batch_size, pause_secs, timeout_secs, collection=collection)
         task.result()
 
-
-
-
     # Load all the buckets until there is no more memory
     # Assumption - all buckets are ephemeral
     # Work in progress
@@ -1078,12 +1081,6 @@ class BaseTestCase(unittest.TestCase):
                     memory_is_full = True
                     self.log.info("Memory is full, %s bytes in use for %s and bucket %s!" %
                                   (memory_used, self.master.ip, bucket.name))
-
-
-
-
-
-
 
     def key_generator(self, size=6, chars=string.ascii_uppercase + string.digits):
         return ''.join(random.choice(chars) for x in range(size))

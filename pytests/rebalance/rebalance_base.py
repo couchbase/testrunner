@@ -1,7 +1,6 @@
 from basetestcase import BaseTestCase
 from couchbase_helper.document import View
 from couchbase_helper.documentgenerator import BlobGenerator
-from membase.api.exception import RebalanceFailedException
 from membase.api.rest_client import RestConnection
 import json
 
@@ -17,20 +16,38 @@ class RebalanceBaseTest(BaseTestCase):
             self.doc_ops = self.doc_ops.split(":")
         self.defaul_map_func = "function (doc) {\n  emit(doc._id, doc);\n}"
         self.default_view_name = "default_view"
-        self.default_view = View(self.default_view_name, self.defaul_map_func, None)
+        self.default_view = View(self.default_view_name, self.defaul_map_func,
+                                 None)
         self.std_vbucket_dist = self.input.param("std_vbucket_dist", None)
         self.zone = self.input.param("zone", 1)
         # define the data that will be used to test
         self.blob_generator = self.input.param("blob_generator", True)
+
+        # To validate MB-34173
+        self.sleep_before_rebalance = \
+            self.input.param("sleep_before_rebalance", None)
+        flusher_batch_split_trigger = \
+            self.input.param("flusher_batch_split_trigger", None)
+
+        if flusher_batch_split_trigger:
+            self.set_flusher_batch_split_trigger(
+                flusher_batch_split_trigger, self.buckets)
+
         if self.blob_generator:
-            # gen_load data is used for upload before each test(1000 items by default)
-            self.gen_load = BlobGenerator('mike', 'mike-', self.value_size, end=self.num_items)
+            # gen_load is used to create initial docs (1000 items by default)
+            self.gen_load = BlobGenerator('mike', 'mike-', self.value_size,
+                                          end=self.num_items)
             # gen_update is used for doing mutation for 1/2th of uploaded data
-            self.gen_update = BlobGenerator('mike', 'mike-', self.value_size, end=(self.num_items / 2 - 1))
+            self.gen_update = BlobGenerator('mike', 'mike-', self.value_size,
+                                            end=(self.num_items / 2 - 1))
             # upload data before each test
-            self._load_all_buckets(self.servers[0], self.gen_load, "create", 0, flag=2, batch_size=20000)
+            self._load_all_buckets(self.servers[0], self.gen_load, "create",
+                                   0, flag=2, batch_size=20000)
         else:
             self._load_doc_data_all_buckets(batch_size=20000)
+
+        # Validate seq_no snap_start/stop values with initial load
+        self.check_snap_start_corruption()
 
     def tearDown(self):
         super(RebalanceBaseTest, self).tearDown()
@@ -44,9 +61,11 @@ class RebalanceBaseTest(BaseTestCase):
 
     def shuffle_nodes_between_zones_and_rebalance(self, to_remove=None):
         """
-        Shuffle the nodes present in the cluster if zone > 1. Rebalance the nodes in the end.
-        Nodes are divided into groups iteratively i.e. 1st node in Group 1, 2nd in Group 2, 3rd in Group 1 and so on, when
-        zone=2.
+        Shuffle the nodes present in the cluster if zone > 1.
+        Rebalance the nodes in the end.
+        Nodes are divided into groups iteratively
+        i.e. 1st node in Group 1, 2nd in Group 2, 3rd in Group 1 and so on,
+        when zone=2.
         :param to_remove: List of nodes to be removed.
         """
         if not to_remove:
@@ -68,7 +87,8 @@ class RebalanceBaseTest(BaseTestCase):
             nodes_in_cluster = [node.ip for node in self.get_nodes_in_cluster()]
             nodes_to_remove = [node.ip for node in to_remove]
             for i in range(1, len(self.servers)):
-                if self.servers[i].ip in nodes_in_cluster and self.servers[i].ip not in nodes_to_remove:
+                if self.servers[i].ip in nodes_in_cluster \
+                        and self.servers[i].ip not in nodes_to_remove:
                     server_group = i % int(self.zone)
                     nodes_in_zone[zones[server_group]].append(self.servers[i].ip)
             # Shuffle the nodesS
@@ -77,14 +97,16 @@ class RebalanceBaseTest(BaseTestCase):
                                     set([node for node in rest.get_nodes_in_zone(zones[i])]))
                 rest.shuffle_nodes_in_zones(node_in_zone, zones[0], zones[i])
         otpnodes = [node.id for node in rest.node_statuses()]
-        nodes_to_remove = [node.id for node in rest.node_statuses() if node.ip in [t.ip for t in to_remove]]
+        nodes_to_remove = [node.id for node in rest.node_statuses()
+                           if node.ip in [t.ip for t in to_remove]]
         # Start rebalance and monitor it.
         started = rest.rebalance(otpNodes=otpnodes, ejectedNodes=nodes_to_remove)
         if started:
             result = rest.monitorRebalance()
             msg = "successfully rebalanced cluster {0}"
             self.log.info(msg.format(result))
-        # Verify replicas of one node should not be in the same zone as active vbuckets of the node.
+        # Verify replicas of one node should not be in the same zone
+        # as active vbuckets of the node.
         if self.zone > 1:
             self._verify_replica_distribution_in_zones(nodes_in_zone)
 
@@ -97,11 +119,13 @@ class RebalanceBaseTest(BaseTestCase):
         serverinfo = self.servers[0]
         rest = RestConnection(serverinfo)
         for node in to_add:
-            rest.add_node(user=serverinfo.rest_username, password=serverinfo.rest_password,
+            rest.add_node(user=serverinfo.rest_username,
+                          password=serverinfo.rest_password,
                           remoteIp=node.ip)
         self.shuffle_nodes_between_zones_and_rebalance(to_remove)
 
-    def change_retry_rebalance_settings(self, enabled=True, afterTimePeriod=300, maxAttempts=1):
+    def change_retry_rebalance_settings(self, enabled=True,
+                                        afterTimePeriod=300, maxAttempts=1):
         # build the body
         body = dict()
         if enabled:
@@ -113,7 +137,8 @@ class RebalanceBaseTest(BaseTestCase):
         rest = RestConnection(self.master)
         rest.set_retry_rebalance_settings(body)
         result = rest.get_retry_rebalance_settings()
-        self.log.info("Retry Rebalance settings changed to : {0}".format(json.loads(result)))
+        self.log.info("Retry Rebalance settings changed to : {0}"
+                      .format(json.loads(result)))
 
     def reset_retry_rebalance_settings(self):
         body = dict()

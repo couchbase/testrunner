@@ -209,11 +209,12 @@ class RestHelper(object):
                 bucket_to_check = [bucket for bucket in buckets][0]
             vbuckets_servers[server] = {}
             vbs_active = [vb.id for vb in bucket_to_check.vbuckets
-                           if vb.master.startswith(str(server.ip))]
+                          if vb.master.startswith(str(server.ip))]
             vbs_replica = []
             for replica_num in xrange(0, bucket_to_check.numReplicas):
                 vbs_replica.extend([vb.id for vb in bucket_to_check.vbuckets
-                                    if vb.replica[replica_num].startswith(str(server.ip))])
+                                    if replica_num in vb.replica
+                                    and vb.replica[replica_num].startswith(str(server.ip))])
             vbuckets_servers[server]['active_vb'] = vbs_active
             vbuckets_servers[server]['replica_vb'] = vbs_replica
         return vbuckets_servers
@@ -1442,10 +1443,10 @@ class RestConnection(object):
 
     def set_recovery_type(self, otpNode=None, recoveryType=None):
         log.info("Going to set recoveryType={0} for node :: {1}".format(recoveryType, otpNode))
-        if otpNode == None:
+        if otpNode is None:
             log.error('otpNode parameter required')
             return False
-        if recoveryType == None:
+        if recoveryType is None:
             log.error('recoveryType is not set')
             return False
         api = self.baseUrl + 'controller/setRecoveryType'
