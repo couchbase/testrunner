@@ -2813,8 +2813,57 @@ class BaseTestCase(unittest.TestCase):
 
         self.log.info("created collections for the bucket {} are {}".format(bucket, self.collection_name[bucket]))
 
+    def _record_vbuckets(self, master, servers):
+        map = dict()
+        for bucket in self.buckets:
+            self.log.info("Record vbucket for the bucket {0}"
+                          .format(bucket.name))
+            map[bucket.name] = RestHelper(RestConnection(master))\
+                ._get_vbuckets(servers, bucket_name=bucket.name)
+        self.log.info("Map: {0}".format(map))
+        return map
 
+    def _validate_seq_no_stats(self, vbucket_stats):
+        failure_dict = dict()
+        corruption = False
+        buckets = vbucket_stats.keys()
+        # self.log.info("buckets : {0}".format(buckets))
+        for bucket in buckets:
+            failure_dict[bucket] = dict()
+            nodes = vbucket_stats[bucket].keys()
+            # self.log.info("{0} : {1}".format(bucket, nodes))
+            for node in nodes:
+                failure_dict[bucket][node] = dict()
+                vb_list = vbucket_stats[bucket][node].keys()
+                # self.log.info("{0} : {1} : {2} ".format(bucket, node, vb_list))
+                for vb in vb_list:
+                    last_persisted_seqno = int(vbucket_stats[bucket][node][vb]["last_persisted_seqno"])
+                    last_persisted_snap_start = int(vbucket_stats[bucket][node][vb]["last_persisted_snap_start"])
+                    last_persisted_snap_end = int(vbucket_stats[bucket][node][vb]["last_persisted_snap_end"])
+                    if last_persisted_snap_start > last_persisted_seqno or \
+                            last_persisted_snap_start > last_persisted_snap_end:
+                        failure_dict[bucket][node][vb] = {}
+                        failure_dict[bucket][node][vb]["last_persisted_seqno"] = last_persisted_seqno
+                        failure_dict[bucket][node][vb]["last_persisted_snap_start"] = last_persisted_snap_start
+                        failure_dict[bucket][node][vb]["last_persisted_snap_end"] = last_persisted_snap_end
+                        corruption = True
+            return failure_dict, corruption
 
-
-
-
+    def check_snap_start_corruption(self, servers_to_check=None):
+        if servers_to_check is None:
+            rest = RestConnection(self.master)
+            nodes = rest.get_nodes()
+            servers_to_check = []
+            for node in nodes:
+                for server in self.servers:
+                    if node.ip == server.ip and str(node.port) == str(server.port):
+                        servers_to_check.append(server)
+        self.log.info("Servers to check bucket-seqno: {0}"
+                      .format(servers_to_check))
+        self._record_vbuckets(self.master, servers_to_check)
+        vbucket_stats = self.get_vbucket_seqnos(
+            servers_to_check, self.buckets, skip_consistency=True)
+        failure_dict, corruption = self._validate_seq_no_stats(vbucket_stats)
+        if corruption:
+            self.fail("snap_start and snap_end corruption found !!! . {0}"
+                      .format(failure_dict))

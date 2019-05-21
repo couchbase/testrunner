@@ -1521,8 +1521,17 @@ class RestConnection(object):
     def set_enable_flow_control(self, flow=True, bucket='default'):
         flow_control = "false"
         if flow:
-           flow_control = "true"
+            flow_control = "true"
         code = "ns_bucket:update_bucket_props(\"" + bucket + "\", [{extra_config_string, \"upr_enable_flow_control=" + flow_control + "\"}])"
+        status, content = self.diag_eval(code)
+        return status, content
+
+    def change_flusher_batch_split_trigger(self, flusher_batch_split_trigger=3,
+                                           bucket='default'):
+        code = "ns_bucket:update_bucket_props(\"" + bucket \
+               + "\", [{extra_config_string, " \
+               + "\"flusher_batch_split_trigger=" \
+               + str(flusher_batch_split_trigger) + "\"}])."
         status, content = self.diag_eval(code)
         return status, content
 
