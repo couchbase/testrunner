@@ -12,15 +12,15 @@ from ent_backup_restore.validation_helpers.backup_restore_validations \
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
 from remote.remote_util import RemoteMachineShellConnection
-from membase.api.rest_client import RestHelper, Bucket as CBBucket
+from membase.api.rest_client import RestHelper, RestConnection, \
+                                    Bucket as CBBucket
 from couchbase_helper.document import View
 from testconstants import LINUX_COUCHBASE_BIN_PATH,\
                           COUCHBASE_DATA_PATH, WIN_COUCHBASE_DATA_PATH_RAW,\
                           WIN_COUCHBASE_BIN_PATH_RAW, WIN_COUCHBASE_BIN_PATH, WIN_TMP_PATH_RAW,\
                           MAC_COUCHBASE_BIN_PATH, LINUX_ROOT_PATH, WIN_ROOT_PATH,\
                           WIN_TMP_PATH, STANDARD_BUCKET_PORT, WIN_CYGWIN_BIN_PATH
-from testconstants import INDEX_QUOTA, FTS_QUOTA
-from membase.api.rest_client import RestConnection
+from testconstants import INDEX_QUOTA, FTS_QUOTA, COUCHBASE_FROM_MAD_HATTER
 from security.rbac_base import RbacBase
 from couchbase.bucket import Bucket
 from lib.memcached.helper.data_helper import VBucketAwareMemcached, MemcachedClientHelper
@@ -384,7 +384,14 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             password_input = ""
         elif self.backupset.passwd_env_with_prompt:
             password_input = "-p "
-        if "4.6" <= RestConnection(self.backupset.backup_host).get_nodes_version():
+
+        """ Print out of cbbackupmgr from 6.5 is different with older version """
+        self.cbbkmgr_version = "6.5"
+        self.bk_printout = "Backup successfully completed"
+        if RestHelper(RestConnection(self.backupset.backup_host)).is_ns_server_running():
+            self.cbbkmgr_version = RestConnection(self.backupset.backup_host).get_nodes_version()
+
+        if "4.6" <= self.cbbkmgr_version[:3]:
             self.cluster_flag = "--cluster"
 
         args = "backup --archive {0} --repo {1} {6} http{7}://{2}:{8}{3} "\
@@ -435,8 +442,13 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         if self.debug_logs:
             remote_client.log_command_output(output, error)
 
-        if error or (output and "Backup successfully completed" not in output):
-            return output, error
+        for bucket in self.buckets:
+            if self.cbbkmgr_version[:5] in COUCHBASE_FROM_MAD_HATTER:
+                self.bk_printout = 'Backed up bucket "{0}" succeeded'.format(bucket.name)
+            if error or not self._check_output(self.bk_printout, output):
+                self.log.error("Failed to backup bucket {0}".format(bucket.name))
+                return output, error
+
         command = "ls -tr {0}/{1} | tail -1".format(self.backupset.directory, self.backupset.name)
         o, e = remote_client.execute_command(command)
         if o:
@@ -450,14 +462,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                                 validate_directory_structure=True):
         if not skip_backup:
             output, error = self.backup_cluster()
-            backup_done = []
-            for bucket in self.buckets:
-                if error or not self._check_output('Backed up bucket "{0}" succeeded'\
-                                                       .format(bucket.name), output):
-                    backup_done.append("False")
-                    self.log.error("Failed to backup bucket {0}".format(bucket.name))
-            if backup_done and "False" in backup_done:
-                self.fail("Taking cluster backup failed. Check printout above. "
+            if error or not self._check_output(self.bk_printout, output):
+                self.fail("Taking cluster backup failed. Check printout below. "
                           "\nErrors: {0} \nOutput: {1}".format(error, output))
         self.backup_list()
         if repeats < 2 and validate_directory_structure:
