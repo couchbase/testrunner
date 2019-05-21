@@ -38,6 +38,7 @@ class N1qlFTSSanityTest(QueryTests):
         self.cbcluster = CouchbaseCluster(name='cluster', nodes=self.servers, log=self.log)
         rest = self.get_rest_client(self.servers[0].rest_username, self.servers[0].rest_password)
         self._create_fts_index(index_name="idx_default_fts", doc_count=98784, source_name='default')
+        self.drop_index_safe(bucket_name="default", index_name="#primary", is_primary=True)
 
         self.scan_consistency="NOT_BOUNDED"
         n1ql_query = "select meta().id from default let res=true where search(default, {\"field\": \"email\", \"match\":\"'9'\"})=res"
@@ -47,7 +48,12 @@ class N1qlFTSSanityTest(QueryTests):
                                                         query_json=fts_request)
         comparison_results = self._compare_n1ql_results_against_fts(n1ql_results, hits)
         self.assertEquals(comparison_results, "OK", comparison_results)
+        self.log("n1ql+fts integration sanity test is passed. Results against n1ql query equal to fts service call results.")
+        self.log("n1ql results: "+str(n1ql_results))
 
+        explain_result = self.run_cbq_query("explain select meta().id from default let res=true where search(default, {\"field\": \"email\", \"match\":\"'9'\"})=res")
+        self.assertTrue("idx_default_fts" in str(explain_result), "FTS index is not used!")
+        self.log("n1ql+fts integration sanity test is passed. FTS index usage is found in execution plan.")
         self._remove_all_fts_indexes()
         self.scan_consistency="REQUEST_PLUS"
 

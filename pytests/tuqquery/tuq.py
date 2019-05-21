@@ -591,10 +591,17 @@ class QueryTests(BaseTestCase):
         self.run_cbq_query("drop index `%s`.`%s`" % (bucket, index))
         self.wait_for_index_drop(bucket, index)
 
-    def drop_index_safe(self, bucket, index):
-        if self.is_index_present(bucket_name=bucket, index_name=index):
-            self.drop_index(bucket, index)
-            self.wait_for_index_drop(bucket, index)
+    def drop_primary_index(self, bucket, index):
+        self.run_cbq_query("drop primary index on `%s`" % (bucket))
+        self.wait_for_index_drop(bucket, index)
+
+    def drop_index_safe(self, bucket_name, index_name, is_primary=False):
+        if self.is_index_present(bucket_name=bucket_name, index_name=index_name):
+            if is_primary:
+                self.drop_primary_index(bucket_name, index_name)
+            else:
+                self.drop_index(bucket_name, index_name)
+            self.wait_for_index_drop(bucket_name, index_name)
 
     def drop_all_indexes(self, bucket=None, leave_primary=True):
         current_indexes = self.get_parsed_indexes()
