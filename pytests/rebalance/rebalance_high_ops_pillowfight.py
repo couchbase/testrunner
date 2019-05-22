@@ -39,8 +39,7 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
         self.ddocs = []
         self.run_view_query_iterations = self.input.param("run_view_query_iterations", 10)
         self.rebalance_quirks = self.input.param('rebalance_quirks', False)
-        self.update_bucket_props = self.input.param('update_bucket_props', False)
-        self.flusher_batch_split_trigger = self.input.param('flusher_batch_split_trigger', 1)
+        self.flusher_batch_split_trigger = self.input.param('flusher_batch_split_trigger', None)
 
         if self.rebalance_quirks:
             for server in self.servers:
@@ -50,7 +49,7 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
                 # rest.diag_eval(
                 #    "[ns_config:set({node, N, disable_rebalance_quirks}, [disable_old_master]) || N <- ns_node_disco:nodes_wanted()].")
 
-        if self.update_bucket_props:
+        if self.flusher_batch_split_trigger:
             self.set_flusher_batch_split_trigger(flusher_batch_split_trigger=self.flusher_batch_split_trigger,
                                                  buckets=self.buckets)
 
