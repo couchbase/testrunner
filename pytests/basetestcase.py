@@ -2866,3 +2866,23 @@ class BaseTestCase(unittest.TestCase):
         if corruption:
             self.fail("snap_start and snap_end corruption found !!! . {0}"
                       .format(failure_dict))
+
+    def set_flusher_batch_split_trigger(self, flusher_batch_split_trigger=3, buckets=None):
+        self.log.info("Changing the bucket properties by changing flusher_batch_split_trigger to {0}".
+                      format(flusher_batch_split_trigger))
+        rest = RestConnection(self.master)
+        for bucket in buckets:
+            rest.change_flusher_batch_split_trigger(flusher_batch_split_trigger=flusher_batch_split_trigger,
+                                                    bucket=bucket.name)
+        shell = RemoteMachineShellConnection(self.master)
+        shell.kill_memcached()
+        # Add warmup check instead of a blind sleep.
+        # TODO: See _warmup_check in WarmUpTests class
+        self.sleep(30)
+        shell.disconnect()
+        for bucket in buckets:
+            mc = MemcachedClient(self.master.ip, 11210)
+            mc.sasl_auth_plain(self.master.rest_username, self.master.rest_password)
+            mc.bucket_select(bucket.name)
+            stats = mc.stats()
+            self.assertEquals(int(stats['ep_flusher_batch_split_trigger']), flusher_batch_split_trigger)
