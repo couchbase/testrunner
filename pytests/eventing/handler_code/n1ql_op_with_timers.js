@@ -14,11 +14,25 @@ function OnDelete(meta) {
 }
 function NDtimerCallback(context) {
     var docID = context.docID;
-    var query = DELETE FROM dst_bucket where meta().id = $docID;
+    while (true) {
+    try {
+        var query = DELETE FROM dst_bucket where meta().id = $docID;
+        break;
+    } catch (e) {
+        log(e);
+        }
+    }
 //    query.execQuery();
 }
 function timerCallback(context) {
     var docID = context.docID;
-    var query = INSERT INTO dst_bucket ( KEY, VALUE ) VALUES ( $docID ,'timerCallback');
+    while (true) {
+    try {
+        var query = INSERT INTO dst_bucket ( KEY, VALUE ) VALUES ( $docID ,'timerCallback');
+        break;
+    } catch (e) {
+        log(e);
+        }
+    }
 //    query.execQuery();
 }
