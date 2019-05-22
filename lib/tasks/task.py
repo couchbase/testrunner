@@ -459,7 +459,7 @@ class RebalanceTask(Task):
         node_index = 0
         for node in self.to_add:
             self.log.info("adding node {0}:{1} to cluster".format(node.ip, node.port))
-            if self.services != None:
+            if self.services is not None:
                 services_for_node = [self.services[node_index]]
                 node_index += 1
             if self.use_hostnames:
