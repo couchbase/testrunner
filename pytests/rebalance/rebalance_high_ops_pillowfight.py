@@ -339,7 +339,7 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
         # rebalance.result()
         rest.monitorRebalance(stop_if_loop=False)
         load_thread.join()
-        if self.update_bucket_props:
+        if self.flusher_batch_split_trigger:
             self.check_snap_start_corruption(servers_to_check=self.servers[:self.nodes_init + self.nodes_in])
         if self.run_with_views:
             view_query_thread.join()
@@ -392,7 +392,7 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
         # rebalance.result()
         rest.monitorRebalance(stop_if_loop=False)
         update_thread.join()
-        if self.update_bucket_props:
+        if self.flusher_batch_split_trigger:
             self.check_snap_start_corruption(servers_to_check=self.servers[:self.nodes_init + self.nodes_in])
         if self.run_with_views:
             view_query_thread.join()
@@ -450,7 +450,7 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
         # rebalance.result()
         rest.monitorRebalance(stop_if_loop=False)
         delete_thread.join()
-        if self.update_bucket_props:
+        if self.flusher_batch_split_trigger:
             self.check_snap_start_corruption(servers_to_check=self.servers[:self.nodes_init + self.nodes_in])
         if self.run_with_views:
             view_query_thread.join()
@@ -501,7 +501,7 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
         # rebalance.result()
         rest.monitorRebalance(stop_if_loop=False)
         load_thread.join()
-        if self.update_bucket_props:
+        if self.flusher_batch_split_trigger:
             self.check_snap_start_corruption(servers_to_check=self.servers[:self.nodes_init + self.nodes_in])
         if self.run_with_views:
             view_query_thread.join()
@@ -557,7 +557,7 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
         # rebalance.result()
         rest.monitorRebalance(stop_if_loop=False)
         load_thread.join()
-        if self.update_bucket_props:
+        if self.flusher_batch_split_trigger:
             self.check_snap_start_corruption()
 
         if self.run_with_views:
@@ -614,7 +614,7 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
         # rebalance.result()
         rest.monitorRebalance(stop_if_loop=False)
         update_thread.join()
-        if self.update_bucket_props:
+        if self.flusher_batch_split_trigger:
             self.check_snap_start_corruption()
         if self.run_with_views:
             view_query_thread.join()
@@ -675,7 +675,7 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
         # rebalance.result()
         rest.monitorRebalance(stop_if_loop=False)
         delete_thread.join()
-        if self.update_bucket_props:
+        if self.flusher_batch_split_trigger:
             self.check_snap_start_corruption()
         if self.run_with_views:
             view_query_thread.join()
@@ -728,7 +728,7 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
         # rebalance.result()
         rest.monitorRebalance(stop_if_loop=False)
         load_thread.join()
-        if self.update_bucket_props:
+        if self.flusher_batch_split_trigger:
             self.check_snap_start_corruption()
         if self.run_with_views:
             view_query_thread.join()
@@ -787,7 +787,7 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
         # rebalance.result()
         rest.monitorRebalance(stop_if_loop=False)
         load_thread.join()
-        if self.update_bucket_props:
+        if self.flusher_batch_split_trigger:
             self.check_snap_start_corruption()
         if self.run_with_views:
             view_query_thread.join()
@@ -843,7 +843,7 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
         # rebalance.result()
         rest.monitorRebalance(stop_if_loop=False)
         update_thread.join()
-        if self.update_bucket_props:
+        if self.flusher_batch_split_trigger:
             self.check_snap_start_corruption()
         if self.run_with_views:
             view_query_thread.join()
@@ -906,7 +906,7 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
         # rebalance.result()
         rest.monitorRebalance(stop_if_loop=False)
         delete_thread.join()
-        if self.update_bucket_props:
+        if self.flusher_batch_split_trigger:
             self.check_snap_start_corruption()
         if self.run_with_views:
             view_query_thread.join()
@@ -962,7 +962,7 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
         # rebalance.result()
         rest.monitorRebalance(stop_if_loop=False)
         load_thread.join()
-        if self.update_bucket_props:
+        if self.flusher_batch_split_trigger:
             self.check_snap_start_corruption()
         if self.run_with_views:
             view_query_thread.join()
@@ -1027,7 +1027,7 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         load_thread.join()
         rebalance.result()
-        if self.update_bucket_props:
+        if self.flusher_batch_split_trigger:
             self.check_snap_start_corruption(servers_to_check=self.servers[:self.nodes_init])
         num_items_to_validate = self.num_items * 3
         errors = self.check_data(self.master, bucket, num_items_to_validate)
@@ -1073,7 +1073,7 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
         # rebalance.result()
         rest.monitorRebalance(stop_if_loop=False)
         load_thread.join()
-        if self.update_bucket_props:
+        if self.flusher_batch_split_trigger:
             self.check_snap_start_corruption()
         num_items_to_validate = self.num_items * 3
         errors = self.check_data(self.master, bucket, num_items_to_validate)
@@ -1106,7 +1106,7 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
         # rebalance.result()
         rest.monitorRebalance(stop_if_loop=False)
         load_thread.join()
-        if self.update_bucket_props:
+        if self.flusher_batch_split_trigger:
             self.check_snap_start_corruption()
         num_items_to_validate = self.num_items * 5
         errors = self.check_data(self.master, bucket, num_items_to_validate)
@@ -1140,7 +1140,7 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
                                                  servs_out)
         rebalance.result()
         load_thread.join()
-        if self.update_bucket_props:
+        if self.flusher_batch_split_trigger:
             self.check_snap_start_corruption()
         num_items_to_validate = self.num_items * 7
         errors = self.check_data(self.master, bucket, num_items_to_validate)
@@ -1179,7 +1179,7 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
                                                  [])
         # rebalance.result()
         rest.monitorRebalance(stop_if_loop=False)
-        if self.update_bucket_props:
+        if self.flusher_batch_split_trigger:
             self.check_snap_start_corruption()
         for i in range(1, 100):
             self.sleep(20)
@@ -1191,7 +1191,7 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
             # rebalance.result()
             rest.monitorRebalance(stop_if_loop=False)
         load_thread.join()
-        if self.update_bucket_props:
+        if self.flusher_batch_split_trigger:
             self.check_snap_start_corruption()
         num_items_to_validate = self.num_items * 3
         errors = self.check_data(self.master, bucket, num_items_to_validate)
@@ -1242,7 +1242,7 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
         # rebalance.result()
         rest.monitorRebalance(stop_if_loop=False)
         load_thread.join()
-        if self.update_bucket_props:
+        if self.flusher_batch_split_trigger:
             self.check_snap_start_corruption()
         num_items_to_validate = self.num_items * 3
         errors = self.check_data(self.master, bucket, num_items_to_validate)
