@@ -19,16 +19,19 @@ class RebalanceInOutTests(RebalanceBaseTest):
     def test_rebalance_in_out_after_mutation(self):
         """
         Rebalances nodes out and in of the cluster while doing mutations.
-        Use different nodes_in and nodes_out params to have uneven add and deletion. Use 'zone'
-        param to have nodes divided into server groups by having zone > 1.
+        Use different nodes_in and nodes_out params to have uneven add and
+        deletion. Use 'zone' param to have nodes divided into server groups
+        by having zone > 1.
 
-        This test begins by loading a given number of items into the cluster. It then
-        removes one node, rebalances that node out the cluster, and then rebalances it back
-        in. During the rebalancing we update all of the items in the cluster. Once the
-        node has been removed and added back we  wait for the disk queues to drain, and
-        then verify that there has been no data loss, sum(curr_items) match the curr_items_total.
-        We then remove and add back two nodes at a time and so on until we have reached the point
-        where we are adding back and removing at least half of the nodes.
+        This test begins by loading a given number of items into the cluster.
+        It then removes one node, rebalances that node out the cluster, and
+        then rebalances it back in. During the rebalancing we update all of
+        the items in the cluster. Once the node has been removed and added
+        back we  wait for the disk queues to drain, and then verify that there
+        has been no data loss, sum(curr_items) match the curr_items_total.
+        We then remove and add back two nodes at a time and so on until we have
+        reached the point where we are adding back and removing at least half
+        of the nodes.
         """
         # Shuffle the nodes if zone > 1 is specified.
         if self.zone > 1:
@@ -41,6 +44,10 @@ class RebalanceInOutTests(RebalanceBaseTest):
         result_nodes = list(set(self.servers[:self.nodes_init] + servs_in) - set(servs_out))
         for task in tasks:
             task.result(self.wait_timeout * 20)
+
+        # Validate seq_no snap_start/stop values
+        self.check_snap_start_corruption()
+
         self._verify_stats_all_buckets(self.servers[:self.nodes_init], timeout=120)
         self._wait_for_stats_all_buckets(self.servers[:self.nodes_init])
         self.sleep(20)
@@ -62,6 +69,9 @@ class RebalanceInOutTests(RebalanceBaseTest):
         self.verify_unacked_bytes_all_buckets()
         nodes = self.get_nodes_in_cluster(self.master)
         self.vb_distribution_analysis(servers=nodes, std=1.0, total_vbuckets=self.total_vbuckets)
+
+        # Validate seq_no snap_start/stop values
+        self.check_snap_start_corruption()
 
     def test_rebalance_in_out_with_failover_addback_recovery(self):
         """
@@ -135,6 +145,9 @@ class RebalanceInOutTests(RebalanceBaseTest):
         servs_out = self.servers[self.nodes_init - self.nodes_out:self.nodes_init]
         for task in tasks:
             task.result(self.wait_timeout * 20)
+        # Validate seq_no snap_start/stop values after initial doc_load
+        self.check_snap_start_corruption()
+
         self._verify_stats_all_buckets(self.servers[:self.nodes_init], timeout=120)
         self._wait_for_stats_all_buckets(self.servers[:self.nodes_init])
         self.sleep(20)
@@ -148,9 +161,26 @@ class RebalanceInOutTests(RebalanceBaseTest):
         result_nodes = list(set(self.servers[:self.nodes_init] + servs_in) - set(servs_out))
         for node in servs_in:
             self.rest.add_node(self.master.rest_username, self.master.rest_password, node.ip, node.port)
+
+        # Load data after add-node
+        self._load_all_buckets(self.master, gen, "update", 0)
+        # Validate seq_no snap_start/stop values
+        self.check_snap_start_corruption()
+
         # Mark Node for failover
         self.rest.fail_over(chosen[0].id, graceful=fail_over)
+
+        # Load data after failover
+        self._load_all_buckets(self.master, gen, "update", 0)
+        # Validate seq_no snap_start/stop values
+        self.check_snap_start_corruption()
+
+        # No need to pass self.sleep_before_rebalance,
+        # since prev ops are synchronous call
         self.shuffle_nodes_between_zones_and_rebalance(servs_out)
+        # Validate seq_no snap_start/stop values after rebalance
+        self.check_snap_start_corruption()
+
         self.verify_cluster_stats(result_nodes, check_ep_items_remaining=True)
         self.compare_failovers_logs(prev_failover_stats, result_nodes, self.buckets)
         self.sleep(30)
@@ -190,17 +220,29 @@ class RebalanceInOutTests(RebalanceBaseTest):
         gen = BlobGenerator('mike', 'mike-', self.value_size, end=self.num_items)
         self._load_all_buckets(self.master, gen, "create", 0)
 
+        # Validate seq_no snap_start/stop values after doc_loading
+        self.check_snap_start_corruption()
+
         for i in reversed(range(self.num_servers)[self.num_servers / 2:]):
             tasks = self._async_load_all_buckets(self.master, gen, "update", 0, batch_size=50)
-            self.cluster.rebalance(self.servers[:i], [], self.servers[i:self.num_servers])
+            self.cluster.rebalance(
+                self.servers[:i], [], self.servers[i:self.num_servers],
+                sleep_before_rebalance=self.sleep_before_rebalance)
             for task in tasks:
                 task.result()
             self.sleep(5)
+            # Validate seq_no snap_start/stop values
+            self.check_snap_start_corruption()
+
             tasks = self._async_load_all_buckets(self.master, gen, "update", 0, batch_size=50)
-            self.add_remove_servers_and_rebalance(self.servers[i:self.num_servers], [])
+            self.add_remove_servers_and_rebalance(
+                self.servers[i:self.num_servers], [],
+                sleep_before_rebalance=self.sleep_before_rebalance)
             for task in tasks:
                 task.result()
             self.verify_cluster_stats(self.servers[:self.num_servers], timeout=2400)
+            # Validate seq_no snap_start/stop values
+            self.check_snap_start_corruption()
         self.verify_unacked_bytes_all_buckets()
 
     def test_rebalance_in_out_at_once_with_max_buckets_number(self):
@@ -241,74 +283,119 @@ class RebalanceInOutTests(RebalanceBaseTest):
         self._load_all_buckets(self.master, gen, "create", 0)
         self._wait_for_stats_all_buckets(servs_init)
 
-        rebalance = self.cluster.async_rebalance(servs_init, servs_in, servs_out)
-        self._async_load_all_buckets(self.master, gen, "update", 0)
+        rebalance = self.cluster.async_rebalance(
+            servs_init, servs_in, servs_out,
+            sleep_before_rebalance=self.sleep_before_rebalance)
+
+        tasks = self._async_load_all_buckets(self.master, gen, "update", 0)
         rebalance.result()
+        for task in tasks:
+            task.result()
+
         self.verify_cluster_stats(result_nodes)
         self.verify_unacked_bytes_all_buckets()
 
     def test_incremental_rebalance_in_out_with_mutation(self):
         """
         Rebalances nodes out and in of the cluster while doing mutations.
-        Use 'zone' param to have nodes divided into server groups by having zone > 1.
+        Use 'zone' param to have nodes divided into server groups by
+        having zone > 1.
 
-        This test begins by loading a given number of items into the cluster. It then
-        removes one node, rebalances that node out the cluster, and then rebalances it back
-        in. During the rebalancing we update all of the items in the cluster. Once the
-        node has been removed and added back we  wait for the disk queues to drain, and
-        then verify that there has been no data loss, sum(curr_items) match the curr_items_total.
-        We then remove and add back two nodes at a time and so on until we have reached the point
-        where we are adding back and removing at least half of the nodes.
+        This test begins by loading a given number of items into the cluster.
+        It then removes one node, rebalances that node out the cluster,
+        and then rebalances it back in. During the rebalancing we update all
+        of the items in the cluster. Once the node has been removed and
+        added back we  wait for the disk queues to drain, and then verify that
+        there is no data loss, sum(curr_items) match the curr_items_total.
+        We then remove and add back two nodes at a time and so on until
+        we have reached the point where we are adding back and removing
+        at least half of the nodes.
         """
-        self.add_remove_servers_and_rebalance(self.servers[1:self.num_servers], [])
         gen = BlobGenerator('mike', 'mike-', self.value_size, end=self.num_items)
+        self.add_remove_servers_and_rebalance(self.servers[1:self.num_servers], [])
         self._load_all_buckets(self.master, gen, "create", 0)
+
+        # Validate seq_no snap_start/stop values with all nodes-in
+        self.check_snap_start_corruption()
+
         batch_size = 50
         for i in reversed(range(self.num_servers)[self.num_servers / 2:]):
-            tasks = self._async_load_all_buckets(self.master, gen, "update", 0, batch_size=batch_size, timeout_secs=60)
+            tasks = self._async_load_all_buckets(
+                self.master, gen, "update", 0,
+                batch_size=batch_size, timeout_secs=60)
+            self.cluster.rebalance(
+                self.servers[:i], [], self.servers[i:self.num_servers],
+                sleep_before_rebalance=self.sleep_before_rebalance)
 
-            self.cluster.rebalance(self.servers[:i], [], self.servers[i:self.num_servers])
             self.sleep(10)
             for task in tasks:
                 task.result(self.wait_timeout * 20)
-            tasks = self._async_load_all_buckets(self.master, gen, "update", 0, batch_size=batch_size, timeout_secs=60)
-            self.add_remove_servers_and_rebalance(self.servers[i:self.num_servers], [])
+
+            # Validate seq_no snap_start/stop values after rebalance
+            self.check_snap_start_corruption()
+
+            tasks = self._async_load_all_buckets(
+                self.master, gen, "update", 0,
+                batch_size=batch_size, timeout_secs=60)
+            self.add_remove_servers_and_rebalance(
+                self.servers[i:self.num_servers], [],
+                sleep_before_rebalance=self.sleep_before_rebalance)
             for task in tasks:
                 task.result(self.wait_timeout * 20)
+
+            # Validate seq_no snap_start/stop values after rebalance
+            self.check_snap_start_corruption()
             self.verify_cluster_stats(self.servers[:self.num_servers])
         self.verify_unacked_bytes_all_buckets()
 
     def test_incremental_rebalance_in_out_with_mutation_and_compaction(self):
         """
-        Rebalances nodes out and in of the cluster while doing mutations and compaction.
-        Use 'zone' param to have nodes divided into server groups by having zone > 1.
+        Rebalances nodes out and in of the cluster while doing mutations and
+        compaction. Use 'zone' param to have nodes divided into server groups
+        by having zone > 1.
 
-        This test begins by loading a given number of items into the cluster. It then
-        removes one node, rebalances that node out the cluster, and then rebalances it back
-        in. During the rebalancing we update all of the items in the cluster. Once the
-        node has been removed and added back we  wait for the disk queues to drain, and
-        then verify that there has been no data loss, sum(curr_items) match the curr_items_total.
-        We then remove and add back two nodes at a time and so on until we have reached the point
-        where we are adding back and removing at least half of the nodes.
+        This test begins by loading a given number of items into the cluster.
+        It then removes one node, rebalances that node out the cluster, and
+        then rebalances it back in. During the rebalancing we update all of the
+        items in the cluster. Once the node has been removed and added back we
+        wait for the disk queues to drain, and then verify that there has been
+        no data loss, sum(curr_items) match the curr_items_total.
+        We then remove and add back two nodes at a time and so on until
+        we have reached the point where we are adding back and removing
+        at least half of the nodes.
         """
-        self.add_remove_servers_and_rebalance(self.servers[1:self.num_servers], [])
-        gen = BlobGenerator('mike', 'mike-', self.value_size, end=self.num_items)
+        gen = BlobGenerator('mike', 'mike-', self.value_size,
+                            end=self.num_items)
+        self.add_remove_servers_and_rebalance(
+            self.servers[1:self.num_servers], [])
         self._load_all_buckets(self.master, gen, "create", 0)
         batch_size = 50
         for i in reversed(range(self.num_servers)[self.num_servers / 2:]):
-            tasks = self._async_load_all_buckets(self.master, gen, "update", 0, batch_size=batch_size, timeout_secs=60)
+            tasks = self._async_load_all_buckets(
+                self.master, gen, "update", 0,
+                batch_size=batch_size, timeout_secs=60)
             for bucket in self.buckets:
                 tasks.append(self.cluster.async_compact_bucket(self.master, bucket))
-            self.cluster.rebalance(self.servers[:i], [], self.servers[i:self.num_servers])
-            self.sleep(10)
+            self.cluster.rebalance(
+                self.servers[:i], [], self.servers[i:self.num_servers],
+                sleep_before_rebalance=self.sleep_before_rebalance)
 
+            self.sleep(10)
             for task in tasks:
                 task.result(self.wait_timeout * 20)
+
+            # Validate seq_no snap_start/stop values after rebalance
+            self.check_snap_start_corruption()
+
             tasks = self._async_load_all_buckets(self.master, gen, "update", 0, batch_size=batch_size, timeout_secs=60)
             self.add_remove_servers_and_rebalance(self.servers[i:self.num_servers], [])
             for task in tasks:
                 task.result(self.wait_timeout * 20)
+
+            # Validate seq_no snap_start/stop values
+            self.check_snap_start_corruption()
             self.verify_cluster_stats(self.servers[:self.num_servers])
+
         self.verify_unacked_bytes_all_buckets()
 
     def test_rebalance_in_out_with_compaction_and_expiration_ops(self):
@@ -379,72 +466,105 @@ class RebalanceInOutTests(RebalanceBaseTest):
     def test_incremental_rebalance_in_out_with_mutation_and_deletion(self):
         """
         Rebalances nodes into and out of the cluster while doing mutations and
-        deletions.
-        Use 'zone' param to have nodes divided into server groups by having zone > 1.
+        deletions. Use 'zone' param to have nodes divided into server groups
+        by having zone > 1.
 
-        This test begins by loading a given number of items into the cluster. It then
-        adds one node, rebalances that node into the cluster, and then rebalances it back
-        out. During the rebalancing we update half of the items in the cluster and delete
-        the other half. Once the node has been removed and added back we recreate the
-        deleted items, wait for the disk queues to drain, and then verify that there has
-        been no data loss, sum(curr_items) match the curr_items_total. We then remove and
+        This test begins by loading a given number of items into the cluster.
+        It then adds one node, rebalances that node into the cluster, and then
+        rebalances it back out. During the rebalancing we update half of the
+        items in the cluster and delete the other half. Once the node has been
+        removed and added back we recreate the deleted items, wait for the
+        disk queues to drain, and then verify that there has been no data loss,
+        sum(curr_items) match the curr_items_total. We then remove and
         add back two nodes at a time and so on until we have reached the point
         where we are adding back and removing at least half of the nodes.
         """
-        self.add_remove_servers_and_rebalance(self.servers[1:self.num_servers], [])
-        gen_delete = BlobGenerator('mike', 'mike-', self.value_size, start=self.num_items / 2 + 2000,
+        self.add_remove_servers_and_rebalance(
+            self.servers[1:self.num_servers], [])
+        gen_delete = BlobGenerator('mike', 'mike-', self.value_size,
+                                   start=self.num_items / 2 + 2000,
                                    end=self.num_items)
         for i in reversed(range(self.num_servers)[self.num_servers / 2:]):
-            tasks = self._async_load_all_buckets(self.master, self.gen_update, "update", 0,
-                                                 pause_secs=5, batch_size=1, timeout_secs=60)
-            tasks.extend(self._async_load_all_buckets(self.master, gen_delete, "delete", 0,
-                                                      pause_secs=5, batch_size=1, timeout_secs=60))
+            tasks = self._async_load_all_buckets(
+                self.master, self.gen_update, "update", 0,
+                pause_secs=5, batch_size=1, timeout_secs=60)
+            tasks.extend(self._async_load_all_buckets(
+                self.master, gen_delete, "delete", 0,
+                pause_secs=5, batch_size=1, timeout_secs=60))
 
-            self.cluster.rebalance(self.servers[:i], [], self.servers[i:self.num_servers])
+            self.cluster.rebalance(
+                self.servers[:i], [], self.servers[i:self.num_servers],
+                sleep_before_rebalance=self.sleep_before_rebalance)
             self.sleep(60)
-            self.add_remove_servers_and_rebalance(self.servers[i:self.num_servers], [])
+            self.add_remove_servers_and_rebalance(
+                self.servers[i:self.num_servers], [],
+                sleep_before_rebalance=self.sleep_before_rebalance)
             for task in tasks:
                 task.result(self.wait_timeout * 30)
+
+            # Validate seq_no snap_start/stop values after rebalance
+            self.check_snap_start_corruption()
+
             self._load_all_buckets(self.master, gen_delete, "create", 0)
             self.verify_cluster_stats(self.servers[:self.num_servers])
+
+            # Validate seq_no snap_start/stop values after doc_ops 'create'
+            self.check_snap_start_corruption()
 
     def test_incremental_rebalance_in_out_with_mutation_and_expiration(self):
         """
         Rebalances nodes into and out of the cluster while doing mutations and
-        expirations.
-        Use 'zone' param to have nodes divided into server groups by having zone > 1.
+        expirations. Use 'zone' param to have nodes divided into server groups
+        by having zone > 1.
 
-        This test begins by loading a given number of items into the cluster. It then
-        adds one node, rebalances that node into the cluster, and then rebalances it back
-        out. During the rebalancing we update half of the items in the cluster and expire
-        the other half. Once the node has been removed and added back we recreate the
-        expired items, wait for the disk queues to drain, and then verify that there has
-        been no data loss, sum(curr_items) match the curr_items_total.We then remove and
+        This test begins by loading a given number of items into the cluster.
+        It then adds one node, rebalances that node into the cluster, and then
+        rebalances it back out. During the rebalancing we update half of the
+        items in the cluster and expire the other half. Once the node has been
+        removed and added back we recreate the expired items, wait for the
+        disk queues to drain, and then verify that there has been no data loss,
+        sum(curr_items) match the curr_items_total.We then remove and
         add back two nodes at a time and so on until we have reached the point
         where we are adding back and removing at least half of the nodes.
         """
         self.add_remove_servers_and_rebalance(self.servers[1:self.num_servers], [])
-        gen_expire = BlobGenerator('mike', 'mike-', self.value_size, start=self.num_items / 2,
+        gen_expire = BlobGenerator('mike', 'mike-', self.value_size,
+                                   start=self.num_items / 2,
                                    end=self.num_items)
         for i in reversed(range(self.num_servers)[self.num_servers / 2:]):
             self.log.info("iteration #{0}".format(i))
-            tasks = self._async_load_all_buckets(self.master, self.gen_update, "update", 0, batch_size=1)
-            tasks.extend(self._async_load_all_buckets(self.master, gen_expire, "update", 10, batch_size=1))
+            tasks = self._async_load_all_buckets(
+                self.master, self.gen_update, "update", 0, batch_size=1)
+            tasks.extend(self._async_load_all_buckets(
+                self.master, gen_expire, "update", 10, batch_size=1))
 
-            self.cluster.rebalance(self.servers[:i], [], self.servers[i:self.num_servers])
+            self.cluster.rebalance(
+                self.servers[:i], [], self.servers[i:self.num_servers],
+                sleep_before_rebalance=self.sleep_before_rebalance)
             self.sleep(20)
-            tasks.append(self.cluster.async_rebalance(self.servers[:self.num_servers],
-                                                      self.servers[i:self.num_servers], []))
+
+            # Validate seq_no snap_start/stop values after rebalance
+            self.check_snap_start_corruption()
+
+            rebalance = self.cluster.async_rebalance(
+                self.servers[:self.num_servers],
+                self.servers[i:self.num_servers], [],
+                sleep_before_rebalance=self.sleep_before_rebalance)
             try:
-                for task in tasks:
+                for task in tasks + [rebalance]:
                     task.result(min(self.wait_timeout * 30, 36000))
             except:
-                for task in tasks:
-                    # cancel task won't fix the issue (load tasks are popped from queue and there is nothing to cancel,
-                    # but still there is a thread running)
+                for task in tasks + [rebalance]:
+                    # cancel task won't fix the issue
+                    # (load tasks are popped from queue and there is
+                    # nothing to cancel, but still there is a thread running)
                     if hasattr(task, '_Thread__stop'):
                         task._Thread__stop()
                 raise
+
+            # Validate seq_no snap_start/stop values
+            self.check_snap_start_corruption()
+
             self._load_all_buckets(self.master, gen_expire, "create", 0)
             self.verify_cluster_stats(self.servers[:self.num_servers])
         self.verify_unacked_bytes_all_buckets()
@@ -480,16 +600,19 @@ class RebalanceInOutTests(RebalanceBaseTest):
         """
         PERFORMANCE:Rebalance in/out at once with stopped persistence.
 
-        This test begins by loading a given number of items into the cluster with
-        self.nodes_init nodes in it. Then we stop persistence on some nodes.
-        Test starts  to update some data and load new data in the cluster.
-        At that time we add  servs_in nodes and remove  servs_out nodes and start rebalance.
-        After rebalance and data ops are completed we start verification phase:
-        wait for the disk queues to drain, verify the number of items that were/or not persisted
+        This test begins by loading a given number of items into the cluster
+        with self.nodes_init nodes in it. Then we stop persistence on some
+        nodes. Test starts  to update some data and load new data in the
+        cluster. At that time we add  servs_in nodes and remove servs_out nodes
+        and start rebalance. After rebalance and data ops are completed we
+        start verification phase: wait for the disk queues to drain,
+        verify the number of items that were/or not persisted
         with expected values, verify that there has been no data loss,
-        sum(curr_items) match the curr_items_total.Once All checks passed, test is finished.
+        sum(curr_items) match the curr_items_total.Once All checks passed,
+        test is finished.
         Available parameters by default are:
-        nodes_init=1, nodes_in=1, nodes_out=1,num_nodes_with_stopped_persistence=1
+        nodes_init=1, nodes_in=1,
+        nodes_out=1, num_nodes_with_stopped_persistence=1
         num_items_without_persistence=100000
         """
         num_nodes_with_stopped_persistence = self.input.param("num_nodes_with_stopped_persistence", 1)
@@ -509,12 +632,19 @@ class RebalanceInOutTests(RebalanceBaseTest):
         self.log.info("current nodes : {0}".format([node.id for node in rest.node_statuses()]))
         self.log.info("adding nodes {0} to cluster".format(servs_in))
         self.log.info("removing nodes {0} from cluster".format(servs_out))
-        tasks = self._async_load_all_buckets(self.master, gen_extra, "create", 0, batch_size=1000)
+        tasks = self._async_load_all_buckets(self.master, gen_extra, "create",
+                                             0, batch_size=1000)
         result_nodes = set(servs_init + servs_in) - set(servs_out)
         # wait timeout in 60 min because MB-7386 rebalance stuck
-        self.cluster.rebalance(servs_init[:self.nodes_init], servs_in, servs_out, timeout=self.wait_timeout * 60)
+        self.cluster.rebalance(
+            servs_init[:self.nodes_init], servs_in, servs_out,
+            timeout=self.wait_timeout * 60,
+            sleep_before_rebalance=self.sleep_before_rebalance)
         for task in tasks:
             task.result()
+
+        # Validate seq_no snap_start/stop values after rebalance
+        self.check_snap_start_corruption()
 
         self._wait_for_stats_all_buckets(servs_init[:self.nodes_init - self.nodes_out],
                                          ep_queue_size=self.num_items_without_persistence * 0.9, ep_queue_size_cond='>')
@@ -592,12 +722,14 @@ class RebalanceInOutTests(RebalanceBaseTest):
         gen_create = BlobGenerator('mike', 'mike-', self.value_size, start=self.num_items + 1,
                                    end=self.num_items * (100 + data_perc_add) / 100)
         load_tasks = self._async_load_all_buckets(self.master, gen_create, "create", 0)
-        rebalance = self.cluster.async_rebalance(servs_init, servs_in, servs_out)
+        rebalance = self.cluster.async_rebalance(
+            servs_init, servs_in, servs_out,
+            sleep_before_rebalance=self.sleep_before_rebalance)
 
         expected_rows = self.num_items * (100 + data_perc_add) / 100 - 1
         start_time = time.time()
 
-        tasks = {}
+        tasks = dict()
         for bucket in self.buckets:
             for ddoc_name in ddoc_names:
                 for i in xrange(num_views):
@@ -622,5 +754,7 @@ class RebalanceInOutTests(RebalanceBaseTest):
         load_tasks[0].result()
         rebalance.result()
 
+        # Validate seq_no snap_start/stop values after rebalance
+        self.check_snap_start_corruption()
         self.verify_cluster_stats(result_nodes)
         self.verify_unacked_bytes_all_buckets()

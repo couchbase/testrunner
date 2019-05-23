@@ -222,6 +222,7 @@ class RebalanceInTests(RebalanceBaseTest):
         for task in tasks:
             task.result()
 
+        self.sleep(10, "Sleep before stat verification")
         self.verify_cluster_stats(self.servers[:self.nodes_in + self.nodes_init])
         self.verify_unacked_bytes_all_buckets()
 

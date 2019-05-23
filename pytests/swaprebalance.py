@@ -69,11 +69,11 @@ class SwapRebalanceBase(unittest.TestCase):
             # Add built-in user
             testuser = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'password': 'password'}]
             RbacBase().create_user_source(testuser, 'builtin', self.servers[0])
-            
+
             # Assign user to role
             role_list = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'roles': 'admin'}]
             RbacBase().add_user_role(role_list, RestConnection(self.servers[0]), 'builtin')
-            
+
             if self.num_buckets > 10:
                 BaseTestCase.change_max_buckets(self, self.num_buckets)
             self.log.info("==============  SwapRebalanceBase setup was finished for test #{0} {1} =============="
@@ -330,7 +330,7 @@ class SwapRebalanceBase(unittest.TestCase):
 
         self.log.info("SWAP REBALANCE PHASE")
         rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()],
-            ejectedNodes=optNodesIds)
+                       ejectedNodes=optNodesIds)
 
         if do_stop_start:
             # Rebalance is stopped at 20%, 40% and 60% completion

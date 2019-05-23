@@ -59,7 +59,8 @@ class RebalanceBaseTest(BaseTestCase):
                 if rest.is_zone_exist(a + str(i + 1)):
                     rest.delete_zone(a + str(i + 1))
 
-    def shuffle_nodes_between_zones_and_rebalance(self, to_remove=None):
+    def shuffle_nodes_between_zones_and_rebalance(self, to_remove=None,
+                                                  sleep_before_rebalance=None):
         """
         Shuffle the nodes present in the cluster if zone > 1.
         Rebalance the nodes in the end.
@@ -67,6 +68,7 @@ class RebalanceBaseTest(BaseTestCase):
         i.e. 1st node in Group 1, 2nd in Group 2, 3rd in Group 1 and so on,
         when zone=2.
         :param to_remove: List of nodes to be removed.
+        :param sleep_before_rebalance: If !NONE, sleep before rebalance start
         """
         if not to_remove:
             to_remove = []
@@ -99,6 +101,8 @@ class RebalanceBaseTest(BaseTestCase):
         otpnodes = [node.id for node in rest.node_statuses()]
         nodes_to_remove = [node.id for node in rest.node_statuses()
                            if node.ip in [t.ip for t in to_remove]]
+        if sleep_before_rebalance:
+            self.sleep(sleep_before_rebalance)
         # Start rebalance and monitor it.
         started = rest.rebalance(otpNodes=otpnodes, ejectedNodes=nodes_to_remove)
         if started:
@@ -110,11 +114,13 @@ class RebalanceBaseTest(BaseTestCase):
         if self.zone > 1:
             self._verify_replica_distribution_in_zones(nodes_in_zone)
 
-    def add_remove_servers_and_rebalance(self, to_add, to_remove):
+    def add_remove_servers_and_rebalance(self, to_add, to_remove,
+                                         sleep_before_rebalance=None):
         """
         Add and/or remove servers and rebalance.
         :param to_add: List of nodes to be added.
         :param to_remove: List of nodes to be removed.
+        :param sleep_before_rebalance: Sleep in secs if required
         """
         serverinfo = self.servers[0]
         rest = RestConnection(serverinfo)
@@ -122,7 +128,8 @@ class RebalanceBaseTest(BaseTestCase):
             rest.add_node(user=serverinfo.rest_username,
                           password=serverinfo.rest_password,
                           remoteIp=node.ip)
-        self.shuffle_nodes_between_zones_and_rebalance(to_remove)
+        self.shuffle_nodes_between_zones_and_rebalance(
+            to_remove, sleep_before_rebalance=sleep_before_rebalance)
 
     def change_retry_rebalance_settings(self, enabled=True,
                                         afterTimePeriod=300, maxAttempts=1):

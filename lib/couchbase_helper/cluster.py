@@ -322,7 +322,9 @@ class Cluster(object):
         _task = self.async_init_node(server, async_init_node, disabled_consistent_view, services = services, index_quota_percent= index_quota_percent)
         return _task.result()
 
-    def rebalance(self, servers, to_add, to_remove, timeout=None, use_hostnames=False, services = None):
+    def rebalance(self, servers, to_add, to_remove, timeout=None,
+                  use_hostnames=False, services=None,
+                  sleep_before_rebalance=None):
         """Syncronously rebalances a cluster
 
         Parameters:
@@ -331,9 +333,13 @@ class Cluster(object):
             to_remove - All servers being removed from the cluster ([TestInputServers])
             use_hostnames - True if nodes should be added using their hostnames (Boolean)
             services - Services definition per Node, default is None (this is since Sherlock release)
+            sleep_before_rebalance - If not NONE, rebalance will be delayed for
+                                     'n'seconds
         Returns:
             boolean - Whether or not the rebalance was successful"""
-        _task = self.async_rebalance(servers, to_add, to_remove, use_hostnames, services = services)
+        _task = self.async_rebalance(
+            servers, to_add, to_remove, use_hostnames, services=services,
+            sleep_before_rebalance=sleep_before_rebalance)
         return _task.result(timeout)
 
     def load_buckets_with_high_ops(self, server, bucket, items, batch=20000,
