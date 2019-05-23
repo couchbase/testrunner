@@ -1728,10 +1728,12 @@ class StableTopFTS(FTSBaseTest):
         """
         geo_index = self.create_geo_index_and_load()
         from random_query_generator.rand_query_gen import FTSESQueryGenerator
-
+        testcase_failed = False
         for i in range(self.num_queries):
+	    self.log.info("Running Query no --> " + str(i))
             fts_query, es_query = FTSESQueryGenerator.construct_geo_location_query()
             print fts_query
+            print "fts_query location ---> " + str(fts_query["location"])
             # If query has geo co-ordinates in form of an object
             if "lon" in fts_query["location"]:
                 lon = fts_query["location"]["lon"]
@@ -1744,8 +1746,8 @@ class StableTopFTS(FTSBaseTest):
             elif isinstance(fts_query["location"],str):
                 # If the location is in string format
                 if "," in fts_query["location"]:
-                    lon = float(fts_query["location"].split(",")[0])
-                    lat = float(fts_query["location"].split(",")[1])
+                    lat = float(fts_query["location"].split(",")[0])
+                    lon = float(fts_query["location"].split(",")[1])
                 else:
                     lat = float(Geohash.decode(fts_query["location"])[0])
                     lon = float (Geohash.decode(fts_query["location"])[1])
@@ -1770,7 +1772,7 @@ class StableTopFTS(FTSBaseTest):
             if case == 3:
                 geohash = Geohash.encode(lat, lon, precision=random.randint(3, 8))
                 location = geohash
-
+            print "sort_fields_location ----> " + str(location)
             sort_fields = [
                 {
                     "by": "geo_distance",
@@ -1809,9 +1811,12 @@ class StableTopFTS(FTSBaseTest):
             else:
                 msg = "FAIL: Sort order mismatch!"
                 self.log.error(msg)
-                self.fail(msg)
+                testcase_failed = True
+
             self.log.info("--------------------------------------------------"
                           "--------------------------------------------------")
+        if testcase_failed:
+            self.fail(msg)
 
     def test_xattr_support(self):
         """
