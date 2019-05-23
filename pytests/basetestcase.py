@@ -2667,7 +2667,7 @@ class BaseTestCase(unittest.TestCase):
         for version in versions:
             if "3.5" > version:
                 return servers
-        if servers == None:
+        if servers is None:
             servers = self.servers
         kv_servers = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True,servers=servers, master=master)
         new_servers = []
@@ -2867,16 +2867,21 @@ class BaseTestCase(unittest.TestCase):
     def set_flusher_batch_split_trigger(self, flusher_batch_split_trigger=3, buckets=None):
         self.log.info("Changing the bucket properties by changing flusher_batch_split_trigger to {0}".
                       format(flusher_batch_split_trigger))
-        rest = RestConnection(self.master)
-        for bucket in buckets:
-            rest.change_flusher_batch_split_trigger(flusher_batch_split_trigger=flusher_batch_split_trigger,
-                                                    bucket=bucket.name)
-        shell = RemoteMachineShellConnection(self.master)
-        shell.kill_memcached()
+        for server in self.get_kv_nodes(master=self.master):
+            rest = RestConnection(server)
+            for bucket in buckets:
+                rest.change_flusher_batch_split_trigger(
+                    flusher_batch_split_trigger=flusher_batch_split_trigger,
+                    bucket=bucket.name)
+            # Restart Memcached in all cluster nodes to reflect the settings
+            shell = RemoteMachineShellConnection(server)
+            shell.kill_memcached()
+            shell.disconnect()
+
         # Add warmup check instead of a blind sleep.
         # TODO: See _warmup_check in WarmUpTests class
         self.sleep(30)
-        shell.disconnect()
+
         for bucket in buckets:
             mc = MemcachedClient(self.master.ip, 11210)
             mc.sasl_auth_plain(self.master.rest_username, self.master.rest_password)

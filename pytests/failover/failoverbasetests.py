@@ -53,6 +53,17 @@ class FailoverBaseTest(BaseTestCase):
             self.recoveryType=self.recoveryType.split(":")
         if self.deltaRecoveryBuckets:
             self.deltaRecoveryBuckets=self.deltaRecoveryBuckets.split(":")
+
+        # To validate MB-34173
+        self.sleep_before_rebalance = \
+            self.input.param("sleep_before_rebalance", None)
+        flusher_batch_split_trigger = \
+            self.input.param("flusher_batch_split_trigger", None)
+
+        if flusher_batch_split_trigger:
+            self.set_flusher_batch_split_trigger(
+                flusher_batch_split_trigger, self.buckets)
+
         # Defintions of Blod Generator used in tests
         self.gen_initial_create = BlobGenerator('failover', 'failover', self.value_size, end=self.num_items)
         self.gen_create = BlobGenerator('failover', 'failover', self.value_size, start=self.num_items + 1 , end=self.num_items * 1.5)
