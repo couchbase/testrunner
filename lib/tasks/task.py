@@ -1918,12 +1918,14 @@ class BatchedValidateDataTask(GenericLoadingTask):
         try:
             key_vals = self.client.getMulti(keys, parallel=True, timeout_sec=self.timeout_sec, collection=collection)
         except ValueError, error:
+            self.log.error("Insert failed via memcached client. Error: %s"%str(error))
             self.state = FINISHED
             self.kv_store.release_partitions(partition_keys_dic.keys())
             self.set_exception(error)
             return
         except BaseException, error:
         # handle all other exception, for instance concurrent.futures._base.TimeoutError
+            self.log.error("Insert failed via memcached client. Error: %s"%str(error))
             self.state = FINISHED
             self.kv_store.release_partitions(partition_keys_dic.keys())
             self.set_exception(error)
