@@ -4046,6 +4046,7 @@ class FTSBaseTest(unittest.TestCase):
                                 "dynamic": False,
                                 "enabled": True,
                                 "fields": [{
+                                    "docvalues": True,
                                     "include_in_all": True,
                                     "name": "geo",
                                     "type": "geopoint",
