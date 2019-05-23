@@ -801,14 +801,14 @@ class XDCReplication:
             )
         if 'filter_expression' in self.__test_xdcr_params:
             if self.__test_xdcr_params['filter_expression']:
-                masked_input = {"comma": ',', "star": '*', "dot": '.', "equals": '='}
-                need_to_encode = ['+']
+                masked_input = {"comma": ',', "star": '*', "dot": '.', "equals": '=', "{": '', "}": ''}
+                #need_to_encode = ['+']
                 for _ in masked_input:
                     self.__test_xdcr_params['filter_expression'] = self.__test_xdcr_params['filter_expression']\
                         .replace(_, masked_input[_])
-                for _ in need_to_encode:
-                    self.__test_xdcr_params['filter_expression'] = self.__test_xdcr_params['filter_expression'] \
-                        .replace(_, urllib.quote_plus(_))
+                #for _ in need_to_encode:
+                #    self.__test_xdcr_params['filter_expression'] = self.__test_xdcr_params['filter_expression'] \
+                #        .replace(_, urllib.quote_plus(_))
 
     def __convert_test_to_xdcr_params(self):
         xdcr_params = {}
@@ -1239,7 +1239,10 @@ class CouchbaseCluster:
         if not '"' + param + '":' + value in output:
             RemoteMachineShellConnection(self.__master_node).execute_command_raw(
                 "curl http://Administrator:password@localhost:9998/xdcr/internalSettings -X POST -d " +
-                urllib.quote_plus(param +'="' + value + '"'))
+                param + '=' + value)
+        output, _ = RemoteMachineShellConnection(self.__master_node).execute_command_raw(
+            "curl -X GET http://Administrator:password@localhost:9998/xdcr/internalSettings")
+        self.__log.info("{0}:{1}".format(self.__master_node.ip, output))
 
     def __remove_all_remote_clusters(self):
         rest_remote_clusters = RestConnection(
@@ -3636,6 +3639,8 @@ class XDCRNewBaseTest(unittest.TestCase):
                 self._create_index(dest_master, bucket)
             if repl['filterExpression']:
                 filter_exp = repl['filterExpression']
+            else:
+                self.fail("Replication created without any filter.")
             src_count = self._get_doc_count(src_master, filter_exp, bucket)
             dest_count = self._get_doc_count(dest_master, filter_exp, bucket)
             if src_count != dest_count:
