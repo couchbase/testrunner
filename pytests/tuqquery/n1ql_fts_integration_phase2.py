@@ -196,15 +196,15 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
 
         self._remove_all_fts_indexes()
 
-    #MB-33876
     def test_search_options_index_name(self):
         test_name = self.input.param("test_name", '')
         if test_name == '':
             raise Exception("Invalid test configuration! Test name should not be empty.")
 
         test_cases = {
-            "index_not_exists": { # MB-33876
-                "expected_result": "fail"
+            "index_not_exists": {
+                "expected_result": "success",
+                "index_in_explain": "#primary"
             },
             "single_fts_index": {
                 "expected_result": "success",
@@ -267,23 +267,22 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
             "size": [10, 100],
             # 10 results
             "sort": ["[{\"by\": \"field\", \"field\": \"name\", \"mode\":\"max\", \"missing\": \"last\"}]"],
-            # 10 results
-            "query": ["{\"match\": \"California\", \"field\": \"state\"}", "{\"match\": \"Texas\", \"field\": \"state\"}"]
         }
 
         for option_val in test_cases[test_name]:
             self._create_fts_index(index_name='idx_beer_sample_fts', doc_count=7303, source_name='beer-sample')
             n1ql_query = "select meta().id from `beer-sample` where search(`beer-sample`, {\"field\": \"state\", \"match\":\"California\"}, {\""+test_name+"\": "+str(option_val)+"})"
+            if test_name == "size":
+                n1ql_query = "select meta().id from `beer-sample` where search(`beer-sample`, {\"query\":{\"field\": \"state\", \"match\":\"California\"}, \""+test_name+"\":"+ str(option_val)+"})"
             if test_name == 'size':
-                fts_request_str = "'{\"query\":{\"field\": \"state\", \"match\":\"California\"}, \"size\":"+str(option_val)+ "}'"
+                fts_request_str = "{\"query\":{\"field\": \"state\", \"match\":\"California\"}, \"size\":"+str(option_val)+ "}"
             else:
-                fts_request_str = "'{\"query\":{\"field\": \"state\", \"match\":\"California\"}, \"size\":10000, \""+test_name+"\":"+str(option_val)+"}'"
+                fts_request_str = "{\"query\":{\"field\": \"state\", \"match\":\"California\"}, \"size\":10000, \""+test_name+"\":"+str(option_val)+"}"
             fts_request = json.loads(fts_request_str)
             n1ql_results = self.run_cbq_query(n1ql_query)['results']
             total_hits, hits, took, status = \
                 rest.run_fts_query(index_name="idx_beer_sample_fts",
                                    query_json=fts_request)
-
             self._remove_all_fts_indexes()
             comparison_result = self._compare_n1ql_results_against_fts(n1ql_results, hits)
             self.assertEquals(comparison_result, "OK", comparison_result)
@@ -426,7 +425,6 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
                 "query": "explain select meta().id from `beer-sample` where search(`beer-sample`, {\"field\": \"state\", \"match\":\"California\"})",
                 "index": "idx_beer_sample_fts_name"
             },
-            # MB-33678
             "shortest_gsi":{
                 "query": "explain select meta().id from `beer-sample` where search(`beer-sample`, {\"field\": \"name\", \"match\":\"California\"})",
                 "index": "idx_name"
@@ -449,7 +447,7 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
 
         n1ql_query = test_cases[test_name]["query"]
         result = self.run_cbq_query(n1ql_query)
-        if test_name == "primary_gsi":
+        if test_name in["primary_gsi", "shortest_gsi"] :
             self.assertEquals(result['results'][0]['plan']['~children'][0]['#operator'], "PrimaryScan3")
         else:
             self.assertEquals(result['results'][0]['plan']['~children'][0]['index'], test_cases[test_name]["index"])

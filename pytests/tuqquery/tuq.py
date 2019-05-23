@@ -588,7 +588,7 @@ class QueryTests(BaseTestCase):
             self.wait_for_index_status(bucket, index_name, index_status)
 
     def drop_index(self, bucket, index):
-        self.run_cbq_query("drop index %s.%s" % (bucket, index))
+        self.run_cbq_query("drop index `%s`.`%s`" % (bucket, index))
         self.wait_for_index_drop(bucket, index)
 
     def drop_index_safe(self, bucket, index):

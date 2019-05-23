@@ -398,65 +398,103 @@ class N1qlFTSIntegrationTest(QueryTests):
 
     ''' N1QL syntax check - UNION/INTERSECT/EXCEPT '''
     def test_n1ql_syntax_union_intersect_except_correct_indexes(self):
-        ops = [' union ', ' intersect ', ' except ']
+        tests = {
+            "test_union":{
+                "operator": "union",
+                "left_set_value": "test_string",
+                "right_set_value": "string data 1"
+            },
+            "test_intersect": {
+                "operator": "intersect",
+                "left_set_value": "test_string",
+                "right_set_value": "test_string"
+            },
+            "test_except": {
+                "operator": "except",
+                "left_set_value": "test_string",
+                "right_set_value": "string data 1"
+            },
+        }
         all_distinct = [' ', ' all ']
         services_map = self._get_services_map()
+        test_name = self.input.param("test_name", '')
+        operator = tests[test_name]['operator']
+        left_set_value = tests[test_name]['left_set_value']
+        right_set_value = tests[test_name]['right_set_value']
 
-        for op in ops:
-            for a_d in all_distinct:
-                for idx1 in ['idx_test_bucket_fts', 'idx_test_bucket_fts_alias', 'idx_test_bucket_fts-copy', 'idx_test_bucket_fts-copy_alias']:
-                    for idx2 in ['idx_test_bucket_fts', 'idx_test_bucket_fts_alias', 'idx_test_bucket_fts-copy', 'idx_test_bucket_fts-copy_alias']:
-                        fts_query = ("select * from (select * from ( select raw ht.id from (SELECT result.hits FROM "
+        for a_d in all_distinct:
+            for idx1 in ['idx_test_bucket_fts', 'idx_test_bucket_fts_alias', 'idx_test_bucket_fts-copy', 'idx_test_bucket_fts-copy_alias']:
+                for idx2 in ['idx_test_bucket_fts', 'idx_test_bucket_fts_alias', 'idx_test_bucket_fts-copy', 'idx_test_bucket_fts-copy_alias']:
+                    fts_query = ("select * from (select * from ( select raw ht.id from (SELECT result.hits FROM "
                                      "       SEARCH_QUERY('" + idx1 + "',"
                                      "       { 'explain' : FALSE, 'fields' : [ 'string_field' ],"
-                                     "       'highlight' : {}, 'query' : { 'query' : 'string_field:\"test_string\"' },"
+                                     "       'highlight' : {}, 'query' : { 'query' : 'string_field:\""+left_set_value+"\"' },"
                                      "       'size':100}) AS result) "
-                                     "       aa unnest aa.hits as ht order by ht.id) q1"
-                                     " " + op + " " + a_d + " "
+                                     "       aa unnest aa.hits as ht order by ht.id) q1 "
+                                     " " + operator + " " + a_d + " "
                                      " select * from (select raw ht.id from (SELECT result.hits FROM "
                                      "       SEARCH_QUERY('" + idx2 + "',"
                                      "       { 'explain' : FALSE, 'fields' : [ 'string_field' ],"
-                                     "       'highlight' : {}, 'query' : { 'query' : 'string_field:\"test_string\"' },"
+                                     "       'highlight' : {}, 'query' : { 'query' : 'string_field:\""+right_set_value+"\"' },"
                                      "       'size':100}) AS result) "
                                      "aa unnest aa.hits as ht order by ht.id) q1 ) a order by q1")
-                        n1ql_query = ("select * from (select * from (select raw meta().id from test_bucket where string_field like 'test_string%') q1"
-                                     " " + op + " "+ a_d + " " 
-                                     "select * from (select raw meta().id from test_bucket where string_field like 'test_string%') q1) a order by q1")
+                    n1ql_query = ("select * from (select * from (select raw meta().id from test_bucket where string_field like '"+left_set_value+"%') q1"
+                                     " " + operator + " "+ a_d + " " 
+                                     "select * from (select raw meta().id from test_bucket where string_field like '"+right_set_value+"%') q1) a order by q1")
 
-                        for node in self.servers:
-                            test_result = self._validate_query_against_node(node, services_map, fts_query, n1ql_query)
-                            self.assertEquals(test_result, True, "Node " + str(node) + " test is failed.")
+                    for node in self.servers:
+                        test_result = self._validate_query_against_node(node, services_map, fts_query, n1ql_query)
+                        self.assertEquals(test_result, True, "Node " + str(node) + " test is failed.")
 
 
     ''' N1QL syntax check - UNION/INTERSECT/EXCEPT, invalid index for both subselects '''
     def test_n1ql_syntax_union_intersect_except_invalid_index(self):
-        ops = [' union ', ' intersect ', ' except ']
+        tests = {
+            "test_union":{
+                "operator": "union",
+                "left_set_value": "test_string",
+                "right_set_value": "string data 1"
+            },
+            "test_intersect": {
+                "operator": "intersect",
+                "left_set_value": "test_string",
+                "right_set_value": "test_string"
+            },
+            "test_except": {
+                "operator": "except",
+                "left_set_value": "test_string",
+                "right_set_value": "string data 1"
+            },
+        }
         all_distinct = [' ', ' all ']
         fts_indexes = ['idx_test_bucket_fts-invalid']
         services_map = self._get_services_map()
+        test_name = self.input.param("test_name", '')
+        operator = tests[test_name]['operator']
+        left_set_value = tests[test_name]['left_set_value']
+        right_set_value = tests[test_name]['right_set_value']
 
-        for op in ops:
-            for a_d in all_distinct:
-                for fts_idx in fts_indexes:
-                    fts_query = "select * from (select * from (select raw ht.id from (SELECT result.hits FROM " \
+        for a_d in all_distinct:
+            for fts_idx in fts_indexes:
+                fts_query = "select * from (select * from (select raw ht.id from (SELECT result.hits FROM " \
                             "       SEARCH_QUERY('"+fts_idx+"'," \
                             "       { 'explain' : FALSE, 'fields' : [ 'string_field' ]," \
-                            "       'highlight' : {}, 'query' : { 'query' : 'string_field:\"test_string\"' }," \
+                            "       'highlight' : {}, 'query' : { 'query' : 'string_field:\""+left_set_value+"\"' }," \
                             "       'size':100}) AS result) " \
-                            "       aa unnest aa.hits as ht order by ht.id) q1" \
-                            + op + a_d + \
+                            "       aa unnest aa.hits as ht order by ht.id) q1 " \
+                            + operator + a_d + \
                             " select * from (select raw ht.id from (SELECT result.hits FROM " \
                             "       SEARCH_QUERY('"+fts_idx+"'," \
                             "       { 'explain' : FALSE, 'fields' : [ 'string_field' ]," \
-                            "       'highlight' : {}, 'query' : { 'query' : 'string_field:\"test_string\"' }," \
+                            "       'highlight' : {}, 'query' : { 'query' : 'string_field:\""+right_set_value+"\"' }," \
                             "       'size':100}) AS result) " \
                             "aa unnest aa.hits as ht order by ht.id ) q1) a order by q1"
-                    n1ql_query = "select * from (select * from (select raw meta().id from test_bucket where string_field like 'test_string%') q1 " \
-                             + op + a_d + \
-                             "select * from ( select raw meta().id from test_bucket where string_field like 'test_string%') q1) a order by q1"
-                    for node in self.servers:
-                        test_result = self._validate_query_against_node(node, services_map, fts_query, n1ql_query)
-                        self.assertEquals(test_result, False, "Node " + str(node) + " test is not failed.")
+                n1ql_query = "select * from (select * from (select raw meta().id from test_bucket where string_field like '"+left_set_value+"%') q1 " \
+                             + operator + a_d + \
+                             "select * from ( select raw meta().id from test_bucket where string_field like '"+right_set_value+"%') q1) a order by q1"
+                for node in self.servers:
+                    test_result = self._validate_query_against_node(node, services_map, fts_query, n1ql_query)
+                    self.assertEquals(test_result, False, "Node " + str(node) + " test is not failed.")
 
 
     ''' N1QL syntax check - ALL/DISTINCT RAW/ELEMENT/VALUE '''
@@ -492,11 +530,11 @@ class N1qlFTSIntegrationTest(QueryTests):
         '''
     def test_clusterops_fts_node_failover(self):
         self._update_replica_for_fts_index(self.fts_indexes['index1'], 1)
+        self.sleep(30)
         services_string = self.input.param("services_init", '')
         services = services_string.split("-")
         for service in services:
             service.replace(":",",")
-
         idx_result_node1_before_failover = self._run_query_against_node(self.servers[0], self.test_fts_query)
 
 
@@ -507,12 +545,11 @@ class N1qlFTSIntegrationTest(QueryTests):
 
         idx_result_node1_after_failover = self._run_query_against_node(self.servers[0], self.test_fts_query)
         alias_result_node1_after_failover = self._run_query_against_node(self.servers[0], self.test_fts_alias_query)
-
         self.assertEquals(idx_result_node1_before_failover == idx_result_node1_after_failover and
                           idx_result_node1_before_failover == alias_result_node1_after_failover, True, "Results after failover are not the same.")
 
-        self.cluster.rebalance(self.servers, [], self.servers[2])
-        self.cluster.rebalance(self.servers, [self.servers[2]], [], services=services[2])
+        self.cluster.rebalance(self.servers, [], [self.servers[2]])
+        self.cluster.rebalance(self.servers, [self.servers[2]], [], services=[services[2]])
 
         idx_result_node1_after_rebalance = self._run_query_against_node(self.servers[0], self.test_fts_query)
         alias_result_node1_after_rebalance = self._run_query_against_node(self.servers[0], self.test_fts_alias_query)
