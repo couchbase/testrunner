@@ -2867,13 +2867,15 @@ class BaseTestCase(unittest.TestCase):
     def set_flusher_batch_split_trigger(self, flusher_batch_split_trigger=3, buckets=None):
         self.log.info("Changing the bucket properties by changing flusher_batch_split_trigger to {0}".
                       format(flusher_batch_split_trigger))
+
+        rest = RestConnection(self.master)
+        for bucket in buckets:
+            rest.change_flusher_batch_split_trigger(
+                flusher_batch_split_trigger=flusher_batch_split_trigger,
+                bucket=bucket.name)
+
+        # Restart Memcached in all cluster nodes to reflect the settings
         for server in self.get_kv_nodes(master=self.master):
-            rest = RestConnection(server)
-            for bucket in buckets:
-                rest.change_flusher_batch_split_trigger(
-                    flusher_batch_split_trigger=flusher_batch_split_trigger,
-                    bucket=bucket.name)
-            # Restart Memcached in all cluster nodes to reflect the settings
             shell = RemoteMachineShellConnection(server)
             shell.kill_memcached()
             shell.disconnect()
