@@ -2884,9 +2884,12 @@ class BaseTestCase(unittest.TestCase):
         # TODO: See _warmup_check in WarmUpTests class
         self.sleep(30)
 
-        for bucket in buckets:
-            mc = MemcachedClient(self.master.ip, 11210)
-            mc.sasl_auth_plain(self.master.rest_username, self.master.rest_password)
-            mc.bucket_select(bucket.name)
-            stats = mc.stats()
-            self.assertEquals(int(stats['ep_flusher_batch_split_trigger']), flusher_batch_split_trigger)
+        for server in self.get_kv_nodes(master=self.master):
+            for bucket in buckets:
+                mc = MemcachedClient(server.ip, 11210)
+                mc.sasl_auth_plain(self.master.rest_username,
+                                   self.master.rest_password)
+                mc.bucket_select(bucket.name)
+                stats = mc.stats()
+                self.assertEquals(int(stats['ep_flusher_batch_split_trigger']),
+                                  flusher_batch_split_trigger)

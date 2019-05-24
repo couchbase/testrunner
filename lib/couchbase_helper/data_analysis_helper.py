@@ -541,33 +541,32 @@ class DataCollector(object):
             if not collecting per node :: {bucket : [{key:value}]}
             if collecting per node :: {bucket : {node:[{key:value}]}}
         """
-        bucketMap = {}
+        bucketMap = dict()
         for bucket in buckets:
-            bucketMap[bucket.name] = {}
-        for bucket in buckets:
-            dataMap = {}
+            bucketMap[bucket.name] = dict()
+            dataMap = dict()
             for server in servers:
                 client = MemcachedClientHelper.direct_client(server, bucket)
                 stats = client.stats('failovers')
-                map_data = {}
-                num_map ={}
+                map_data = dict()
+                num_map = dict()
                 for o in stats.keys():
                     tokens = o.split(":")
                     vb = tokens[0]
                     key = tokens[1]
                     value = stats[o].split()
-                    num = -1
-                    if len(tokens)  ==  3:
+                    num = 99999
+                    if len(tokens) == 3:
                         vb = tokens[0]
                         num = int(tokens[1])
                         key = tokens[2]
-                    if vb in map_data.keys() and (num == num_map[vb] or num > num_map[vb]):
+                    if vb in map_data.keys() and (num == num_map[vb] or num < num_map[vb]):
                         map_data[vb][key] = value[0]
                         num_map[vb] = num
                     elif vb in map_data.keys() and key == "num_entries":
                         map_data[vb][key] = value[0]
                     elif vb not in map_data.keys():
-                        m = {}
+                        m = dict()
                         m[key] = value[0]
                         map_data[vb] = m
                         num_map[vb] = num
