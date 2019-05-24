@@ -1024,8 +1024,11 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
         load_thread = self.load_docs()
         self.log.info('starting the load thread...')
         load_thread.start()
+        # This code was specifically added for CBSE-6791
+        if self.nodes_init == 1 and self.flusher_batch_split_trigger:
+            self.cluster.rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]], [])
         load_thread.join()
-        load_thread = self.load_docs(num_items=(self.num_items * 2),
+        load_thread = self.load_docs(num_items=(self.num_items),
                                      start_document=self.num_items)
         load_thread.start()
         nodes_all = rest.node_statuses()
@@ -1039,22 +1042,32 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
             "graceful", wait_for_pending=360)
 
         failover_task.result()
+        load_thread.join()
 
+        load_thread = self.load_docs(num_items=self.num_items * 2,
+                                     start_document=(self.num_items * 2))
+        load_thread.start()
+        if self.flusher_batch_split_trigger:
+            for i in range(10):
+                # do delta recovery and cancel add back few times
+                # This was added to reproduce MB-34173
+                rest.set_recovery_type(node.id, self.recovery_type)
+                self.sleep(10)
+                rest.add_back_node(node.id)
         rest.set_recovery_type(node.id, self.recovery_type)
-        # Remove this. This cause even the delta recovery to become full recovery
-        # TODO: Do this to all the delta recovery testcases.
-        # rest.add_back_node(node.id)
-
+        self.sleep(30)
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
                                                  [], [])
 
         reached = RestHelper(rest).rebalance_reached()
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
-        load_thread.join()
         rebalance.result()
-        if self.flusher_batch_split_trigger:
+        load_thread.join()
+        if self.nodes_init == 1 and self.flusher_batch_split_trigger:
+            self.check_snap_start_corruption(servers_to_check=self.servers[:self.nodes_init + 1])
+        elif self.flusher_batch_split_trigger:
             self.check_snap_start_corruption(servers_to_check=self.servers[:self.nodes_init])
-        num_items_to_validate = self.num_items * 3
+        num_items_to_validate = self.num_items * 4
         errors = self.check_data(self.master, bucket, num_items_to_validate)
         if errors:
             self.log.info("Missing keys count : {0}".format(len(errors)))
