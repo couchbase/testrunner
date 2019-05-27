@@ -57,12 +57,12 @@ class FailoverBaseTest(BaseTestCase):
         # To validate MB-34173
         self.sleep_before_rebalance = \
             self.input.param("sleep_before_rebalance", None)
-        flusher_batch_split_trigger = \
+        self.flusher_batch_split_trigger = \
             self.input.param("flusher_batch_split_trigger", None)
 
-        if flusher_batch_split_trigger:
+        if self.flusher_batch_split_trigger:
             self.set_flusher_batch_split_trigger(
-                flusher_batch_split_trigger, self.buckets)
+                self.flusher_batch_split_trigger, self.buckets)
 
         # Defintions of Blod Generator used in tests
         self.gen_initial_create = BlobGenerator('failover', 'failover', self.value_size, end=self.num_items)

@@ -110,7 +110,9 @@ class FailoverTests(FailoverBaseTest):
         else:
             self.run_failover_operations(self.chosen, failover_reason)
 
-        if self.num_replicas >= self.num_failed_nodes:
+        # TODO: Enable this even when 'flusher_batch_split_trigger' is not set
+        if self.flusher_batch_split_trigger and \
+                self.num_replicas >= self.num_failed_nodes:
             tasks = self._async_load_all_buckets(
                 self.master, self.gen_update, "update", 0)
             for task in tasks:
