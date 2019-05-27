@@ -110,10 +110,11 @@ class FailoverTests(FailoverBaseTest):
         else:
             self.run_failover_operations(self.chosen, failover_reason)
 
-        tasks = self._async_load_all_buckets(
-            self.master, self.gen_update, "update", 0)
-        for task in tasks:
-            task.result()
+        if self.num_replicas >= self.num_failed_nodes:
+            tasks = self._async_load_all_buckets(
+                self.master, self.gen_update, "update", 0)
+            for task in tasks:
+                task.result()
 
         if self.graceful:
             # Validate seq_no snap_start/stop values
