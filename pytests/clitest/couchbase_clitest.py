@@ -452,10 +452,15 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
             for num in xrange(nodes_add):
                 self.log.info("add node {0} to cluster".format(
                     self.servers[num + 1].ip))
-                options = "--server-add={0}:8091 \
+                server_add = "http://{0}:{1)".format(self.servers[num + 1].ip,
+                                                     self.servers[num + 1].port)
+                if self.secure_conn:
+                    server_add = "https://{0}:1{1}".format(self.servers[num + 1].ip,
+                                                           self.servers[num + 1].port)
+                options = "--server-add={0} \
                            --server-add-username=Administrator \
                            --server-add-password=password" \
-                            .format(self.servers[num + 1].ip)
+                            .format(server_add)
                 output, error = \
                       remote_client.execute_couchbase_cli(cli_command=cli_command,
                                         options=options, cluster_host="localhost",
@@ -2229,7 +2234,8 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
         if servers > 0:
             servers_to_recover = []
             for idx in range(servers):
-                servers_to_recover.append("%s:%s" % (self.servers[idx+1].ip, self.servers[idx+1].port))
+                servers_to_recover.append("{0}:{1}".format(self.servers[idx+1].ip,
+                                                     self.servers[idx+1].port))
             servers_to_recover = ",".join(servers_to_recover)
 
         if invalid_recover_server:
@@ -2237,18 +2243,25 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
 
         servers_to_add = []
         for idx in range(init_num_servers - 1):
-            servers_to_add.append("%s:%s" % (self.servers[idx + 1].ip, self.servers[idx + 1].port))
+            server_add = "http://{0}:{1}".format(self.servers[idx + 1].ip,
+                                                   self.servers[idx + 1].port)
+            if self.secure_conn:
+                server_add = "https://{0}:1{1}".format(self.servers[idx + 1].ip,
+                                                   self.servers[idx + 1].port)
+            servers_to_add.append(server_add)
         servers_to_add = ",".join(servers_to_add)
 
         if initialized:
             cli = CouchbaseCLI(server, server.rest_username, server.rest_password)
-            _, _, success = cli.cluster_init(256, 256, None, "data", None, None, server.rest_username,
+            _, _, success = cli.cluster_init(256, 256, None, "data", None, None,
+                                             server.rest_username,
                                              server.rest_password, None)
             self.assertTrue(success, "Cluster initialization failed during test setup")
 
             if init_num_servers > 1:
                 time.sleep(5)
-                _, _, errored = cli.server_add(servers_to_add, server.rest_username, server.rest_password, None, None,
+                _, _, errored = cli.server_add(servers_to_add, server.rest_username,
+                                               server.rest_password, None, None,
                                                None)
                 self.assertTrue(errored, "Could not add initial servers")
                 _, _, errored = cli.rebalance(None)
@@ -2265,7 +2278,8 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
 
         if not expect_error:
             self.assertTrue(errored, "Expected command to succeed")
-            self.assertTrue(self.verifyRecoveryType(server, servers_to_recover, recovery_type), "Servers not recovered")
+            self.assertTrue(self.verifyRecoveryType(server, servers_to_recover,
+                                                    recovery_type), "Servers not recovered")
         else:
             self.assertTrue(self.verifyCommandOutput(stdout, expect_error, error_msg),
                             "Expected error message not found")

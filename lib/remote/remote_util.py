@@ -4302,15 +4302,15 @@ class RemoteMachineShellConnection:
         return output, error
 
     def couchbase_cli(self, subcommand, cluster_host, options):
-        cb_client = "%scouchbase-cli" % (LINUX_COUCHBASE_BIN_PATH)
+        cb_client = "{0}couchbase-cli".format(LINUX_COUCHBASE_BIN_PATH)
         if self.nonroot:
-            cb_client = "/home/%s%scouchbase-cli" % (self.username,
+            cb_client = "/home/{0}{1}couchbase-cli".format(self.username,
                                                      LINUX_COUCHBASE_BIN_PATH)
         self.extract_remote_info()
         if self.info.type.lower() == 'windows':
-            cb_client = "%scouchbase-cli.exe" % (WIN_COUCHBASE_BIN_PATH)
+            cb_client = "{0}couchbase-cli.exe".format(WIN_COUCHBASE_BIN_PATH)
         if self.info.distribution_type.lower() == 'mac':
-            cb_client = "%scouchbase-cli" % (MAC_COUCHBASE_BIN_PATH)
+            cb_client = "{0}couchbase-cli".format(MAC_COUCHBASE_BIN_PATH)
 
         # now we can run command in format where all parameters are optional
         # {PATH}/couchbase-cli [SUBCOMMAND] [OPTIONS]
