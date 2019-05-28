@@ -82,6 +82,8 @@ class NewUpgradeBaseTest(BaseTestCase):
         self.rest = None
         self.rest_helper = None
         self.is_ubuntu = False
+        self.is_rpm = False
+        self.is_centos7 = False
         self.sleep_time = 15
         self.ddocs = []
         self.item_flag = self.input.param('item_flag', 0)
@@ -132,6 +134,10 @@ class NewUpgradeBaseTest(BaseTestCase):
             self.is_linux = True
         if type.lower() == "ubuntu":
             self.is_ubuntu = True
+        if type.lower() == "centos":
+            self.is_rpm = True
+            if os_version.lower() == "centos 7":
+                self.is_centos7 = True
         self.queue = Queue.Queue()
         self.upgrade_servers = []
         self.index_replicas = self.input.param("index_replicas", None)
