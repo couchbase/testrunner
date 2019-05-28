@@ -138,6 +138,7 @@ class NewUpgradeBaseTest(QueryHelperTests,EventingBaseTest, FTSBaseTest):
         self.fts_obj = None
         self.n1ql_helper = None
         self.index_name_prefix = None
+        self.flusher_batch_split_trigger = self.input.param("flusher_batch_split_trigger", None)
 
     def tearDown(self):
         test_failed = (hasattr(self, '_resultForDoCleanups') and \
