@@ -127,6 +127,7 @@ class NewUpgradeBaseTest(BaseTestCase):
             self.max_verify = min(self.num_items, 100000)
         shell = RemoteMachineShellConnection(self.master)
         type = shell.extract_remote_info().distribution_type
+        os_version = shell.extract_remote_info().distribution_version
         shell.disconnect()
         if type.lower() == 'windows':
             self.is_linux = False
