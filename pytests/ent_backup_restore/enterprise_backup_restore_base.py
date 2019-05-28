@@ -387,7 +387,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
 
         """ Print out of cbbackupmgr from 6.5 is different with older version """
         self.cbbkmgr_version = "6.5"
-        self.bk_printout = "Backup successfully completed"
+        self.bk_printout = "Backup successfully completed".split(",")
         if RestHelper(RestConnection(self.backupset.backup_host)).is_ns_server_running():
             self.cbbkmgr_version = RestConnection(self.backupset.backup_host).get_nodes_version()
 
@@ -444,7 +444,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
 
         for bucket in self.buckets:
             if self.cbbkmgr_version[:5] in COUCHBASE_FROM_MAD_HATTER:
-                self.bk_printout = 'Backed up bucket "{0}" succeeded'.format(bucket.name)
+                self.bk_printout.append('Backed up bucket "{0}" succeeded'.format(bucket.name))
             if error or not self._check_output(self.bk_printout, output):
                 self.log.error("Failed to backup bucket {0}".format(bucket.name))
                 return output, error
@@ -1493,11 +1493,21 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
     def _check_output(self, word_check, output):
         found = False
         if len(output) >=1 :
-            for x in output:
-                if word_check.lower() in x.lower():
-                    self.log.info("Found \"%s\" in CLI output" % word_check)
-                    found = True
-                    break
+            if isinstance(word_check, list):
+                for ele in word_check:
+                    for x in output:
+                        if ele.lower() in x.lower():
+                            self.log.info("Found '{0} in CLI output".format(ele))
+                            found = True
+                            break
+            elif isinstance(word_check, str):
+                for x in output:
+                    if word_check.lower() in x.lower():
+                        self.log.info("Found '{0}' in CLI output".format(word_check))
+                        found = True
+                        break
+            else:
+                self.log.error("invalid {0}".format(word_check))
         return found
 
     def _reset_storage_mode(self, rest, storageMode):
@@ -2185,11 +2195,21 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
     def _check_output(self, word_check, output):
         found = False
         if len(output) >=1 :
-            for x in output:
-                if word_check.lower() in x.lower():
-                    self.log.info("Found \"%s\" in CLI output" % word_check)
-                    found = True
-                    break
+            if isinstance(word_check, list):
+                for ele in word_check:
+                    for x in output:
+                        if ele.lower() in x.lower():
+                            self.log.info("Found '{0}' in CLI output".format(ele))
+                            found = True
+                            break
+            elif isinstance(word_check, str):
+                for x in output:
+                    if word_check.lower() in x.lower():
+                        self.log.info("Found '{0}' in CLI output".format(word_check))
+                        found = True
+                        break
+            else:
+                self.log.error("invalid {0}".format(word_check))
         return found
 
     def merge(self):
