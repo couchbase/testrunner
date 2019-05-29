@@ -452,7 +452,7 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
             for num in xrange(nodes_add):
                 self.log.info("add node {0} to cluster".format(
                     self.servers[num + 1].ip))
-                server_add = "http://{0}:{1)".format(self.servers[num + 1].ip,
+                server_add = "http://{0}:{1}".format(self.servers[num + 1].ip,
                                                      self.servers[num + 1].port)
                 if self.secure_conn:
                     server_add = "https://{0}:1{1}".format(self.servers[num + 1].ip,
