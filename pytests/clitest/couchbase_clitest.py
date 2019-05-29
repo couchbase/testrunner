@@ -245,6 +245,15 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
                     found = True
         return found
 
+    def _convert_server_to_url(self, server):
+        """From 6.5.x, add, remove, failover... need to prefix server with
+           http/https and postfix with 8091/18091 """
+        url_server = "http://{0}:{1}".format(server.ip, server.port)
+        if self.secure_conn:
+            url_server = "https://{0}:1{1}".format(server.ip, server.port)
+        return url_server
+
+
     def _get_dict_from_output(self, output):
         result = {}
         if output[0].startswith("couchbase-cli"):
@@ -877,13 +886,13 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
             Test display bar when rebalance and stop/start rebalance
         """
         server = copy.deepcopy(self.servers[0])
-        add_server = self.servers[1]
+        add_server = self._convert_server_to_url(self.servers[1])
         stop_rebalance = self.input.param("stop-rebalance", False)
         rest = RestConnection(server)
         self.default_bucket = True
         self._bucket_creation()
         cli = CouchbaseCLI(server, "cbadminbucket", "password")
-        output_add, error, msg = cli.server_add(add_server.ip, "Administrator",
+        output_add, error, msg = cli.server_add(add_server, "Administrator",
                                                 "password", None, "data", None)
         if "SUCCESS: Server added" not in output_add[0]:
             self.fail("Could not add node %s to cluster" % add_server.ip)
@@ -1665,9 +1674,12 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
         server = copy.deepcopy(self.servers[0])
 
         servers_list = list()
+        servers_url_list = list()
         for i in range(0, num_servers):
             servers_list.append("%s:%s" % (self.servers[i+1].ip, self.servers[i+1].port))
+            servers_url_list.append("{0}".format(self._convert_server_to_url(self.servers[i+1])))
         server_to_add = ",".join(servers_list)
+        servers_to_add_url = ",".join(servers_url_list)
 
         rest = RestConnection(server)
         rest.force_eject_node()
@@ -1682,7 +1694,7 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
 
         time.sleep(5)
         cli = CouchbaseCLI(server, username, password)
-        stdout, _, _ = cli.server_add(server_to_add, server_username, server_password,
+        stdout, _, _ = cli.server_add(servers_to_add_url, server_username, server_password,
                                                      group, services,
                                                      index_storage_mode)
 
@@ -1730,19 +1742,22 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
 
         initial_servers_list = list()
         for _ in range(0, num_initial_servers-1):
-            initial_servers_list.append("%s:%s" % (self.servers[srv_idx].ip, self.servers[srv_idx].port))
+            initial_servers_list.append("{0}"\
+                            .format(self._convert_server_to_url(self.servers[srv_idx])))
             srv_idx += 1
         initial_servers = ",".join(initial_servers_list)
 
         add_servers_list = list()
         for _ in range(0, num_add_servers):
-            add_servers_list.append("%s:%s" % (self.servers[srv_idx].ip, self.servers[srv_idx].port))
+            add_servers_list.append("{0}"\
+                            .format(self._convert_server_to_url(self.servers[srv_idx])))
             srv_idx += 1
         servers_to_add = ",".join(add_servers_list)
 
         remove_servers_list = list()
         for i in range(0, num_remove_servers):
-            remove_servers_list.append("%s:%s" % (self.servers[i+1].ip, self.servers[i+1].port))
+            remove_servers_list.append("{0}:{1}"\
+                                  .format(self.servers[i+1].ip, self.servers[i+1].port))
         servers_to_remove = ",".join(remove_servers_list)
 
         rest = RestConnection(server)
@@ -1814,10 +1829,11 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
 
         initial_servers_list = list()
         for i in range(0, num_initial_servers - 1):
-            initial_servers_list.append("%s:%s" % (self.servers[i + 1].ip, self.servers[i + 1].port))
+            initial_servers_list.append("{0}"\
+                            .format(self._convert_server_to_url(self.servers[i + 1])))
         initial_servers = ",".join(initial_servers_list)
 
-        server_to_failover = "%s:%s" % (self.servers[1].ip, self.servers[1].port)
+        server_to_failover = "{0}:{1}".format(self.servers[1].ip, self.servers[1].port)
         if invalid_node:
             server_to_failover = "invalid.server:8091"
         if no_failover_servers:
@@ -1958,7 +1974,8 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
 
         servers_to_add = list()
         for idx in range(init_num_servers-1):
-            servers_to_add.append("%s:%s" % (self.servers[idx + 1].ip, self.servers[idx + 1].port))
+            servers_to_add.append("{0}"\
+                       .format(self._convert_server_to_url(self.servers[idx + 1])))
         servers_to_add = ",".join(servers_to_add)
 
         log_nodes = None
@@ -2201,7 +2218,8 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
 
         servers_to_add = []
         for idx in range(init_num_servers-1):
-            servers_to_add.append("%s:%s" % (self.servers[idx + 1].ip, self.servers[idx + 1].port))
+            servers_to_add.append("{0}"\
+                          .format(self._convert_server_to_url(self.servers[idx + 1])))
         servers_to_add = ",".join(servers_to_add)
 
         if initialized:
@@ -2272,11 +2290,7 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
 
         servers_to_add = []
         for idx in range(init_num_servers - 1):
-            server_add = "http://{0}:{1}".format(self.servers[idx + 1].ip,
-                                                   self.servers[idx + 1].port)
-            if self.secure_conn:
-                server_add = "https://{0}:1{1}".format(self.servers[idx + 1].ip,
-                                                   self.servers[idx + 1].port)
+            server_add = "{0}".format(self._convert_server_to_url(self.servers[idx + 1]))
             servers_to_add.append(server_add)
         servers_to_add = ",".join(servers_to_add)
 
@@ -2346,8 +2360,7 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
 
         servers_to_add = []
         for idx in range(init_num_servers - 1):
-            servers_to_add.append("%s:%s" % (self.servers[idx + 1].ip,
-                                             self.servers[idx + 1].port))
+            servers_to_add.append("{0}".format(self._convert_server_to_url(self.servers[idx + 1])))
         servers_to_add = ",".join(servers_to_add)
 
         if initialized:
