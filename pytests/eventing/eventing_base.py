@@ -313,25 +313,13 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         self.delete_function(body)
 
     def undeploy_function(self, body):
-        # body['settings']['deployment_status'] = False
-        # body['settings']['processing_status'] = False
-        # # save the function so that it disappears from UI
-        # content = self.rest.save_function(body['appname'], body)
-        # # undeploy the function
-        # content1 = self.rest.set_settings_for_function(body['appname'], body['settings'])
-        # log.info("Undeploy Application : {0}".format(content1))
-        # return content, content1
+        self.refresh_rest_server()
         content = self.rest.undeploy_function(body['appname'])
         log.info("Undeploy Application : {0}".format(body['appname']))
         self.wait_for_handler_state(body['appname'],"undeployed")
         return content
 
     def delete_function(self, body):
-        # delete the function from the UI and backend
-        # content = self.rest.delete_function_from_temp_store(body['appname'])
-        # content1 = self.rest.delete_function(body['appname'])
-        # log.info("Delete Application : {0}".format(body['appname']))
-        # return content, content1
         content1 = self.rest.delete_single_function(body['appname'])
         log.info("Delete Application : {0}".format(body['appname']))
         return content1
