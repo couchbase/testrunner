@@ -1792,7 +1792,7 @@ class StableTopFTS(FTSBaseTest):
             sort_fields_es = [
                 {
                     "_geo_distance": {
-                        "geo": [lon, lat],
+                        "geo": location,
                         "order": "asc",
                         "unit": unit
                     }

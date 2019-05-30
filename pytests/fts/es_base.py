@@ -462,6 +462,7 @@ class ElasticSearchBase(object):
         """
         try:
             doc_ids = []
+            self.__log.info("ES query '{0}' ".format(query))
             url = self.__connection_url + index_name + '/_search?size='+ \
                   str(result_size)
             status, content, _ = self._http_request(
