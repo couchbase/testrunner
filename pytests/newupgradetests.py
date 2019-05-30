@@ -19,6 +19,8 @@ from testconstants import SHERLOCK_VERSION, COUCHBASE_FROM_SHERLOCK,\
 from couchbase.cluster import Cluster, PasswordAuthenticator
 from couchbase.exceptions import CouchbaseError,CouchbaseNetworkError,CouchbaseTransientError
 from security.rbac_base import RbacBase
+from threading import Thread
+
 
 class SingleNodeUpgradeTests(NewUpgradeBaseTest):
     def setUp(self):
@@ -2502,7 +2504,6 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         self.run_with_views = self.input.param('run_with_views', True)
         self.run_view_query_iterations = self.input.param("run_view_query_iterations", 1)
         self.skip_fresh_install = self.input.param("skip_fresh_install", False)
-        from threading import Thread
         self.num_items = self.input.param("num_items", 3000000)
         self.total_items = self.num_items
         # install initial version on the nodes
@@ -2610,7 +2611,6 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         self.run_with_views = self.input.param('run_with_views', True)
         self.run_view_query_iterations = self.input.param("run_view_query_iterations", 1)
         self.skip_fresh_install = self.input.param("skip_fresh_install", False)
-        from threading import Thread
         self.num_items = self.input.param("num_items", 3000000)
         self.total_items = self.num_items
         # install initial version on the nodes
@@ -2724,7 +2724,6 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         self.run_view_query_iterations = self.input.param("run_view_query_iterations", 1)
         self.skip_fresh_install = self.input.param("skip_fresh_install", False)
         self.recovery_type = self.input.param("recovery_type", "delta")
-        from threading import Thread
         self.num_items = self.input.param("num_items", 3000000)
         self.total_items = self.num_items
         # install initial version on the nodes
@@ -2834,7 +2833,6 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         self.run_view_query_iterations = self.input.param("run_view_query_iterations", 1)
         self.skip_fresh_install = self.input.param("skip_fresh_install", False)
         self.upgrade_order = self.input.param("upgrade_order", "parallel")
-        from threading import Thread
         self.num_items = self.input.param("num_items", 3000000)
         self.total_items = self.num_items
         # install initial version on the nodes
@@ -3094,7 +3092,6 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         rebalance_fail = False
         self.log.info("inside data_load_and_rebalance")
         rest = RestConnection(load_host)
-        from threading import Thread
         self.log.info('starting the view query thread...')
         if self.run_with_views:
             view_query_thread = Thread(target=self.view_queries, name="run_queries",
