@@ -691,7 +691,7 @@ class N1qlFTSIntegrationTest(QueryTests):
             if 'n1ql' in node_services:
                 fts_result = self.run_cbq_query(query=fts_query, server=node, username=username, password=password)
                 n1ql_result = self.run_cbq_query(query=n1ql_query, server=node, username=username, password=password)
-                if fts_result['results']!=n1ql_result['results']:
+                if sorted(fts_result['results'])!=sorted(n1ql_result['results']):
                     return False
 
         return True
@@ -852,4 +852,5 @@ class N1qlFTSIntegrationTest(QueryTests):
         RbacBase().create_user_source(test_bucket_null_null, 'builtin', self.master)
         RbacBase().add_user_role(rolelist, RestConnection(self.master), 'builtin')
         self.users['test_bucket_null_null'] = {'username': 'test_bucket_null_null', 'password': 'password'}
+
 

@@ -240,7 +240,6 @@ class QueryConditionalFunctionsTests(QueryTests):
         queries["f"] = {"indexes": [self.primary_index_def], "queries": [query_6], "asserts": [self.verifier(verify_6, 0)]}
         queries["g"] = {"indexes": [self.primary_index_def], "queries": [query_7], "asserts": [self.verifier(verify_7, 0)]}
         queries["h"] = {"indexes": [self.primary_index_def], "queries": [query_8], "asserts": [self.verifier(verify_8, 0)]}
-
         self.query_runner(queries)
 
     def test_decode_nested(self):
@@ -711,17 +710,17 @@ class QueryConditionalFunctionsTests(QueryTests):
         query_2 = "select array_binary_search([field_that_is_missing, field_that_is_missing, field_that_is_missing], missing) from default"
         verify_2 = "select 0 from default"
 
-        query_3 = "select array_binary_search([join_yr, join_day, field_that_is_missing], missing) from default"
-        verify_3 = "select 2 from default"
+        query_3 = "select array_binary_search([field_that_is_missing,join_yr, join_day], missing) from default"
+        verify_3 = "select 0 from default"
 
         query_4 = "select array_binary_search([missing, missing, missing], not missing) from default"
-        verify_4 = "select -1 from default"
+        verify_4 = "select 0 from default"
 
         query_5 = "select array_binary_search([null, null, null], null) from default"
         verify_5 = "select 0 from default"
 
-        query_6 = "select array_binary_search([join_yr, join_day, null], null) from default"
-        verify_6 = "select 2 from default"
+        query_6 = "select array_binary_search([null, join_yr, join_day], null) from default"
+        verify_6 = "select 0 from default"
 
         query_7 = "select array_binary_search([null, null, null], not null) from default"
         verify_7 = "select 0 from default"
@@ -743,6 +742,7 @@ class QueryConditionalFunctionsTests(QueryTests):
         queries["i"] = {"indexes": [self.primary_index_def], "queries": [query_9], "asserts": [self.verifier(verify_9, 0)]}
 
         self.query_runner(queries)
+
 
     def test_decode_meta(self):
         queries = dict()

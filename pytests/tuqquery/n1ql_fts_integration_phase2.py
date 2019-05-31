@@ -64,7 +64,7 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
                 if alias!="":
                     dot="."
                 fts_query = "select "+str(alias)+str(dot)+"code, "+str(alias)+str(dot)+"state from "+str(bucket_name)+" " \
-                            "where "+str(alias)+str(dot)+"type='brewery' and SEARCH("+alias+dot+"state, 'state:California') order by "+str(alias)+str(dot)+"code"
+                            "where "+str(alias)+str(dot)+"type='brewery' and SEARCH("+alias+dot+"state, {'query':{'field': 'state', 'match': 'California'}, 'size': 10000}) order by "+str(alias)+str(dot)+"code"
                 n1ql_query = "select code, state from `beer-sample` where type='brewery' and state like '%California%' order by code"
 
                 fts_results = self.run_cbq_query(fts_query)['results']
@@ -271,7 +271,7 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
 
         for option_val in test_cases[test_name]:
             self._create_fts_index(index_name='idx_beer_sample_fts', doc_count=7303, source_name='beer-sample')
-            n1ql_query = "select meta().id from `beer-sample` where search(`beer-sample`, {\"field\": \"state\", \"match\":\"California\"}, {\""+test_name+"\": "+str(option_val)+"})"
+            n1ql_query = "select meta().id from `beer-sample` where search(`beer-sample`, {\"query\":{\"field\": \"state\", \"match\":\"California\"}, \"size\": 10000}, {\""+test_name+"\": "+str(option_val)+"})"
             if test_name == "size":
                 n1ql_query = "select meta().id from `beer-sample` where search(`beer-sample`, {\"query\":{\"field\": \"state\", \"match\":\"California\"}, \""+test_name+"\":"+ str(option_val)+"})"
             if test_name == 'size':
