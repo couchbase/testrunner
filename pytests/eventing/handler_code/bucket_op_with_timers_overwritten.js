@@ -15,7 +15,7 @@ function OnUpdate(doc,meta) {
 }
 function timerCallback(context) {
     var time_rand = random_gen();
-    var doc_id = time_rand + ' ';
+    var doc_id = context.docID+'_'+time_rand;
     dst_bucket[doc_id] = context.random_text;
 }
 
