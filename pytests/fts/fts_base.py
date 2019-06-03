@@ -913,6 +913,8 @@ class FTSIndex:
             self.name,
             rest.ip))
         rest.update_fts_index(self.name, self.index_definition)
+        self.__log.info("sleeping for 200")
+        time.sleep(200)
 
     def update_index_to_upside_down(self):
         if self.is_upside_down():
