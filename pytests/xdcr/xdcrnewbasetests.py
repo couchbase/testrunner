@@ -1197,7 +1197,7 @@ class CouchbaseCluster:
                 bucket_params['eviction_policy'] = eviction_policy
             else:
                 bucket_params['eviction_policy'] = EVICTION_POLICY.NRU_EVICTION
-            if eviction_policy == EVICTION_POLICY.NRU_EVICTION:
+            if bucket_params['eviction_policy'] == EVICTION_POLICY.NRU_EVICTION:
                 if "6.0.2-" in NodeHelper.get_cb_version(server):
                     self.set_internal_setting("AllowSourceNRUCreation", "true")
         else:
@@ -1220,7 +1220,10 @@ class CouchbaseCluster:
         if not '"' + param + '":' + value in output:
             RemoteMachineShellConnection(self.__master_node).execute_command_raw(
                 "curl http://Administrator:password@localhost:9998/xdcr/internalSettings -X POST -d " +
-                urllib.quote_plus(param +'="' + value + '"'))
+                param + '=' + value)
+        output, _ = RemoteMachineShellConnection(self.__master_node).execute_command_raw(
+            "curl -X GET http://Administrator:password@localhost:9998/xdcr/internalSettings")
+        self.__log.info("{0}:{1}".format(self.__master_node.ip, output))
 
     def __remove_all_remote_clusters(self):
         rest_remote_clusters = RestConnection(
