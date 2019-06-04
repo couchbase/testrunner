@@ -10,6 +10,7 @@ import mc_bin_client
 import couchbase.subdocument as SD
 from sdk_client import SDKClient
 
+
 class SubdocSimpleDataset(SubdocBaseTest):
     def setUp(self):
         super(SubdocSimpleDataset, self).setUp()
@@ -17,6 +18,40 @@ class SubdocSimpleDataset(SubdocBaseTest):
 
     def tearDown(self):
         super(SubdocSimpleDataset, self).tearDown()
+
+    def test_system_xattr_with_compression(self):
+        # MB-34346
+        #subdoc.subdoc_simple_dataset.SubdocSimpleDataset.test_system_xattr_with_compression,compression_mode=active,use_sdk_client=True,value_size=262114
+        KEY = "key"
+        self.value_size = self.input.param("value_size", 102400)
+        self.log.info("Insert a key and set xattr for the key")
+
+        val = self.generate_random_json_doc(self.value_size)
+        if random.choice([True, False]):
+            self.client.insert(KEY, val, 60)
+        else:
+            self.client.insert(KEY, {}, 60)
+        rv = self.client.cb.mutate_in(KEY, SD.upsert('_system1', val, xattr=True, create_parents=True))
+        self.assertTrue(rv.success)
+        rv = self.client.cb.mutate_in(KEY, SD.upsert('_system2', {'field1': val, 'field2': val}, xattr=True, create_parents=True))
+        self.assertTrue(rv.success)
+        rv = self.client.cb.mutate_in(KEY, SD.upsert('a', {'field1': {'sub_field1a': 0, 'sub_field1b': 00}, 'field2': {'sub_field2a': 20, 'sub_field2b': 200}}, xattr=True, create_parents=True))
+        self.assertTrue(rv.success)
+
+        self.client.upsert(KEY, value={}, ttl=20)
+        self.sleep(30)
+        try:
+            self.client.get(KEY)
+        except MemcachedError as exp:
+            self.assertEqual(exp.status, 1)
+
+
+    def generate_random_json_doc(self, value_size = 10240):
+        age = range(1, 100)
+        name = ['a' * value_size,]
+        template =  { "age": age, "name": name }
+        json_string = json.dumps(template)
+        return json_string
 
     # Test the fix for MB-30278
     def test_verify_backtick(self):
@@ -421,7 +456,7 @@ class SubdocSimpleDataset(SubdocBaseTest):
         # wait for it to persist and then evict the key
         persisted = 0
         while persisted == 0:
-                opaque, rep_time, persist_time, persisted, cas = mc.observe(self.key)
+            opaque, rep_time, persist_time, persisted, cas = mc.observe(self.key)
 
         mc.evict_key(self.key)
         time.sleep(65)
