@@ -26,7 +26,8 @@ class ViewMergingTests(BaseTestCase):
                 TestInputSingleton.input.test_params['skip_buckets_handle'] = True
             self.default_bucket_name = 'default'
             super(ViewMergingTests, self).setUp()
-            if 'first_case' in TestInputSingleton.input.test_params:
+            if 'first_case' in TestInputSingleton.input.test_params \
+                    and self.num_servers > 1:
                 self.cluster.rebalance(self.servers[:], self.servers[1:], [])
             # We use only one bucket in this test suite
             self.rest = RestConnection(self.master)
