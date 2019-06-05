@@ -29,7 +29,9 @@ from membase.api.exception import N1QLQueryException, DropIndexException, Create
 from remote.remote_util import RemoteMachineShellConnection, RemoteUtilHelper
 from couchbase_helper.documentgenerator import BatchedDocumentGenerator
 from TestInput import TestInputServer, TestInputSingleton
-from testconstants import MIN_KV_QUOTA, INDEX_QUOTA, FTS_QUOTA, COUCHBASE_FROM_4DOT6, THROUGHPUT_CONCURRENCY, ALLOW_HTP, CBAS_QUOTA, COUCHBASE_FROM_VERSION_4
+from testconstants import MIN_KV_QUOTA, INDEX_QUOTA, FTS_QUOTA, COUCHBASE_FROM_4DOT6,\
+                          THROUGHPUT_CONCURRENCY, ALLOW_HTP, CBAS_QUOTA, COUCHBASE_FROM_VERSION_4,\
+                          CLUSTER_QUOTA_RATIO
 from multiprocessing import Process, Manager, Semaphore
 
 try:
@@ -143,7 +145,7 @@ class NodeInitializeTask(Task):
         """ Adjust KV RAM to correct value when there is INDEX
             and FTS services added to node from Watson  """
         index_quota = INDEX_QUOTA
-        kv_quota = int(info.mcdMemoryReserved * 2/3)
+        kv_quota = int(info.mcdMemoryReserved * CLUSTER_QUOTA_RATIO)
         if self.index_quota_percent:
                 index_quota = self.index_quota
         if not self.quota_percent:
