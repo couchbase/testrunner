@@ -76,7 +76,13 @@ class AutoRetryFailedRebalance(RebalanceBaseTest):
             self._recover_from_error(during_rebalance_failure)
             self._check_retry_rebalance_succeeded()
         else:
-            self.fail("Rebalance did not fail as expected. Hence could not validate auto-retry feature..")
+            # This is added as the failover task is not throwing exception
+            if self.rebalance_operation == "graceful_failover":
+                # Recover from the error
+                self._recover_from_error(during_rebalance_failure)
+                self._check_retry_rebalance_succeeded()
+            else:
+                self.fail("Rebalance did not fail as expected. Hence could not validate auto-retry feature..")
         finally:
             if self.disable_auto_failover:
                 self.rest.update_autofailover_settings(True, 120)
@@ -227,6 +233,7 @@ class AutoRetryFailedRebalance(RebalanceBaseTest):
             self._delete_rebalance_test_condition(test_failure_condition)
 
     def _rebalance_operation(self, rebalance_operation):
+        self.log.info("Starting rebalance operation of type : {0}".format(rebalance_operation))
         if rebalance_operation == "rebalance_out":
             operation = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], self.servers[1:])
         elif rebalance_operation == "rebalance_in":
@@ -240,13 +247,13 @@ class AutoRetryFailedRebalance(RebalanceBaseTest):
         elif rebalance_operation == "graceful_failover":
             # TODO : retry for graceful failover is not yet implemented
             operation = self.cluster.async_failover([self.master], failover_nodes=[self.servers[1]],
-                                                    graceful=True)
+                                                    graceful=True, wait_for_pending=120)
         return operation
 
     def _check_retry_rebalance_succeeded(self):
+        self.sleep(self.sleep_time)
         result = json.loads(self.rest.get_pending_rebalance_info())
         self.log.info(result)
-        self.sleep(self.sleep_time)
         retry_after_secs = result["retry_after_secs"]
         attempts_remaining = result["attempts_remaining"]
         retry_rebalance = result["retry_rebalance"]
@@ -254,7 +261,7 @@ class AutoRetryFailedRebalance(RebalanceBaseTest):
         while attempts_remaining:
             # wait for the afterTimePeriod for the failed rebalance to restart
             self.sleep(retry_after_secs, message="Waiting for the afterTimePeriod to complete")
-            try :
+            try:
                 result = self.rest.monitorRebalance()
                 msg = "monitoring rebalance {0}"
                 self.log.info(msg.format(result))
