@@ -172,6 +172,11 @@ INDEX_QUOTA = 256
 FTS_QUOTA = 512
 EVENTING_QUOTA = 256
 CBAS_QUOTA = 1024
+""" when we run with small server, it needs to increase cluster quota so that small
+    server could have many services in.
+    Default value is 0.67
+"""
+CLUSTER_QUOTA_RATIO = 0.67
 LINUX_COUCHBASE_BIN_PATH = "/opt/couchbase/bin/"
 LINUX_NONROOT_CB_BIN_PATH = "~/opt/couchbase/bin/"
 NR_INSTALL_LOCATION_FILE = "nonroot_install_location.txt"
