@@ -25,7 +25,7 @@ from fts.fts_base import FTSIndex, FTSBaseTest
 from pytests.fts.fts_callable import FTSCallable
 from cbas.cbas_base import CBASBaseTest
 from pprint import pprint
-from testconstants import CB_REPO
+from testconstants import CB_REPO, INDEX_QUOTA
 from testconstants import MV_LATESTBUILD_REPO
 from testconstants import SHERLOCK_BUILD_REPO
 from testconstants import COUCHBASE_VERSION_2
@@ -231,6 +231,12 @@ class NewUpgradeBaseTest(QueryHelperTests,EventingBaseTest, FTSBaseTest):
 
         if 4.5 > float(self.initial_version[:3]):
             self.gsi_type = "forestdb"
+        for service in set_services:
+            if "index" in service:
+                self.log.info("set index quota to {0}".format(INDEX_QUOTA))
+                RestConnection(servers[0]).set_service_memoryQuota(service='indexMemoryQuota',
+                                                                   memoryQuota=INDEX_QUOTA)
+                break
         self.quota = self._initialize_nodes(self.cluster, servers,
                                             self.disabled_consistent_view,
                                             self.rebalanceIndexWaitingDisabled,
