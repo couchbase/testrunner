@@ -1603,7 +1603,7 @@ class RemoteMachineShellConnection:
     def set_vbuckets_win(self, build, vbuckets):
         bin_path = WIN_COUCHBASE_BIN_PATH
         bin_path = bin_path.replace("\\", "")
-        build = build.replace('-', '.')
+        build = re.sub(r'(?<=[.?!])( +|\d)-', r'', build)
         src_file = bin_path + "install/cb_winsvc_start_{0}.bat".format(build)
         des_file = "/tmp/cb_winsvc_start_{0}_{1}.bat".format(build, self.ip)
         local_file = "/tmp/cb_winsvc_start_{0}_{1}.bat_tmp".format(build, self.ip)
@@ -1650,7 +1650,7 @@ class RemoteMachineShellConnection:
     def set_fts_query_limit_win(self, build, name, value, ipv6=False):
         bin_path = WIN_COUCHBASE_BIN_PATH
         bin_path = bin_path.replace("\\", "")
-        build = build.replace('-', '.')
+        build = re.sub(r'(?<=[.?!])( +|\d)-', r'', build)
         src_file = bin_path + "install/cb_winsvc_start_{0}.bat".format(build)
         des_file = "/tmp/cb_winsvc_start_{0}_{1}.bat".format(build, self.ip)
         local_file = "/tmp/cb_winsvc_start_{0}_{1}.bat_tmp".format(build, self.ip)
