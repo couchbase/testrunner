@@ -974,7 +974,7 @@ class RemoteMachineShellConnection:
 
         elif self.info.distribution_type.lower() == 'mac':
             command = "cd ~/Downloads ; rm -rf couchbase-server* ;"\
-                      " rm -rf Couchbase\ Server.app ; curl -O {0}".format(url)
+                      " rm -rf Couchbase\ Server.app ; curl -o {0} {1}".format(filename, url)
             output, error = self.execute_command(command)
             self.log_command_output(output, error)
             output, error = self.execute_command('ls -lh  ~/Downloads/%s' % filename)
@@ -2052,10 +2052,25 @@ class RemoteMachineShellConnection:
             """ close Safari browser before install """
             self.terminate_process(self.info, "/Applications/Safari.app/Contents/MacOS/Safari")
             o, r = self.execute_command("ps aux | grep Archive | awk '{print $2}' | xargs kill -9")
-            self.sleep(20)
             output, error = self.execute_command("cd ~/Downloads ; open couchbase-server*.zip")
-            self.log_command_output(output, error)
-            self.sleep(20)
+            extracted = False
+            count = 1
+            if not output:
+                log.info("\n****** waiting to unzip file in server: {0}".format(self.ip))
+                while not extracted:
+                    found, error = self.execute_command("ls ~/Downloads/couchbase-server*/",
+                                                         debug=False)
+                    if "Couchbase Server.app" not in found:
+                        time.sleep(10)
+                        count += 1
+                    else:
+                        extracted = True
+            else:
+                found, error = self.execute_command("ls ~/Downloads/couchbase-server*/",
+                                                     debug=False)
+                if "Couchbase Server.app" not in found:
+                    raise Exception("Faile to open zip file")
+
             cmd1 = "mv ~/Downloads/couchbase-server*/Couchbase\ Server.app /Applications/"
             cmd2 = "sudo xattr -d -r com.apple.quarantine /Applications/Couchbase\ Server.app"
             cmd3 = "open /Applications/Couchbase\ Server.app"

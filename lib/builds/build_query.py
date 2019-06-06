@@ -316,6 +316,14 @@ class BuildQuery(object):
             build.url_latest_build = "{4}{0}_{1}_{3}.setup.{2}"\
                              .format(product, os_architecture,
                              deliverable_type, build_details, CB_LATESTBUILDS_REPO)
+        elif deliverable_type == "zip":
+            if not re.match(r'[1-9].[0-9].[0-9]$', build_version):
+                if build_version[:5] in COUCHBASE_RELEASE_FROM_VERSION_3:
+                    os_name = "macos"
+                    build.url = "{6}{0}/{1}_{4}-{5}_{2}.{3}"\
+                                .format(build_version[:build_version.find('-')],
+                                product, os_architecture, deliverable_type,
+                                build_details[:5],os_name, CB_RELEASE_REPO)
         else:
             """ check match full version x.x.x-xxxx """
             if not re.match(r'[1-9].[0-9].[0-9]$', build_version):
