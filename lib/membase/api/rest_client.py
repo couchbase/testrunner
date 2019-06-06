@@ -2472,11 +2472,12 @@ class RestConnection(object):
             settings.enabled = json_parsed["enabled"]
             settings.count = json_parsed["count"]
             settings.timeout = json_parsed["timeout"]
-            settings.can_abort_rebalance = json_parsed["canAbortRebalance"]
             settings.failoverOnDataDiskIssuesEnabled = json_parsed["failoverOnDataDiskIssues"]["enabled"]
             settings.failoverOnDataDiskIssuesTimeout = json_parsed["failoverOnDataDiskIssues"]["timePeriod"]
             settings.maxCount = json_parsed["maxCount"]
             settings.failoverServerGroup = json_parsed["failoverServerGroup"]
+            if json_parsed["canAbortRebalance"]:
+                settings.can_abort_rebalance = json_parsed["canAbortRebalance"]
         return settings
 
     def update_autofailover_settings(self, enabled, timeout, canAbortRebalance=False, enable_disk_failure=False,

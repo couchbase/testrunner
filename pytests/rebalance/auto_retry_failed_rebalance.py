@@ -308,9 +308,9 @@ class AutoRetryFailedRebalance(RebalanceBaseTest):
 
     def _induce_rebalance_test_condition(self, test_failure_condition):
         if test_failure_condition == "verify_replication":
-            set_command = 'testconditions:set({0}, {fail, \"default\"})'.format(test_failure_condition)
+            set_command = "testconditions:set(verify_replication, {fail, \"" + "default" + "\"})"
         elif test_failure_condition == "backfill_done":
-            set_command = 'testconditions:set({0}, {for_vb_move, \"default\", fail})'.format(test_failure_condition)
+            set_command = "testconditions:set(backfill_done, {for_vb_move, \"" + "default\", 1 , " + "fail})"
         else:
             set_command = "testconditions:set({0}, fail)".format(test_failure_condition)
         get_command = "testconditions:get({0})".format(test_failure_condition)
