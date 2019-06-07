@@ -96,6 +96,9 @@ CB_VERSION_NAME = {"0.0":"master", "4.0":"sherlock", "4.1":"sherlock",
                    "6.0":"alice",
                    "6.5":"mad-hatter"}
 
+MACOS_NAME = {"10.10":"Yosemite", "10.11":"El Capitan", "10.12":"Sierra", "10.13":"High Sierra",
+              "10.14":"Mojave", "10.15":"Catalina"}
+
 SYSTEMD_SERVER = ["centos 7", "suse 12", "ubuntu 16.04", "ubuntu 18.04",
                   "debian gnu/linux 8", "debian gnu/linux 9", "rhel8"]
 WIN_MEMBASE_DATA_PATH = '/cygdrive/c/Program\ Files/Membase/Server/var/lib/membase/data/'
