@@ -1,5 +1,6 @@
 import logger
 from lib.membase.api.rest_client import RestConnection
+import time
 
 class N1QLCallable:
     """
@@ -26,7 +27,7 @@ class N1QLCallable:
         res = RestConnection(node).query_tool(query)
         return res
 
-    def create_gsi_index(self, keyspace="", name="", fields="", using="gsi", is_primary=False, index_condition=""):
+    def create_gsi_index(self, keyspace="", name="", fields="", using="gsi", is_primary=False, index_condition="", time_to_wait=30):
         index_not_exists = self.run_n1ql_query("select * from system:indexes where name='{0}' and keyspace_id='{1}'".format(name, keyspace))['metrics']['resultCount'] == 0
         if index_not_exists:
             self.log.info("creating index: {0} {1} {2}".format(keyspace, name, using))
@@ -37,10 +38,17 @@ class N1QLCallable:
                     self.run_n1ql_query("CREATE INDEX {0} ON `{1}`({2}) WHERE {3}  USING {4}".format(name, keyspace, fields, index_condition, using))
                 else:
                     self.run_n1ql_query("CREATE INDEX {0} ON `{1}`({2}) USING {3}".format(name, keyspace, fields, using))
+            attempts = 0
+            while attempts < time_to_wait:
+                index_state = self.run_n1ql_query("select state from system:indexes where name='{0}' and keyspace_id='{1}'".format(name, keyspace))
+                if index_state and index_state["results"] and index_state["results"][0]["state"] == "online":
+                    break
+                time.sleep(1)
+                attempts = attempts + 1
         else:
             self.log.info("index {0} on `{1}` already exests".format(name, keyspace))
 
-    def drop_gsi_index(self, name="", keyspace="", is_primary=False):
+    def drop_gsi_index(self, name="", keyspace="", is_primary=False, time_to_wait=30):
         self.log.info("dropping index: {0}.{1}".format(keyspace, name))
         index_exists = self.run_n1ql_query("select * from system:indexes where name='{0}' and keyspace_id='{1}'".format(name, keyspace))['metrics']['resultCount'] == 1
         if index_exists:
@@ -48,6 +56,15 @@ class N1QLCallable:
                 self._drop_primary_index(keyspace)
             else:
                 self._drop_index(keyspace, name)
+            attempts = 0
+            while attempts < time_to_wait:
+                index_exists = self.run_n1ql_query(
+                    "select * from system:indexes where name='{0}' and keyspace_id='{1}'".format(name, keyspace))[
+                                   'metrics']['resultCount'] == 1
+                if not index_exists:
+                    break
+                time.sleep(1)
+                attempts = attempts + 1
         else:
             self.log.info("index: {0}.{1} does not exist. Nothing to drop.".format(keyspace, name))
 
