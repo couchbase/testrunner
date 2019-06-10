@@ -28,8 +28,11 @@ class AutoRetryFailedRebalance(RebalanceBaseTest):
                                              maxAttempts=self.maxAttempts)
         self.rebalance_operation = self.input.param("rebalance_operation", "rebalance_out")
         self.disable_auto_failover = self.input.param("disable_auto_failover", True)
+        self.auto_failover_timeout = self.input.param("auto_failover_timeout", 120)
         if self.disable_auto_failover:
             self.rest.update_autofailover_settings(False, 120)
+        else:
+            self.rest.update_autofailover_settings(True, self.auto_failover_timeout)
 
     def tearDown(self):
         self.reset_retry_rebalance_settings()
@@ -231,6 +234,38 @@ class AutoRetryFailedRebalance(RebalanceBaseTest):
             if self.disable_auto_failover:
                 self.rest.update_autofailover_settings(True, 120)
             self._delete_rebalance_test_condition(test_failure_condition)
+
+    def test_auto_retry_of_failed_rebalance_with_autofailvoer_enabled(self):
+        before_rebalance_failure = self.input.param("before_rebalance_failure", "stop_server")
+        # induce the failure before the rebalance starts
+        self._induce_error(before_rebalance_failure)
+        try:
+            operation = self._rebalance_operation(self.rebalance_operation)
+            operation.result()
+        except Exception as e:
+            self.log.info("Rebalance failed with : {0}".format(str(e)))
+            if self.auto_failover_timeout < self.afterTimePeriod:
+                self.sleep(self.auto_failover_timeout)
+                result = json.loads(self.rest.get_pending_rebalance_info())
+                self.log.info(result)
+                retry_rebalance = result["retry_rebalance"]
+                if retry_rebalance != "not_pending":
+                    self.fail("Auto-failover did not cancel pending retry of the failed rebalance")
+            else:
+                try:
+                    self._check_retry_rebalance_succeeded()
+                except Exception as e:
+                    if "Retrying of rebalance still did not help" not in str(e):
+                        self.fail("retry rebalance succeeded even without failover")
+                    self.sleep(self.auto_failover_timeout)
+                    self.cluster.rebalance(self.servers[:self.nodes_init], [], [])
+        else:
+            self.fail("Rebalance did not fail as expected. Hence could not validate auto-retry feature..")
+        finally:
+            if self.disable_auto_failover:
+                self.rest.update_autofailover_settings(True, 120)
+            self.start_server(self.servers[1])
+            self.stop_firewall_on_node(self.servers[1])
 
     def _rebalance_operation(self, rebalance_operation):
         self.log.info("Starting rebalance operation of type : {0}".format(rebalance_operation))
