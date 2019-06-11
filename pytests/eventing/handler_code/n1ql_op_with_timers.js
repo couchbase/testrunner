@@ -14,11 +14,25 @@ function OnDelete(meta) {
 }
 function NDtimerCallback(context) {
     var docID = context.docID;
+    while(true){
+    try{
     var query = DELETE FROM dst_bucket where meta().id = $docID;
-//    query.execQuery();
+    break;
+    }
+    catch(e){
+    log(e);
+    }
+    }
 }
 function timerCallback(context) {
     var docID = context.docID;
+    while(true){
+    try{
     var query = INSERT INTO dst_bucket ( KEY, VALUE ) VALUES ( $docID ,'timerCallback');
-//    query.execQuery();
+     break;
+    }
+    catch(e){
+    log(e);
+    }
+    }
 }

@@ -12,13 +12,29 @@ function OnDelete(meta) {
     var context = {docID : meta.id};
     createTimer(NDtimerCallback,  expiry, meta.id, context);
 }
+
 function NDtimerCallback(context) {
     var docID = context.docID;
+    while(true){
+    try{
     var query = DELETE FROM dst_bucket2 where meta().id = $docID;
-//    query.execQuery();
+    break;
+    }
+    catch(e){
+    log(e);
+    }
+    }
 }
+
 function timerCallback(context) {
     var docID = context.docID;
+    while(true){
+    try{
     var query = INSERT INTO dst_bucket2 ( KEY, VALUE ) VALUES ( $docID ,'timerCallback');
-//    query.execQuery();
+    break;
+    }
+    catch(e){
+    log(e);
+    }
+    }
 }
