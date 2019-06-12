@@ -195,8 +195,12 @@ class EventingN1QL(EventingBaseTest):
         body = self.create_save_function_body(self.function_name, HANDLER_CODE_ERROR.RANDOM,
                                               dcp_stream_boundary="from_now")
         # MB-27126
-        self.deploy_function(body, deployment_fail=False)
-        # TODO : more assertion needs to be validate after MB-27126
+        try:
+            self.deploy_function(body,deployment_fail=True)
+        except Exception as e:
+            if "Handler code is missing OnUpdate() and OnDelete() functions. At least one of them is needed to deploy the handler" not in str(e):
+                self.fail("Function deployment succeeded with missing OnUpdate() and OnDelete()")
+
 
     def test_anonymous_with_cron_timer(self):
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
