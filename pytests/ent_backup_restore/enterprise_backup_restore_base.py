@@ -20,7 +20,8 @@ from testconstants import LINUX_COUCHBASE_BIN_PATH,\
                           WIN_COUCHBASE_BIN_PATH_RAW, WIN_COUCHBASE_BIN_PATH, WIN_TMP_PATH_RAW,\
                           MAC_COUCHBASE_BIN_PATH, LINUX_ROOT_PATH, WIN_ROOT_PATH,\
                           WIN_TMP_PATH, STANDARD_BUCKET_PORT, WIN_CYGWIN_BIN_PATH
-from testconstants import INDEX_QUOTA, FTS_QUOTA, COUCHBASE_FROM_MAD_HATTER
+from testconstants import INDEX_QUOTA, FTS_QUOTA, COUCHBASE_FROM_MAD_HATTER,\
+                          CLUSTER_QUOTA_RATIO
 from security.rbac_base import RbacBase
 from couchbase.bucket import Bucket
 from lib.memcached.helper.data_helper import VBucketAwareMemcached, MemcachedClientHelper
@@ -253,6 +254,10 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                                             self.services_init, start_node=0)
         if not self.master_services:
             self.master_services = ["kv"]
+        self.restore_services = self.get_services([self.backupset.restore_cluster_host],
+                                                   self.services_init, start_node=0)
+        if not self.restore_services:
+            self.restore_services = ["kv"]
         self.per_node = self.input.param("per_node", True)
         if not os.path.exists(self.backup_validation_files_location):
             os.mkdir(self.backup_validation_files_location)
@@ -587,14 +592,17 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             bucket_compression_mode = self.restore_compression_mode
         if not self.skip_buckets:
             rest_conn = RestConnection(self.backupset.restore_cluster_host)
+            restore_cluster_services = rest_conn.get_nodes_services()
+            restore_services = restore_cluster_services.values()[0]
+            self.log.info("Services in restore cluster: {0}".format(restore_services))
             rest_helper = RestHelper(rest_conn)
             total_mem = rest_conn.get_nodes_self().mcdMemoryReserved
-            ram_size = rest_conn.get_nodes_self().mcdMemoryReserved * 2 / 3
+            ram_size = rest_conn.get_nodes_self().mcdMemoryReserved * CLUSTER_QUOTA_RATIO
             has_index_node = False
-            if "index" in self.master_services[0]:
+            if "index" in restore_services:
                 has_index_node = True
                 ram_size = int(ram_size) - INDEX_QUOTA
-            if "fts" in self.master_services[0]:
+            if "fts" in restore_services:
                 ram_size = int(ram_size) - FTS_QUOTA
             all_buckets = self.total_buckets
             if len(self.buckets) > 0:

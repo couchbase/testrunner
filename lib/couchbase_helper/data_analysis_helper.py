@@ -780,7 +780,7 @@ class DataCollector(object):
     def get_kv_dump_from_backup_file(self, server, cli_command, cmd_ext,
                                      backup_dir, master_key, buckets):
         """
-            Extract key value from database file shard_0.fdb
+            Extract key value from database file shard_0.sqlite.0
             Return: key, kv store name, status and value
         """
         conn = RemoteMachineShellConnection(server)
@@ -790,47 +790,41 @@ class DataCollector(object):
         for bucket in buckets:
             backup_data[bucket.name] = {}
             print "---- Collecting data in backup repo"
-            cmd1 = "ls {0}/backup/{1}*/{2}*/data | grep \.fdb | wc -l "\
-                                            .format(backup_dir, now.year, bucket.name)
-            data_files, error = conn.execute_command(cmd1)
-            if data_files and (int(data_files[0]) > 0 and int(data_files[0]) <= 1024):
-                if master_key == "random_keys":
-                    master_key = ".\{12\}$"
-                dump_output = []
-                for i in range(0, int(data_files[0])):
-                    cmd2 = "{0}forestdb_dump{1} --plain-meta "\
-                      "{2}/backup/{3}*/{4}*/data/shard_{5}.fdb.0 | grep -A 8 '^Doc\sID:\s{6}' "\
-                                                      .format(cli_command, cmd_ext,\
-                                                       backup_dir, now.year, bucket.name,\
-                                                       i, master_key)
-                    output, error = conn.execute_command(cmd2, debug=False)
-                    if output:
-                        """ remove empty element """
-                        output = [x.strip(' ') for x in output]
-                        """ remove '--' element """
-                        output = [ x for x in output if not "--" in x ]
-                        key_ids       =  [x.split(":")[1].strip(' ') for x in output[0::9]]
-                        key_partition =  [x.split(":")[1].strip(' ') for x in output[1::9]]
-                        key_status    =  [x.split(":")[-1].strip(' ') for x in output[6::9]]
-                        key_value = []
-                        for x in output[8::9]:
-                            if x.split(":",1)[1].strip(' ').startswith("{"):
-                                key_value.append(x.split(":",1)[1].strip())
-                            else:
-                                key_value.append(x.split(":")[-1].strip(' '))
-                        for idx, key in enumerate(key_ids):
-                            backup_data[bucket.name][key] = \
-                               {"KV store name":key_partition[idx], "Status":key_status[idx],
-                                "Value":key_value[idx]}
-                        status = True
+            if master_key == "random_keys":
+                master_key = ".\{12\}$"
+            dump_output = []
+            for i in range(0, 1024):
+                cmd2 = "{0}cbsqlitedump{1} "\
+                       " -f {2}/backup/{3}*/{4}*/data/shard_{5}.sqlite.0 | grep -A 8 'Key: {6}' "\
+                                                  .format(cli_command, cmd_ext,\
+                                                   backup_dir, now.year, bucket.name,\
+                                                   i, master_key)
+                output, error = conn.execute_command(cmd2, debug=False)
+                if output:
+                    """ remove empty element """
+                    output = [x.strip(' ') for x in output]
+                    """ remove '--' element """
+                    output = [ x for x in output if not "--" in x ]
+                    key_ids       =  [x.split(":")[1].strip(' ') for x in output[0::9]]
+                    key_partition =  [x.split(":")[1].strip(' ') for x in output[1::9]]
+                    key_status    =  [x.split(":")[1].strip(' ') for x in output[4::9]]
+                    key_value = []
+                    for x in output[8::9]:
+                        if x.split(":",1)[1].strip(' ').startswith("{"):
+                            key_value.append(x.split(":",1)[1].strip())
+                        else:
+                            key_value.append(x.split(":")[-1].strip(' '))
+                    for idx, key in enumerate(key_ids):
+                        backup_data[bucket.name][key] = \
+                           {"KV store name":key_partition[idx], "Status":key_status[idx],
+                            "Value":key_value[idx]}
+                    status = True
 
-                if not backup_data[bucket.name]:
-                    print "Data base of bucket {0} is empty".format(bucket.name)
-                    return  backup_data, status
-                print "---- Done extract data from {0} backup files in backup repo of bucket {1}"\
-                                                                   .format(data_files, bucket.name)
-            else:
-                raise Exception("Could not find file shard*.fdb at {0}".format(server.ip))
+            if not backup_data[bucket.name]:
+                print "Data base of bucket {0} is empty".format(bucket.name)
+                return  backup_data, status
+            print "---- Done extract data from backup files in backup repo of bucket {0}"\
+                                                                   .format(bucket.name)
         return backup_data, status
 
     def get_views_definition_from_backup_file(self, server, backup_dir, buckets):
