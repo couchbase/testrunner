@@ -89,6 +89,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.multi_num_shards = self.input.param("multi_num_shards", False)
         self.shards_action = self.input.param("shards_action", None)
         self.bkrs_flag = self.input.param("bkrs_flag", None)
+        self.sqlite_storage = self.input.param("sqlite_storage", False)
         self.force_restart_erlang = self.input.param("force_restart_erlang", False)
         self.force_restart_couchbase_server = \
                           self.input.param("force_restart_couchbase_server", False)
@@ -345,6 +346,16 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             args += " --disable-ft-indexes"
         if self.backupset.disable_data:
             args += " --disable-data"
+        if self.vbucket_filter:
+            if self.vbucket_filter == "empty":
+                args += " --vbucket-filter "
+            elif self.vbucket_filter == "all":
+                all_vbuckets = "0"
+                for x in range (1, 1024):
+                    all_vbuckets += "," + str(x)
+                args += " --vbucket-filter {0}".format(all_vbuckets)
+            else:
+                args += " --vbucket-filter {0}".format(self.vbucket_filter)
         remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, args)
         if del_old_backup:
@@ -419,7 +430,12 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             args += " --value-compression compressed"
         if self.num_shards is not None:
             args += " --shards {0} ".format(self.num_shards)
-
+        """
+           MB-33698: there are changes in cbbackupmgr
+           file chunking and sqlite will be set as default
+        """
+        if self.sqlite_storage:
+            args += " --storage sqlite "
         user_env = ""
         password_env = ""
         if self.backupset.user_env:
@@ -692,17 +708,6 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                 args += " --replace-ttl-with {0}".format(self.replace_ttl_with)
             else:
                 args += " --replace-ttl {0}".format(self.replace_ttl)
-        if self.vbucket_filter:
-            if self.vbucket_filter == "empty":
-                args += " --vbucket-filter "
-            elif self.vbucket_filter == "all":
-                all_vbuckets = "0"
-                for x in range (1, 1023):
-                    all_vbuckets += "," + str(x)
-                args += " --vbucket-filter {0}".format(all_vbuckets)
-            else:
-                args += " --vbucket-filter {0}".format(self.vbucket_filter)
-
         command = "{3} {2} {0}/cbbackupmgr {1}".format(self.cli_command_location, args,
                                                    password_env, user_env)
         output, error = shell.execute_command(command)
@@ -877,8 +882,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
     def backup_compact_deleted_keys_validation(self, delete_keys):
         self.log.info("Check deleted keys status in file after compact")
         conn = RemoteMachineShellConnection(self.backupset.backup_host)
-        output, error = conn.execute_command("ls %s/backup/201*/default*/data "\
-                                                     % self.backupset.directory)
+        output, error = conn.execute_command("ls {0}/backup/201*/default*/data "\
+                                                     .format(self.backupset.directory))
         deleted_key_status = {}
         if "shard_0.fdb" in output:
             cmd = "%sforestdb_dump%s --plain-meta --no-body "\
@@ -890,14 +895,14 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                 key_ids = [x.split(":")[1].strip(' ') for x in dump_output[0::8]]
                 miss_keys = [x for x in delete_keys if x not in key_ids]
                 if miss_keys:
-                    raise Exception("Lost some keys %s ", miss_keys)
+                    raise Exception("Lost some keys {0} ".format(miss_keys))
                 partition_ids =  [x.split(":")[1].strip(' ') for x in dump_output[1::8]]
                 status_ids =     [x.split(" ")[-3].strip(' ') for x in dump_output[6::8]]
                 for idx, key in enumerate(key_ids):
                     deleted_key_status[key] = \
                            {"KV store name":partition_ids[idx], "Status":status_ids[idx]}
                     if status_ids[idx] != "deleted":
-                        raise Exception("key %s status was not deleted. " % key)
+                        raise Exception("key {0} status was not deleted. ".format(key))
             else:
                 raise Exception("backup compaction failed to keep delete docs in file")
         else:
@@ -1641,58 +1646,70 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
 
     def _validate_restore_vbucket_filter(self):
         data_collector = DataCollector()
-        vbucket_filter = self.vbucket_filter.split(",")
+        if "," in self.vbucket_filter:
+            vbucket_filter = [int(x) for x in self.vbucket_filter.split(",")]
+        elif "-" in self.vbucket_filter:
+            vbucket_filter = []
+            vbuckets_range = [int(x) for x in self.vbucket_filter.split("-")]
+            for i in range(vbuckets_range[0], vbuckets_range[1] + 1):
+                vbucket_filter.append(i)
+        else:
+            vbucket_filter = self.vbucket_filter.split("")
         shell = RemoteMachineShellConnection(self.backupset.backup_host)
         rest = RestConnection(self.backupset.restore_cluster_host)
-        restore_buckets_items = rest.get_buckets_itemCount()
         restore_buckets = rest.get_buckets()
+        for bucket in restore_buckets:
+            bucket_ready = RestHelper(rest).vbucket_map_ready(bucket.name)
+            if not bucket_ready:
+                self.fail("Restore bucket {0} not ready after 120 seconds".format(bucket.name))
+        restore_buckets_items = rest.get_buckets_itemCount()
+
         for bucket in self.buckets:
             output, error = shell.execute_command("ls {0}/backup/*/{1}*/data "\
                                              .format(self.backupset.directory, bucket.name))
             filter_vbucket_keys = {}
             total_filter_keys = 0
+            backup_files = []
+            backup_data = []
             """ get vbucket keys pair in data base """
-            if "shard_0.fdb" in output:
-                for vb in vbucket_filter:
-                    cmd = "{0}forestdb_dump{1} --plain-meta --no-body --kvs partition{3} "\
-                      "{2}/backup/*/*/data/shard_0.fdb | grep 'Doc ID'"\
-                                         .format(self.cli_command_location, self.cmd_ext,\
-                                                             self.backupset.directory, vb)
-                    dump_output, error = shell.execute_command(cmd)
-                    if dump_output:
-                        dump_output = [x.replace("Doc ID: ", "") for x in dump_output]
-
-                        filter_vbucket_keys[vb] = dump_output
-                        total_filter_keys += len(dump_output)
-                        if self.debug_logs:
-                            print("dump output: ", dump_output)
-                if filter_vbucket_keys:
-                    if int(restore_buckets_items[bucket.name]) != total_filter_keys:
-                        mesg = "** Failed to restore keys from vbucket-filter. "
-                        mesg += "\nTotal filter keys in backup file {0}".format(total_filter_keys)
-                        mesg += "\nTotal keys in bucket {0}: {1}".format(bucket.name,
-                                                                         restore_buckets_items)
-                        self.fail(mesg)
-                    else:
-                        self.log.info("Success restore items from vbucket-filter")
-                        vbuckets = rest.get_vbuckets(bucket.name)
-                        headerInfo, bucket_data = \
-                               data_collector.collect_data([self.backupset.restore_cluster_host],
-                                                           [bucket], perNode=False,
-                                                           getReplica=False, mode="memory")
-                        client = VBucketAwareMemcached(rest, bucket.name)
-                        self.log.info(" ** vbuckets should be restore: {0}".format(vbucket_filter))
-                        for key in bucket_data[bucket.name]:
-                            vBucketId = client._get_vBucket_id(key)
-                            if self.debug_logs:
-                                print("This key {0} in vbucket {1}".format(key, vBucketId))
-                            if str(vBucketId) not in vbucket_filter:
-                                self.fail("vbucketId {0} of key {1} not from vbucket filters {2}"\
-                                               .format(vBucketId, key, vbucket_filter))
+            self.log.info("Collecting data from backup repo ...")
+            for vb in vbucket_filter:
+                cmd = "{0}cbsqlitedump{1} --no-meta --no-body "\
+                  " -f {2}/backup/*/*/data/shard_{3}.sqlite.0 | grep 'Key:'"\
+                                 .format(self.cli_command_location, self.cmd_ext,\
+                                                     self.backupset.directory, vb)
+                dump_output, error = shell.execute_command(cmd, debug=False)
+                if dump_output:
+                    dump_output = [x.replace("Key: ", "") for x in dump_output]
+                    filter_vbucket_keys[vb] = dump_output
+                    total_filter_keys += len(dump_output)
+                    if self.debug_logs:
+                        print("dump output: ", dump_output)
+            if filter_vbucket_keys:
+                if int(restore_buckets_items[bucket.name]) != total_filter_keys:
+                    mesg = "** Failed to restore keys from vbucket-filter. "
+                    mesg += "\nTotal filter keys in backup file {0}".format(total_filter_keys)
+                    mesg += "\nTotal keys in bucket {0}: {1}".format(bucket.name,
+                                                                     restore_buckets_items)
+                    self.fail(mesg)
                 else:
-                    self.log.info("No keys with vbucket filter {0} restored".format(vbucket_filter))
+                    self.log.info("Success restore items from vbucket-filter")
+                    vbuckets = rest.get_vbuckets(bucket.name)
+                    headerInfo, bucket_data = \
+                           data_collector.collect_data([self.backupset.restore_cluster_host],
+                                                       [bucket], perNode=False,
+                                                       getReplica=False, mode="memory")
+                    client = VBucketAwareMemcached(rest, bucket.name)
+                    self.log.info(" ** vbuckets should be restore: {0}".format(vbucket_filter))
+                    for key in bucket_data[bucket.name]:
+                        vBucketId = client._get_vBucket_id(key)
+                        if self.debug_logs:
+                            print("This key {0} in vbucket {1}".format(key, vBucketId))
+                        if vBucketId not in vbucket_filter:
+                            self.fail("vbucketId {0} of key {1} not from vbucket filters {2}"\
+                                           .format(vBucketId, key, vbucket_filter))
             else:
-                raise Exception("file shard_0.fdb did not created ")
+                self.log.info("No keys with vbucket filter {0} restored".format(vbucket_filter))
         shell.disconnect()
 
     def _validate_restore_replace_ttl_with(self, ttl_set):
