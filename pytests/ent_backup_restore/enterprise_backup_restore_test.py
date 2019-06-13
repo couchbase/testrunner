@@ -116,7 +116,9 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                 if self.same_cluster:
                     self._initialize_nodes(Cluster(), self.servers[:self.nodes_init])
                 else:
-                    self._initialize_nodes(Cluster(), self.input.clusters[0][:self.nodes_init])
+                    rest = RestConnection(self.backupset.restore_cluster_host)
+                    rest.force_eject_node()
+                    rest.init_node()
                 self.log.info("Done reset cluster")
             self.sleep(10)
 

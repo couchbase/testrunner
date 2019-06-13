@@ -12,7 +12,7 @@ from copy import deepcopy
 from threading import Thread
 from TestInput import TestInputSingleton
 from testconstants import MIN_KV_QUOTA, INDEX_QUOTA, FTS_QUOTA, CBAS_QUOTA
-from testconstants import COUCHBASE_FROM_VERSION_4, IS_CONTAINER
+from testconstants import COUCHBASE_FROM_VERSION_4, IS_CONTAINER, CLUSTER_QUOTA_RATIO
 
 
 try:
@@ -880,7 +880,7 @@ class RestConnection(object):
             time.sleep(1)
             kv_quota = int(self.get_nodes_self().mcdMemoryReserved)
         info = self.get_nodes_self()
-        kv_quota = int(info.mcdMemoryReserved * 2 / 3)
+        kv_quota = int(info.mcdMemoryReserved * CLUSTER_QUOTA_RATIO)
 
         cb_version = info.version[:5]
         if cb_version in COUCHBASE_FROM_VERSION_4:
