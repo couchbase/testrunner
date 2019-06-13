@@ -84,7 +84,7 @@ class DirectoryStructureValidations(BackupRestoreValidationBase):
                 else:
                     buck['data'] = {}
                     for i in range(0, int(self.backupset.threads)):
-                        shard = 'shard_{0}.fdb'.format(i)
+                        shard = 'shard_{0}.sqlite.0'.format(i)
                         buck['data'][shard] = shard
         return json_helper.object
 

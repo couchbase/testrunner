@@ -1176,7 +1176,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             if self.cluster_new_role in users_can_not_backup_all:
                 error_found = False
                 error_messages = ["Error backing up cluster: Forbidden",
-                                  "Could not find file shard_0.fdb",
+                                  "Could not find file shard_0.sqlite",
                                   "Error backing up cluster: Invalid permissions",
                                   "Database file is empty",
                                   "Error backing up cluster: Unable to find the latest vbucket"]
@@ -3500,7 +3500,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         data_dir = o[0]
         conn.execute_command("dd if=/dev/zero of=/tmp/entbackup/backup/" +
                              str(self.backups[0]) +
-                             "/" + data_dir + "/data/shard_0.fdb" +
+                             "/" + data_dir + "/data/shard_0.sqlite" +
                              " bs=1024 count=100 seek=10 conv=notrunc")
         output, error = self.backup_restore()
         self.assertTrue("Restore failed due to an internal issue, see logs for details" in output[-1],
@@ -3759,7 +3759,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             else:
                 if self.multi_num_shards:
                     self.num_shards = self.first_bk_num_shards
-                result, mesg = self._validate_num_files(".fdb", self.num_shards, self.buckets[0].name)
+                result, mesg = self._validate_num_files(".sqlite", self.num_shards, self.buckets[0].name)
                 if not result:
                     self.fail(mesg)
                 self._shards_modification(self.shards_action)

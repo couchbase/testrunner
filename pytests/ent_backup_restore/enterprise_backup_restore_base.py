@@ -90,7 +90,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.multi_num_shards = self.input.param("multi_num_shards", False)
         self.shards_action = self.input.param("shards_action", None)
         self.bkrs_flag = self.input.param("bkrs_flag", None)
-        self.sqlite_storage = self.input.param("sqlite_storage", False)
+        self.sqlite_storage = self.input.param("sqlite_storage", True)
         self.force_restart_erlang = self.input.param("force_restart_erlang", False)
         self.force_restart_couchbase_server = \
                           self.input.param("force_restart_couchbase_server", False)
@@ -893,9 +893,9 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         output, error = conn.execute_command("ls {0}/backup/201*/default*/data "\
                                                      .format(self.backupset.directory))
         deleted_key_status = {}
-        if "shard_0.fdb" in output:
-            cmd = "%sforestdb_dump%s --plain-meta --no-body "\
-                  "%s/backup/201*/default*/data/shard_0.fdb | grep -A 6 ent-backup "\
+        if "shard_0.sqlite.0" in output:
+            cmd = "{0}cbsqlitedump{1} "\
+                  " -f {2}/backup/201*/default*/data/shard_0.sqlite.0 | grep -A 6 ent-backup "\
                                          % (self.cli_command_location, self.cmd_ext,\
                                          self.backupset.directory)
             dump_output, error = conn.execute_command(cmd)
@@ -914,7 +914,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             else:
                 raise Exception("backup compaction failed to keep delete docs in file")
         else:
-            raise Exception("file shard_0.fdb did not created ")
+            raise Exception("file shard_0.sqlite did not created ")
         conn.disconnect()
         return deleted_key_status
 
@@ -1414,7 +1414,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         if status:
             if output:
                 for x in output:
-                    if "shard_0.fdb" in x:
+                    if "shard_0.sqlite.0" in x:
                         if x.strip().split()[0][-2:] in unit_size:
                             file_info["file_size"] = \
                                       int(x.strip().split()[0][:-2].split(".")[0])
@@ -1948,7 +1948,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             else:
                 backup_date = output[0]
 
-            cmd2 = "ls {0}/backup/{1}/{2}*/data/ | grep{3} .fdb | wc -l"\
+            cmd2 = "ls {0}/backup/{1}/{2}*/data/ | grep{3} .sqlite.0 | wc -l"\
                            .format(self.backupset.directory, backup_date,
                                    bucket.name, self.cmd_ext)
             output, error = shell.execute_command(cmd2)
@@ -1957,17 +1957,17 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
 
             if action == "remove":
                 self.log.info("Remove a shard in backup repo")
-                cmd = "cd {0}/backup/{1}*/{2}*/data/; rm -f shard_1.fdb  "\
+                cmd = "cd {0}/backup/{1}*/{2}*/data/; rm -f shard_1.sqlite.0  "\
                              .format(self.backupset.directory,backup_date, bucket.name)
 
                 output, error = shell.execute_command(cmd)
-                cmd = "cd {0}/backup/{1}*/{2}*/data/; ls | grep{3} .fdb | wc -l"\
+                cmd = "cd {0}/backup/{1}*/{2}*/data/; ls | grep{3} .sqlite.0 | wc -l"\
                              .format(self.backupset.directory, backup_date, bucket.name,
                                      self.cmd_ext)
                 output, error = shell.execute_command(cmd)
             if action == "duplicate":
                 self.log.info("Duplicate one shard in backup repo")
-                cmd = "cd {0}/backup/{1}*/{2}*/data/; cp shard_1.fdb shard_{3}.fdb"\
+                cmd = "cd {0}/backup/{1}*/{2}*/data/; cp shard_1.sqlite.0 shard_{3}.sqlite.0"\
                                                       .format(self.backupset.directory,
                                                        backup_date, bucket.name, num_shards + 1)
                 output, error = shell.execute_command(cmd)
@@ -1977,7 +1977,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                     self.fail("This test needs to set 20 shards to run")
                 if num_shards > 0:
                     self.log.info("Corrupted a shard in backup repo")
-                    cmd = "cd {0}/backup/{1}*/{2}*/data/; echo 'Hello world' > shard_1.fdb"\
+                    cmd = "cd {0}/backup/{1}*/{2}*/data/; echo 'Hello world' > shard_1.sqlite.0"\
                                               .format(self.backupset.directory, backup_date,
                                                       bucket.name)
                     output, error = shell.execute_command(cmd)
@@ -1990,14 +1990,14 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         for bucket in self.buckets:
             vbuckets_per_shard[bucket.name] = {}
             print "---- Collecting vbuckets in each shard in backup repo"
-            cmd1 = "ls {0}/backup/{1}*/{2}*/data | grep \.fdb | wc -l "\
+            cmd1 = "ls {0}/backup/{1}*/{2}*/data | grep \.sqlite | wc -l "\
                                  .format(self.backupset.directory, now.year, bucket.name)
             num_shards, error = shell.execute_command(cmd1)
 
             if num_shards and int(num_shards[0]) > 0:
                 for i in range(0, int(num_shards[0])):
                     cmd2 = "{0}forestdb_dump{1} --plain-meta "\
-                      "{2}/backup/{3}*/{4}*/data/shard_{5}.fdb | grep partition | wc -l "\
+                      "{2}/backup/{3}*/{4}*/data/shard_{5}.sqlite.0 | grep partition | wc -l "\
                                               .format(self.cli_command_location, self.cmd_ext,\
                                                       self.backupset.directory, now.year,\
                                                       bucket.name, i)
@@ -2713,7 +2713,7 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         conn.log_command_output(o, e)
         data_dir = o[0]
         o, e = conn.execute_command("dd if=/dev/zero of=" + self.backupset.directory + "/" + self.backupset.name + "/" +
-                                    backup_to_corrupt + "/" + data_dir + "/data/shard_0.fdb" +
+                                    backup_to_corrupt + "/" + data_dir + "/data/shard_0.sqlite.0" +
                                     " bs=1024 count=100 seek=10 conv=notrunc")
         conn.log_command_output(o, e)
         conn.disconnect()
