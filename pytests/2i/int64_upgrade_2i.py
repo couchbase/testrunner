@@ -284,6 +284,81 @@ class UpgradeSecondaryIndexInt64(UpgradeSecondaryIndex):
                 self._update_int64_dataset()
                 self._query_for_long_num()
 
+    def test_online_upgrade_with_rebalance_stats(self):
+        upgrade_nodes = self.servers[:self.nodes_init]
+        create_index_query1 = "CREATE INDEX idx ON default(name) USING GSI  WITH {'nodes': ['%s:%s']}" % (self.servers[1].ip,self.servers[1].port)
+        self.n1ql_helper.run_cbq_query(query=create_index_query1,
+                                       server=self.n1ql_node)
+        if self.disable_plasma_upgrade:
+            self._install(self.nodes_in_list, version=self.upgrade_to)
+            rebalance = self.cluster.async_rebalance(
+                self.servers[:self.nodes_init],
+                [self.nodes_in_list[0]], [],
+                services=["index"])
+            rebalance.result()
+            self.sleep(30)
+            self.disable_upgrade_to_plasma(self.nodes_in_list[0])
+        for node in upgrade_nodes:
+            node_rest = RestConnection(node)
+            node_info = "{0}:{1}".format(node.ip, node.port)
+            node_services_list = node_rest.get_nodes_services()[node_info]
+            node_services = [",".join(node_services_list)]
+            log.info("Rebalancing the node out...")
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],[], [node])
+            rebalance.result()
+            self.sleep(30)
+            active_nodes = [srvr for srvr in self.servers if srvr.ip != node.ip]
+            log.info("Upgrading the node...")
+            upgrade_th = self._async_update(self.upgrade_to, [node])
+            for th in upgrade_th:
+                 th.join()
+            self.sleep(60)
+            log.info("==== Upgrade Complete ====")
+            log.info("Adding node back to cluster...")
+            rebalance = self.cluster.async_rebalance(active_nodes,
+                                             [node], [],
+                                             services=node_services)
+            rebalance.result()
+            self.sleep(30)
+            node_version = RestConnection(node).get_nodes_versions()
+            log.info("{0} node Upgraded to: {1}".format(node.ip, node_version))
+        msg = "Cluster is not healthy after upgrade"
+        self.assertTrue(self.wait_until_cluster_is_healthy(), msg)
+        log.info("Cluster is healthy")
+        self.add_built_in_server_user()
+        self.sleep(20)
+        self.assertTrue(self.wait_until_indexes_online(), "Some indexes are not online")
+        log.info("All indexes are online")
+
+        index_map = self.get_index_stats()
+        self.log.info(index_map)
+        for index in index_map['default']:
+            self.assertTrue("key_size_distribution" in str(index_map['default'][index]))
+        self.rest.flush_bucket("default")
+        self.sleep(60)
+        string_70 = "x" * 70
+        string_3000 = "x" * 3000
+        string_103000 = "x" * 103000
+
+        insert_query1 = 'INSERT INTO default (KEY, VALUE) VALUES ("id1", { "name" : "%s" })' % string_70
+        insert_query2 = 'INSERT INTO default (KEY, VALUE) VALUES ("id2", { "name" : {"name": "%s", "fake": "%s"} })' % (
+            string_70, string_3000)
+        insert_query5 = 'INSERT INTO default (KEY, VALUE) VALUES ("id5", { "name" : "%s" })' % string_103000
+
+        self.n1ql_helper.run_cbq_query(query=insert_query1,
+                                       server=self.n1ql_node)
+        self.n1ql_helper.run_cbq_query(query=insert_query2,
+                                       server=self.n1ql_node)
+        self.n1ql_helper.run_cbq_query(query=insert_query5,
+                                       server=self.n1ql_node)
+        index_map = self.get_index_stats()
+        self.log.info(index_map)
+        for index in index_map['default']:
+            if index == 'idx':
+                self.log.info(index_map['default'][index]['key_size_distribution'])
+                self.assertTrue(str(index_map['default'][index]['key_size_distribution']) == "{u'(0-64)': 0, u'(257-1024)': 0, u'(65-256)': 1, u'(4097-102400)': 0, u'(1025-4096)': 1, u'(102401-max)': 1}")
+
+
     def _create_int64_dataset(self):
         generators = []
         document_template = '{{"name":"{0}", "int_num": {1}, "long_num":{2}, "long_num_partial":{3}, "long_arr": {4},' \
