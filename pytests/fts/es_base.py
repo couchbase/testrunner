@@ -2,6 +2,8 @@ import httplib2
 import json
 from tasks.taskmanager import TaskManager
 from tasks.task import *
+from remote.remote_util import RemoteMachineShellConnection, RemoteUtilHelper
+import time
 
 class BLEVE:
     STOPWORDS = ['i', 'me', 'my', 'myself', 'we', 'our', 'ours', 'ourselves',
@@ -217,6 +219,24 @@ class ElasticSearchBase(object):
             self.__log.error("socket error while connecting to {0} error {1} ".
                              format(api, e))
             raise ServerUnavailableException(ip=self.__host.ip)
+
+    def restart_es(self):
+        shell = RemoteMachineShellConnection(self.__host)
+        es_restart_cmd = "/etc/init.d/elasticsearch restart"
+        o, e = shell.execute_non_sudo_command(es_restart_cmd)
+        shell.log_command_output(o, e)
+
+        es_start = False
+        for i in range(2):
+            self.sleep(10)
+            if self.is_running():
+                es_start = True
+                break
+        if not es_start:
+            self.fail("Could not reach Elastic Search server on %s"
+                      % self.ip)
+        else:
+            self.__log.info("Restarted ES server %s successfully" % self.__host.ip)
 
     def is_running(self):
         """
@@ -498,3 +518,7 @@ class ElasticSearchBase(object):
         :return: List of all indices
         """
         return self.__indices
+
+    def sleep(self, timeout=1, message=""):
+        self.__log.info("sleep for {0} secs. {1} ...".format(timeout, message))
+        time.sleep(timeout)

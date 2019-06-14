@@ -3281,9 +3281,7 @@ class FTSBaseTest(unittest.TestCase):
                           " [elastic] section in your ini file,"
                           " else set \"compare_es\" as False")
             self.es = ElasticSearchBase(self.elastic_node, self.log)
-            if not self.es.is_running():
-                self.fail("Could not reach Elastic Search server on %s"
-                          % self.elastic_node.ip)
+            self.es.restart_es()
         else:
             self.es = None
         self.run_via_n1ql = self._input.param("run_via_n1ql", False)

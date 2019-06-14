@@ -216,7 +216,7 @@ class TestInputParser():
             elif section == 'tuq_client':
                 input.tuq_client = TestInputParser.get_tuq_config(config, section)
             elif section == 'elastic':
-                input.elastic = TestInputParser.get_elastic_config(config, section)
+                input.elastic = TestInputParser.get_elastic_config(config, section, global_properties)
             elif section == 'cbas':
                 input.cbas = TestInputParser.get_cbas_config(config, section)
             elif result is not None:
@@ -333,7 +333,7 @@ class TestInputParser():
         return conf
 
     @staticmethod
-    def get_elastic_config(config, section):
+    def get_elastic_config(config, section, global_properties):
         server = TestInputServer()
         options = config.options(section)
         for option in options:
@@ -345,6 +345,11 @@ class TestInputParser():
                 server.es_username = config.get(section, option)
             if option == 'es_password':
                 server.es_password = config.get(section, option)
+
+        if server.ssh_username == '' and 'username' in global_properties:
+            server.ssh_username = global_properties['username']
+        if server.ssh_password == '' and 'password' in global_properties:
+            server.ssh_password = global_properties['password']
         return server
 
     @staticmethod
