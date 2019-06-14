@@ -10,8 +10,7 @@ function DocTimerCallback(context) {
     try {
         src_bucket[context.docID] = context.random_text;
     } catch(e) {
-        //var time_rand = random_gen();
-        //dst_bucket[time_rand] = 'from DocTimerCallback';
+        log(e);
     }
 }
 function random_gen(){
