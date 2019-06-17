@@ -553,7 +553,7 @@ class EventingRebalance(EventingBaseTest):
             self.fail("rebalance failed with  error : {0}".format(str(ex)))
         finally:
             remote.start_server()
-            self.sleep(40, "Wait for server to start")
+            self.sleep(120, "Wait for server to start")
         # Wait for eventing to catch up with all the delete mutations and verify results
         # This is required to ensure eventing works after rebalance goes through successfully
         stats_src = RestConnection(self.master).get_bucket_stats(bucket=self.src_bucket_name)
