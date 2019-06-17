@@ -608,6 +608,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             if len(self.buckets) > 0:
                 all_buckets = len(self.buckets)
             bucket_size = self._get_bucket_size(ram_size, all_buckets)
+            if "index" in restore_services and "fts" in restore_services:
+                bucket_size = bucket_size * .8
             if self.dgm_run:
                 bucket_size = 256
 
