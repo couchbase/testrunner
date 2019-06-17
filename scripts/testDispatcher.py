@@ -66,8 +66,6 @@ def main():
 
     options, args = parser.parse_args()
 
-
-
     print 'the run is', options.run
     print 'the  version is', options.version
     releaseVersion = float( '.'.join( options.version.split('.')[:2]) )
@@ -75,18 +73,12 @@ def main():
 
     print 'nolaunch', options.noLaunch
     print 'os', options.os
-    #print 'url', options.url
-
-
     print 'url is', options.url
-
     print 'the reportedParameters are', options.dashboardReportedParameters
-
 
     # What do we do with any reported parameters?
     # 1. Append them to the extra (testrunner) parameters
     # 2. Append the right hand of the equals sign to the subcomponent to make a report descriptor
-
 
     if options.extraParameters is None:
         if options.dashboardReportedParameters is None:
@@ -98,13 +90,10 @@ def main():
         if options.dashboardReportedParameters is not None:
             runTimeTestRunnerParameters = options.extraParameters + ',' + options.dashboardReportedParameters
 
-
-
     #f = open(options.suiteFile)
     #data = f.readlines()
 
     testsToLaunch = []
-
     #for d in data:
      #  fields = d.split()
      #  testsToLaunch.append( {'descriptor':fields[0],'confFile':fields[1],'iniFile':fields[2],
@@ -125,12 +114,10 @@ def main():
                 if i < len(splitComponents) - 1:
                     componentString = componentString + ','
 
-
             queryString = "select * from `QE-Test-Suites` where \"{0}\" in partOf and component in [{1}] order by component;".format(options.run, componentString)
 
         else:
             # have a subcomponent, assume only 1 component
-
             splitSubcomponents = options.subcomponent.split(',')
             subcomponentString = ''
             for i in range( len(splitSubcomponents) ):
@@ -141,13 +128,19 @@ def main():
             queryString = "select * from `QE-Test-Suites` where \"{0}\" in partOf and component in ['{1}'] and subcomponent in [{2}];".\
                 format(options.run, options.component, subcomponentString)
 
-
     print 'the query is', queryString #.format(options.run, componentString)
     query = N1QLQuery(queryString )
     results = cb.n1ql_query( queryString )
 
-    framework = None
     for row in results:
+        # Setting default values
+        framework = "testrunner"
+        owner = 'QE'
+        initNodes = True
+        installParameters = 'None'
+        slave = 'P0'
+        mailing_list = 'qa@couchbase.com'
+        mode = 'java'
         try:
             data = row['QE-Test-Suites']
             data['config'] = data['config'].rstrip()       # trailing spaces causes problems opening the files
@@ -166,32 +159,19 @@ def main():
                     else:
                         if 'initNodes' in data:
                             initNodes = data['initNodes'].lower() == 'true'
-                        else:
-                            initNodes = True
                         if 'installParameters' in data:
                             installParameters = data['installParameters']
-                        else:
-                            installParameters = 'None'
                         if 'slave' in data:
                             slave = data['slave']
-                        else:
-                            slave = 'P0'
                         if 'owner' in data:
                             owner = data['owner']
-                        else:
-                            owner = 'QE'
                         if 'mailing_list' in data:
                             mailing_list = data['mailing_list']
-                        else:
-                            mailing_list = 'qa@couchbase.com'
                         if 'mode' in data:
                             mode = data["mode"]
-                        else:
-                            mode = 'java'
                         if 'framework' in data:
                             framework = data["framework"]
-                        else:
-                            framework = 'testrunner'
+
                         # if there's an additional pool, get the number
                         # of additional servers needed from the ini
                         addPoolServerCount = getNumberOfAddpoolServers(
@@ -199,6 +179,7 @@ def main():
                             options.addPoolId)
 
                         testsToLaunch.append({
+                            'framework': framework,
                             'component':data['component'],
                             'subcomponent':data['subcomponent'],
                             'confFile':data['confFile'],
@@ -228,32 +209,12 @@ def main():
     for i in testsToLaunch: print i['component'], i['subcomponent']
     print '\n\n'
 
-
-
-
-    launchStringBase = 'http://qa.sc.couchbase.com/job/test_suite_executor'
-
-    # optional add [-docker] [-Jenkins extension]
-    if options.serverType.lower() == 'docker':
-        launchStringBase = launchStringBase + '-docker'
-    if options.test:
-        launchStringBase = launchStringBase + '-test'
-#     if options.framework.lower() == "jython":
-    if framework == "jython":
-        launchStringBase = launchStringBase + '-jython'
-    if framework == "TAF":
-        launchStringBase = launchStringBase + '-TAF'
-    elif options.jenkins is not None:
-        launchStringBase = launchStringBase + '-' + options.jenkins
-
-
-
-    # this are VM/Docker dependent - or maybe not
+    launchStringBase = 'http://qa.sc.couchbase.com/job/{0}'
     launchString = launchStringBase + '/buildWithParameters?token=test_dispatcher&' + \
-                        'version_number={0}&confFile={1}&descriptor={2}&component={3}&subcomponent={4}&' + \
-                         'iniFile={5}&parameters={6}&os={7}&initNodes={' \
-                         '8}&installParameters={9}&branch={10}&slave={' \
-                         '11}&owners={12}&mailing_list={13}&mode={14}&timeout={15}'
+                        'version_number={1}&confFile={2}&descriptor={3}&component={4}&subcomponent={5}&' + \
+                         'iniFile={6}&parameters={7}&os={8}&initNodes={' \
+                         '9}&installParameters={10}&branch={11}&slave={' \
+                         '12}&owners={13}&mailing_list={14}&mode={15}&timeout={16}'
     if options.url is not None:
         launchString = launchString + '&url=' + options.url
 
@@ -315,7 +276,6 @@ def main():
                     else:
                         i = i + 1
 
-
                 if haveTestToLaunch:
                     # build the dashboard descriptor
                     dashboardDescriptor = urllib.quote(testsToLaunch[i]['subcomponent'])
@@ -326,7 +286,6 @@ def main():
                     # and this is the Jenkins descriptor
                     descriptor = urllib.quote(testsToLaunch[i]['component'] + '-' + testsToLaunch[i]['subcomponent'] +
                                         '-' + time.strftime('%b-%d-%X') + '-' + options.version )
-
 
                     # grab the server resources
                     # this bit is Docker/VM dependent
@@ -384,8 +343,6 @@ def main():
                         time.sleep(POLL_INTERVAL) # some error checking here at some point
                     else:
                         # and send the request to the test executor
-
-
                         # figure out the parameters, there are test suite specific, and added at dispatch time
                         if  runTimeTestRunnerParameters is None:
                             parameters = testsToLaunch[i]['parameters']
@@ -395,9 +352,22 @@ def main():
                             else:
                                 parameters = testsToLaunch[i]['parameters'] + ',' + runTimeTestRunnerParameters
 
+                        # this are VM/Docker dependent - or maybe not
+                        # optional add [-docker] [-Jenkins extension]
+                        base_url_str = "test_suite_executor"
+                        if options.serverType.lower() == 'docker':
+                            base_url_str = launchStringBase + '-docker'
+                        elif options.test:
+                            base_url_str = launchStringBase + '-test'
+                        elif testsToLaunch[i]['framework'] == "jython":
+                            base_url_str = launchStringBase + '-jython'
+                        elif testsToLaunch[i]['framework'] == "TAF":
+                            base_url_str = launchStringBase + '-TAF'
+                        elif options.jenkins is not None:
+                            base_url_str = launchStringBase + '-' + options.jenkins
 
-
-                        url = launchString.format(options.version,
+                        url = launchString.format(base_url_str,
+                                                  options.version,
                                                   testsToLaunch[i]['confFile'],
                                                   descriptor,
                                                   testsToLaunch[i]['component'],
@@ -415,7 +385,6 @@ def main():
                                                   testsToLaunch[i]['mode'],
                                                   testsToLaunch[i]['timeLimit'])
 
-
                         if options.serverType.lower() != 'docker':
                             r2 = json.loads(content)
                             servers = json.dumps(r2).replace(' ','').replace('[','', 1)
@@ -431,9 +400,8 @@ def main():
                                       '&addPoolServers=' +\
                                       urllib.quote(addPoolServers)
 
-
-                        print '\n', time.asctime( time.localtime(time.time()) ), 'launching ', url
-                        print url
+                        print '\n', time.asctime( time.localtime(time.time()) )
+                        print 'Launching ', url
 
                         if options.noLaunch:
                             # free the VMs
@@ -474,4 +442,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
