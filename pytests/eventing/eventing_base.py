@@ -114,7 +114,7 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         fh.close()
         body['depcfg'] = {}
         body['depcfg']['buckets'] = []
-        body['depcfg']['buckets'].append({"alias": self.dst_bucket_name, "bucket_name": self.dst_bucket_name})
+        body['depcfg']['buckets'].append({"alias": self.dst_bucket_name, "bucket_name": self.dst_bucket_name,"access": "rw"})
         if multi_dst_bucket:
             body['depcfg']['buckets'].append({"alias": self.dst_bucket_name1, "bucket_name": self.dst_bucket_name1})
         body['depcfg']['metadata_bucket'] = self.metadata_bucket_name

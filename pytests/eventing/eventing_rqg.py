@@ -120,7 +120,8 @@ class EventingRQG(EventingBaseTest):
                 for thread in threads:
                     thread.join()
                 key = datetime.datetime.now().time()
-                query = "insert into src_bucket (KEY, VALUE) VALUES (\"" + str(key) + "\",\"doc created\")"
+                query = "insert into src_bucket (KEY, VALUE) VALUES (\""+str(key)+"\",{\"email\":\"a@b.c\"})"
+                self.log.info("insert doc:{}".format(query))
                 self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_node)
                 self.sleep(10)
                 self.eventing_stats()
