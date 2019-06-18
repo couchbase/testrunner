@@ -1,18 +1,18 @@
-from newupgradebasetest import NewUpgradeBaseTest
 import Queue
 import copy
-from membase.helper.cluster_helper import ClusterOperationHelper
 import threading
 from random import randint
 from remote.remote_util import RemoteMachineShellConnection
+from couchbase_helper.documentgenerator import BlobGenerator
 from couchbase_helper.tuq_helper import N1QLHelper
 from eventing.eventing_base import EventingBaseTest
-from pytests.eventing.eventing_constants import HANDLER_CODE
 from lib.testconstants import STANDARD_BUCKET_PORT
 from membase.api.rest_client import RestConnection, RestHelper
-from couchbase_helper.documentgenerator import BlobGenerator
 from membase.helper.bucket_helper import BucketOperationHelper
-
+from membase.helper.cluster_helper import ClusterOperationHelper
+from pytests.eventing.eventing_constants import HANDLER_CODE
+from remote.remote_util import RemoteMachineShellConnection
+from newupgradebasetest import NewUpgradeBaseTest
 
 class UpgradeTests(NewUpgradeBaseTest, EventingBaseTest):
 
@@ -45,6 +45,7 @@ class UpgradeTests(NewUpgradeBaseTest, EventingBaseTest):
         self.metadata_bucket_name = self.input.param('metadata_bucket_name', 'metadata')
         self.create_functions_buckets = self.input.param('create_functions_buckets', True)
         self.use_memory_manager = self.input.param('use_memory_manager', True)
+        self.test_upgrade_with_xdcr = self.input.param('xdcr', False)
         self.final_events = []
         self.n1ql_helper = None
         self.total_buckets = 1
@@ -135,6 +136,10 @@ class UpgradeTests(NewUpgradeBaseTest, EventingBaseTest):
                                            self.after_upgrade_services_in, start_node = 0)
         self.fts_obj = None
         self.index_name_prefix = None
+        if self.test_upgrade_with_xdcr:
+            from pytests.xdcr.xdcr_callable import XDCRCallable
+            # Setup XDCR src and target clusters
+            self.xdcr_handle = XDCRCallable(self.servers[:self.nodes_init])
 
     def tearDown(self):
         super(UpgradeTests, self).tearDown()
@@ -1180,6 +1185,27 @@ class UpgradeTests(NewUpgradeBaseTest, EventingBaseTest):
                 queue.put(False)
         if queue is not None:
             queue.put(True)
+
+    def xdcr_create_replication(self):
+        try:
+            self.xdcr_handle._create_replication()
+        except Exception, ex:
+            self.log.info(ex)
+
+    def xdcr_set_replication_properties(self):
+        try:
+            param_str = self.__input.param(
+                "%s@%s" %
+                ("default", "C"), None)
+            self.xdcr_handle._set_replication_properties(param_str)
+        except Exception, ex:
+            self.log.info(ex)
+
+    def xdcr_get_replication_properties(self):
+        try:
+            self.xdcr_handle._get_replication_properties()
+        except Exception, ex:
+            self.log.info(ex)
 
     def create_n1ql_index_query(self, queue=None):
         try:
