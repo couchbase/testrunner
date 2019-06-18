@@ -551,7 +551,7 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
 
         self._create_fts_index(index_name="idx_beer_sample_fts", doc_count=7303, source_name='beer-sample')
 
-        n1ql_query = "select meta().id from `beer-sample` let res=true where search(`beer-sample`, {\"field\": \"state\", \"match\":\"California\"})=res"
+        n1ql_query = "select meta().id from `beer-sample` let res=true where search(`beer-sample`, {\"query\":{\"field\": \"state\", \"match\":\"California\"},\"size\":10000})=res"
         fts_request = {"query":{"field": "state", "match":"California"}, "size":10000}
         n1ql_results = self.run_cbq_query(n1ql_query)['results']
         total_hits, hits, took, status = rest.run_fts_query(index_name="idx_beer_sample_fts",
