@@ -90,7 +90,6 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.multi_num_shards = self.input.param("multi_num_shards", False)
         self.shards_action = self.input.param("shards_action", None)
         self.bkrs_flag = self.input.param("bkrs_flag", None)
-        self.sqlite_storage = self.input.param("sqlite_storage", True)
         self.force_restart_erlang = self.input.param("force_restart_erlang", False)
         self.force_restart_couchbase_server = \
                           self.input.param("force_restart_couchbase_server", False)
@@ -435,12 +434,6 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             args += " --value-compression compressed"
         if self.num_shards is not None:
             args += " --shards {0} ".format(self.num_shards)
-        """
-           MB-33698: there are changes in cbbackupmgr
-           file chunking and sqlite will be set as default
-        """
-        if self.sqlite_storage:
-            args += " --storage sqlite "
         user_env = ""
         password_env = ""
         if self.backupset.user_env:
@@ -1233,6 +1226,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                         value = value[1:-1]
                 else:
                     value = ",".join(value.split(',')[4:5])
+                    if value.startswith("b'"):
+                        value = value[2:-1]
                 buckets_data[bucket.name][key] = value
             self.log.info("*** Compare data in bucket and in backup file of bucket {0} ***"
                                                                       .format(bucket.name))
