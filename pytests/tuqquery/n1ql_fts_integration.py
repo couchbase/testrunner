@@ -440,7 +440,7 @@ class N1qlFTSIntegrationTest(QueryTests):
                                      "aa unnest aa.hits as ht order by ht.id) q1 ) a order by q1")
                     n1ql_query = ("select * from (select * from (select raw meta().id from test_bucket where string_field like '"+left_set_value+"%') q1"
                                      " " + operator + " "+ a_d + " " 
-                                     "select * from (select raw meta().id from test_bucket where string_field like '"+right_set_value+"%') q1) a order by q1")
+                                     "select * from (select raw meta().id from test_bucket where string_field like '"+right_set_value+"') q1) a order by q1")
 
                     for node in self.servers:
                         test_result = self._validate_query_against_node(node, services_map, fts_query, n1ql_query)
@@ -454,11 +454,6 @@ class N1qlFTSIntegrationTest(QueryTests):
                 "operator": "union",
                 "left_set_value": "test_string",
                 "right_set_value": "string data 1"
-            },
-            "test_intersect": {
-                "operator": "intersect",
-                "left_set_value": "test_string",
-                "right_set_value": "test_string"
             },
             "test_except": {
                 "operator": "except",
@@ -491,7 +486,7 @@ class N1qlFTSIntegrationTest(QueryTests):
                             "aa unnest aa.hits as ht order by ht.id ) q1) a order by q1"
                 n1ql_query = "select * from (select * from (select raw meta().id from test_bucket where string_field like '"+left_set_value+"%') q1 " \
                              + operator + a_d + \
-                             "select * from ( select raw meta().id from test_bucket where string_field like '"+right_set_value+"%') q1) a order by q1"
+                             "select * from ( select raw meta().id from test_bucket where string_field like '"+right_set_value+"') q1) a order by q1"
                 for node in self.servers:
                     test_result = self._validate_query_against_node(node, services_map, fts_query, n1ql_query)
                     self.assertEquals(test_result, False, "Node " + str(node) + " test is not failed.")
@@ -533,8 +528,10 @@ class N1qlFTSIntegrationTest(QueryTests):
         self.sleep(30)
         services_string = self.input.param("services_init", '')
         services = services_string.split("-")
+        new_services = []
         for service in services:
-            service.replace(":",",")
+            new_service = service.replace(":",",")
+            new_services.append(new_service)
         idx_result_node1_before_failover = self._run_query_against_node(self.servers[0], self.test_fts_query)
 
 
@@ -549,7 +546,7 @@ class N1qlFTSIntegrationTest(QueryTests):
                           idx_result_node1_before_failover == alias_result_node1_after_failover, True, "Results after failover are not the same.")
 
         self.cluster.rebalance(self.servers, [], [self.servers[2]])
-        self.cluster.rebalance(self.servers, [self.servers[2]], [], services=[services[2]])
+        self.cluster.rebalance(self.servers, [self.servers[2]], [], services=[new_services[2]])
 
         idx_result_node1_after_rebalance = self._run_query_against_node(self.servers[0], self.test_fts_query)
         alias_result_node1_after_rebalance = self._run_query_against_node(self.servers[0], self.test_fts_alias_query)
