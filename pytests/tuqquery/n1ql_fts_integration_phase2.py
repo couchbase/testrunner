@@ -204,7 +204,7 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
         test_cases = {
             "index_not_exists": {
                 "expected_result": "success",
-                "index_in_explain": "#primary"
+                "index_in_explain": "beer_primary"
             },
             "single_fts_index": {
                 "expected_result": "success",
