@@ -75,6 +75,7 @@ class QueryChainedLetTests(QueryTests):
         verify_11 = 'select 1 as a, join_mo+1 as b, (select join_day from default d2 use keys (select raw meta(d1).id from default d1 order by meta(d1).id limit 10) where join_day != (join_mo+1) order by join_day limit 10) as c from default d0 order by a, b, c limit 10'
 
         # full query
+        #/MB-34680
         query_12 = 'select a, b, c from default let a=join_yr, b=join_mo, c=join_day where (a > 100 OR c < 100) and b != 200 group by a,b,c having (a>b and b>c) or a == b+c order by a, b, c limit 10'
         verify_12 = 'select join_yr as a, join_mo as b, join_day as c from default where (join_yr > 100 OR join_day < 100) and join_mo != 200 group by join_yr, join_mo, join_day having (join_yr>join_mo and join_mo>join_day) or join_yr == join_mo+join_day order by join_yr, join_mo, join_day limit 10'
 
@@ -95,7 +96,6 @@ class QueryChainedLetTests(QueryTests):
         queries["k"] = {"queries": [query_11], "asserts": [self.verifier(verify_11)]}
         queries["l"] = {"queries": [query_12], "asserts": [self.verifier(verify_12)]}
         queries["m"] = {"queries": [query_13], "asserts": [self.verifier(verify_13)]}
-
         self.query_runner(queries)
 
     def test_basic_chained_letting(self):
