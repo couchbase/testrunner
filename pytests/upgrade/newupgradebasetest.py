@@ -18,6 +18,7 @@ from scripts.install import InstallerJob
 from builds.build_query import BuildQuery
 from couchbase_helper.tuq_generators import JsonGenerator
 from pytests.fts.fts_callable import FTSCallable
+from pytests.tuqquery.n1ql_callable import N1QLCallable
 from pprint import pprint
 from testconstants import CB_REPO
 from testconstants import MV_LATESTBUILD_REPO
@@ -1149,6 +1150,43 @@ class NewUpgradeBaseTest(BaseTestCase):
                               format(index.name,
                                      type,
                                      check_index_type))
+        except Exception, ex:
+            print ex
+            if queue is not None:
+                queue.put(False)
+        if queue is not None:
+            queue.put(True)
+
+    """ Use n1ql callable to create, query n1ql """
+    def create_n1ql_index_and_query(self, queue=None):
+        """
+        Call this before upgrade
+        1. creates a gsi index, one per bucket
+        2. Loads fts json data
+        3. Runs queries and compares the results against ElasticSearch
+        """
+        try:
+            n1ql_obj = N1QLCallable(self.servers)
+            for bucket in self.buckets:
+                n1ql_obj.create_gsi_index(keyspace=bucket.name, name="test_idx1",
+                                          fields="email", using="gsi", is_primary=False,
+                                          index_condition="")
+                result = n1ql_obj.run_n1ql_query("select * from system:indexes")
+                n1ql_obj.drop_gsi_index(keyspace=bucket.name, name="test_idx1",
+                                        is_primary=False)
+            #return self.n1ql_obj
+        except Exception, ex:
+            print ex
+            if queue is not None:
+                queue.put(False)
+        if queue is not None:
+            queue.put(True)
+
+    def run_n1ql_query(self, queue=None):
+        try:
+            self.log.info("Run queries again")
+            n1ql_obj = N1QLCallable(self.servers)
+            result = n1ql_obj.run_n1ql_query("select * from system:indexes")
         except Exception, ex:
             print ex
             if queue is not None:

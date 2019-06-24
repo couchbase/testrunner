@@ -1181,6 +1181,17 @@ class UpgradeTests(NewUpgradeBaseTest, EventingBaseTest):
         if queue is not None:
             queue.put(True)
 
+    def create_n1ql_index_query(self, queue=None):
+        try:
+            self.create_n1ql_index_and_query()
+            #return self.n1ql_obj
+        except Exception, ex:
+            self.log.info(ex)
+            if queue is not None:
+                queue.put(False)
+        if queue is not None:
+            queue.put(True)
+
     def cluster_stats(self, servers):
         self._wait_for_stats_all_buckets(servers)
 
