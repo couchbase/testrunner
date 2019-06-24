@@ -1224,12 +1224,10 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                     value = value.replace('""', '"')
                     if value.startswith('"') and value.endswith('"'):
                         value = value[1:-1]
-                    if value.startswith("b'"):
-                        value = value[2:-1]
                 else:
                     value = ",".join(value.split(',')[4:5])
-                    if value.startswith("b'"):
-                        value = value[2:-1]
+                if value.startswith("b'"):
+                    value = value[2:-1]
                 buckets_data[bucket.name][key] = value
             self.log.info("*** Compare data in bucket and in backup file of bucket {0} ***"
                                                                       .format(bucket.name))
