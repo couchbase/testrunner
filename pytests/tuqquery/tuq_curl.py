@@ -391,21 +391,6 @@ class QueryCurlTests(QueryTests):
         self.assertTrue(json_curl['metrics']['resultCount'] == 1 and
                         json_curl['results'][0]['result']['username'] == 'Bret')
 
-    '''Test request to the google maps api with an api key'''
-    def test_external_json_google_api_key(self):
-        # Test the google maps json endpoint with a valid api key and make sure it works
-        curl_output = self.shell.execute_command("%s --get https://maps.googleapis.com/maps/api/geocode/json "
-                                                 "-d 'address=santa+cruz&components=country:ES&key=AIzaSyCT6niGCMsgegJkQSYSqpoLZ4_rSO59XQQ'"
-                                                 % self.curl_path)
-        self.log.info(curl_output)
-        expected_curl = self.convert_list_to_json(curl_output[0])
-        url = "'https://maps.googleapis.com/maps/api/geocode/json'"
-        options= "{'get':True,'data': 'address=santa+cruz&components=country:ES&key=AIzaSyCT6niGCMsgegJkQSYSqpoLZ4_rSO59XQQ'}"
-        query="select curl("+ url +", %s" % options + ")"
-        curl = self.shell.execute_commands_inside(self.cbqpath,query,'', '', '', '', '')
-        actual_curl = self.convert_to_json(curl)
-        self.assertEqual(actual_curl['results'][0]['$1'], expected_curl)
-
     '''Test request to a JIRA json endpoint'''
     def test_external_json_jira(self):
         curl_output = self.shell.execute_command("%s https://jira.atlassian.com/rest/api/latest/issue/JRA-9"
