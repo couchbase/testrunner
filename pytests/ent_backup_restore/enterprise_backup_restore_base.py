@@ -351,9 +351,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         if self.backupset.disable_data:
             args += " --disable-data"
         if self.vbucket_filter:
-            if self.vbucket_filter == "empty":
-                args += " --vbucket-filter "
-            elif self.vbucket_filter == "all":
+            if self.vbucket_filter == "all":
                 all_vbuckets = "0"
                 for x in range (1, 1024):
                     all_vbuckets += "," + str(x)
