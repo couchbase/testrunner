@@ -298,18 +298,18 @@ class MemcachedClient(object):
         """Decrement or create the named counter."""
         return self.__incrdecr(memcacheConstants.CMD_DECR, key, amt, init, exp, collection)
 
-    def _doMetaCmd(self, cmd, key, value, cas, exp, flags, seqno, remote_cas, options, meta_len, collection):
-        extra = struct.pack('>IIQQIH', flags, exp, seqno, remote_cas, options, meta_len)
-        return self._doCmd(cmd, key, value, extra, cas, collection)
+    def _doMetaCmd(self, cmd, key, value, cas, exp, flags, seqno, remote_cas):
+        extra = struct.pack('>IIQQ', flags, exp, seqno, remote_cas)
+        return self._doCmd(cmd, key, value, extra, cas)
 
     def set(self, key, exp, flags, val, collection=None):
         """Set a value in the memcached server."""
         return self._mutate(memcacheConstants.CMD_SET, key, exp, flags, 0, val, collection)
 
-    def setWithMeta(self, key, value, exp, flags, seqno, remote_cas, options, meta_len, collection=None):
+    def setWithMeta(self, key, value, exp, flags, seqno, remote_cas):
         """Set a value and its meta data in the memcached server."""
         return self._doMetaCmd(memcacheConstants.CMD_SET_WITH_META,
-                               key, value, 0, exp, flags, seqno, remote_cas, options, meta_len, collection)
+                               key, value, 0, exp, flags, seqno, remote_cas)
 
     def delWithMeta(self, key, exp, flags, seqno, remote_cas, collection=None):
         return self._doMetaCmd(memcacheConstants.CMD_DELETE_WITH_META,
