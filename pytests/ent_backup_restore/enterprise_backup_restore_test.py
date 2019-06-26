@@ -1101,6 +1101,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             5. Verify if backup command handles user role correctly
         """
         all_buckets = self.input.param("all_buckets", False)
+        backup_failed = False
         if self.create_fts_index:
             gen = DocumentGenerator('test_docs', '{{"age": {0}}}', xrange(100), start=0,
                                     end=self.num_items)
@@ -1123,14 +1124,14 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         if all_buckets:
             self.cluster_new_role = self.cluster_new_role + "[*]"
 
-        self.log.info("\n***** Create new user: %s with role: %s to do backup *****"
-                      % (self.cluster_new_user, self.cluster_new_role))
-        testuser = [{"id": "%s" % self.cluster_new_user,
-                     "name": "%s" % self.cluster_new_user,
+        self.log.info("\n***** Create new user: {0} with role: {1} to do backup *****"\
+                      .format(self.cluster_new_user, self.cluster_new_role))
+        testuser = [{"id": "{0}".format(self.cluster_new_user),
+                     "name": "{0}".format(self.cluster_new_user),
                      "password": "password"}]
-        rolelist = [{"id": "%s" % self.cluster_new_user,
-                     "name": "%s" % self.cluster_new_user,
-                     "roles": "%s" % self.cluster_new_role}]
+        rolelist = [{"id": "{0}".format(self.cluster_new_user),
+                     "name": "{0}".format(self.cluster_new_user),
+                     "roles": "{0}".format(self.cluster_new_role)}]
         users_can_backup_all = ["admin", "bucket_full_access[*]",
                                 "data_backup[*]"]
         users_can_not_backup_all = ["views_admin[*]", "replication_admin",
@@ -1143,25 +1144,28 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         try:
             status = self.add_built_in_server_user(testuser, rolelist)
             if not status:
-                self.fail("Fail to add user: %s with role: %s " \
-                          % (self.cluster_new_user,
+                self.fail("Fail to add user: {0} with role: {1} " \
+                          .format(self.cluster_new_user,
                              self.cluster_new_role))
             output, error = self.backup_cluster()
             success_msg = 'Backup successfully completed'
-            fail_msg = "Error backing up cluster:"
+            fail_msg = ["Error backing up cluster:"]
+            for bucket in self.buckets:
+                fail_msg.append('Backed up bucket "{0}" failed'.format(bucket.name))
             if self.cluster_new_role in users_can_backup_all:
                 if not self._check_output(success_msg, output):
-                    self.fail("User %s failed to backup data.\n"
-                              "Here is the output %s " % \
-                              (self.cluster_new_role, output))
+                    self.fail("User {0} failed to backup data.\n".format(self.cluster_new_role) + \
+                              "Here is the output {0} ".format(output))
             elif self.cluster_new_role in users_can_not_backup_all:
                 if not self._check_output(fail_msg, output):
                     self.fail("cbbackupmgr failed to block user to backup")
+                else:
+                    backup_failed = True
 
             status, _, message = self.backup_list()
             if not status:
                 self.fail(message)
-            if self.do_verify:
+            if self.do_verify and not backup_failed:
                 current_vseqno = self.get_vbucket_seqnos(self.cluster_to_backup,
                                                          self.buckets,
                                                          self.skip_consistency,
@@ -1181,32 +1185,36 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                                   "Could not find file shard_0.sqlite",
                                   "Error backing up cluster: Invalid permissions",
                                   "Database file is empty",
-                                  "Error backing up cluster: Unable to find the latest vbucket"]
+                                  "Error backing up cluster: Unable to find the latest vbucket",
+                                  "Failed to backup bucket"]
                 if self.do_verify:
-                    if str(e) in error_messages:
+                    if str(e) in error_messages or backup_failed:
                         error_found = True
                     if not error_found:
-                        raise Exception("cbbackupmgr does not block user role: %s to backup" \
-                                        % self.cluster_new_role)
+                        raise Exception("cbbackupmgr does not block user role: {0} to backup" \
+                                        .format(self.cluster_new_role))
                     if self.cluster_new_role == "views_admin[*]" and self.create_views:
                         status, mesg = self.validate_backup_views(self.backupset.backup_host)
                         if not status:
                             raise Exception(mesg)
                 if "Expected error message not thrown" in str(e):
-                    raise Exception("cbbackupmgr does not block user role: %s to backup" \
-                                    % self.cluster_new_role)
+                    raise Exception("cbbackupmgr does not block user role: {0} to backup" \
+                                    .format(self.cluster_new_role))
             if self.cluster_new_role in users_can_backup_all:
                 if not self._check_output(success_msg, output):
                     self.fail(e)
 
         finally:
-            self.log.info("Delete new create user: %s " % self.cluster_new_user)
+            if backup_failed:
+                self.log.info("cbbackupmgr blocked user: {0} to backup"\
+                                                 .format(self.cluster_new_role))
+            self.log.info("Delete new create user: {0} ".format(self.cluster_new_user))
             shell = RemoteMachineShellConnection(self.backupset.backup_host)
             curl_path = ""
             if self.os_name == "windows":
                 curl_path = self.cli_command_location
-            cmd = "%scurl%s -g -X %s -u %s:%s http://%s:8091/settings/rbac/users/local/%s" \
-                  % (curl_path,
+            cmd = "{0}curl{1} -g -X {2} -u {3}:{4} http://{5}:8091/settings/rbac/users/local/{6}"\
+                  .format(curl_path,
                      self.cmd_ext,
                      "DELETE",
                      self.master.rest_username,
