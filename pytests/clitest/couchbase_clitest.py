@@ -2584,7 +2584,7 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
                     self.log.info("logs dir successful created ")
                     output, error = self.shell.execute_command("ls %slogs"
                                                         % self.backup_path)
-                    if output and "backup.log" in output:
+                    if output and "backup-0.log" in output:
                         self.log.info("backup.log file successful created ")
                     else:
                         self.fail("fail to create backup.log file")
@@ -2638,7 +2638,7 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
                       Total dir and files:
                         bucket-config.json  data  full-text.json  gsi.json
                         range.json views.json """
-                backup_folder_content = ["analytics.json","bucket-config.json", "data",
+                backup_folder_content = ["bucket-config.json", "data",
                                          "full-text.json", "gsi.json",
                                           "range.json", "views.json"]
                 for bucket in self.buckets:

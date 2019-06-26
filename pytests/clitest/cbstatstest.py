@@ -83,6 +83,7 @@ class cbstatsTests(CliBaseTest):
             shell.disconnect()
             found_version = False
             if output:
+                self.log.info("\ngocb version: {0} ".format(output))
                 for ele in output:
                     if "gocb" in ele and self.software_version in ele:
                         found_version = True
