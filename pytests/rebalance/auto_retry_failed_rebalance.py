@@ -338,6 +338,7 @@ class AutoRetryFailedRebalance(RebalanceBaseTest):
         elif error_condition == "enable_firewall":
             self.stop_firewall_on_node(self.servers[1])
         elif error_condition == "reboot_server":
+            self.sleep(self.sleep_time * 4)
             # wait till node is ready after warmup
             ClusterOperationHelper.wait_for_ns_servers_or_assert([self.servers[1]], self, wait_if_warmup=True)
 
