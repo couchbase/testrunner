@@ -154,3 +154,29 @@ class EventingCurl(EventingBaseTest):
             self.sleep(20)
             # Wait for eventing to catch up with all the create mutations and verify results
             self.verify_eventing_results(self.function_name, 0,skip_stats_validation=True)
+
+        def test_curl_with_different_handlers_pause_resume_n1ql(self):
+            self.n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
+            self.n1ql_helper = N1QLHelper(shell=self.shell, max_verify=self.max_verify, buckets=self.buckets,
+                                          item_flag=self.item_flag, n1ql_port=self.n1ql_port,
+                                          full_docs_list=self.full_docs_list, log=self.log, input=self.input,
+                                          master=self.master, use_rest=True)
+            self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
+            gen_load_del = copy.deepcopy(self.gens_load)
+            body = self.create_save_function_body(self.function_name, self.handler_code,
+                                                  worker_count=3)
+            self.deploy_function(body)
+            # load some data
+            task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
+                                                    self.buckets[0].kvs[1], 'create', compression=self.sdk_compression)
+            self.pause_function(body)
+            task.result()
+            self.resume_function(body)
+            # Wait for eventing to catch up with all the create mutations and verify results
+            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016,skip_stats_validation=True)
+            # delete json documents
+            self.load(gen_load_del, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                      batch_size=self.batch_size, op_type='delete')
+            self.pause_resume_n(body,1)
+            self.verify_eventing_results(self.function_name, 0,skip_stats_validation=True)
+            self.undeploy_and_delete_function(body)
