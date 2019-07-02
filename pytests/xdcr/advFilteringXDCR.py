@@ -58,7 +58,6 @@ class XDCRAdvFilterTests(XDCRNewBaseTest):
         replications = self.src_rest.get_replications()
         self.verify_filtered_items(self.src_master, self.dest_master, replications)
         if rdirection == "bidirection":
-            self.load_data(self.dest_master.ip)
             replications = self.dest_rest.get_replications()
             self.verify_filtered_items(self.dest_master, self.src_master, replications, skip_index=True)
 

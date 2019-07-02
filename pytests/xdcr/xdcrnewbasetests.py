@@ -3625,6 +3625,8 @@ class XDCRNewBaseTest(unittest.TestCase):
                                  + "ON " + bucket)
 
     def _get_doc_count(self, server, filter_exp, bucket):
+        if "DATE" in filter_exp:
+            filter_exp = filter_exp.replace("DATE", '')
         doc_count = self.__execute_query(server, "SELECT COUNT(*) FROM "
                                          + bucket +
                                          " WHERE " + filter_exp)
