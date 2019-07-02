@@ -787,9 +787,8 @@ class XDCReplication:
             self.__from_bucket.name, self.__dest_cluster.get_name(),
             self.__to_bucket.name)
 
-    # get per replication params specified as from_bucket@cluster_name=
-    # eg. default@C1="xdcrFilterExpression:loadOne,xdcrCheckpointInterval:60,
-    # xdcrFailureRestartInterval:20"
+    # get per replication params specified as from_bucket@cluster_name=<setting>:<value>
+    # eg. default@C1=filter_expression:loadOne,failure_restart_interval:20
     def __parse_test_xdcr_params(self):
         param_str = self.__input.param(
             "%s@%s" %
@@ -801,14 +800,10 @@ class XDCReplication:
             )
         if 'filter_expression' in self.__test_xdcr_params:
             if self.__test_xdcr_params['filter_expression']:
-                masked_input = {"comma": ',', "star": '*', "dot": '.', "equals": '=', "{": '', "}": ''}
-                #need_to_encode = ['+']
+                masked_input = {"comma": ',', "star": '*', "dot": '.', "equals": '=', "{": '', "}": '', "colon": ':'}
                 for _ in masked_input:
                     self.__test_xdcr_params['filter_expression'] = self.__test_xdcr_params['filter_expression']\
                         .replace(_, masked_input[_])
-                #for _ in need_to_encode:
-                #    self.__test_xdcr_params['filter_expression'] = self.__test_xdcr_params['filter_expression'] \
-                #        .replace(_, urllib.quote_plus(_))
 
     def __convert_test_to_xdcr_params(self):
         xdcr_params = {}
@@ -3625,11 +3620,12 @@ class XDCRNewBaseTest(unittest.TestCase):
                                  + "ON " + bucket)
 
     def _get_doc_count(self, server, filter_exp, bucket):
-        if "DATE" in filter_exp:
-            filter_exp = filter_exp.replace("DATE", '')
-        doc_count = self.__execute_query(server, "SELECT COUNT(*) FROM "
-                                         + bucket +
-                                         " WHERE " + filter_exp)
+        if len(filter_exp) > 1:
+            if "DATE" in filter_exp:
+                filter_exp = filter_exp.replace("DATE", '')
+            doc_count = self.__execute_query(server, "SELECT COUNT(*) FROM "
+                                             + bucket +
+                                             " WHERE " + filter_exp)
         return doc_count if doc_count else 0
 
     def verify_filtered_items(self, src_master, dest_master, replications, skip_index=False):
@@ -3641,23 +3637,21 @@ class XDCRNewBaseTest(unittest.TestCase):
                 self._create_index(dest_master, bucket)
             if repl['filterExpression']:
                 filter_exp = repl['filterExpression']
-            else:
-                self.fail("Replication created without any filter.")
-            src_count = self._get_doc_count(src_master, filter_exp, bucket)
-            dest_count = self._get_doc_count(dest_master, filter_exp, bucket)
-            if src_count != dest_count:
-                self.fail("Doc count {0} on {1} does not match "
-                          "doc count {2} on {3} "
-                          "after applying filter {4}"
-                          .format(src_count, src_master.ip,
-                                  dest_count, dest_master.ip,
-                                  filter_exp))
-            self.log.info("Doc count {0} on {1} matches "
-                          "doc count {2} on {3} "
-                          "after applying filter {4}"
-                          .format(src_count, src_master.ip,
-                                  dest_count, dest_master.ip,
-                                  filter_exp))
+                src_count = self._get_doc_count(src_master, filter_exp, bucket)
+                dest_count = self._get_doc_count(dest_master, filter_exp, bucket)
+                if src_count != dest_count:
+                    self.fail("Doc count {0} on {1} does not match "
+                              "doc count {2} on {3} "
+                              "after applying filter {4}"
+                              .format(src_count, src_master.ip,
+                                      dest_count, dest_master.ip,
+                                      filter_exp))
+                self.log.info("Doc count {0} on {1} matches "
+                              "doc count {2} on {3} "
+                              "after applying filter {4}"
+                              .format(src_count, src_master.ip,
+                                      dest_count, dest_master.ip,
+                                      filter_exp))
 
     def verify_results(self, skip_verify_data=[], skip_verify_revid=[]):
         """Verify data between each couchbase and remote clusters.
