@@ -13,16 +13,22 @@ function OnDelete(meta) {
     createTimer(NDtimerCallback,  expiry, meta.id, context);
 }
 function NDtimerCallback(context) {
+    while(true){
     try {
         delete src_bucket[context.docID + "_sbm"];
+        break;
     } catch(e) {
         log(e);
     }
+    }
 }
 function timerCallback(context) {
+   while(true){
    try {
         src_bucket[context.docID] = context.random_text;
+        break;
     } catch(e) {
         log(e);
+    }
     }
 }
