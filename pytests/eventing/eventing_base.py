@@ -74,7 +74,7 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         self.cookies = self.input.param('cookies',False)
         self.bearer_key = self.input.param('bearer_key','')
         if self.hostname=='local':
-            self.insall_dependencies()
+            #self.insall_dependencies()
             s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             s.connect(("8.8.8.8", 80))
             ip = s.getsockname()[0]
@@ -613,9 +613,9 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         o=os.system('python scripts/curl_setup.py start')
         self.log.info("=== started docker container =======".format(o))
         self.sleep(10)
-        o=os.system('python scripts/curl_setup.py setup')
-        self.log.info("=== setup done =======")
-        self.log.info(o)
+        # o=os.system('python scripts/curl_setup.py setup')
+        # self.log.info("=== setup done =======")
+        # self.log.info(o)
 
     def teardown_curl(self):
         o = os.system('python scripts/curl_setup.py stop')
