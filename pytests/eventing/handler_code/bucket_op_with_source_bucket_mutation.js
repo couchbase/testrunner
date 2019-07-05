@@ -4,6 +4,7 @@ function OnUpdate(doc, meta) {
     try {
         var time_rand = random_gen();
         src_bucket[meta.id + time_rand] = doc;
+        break;
     } catch(e) {
         log(e);
     }
