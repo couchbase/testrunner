@@ -287,11 +287,16 @@ class AutoRetryFailedRebalance(RebalanceBaseTest):
 
     def _check_retry_rebalance_succeeded(self):
         self.sleep(self.sleep_time)
-        result = json.loads(self.rest.get_pending_rebalance_info())
-        self.log.info(result)
-        retry_after_secs = result["retry_after_secs"]
-        attempts_remaining = result["attempts_remaining"]
-        retry_rebalance = result["retry_rebalance"]
+        for i in range(10):
+            self.log.info("Getting stats : try {0}".format(i))
+            result = json.loads(self.rest.get_pending_rebalance_info())
+            self.log.info(result)
+            if "retry_after_secs" in result:
+                retry_after_secs = result["retry_after_secs"]
+                attempts_remaining = result["attempts_remaining"]
+                retry_rebalance = result["retry_rebalance"]
+                break
+            self.sleep(self.sleep_time)
         self.log.info("Attempts remaining : {0}, Retry rebalance : {1}".format(attempts_remaining, retry_rebalance))
         while attempts_remaining:
             # wait for the afterTimePeriod for the failed rebalance to restart
