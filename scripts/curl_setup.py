@@ -17,12 +17,9 @@ def start_image(client,name):
    if not run:
        id=client.containers.run(name,ports={1080:1080}, detach=True)
        print(id)
-       setup()
    else:
-       print("container is already running")
-       res = requests.put('http://localhost:1080/mockserver/retrieve?type=ACTIVE_EXPECTATIONS')
-       print(json.dumps(res.json(), indent=4, sort_keys=True))
-       #reset()
+       print("container is already running,hence resetting it")
+       reset()
 
 def stop_containar(client,name):
     for container in client.containers.list(filters={"ancestor":"jamesdbloom/mockserver:latest","status":"running"}):
