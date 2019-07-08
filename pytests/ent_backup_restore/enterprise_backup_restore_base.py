@@ -1582,10 +1582,11 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                                             .format(log_archive_env,
                                                     self.cli_command_location,
                                                     args)
+        collection_time = datetime.datetime.utcnow()
         output, error = shell.execute_command(command)
         shell.disconnect()
         if self._check_output("Collecting logs succeeded", output):
-            self._verify_cbbackupmgr_logs()
+            self._verify_cbbackupmgr_logs(collection_time)
         elif self.backupset.no_log_output_flag and self._check_output("error", output):
             self.log.info("This is negative test")
         elif self.backupset.ex_logs_path:
@@ -1596,7 +1597,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         else:
             self.fail("Failed to collect logs. Output: {0}".format(output))
 
-    def _verify_cbbackupmgr_logs(self):
+    def _verify_cbbackupmgr_logs(self, log_collect_datetime):
         shell = RemoteMachineShellConnection(self.backupset.backup_host)
         self.log.info("\n**** start to verify cbbackupmgr logs ****")
 
@@ -1631,6 +1632,27 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                 if log_name == ele:
                     output, _ = shell.execute_command("ls {0}"\
                                                .format(logs_path + "/" + log_name))
+
+                    # Check that timestamps for log files have been correctly generated
+                    version = RestConnection(self.backupset.backup_host).get_nodes_version()
+                    if "6.5" <= version[:3]:
+                        time_check_output, _ = shell.execute_command(
+                            "ls -l --time-style=long-iso {0}".format(logs_path + "/" + log_name))
+                        for log_file in time_check_output[1:]:
+
+                            # Extract and parse timestamp
+                            file_name = log_file.split()[-1]
+                            file_timestamp = ' '.join(log_file.split()[5:7])
+                            file_timestamp = datetime.datetime.strptime(
+                                file_timestamp, "%Y-%m-%d %H:%M")
+
+                            # Ensure collection times are correct, with a grace period of 30 minutes
+                            if not file_timestamp - log_collect_datetime < datetime.timedelta(minutes=30):
+                                self.fail(
+                                    "File '{}' timestamp of '{}' inconsistent "
+                                    "with collection time of '{}' ".format(
+                                        file_name, file_timestamp, log_collect_datetime))
+
         if "C_" in output:
             win_path = "/C_/tmp/entbackup"
             output, _ = shell.execute_command("ls {0}".format(logs_path + win_path))
