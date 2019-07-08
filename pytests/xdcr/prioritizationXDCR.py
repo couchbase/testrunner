@@ -25,17 +25,17 @@ class XDCRPrioritization(XDCRNewBaseTest):
     def print_status(self, bucket, server, param, actual, expected, match):
         if match:
             self.log.info("For replication {0}->{0} "
-                          "on source {1}, actual {2}:{3} matches expected {2}:{4}". \
+                          "from source {1}, actual {2}:{3} matches expected {2}:{4}". \
                           format(bucket, server, param, actual, expected))
         else:
             self.fail("For replication {0}->{0} "
-                      "on source {1}, actual {2}:{3} does NOT match expected {2}:{4}". \
+                      "from source {1}, actual {2}:{3} does NOT match expected {2}:{4}". \
                       format(bucket, server, param, actual, expected))
 
     def __verify_dcp_priority(self, server, expected_priority):
         shell = RemoteMachineShellConnection(server)
         rest = RestConnection(server)
-        match = True
+        match = False
         for bucket in rest.get_buckets():
             repl = rest.get_replication_for_buckets(bucket.name, bucket.name)
             # Taking 10 samples of DCP priority ~5 seconds apart.
@@ -45,8 +45,8 @@ class XDCRPrioritization(XDCRNewBaseTest):
                 for stat in output:
                     if re.search("eq_dcpq:xdcr:dcp_" + repl['id'] + ".*==:priority:", stat):
                         actual_priority = stat.split("==:priority:")[1].lstrip()
-                        if actual_priority not in expected_priority[bucket.name]:
-                            match = False
+                        if actual_priority in expected_priority[bucket.name]:
+                            match = True
                         self.log.info("Sample {0}:".format(sample + 1))
                         self.print_status(bucket.name, server.ip, "dcp priority",
                                           actual_priority,
