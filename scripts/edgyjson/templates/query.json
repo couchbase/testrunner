@@ -1,0 +1,56 @@
+{
+  "int": {
+    "min": 0,
+    "max": 100,
+    "operations": ["ARITHMETIC_UNARIES", "ARITHMETIC_BINARIES", "COMMON"],
+    "relations": ["=", "==", "!=", "<>", ">", ">=", "<", "<="],
+    "operands": ["int", "int-negative", "float", "float-negative", "PI()", "E()"],
+    "generate_filter" : "True"
+  },
+   "float": {
+    "min": 0,
+    "max": 100,
+    "operations": ["ARITHMETIC_UNARIES", "ARITHMETIC_BINARIES", "COMMON"],
+    "relations": ["=", "==", "!=", "<>", ">", ">=", "<", "<="],
+    "operands": ["int", "int-negative", "float", "float-negative", "PI()", "E()"],
+    "generate_filter" : "True"
+  },
+  "bool": {
+    "operations": ["ARITHMETIC_BINARIES", "COMMON"],
+    "relations": ["=", "==", "!=", "<>", ">", ">=", "<", "<="],
+    "operands": ["int", "int-negative", "float", "float-negative", "bool"],
+    "generate_filter" : "True"
+  },
+  "string-short": {
+    "len_min":1,
+    "len_max":5,
+    "operations": ["STRING_BINARIES", "COMMON"],
+    "relations": ["=", "==", "!=", "<>", ">", ">=", "<", "<="],
+    "operands": [],
+    "generate_filter" : "True"
+  },
+  "string-medium": {
+    "len_min":5,
+    "len_max":20,
+    "operations": ["STRING_BINARIES", "COMMON"],
+    "relations": ["=", "==", "!=", "<>", ">", ">=", "<", "<="],
+    "operands": [],
+    "generate_filter" : "True"
+  },
+  "string-long": {
+    "len_min":20,
+    "len_max":100,
+    "operations": ["STRING_BINARIES", "COMMON"],
+    "relations": ["=", "==", "!=", "<>", ">", ">=", "<", "<="],
+    "operands": [],
+    "generate_filter" : "True"
+  },
+  "string-vlong": {
+    "len_min":5,
+    "len_max":20,
+    "operations": ["STRING_BINARIES", "COMMON"],
+    "relations": ["=", "==", "!=", "<>", ">", ">=", "<", "<="],
+    "operands": [],
+    "generate_filter" : "True"
+  }
+}

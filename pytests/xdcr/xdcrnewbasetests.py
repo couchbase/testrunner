@@ -5,6 +5,7 @@ import logger
 import logging
 import re
 import urllib
+import random
 
 from couchbase_helper.cluster import Cluster
 from membase.api.rest_client import RestConnection, Bucket
@@ -787,6 +788,15 @@ class XDCReplication:
             self.__from_bucket.name, self.__dest_cluster.get_name(),
             self.__to_bucket.name)
 
+    def __get_random_filter(self, filter_type):
+        from scripts.edgyjson.main import JSONDoc
+        obj = JSONDoc(template="query.json", filter=True, load=False)
+        filter_type = filter_type.split("random-")[1]
+        if filter_type == "random":
+            filter_type = random.choice(obj.filters_json_objs_dict.keys())
+        ex = random.choice(obj.filters_json_objs_dict[filter_type])
+        return ex
+
     # get per replication params specified as from_bucket@cluster_name=<setting>:<value>
     # eg. default@C1=filter_expression:loadOne,failure_restart_interval:20
     def __parse_test_xdcr_params(self):
@@ -799,11 +809,13 @@ class XDCReplication:
                 dict(zip(argument_split[::2], argument_split[1::2]))
             )
         if 'filter_expression' in self.__test_xdcr_params:
-            if self.__test_xdcr_params['filter_expression']:
+            if len(self.__test_xdcr_params['filter_expression']) > 0:
+                ex = self.__test_xdcr_params['filter_expression']
+                if ex.startswith("random"):
+                    ex = self.__get_random_filter(ex)
                 masked_input = {"comma": ',', "star": '*', "dot": '.', "equals": '=', "{": '', "}": '', "colon": ':'}
                 for _ in masked_input:
-                    self.__test_xdcr_params['filter_expression'] = self.__test_xdcr_params['filter_expression']\
-                        .replace(_, masked_input[_])
+                    self.__test_xdcr_params['filter_expression'] = ex.replace(_, masked_input[_])
 
     def __convert_test_to_xdcr_params(self):
         xdcr_params = {}

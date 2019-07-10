@@ -17,8 +17,9 @@ from ValueGenerator import ValueGenerator
 
 # Example usage: python main.py -ip 192.168.56.111 -u Administrator -p password -b default -n 5
 class JSONDoc(object):
-    def __init__(self, server, username, password, bucket, startseqnum=1, randkey=False, keyprefix="edgyjson-",
-                 encoding="utf-8", num_docs=1, template="mix.json", xattrs=False):
+    def __init__(self, server=None, username=None, password=None, bucket=None, startseqnum=1, randkey=False,
+                 keyprefix="edgyjson-",
+                 encoding="utf-8", num_docs=1, template="mix.json", xattrs=False, filter=False, load=True):
         self.startseqnum = startseqnum
         self.randkey = randkey
         self.keyprefix = keyprefix
@@ -26,20 +27,23 @@ class JSONDoc(object):
         self.num_docs = num_docs
         self.template_file = template
         self.xattrs = xattrs
+        self.filter = filter
         logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
         local = False
         if not server or len(server) < 2:
-            logging.info("No valid server provided. Generating docs locally in ./output dir")
             local = True
         else:
             self.server = server
             self.username = username
             self.password = password
             self.bucket = bucket
-        if local:
-            self.printDoc()
-        else:
-            self.uploadDoc()
+        self.createContent()
+        if load:
+            if local:
+                logging.info("No valid server provided. Generating docs locally in ./output dir")
+                self.printDoc()
+            else:
+                self.uploadDoc()
 
     def uploadDoc(self):
         # connect to cb cluster
@@ -93,6 +97,9 @@ class JSONDoc(object):
         if self.xattrs:
             logging.info("Upserting xattrs")
             self.add_xattrs(cb)
+        if self.filter:
+            logging.info("Upserting filter_expressions.json")
+            cb.upsert("filter_expressions", self.filters_json_objs_dict)
 
     def add_xattrs(self, cb):
         num_xattr_docs = 10 if self.num_docs > 10 else self.num_docs
@@ -119,9 +126,21 @@ class JSONDoc(object):
                 logging.info("print: " + dockey)
             except Exception as e:
                 logging.error("Print error\n" + traceback.format_exc())
+            if self.filter:
+                try:
+                    current_dir = os.path.dirname(__file__)
+                    output = os.path.join(current_dir, "output/", "filter_expressions.json")
+                    with open(output, 'w') as f:
+                        f.write(json.dumps(self.filters_json_objs_dict, indent=3).encode(self.encoding, "ignore"))
+                    logging.info("print: filter_expressions.json")
+                except Exception as e:
+                    logging.error("Print error\n" + traceback.format_exc())
 
     def createContent(self):
         self.json_objs_dict = {}
+        self.filters_json_objs_dict = {}
+        if self.filter:
+           self.filters_json_objs_dict["filter_expressions"] = []
         try:
             current_dir = os.path.dirname(__file__)
             template = open(os.path.join(current_dir, "templates/", self.template_file))
@@ -133,11 +152,11 @@ class JSONDoc(object):
         valuegen = ValueGenerator()
         for key, value in content.items():
             if key in constants.generator_methods.keys():
-                if len(value) > 1:
-                    argsdict = self.parseargs(value)
+                if value:
+                    argsdict = value
                 else:
                     argsdict = {}
-                val = getattr(valuegen, constants.generator_methods[key])(**argsdict)
+                val, filter_exp = getattr(valuegen, constants.generator_methods[key])(**argsdict)
                 if self.randkey:
                     func_list = [func for func in dir(valuegen) if
                                  callable(getattr(valuegen, func)) and not func.startswith("__")]
@@ -146,6 +165,8 @@ class JSONDoc(object):
                     while isinstance(key, list) or isinstance(key, dict):
                         key = getattr(globals()['ValueGenerator'](), random.choice(func_list))()
             self.json_objs_dict[key] = val
+            if self.filter:
+                self.filters_json_objs_dict[key.split('-')[0]] = filter_exp
 
     def parseargs(self, argsstr):
         argsindex = argsstr.split(',')
@@ -175,6 +196,7 @@ if __name__ == "__main__":
     parser.add_argument('--template', '-t', help="JSON Template File. Should be placed in ./templates dir", type=str,
                         default="mix.json")
     parser.add_argument('--xattrs', '-x', help="Add xattrs?", type=bool, default=False)
+    parser.add_argument('--filter', '-f', help="Generate filters", type=bool, default=False)
     args = parser.parse_args()
     if args.server and (args.user is None or args.password is None or args.bucket is None):
         logging.error("username, password and bucket name are required")

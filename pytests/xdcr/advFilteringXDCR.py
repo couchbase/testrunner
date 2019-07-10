@@ -47,7 +47,7 @@ class XDCRAdvFilterTests(XDCRNewBaseTest):
             JSONDoc(server=server, username="Administrator", password="password",
                     bucket=bucket, startseqnum=random.randrange(1, 10000000, 1),
                     randkey=False, encoding="utf-8",
-                    num_docs=num_docs, template="mix.json", xattrs=True)
+                    num_docs=num_docs, template="query.json", xattrs=True)
             self.sleep(30, "Waiting for docs to be loaded")
         except Exception as e:
             self.fail(

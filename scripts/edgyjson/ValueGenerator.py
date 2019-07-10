@@ -1,8 +1,6 @@
-import io
 import random
 import string
 import sys
-import requests
 from datetime import datetime
 import pytz
 import collections
@@ -71,7 +69,13 @@ class ValueGenerator(object):
             self.num_min += 1
         return ret
 
-    def rand_bool(self):
+    def rand_bool(self, operations=[], relations=[], operands=[], generate_filter=False):
+        if generate_filter:
+            filter_exp = []
+            operand_values = self.__generate_operand_values(operands)
+            for expression in self.__generate_expressions(["bool"], operations, relations, operand_values):
+                filter_exp.append(expression)
+            return random.choice([True, False]), filter_exp
         return random.choice([True, False])
 
     def date_time(self):
@@ -111,29 +115,93 @@ class ValueGenerator(object):
             # Insurance against maximum recursion depth exceeded exception
             return {{{}}}
 
-    def rand_float(self, negative=False):
-        if bool(negative):
-            return -1 * random.uniform(sys.float_info.min, sys.float_info.max)
+    def rand_float(self, min=sys.float_info.min, max=sys.float_info.max, operations=[], relations=[], operands=[],
+                   generate_filter=False, negative=False):
+        filter_exp = []
+        rand_float = 1
+        if negative:
+            self.float_min = 1 if min == 0 else min
+            rand_float = -1
         else:
-            return random.uniform(sys.float_info.min, sys.float_info.max)
+            self.float_min = 0 if min < 0 else min
+        self.float_max = sys.float_info.max if self.float_min >= max else max
+        rand_float = rand_float * random.uniform(self.float_min, self.float_max)
+        if generate_filter:
+            operand_values = self.__generate_operand_values(operands)
+            for expression in self.__generate_expressions(["float"], operations, relations, operand_values):
+                filter_exp.append(expression)
+            return rand_float, filter_exp
+        return rand_float
 
-    def rand_int(self, negative=False):
-        if bool(negative):
-            return -1 * random.randint(1, sys.maxsize)
+    def __generate_operand_values(self, operands):
+        # Generate random operand values for operands provided in template file
+        # using generator methods in ValueGenerator.py or literal operand values
+        operand_values = []
+        for operand in operands:
+            if operand in constants.generator_methods.keys():
+                operand_values.append(getattr(globals()['ValueGenerator'](), constants.generator_methods[operand])())
+            else:
+                operand_values.append(operand)
+        return operand_values
+
+    def __generate_expressions(self, keys, operations, relations, operands):
+        exps = []
+        for _ in xrange(constants.NUM_OPS):
+            if "ARITHMETIC_BINARIES" in operations:
+                ex = random.choice(constants.ARITHMETIC_BINARIES) % (
+                    random.choice(keys), random.choice(operands)) + random.choice(relations) + str(
+                    random.choice(operands))
+                exps.append(ex.replace("%s", ex))
+            if "ARITHMETIC_UNARIES" in operations:
+                ex = random.choice(constants.ARITHMETIC_UNARIES).replace("%s", random.choice(keys)) + random.choice(
+                    relations) + str(
+                    random.choice(operands))
+                exps.append(ex)
+            if "STRING_BINARIES" in operations:
+                ex = random.choice(constants.STRING_BINARIES) % (random.choice(keys), random.choice(operands))
+                exps.append(ex)
+            if "COMMON" in operations:
+                ex = random.choice(constants.COMMON).replace("%s", random.choice(keys))
+                exps.append(ex)
+        return exps
+
+    def rand_int(self, min=0, max=sys.maxsize, operations=[], relations=[], operands=[], negative=False,
+                 generate_filter=False):
+        filter_exp = []
+        rand_int = 1
+        if negative:
+            self.int_min = 1 if min == 0 else min
+            rand_int = -1
         else:
-            return random.randint(0, sys.maxsize)
+            self.int_min = 0 if min < 0 else min
+        self.int_max = sys.maxsize if self.int_min >= max else max
+        rand_int = rand_int * random.randint(self.int_min, self.int_max)
+        if generate_filter:
+            operand_values = self.__generate_operand_values(operands)
+            for expression in self.__generate_expressions(["int"], operations, relations, operand_values):
+                filter_exp.append(expression)
+            return rand_int, filter_exp
+        return rand_int
 
     def rand_null(self):
         return random.choice(["NULL", "null", "Null", None])
 
-    def rand_string(self, len_min=0, len_max=10):
+    def rand_string(self, len_min=2, len_max=10, operations=[], relations=[], operands=[], generate_filter=False):
         self.len_min = int(len_min)
         self.len_max = int(len_max)
-        return ''.join(random.choice(
+        filter_exp = []
+        ret = ''.join(random.choice(
             string.ascii_letters * 40 + \
             string.digits * 10 + \
             string.whitespace * 40 + \
             string.punctuation * 10) for _ in xrange(random.randint(self.len_min, self.len_max)))
+        if generate_filter:
+            string_types = [key for key in constants.generator_methods.keys() if key.startswith("string")]
+            operand_values = self.__generate_operand_values(string_types)
+            for expression in self.__generate_expressions(string_types, operations, relations, operand_values):
+                filter_exp.append(expression)
+            return ret, filter_exp
+        return ret
 
     def string_num(self, len_min=1, len_max=10):
         self.len_min = int(len_min)
