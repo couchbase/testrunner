@@ -643,7 +643,12 @@ class StableTopFTS(FTSBaseTest):
         self.create_es_index_mapping(index.es_custom_map)
         self.load_data()
         self.wait_for_indexing_complete()
-        self.run_query_and_compare(index)
+        if self.run_via_n1ql:
+            n1ql_executor = self._cb_cluster
+        else:
+            n1ql_executor = None
+
+        self.run_query_and_compare(index, n1ql_executor=n1ql_executor)
         if fail:
             raise err
 
@@ -710,7 +715,12 @@ class StableTopFTS(FTSBaseTest):
         self.create_es_index_mapping(index.es_custom_map,index.index_definition)
         self.wait_for_indexing_complete()
         try:
-            self.run_query_and_compare(index)
+            if self.run_via_n1ql:
+                n1ql_executor = self._cb_cluster
+            else:
+                n1ql_executor = None
+
+            self.run_query_and_compare(index, n1ql_executor=n1ql_executor)
         except AssertionError as err:
             self.log.error(err)
             fail = True
@@ -933,6 +943,7 @@ class StableTopFTS(FTSBaseTest):
         bucket = self._cb_cluster.get_bucket_by_name("travel-sample")
         index = self.create_index(bucket, "travel-index")
         self.sleep(10)
+        self.wait_for_indexing_complete()
 
         # Add Type Mapping
         index.add_type_mapping_to_index_definition(type="airport",
