@@ -2355,9 +2355,12 @@ class QueryTests(BaseTestCase):
         res = self.curl_with_roles(self.query)
         role_list = ["query_delete(default)", "query_delete(standard_bucket0)", "delete(default)", "bucket_full_access(default)"]
         self.assertNotEquals(res['status'], 'success') if role in role_list else self.assertTrue(res['status'] == 'success')
-        self.query = 'delete from system:active_requests'
-        res = self.curl_with_roles(self.query)
-        self.assertTrue(res['status'] == 'stopped')
+        try:
+            self.query = 'delete from system:active_requests'
+            res = self.curl_with_roles(self.query)
+            self.assertTrue(res['status'] == 'stopped')
+        except:
+            self.assertTrue(res['status'] == 'fatal')
         if role not in role_list:
             self.query = 'delete from system:prepareds'
             res = self.curl_with_roles(self.query)
@@ -3116,9 +3119,64 @@ class QueryTests(BaseTestCase):
 
 ##############################################################################################
 #
-#   tuq_xattrs.py helpers
+#   tuq_cluster_ops helpers
 #
 ##############################################################################################
+
+    def run_queries_until_timeout(self,timeout=120):
+        self.log.info("Running queries for %s seconds to ensure no issues" % timeout)
+        init_time = time.time()
+        check = False
+        next_time = init_time
+        while not check:
+            try:
+                result = self.run_cbq_query("select * from default limit 10000")
+                time.sleep(2)
+                self.log.info("Query Succeeded")
+                check = next_time - init_time > timeout
+                next_time = time.time()
+                self.fail = False
+            except Exception as e:
+                self.log.error("Query Failed")
+                self.log.error(str(e))
+                time.sleep(2)
+                check = next_time - init_time > timeout
+                if next_time - init_time > timeout:
+                    self.log.error("Queries are failing after the interval, queries should have recovered by now!")
+                    self.fail = True
+                next_time = time.time()
+
+        return
+
+    def _check_retry_rebalance_succeeded(self):
+        rest = RestConnection(self.master)
+        result = json.loads(rest.get_pending_rebalance_info())
+        self.log.info(result)
+        retry_after_secs = result["retry_after_secs"]
+        attempts_remaining = result["attempts_remaining"]
+        retry_rebalance = result["retry_rebalance"]
+        self.log.info("Attempts remaining : {0}, Retry rebalance : {1}".format(attempts_remaining, retry_rebalance))
+        while attempts_remaining:
+            # wait for the afterTimePeriod for the failed rebalance to restart
+            self.sleep(retry_after_secs, message="Waiting for the afterTimePeriod to complete")
+            try:
+                result = self.rest.monitorRebalance()
+                msg = "monitoring rebalance {0}"
+                self.log.info(msg.format(result))
+            except Exception:
+                result = json.loads(self.rest.get_pending_rebalance_info())
+                self.log.info(result)
+                try:
+                    attempts_remaining = result["attempts_remaining"]
+                    retry_rebalance = result["retry_rebalance"]
+                    retry_after_secs = result["retry_after_secs"]
+                except KeyError:
+                    self.fail("Retrying of rebalance still did not help. All the retries exhausted...")
+                self.log.info("Attempts remaining : {0}, Retry rebalance : {1}".format(attempts_remaining,
+                                                                                       retry_rebalance))
+            else:
+                self.log.info("Retry rebalanced fixed the rebalance failure")
+                break
 
 ##############################################################################################
 #

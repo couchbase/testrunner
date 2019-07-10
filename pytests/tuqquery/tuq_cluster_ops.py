@@ -1,8 +1,7 @@
-import math
 import time
-import uuid
+import threading
+import json
 from security.auditmain import audit
-from tuqquery.tuq import QueryTests
 from tuqquery.tuq_join import JoinTests
 from remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection
@@ -10,14 +9,27 @@ from membase.helper.cluster_helper import ClusterOperationHelper
 from backuptests import BackupHelper
 from tuq_sanity import QuerySanityTests
 
-class QueriesOpsTests(QuerySanityTests, QueryTests):
+class QueriesOpsTests(QuerySanityTests):
     def setUp(self):
         self.cluster_ops=True
         super(QueriesOpsTests, self).setUp()
+        self.setup_query_nodes = self.input.param("setup_query_nodes", False)
         self.query_params = {'scan_consistency' : 'statement_plus'}
         if self.nodes_init > 1 and not self._testMethodName == 'suite_setUp':
-            self.cluster.rebalance(self.servers[:1], self.servers[1:self.nodes_init], [])
+            if self.setup_query_nodes:
+                self.cluster.rebalance(self.servers[:1], self.servers[1:self.nodes_init], [],  services=['n1ql'])
+            else:
+                self.cluster.rebalance(self.servers[:1], self.servers[1:self.nodes_init], [])
         self.indx_type = self.input.param("indx_type", 'GSI')
+        self.stop_server = self.input.param("stop_server", False)
+        self.stop_source = self.input.param("stop_source", False)
+        self.network_partition = self.input.param("network_partition", False)
+        self.rebalance_index = self.input.param("rebalance_index", False)
+        self.rebalance_n1ql = self.input.param("rebalance_n1ql", False)
+        self.retry_time = self.input.param("retry_time", 300)
+        self.rebalance_out = self.input.param("rebalance_out", False)
+        self.num_retries = self.input.param("num_retries", 1)
+        self.fail = False
 
     def suite_setUp(self):
         super(QueriesOpsTests, self).suite_setUp()
@@ -372,6 +384,172 @@ class QueriesOpsTests(QuerySanityTests, QueryTests):
             for bucket in self.buckets:
                 for index_name in set(indexes):
                     self.run_cbq_query(query="DROP INDEX %s.%s" % (bucket.name, index_name))
+
+    def test_rebalance_in_stop_node(self):
+        self.assertTrue(len(self.servers) >= self.nodes_in + 1, "Servers are not enough")
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
+                                                 self.servers[1:(self.nodes_init + 1)], self.servers[:1], services=['kv,index'])
+        rebalance.result()
+        rebalance = self.cluster.async_rebalance(self.servers[1:self.nodes_init+1],
+                                                 self.servers[:1], [], services=['n1ql'])
+        rebalance.result()
+        try:
+            thread1 = threading.Thread(name='run_query', target=self.run_queries_until_timeout)
+            thread1.start()
+            if self.stop_source:
+                remote = RemoteMachineShellConnection(self.servers[0])
+                remote.stop_server()
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init+1],
+                                                     self.servers[2:(self.nodes_init + 2)], [],services=['n1ql'])
+            rebalance.result()
+            if self.stop_server:
+                remote = RemoteMachineShellConnection(self.servers[2])
+                remote.stop_server()
+            elif self.network_partition:
+                self.start_firewall_on_node(self.servers[2])
+                self.sleep(10)
+            else:
+                self.cluster.failover(self.servers[:self.nodes_init+2], self.servers[2:self.nodes_init+2])
+            thread1.join()
+            self.assertFalse(self.fail, "Queries did not recover")
+        except Exception as e:
+            self.log.error(str(e))
+        finally:
+            if self.stop_source or self.stop_server:
+                remote.start_server()
+            elif self.network_partition:
+                self.stop_firewall_on_node(self.servers[(self.nodes_init)])
+                self.sleep(300)
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init+1],
+            [], [self.servers[0]])
+            rebalance.result()
+            rebalance = self.cluster.async_rebalance(self.servers[1:self.nodes_init+1],
+            [self.servers[0]], [], services =['kv,n1ql,index'])
+            rebalance.result()
+
+    def test_rebalance_in_failure(self):
+        self.assertTrue(len(self.servers) >= self.nodes_in + 1, "Servers are not enough")
+        try:
+            thread1 = threading.Thread(name='run_query', target=self.run_queries_until_timeout)
+            thread1.start()
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
+                                                     self.servers[1:(self.nodes_init + 1)], [],services=['n1ql'])
+            time.sleep(1)
+            self.start_firewall_on_node(self.servers[(self.nodes_init)])
+            self.sleep(120)
+            thread1.join()
+            self.assertFalse(self.fail, "Queries did not recover")
+        except Exception as e:
+            self.log.error(str(e))
+        finally:
+            self.stop_firewall_on_node(self.servers[(self.nodes_init)])
+            self.sleep(300)
+
+    def test_rebalance_failure_retry(self):
+        self.assertTrue(len(self.servers) >= self.nodes_in + 1, "Servers are not enough")
+        body = {"enabled": "true", "afterTimePeriod": self.retry_time , "maxAttempts" : self.num_retries}
+        rest = RestConnection(self.master)
+        rest.set_retry_rebalance_settings(body)
+        result = rest.get_retry_rebalance_settings()
+        if self.rebalance_out:
+            rebalance_server = self.servers[(self.nodes_init-1)]
+        else:
+            rebalance_server = self.servers[(self.nodes_init)]
+        self.log.info("Retry Rebalance settings changed to : {0}"
+                      .format(json.loads(result)))
+        try:
+            if self.rebalance_out:
+                rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
+                                                         [], [self.servers[self.nodes_init - 1]])
+            else:
+                rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
+                                                        self.servers[1:(self.nodes_init + 1)], [],services=['n1ql'])
+            time.sleep(1)
+            self.start_firewall_on_node(rebalance_server)
+            rebalance.result()
+            self.fail("Rebalance did not fail")
+        except Exception as e:
+            self.log.error(str(e))
+            if self.num_retries > 1:
+                time.sleep(self.retry_time + 30)
+            self.stop_firewall_on_node(rebalance_server)
+            time.sleep(10)
+            self._check_retry_rebalance_succeeded()
+        finally:
+            self.stop_firewall_on_node(rebalance_server)
+            body = {"enabled": "false"}
+            rest.set_retry_rebalance_settings(body)
+            self.sleep(60)
+
+    def test_rebalance_out_query_node(self):
+        self.assertTrue(len(self.servers) >= self.nodes_in + 1, "Servers are not enough")
+        try:
+            thread1 = threading.Thread(name='run_query', target=self.run_queries_until_timeout)
+            thread1.start()
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
+                                                     [], [self.servers[self.nodes_init-1]])
+            rebalance.result()
+            if self.stop_server:
+                output, error = self.shell.execute_command("killall -9 cbq-engine")
+            thread1.join()
+            self.assertFalse(self.fail, "Queries failed")
+        except Exception as e:
+            self.log.error(str(e))
+
+
+    def test_swap_rebalance_nodes(self):
+        self.assertTrue(len(self.servers) >= self.nodes_in + 1, "Servers are not enough")
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
+                                                 self.servers[self.nodes_init:self.nodes_init + 1],
+                                                 [],services=["kv"])
+        rebalance.result()
+        rebalance = self.cluster.async_rebalance(self.servers[:(self.nodes_init+1)],
+                                                 self.servers[self.nodes_init+1:self.nodes_init + 2],
+                                                 self.servers[:1],services=["index"])
+        rebalance.result()
+        rebalance = self.cluster.async_rebalance(self.servers[1:(self.nodes_init+3)],
+                                                 self.servers[self.nodes_init+2:self.nodes_init + 3],
+                                                 [],services=["n1ql"])
+        rebalance.result()
+        try:
+            thread1 = threading.Thread(name='run_query', target=self.run_queries_until_timeout)
+            thread1.start()
+            if self.rebalance_index:
+                rebalance = self.cluster.async_rebalance(self.servers[1:self.nodes_init+3],
+                self.servers[:1],
+                self.servers[self.nodes_init+1:self.nodes_init+2], services=["kv,n1ql,index"])
+            elif self.rebalance_n1ql:
+                rebalance = self.cluster.async_rebalance(self.servers[1:self.nodes_init+3],
+                self.servers[:1],
+                self.servers[self.nodes_init+2:self.nodes_init+3], services=["kv,n1ql,index"])
+            else:
+                rebalance = self.cluster.async_rebalance(self.servers[1:self.nodes_init+3],
+                self.servers[:1],
+                self.servers[self.nodes_init:self.nodes_init+1], services=["kv,n1ql,index"])
+            rebalance.result()
+            thread1.join()
+            self.assertFalse(self.fail, "Queries failed")
+        except Exception as e:
+            self.log.error(str(e))
+
+
+    def test_swap_rebalance_kv_n1ql_index(self):
+        self.assertTrue(len(self.servers) >= self.nodes_in + 1, "Servers are not enough")
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
+                                                 self.servers[self.nodes_init:self.nodes_init + 1],
+                                                 [],services=["kv,n1ql,index"])
+        rebalance.result()
+        try:
+            thread1 = threading.Thread(name='run_query', target=self.run_queries_until_timeout)
+            thread1.start()
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init+1],
+            self.servers[self.nodes_init+1:self.nodes_init+2],
+            self.servers[self.nodes_init:self.nodes_init+1], services=["kv,index,n1ql"])
+            rebalance.result()
+            thread1.join()
+            self.assertFalse(self.fail, "Queries failed")
+        except Exception as e:
+            self.log.error(str(e))
 
 ###########################################################################################################
     def test_prepared_with_incr_rebalance_in(self):
