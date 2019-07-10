@@ -29,11 +29,11 @@ class QueryWhitelistTests(QueryTests):
         self.cbqpath = '%scbq' % self.path + " -e %s:%s -q -u %s -p %s"\
                                              % (self.master.ip, self.n1ql_port, self.rest.username, self.rest.password)
         #Whitelist error messages
-        self.query_error_msg = "Errorevaluatingprojection.-cause:URLendpointisn'twhitelistedhttp://%s:%s/query/service." \
+        self.query_error_msg = "Errorevaluatingprojection.-cause:URLendpointisntwhitelistedhttp://%s:%s/query/service." \
                 "PleasemakesuretowhitelisttheURLontheUI." % (self.master.ip, self.n1ql_port)
-        self.jira_error_msg ="Errorevaluatingprojection.-cause:URLendpointisn'twhitelistedhttps://jira.atlassian." \
+        self.jira_error_msg ="Errorevaluatingprojection.-cause:URLendpointisntwhitelistedhttps://jira.atlassian." \
                              "com/rest/api/latest/issue/JRA-9.PleasemakesuretowhitelisttheURLontheUI."
-        self.google_error_msg = "Errorevaluatingprojection.-cause:URLendpointisn'twhitelisted" \
+        self.google_error_msg = "Errorevaluatingprojection.-cause:URLendpointisntwhitelisted" \
                                 "https://maps.googleapis.com/maps/api/geocode/json."
         #End of whitelist error messages
         self.query_service_url = "'http://%s:%s/query/service'" % (self.master.ip,self.n1ql_port)
