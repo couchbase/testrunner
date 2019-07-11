@@ -89,6 +89,8 @@ class EventingRebalance(EventingBaseTest):
             self.handler_code = HANDLER_CODE_CURL.BUCKET_OP_WITH_CURL_PUT
         elif handler_code == 'bucket_op_curl_delete':
             self.handler_code = HANDLER_CODE_CURL.BUCKET_OP_WITH_CURL_DELETE
+        elif handler_code == 'bucket_op_curl_jenkins':
+            self.handler_code = HANDLER_CODE_CURL.BUCKET_OP_WITH_CURL_JENKINS
         elif handler_code == 'timer_op_curl_get':
             self.handler_code = HANDLER_CODE_CURL.TIMER_OP_WITH_CURL_GET
         elif handler_code == 'timer_op_curl_post':
@@ -97,6 +99,8 @@ class EventingRebalance(EventingBaseTest):
             self.handler_code = HANDLER_CODE_CURL.TIMER_OP_WITH_CURL_PUT
         elif handler_code == 'timer_op_curl_delete':
             self.handler_code = HANDLER_CODE_CURL.TIMER_OP_WITH_CURL_DELETE
+        elif handler_code == 'timer_op_curl_jenkins':
+            self.handler_code = HANDLER_CODE_CURL.TIMER_OP_WITH_CURL_JENKINS
         else:
             self.handler_code = HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE
         force_disable_new_orchestration = self.input.param('force_disable_new_orchestration', False)
