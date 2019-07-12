@@ -50,6 +50,7 @@ class NewUpgradeBaseTest(QueryHelperTests,EventingBaseTest, FTSBaseTest):
         self.use_hostnames = self.input.param("use_hostnames", False)
         self.product = self.input.param('product', 'couchbase-server')
         self.initial_version = self.input.param('initial_version', '2.5.1-1083')
+        self.use_domain_name = self.input.param('use_domain_names', 0)
         self.initial_vbuckets = self.input.param('initial_vbuckets', 1024)
         self.upgrade_versions = self.input.param('upgrade_version', '4.1.0-4963')
         self.upgrade_versions = self.upgrade_versions.split(";")
@@ -186,6 +187,7 @@ class NewUpgradeBaseTest(QueryHelperTests,EventingBaseTest, FTSBaseTest):
         params['version'] = self.initial_version
         params['vbuckets'] = [self.initial_vbuckets]
         params['init_nodes'] = self.init_nodes
+        params['use_domain_names'] = self.use_domain_name
         if 5 <= int(self.initial_version[:1]) or 5 <= int(self.upgrade_versions[0][:1]):
             params['fts_query_limit'] = 10000000
         if version:
