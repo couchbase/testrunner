@@ -166,13 +166,14 @@ class CustomMapGenerator:
     """
     # Generates an FTS and equivalent ES custom map for emp/wiki datasets
     """
-    def __init__(self, seed=0, dataset="emp", num_custom_analyzers=0,multiple_filters=False):
+    def __init__(self, seed=0, dataset="emp", num_custom_analyzers=0,multiple_filters=False, custom_map_add_non_indexed_fields=True):
         random.seed(seed)
         self.fts_map = {"types": {}}
         self.es_map = {}
         self.num_field_maps = random.randint(1, 10)
         self.queryable_fields = {}
         self.num_custom_analyzers = num_custom_analyzers
+        self.custom_map_add_non_indexed_fields = custom_map_add_non_indexed_fields
         # Holds the list of custom analyzers created by
         # build_custom_analyzer method
         self.custom_analyzers=[]
@@ -281,7 +282,8 @@ class CustomMapGenerator:
                 fts_child, es_child = self.get_child_map(field)
             self.fts_map['types'][dataset]['properties'][field] = fts_child
             self.es_map[dataset]['properties'][field] = es_child
-        self.add_non_indexed_field_to_query()
+        if self.custom_map_add_non_indexed_fields:
+            self.add_non_indexed_field_to_query()
 
     def add_non_indexed_field_to_query(self):
         """
