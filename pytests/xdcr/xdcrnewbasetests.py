@@ -815,7 +815,8 @@ class XDCReplication:
                     ex = self.__get_random_filter(ex)
                 masked_input = {"comma": ',', "star": '*', "dot": '.', "equals": '=', "{": '', "}": '', "colon": ':'}
                 for _ in masked_input:
-                    self.__test_xdcr_params['filter_expression'] = ex.replace(_, masked_input[_])
+                    ex = ex.replace(_, masked_input[_])
+                self.__test_xdcr_params['filter_expression'] = ex.replace(_, masked_input[_])
 
     def __convert_test_to_xdcr_params(self):
         xdcr_params = {}
