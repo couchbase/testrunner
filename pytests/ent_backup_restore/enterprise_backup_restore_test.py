@@ -3539,6 +3539,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
         self._load_all_buckets(self.master, gen, "create", 0)
         self.backup_create()
+        self.backup()
         self._collect_logs()
 
     def test_cbbackupmgr_restore_with_ttl(self):
