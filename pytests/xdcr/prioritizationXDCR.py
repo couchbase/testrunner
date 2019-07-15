@@ -60,16 +60,12 @@ class XDCRPrioritization(XDCRNewBaseTest):
         rest = RestConnection(server)
         buckets = rest.get_buckets()
         for bucket in buckets:
-            if self.initial:
-                goxdcr_priority = str(rest.get_xdcr_param(bucket.name, bucket.name, "priority")).lower()
-                # All replications start with 'medium' dcp priority
-                expected_priority[bucket.name] = ["medium"]
-                if goxdcr_priority == "low" or goxdcr_priority == "high":
-                    expected_priority[bucket.name].append(goxdcr_priority)
-                elif goxdcr_priority == "medium":
-                    expected_priority[bucket.name].append("high")
-            else:
-                expected_priority[bucket.name] = "medium"
+            goxdcr_priority = str(rest.get_xdcr_param(bucket.name, bucket.name, "priority")).lower()
+            expected_priority[bucket.name] = ["low", "medium", "high"]
+            if goxdcr_priority == "low":
+                expected_priority[bucket.name].remove("high")
+            elif goxdcr_priority == "high":
+                expected_priority[bucket.name].remove("low")
         self.__verify_dcp_priority(server, expected_priority)
 
     def _verify_goxdcr_priority(self, cluster):
