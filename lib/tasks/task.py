@@ -1415,7 +1415,7 @@ class ESRunQueryCompare(Task):
                 should_verify_n1ql = False
 
             if self.n1ql_executor and should_verify_n1ql:
-                n1ql_query = "select meta().id from default where type='emp' and search(default, " + str(
+                n1ql_query = "select meta().id from default where type='" + str(self.fts_index.dataset) + "' and search(default, " + str(
                     json.dumps(self.fts_query)) + ")"
                 self.log.info("Running N1QL query: "+str(n1ql_query))
                 n1ql_result = self.n1ql_executor.run_n1ql_query(query=n1ql_query)
