@@ -287,6 +287,7 @@ class AutoRetryFailedRebalance(RebalanceBaseTest):
 
     def _check_retry_rebalance_succeeded(self):
         self.sleep(self.sleep_time)
+        attempts_remaining = retry_rebalance = retry_after_secs = None
         for i in range(10):
             self.log.info("Getting stats : try {0}".format(i))
             result = json.loads(self.rest.get_pending_rebalance_info())
