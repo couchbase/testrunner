@@ -1415,7 +1415,14 @@ class ESRunQueryCompare(Task):
                 should_verify_n1ql = False
 
             if self.n1ql_executor and should_verify_n1ql:
-                n1ql_query = "select meta().id from default where type='" + str(self.fts_index.dataset) + "' and search(default, " + str(
+                if self.fts_index.dataset == 'all':
+                    query_type = 'emp'
+                    if int(TestInputSingleton.input.param("doc_maps", 1)) > 1:
+                        query_type = 'wiki'
+                else:
+                    query_type = self.fts_index.dataset
+
+                n1ql_query = "select meta().id from default where type='" + str(query_type) + "' and search(default, " + str(
                     json.dumps(self.fts_query)) + ")"
                 self.log.info("Running N1QL query: "+str(n1ql_query))
                 n1ql_result = self.n1ql_executor.run_n1ql_query(query=n1ql_query)

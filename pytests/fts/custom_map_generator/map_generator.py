@@ -27,7 +27,7 @@ WIKI_FIELDS = {
     'text': ["title", "type"],
     'number': ["mutated"],
     #'object': ["revision", "text", "contributor"]
-    'object': ["revision", "contributor"]
+    'object': ["revision"]
 }
 
 TOTAL_WIKI_FIELDS = 6
@@ -39,9 +39,9 @@ WIKI_NESTED_FIELDS = {
     #'text': {
     #    'text': ["#text"]
     #},
-    'contributor': {
-        'text': ["username"]
-    }
+    #'contributor': {
+    #    'text': ["username"]
+    #}
 }
 
 FULL_FIELD_NAMES = {
@@ -49,7 +49,7 @@ FULL_FIELD_NAMES = {
     'team_size': 'manages_team_size',
     'timestamp': 'revision_timestamp',
     #'#text': 'revision_text_text',
-    'username': 'revision_contributor_username'
+    #'username': 'revision_contributor_username'
 }
 
 CUSTOM_ANALYZER_TEMPLATE = {
