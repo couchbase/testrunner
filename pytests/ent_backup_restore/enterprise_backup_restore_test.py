@@ -116,6 +116,9 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                 if self.same_cluster:
                     self._initialize_nodes(Cluster(), self.servers[:self.nodes_init])
                 else:
+                    shell = RemoteMachineShellConnection(self.backupset.restore_cluster_host)
+                    shell.enable_diag_eval_on_non_local_hosts()
+                    shell.disconnect()
                     rest = RestConnection(self.backupset.restore_cluster_host)
                     rest.force_eject_node()
                     rest.init_node()
