@@ -14,6 +14,7 @@ from security.rbacmain import rbacmain
 from remote.remote_util import RemoteMachineShellConnection
 from clitest.cli_base import CliBaseTest
 
+
 class ServerInfo():
     def __init__(self,
                  ip,
@@ -36,7 +37,9 @@ class rbacclitest(rbacTest):
         super(rbacclitest, self).setUp()
         self.ldapUser = self.input.param('ldapuser','Administrator')
         self.ldapPass = self.input.param('ldappass','password')
-        self.user_name = self.input.param("user_name")
+        self.user_name = self.input.param("user_name","")
+        self.user_id = self.input.param('user_id','')
+
 
     def tearDown(self):
         super(rbacclitest, self).tearDown()
@@ -94,7 +97,7 @@ class rbacclitest(rbacTest):
         if self.auth_type == "local":
             options += " --rbac-password " + users[0][1]
         output, error = self.execute_admin_role_manage(options)
-        self.assertTrue("SUCCESS: RBAC user set" in output[0],"Issue with command create_user")
+        self.assertTrue("SUCCESS: User " in output[0],"Issue with command create_user")
 
     def test_create_user_name(self):
         users, roles = self._get_user_role()
@@ -103,14 +106,14 @@ class rbacclitest(rbacTest):
         if self.auth_type == "local":
             options += " --rbac-password " + users[0][1]
         output, error = self.execute_admin_role_manage(options)
-        self.assertTrue("SUCCESS: RBAC user set" in output[0],"Issue with command create user name")
+        self.assertTrue("SUCCESS: User " in output[0],"Issue with command create user name")
 
     def test_delete_user(self):
         self.test_create_user()
         users, roles = self._get_user_role()
         options = "--delete " + "--rbac-username " + users[0][0] + " --auth-domain=" + self.auth_type
         output, error = self.execute_admin_role_manage(options)
-        self.assertTrue("SUCCESS: RBAC user removed" in output[0], "Issue with command of delete user")
+        self.assertTrue("SUCCESS: User " in output[0], "Issue with command of delete user")
 
     def test_delete_user_noexist(self):
         users, roles = self._get_user_role()
@@ -171,7 +174,7 @@ class rbacclitest(rbacTest):
             if self.auth_type == "local":
                 options += " --rbac-password " + users[1]
             output, error = self.execute_admin_role_manage(options)
-            self.assertTrue("ERROR: _ - The username must not contain spaces, control or any" in output[0],
+            self.assertTrue("ERROR: _ - Username must not contain spaces, control or any" in output[0],
                             "Issue with command without" + \
                             " rbac-password value")
 
@@ -192,7 +195,7 @@ class rbacclitest(rbacTest):
         if self.auth_type == "local":
             options += " --rbac-password " + users[0][1]
         output, error = self.execute_admin_role_manage(options)
-        self.assertTrue("SUCCESS: RBAC user set" in output[0], "Issue with command create_user")
+        self.assertTrue("SUCCESS: User " in output[0], "Issue with command create_user")
         if self.new_password is not None:
             options = ""
             options = "--set " + "--rbac-username " + users[0][0] + " --roles " + roles \
@@ -200,7 +203,7 @@ class rbacclitest(rbacTest):
             if self.auth_type == "local":
                 options += " --rbac-password " + self.new_password
             output, error = self.execute_admin_role_manage(options)
-            self.assertTrue("SUCCESS: RBAC user set" in output[0], "Issue with command create_user")
+            self.assertTrue("SUCCESS: User " in output[0], "Issue with command create_user")
 
     def test_invalid_passwords(self):
         final_policy = ""
@@ -211,10 +214,9 @@ class rbacclitest(rbacTest):
             policy_type = policy_type.split(":")
             for policy in policy_type:
                 final_policy = final_policy + " --" + policy
-            print final_policy
             policy_type = final_policy
         if policy_type == "uppercase":
-            error_msg = "ERROR: password - The password must contain at least one uppercase letter"
+            error_msg = "ERROR: argument --uppercase: expected one argument"
         elif policy_type == "lowercase":
             error_msg = "ERROR: password - The password must contain at least one lowercase letter"
         elif policy_type == "digit":
@@ -237,20 +239,24 @@ class rbacclitest(rbacTest):
                     roles + " --auth-domain " + self.auth_type
             output, error = self.execute_admin_role_manage(options)
             if correct_pass:
-                self.assertTrue("SUCCESS: RBAC user set" in output[0], "Issue with command create_user")
+                self.assertTrue("SUCCESS: User " in output[0], "Issue with command create_user")
             else:
-                self.assertTrue(error_msg in output[0],
+                if 'ERROR' in output[0]:
+                    self.assertTrue(error_msg in output[0],
                             "Issue with password < 6 characters")
+                else:
+                    self.assertTrue("SUCCESS: User " in output[0], "Issue with command create_user")
         finally:
             options = "--set --min-length 6"
             output, error = self.execute_password_policy(options)
+            self.assertTrue("SUCCESS: Password policy updated" in output[0], "Issue with setting the policy ")
 
     def test_delete_user(self):
         self.test_create_user()
         users, roles = self._get_user_role()
         options = "--delete " + "--rbac-username " + users[0][0] + " --auth-type=" + self.auth_type
         output, error = self.execute_admin_role_manage(options)
-        self.assertTrue("SUCCESS: RBAC user removed" in output[0], "Issue with command of delete user")
+        self.assertTrue("SUCCESS: User " in output[0], "Issue with command of delete user")
 
     def test_delete_user_noexist(self):
         users, roles = self._get_user_role()
