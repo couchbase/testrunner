@@ -195,7 +195,8 @@ class rbacclitest(rbacTest):
         if self.auth_type == "local":
             options += " --rbac-password " + users[0][1]
         output, error = self.execute_admin_role_manage(options)
-        self.assertTrue("SUCCESS: User " in output[0], "Issue with command create_user")
+        self.assertTrue("SUCCESS: User {0} set".format(users[0][0]) in output[0],
+                        "Issue with command create_user")
         if self.new_password is not None:
             options = ""
             options = "--set " + "--rbac-username " + users[0][0] + " --roles " + roles \
@@ -203,7 +204,8 @@ class rbacclitest(rbacTest):
             if self.auth_type == "local":
                 options += " --rbac-password " + self.new_password
             output, error = self.execute_admin_role_manage(options)
-            self.assertTrue("SUCCESS: User " in output[0], "Issue with command create_user")
+            self.assertTrue("SUCCESS: User {0} set".format(users[0][0]) in output[0],
+                            "Issue with command create_user")
 
     def test_invalid_passwords(self):
         final_policy = ""
@@ -234,12 +236,13 @@ class rbacclitest(rbacTest):
                 options = "--set --min-length 6 " + policy_type
             else:
                 options = "--set --min-length 6 --" + policy_type
-            output, error = self.execute_password_policy(options)
+            self.execute_password_policy(options)
             options = "--set " + " --rbac-username " + users[0][0] + " --rbac-password " + users[0][1] + " --roles " + \
                     roles + " --auth-domain " + self.auth_type
             output, error = self.execute_admin_role_manage(options)
             if correct_pass:
-                self.assertTrue("SUCCESS: User " in output[0], "Issue with command create_user")
+                self.assertTrue("SUCCESS: User {0} set".format(users[0][0]) in output[0],
+                                 "Issue with command create_user")
             else:
                 if 'ERROR' in output[0]:
                     self.assertTrue(error_msg in output[0],
