@@ -1015,7 +1015,7 @@ class RemoteMachineShellConnection:
             command1 = "cd /tmp ; D=$(mktemp -d cb_XXXX) ; mv {0} $D ; mv core.* $D ;"\
                                      " rm -f * ; mv $D/* . ; rmdir $D".format(filename)
             if self.info.distribution_type.lower() == 'suse':
-                command1 = "cd /var/cache/zypper/RPMS/; rm -rf couchbase-server*"
+                command1 += "; cd /var/cache/zypper/RPMS/; rm -rf couchbase-server*"
             command_root = "cd /tmp;wget -q -O {0} {1};cd /tmp;ls -lh".format(filename, url)
             file_location = "/tmp"
             output, error = self.execute_command_raw(command1, debug=False)
