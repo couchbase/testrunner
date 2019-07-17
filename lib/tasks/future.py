@@ -266,7 +266,8 @@ class Future(object):
         self._invoke_callbacks()
 
     @staticmethod
-    def wait_until(value_getter, condition, timeout_secs=-1):
+    def wait_until(value_getter, condition, timeout_secs=-1,
+                   interval_time=0.01, exponential_backoff=True):
         """
         Repeatedly calls value_getter returning the value when it
         satisfies condition. Calls to value getter back off exponentially.
@@ -277,19 +278,24 @@ class Future(object):
         :param condition: single-arg function that tests the value
         :param timeout_secs: number of seconds after which to timeout; if negative
                              waits forever; default is to wait forever
+        :param interval_time: base time to wait at each interval
+        :param exponential_backoff: back off exponentially. Otherwise back off
+                                    is linear
         :return: the value returned by value_getter
         :raises: TimeoutError if the operation times out before
                  getting a value that satisfies condition
         """
         start_time = time.time()
         stop_time = start_time + max(timeout_secs, 0)
-        interval = 0.01
-        attempt = 0
+        attempt = 0 if exponential_backoff else 1
         value = value_getter()
         while not condition(value):
             now = time.time()
             if timeout_secs < 0 or now < stop_time:
-                time.sleep(2**attempt * interval)
+                if exponential_backoff:
+                    time.sleep(2 ** attempt * interval_time)
+                else:
+                    time.sleep(attempt * interval_time)
                 attempt += 1
                 value = value_getter()
             else:

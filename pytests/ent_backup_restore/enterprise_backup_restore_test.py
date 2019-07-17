@@ -3843,7 +3843,9 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         Future.wait_until(
             lambda: (bool(backup_client.execute_command(command)[0]) or backup_result.done()),
             lambda x: x is True,
-            200)
+            200,
+            interval_time=0.1,
+            exponential_backoff=False)
 
         # If the backup finished and we never saw a DCP connection something's not right.
         if backup_result.done():
