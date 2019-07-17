@@ -3837,9 +3837,11 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             cb_version=self.cb_version)
 
         # We need to wait until the data transfer starts before we pause memcached.
-        # Read the backup file output until we find evidence of a DCP connection, or the backup finishes.
+        # Read the backup file output until we find evidence of a DCP connection,
+        # or the backup finishes.
         backup_client = RemoteMachineShellConnection(self.backupset.backup_host)
-        command = "tail -n 1 {}/logs/backup-*.log | grep ' (DCP) '".format(self.backupset.directory)
+        command = "tail -n 1 {}/logs/backup-*.log | grep ' (DCP) '"\
+                                               .format(self.backupset.directory)
         Future.wait_until(
             lambda: (bool(backup_client.execute_command(command)[0]) or backup_result.done()),
             lambda x: x is True,
@@ -3852,14 +3854,15 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             self.fail("Never found evidence of open DCP stream in backup logs.")
 
         # Pause memcached to trigger the log message.
-        cluster_client = RemoteMachineShellConnection(self.backupset.restore_cluster_host)
+        cluster_client = RemoteMachineShellConnection(self.backupset.cluster_host)
         cluster_client.pause_memcached(self.os_name, timesleep=65)
         cluster_client.unpause_memcached(self.os_name)
         cluster_client.disconnect()
         backup_result.result(timeout=200)
 
         expected_message = "Stream has been inactive for 60s"
-        command = "cat {}/logs/backup-*.log | grep '{}' ".format(self.backupset.directory, expected_message)
+        command = "cat {}/logs/backup-*.log | grep '{}' "\
+                         .format(self.backupset.directory, expected_message)
         output, _ = backup_client.execute_command(command)
         if not output:
             self.fail("Mutations were blocked for over 60 seconds, "
