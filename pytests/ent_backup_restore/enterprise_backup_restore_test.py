@@ -3581,11 +3581,14 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
         self._load_all_buckets(self.master, gen, "create", 0)
         self.backup_create()
-        self.backup_cluster_validate()
         if self.should_fail:
-            self.backup_restore()
+            self.backup_cluster()
         else:
-            self.backup_restore_validate()
+            self.backup_cluster_validate()
+            if self.restore_should_fail:
+                self.backup_restore()
+            else:
+                self.backup_restore_validate()
 
     def test_cbbackupmgr_with_eventing(self):
         """
