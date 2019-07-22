@@ -1419,7 +1419,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.enable_firewall = True
         try:
             output, error = self.backup_cluster()
-            self.assertTrue(self._check_output("getsockopt: connection refused", output),
+            self.assertTrue(self._check_output("connect: connection refused", output),
                             "Expected error not thrown by backup cluster when firewall enabled")
         finally:
             self.log.info("Disabling firewall on cluster host to take backup")
@@ -1435,7 +1435,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         """ reset restore cluster to same services as backup cluster """
         try:
             output, error = self.backup_restore()
-            mesg = "getsockopt: connection refused"
+            mesg = "connect: connection refused"
             if self.skip_buckets:
                 mesg = "Error restoring cluster:"
             self.assertTrue(self._check_output(mesg, output),
