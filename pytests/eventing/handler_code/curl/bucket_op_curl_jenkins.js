@@ -1,6 +1,6 @@
 function OnUpdate(doc, meta) {
     var request = {
-	path : 'job/test_suite_executor/api/json'
+	path : 'job/test_suite_executor/api/json?tree=jobs[component]'
     }
     try {
     	var response = curl("GET", server, request);
@@ -21,7 +21,7 @@ function OnUpdate(doc, meta) {
 
 function OnDelete(meta) {
     var request = {
-	path : 'job/test_suite_executor/api/json'
+	path : 'job/test_suite_executor/api/json?tree=jobs[component]'
     };
     try {
     	var response = curl("GET", server, request);

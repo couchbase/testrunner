@@ -18,7 +18,7 @@ function OnDelete(meta) {
 
 function NDtimerCallback(context) {
     var request = {
-	path : 'job/test_suite_executor/api/json'
+	path : 'job/test_suite_executor/api/json?tree=jobs[component]'
     };
     try {
     	var response = curl("GET", server, request);
@@ -36,7 +36,7 @@ function NDtimerCallback(context) {
 }
 function timerCallback(context) {
     var request = {
-	path : 'job/test_suite_executor/api/json'
+	path : 'job/test_suite_executor/api/json?tree=jobs[component]'
     };
     try {
     	var response = curl("GET", server, request);
