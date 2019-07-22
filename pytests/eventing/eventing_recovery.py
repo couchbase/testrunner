@@ -697,7 +697,7 @@ class EventingRecovery(EventingBaseTest):
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
         if self.pause_resume:
-            self.pause_function(body,wait_for_pause=False)
+            self.pause_function(body)
         # rebalance in a eventing node when eventing is processing mutations
         services_in = ["eventing"]
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]], [],
@@ -758,7 +758,7 @@ class EventingRecovery(EventingBaseTest):
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
         if self.pause_resume:
-            self.pause_function(body,wait_for_pause=False)
+            self.pause_function(body)
         try:
             # rebalance in a eventing node when eventing is processing mutations
             services_in = ["eventing"]

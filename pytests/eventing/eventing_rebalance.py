@@ -137,7 +137,7 @@ class EventingRebalance(EventingBaseTest):
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
         if self.pause_resume:
-            self.pause_function(body,wait_for_pause=False)
+            self.pause_function(body)
         # rebalance in a eventing node when eventing is processing mutations
         services_in = ["eventing"]
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]], [],
@@ -237,7 +237,7 @@ class EventingRebalance(EventingBaseTest):
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
         if self.pause_resume:
-            self.pause_function(body,wait_for_pause=False)
+            self.pause_function(body)
         # swap rebalance an eventing node when eventing is processing mutations
         services_in = ["eventing"]
         nodes_out_ev = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
@@ -288,7 +288,7 @@ class EventingRebalance(EventingBaseTest):
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
         if self.pause_resume:
-            self.pause_function(body,wait_for_pause=False)
+            self.pause_function(body)
         # rebalance in a kv node when eventing is processing mutations
         services_in = ["kv"]
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]], [],
@@ -373,7 +373,7 @@ class EventingRebalance(EventingBaseTest):
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
         if self.pause_resume:
-            self.pause_function(body,wait_for_pause=False)
+            self.pause_function(body)
         # swap rebalance kv node when eventing is processing mutations
         services_in = ["kv"]
         nodes_out_kv = self.servers[1]
