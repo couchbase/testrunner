@@ -33,6 +33,9 @@ function NDtimerCallback(context) {
     	if(response.status == 200){
     	    delete dst_bucket[context.docID];
     	}
+    	else{
+    	    delete dst_bucket[context.docID];
+    	}
     }
     catch (e) {
     	log('error:', e);
@@ -54,6 +57,9 @@ function timerCallback(context) {
     	var res= new Uint8Array(response.body);
     	if(response.status == 200){
     	    dst_bucket[context.docID]=response.body;
+    	}
+    	else{
+    	    dst_bucket[context.docID]=response.status;
     	}
     }
     catch (e) {

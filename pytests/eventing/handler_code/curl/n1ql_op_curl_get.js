@@ -1,22 +1,4 @@
 function OnUpdate(doc, meta) {
-    var expiry = new Date();
-    expiry.setSeconds(expiry.getSeconds() + 30);
-
-    var context = {docID : meta.id, random_text : "e6cZZGHuh0R7Aumoe6cZZGHuh0R7Aumoe6cZZGHuh0R7Aumoe6cZZGHuh0R7Aumoe6cZZGHuh0R7Aumoe6cZZGHuh0R7Aumoe6cZZGHuh0R7Aumoe6cZZGHuh0R7Aumoe6cZZGHuh0R7Aumoe6cZZGHuh0R7Aumoe6cZZGHuh0R7Aumoe6cZZGHuh0R7Aumoe6cZZGHuh0R7Aumoe6cZZGHuh07Aumoe6cZZGHuh07Aumoe6cZZGHuh07Aumoe6"};
-    createTimer(timerCallback,  expiry, meta.id, context);
-}
-
-
-
-function OnDelete(meta) {
-    var expiry = new Date();
-    expiry.setSeconds(expiry.getSeconds() + 30);
-
-    var context = {docID : meta.id};
-    createTimer(NDtimerCallback,  expiry, meta.id, context);
-}
-
-function NDtimerCallback(context) {
     var request = {
 	path : 'headers',
 	headers: {
@@ -30,17 +12,24 @@ function NDtimerCallback(context) {
     	log('response status received from server:', response.status);
     	var res= new Uint8Array(response.body);
     	if(response.status == 200){
-    	    delete dst_bucket[context.docID];
+    	    var id=meta.id;
+    	    var status= response.status;
+    	    var query= UPSERT into dst_bucket (KEY, VALUE) VALUES ($id, $status);
     	}
     	else{
-    	    delete dst_bucket[context.docID];
+    	    var id=meta.id;
+    	    var status= response.status;
+    	    var query= UPSERT into dst_bucket (KEY, VALUE) VALUES ($id, $status);
     	}
     }
     catch (e) {
     	log('error:', e);
         }
 }
-function timerCallback(context) {
+
+
+
+function OnDelete(meta) {
     var request = {
 	path : 'headers',
 	headers: {
@@ -54,10 +43,12 @@ function timerCallback(context) {
     	log('response status received from server:', response.status);
     	var res= new Uint8Array(response.body);
     	if(response.status == 200){
-    	    dst_bucket[context.docID]=response.body;
+    	    var id=meta.id;
+    	    delete from dst_bucket where META().id=$id;
     	}
     	else{
-    	    dst_bucket[context.docID]=response.status;
+    	    var id=meta.id;
+    	    delete from dst_bucket where META().id=$id;
     	}
     }
     catch (e) {

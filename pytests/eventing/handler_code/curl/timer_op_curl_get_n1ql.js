@@ -16,27 +16,26 @@ function OnDelete(meta) {
     createTimer(NDtimerCallback,  expiry, meta.id, context);
 }
 
-
 function NDtimerCallback(context) {
     var request = {
-	path : 'put?param=text',
+	path : 'headers',
 	headers: {
-    "cache-control": "no-cache",
-    "Postman-Token": "a3e931fe-8fe2-413c-be82-546062d28377"
-    },
-    body: "This is expected to be sent back as part of response body."
+    "sample-header": "test"
+    }
     };
     try {
-    	var response = curl("PUT", server, request);
+    	var response = curl("GET", server, request);
     	log('response body received from server:', response.body);
     	log('response headers received from server:', response.headers);
     	log('response status received from server:', response.status);
     	var res= new Uint8Array(response.body);
     	if(response.status == 200){
-    	    delete dst_bucket[context.docID];
+    	    var id=context.docID;
+    	    delete from dst_bucket where META().id=$id;
     	}
     	else{
-    	    delete dst_bucket[context.docID];
+    	    var id=context.docID;
+    	    delete from dst_bucket where META().id=$id;
     	}
     }
     catch (e) {
@@ -45,24 +44,26 @@ function NDtimerCallback(context) {
 }
 function timerCallback(context) {
     var request = {
-	path : 'put?param=text',
+	path : 'headers',
 	headers: {
-    "cache-control": "no-cache",
-    "Postman-Token": "a3e931fe-8fe2-413c-be82-546062d28377"
-    },
-    body: "This is expected to be sent back as part of response body."
+    "sample-header": "test"
+    }
     };
     try {
-    	var response = curl("PUT", server, request);
+    	var response = curl("GET", server, request);
     	log('response body received from server:', response.body);
     	log('response headers received from server:', response.headers);
     	log('response status received from server:', response.status);
     	var res= new Uint8Array(response.body);
     	if(response.status == 200){
-    	    dst_bucket[context.docID]=response.body;
+    	    var id=context.docID;
+    	    var status= response.status;
+    	    var query= UPSERT into dst_bucket (KEY, VALUE) VALUES ($id, $status);
     	}
     	else{
-    	    dst_bucket[context.docID]=response.status;
+    	    var id=context.docID;
+    	    var status= response.status;
+    	    var query= UPSERT into dst_bucket (KEY, VALUE) VALUES ($id, $status);
     	}
     }
     catch (e) {
