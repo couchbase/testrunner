@@ -1827,6 +1827,10 @@ class RestConnection(object):
             node = RestParser().parse_get_nodes_response(json_parsed)
         return node
 
+    def get_ip_from_ini_file(self):
+        """ in alternate address, we need to get hostname from ini file """
+        return self.ip
+
     def node_statuses(self, timeout=120):
         nodes = []
         api = self.baseUrl + 'nodeStatuses'

@@ -4921,11 +4921,33 @@ class RemoteMachineShellConnection:
         command = "dd if=/dev/zero of={0}/disk-quota.ext3 count={1}; df -Th".format(location, count)
         output, error = self.execute_command(command)
         return output, error
-    
+
     def update_dist_type(self):
         output, error = self.execute_command("echo '{{dist_type,inet6_tcp}}.' > {0}".format(LINUX_DIST_CONFIG))
         self.log_command_output(output, error)
-        
+
+    def alt_addr_add_node(self, main_server=None, internal_IP=None,
+                                server_add=None,
+                                user="Administrator",
+                                passwd="password",
+                                services="kv", cmd_ext=""):
+        """ in alternate address, we need to use curl to add node """
+
+        if internal_IP is None:
+            raise Exception("Need internal IP to add node.")
+        if main_server is None:
+            raise Exception("Need master IP to run")
+        cmd = 'curl{0} -X POST -d  "hostname={1}&user={2}&password={3}&services={4}" '\
+                             .format(cmd_ext, internal_IP, server_add.rest_username,
+                                     server_add.rest_password, services)
+        cmd += '-u {0}:{1} http://{2}:8091/controller/addNode'\
+                             .format(main_server.rest_username,
+                                     main_server.rest_password,
+                                     main_server.ip)
+        output, error = self.execute_command(cmd)
+        return output, error
+
+
 class RemoteUtilHelper(object):
 
     @staticmethod

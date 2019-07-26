@@ -343,7 +343,7 @@ class BucketOperationHelper():
         msg = "waiting for memcached bucket : {0} in {1} to accept set ops"
         log.info(msg.format(bucket, node.ip))
         all_vbuckets_ready = BucketOperationHelper.wait_for_vbuckets_ready_state(node,
-                                                                                 bucket, timeout_in_seconds, log_msg)
+                                                bucket, timeout_in_seconds, log_msg)
         # return (counter == vbucket_count) and all_vbuckets_ready
         return all_vbuckets_ready
 

@@ -836,13 +836,16 @@ class VBucketAwareMemcached(object):
                 self.add_memcached(replica, memcacheds, rest, bucket)
         return memcacheds, vBucketMap, vBucketMapReplica
 
-    def add_memcached(self, server_str, memcacheds, rest, bucket, admin_user='cbadminbucket', admin_pass='password'):
+    def add_memcached(self, server_str, memcacheds, rest, bucket, admin_user='cbadminbucket',
+                                                                      admin_pass='password'):
         if not server_str in memcacheds:
             serverIp = server_str.rsplit(":", 1)[0]
             serverPort = int(server_str.rsplit(":", 1)[1])
             nodes = rest.get_nodes()
             server = TestInputServer()
             server.ip = serverIp
+            if TestInputSingleton.input.param("alt_addr", False):
+                server.ip = rest.get_ip_from_ini_file()
             server.port = rest.port
             server.rest_username = rest.username
             server.rest_password = rest.password

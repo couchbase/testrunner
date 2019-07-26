@@ -4,6 +4,7 @@ from remote.remote_util import RemoteMachineShellConnection
 from mc_bin_client import MemcachedClient, MemcachedError
 from membase.api.exception import ServerAlreadyJoinedException
 from membase.helper.rebalance_helper import RebalanceHelper
+from TestInput import TestInputSingleton
 import memcacheConstants
 
 import logger
@@ -259,11 +260,22 @@ class ClusterOperationHelper(object):
                                           ejectedNodes=[node.id for node in nodes if node.id != master_id],
                                           wait_for_rebalance=wait_for_rebalance)
             success_cleaned = []
+            alt_addr = TestInputSingleton.input.param("alt_addr", False)
             for removed in [node for node in nodes if (node.id != master_id)]:
                 removed.rest_password = servers[0].rest_password
                 removed.rest_username = servers[0].rest_username
                 try:
-                    rest = RestConnection(removed)
+                    if alt_addr:
+                        for server in servers:
+                            shell = RemoteMachineShellConnection(server)
+                            internal_IP = shell.get_ip_address()
+                            internal_IP = [x for x in internal_IP if x != "127.0.0.1"]
+                            shell.disconnect()
+                            if internal_IP == removed.ip:
+                                rest = RestConnection(server)
+                                break
+                    else:
+                        rest = RestConnection(removed)
                 except Exception as ex:
                     log.error("can't create rest connection after rebalance out for ejected nodes,\
                         will retry after 10 seconds according to MB-8430: {0} ".format(ex))
@@ -283,8 +295,19 @@ class ClusterOperationHelper(object):
                 log.error("node {0}:{1} was not cleaned after removing from cluster".format(
                            removed.ip, removed.port))
                 try:
-                    rest = RestConnection(node)
-                    rest.force_eject_node()
+                    if alt_addr:
+                        for server in servers:
+                            shell = RemoteMachineShellConnection(server)
+                            internal_IP = shell.get_ip_address()
+                            internal_IP = [x for x in internal_IP if x != "127.0.0.1"]
+                            shell.disconnect()
+                            if internal_IP == removed.ip:
+                                rest = RestConnection(server)
+                                break
+                    else:
+                        rest = RestConnection(node)
+                    if not alt_addr:
+                        rest.force_eject_node()
                 except Exception as ex:
                     log.error("force_eject_node {0}:{1} failed: {2}".format(removed.ip, removed.port, ex))
             if len(set([node for node in nodes if (node.id != master_id)])\

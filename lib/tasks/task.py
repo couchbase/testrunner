@@ -244,6 +244,7 @@ class BucketCreateTask(Task):
         Task.__init__(self, "bucket_create_task")
         self.server = bucket_params['server']
         self.bucket = bucket_params['bucket_name']
+        self.alt_addr = TestInputSingleton.input.param("alt_addr", False)
         self.replicas = bucket_params['replicas']
         self.port = bucket_params['port']
         self.size = bucket_params['size']
@@ -339,7 +340,7 @@ class BucketCreateTask(Task):
                 self.set_result(True)
                 self.state = FINISHED
                 return
-            if BucketOperationHelper.wait_for_memcached(self.server, self.bucket):
+            if BucketOperationHelper.wait_for_memcached(self.server, self.bucket, self.alt_addr):
                 self.log.info("bucket '{0}' was created with per node RAM quota: {1}".format(self.bucket, self.size))
                 self.set_result(True)
                 self.state = FINISHED
