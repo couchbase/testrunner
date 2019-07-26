@@ -2893,3 +2893,39 @@ class BaseTestCase(unittest.TestCase):
                 stats = mc.stats()
                 self.assertEquals(int(stats['ep_flusher_batch_split_trigger']),
                                   flusher_batch_split_trigger)
+
+    def check_retry_rebalance_succeeded(self):
+        self.sleep(30)
+        attempts_remaining = retry_rebalance = retry_after_secs = None
+        for i in range(10):
+            self.log.info("Getting stats : try {0}".format(i))
+            result = json.loads(self.rest.get_pending_rebalance_info())
+            self.log.info(result)
+            if "retry_after_secs" in result:
+                retry_after_secs = result["retry_after_secs"]
+                attempts_remaining = result["attempts_remaining"]
+                retry_rebalance = result["retry_rebalance"]
+                break
+            self.sleep(self.sleep_time)
+        self.log.info("Attempts remaining : {0}, Retry rebalance : {1}".format(attempts_remaining, retry_rebalance))
+        while attempts_remaining:
+            # wait for the afterTimePeriod for the failed rebalance to restart
+            self.sleep(retry_after_secs, message="Waiting for the afterTimePeriod to complete")
+            try:
+                result = self.rest.monitorRebalance()
+                msg = "monitoring rebalance {0}"
+                self.log.info(msg.format(result))
+            except Exception:
+                result = json.loads(self.rest.get_pending_rebalance_info())
+                self.log.info(result)
+                try:
+                    attempts_remaining = result["attempts_remaining"]
+                    retry_rebalance = result["retry_rebalance"]
+                    retry_after_secs = result["retry_after_secs"]
+                except KeyError:
+                    self.fail("Retrying of rebalance still did not help. All the retries exhausted...")
+                self.log.info("Attempts remaining : {0}, Retry rebalance : {1}".format(attempts_remaining,
+                                                                                       retry_rebalance))
+            else:
+                self.log.info("Retry rebalanced fixed the rebalance failure")
+                break

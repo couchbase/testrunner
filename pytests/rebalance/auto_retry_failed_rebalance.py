@@ -56,7 +56,7 @@ class AutoRetryFailedRebalance(RebalanceBaseTest):
             self.log.info("Rebalance failed with : {0}".format(str(e)))
             # Recover from the error
             self._recover_from_error(before_rebalance_failure)
-            self._check_retry_rebalance_succeeded()
+            self.check_retry_rebalance_succeeded()
         else:
             self.fail("Rebalance did not fail as expected. Hence could not validate auto-retry feature..")
         finally:
@@ -77,13 +77,13 @@ class AutoRetryFailedRebalance(RebalanceBaseTest):
             self.log.info("Rebalance failed with : {0}".format(str(e)))
             # Recover from the error
             self._recover_from_error(during_rebalance_failure)
-            self._check_retry_rebalance_succeeded()
+            self.check_retry_rebalance_succeeded()
         else:
             # This is added as the failover task is not throwing exception
             if self.rebalance_operation == "graceful_failover":
                 # Recover from the error
                 self._recover_from_error(during_rebalance_failure)
-                self._check_retry_rebalance_succeeded()
+                self.check_retry_rebalance_succeeded()
             else:
                 self.fail("Rebalance did not fail as expected. Hence could not validate auto-retry feature..")
         finally:
@@ -193,7 +193,7 @@ class AutoRetryFailedRebalance(RebalanceBaseTest):
                 self.fail("Invalid post_failure_operation option")
             # In these failure scenarios while the retry is pending, then the retry will be attempted but fail
             try:
-                self._check_retry_rebalance_succeeded()
+                self.check_retry_rebalance_succeeded()
             except Exception as e:
                 self.log.info(e)
                 if "Retrying of rebalance still did not help. All the retries exhausted" not in str(e):
@@ -227,7 +227,7 @@ class AutoRetryFailedRebalance(RebalanceBaseTest):
             self.log.info("Rebalance failed with : {0}".format(str(e)))
             # Delete the rebalance test condition so that we recover from the error
             self._delete_rebalance_test_condition(test_failure_condition)
-            self._check_retry_rebalance_succeeded()
+            self.check_retry_rebalance_succeeded()
         else:
             self.fail("Rebalance did not fail as expected. Hence could not validate auto-retry feature..")
         finally:
@@ -253,7 +253,7 @@ class AutoRetryFailedRebalance(RebalanceBaseTest):
                     self.fail("Auto-failover did not cancel pending retry of the failed rebalance")
             else:
                 try:
-                    self._check_retry_rebalance_succeeded()
+                    self.check_retry_rebalance_succeeded()
                 except Exception as e:
                     if "Retrying of rebalance still did not help" not in str(e):
                         self.fail("retry rebalance succeeded even without failover")
@@ -284,42 +284,6 @@ class AutoRetryFailedRebalance(RebalanceBaseTest):
             operation = self.cluster.async_failover([self.master], failover_nodes=[self.servers[1]],
                                                     graceful=True, wait_for_pending=120)
         return operation
-
-    def _check_retry_rebalance_succeeded(self):
-        self.sleep(self.sleep_time)
-        attempts_remaining = retry_rebalance = retry_after_secs = None
-        for i in range(10):
-            self.log.info("Getting stats : try {0}".format(i))
-            result = json.loads(self.rest.get_pending_rebalance_info())
-            self.log.info(result)
-            if "retry_after_secs" in result:
-                retry_after_secs = result["retry_after_secs"]
-                attempts_remaining = result["attempts_remaining"]
-                retry_rebalance = result["retry_rebalance"]
-                break
-            self.sleep(self.sleep_time)
-        self.log.info("Attempts remaining : {0}, Retry rebalance : {1}".format(attempts_remaining, retry_rebalance))
-        while attempts_remaining:
-            # wait for the afterTimePeriod for the failed rebalance to restart
-            self.sleep(retry_after_secs, message="Waiting for the afterTimePeriod to complete")
-            try:
-                result = self.rest.monitorRebalance()
-                msg = "monitoring rebalance {0}"
-                self.log.info(msg.format(result))
-            except Exception:
-                result = json.loads(self.rest.get_pending_rebalance_info())
-                self.log.info(result)
-                try:
-                    attempts_remaining = result["attempts_remaining"]
-                    retry_rebalance = result["retry_rebalance"]
-                    retry_after_secs = result["retry_after_secs"]
-                except KeyError:
-                    self.fail("Retrying of rebalance still did not help. All the retries exhausted...")
-                self.log.info("Attempts remaining : {0}, Retry rebalance : {1}".format(attempts_remaining,
-                                                                                       retry_rebalance))
-            else:
-                self.log.info("Retry rebalanced fixed the rebalance failure")
-                break
 
     def _induce_error(self, error_condition):
         if error_condition == "stop_server":
