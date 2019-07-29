@@ -4,12 +4,15 @@ from TestInput import TestInputSingleton
 from threading import Thread
 from lib.remote.remote_util import RemoteMachineShellConnection
 from lib.memcached.helper.data_helper import MemcachedClientHelper
+from lib.membase.api.rest_client import RestConnection, RestHelper
 import json
 
 class MovingTopFTS(FTSBaseTest):
 
     def setUp(self):
         self.num_rebalance = TestInputSingleton.input.param("num_rebalance", 1)
+        self.retry_time = TestInputSingleton.input.param("retry_time", 300)
+        self.num_retries = TestInputSingleton.input.param("num_retries", 1)
         self.query = {"match": "emp", "field": "type"}
         super(MovingTopFTS, self).setUp()
 
@@ -17,6 +20,17 @@ class MovingTopFTS(FTSBaseTest):
         super(MovingTopFTS, self).tearDown()
 
     """ Topology change during indexing"""
+
+
+    def kill_fts_service(self, timeout):
+        fts_node = self._cb_cluster.get_random_fts_node()
+        self.sleep(timeout)
+        NodeHelper.kill_cbft_process(fts_node)
+
+    def kill_erlang_service(self, timeout):
+        fts_node = self._cb_cluster.get_random_fts_node()
+        self.sleep(timeout)
+        NodeHelper.kill_erlang(fts_node)
 
     def rebalance_in_during_index_building(self):
         self.load_data()
@@ -32,6 +46,35 @@ class MovingTopFTS(FTSBaseTest):
         self.wait_for_indexing_complete()
         self.validate_index_count(equal_bucket_doc_count=True)
 
+    def retry_rebalance_in_during_index_building(self):
+        self._cb_cluster.enable_retry_rebalance(self.retry_time, self.num_retries)
+        self.load_data()
+        self.create_fts_indexes_all_buckets()
+        self.sleep(10)
+        self.log.info("Index building has begun...")
+        self.sleep(10)
+        for index in self._cb_cluster.get_indexes():
+            self.log.info("Index count for %s: %s"
+                          %(index.name,index.get_indexed_doc_count()))
+        try:
+            reb_thread = Thread(
+                target=self.kill_fts_service,
+                args=[10])
+            reb_thread.start()
+            self.sleep(2)
+            self._cb_cluster.rebalance_in(num_nodes=1, services=["fts"])
+            self.fail("Rebalance did not fail")
+        except Exception as e:
+            self.log.error(str(e))
+            self.sleep(5)
+            self._check_retry_rebalance_succeeded()
+
+        for index in self._cb_cluster.get_indexes():
+            self.is_index_partitioned_balanced(index)
+        self.wait_for_indexing_complete()
+        self.validate_index_count(equal_bucket_doc_count=True)
+        self._cb_cluster.disable_retry_rebalance()
+
     def rebalance_out_during_index_building(self):
         self.load_data()
         self.create_fts_indexes_all_buckets()
@@ -41,6 +84,32 @@ class MovingTopFTS(FTSBaseTest):
             self.log.info("Index count for %s: %s"
                           %(index.name,index.get_indexed_doc_count()))
         self._cb_cluster.rebalance_out()
+        for index in self._cb_cluster.get_indexes():
+            self.is_index_partitioned_balanced(index)
+        self.wait_for_indexing_complete()
+        self.validate_index_count(equal_bucket_doc_count=True)
+
+    def retry_rebalance_out_during_index_building(self):
+        self._cb_cluster.enable_retry_rebalance(self.retry_time, self.num_retries)
+        self.load_data()
+        self.create_fts_indexes_all_buckets()
+        self.sleep(30)
+        self.log.info("Index building has begun...")
+        self.sleep(10)
+        for index in self._cb_cluster.get_indexes():
+            self.log.info("Index count for %s: %s"
+                          %(index.name,index.get_indexed_doc_count()))
+        try:
+            reb_thread = Thread(
+                target=self.kill_fts_service,
+                args=[5])
+            reb_thread.start()
+            self._cb_cluster.rebalance_out()
+            self.fail("Rebalance did not fail")
+        except Exception as e:
+            self.log.error(str(e))
+            self.sleep(5)
+            self._check_retry_rebalance_succeeded()
         for index in self._cb_cluster.get_indexes():
             self.is_index_partitioned_balanced(index)
         self.wait_for_indexing_complete()
@@ -69,6 +138,33 @@ class MovingTopFTS(FTSBaseTest):
             self.log.info("Index count for %s: %s"
                           %(index.name, index.get_indexed_doc_count()))
         self._cb_cluster.swap_rebalance(services=["fts"])
+        for index in self._cb_cluster.get_indexes():
+            self.is_index_partitioned_balanced(index)
+        self.wait_for_indexing_complete()
+        self.validate_index_count(equal_bucket_doc_count=True)
+
+    def retry_swap_rebalance_during_index_building(self):
+        self._cb_cluster.enable_retry_rebalance(self.retry_time, self.num_retries)
+        self.load_data()
+        self.create_fts_indexes_all_buckets()
+        self.sleep(10)
+        self.log.info("Index building has begun...")
+        self.sleep(10)
+        for index in self._cb_cluster.get_indexes():
+            self.log.info("Index count for %s: %s"
+                          %(index.name, index.get_indexed_doc_count()))
+
+        try:
+            reb_thread = Thread(
+                target=self._cb_cluster.reboot_after_timeout(),
+                args=[5])
+            reb_thread.start()
+            self._cb_cluster.swap_rebalance(services=["fts"])
+        except Exception as e:
+            self.log.error(str(e))
+            self.sleep(5)
+            self._check_retry_rebalance_succeeded()
+
         for index in self._cb_cluster.get_indexes():
             self.is_index_partitioned_balanced(index)
         self.wait_for_indexing_complete()

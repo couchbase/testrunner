@@ -2728,6 +2728,19 @@ class CouchbaseCluster:
         task = self.__async_rebalance_out(num_nodes=num_nodes)
         task.result()
 
+    def enable_retry_rebalance(self, retry_time, num_retries):
+        body = {"enabled": "true", "afterTimePeriod": retry_time, "maxAttempts": num_retries}
+        rest = RestConnection(self.get_master_node())
+        rest.set_retry_rebalance_settings(body)
+        result = rest.get_retry_rebalance_settings()
+        self.__log.info("Retry Rebalance settings changed to : {0}"
+                      .format(json.loads(result)))
+
+    def disable_retry_rebalance(self):
+        rest = RestConnection(self.get_master_node())
+        body = {"enabled": "false"}
+        rest.set_retry_rebalance_settings(body)
+
     def async_rebalance_in(self, num_nodes=1, services=None):
         """Rebalance-in nodes into Cluster asynchronously
         @param num_nodes: number of nodes to rebalance-in to cluster.
@@ -3011,6 +3024,10 @@ class CouchbaseCluster:
         NodeHelper.reboot_server(reboot_node, test_case)
         return reboot_node
 
+    def reboot_after_timeout(self, timeout=5):
+        time.sleep(timeout)
+        self.reboot_one_node(test_case=self)
+
     def restart_couchbase_on_all_nodes(self):
         for node in self.__nodes:
             NodeHelper.do_a_warm_up(node)
@@ -3076,6 +3093,36 @@ class FTSBaseTest(unittest.TestCase):
 
     def __is_cluster_run(self):
         return len(set([server.ip for server in self._input.servers])) == 1
+
+    def _check_retry_rebalance_succeeded(self):
+        rest = RestConnection(self._cb_cluster.get_master_node())
+        result = json.loads(rest.get_pending_rebalance_info())
+        self.log.info(result)
+        retry_after_secs = result["retry_after_secs"]
+        attempts_remaining = result["attempts_remaining"]
+        retry_rebalance = result["retry_rebalance"]
+        self.log.info("Attempts remaining : {0}, Retry rebalance : {1}".format(attempts_remaining, retry_rebalance))
+        while attempts_remaining:
+            # wait for the afterTimePeriod for the failed rebalance to restart
+            self.sleep(retry_after_secs, message="Waiting for the afterTimePeriod to complete")
+            try:
+                result = rest.monitorRebalance()
+                msg = "monitoring rebalance {0}"
+                self.log.info(msg.format(result))
+            except Exception:
+                result = json.loads(rest.get_pending_rebalance_info())
+                self.log.info(result)
+                try:
+                    attempts_remaining = result["attempts_remaining"]
+                    retry_rebalance = result["retry_rebalance"]
+                    retry_after_secs = result["retry_after_secs"]
+                except KeyError:
+                    self.fail("Retrying of rebalance still did not help. All the retries exhausted...")
+                self.log.info("Attempts remaining : {0}, Retry rebalance : {1}".format(attempts_remaining,
+                                                                                       retry_rebalance))
+            else:
+                self.log.info("Retry rebalanced fixed the rebalance failure")
+                break
 
     def tearDown(self):
         """Clusters cleanup"""
