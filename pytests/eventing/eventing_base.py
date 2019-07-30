@@ -632,3 +632,12 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
                 import docker
             except ImportError, e:
                 raise Exception("docker installation fails with {}".format(o))
+
+    def load_sample_buckets(self, server, bucketName):
+        from lib.remote.remote_util import RemoteMachineShellConnection
+        shell = RemoteMachineShellConnection(server)
+        shell.execute_command("""curl -v -u Administrator:password \
+                             -X POST http://{0}:8091/sampleBuckets/install \
+                          -d '["{1}"]'""".format(server.ip, bucketName))
+        shell.disconnect()
+        self.sleep(20)
