@@ -21,7 +21,7 @@ function NDtimerCallback(context) {
 	path : 'utf',
 	body: "我说中国话",
 	headers: {
-        "Content-Type":"text/plain"
+        "Content-Type":"text/plain;charset=utf-8"
     }
     };
     try {
@@ -43,7 +43,7 @@ function timerCallback(context) {
 	path : 'utf',
 	body: "我说中国话",
 	headers: {
-        "Content-Type":"text/plain"
+        "Content-Type":"text/plain;charset=utf-8"
     }
     };
     try {

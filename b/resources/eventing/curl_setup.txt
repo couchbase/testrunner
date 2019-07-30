@@ -222,7 +222,7 @@
            "body" : {
 		      "type" : "STRING",
 		      "string" : "我说中国话",
-		      "contentType" : "text/plain; charset=utf-16"
+		      "contentType" : "text/plain; charset=utf-8"
 		    }
           },
            "httpResponse" : {
