@@ -30,7 +30,7 @@ class LogRedactionTests(LogRedactionBase):
         try:
             logs_path = result["perNode"]["ns_1@" + str(self.master.ip)]["path"]
         except KeyError:
-            logs_path = result["perNode"]["ns_1@127.0.0.1"]["path"]
+            logs_path = result["perNode"]["ns_1@cb.local"]["path"]
         redactFileName = logs_path.split('/')[-1]
         nonredactFileName = logs_path.split('/')[-1].replace('-redacted', '')
         remotepath = logs_path[0:logs_path.rfind('/')+1]
@@ -45,7 +45,7 @@ class LogRedactionTests(LogRedactionBase):
         try:
             logs_path = result["perNode"]["ns_1@" + str(self.master.ip)]["path"]
         except KeyError:
-            logs_path = result["perNode"]["ns_1@127.0.0.1"]["path"]
+            logs_path = result["perNode"]["ns_1@cb.local"]["path"]
         nonredactFileName = logs_path.split('/')[-1]
         remotepath = logs_path[0:logs_path.rfind('/')+1]
         self.verify_log_files_exist(remotepath=remotepath,
@@ -70,7 +70,7 @@ class LogRedactionTests(LogRedactionBase):
         try:
             logs_path = result["perNode"]["ns_1@" + str(self.master.ip)]["path"]
         except KeyError:
-            logs_path = result["perNode"]["ns_1@127.0.0.1"]["path"]
+            logs_path = result["perNode"]["ns_1@cb.local"]["path"]
         redactFileName = logs_path.split('/')[-1]
         nonredactFileName = logs_path.split('/')[-1].replace('-redacted', '')
         remotepath = logs_path[0:logs_path.rfind('/') + 1]
@@ -116,7 +116,7 @@ class LogRedactionTests(LogRedactionBase):
         try:
             logs_path = result["perNode"]["ns_1@" + str(self.master.ip)]["path"]
         except KeyError:
-            logs_path = result["perNode"]["ns_1@127.0.0.1"]["path"]
+            logs_path = result["perNode"]["ns_1@cb.local"]["path"]
         redactFileName = logs_path.split('/')[-1]
         nonredactFileName = logs_path.split('/')[-1].replace('-redacted', '')
         remotepath = logs_path[0:logs_path.rfind('/') + 1]
@@ -210,7 +210,7 @@ class LogRedactionTests(LogRedactionBase):
         try:
             logs_path = result["perNode"]["ns_1@" + str(self.master.ip)]["path"]
         except KeyError:
-            logs_path = result["perNode"]["ns_1@127.0.0.1"]["path"]
+            logs_path = result["perNode"]["ns_1@cb.local"]["path"]
         redactFileName = logs_path.split('/')[-1]
         nonredactFileName = logs_path.split('/')[-1].replace('-redacted', '')
         remotepath = logs_path[0:logs_path.rfind('/') + 1]
@@ -272,7 +272,7 @@ class LogRedactionTests(LogRedactionBase):
         try:
             logs_path = result["perNode"]["ns_1@" + str(self.master.ip)]["path"]
         except KeyError:
-            logs_path = result["perNode"]["ns_1@127.0.0.1"]["path"]
+            logs_path = result["perNode"]["ns_1@cb.local"]["path"]
         redactFileName = logs_path.split('/')[-1]
         nonredactFileName = logs_path.split('/')[-1].replace('-redacted', '')
         remotepath = logs_path[0:logs_path.rfind('/') + 1]
@@ -334,7 +334,7 @@ class LogRedactionTests(LogRedactionBase):
         try:
             logs_path = result["perNode"]["ns_1@" + str(self.master.ip)]["path"]
         except KeyError:
-            logs_path = result["perNode"]["ns_1@127.0.0.1"]["path"]
+            logs_path = result["perNode"]["ns_1@cb.local"]["path"]
         redactFileName = logs_path.split('/')[-1]
         nonredactFileName = logs_path.split('/')[-1].replace('-redacted', '')
         remotepath = logs_path[0:logs_path.rfind('/') + 1]
@@ -396,7 +396,7 @@ class LogRedactionTests(LogRedactionBase):
         try:
             logs_path = result["perNode"]["ns_1@" + str(self.master.ip)]["path"]
         except KeyError:
-            logs_path = result["perNode"]["ns_1@127.0.0.1"]["path"]
+            logs_path = result["perNode"]["ns_1@cb.local"]["path"]
         redactFileName = logs_path.split('/')[-1]
         nonredactFileName = logs_path.split('/')[-1].replace('-redacted', '')
         remotepath = logs_path[0:logs_path.rfind('/') + 1]
@@ -418,7 +418,7 @@ class LogRedactionTests(LogRedactionBase):
         try:
             logs_path = result["perNode"]["ns_1@" + str(self.master.ip)]["path"]
         except KeyError:
-            logs_path = result["perNode"]["ns_1@127.0.0.1"]["path"]
+            logs_path = result["perNode"]["ns_1@cb.local"]["path"]
         redactFileName = logs_path.split('/')[-1]
         nonredactFileName = logs_path.split('/')[-1].replace('-redacted', '')
         remotepath = logs_path[0:logs_path.rfind('/')+1]
@@ -468,7 +468,7 @@ class LogRedactionTests(LogRedactionBase):
             try:
                 logs_path = result["perNode"]["ns_1@" + str(self.master.ip)]["path"]
             except KeyError:
-                logs_path = result["perNode"]["ns_1@127.0.0.1"]["path"]
+                logs_path = result["perNode"]["ns_1@cb.local"]["path"]
             redactFileName = logs_path.split('/')[-1]
             nonredactFileName = logs_path.split('/')[-1].replace('-redacted', '')
             remotepath = logs_path[0:logs_path.rfind('/')+1]
@@ -538,7 +538,7 @@ class LogRedactionTests(LogRedactionBase):
         try:
             logs_path = result["perNode"]["ns_1@" + str(self.master.ip)]["path"]
         except KeyError:
-            logs_path = result["perNode"]["ns_1@127.0.0.1"]["path"]
+            logs_path = result["perNode"]["ns_1@cb.local"]["path"]
         redactFileName = logs_path.split('/')[-1]
         nonredactFileName = logs_path.split('/')[-1].replace('-redacted', '')
         remotepath = logs_path[0:logs_path.rfind('/')+1]
@@ -585,7 +585,7 @@ class LogRedactionTests(LogRedactionBase):
         try:
             logs_path = result["perNode"]["ns_1@" + str(self.master.ip)]["path"]
         except KeyError:
-            logs_path = result["perNode"]["ns_1@127.0.0.1"]["path"]
+            logs_path = result["perNode"]["ns_1@cb.local"]["path"]
         redactFileName = logs_path.split('/')[-1]
         nonredactFileName = logs_path.split('/')[-1].replace('-redacted', '')
         remotepath = logs_path[0:logs_path.rfind('/') + 1]
