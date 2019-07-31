@@ -263,28 +263,25 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
             "highlight": ["{\"style\":\"html\", \"fields\":[\"*\"]}", "{\"style\":\"html\", \"fields\":[\"name\"]}", "{\"style\":\"ansi\", \"fields\":[\"name\"]}", "{\"style\":\"ansi\", \"fields\":[\"*\"]}"],
             # 10 results
             "analyzer": ["{\"match\": \"California\", \"field\": \"state\", \"analyzer\": \"standard\"}", "{\"match\": \"California\", \"field\": \"state\", \"analyzer\": \"html\"}"],
-            # MB-34005
             "size": [10, 100],
-            # 10 results
-            "sort": ["[{\"by\": \"field\", \"field\": \"name\", \"mode\":\"max\", \"missing\": \"last\"}]"],
         }
 
         for option_val in test_cases[test_name]:
             self._create_fts_index(index_name='idx_beer_sample_fts', doc_count=7303, source_name='beer-sample')
-            n1ql_query = "select meta().id from `beer-sample` where search(`beer-sample`, {\"query\":{\"field\": \"state\", \"match\":\"California\"}, \"size\": 10000}, {\""+test_name+"\": "+str(option_val)+"})"
+            n1ql_query = "select meta().id from `beer-sample` where search(`beer-sample`, {\"query\":{\"field\": \"state\", \"match\":\"California\"}, \"size\": 10000, \"sort\": [{\"by\":\"field\",\"field\":\"name\",\"mode\":\"max\",\"missing\":\"last\"}]}, {\""+test_name+"\": "+str(option_val)+"})"
             if test_name == "size":
-                n1ql_query = "select meta().id from `beer-sample` where search(`beer-sample`, {\"query\":{\"field\": \"state\", \"match\":\"California\"}, \""+test_name+"\":"+ str(option_val)+"})"
+                n1ql_query = "select meta().id from `beer-sample` where search(`beer-sample`, {\"query\":{\"field\": \"state\", \"match\":\"California\"}, \"sort\": [{\"by\":\"field\",\"field\":\"name\",\"mode\":\"max\",\"missing\":\"last\"}], \""+test_name+"\":"+ str(option_val)+"})"
             if test_name == 'size':
-                fts_request_str = "{\"query\":{\"field\": \"state\", \"match\":\"California\"}, \"size\":"+str(option_val)+ "}"
+                fts_request_str = "{\"query\":{\"field\": \"state\", \"match\":\"California\"}, \"size\":"+str(option_val)+ ", \"sort\": [{\"by\":\"field\",\"field\":\"name\",\"mode\":\"max\",\"missing\":\"last\"}]}"
             else:
-                fts_request_str = "{\"query\":{\"field\": \"state\", \"match\":\"California\"}, \"size\":10000, \""+test_name+"\":"+str(option_val)+"}"
+                fts_request_str = "{\"query\":{\"field\": \"state\", \"match\":\"California\"}, \"sort\": [{\"by\":\"field\",\"field\":\"name\",\"mode\":\"max\",\"missing\":\"last\"}], \"size\":10000, \""+test_name+"\":"+str(option_val)+"}"
             fts_request = json.loads(fts_request_str)
             n1ql_results = self.run_cbq_query(n1ql_query)['results']
             total_hits, hits, took, status = \
                 rest.run_fts_query(index_name="idx_beer_sample_fts",
                                    query_json=fts_request)
-            self._remove_all_fts_indexes()
             comparison_result = self._compare_n1ql_results_against_fts(n1ql_results, hits)
+            self._remove_all_fts_indexes()
             self.assertEquals(comparison_result, "OK", comparison_result)
 
 
@@ -703,9 +700,9 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
                 "expected_result": "success"
             },
             "named_prepared_option_settings": {
-                "prepared": "select meta().id from `beer-sample` where search(`beer-sample`, 'st    ate:California', {'size': $size})",
+                "prepared": "select meta().id from `beer-sample` where search(`beer-sample`, {\"query\":{\"field\": \"state\", \"match\":\"California\"},'size': $size})",
                 "params": "$size=15",
-                "n1ql": "select meta().id from `beer-sample` where search(`beer-sample`, 'state:California', {'size': 15})",
+                "n1ql": "select meta().id from `beer-sample` where search(`beer-sample`, {\"query\":{\"field\": \"state\", \"match\":\"California\"},'size': 15})",
                 "expected_result": "success"
             },
             "named_prepared_option_out": {
@@ -792,8 +789,8 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
         test_cases = {
             # MB-33724
             "named_prepared_query_definition": {
-                "prepared": "select meta().id from `beer-sample` where search(`beer-sample`, \"state:$state_val\")",
-                "params": "$state_val=\"California\"",
+                "prepared": "select meta().id from `beer-sample` where search(`beer-sample`, $state_val)",
+                "params": "$state_val=\"state:California\"",
                 "n1ql": "select meta().id from `beer-sample` where search(`beer-sample`, 'state:California')",
                 "expected_result": "success"
             },
@@ -805,21 +802,21 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
                 "expected_result": "success"
             },
             "named_prepared_option_out": {
-                "prepared": "select meta().id from `beer-sample` where search(`beer-sample`, \"state:California\", {\"out\": $out_val})",
-                "params": "$out=\"out_values\"",
+                "prepared": "select meta().id from `beer-sample` where search(`beer-sample`, \"state:California\", $out_param)",
+                "params": "$out_param={\"out\":\"out_values\"}",
                 "n1ql": "select meta().id from `beer-sample` where search(`beer-sample`, 'state:California', {'out': 'out_values'})",
                 "expected_result": "success"
             },
             "positional_prepared_query_definition": {
-                "prepared": "select meta().id from `beer-sample` where search(`beer-sample`, \"state:$1\")",
-                "params": "args=[\"California\"]",
+                "prepared": "select meta().id from `beer-sample` where search(`beer-sample`, $1)",
+                "params": "args=[\"state:California\"]",
                 "n1ql": "select meta().id from `beer-sample` where search(`beer-sample`, 'state:California')",
                 "expected_result": "success"
             },
             "positional_prepared_option_index_name": {
-                "prepared": "select meta().id from `beer-sample` where search(`beer-sample`, \"state:California\", {\"index\": \"$1\"})",
-                "params": "args=[\"idx_beer_sample_fts\"]",
-                "n1ql": "",
+                "prepared": "select meta().id from `beer-sample` where search(`beer-sample`, \"state:California\", $1)",
+                "params": "args=[{\"index\":\"idx_beer_sample_fts\"}]",
+                "n1ql": "select meta().id from `beer-sample` where search(`beer-sample`, 'state:California', {\"index\":\"idx_beer_sample_fts\"})",
                 "expected_result": "success"
             },
             "positional_prepared_option_settings": {
@@ -829,9 +826,9 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
                 "expected_result": "success"
             },
             "positional_prepared_option_out": {
-                "prepared": "select meta().id from `beer-sample` where search(`beer-sample`, \"state:California\", {\"out\": $1})",
-                "params": "args=[\"out_values\"]",
-                "n1ql": "",
+                "prepared": "select meta().id from `beer-sample` where search(`beer-sample`, \"state:California\", $1)",
+                "params": "args=[{\"out\":\"out_values\"}]",
+                "n1ql": "select meta().id from `beer-sample` where search(`beer-sample`, 'state:California')",
                 "expected_result": "success"
             }
         }
@@ -925,9 +922,9 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
                                 search_results = self.run_cbq_query(search_query)['results']
                                 if outer_sort_expression == "":
                                     if inner_sort_expression != "":
-                                        fts_request_str = "'{\"query\":{\"field\": \"state\", \"match\":\"California\"}, \"size\":1000,"+inner_sort_expression+"}'"
+                                        fts_request_str = "{\"query\":{\"field\": \"state\", \"match\":\"California\"}, \"size\":1000,"+inner_sort_expression+"}"
                                     else:
-                                        fts_request_str = "'{\"query\":{\"field\": \"state\", \"match\":\"California\"}, \"size\":10000}'"
+                                        fts_request_str = "{\"query\":{\"field\": \"state\", \"match\":\"California\"}, \"size\":10000}"
                                     fts_request = json.loads(fts_request_str)
                                     total_hits, hits, took, status = rest.run_fts_query(
                                         index_name="idx_beer_sample_fts",
@@ -949,7 +946,6 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
                                     self.assertEquals(len(n1ql_doc_ids), len(search_doc_ids),
                                                       "SEARCH QUERY - " + search_query + "\nN1QL QUERY - " + n1ql_query)
                                     self.assertEquals(sorted(search_doc_ids), sorted(n1ql_doc_ids), "SEARCH QUERY - "+search_query+"\nN1QL QUERY - "+n1ql_query)
-
 
         self._remove_all_fts_indexes()
 
@@ -1136,7 +1132,6 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
             self.run_cbq_query("create index beer_sample_address_arr_idx on `beer-sample` (all array v.address for v in address end)")
         if not self.is_index_present("beer-sample", "beer_sample_address_idx"):
             self.run_cbq_query("create index beer_sample_address_idx on `beer-sample` (`beer-sample`.address)")
-
         self.wait_for_all_indexes_online()
 
         n1ql_query = ""
@@ -1188,7 +1183,7 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
 
         results_before_expiration = self.run_cbq_query("select count(*) from ttl_bucket where search(ttl_bucket, \"string_field:string\")")
         self.assertTrue(results_before_expiration['results'][0]['$1'] > 0, "Results before expiration must be positive")
-        self.sleep(100)
+        self.sleep(300)
         results_after_expiration = self.run_cbq_query("select count(*) from ttl_bucket where search(ttl_bucket, \"string_field:string\")")
         self.assertTrue(results_after_expiration['results'][0]['$1'] == 0, "Results after expiration must be zero")
 
