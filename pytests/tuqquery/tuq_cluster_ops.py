@@ -474,7 +474,7 @@ class QueriesOpsTests(QuerySanityTests):
                 time.sleep(self.retry_time + 30)
             self.stop_firewall_on_node(rebalance_server)
             time.sleep(10)
-            self._check_retry_rebalance_succeeded()
+            self.check_retry_rebalance_succeeded()
         finally:
             self.stop_firewall_on_node(rebalance_server)
             body = {"enabled": "false"}
