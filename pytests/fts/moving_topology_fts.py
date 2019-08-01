@@ -773,6 +773,36 @@ class MovingTopFTS(FTSBaseTest):
                                              expected_hits=self._num_items)
         self.log.info("SUCCESS! Hits: %s" % hits)
 
+    def retry_rebalance_in_during_querying(self):
+        #TESTED
+        self._cb_cluster.enable_retry_rebalance(self.retry_time, self.num_retries)
+        index = self.create_index_generate_queries()
+        services = []
+        for _ in xrange(self.num_rebalance):
+            services.append("fts")
+        tasks = []
+        retry_reb_thread = Thread(
+            target=self.retry_rebalance,
+            args=[services])
+        retry_reb_thread.start()
+        reb_thread = Thread(
+            target=self._cb_cluster.reboot_after_timeout(),
+            args=[5])
+        reb_thread.start()
+        for count in range(0, len(index.fts_queries)):
+            tasks.append(self._cb_cluster.async_run_fts_query_compare(
+                fts_index=index,
+                es=self.es,
+                es_index_name=None,
+                query_index=count))
+        self.run_tasks_and_report(tasks, len(index.fts_queries))
+        self.sleep(30)
+        self.is_index_partitioned_balanced(index)
+        hits, _, _, _ = index.execute_query(query=self.query,
+                                            expected_hits=self._num_items)
+        self.log.info("SUCCESS! Hits: %s" % hits)
+        self._cb_cluster.disable_retry_rebalance()
+
     def rebalance_out_during_querying(self):
         #TESTED
         index = self.create_index_generate_queries()
@@ -792,6 +822,48 @@ class MovingTopFTS(FTSBaseTest):
         hits, _, _, _ = index.execute_query(query=self.query,
                                          expected_hits=self._num_items)
         self.log.info("SUCCESS! Hits: %s" % hits)
+
+    def retry_rebalance(self, services=None):
+        try:
+            if services:
+                self._cb_cluster.rebalance_in(
+                    num_nodes=self.num_rebalance,
+                    services=services)
+            else:
+                self._cb_cluster.rebalance_out()
+            self.fail("Rebalance did not fail")
+        except Exception as e:
+            self.log.error(str(e))
+            self.sleep(5)
+            self._check_retry_rebalance_succeeded()
+
+    def retry_rebalance_out_during_querying(self):
+        #TESTED
+        self._cb_cluster.enable_retry_rebalance(self.retry_time, self.num_retries)
+        index = self.create_index_generate_queries()
+        #self.run_query_and_compare(index)
+        tasks = []
+        retry_reb_thread = Thread(
+            target=self.retry_rebalance,
+            args=[])
+        retry_reb_thread.start()
+        reb_thread = Thread(
+            target=self._cb_cluster.reboot_after_timeout(),
+            args=[2])
+        reb_thread.start()
+        for count in range(0, len(index.fts_queries)):
+            tasks.append(self._cb_cluster.async_run_fts_query_compare(
+                fts_index=index,
+                es=self.es,
+                es_index_name=None,
+                query_index=count))
+        self.run_tasks_and_report(tasks, len(index.fts_queries))
+        self.is_index_partitioned_balanced(index)
+        self.run_query_and_compare(index)
+        hits, _, _, _ = index.execute_query(query=self.query,
+                                            expected_hits=self._num_items)
+        self.log.info("SUCCESS! Hits: %s" % hits)
+        self._cb_cluster.disable_retry_rebalance()
 
     def swap_rebalance_during_querying(self):
         #TESTED
