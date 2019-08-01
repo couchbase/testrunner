@@ -5,6 +5,7 @@ function OnUpdate(doc, meta) {
         for(var row of query){
         }
     } catch (e) {
+        log(e);
         var obj=JSON.parse(e["message"]);
         if(obj["errors"][0]["code"]==4000){
             dst_bucket[meta.id]=JSON.parse(e["message"]);
@@ -18,6 +19,7 @@ function OnDelete(meta) {
         for(var row of query){
         }
     } catch (e) {
+        log(e);
         var obj=JSON.parse(e["message"]);
         if(obj["errors"][0]["code"]==4000){
             delete dst_bucket[meta.id];

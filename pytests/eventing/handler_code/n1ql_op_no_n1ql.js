@@ -6,7 +6,7 @@ function OnUpdate(doc, meta) {
         }
     } catch (e) {
         log(e);
-        if(e["message"] == "N1QL: Unable to schedule N1QL query"){
+        if(e["message"] == "Unable to schedule query : Operation not supported\n"){
             dst_bucket[meta.id]=e;
         }
     }
@@ -19,7 +19,7 @@ function OnDelete(meta) {
         }
     } catch (e) {
         log(e);
-         if(e["message"] == "N1QL: Unable to schedule N1QL query"){
+         if(e["message"] == "Unable to schedule query : Operation not supported\n"){
             delete dst_bucket[meta.id];
         }
     }
