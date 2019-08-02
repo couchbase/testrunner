@@ -366,3 +366,19 @@ class EventingN1QL(EventingBaseTest):
             pass
         else:
             raise Exception("Timeout not happened for the long running query")
+
+
+    def test_n1ql_slow_queries(self):
+        self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
+        self.load_sample_buckets(self.server, "travel-sample")
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        body = self.create_save_function_body(self.function_name,"handler_code/n1ql_op_slow_handler.js",
+                                              dcp_stream_boundary="everything", execution_timeout=60)
+        self.deploy_function(body)
+        self.verify_eventing_results(self.function_name, 2016, skip_stats_validation=True)
+        gen_load_del = copy.deepcopy(self.gens_load)
+        # delete json documents
+        self.load(gen_load_del, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size, op_type='delete')
+        self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
