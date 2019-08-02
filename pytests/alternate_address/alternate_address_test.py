@@ -39,7 +39,10 @@ class AlternateAddressTests(AltAddrBaseTest):
                                        encoding="utf-8", start=0, end=self.num_items)
 
     def tearDown(self):
-        super(AlternateAddressTests, self).tearDown()
+        try:
+            super(AlternateAddressTests, self).tearDown()
+        except Exception as e:
+            print e
         ClusterOperationHelper.cleanup_cluster(self.servers, self.servers[0])
         BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
         ClusterOperationHelper.wait_for_ns_servers_or_assert(self.servers, self)
@@ -104,8 +107,9 @@ class AlternateAddressTests(AltAddrBaseTest):
         else:
             set_services = services_in.split(",")
         i = 0
+        num_hostname_add = 0
         for server in self.servers[1:]:
-            internal_IP = self.get_internal_IP(server)
+            add_node_IP = self.get_internal_IP(server)
             node_services = "kv"
             if len(set_services) == 1:
                 node_services = set_services[0]
@@ -113,8 +117,12 @@ class AlternateAddressTests(AltAddrBaseTest):
                 if len(set_services) == len(self.servers[1:]):
                     node_services = set_services[i]
                     i += 1
+            if self.add_hostname_node and num_hostname_add < self.num_hostname_add:
+                add_node_IP = server.ip
+                num_hostname_add += 1
+
             try:
-                shell.alt_addr_add_node(main_server=server1, internal_IP=internal_IP,
+                shell.alt_addr_add_node(main_server=server1, internal_IP=add_node_IP,
                                         server_add=server, services=node_services,
                                         cmd_ext=self.cmd_ext)
             except Exception as e:
@@ -127,6 +135,9 @@ class AlternateAddressTests(AltAddrBaseTest):
         if self.run_alt_addr_loader:
             if self.alt_addr_kv_loader:
                 self.kv_loader(server1, client_os = self.client_os)
+            if self.alt_addr_n1ql_query:
+                self.n1ql_query(server1.ip, self.client_os,
+                                create_travel_sample_bucket=True)
         alt_addr_status = []
         for server in self.servers[1:]:
             internal_IP = self.get_internal_IP(server)
@@ -141,6 +152,8 @@ class AlternateAddressTests(AltAddrBaseTest):
             if self.run_alt_addr_loader:
                 if self.alt_addr_kv_loader:
                     self.kv_loader(server1, self.client_os)
+                if self.alt_addr_n1ql_query:
+                    self.n1ql_query(server1.ip, self.client_os)
         remove_node = ""
         if self.alt_addr_rebalance_out:
             internal_IP = self.get_internal_IP(self.servers[-1])
@@ -163,6 +176,8 @@ class AlternateAddressTests(AltAddrBaseTest):
             if self.run_alt_addr_loader:
                 if self.alt_addr_kv_loader:
                     self.kv_loader(server1, self.client_os)
+                if self.alt_addr_n1ql_query:
+                    self.n1ql_query(server1.ip, self.client_os)
         status = self.remove_all_alternate_address_settings()
         if not status:
             self.fail("Failed to remove all alternate address setting")
@@ -276,7 +291,7 @@ class AlternateAddressTests(AltAddrBaseTest):
         base_path = "/opt/couchbase/bin/"
         if client_os == "mac":
             base_path = "/Applications/Couchbase\ Server.app/Contents/Resources/couchbase-core/bin/"
-        loader_path = "{0}cbworkloadgen".format(base_path)
+        loader_path = "{0}cbworkloadgen{1}".format(base_path, self.cmd_ext)
         cmd_load = " -n {0}:8091 -u Administrator -p password -j".format(server.ip)
         error_mesg = "No alternate address information found"
         try:
@@ -292,6 +307,57 @@ class AlternateAddressTests(AltAddrBaseTest):
                         self.fail("Failed to set alternate address.")
                     else:
                         self.fail("Failed to load to remote cluster.{0}"\
+                                  .format(e.output))
+                else:
+                    self.log.info("Error is expected due to alt addre not set yet")
+
+    """ param: default_bucket=False """
+    def n1ql_query(self, server_IP = None, client_os = "linux",
+                   create_travel_sample_bucket=False):
+        if server_IP is None:
+            server_IP = self.master.ip
+
+        self.log.info("Create travel-sample bucket")
+        if create_travel_sample_bucket:
+            create_bucket_cmd = """curl -g -v -u Administrator:password \
+                             POST http://{0}:8091/sampleBuckets/install \
+                             -d  '["travel-sample"]'""".format(server_IP)
+            output = check_output("{0}".format(create_bucket_cmd), shell=True,
+                                               stderr=STDOUT)
+            if output:
+                self.log.info("Output from create travel-sample bucket: {0}"
+                                                            .format(output))
+
+        base_path = "/opt/couchbase/bin/"
+        query_cmd = 'SELECT country FROM `travel-sample` WHERE name = "Excel Airways";'
+        if client_os == "mac":
+            base_path = "/Applications/Couchbase\ Server.app/Contents/Resources/couchbase-core/bin/"
+        loader_path = "{0}cbq{1}".format(base_path, self.cmd_ext)
+        cmd_load = " -u Administrator -p password -e {0} -s '{1}'"\
+                      .format(server_IP, query_cmd)
+        error_mesg = "No alternate address information found"
+        try:
+            self.log.info("Run query on travel-sample bucket from outside network")
+            output = check_output("{0} {1}".format(loader_path, cmd_load), shell=True, stderr=STDOUT)
+            if output:
+                self.log.info("Output from n1ql query: {0}".format(output))
+                if self.all_alt_addr_set:
+                    if "No alternate address information found" in str(output):
+                        self.fail("Failed to set alternate address.")
+                    elif "Error" in str(output):
+                        self.fail("Failed to find query node in port 8091.")
+                    else:
+                        self.fail("Failed to run query in remote cluster.{0}"\
+                                  .format(output))
+                else:
+                    self.log.info("Error is expected due to alt addre not set yet")
+        except CalledProcessError as e:
+            if e.output:
+                if self.all_alt_addr_set:
+                    if "No alternate address information found" in e.output:
+                        self.fail("Failed to set alternate address.")
+                    else:
+                        self.fail("Failed to run query in remote cluster.{0}"\
                                   .format(e.output))
                 else:
                     self.log.info("Error is expected due to alt addre not set yet")

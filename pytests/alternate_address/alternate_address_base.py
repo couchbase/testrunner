@@ -51,13 +51,15 @@ class AltAddrBaseTest(BaseTestCase):
         self.verify_data = self.input.param("verify-data", False)
         self.debug_logs = self.input.param("debug-logs", False)
         self.should_fail = self.input.param("should-fail", False)
+        self.add_hostname_node = self.input.param("add_hostname_node", False)
+        self.num_hostname_add = self.input.param("num_hostname_add", 0)
         self.alt_addr_services_in = self.input.param("alt_addr_services_in", "kv")
         self.alt_addr_rebalance_out = self.input.param("alt_addr_rebalance_out", False)
         self.alt_addr_rebalance_in = self.input.param("alt_addr_rebalance_in", False)
         self.alt_addr_rebalance_in_services = self.input.param("alt_addr_rebalance_in_services", "kv")
         self.alt_addr_use_public_dns = self.input.param("alt_addr_use_public_dns", False)
         self.alt_addr_kv_loader = self.input.param("alt_addr_kv_loader", False)
-        self.alt_addr_n1ql_loader = self.input.param("alt_addr_n1ql_loader", False)
+        self.alt_addr_n1ql_query = self.input.param("alt_addr_n1ql_query", False)
         self.alt_addr_fts_loader = self.input.param("alt_addr_fts_loader", False)
         self.run_alt_addr_loader = self.input.param("run_alt_addr_loader", False)
         info = self.shell.extract_remote_info()
@@ -132,12 +134,6 @@ class AltAddrBaseTest(BaseTestCase):
 
 
     def tearDown(self):
-        if not self.input.param("skip_cleanup", True):
-            if self.times_teardown_called > 1 :
-                self.shell.disconnect()
-        if self.input.param("skip_cleanup", True):
-            if self.case_number > 1 or self.times_teardown_called > 1:
-                self.shell.disconnect()
         self.times_teardown_called += 1
         serverInfo = self.servers[0]
         rest = RestConnection(serverInfo)
