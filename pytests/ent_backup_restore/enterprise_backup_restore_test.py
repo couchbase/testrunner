@@ -3256,6 +3256,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         5. Restores data ans validates
         6. Ensures that same FTS index is created in restore cluster
         """
+        self.test_fts = True
         rest_src = RestConnection(self.backupset.cluster_host)
         rest_src.add_node(self.servers[1].rest_username, self.servers[1].rest_password,
                           self.servers[1].ip, services=['kv', 'fts'])
@@ -3278,12 +3279,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         except Exception, ex:
             self.fail(ex)
         self.backup_cluster_validate()
-        rest_target = RestConnection(self.backupset.restore_cluster_host)
-        rest_target.add_node(self.input.clusters[0][1].rest_username,
-                             self.input.clusters[0][1].rest_password,
-                             self.input.clusters[0][1].ip, services=['kv', 'fts'])
-        rebalance = self.cluster.async_rebalance(self.cluster_to_restore, [], [])
-        rebalance.result()
+        if self.bucket_type != "ephemeral":
+            self._create_restore_cluster()
         self.backup_restore_validate(compare_uuid=False, seqno_compare_function=">=")
         rest_target_fts = RestConnection(self.input.clusters[0][1])
         status = False

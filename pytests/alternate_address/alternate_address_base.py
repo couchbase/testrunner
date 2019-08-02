@@ -132,7 +132,6 @@ class AltAddrBaseTest(BaseTestCase):
             rolelist = [{'id': bucket.name, 'name': bucket.name, 'roles': 'admin'}]
             self.add_built_in_server_user(testuser=testuser, rolelist=rolelist)
 
-
     def tearDown(self):
         self.times_teardown_called += 1
         serverInfo = self.servers[0]

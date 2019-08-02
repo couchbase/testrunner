@@ -160,6 +160,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.do_verify = self.input.param("do-verify", False)
         self.create_views = self.input.param("create-views", False)
         self.create_fts_index = self.input.param("create-fts-index", False)
+        self.test_fts = self.input.param("test_fts", False)
         self.cluster_new_user = self.input.param("new_user", None)
         self.cluster_new_role = self.input.param("new_role", None)
         self.new_replicas = self.input.param("new-replicas", None)
@@ -587,6 +588,9 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             rest_conn = RestConnection(self.backupset.restore_cluster_host)
             restore_cluster_services = rest_conn.get_nodes_services()
             restore_services = restore_cluster_services.values()[0]
+            shell = RemoteMachineShellConnection(self.backupset.restore_cluster_host)
+            shell.enable_diag_eval_on_non_local_hosts()
+            shell.disconnect()
             self.log.info("Services in restore cluster: {0}".format(restore_services))
             rest_helper = RestHelper(rest_conn)
             total_mem = rest_conn.get_nodes_self().mcdMemoryReserved
@@ -628,6 +632,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                                       "to memopt for gsi.")
                         self.test_storage_mode = "memory_optimized"
                         self._reset_storage_mode(rest_conn, self.test_storage_mode)
+                        if self.test_fts:
+                            self._create_restore_cluster()
 
                     self.log.info("replica in bucket {0} is {1}".format(bucket.name, replicas))
                     rest_conn.create_bucket(bucket=bucket_name,
@@ -1523,10 +1529,25 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
     def _reset_storage_mode(self, rest, storageMode):
         nodes_in_cluster = rest.get_nodes()
         for node in nodes_in_cluster:
+            matched_server = None
+            for server in self.servers:
+                if node.hostname[:-5] == server.ip:
+                    matched_server = server
+                    break
+
             RestConnection(node).force_eject_node()
+            ready = RestHelper(rest).is_ns_server_running()
+            if ready:
+                if server is not None:
+                    shell = RemoteMachineShellConnection(server)
+                    shell.enable_diag_eval_on_non_local_hosts()
+                    shell.disconnect()
+            else:
+                self.fail("NS server is not ready after reset node")
         rest.set_indexer_storage_mode(username='Administrator',
                                           password='password',
                                           storageMode=storageMode)
+        self.log.info("Done reset node")
         rest.init_node()
 
     def _collect_logs(self):
@@ -2136,6 +2157,16 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                     output, error = shell.execute_command(cmd2, debug=False)
                     vbuckets_per_shard[bucket.name][i] = int(output[0])
         shell.disconnect()
+
+    def _create_restore_cluster(self, node_services=["kv"]):
+        if self.test_fts:
+            node_services = ["kv", "fts"]
+        rest_target = RestConnection(self.backupset.restore_cluster_host)
+        rest_target.add_node(self.input.clusters[0][1].rest_username,
+                             self.input.clusters[0][1].rest_password,
+                             self.input.clusters[0][1].ip, services=node_services)
+        rebalance = self.cluster.async_rebalance(self.cluster_to_restore, [], [])
+        rebalance.result()
 
 class Backupset:
     def __init__(self):
