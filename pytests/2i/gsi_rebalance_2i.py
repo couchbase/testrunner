@@ -23,6 +23,12 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         self.rest = RestConnection(self.servers[0])
         self.n1ql_server = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
         self.create_primary_index = False
+        self.retry_time = self.input.param("retry_time", 300)
+        self.rebalance_out = self.input.param("rebalance_out", False)
+        self.sleep_time = self.input.param("sleep_time", 1)
+        self.num_retries = self.input.param("num_retries", 1)
+        self.build_index = self.input.param("build_index", False)
+        self.rebalance_out = self.input.param("rebalance_out", False)
         shell = RemoteMachineShellConnection(self.servers[0])
         info = shell.extract_remote_info().type.lower()
         if info == 'linux':
@@ -2725,6 +2731,65 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
                                                       stats_map_before_rebalance, stats_map_after_rebalance,
                                                       to_add_nodes, [], swap_rebalance=True)
         self.run_operation(phase="after")
+
+    def test_retry_rebalance(self):
+        if not self.build_index:
+            self.run_operation(phase="before")
+            self.sleep(30)
+        body = {"enabled": "true", "afterTimePeriod": self.retry_time , "maxAttempts" : self.num_retries}
+        rest = RestConnection(self.master)
+        rest.set_retry_rebalance_settings(body)
+        result = rest.get_retry_rebalance_settings()
+        index_server = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
+        if self.build_index:
+            self.shell.execute_cbworkloadgen(rest.username, rest.password, 1000000, 100, "default", 1024, '-j')
+        map_before_rebalance, stats_map_before_rebalance = self._return_maps()
+        services_in = ["index"]
+        if self.rebalance_out:
+            # rebalance in a node
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]], [],
+                                                 services=services_in)
+            rebalance.result()
+        try:
+            if self.build_index:
+                thread1 = threading.Thread(name='ddl', target=self.create_workload_index)
+                thread1.start()
+                self.sleep(5)
+            if self.rebalance_out:
+                rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [index_server])
+            else:
+                rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
+                                                         [self.servers[self.nodes_init]], [],
+                                                         services=services_in)
+            self.sleep(2)
+            # reboot an index node during gsi rebalance
+            if not self.build_index:
+                self.reboot_node(index_server)
+            reached = RestHelper(self.rest).rebalance_reached()
+            self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+            rebalance.result()
+        except Exception, ex:
+            if "Rebalance failed. See logs for detailed reason. You can try again" not in str(ex):
+                self.fail("rebalance failed with some unexpected error : {0}".format(str(ex)))
+        else:
+            self.fail("rebalance did not fail after index node reboot")
+        # Rerun rebalance to check if it can recover from failure
+        if self.build_index:
+            thread1.join()
+        self.check_retry_rebalance_succeeded()
+        if self.rebalance_out and not self.build_index:
+            map_after_rebalance, stats_map_after_rebalance = self._return_maps()
+            # validate the results
+            self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance, map_after_rebalance,
+                                                      stats_map_before_rebalance, stats_map_after_rebalance,
+                                                      [], [index_server])
+        self.run_operation(phase="after")
+
+    def create_workload_index(self):
+        workload_index = "CREATE INDEX idx12345 ON default(name)"
+        self.n1ql_helper.run_cbq_query(query=workload_index,
+                                       server=self.n1ql_node)
+        return
 
     def _return_maps(self):
         index_map = self.get_index_map()
