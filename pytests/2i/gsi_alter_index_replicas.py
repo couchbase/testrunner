@@ -885,7 +885,7 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
             thread.join()
 
         if self.expected_err_msg:
-            if self.expected_err_msg not in self.alter_index_error[0]:
+            if self.expected_err_msg not in str(self.alter_index_error[0]):
                 self.fail("Move index failed with unexpected error: %s" % self.alter_index_error)
             self.alter_index_error = ''
         else:
