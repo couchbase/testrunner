@@ -345,6 +345,10 @@ class TestInputParser():
                 server.es_username = config.get(section, option)
             if option == 'es_password':
                 server.es_password = config.get(section, option)
+            if option == 'username':
+                server.ssh_username = config.get(section, option)
+            if option == 'password':
+                server.ssh_password = config.get(section, option)
 
         if server.ssh_username == '' and 'username' in global_properties:
             server.ssh_username = global_properties['username']
