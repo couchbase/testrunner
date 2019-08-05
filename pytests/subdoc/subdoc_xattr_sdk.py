@@ -58,6 +58,7 @@ class SubdocXattrSdkTest(SubdocBaseTest):
     def setUp(self):
         super(SubdocXattrSdkTest, self).setUp()
         self.client = self.direct_client(self.master, self.buckets[0]).cb
+        self.sleep(10, "Wait to avoid _TemporaryFailError")
 
     def tearDown(self):
         super(SubdocXattrSdkTest, self).tearDown()
@@ -201,7 +202,7 @@ class SubdocXattrSdkTest(SubdocBaseTest):
         k = 'xattrs'
         self.client.upsert(k, {})
 
-        for ch in "!\"#$%&'()*+,-./:;<=>?@[\]^`{|}~":
+        for ch in "!\"#%&'()*+,-./:;<=>?@[\]^`{|}~":
             try:
                 key = ch + 'test'
                 self.log.info("test '%s' key" % key)
@@ -1005,10 +1006,10 @@ class SubdocXattrSdkTest(SubdocBaseTest):
         try:
             self.client.mutate_in(k, SD.upsert('$document', {'value': 1}, xattr=True))
         except Exception as e:
-            self.assertEqual(e.message, 'Operational Error')
-            self.assertEqual(e.result.errstr,
-                             'The server replied with an unrecognized status code. '
-                             'A newer version of this library may be able to decode it')
+            self.assertEqual(e.message, 'Subcommand failure')
+            # self.assertEqual(e.result.errstr,
+            #                  'The server replied with an unrecognized status code. '
+            #                  'A newer version of this library may be able to decode it')
         else:
             self.fail("was able to modify $document vxattr?")
 
@@ -1022,10 +1023,10 @@ class SubdocXattrSdkTest(SubdocBaseTest):
         try:
             self.client.lookup_in(k, SD.remove('$document', xattr=True))
         except Exception as e:
-            self.assertEqual(e.message, 'Operational Error')
-            self.assertEqual(e.result.errstr,
-                             'The server replied with an unrecognized status code. '
-                             'A newer version of this library may be able to decode it')
+            self.assertEqual(e.message, 'Subcommand failure')
+            # self.assertEqual(e.result.errstr,
+            #                  'The server replied with an unrecognized status code. '
+            #                  'A newer version of this library may be able to decode it')
         else:
             self.fail("was able to delete $document vxattr?")
 
