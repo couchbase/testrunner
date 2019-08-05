@@ -78,6 +78,14 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
 
 
     def test_keyspace_alias_two_buckets(self):
+        #TODO:
+        #Add tests for 2 SEARCH() calls
+        #Size 20 limit 10
+        #Index UUID
+        #Covering-non covering gsi, at least 2 fields
+        #option - index can be specified in 2 wais: string, object.
+        #2 key spaces in select, no specs in search() - shopuld fail with appropriate error message.
+
         test_name = self.input.param("test_name", '')
         if test_name == '':
             raise Exception("Invalid test configuration! Test name should not be empty.")
@@ -247,6 +255,7 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
 
     # 10 results problem
     def test_search_options(self):
+        #todo: have more than one search() call, play with search_meta() and search_score()
         test_name = self.input.param("test_name", '')
         if test_name == '':
             raise Exception("Invalid test configuration! Test name should not be empty.")
@@ -782,6 +791,7 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
         self._remove_all_fts_indexes()
 
     def test_parameterized_queries(self):
+        #TODO - analyze execution plan for covering indexes.
         test_name = self.input.param("test_name", '')
         if test_name == '':
             raise Exception("Invalid test configuration! Test name should not be empty.")
