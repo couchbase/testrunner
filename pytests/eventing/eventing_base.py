@@ -641,3 +641,11 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
                           -d '["{1}"]'""".format(server.ip, bucketName))
         shell.disconnect()
         self.sleep(20)
+
+    def check_eventing_rebalance(self):
+        status=self.rest.get_eventing_rebalance_status()
+        self.log.info("Eventing rebalance status: {}".format(status))
+        if status=="true":
+            return True
+        else:
+            return False

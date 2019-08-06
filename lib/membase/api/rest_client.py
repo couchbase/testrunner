@@ -4584,6 +4584,18 @@ class RestConnection(object):
             raise Exception(content)
         return content
 
+    '''
+          Get eventing rebalance status
+    '''
+    def get_eventing_rebalance_status(self):
+        authorization = base64.encodestring('%s:%s' % (self.username, self.password))
+        url = "getAggRebalanceStatus"
+        api = self.eventing_baseUrl + url
+        headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
+        status, content, header = self._http_request(api, 'GET', headers=headers)
+        if status:
+            return content
+
     def create_function(self, name, body):
         authorization = base64.encodestring('%s:%s' % (self.username, self.password))
         url = "api/v1/functions/" + name

@@ -1185,6 +1185,9 @@ class EventingRebalance(EventingBaseTest):
             # kill eventing process when eventing rebalance is going on
             if len(eventing_nodes) < 2:
                 self.fail("At least two eventing nodes are required")
+            while(not self.check_eventing_rebalance()):
+                self.log.info("waiting for eventing rebalance to trigger")
+                self.sleep(3)
             self.kill_consumer(eventing_nodes[0])
             self.kill_consumer(self.servers[self.nodes_init])
             self.kill_producer(eventing_nodes[1])
