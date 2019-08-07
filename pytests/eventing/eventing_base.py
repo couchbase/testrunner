@@ -495,7 +495,7 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         remote_client.reboot_node()
         remote_client.disconnect()
         # wait for restart and warmup on all node
-        self.sleep(self.wait_timeout * 5)
+        self.sleep(self.wait_timeout * 2)
         # disable firewall on these nodes
         self.stop_firewall_on_node(server)
         # wait till node is ready after warmup
@@ -649,3 +649,28 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
             return True
         else:
             return False
+
+    def auto_retry_setup(self):
+        self.sleep_time = self.input.param("sleep_time", 15)
+        self.enabled = self.input.param("enabled", True)
+        self.afterTimePeriod = self.input.param("afterTimePeriod", 150)
+        self.maxAttempts = self.input.param("maxAttempts", 1)
+        self.log.info("Changing the retry rebalance settings ....")
+        self.change_retry_rebalance_settings(enabled=self.enabled, afterTimePeriod=self.afterTimePeriod,
+                                             maxAttempts=self.maxAttempts)
+
+    def change_retry_rebalance_settings(self, enabled=True,
+                                        afterTimePeriod=300, maxAttempts=1):
+        # build the body
+        body = dict()
+        if enabled:
+            body["enabled"] = "true"
+        else:
+            body["enabled"] = "false"
+        body["afterTimePeriod"] = afterTimePeriod
+        body["maxAttempts"] = maxAttempts
+        rest = RestConnection(self.master)
+        rest.set_retry_rebalance_settings(body)
+        result = rest.get_retry_rebalance_settings()
+        self.log.info("Retry Rebalance settings changed to : {0}"
+                      .format(json.loads(result)))

@@ -1511,3 +1511,143 @@ class EventingRebalance(EventingBaseTest):
         except:
             pass
 
+
+    def test_killing_eventing_processes_during_eventing_rebalance_with_autoretry(self):
+        self.auto_retry_setup()
+        gen_load_del = copy.deepcopy(self.gens_load)
+        eventing_nodes = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
+        body = self.create_save_function_body(self.function_name, self.handler_code)
+        self.deploy_function(body)
+        if self.pause_resume:
+            self.pause_function(body)
+        try:
+            # load some data
+            task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
+                                                    self.buckets[0].kvs[1], 'create', compression=self.sdk_compression)
+            # rebalance in a eventing node when eventing is processing mutations
+            services_in = ["eventing"]
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]],
+                                                     [],
+                                                     services=services_in)
+            self.sleep(15)
+            reached = RestHelper(self.rest).rebalance_reached(percentage=30)
+            # kill eventing process when eventing rebalance is going on
+            if len(eventing_nodes) < 2:
+                self.fail("At least two eventing nodes are required")
+            while(not self.check_eventing_rebalance()):
+                self.log.info("waiting for eventing rebalance to trigger")
+                self.sleep(3)
+            self.kill_consumer(eventing_nodes[0])
+            self.kill_consumer(self.servers[self.nodes_init])
+            self.kill_producer(eventing_nodes[1])
+            self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+            rebalance.result()
+            task.result()
+        except Exception, ex:
+            log.info("Rebalance failed as expected after eventing got killed: {0}".format(str(ex)))
+            # auto retry the failed rebalance
+            self.check_retry_rebalance_succeeded()
+        else:
+            self.fail("Rebalance succeeded even after killing eventing processes")
+        self.sleep(120)
+        # delete json documents
+        self.load(gen_load_del, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size, op_type='delete')
+        if self.pause_resume:
+            self.resume_function(body)
+        # Wait for eventing to catch up with all the delete mutations and verify results
+        # This is required to ensure eventing works after rebalance goes through successfully
+        if not self.is_sbm:
+            self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+        self.undeploy_and_delete_function(body)
+
+    def test_erl_crash_on_kv_and_eventing_node_during_eventing_rebalance_with_autoretry(self):
+        self.auto_retry_setup()
+        gen_load_del = copy.deepcopy(self.gens_load)
+        kv_node = self.servers[1]
+        eventing_node = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
+        body = self.create_save_function_body(self.function_name, self.handler_code)
+        self.deploy_function(body)
+        if self.pause_resume:
+            self.pause_function(body)
+        try:
+            # load some data
+            task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
+                                                    self.buckets[0].kvs[1], 'create', compression=self.sdk_compression)
+            # rebalance in a eventing node when eventing is processing mutations
+            services_in = ["eventing"]
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]],
+                                                     [],
+                                                     services=services_in)
+            self.sleep(15)
+            reached = RestHelper(self.rest).rebalance_reached(percentage=30)
+            # kill erlang process on kv and eventing when eventing rebalance is going on
+            for node in [kv_node, eventing_node]:
+                self.kill_erlang_service(node)
+            self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+            rebalance.result()
+            task.result()
+        except Exception, ex:
+            log.info("Rebalance failed as expected after erlang got killed: {0}".format(str(ex)))
+            # auto retry failed rebalance
+            self.check_retry_rebalance_succeeded()
+        else:
+            self.fail("Rebalance succeeded even after erl crash")
+        # delete json documents
+        self.load(gen_load_del, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size, op_type='delete')
+        if self.pause_resume:
+            self.resume_function(body)
+        # Wait for eventing to catch up with all the delete mutations and verify results
+        # This is required to ensure eventing works after rebalance goes through successfully
+        if not self.is_sbm:
+            self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+        self.undeploy_and_delete_function(body)
+
+    def test_reboot_of_kv_and_eventing_node_during_eventing_rebalance_with_autoretry(self):
+        self.auto_retry_setup()
+        gen_load_del = copy.deepcopy(self.gens_load)
+        kv_node = self.servers[1]
+        eventing_node = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
+        body = self.create_save_function_body(self.function_name, self.handler_code)
+        self.deploy_function(body)
+        if self.pause_resume:
+            self.pause_function(body)
+        try:
+            # load some data
+            task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
+                                                    self.buckets[0].kvs[1], 'create', compression=self.sdk_compression)
+            # rebalance in a eventing node when eventing rebalance is going on
+            services_in = ["eventing"]
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]],
+                                                     [],
+                                                     services=services_in)
+            self.sleep(15)
+            reached = RestHelper(self.rest).rebalance_reached(percentage=30)
+            # reboot kv and eventing when eventing is processing mutations
+            for node in [kv_node, eventing_node]:
+                self.reboot_server(node)
+            self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+            rebalance.result()
+            task.result()
+        except Exception, ex:
+            log.info("Rebalance failed as expected after reboot of kv and eventing: {0}".format(str(ex)))
+            # auto retry for failed rebalance
+            self.check_retry_rebalance_succeeded()
+        else:
+            self.fail("Rebalance succeeded even after rebooting kv and eventing node")
+        # delete json documents
+        self.load(gen_load_del, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size, op_type='delete')
+        if self.pause_resume:
+            self.resume_function(body)
+        # Wait for eventing to catch up with all the delete mutations and verify results
+        # This is required to ensure eventing works after rebalance goes through successfully
+        try:
+            if not self.is_sbm:
+                self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True, timeout=240)
+        except Exception, ex:
+            log.info(str(ex))
+            # data mismatch is expected in case of a failover
+            pass
+        self.undeploy_and_delete_function(body)
