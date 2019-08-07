@@ -312,7 +312,8 @@ class ClusterOperationHelper(object):
                     log.error("force_eject_node {0}:{1} failed: {2}".format(removed.ip, removed.port, ex))
             if len(set([node for node in nodes if (node.id != master_id)])\
                     - set(success_cleaned)) != 0:
-                raise Exception("not all ejected nodes were cleaned successfully")
+                if not alt_addr:
+                    raise Exception("not all ejected nodes were cleaned successfully")
 
             log.info("removed all the nodes from cluster associated with {0} ? {1}".format(servers[0], \
                     [(node.id, node.port) for node in nodes if (node.id != master_id)]))

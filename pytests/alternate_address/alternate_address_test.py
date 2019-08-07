@@ -6,7 +6,7 @@ from subprocess import Popen, PIPE, check_output, STDOUT, CalledProcessError
 
 from TestInput import TestInputSingleton, TestInputServer
 from alternate_address.alternate_address_base import AltAddrBaseTest
-from membase.api.rest_client import RestConnection
+from membase.api.rest_client import RestConnection, RestHelper
 from couchbase_helper.cluster import Cluster
 from remote.remote_util import RemoteMachineShellConnection
 from membase.helper.bucket_helper import BucketOperationHelper
@@ -16,7 +16,7 @@ from pprint import pprint
 from testconstants import CLI_COMMANDS, LINUX_COUCHBASE_BIN_PATH,\
                           WIN_COUCHBASE_BIN_PATH, COUCHBASE_FROM_MAD_HATTER,\
                           WIN_TMP_PATH_RAW
-from __builtin__ import True
+from __builtin__ import True, False
 from Carbon.Aliases import true
 
 
@@ -43,9 +43,8 @@ class AlternateAddressTests(AltAddrBaseTest):
             super(AlternateAddressTests, self).tearDown()
         except Exception as e:
             print e
-        ClusterOperationHelper.cleanup_cluster(self.servers, self.servers[0])
         BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
-        ClusterOperationHelper.wait_for_ns_servers_or_assert(self.servers, self)
+        ClusterOperationHelper.cleanup_cluster(self.servers, self.servers[0])
 
 
     def test_setting_alternate_address(self):
@@ -54,6 +53,7 @@ class AlternateAddressTests(AltAddrBaseTest):
         secure_port = ""
         secure_conn = ""
         self.all_alt_addr_set = False
+        self.skip_set_alt_addr = False
         shell = RemoteMachineShellConnection(server1)
         if self.secure_conn:
             cacert = self.get_cluster_certificate_info(server1)
@@ -107,7 +107,7 @@ class AlternateAddressTests(AltAddrBaseTest):
         else:
             set_services = services_in.split(",")
         i = 0
-        num_hostname_add = 0
+        num_hostname_add = 1
         for server in self.servers[1:]:
             add_node_IP = self.get_internal_IP(server)
             node_services = "kv"
@@ -117,7 +117,7 @@ class AlternateAddressTests(AltAddrBaseTest):
                 if len(set_services) == len(self.servers[1:]):
                     node_services = set_services[i]
                     i += 1
-            if self.add_hostname_node and num_hostname_add < self.num_hostname_add:
+            if self.add_hostname_node and num_hostname_add <= self.num_hostname_add:
                 add_node_IP = server.ip
                 num_hostname_add += 1
 
@@ -138,39 +138,51 @@ class AlternateAddressTests(AltAddrBaseTest):
             if self.alt_addr_n1ql_query:
                 self.n1ql_query(server1.ip, self.client_os,
                                 create_travel_sample_bucket=True)
+            if self.alt_addr_eventing_function:
+                self.create_eventing_function(server1, self.client_os,
+                                              create_travel_sample_bucket=True)
+                self.skip_set_alt_addr = True
         alt_addr_status = []
-        for server in self.servers[1:]:
-            internal_IP = self.get_internal_IP(server)
-            status = self.set_alternate_address(server, url_format = url_format,
-                                       secure_port = secure_port, secure_conn = secure_conn,
-                                       internal_IP = internal_IP)
-            alt_addr_status.append(status)
-        if False in alt_addr_status:
-            self.fail("Fail to set alt address")
-        else:
-            self.all_alt_addr_set = True
-            if self.run_alt_addr_loader:
-                if self.alt_addr_kv_loader:
-                    self.kv_loader(server1, self.client_os)
-                if self.alt_addr_n1ql_query:
-                    self.n1ql_query(server1.ip, self.client_os)
+        if not self.skip_set_alt_addr:
+            for server in self.servers[1:]:
+                internal_IP = self.get_internal_IP(server)
+                status = self.set_alternate_address(server, url_format = url_format,
+                               secure_port = secure_port, secure_conn = secure_conn,
+                               internal_IP = internal_IP)
+                alt_addr_status.append(status)
+            if False in alt_addr_status:
+                self.fail("Fail to set alt address")
+            else:
+                self.all_alt_addr_set = True
+                if self.run_alt_addr_loader:
+                    if self.alt_addr_kv_loader:
+                        self.kv_loader(server1, self.client_os)
+                    if self.alt_addr_n1ql_query:
+                        self.n1ql_query(server1.ip, self.client_os)
         remove_node = ""
         if self.alt_addr_rebalance_out:
             internal_IP = self.get_internal_IP(self.servers[-1])
             reject_node = "ns_1@{0}".format(internal_IP)
-            rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()], ejectedNodes=[reject_node])
+            self.log.info("Rebalance out a node {0}".format(internal_IP)
+            rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()],\
+                                                     ejectedNodes=[reject_node])
+            reb_status = rest.monitorRebalance()
+            self.assertTrue(reb_status, "Rebalance out node {0} failed".format(internal_IP))
             remove_node = internal_IP
-        if self.alt_addr_rebalance_in:
+        if self.alt_addr_rebalance_in and self.alt_addr_rebalance_out:
             if remove_node:
+                if self.add_hostname_node:
+                    remove_node = self.get_external_IP(remove_node)
                 cmd = 'curl -X POST -d  "hostname={0}&user={1}&password={2}&services={3}" '\
                              .format(remove_node, server1.rest_username, server1.rest_password,
                                      self.alt_addr_rebalance_in_services)
                 cmd += '-u Administrator:password http://{0}:8091/controller/addNode'\
                              .format(server1.ip)
                 shell.execute_command(cmd)
-                rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()], ejectedNodes=[])
+                rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()],\
+                                                                    ejectedNodes=[])
                 reb_status = rest.monitorRebalance()
-                self.assertTrue(reb_status, "Rebalance failed")
+                self.assertTrue(reb_status, "Rebalance back in failed")
             else:
                 self.fail("We need a free node to add to cluster")
             if self.run_alt_addr_loader:
@@ -285,6 +297,20 @@ class AlternateAddressTests(AltAddrBaseTest):
         else:
             self.fail("Fail to get internal IP")
 
+    def get_external_IP(self, internal_IP):
+        found = False
+        external_IP = ""
+        for server in self.servers:
+            internalIP = self.get_internal_IP(server)
+            if internal_IP == internalIP:
+                found = True
+                external_IP = server.ip
+                break
+        if not found:
+            self.fail("Could not find server which matches internal IP")
+        else:
+            return external_IP
+
     def kv_loader(self, server = None, client_os = "linux"):
         if server is None:
             server = self.master.ip
@@ -317,16 +343,8 @@ class AlternateAddressTests(AltAddrBaseTest):
         if server_IP is None:
             server_IP = self.master.ip
 
-        self.log.info("Create travel-sample bucket")
-        if create_travel_sample_bucket:
-            create_bucket_cmd = """curl -g -v -u Administrator:password \
-                             POST http://{0}:8091/sampleBuckets/install \
-                             -d  '["travel-sample"]'""".format(server_IP)
-            output = check_output("{0}".format(create_bucket_cmd), shell=True,
-                                               stderr=STDOUT)
-            if output:
-                self.log.info("Output from create travel-sample bucket: {0}"
-                                                            .format(output))
+        self._create_travel_sample_bucket(server_IP,
+                                          create_travel_sample_bucket=create_travel_sample_bucket)
 
         base_path = "/opt/couchbase/bin/"
         query_cmd = 'SELECT country FROM `travel-sample` WHERE name = "Excel Airways";'
@@ -361,6 +379,139 @@ class AlternateAddressTests(AltAddrBaseTest):
                                   .format(e.output))
                 else:
                     self.log.info("Error is expected due to alt addre not set yet")
+
+    def create_eventing_function(self, server = None, client_os = "linux",
+                   create_travel_sample_bucket=False):
+        if server is None:
+            server_IP = self.master.ip
+        else:
+            server_IP = server.ip
+
+        self._create_buckets(server, num_buckets=2)
+        self._create_travel_sample_bucket(server)
+
+        base_path = "/opt/couchbase/bin/"
+        query_cmd = ''
+        rest = RestConnection(server)
+        try:
+            self.log.info("Create event eventingalt from outside network")
+            self._create_eventing_function(server)
+            self._deploy_function(server)
+            self._check_eventing_status(server)
+            self._undeploy_eventing_function(server)
+            self._delete_eventing_function(server)
+        except CalledProcessError as e:
+            if e.output:
+                if self.all_alt_addr_set:
+                    if "No alternate address information found" in e.output:
+                        self.fail("Failed to set alternate address.")
+                    else:
+                        self.fail("Failed to run query in remote cluster.{0}"\
+                                  .format(e.output))
+                else:
+                    self.log.info("Error is expected due to alt addre not set yet")
+
+    def _create_travel_sample_bucket(self, server):
+        self.log.info("Create travel-sample bucket")
+        create_bucket_cmd = """curl -g -u Administrator:password \
+                                   http://{0}:8091/sampleBuckets/install \
+                               -d '["travel-sample"]'""".format(server.ip)
+        output = check_output("{0}".format(create_bucket_cmd), shell=True,
+                                               stderr=STDOUT)
+        ready = RestHelper(RestConnection(server)).vbucket_map_ready("travel-sample")
+        if output:
+            self.log.info("Output from create travel-sample bucket: {0}"
+                                                            .format(output))
+        self.sleep(25, "time to load and create indexes")
+
+    def _create_buckets(self, server, num_buckets=1):
+        if server is None:
+            server = self.master
+        create_bucket_command = """ curl -g -v -u Administrator:password \
+                      http://{0}:8091/pools/default/buckets \
+                      -d ramQuotaMB=256 -d authType=sasl -d replicaNumber=1 """.format(server.ip)
+        if num_buckets == 1:
+            self.log.info("Create bucket {0} ".format("bucket_1"))
+            create_bucket_command += " -d name=bucket_1 "
+            output = check_output("{0}".format(create_bucket_command), shell=True,
+                                               stderr=STDOUT)
+            if output:
+                self.log.info("Output from create bucket bucket_1")
+        if num_buckets > 1:
+            count = 1
+            while count <= num_buckets:
+                bucket_name = "bucket_{0}".format(count)
+                self.log.info("Create bucket {0}".format(bucket_name))
+                create_bucket = create_bucket_command
+                create_bucket += " -d name={0} ".format(bucket_name)
+                print "\ncreate bucket command: ", create_bucket
+                output = check_output("{0}".format(create_bucket), shell=True,
+                                                   stderr=STDOUT)
+                if output:
+                    self.log.info("Output from create bucket {0}".format(bucket_name))
+                ready = RestHelper(RestConnection(server)).vbucket_map_ready(bucket_name)
+                if not ready:
+                    self.fail("Could not create bucket {0}".format(bucket_name))
+                count += 1
+                self.sleep(5)
+
+    def _create_eventing_function(self, server):
+        eventing_name = "eventingalt"
+        function_body = ' {"depcfg":{"buckets":[{"alias":"travelalt","bucket_name":"bucket_2", "access":"rw"}],"metadata_bucket":"bucket_1","source_bucket":"travel-sample", '
+        function_body += ' "curl":[]},"settings":{"worker_count":3,"execution_timeout":60, "user_prefix":"eventing","log_level":"INFO","dcp_stream_boundary":"everything", '
+        function_body += ' "processing_status":false,"deployment_status":false,"description":"", "deadline_timeout":62}, '
+        function_body += '"appname":"{0}", '.format(eventing_name)
+        function_body += """ "appcode":"function OnUpdate(doc, meta) {\\n travelalt[meta.id]=doc\\n log('docId', meta.id);\\n}\\nfunction OnDelete(meta) {\\n}", """
+        function_body += ' "status":"undeployed","uiState":"inactive"} '
+        cmd = "curl -g -u Administrator:password http://{0}:8096/api/v1/functions/{1} -d \'{2}\'"\
+                                                  .format(server.ip, eventing_name, function_body)
+        output = check_output(cmd, shell=True, stderr=STDOUT)
+        """ Correct output from command line
+            {
+             "code": 0,
+             "info": {
+             "status": "Stored function: 'eventingalt' in metakv",
+             "warnings": null
+             }
+            }
+        """
+        if "Stored function: 'eventingalt' " not in str(output):
+            self.fail("Fail to create eventing function")
+
+    def _deploy_function(self, server):
+        eventing_name = "eventingalt"
+        cmd = "curl -u Administrator:password http://{0}:8096/api/v1/functions/{1}/settings"\
+                                                            .format(server.ip,eventing_name)
+        cmd += """ -d '{"deployment_status":true,"processing_status":true}' """
+        output = check_output(cmd, shell=True, stderr=STDOUT)
+        self.sleep(60, "wait for function deployed")
+
+    def _check_eventing_status(self, server):
+        eventing_name = "eventingalt"
+        cmd = "curl GET -u Administrator:password http://{0}:8096/api/v1/functions/{1}/settings"\
+                                                                .format(server.ip, eventing_name)
+        output = check_output(cmd, shell=True, stderr=STDOUT)
+        if '"deployment_status": true' in str(output):
+            return True
+        else:
+            return False
+
+    def _undeploy_eventing_function(self, server):
+        eventing_name = "eventingalt"
+        cmd = "curl -u Administrator:password http://{0}:8096/api/v1/functions/{1}/settings"\
+                                                             .format(server.ip,eventing_name)
+        cmd += """ -d '{"deployment_status":false,"processing_status":false}' """
+        output = check_output(cmd, shell=True, stderr=STDOUT)
+        self.sleep(20, "wait to undeploy function")
+
+    def _delete_eventing_function(self, server):
+        cmd = " curl -X DELETE -u Administrator:password http://{0}:8096/api/v1/functions/"\
+                                                                           .format(server.ip)
+        output = check_output(cmd, shell=True, stderr=STDOUT)
+        if 'Function: eventingalt deleting in the background' in str(output):
+            return True
+        else:
+            return False
 
     def _check_output(self, word_check, output):
         found = False
