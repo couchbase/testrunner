@@ -821,27 +821,35 @@ class BaseSecondaryIndexingTests(QueryTests):
                     is_cluster_healthy = True
         return is_cluster_healthy
 
-    def wait_until_indexes_online(self, timeout=600):
+    def wait_until_indexes_online(self, timeout=600,defer_build=False):
         rest = RestConnection(self.master)
         init_time = time.time()
         check = False
         next_time = init_time
         while not check:
             index_status = rest.get_index_status()
-            log.info(index_status)
             for index_info in index_status.values():
                 for index_state in index_info.values():
-                    if index_state["status"] == "Ready":
-                        check = True
+                    if defer_build:
+                        if index_state["status"] == "Created":
+                            check = True
+                        else:
+                            check = False
+                            time.sleep(1)
+                            next_time = time.time()
+                            break
                     else:
-                        check = False
-                        time.sleep(1)
-                        next_time = time.time()
-                        break
+                        if index_state["status"] == "Ready":
+                            check = True
+                        else:
+                            check = False
+                            time.sleep(1)
+                            next_time = time.time()
+                            break
             check = check or (next_time - init_time > timeout)
         return check
 
-    def wait_until_specific_index_online(self, index_name = '', timeout=600):
+    def wait_until_specific_index_online(self, index_name = '', timeout=600, defer_build=False):
         rest = RestConnection(self.master)
         init_time = time.time()
         check = False
@@ -853,13 +861,22 @@ class BaseSecondaryIndexingTests(QueryTests):
                 for idx_name in index_info.keys():
                     if idx_name == index_name:
                         for index_state in index_info.values():
-                            if index_state["status"] == "Ready":
-                                check = True
+                            if defer_build:
+                                if index_state["status"] == "Created":
+                                    check = True
+                                else:
+                                    check = False
+                                    time.sleep(1)
+                                    next_time = time.time()
+                                    break
                             else:
-                                check = False
-                                time.sleep(1)
-                                next_time = time.time()
-                                break
+                                if index_state["status"] == "Ready":
+                                    check = True
+                                else:
+                                    check = False
+                                    time.sleep(1)
+                                    next_time = time.time()
+                                    break
             check = check or (next_time - init_time > timeout)
         return check
 
