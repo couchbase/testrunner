@@ -1962,7 +1962,7 @@ class RestConnection(object):
             for item in json_parsed:
                 bucketInfo = RestParser().parse_get_bucket_json(item)
                 bucket_map[bucketInfo.name] = bucketInfo.stats.itemCount
-        log.info(bucket_map)
+        #log.info(bucket_map)
         return bucket_map
 
     def get_bucket_stats_for_node(self, bucket='default', node=None):
@@ -2896,9 +2896,29 @@ class RestConnection(object):
             headers=self._create_capi_headers())
         return status
 
+    def resume_fts_index_update(self, name):
+        """ method to stop fts index from updating"""
+        api = self.fts_baseUrl + "api/index/{0}/ingestControl/resume".format(name)
+        status, content, header = self._http_request(
+            api,
+            'POST',
+            '',
+            headers=self._create_capi_headers())
+        return status
+
     def freeze_fts_index_partitions(self, name):
         """ method to freeze index partitions asignment"""
-        api = self.fts_baseUrl+ "api/index/{0}/planFreezeControl".format(name)
+        api = self.fts_baseUrl+ "api/index/{0}/planFreezeControl/freeze".format(name)
+        status, content, header = self._http_request(
+            api,
+            'POST',
+            '',
+            headers=self._create_capi_headers())
+        return status
+
+    def unfreeze_fts_index_partitions(self, name):
+        """ method to freeze index partitions asignment"""
+        api = self.fts_baseUrl+ "api/index/{0}/planFreezeControl/unfreeze".format(name)
         status, content, header = self._http_request(
             api,
             'POST',

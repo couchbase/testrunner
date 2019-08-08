@@ -45,6 +45,25 @@ class StableTopFTS(FTSBaseTest):
         self.wait_for_indexing_complete()
         self.validate_index_count(equal_bucket_doc_count=True)
 
+    def test_index_docvalues_option(self):
+        index = self.create_index(
+            bucket=self._cb_cluster.get_bucket_by_name('default'),
+            index_name="custom_index")
+        self.load_data()
+        self.wait_for_indexing_complete()
+        if float(self.get_zap_docvalue_disksize()) != float(0):
+            self.fail("zap files size with docvalue not empty with docValues = False")
+        else:
+            self.log.info(" zap files size found to be : {0}".format(self.get_zap_docvalue_disksize()))
+
+        index.update_docvalues_email_custom_index(True)
+        self.wait_for_indexing_complete()
+
+        if float(self.get_zap_docvalue_disksize()) == float(0):
+            self.fail("zap files size with docvalue found to be empty with docValues = True")
+        else:
+            self.log.info(" zap files size found to be : {0}".format(self.get_zap_docvalue_disksize()))
+
     def test_maxttl_setting(self):
         self.create_simple_default_index()
         maxttl = int(self._input.param("maxttl", None))

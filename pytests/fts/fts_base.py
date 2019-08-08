@@ -952,6 +952,20 @@ class FTSIndex:
         self.index_definition['uuid'] = self.get_uuid()
         self.update()
 
+    def update_index_partitions(self, new):
+        status, index_def = self.get_index_defn()
+        self.index_definition = index_def["indexDef"]
+        self.index_definition['planParams']['indexPartitions'] = new
+        self.index_definition['uuid'] = self.get_uuid()
+        self.update()
+
+    def update_docvalues_email_custom_index(self, new):
+        status, index_def = self.get_index_defn()
+        self.index_definition = index_def["indexDef"]
+        self.index_definition['params']['mapping']['types']['emp']['properties']['email']['fields'][0]['docvalues'] = new
+        self.index_definition['uuid'] = self.get_uuid()
+        self.update()
+
     def update_num_replicas(self, new):
         self.index_definition['planParams']['numReplicas'] = new
         self.index_definition['uuid'] = self.get_uuid()
@@ -2118,6 +2132,21 @@ class CouchbaseCluster:
         )
         index.create()
         return index
+
+    def create_fts_index_wait_for_completion(self, sample_index_name_1, sample_bucket_name):
+        fts_idx = self.create_fts_index(name=sample_index_name_1, source_name=sample_bucket_name)
+
+        indexed_doc_count = 0
+        self.__log.info(RestConnection(self.get_master_node()).get_buckets_itemCount()[sample_bucket_name])
+        while indexed_doc_count < RestConnection(self.get_master_node()).get_buckets_itemCount()[sample_bucket_name]:
+            try:
+                time.sleep(10)
+                indexed_doc_count = fts_idx.get_indexed_doc_count()
+            except KeyError, k:
+                continue
+
+        return fts_idx
+
 
     def get_fts_index_by_name(self, name):
         """ Returns an FTSIndex object with the given name """
@@ -4054,6 +4083,16 @@ class FTSBaseTest(unittest.TestCase):
                               json.dumps(doc, encoding='utf-8'),
                               doc['_type'],
                               key)
+
+    def get_zap_docvalue_disksize(self):
+        shell = RemoteMachineShellConnection(self._cb_cluster.get_random_fts_node())
+        command = "cd /opt/couchbase/var/lib/couchbase/data/\@fts; find . -name \"*.zap\"|  sort -n | tail -1 | xargs -I {} sh -c \"/opt/couchbase/bin/cbft-bleve zap docvalue {} | tail -1\""
+        output, error = shell.execute_command(command)
+        if error and "remoteClients registered for tls config updates" not in error[0]:
+            self.fail("error running command : {0} , error : {1}".format(command, error))
+        self.log.info(output)
+        self.log.info(re.findall("\d+\.\d+", output[0]))
+        return re.findall("\d+\.\d+", output[0])[0]
 
     def create_geo_index_and_load(self):
         """
