@@ -16,12 +16,24 @@ class QuerySanityTests(QueryTests):
     def setUp(self):
         super(QuerySanityTests, self).setUp()
         self.log.info("==============  QuerySanityTests setup has started ==============")
+        self.index_to_be_created = self.input.param("index_to_be_created", '')
+        self.query_to_be_run = self.input.param("query_to_be_run", '')
+        if self.load_sample:
+            self.rest.load_sample("travel-sample")
+            self.wait_for_all_indexes_online()
         self.log.info("==============  QuerySanityTests setup has completed ==============")
         self.log_config_info()
 
     def suite_setUp(self):
         super(QuerySanityTests, self).suite_setUp()
         self.log.info("==============  QuerySanityTests suite_setup has started ==============")
+        if self.input.param("fast_count", False):
+            random_number = 23917
+            shell = RemoteMachineShellConnection(self.master)
+            shell.execute_cbworkloadgen(self.rest.username, self.rest.password, random_number, 100, "default", 1024,
+                                        '-j')
+            self.run_cbq_query(query="INSERT INTO default ( key, value) VALUES ('pymc100205',{'name':'Sara','age':'30'})")
+
         self.log.info("==============  QuerySanityTests suite_setup has completed ==============")
 
     def tearDown(self):
@@ -419,6 +431,43 @@ class QuerySanityTests(QueryTests):
          new_curl = json.dumps(o)
          string_curl = json.loads(new_curl)
          self.assertTrue(len(string_curl)==2)
+
+##############################################################################################
+#
+#   COUNT
+##############################################################################################
+
+    def test_fast_count(self):
+        if self.index_to_be_created:
+            if "EQUALS" in self.index_to_be_created:
+                self.index_to_be_created = self.index_to_be_created.replace("EQUALS","=")
+            self.run_cbq_query(query=self.index_to_be_created)
+        self.wait_for_all_indexes_online()
+        try:
+            if "STAR" in self.query_to_be_run:
+                self.query_to_be_run = self.query_to_be_run.replace("STAR", "*")
+                if "EQUALS" in self.query_to_be_run:
+                    self.query_to_be_run = self.query_to_be_run.replace("EQUALS","=")
+            #add use primary index hint to the query to compare the GSI query to the primary index query
+            actual_results = self.run_cbq_query(query=self.query_to_be_run)
+            split_query = self.query_to_be_run.split("where")
+            primary_index_query = split_query[0] + "USE INDEX(`#primary`) where" + split_query[1]
+            expected_results = self.run_cbq_query(query=primary_index_query)
+            self.assertEqual(actual_results['results'][0]['$1'],expected_results['results'][0]['$1'])
+        finally:
+            if self.load_sample:
+                self.run_cbq_query(query="DROP INDEX `travel-sample`.idx_flight_stops")
+            else:
+                self.run_cbq_query(query="DROP INDEX default.idx1")
+
+    def test_primary_count(self):
+        #number of documents inserted at the beginning of suite_setup
+        random_number = 23918
+        shell = RemoteMachineShellConnection(self.master)
+        if "STAR" in self.query_to_be_run:
+            self.query_to_be_run = self.query_to_be_run.replace("STAR", "*")
+        actual_results = self.run_cbq_query(query=self.query_to_be_run)
+        self.assertEqual(actual_results['results'][0]['$1'], random_number+self.docs_per_day*2016)
 
 ##############################################################################################
 #
