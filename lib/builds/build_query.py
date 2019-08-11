@@ -368,6 +368,8 @@ class BuildQuery(object):
                                 os_name = "suse11"
                             elif "12" in os_version.lower():
                                 os_name = "suse12"
+                            elif "15" in os_version.lower():
+                                os_name = "suse15"
                         elif "oracle linux" in os_version.lower():
                             os_name = "oel6"
                         elif "amazon linux 2" in os_version.lower():
@@ -440,6 +442,8 @@ class BuildQuery(object):
                                 os_name = "suse11"
                             elif "12" in os_version.lower():
                                 os_name = "suse12"
+                            elif "15" in os_version.lower():
+                                os_name = "suse15"
                         elif "oracle linux" in os_version.lower():
                             os_name = "oel6"
                         elif "amazon linux 2" in os_version.lower():
@@ -685,7 +689,7 @@ class BuildQuery(object):
                     build_info = build_info.replace("-amd64", "")
                 del_words = ["centos6", "debian7", "debian8", "debian9",
                              "ubuntu12.04", "ubuntu14.04", "ubuntu16.04", "ubuntu18.04",
-                             "windows", "macos", "centos7", "suse11", "suse12", "amzn2"]
+                             "windows", "macos", "centos7", "suse11", "suse12", "suse15", "amzn2"]
                 if build_info.startswith("couchbase-server"):
                     build.product = build_info.split("-")
                     build.product = "-".join([i for i in build.product \
@@ -850,6 +854,13 @@ class BuildQuery(object):
                         build.distribution_version = "suse12"
                     else:
                         self.fail("suse 12 does not support on this version %s "
+                                                                  % version[:5])
+                elif "suse 15" in distribution_version:
+                    if version[:5] in COUCHBASE_FROM_MAD_HATTER:
+                        suse_version="suse15"
+                        build.distribution_version = "suse15"
+                    else:
+                        self.fail("suse 15 does not support on this version %s "
                                                                   % version[:5])
                 else:
                     suse_version="suse11"

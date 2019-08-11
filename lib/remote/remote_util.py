@@ -1975,11 +1975,11 @@ class RemoteMachineShellConnection:
                     self.check_pkgconfig(self.info.deliverable_type, openssl)
                     if "SUSE" in self.info.distribution_type:
 			if environment:
-			    output, error = self.execute_command("export {0};zypper -n install /tmp/{1}"
+			    output, error = self.execute_command("export {0};zypper -n install --allow-unsigned-rpm /tmp/{1}"
                                                      .format(environment.strip(), build.name))
 			    self.log_command_output(output, error)
 			else:
-                            output, error = self.execute_command("zypper -n install /tmp/{0}".format(build.name))
+                            output, error = self.execute_command("zypper -n install --allow-unsigned-rpm /tmp/{0}".format(build.name))
                             self.log_command_output(output, error)
                     else:
                         rpm_cmd = "yes | {0}yum localinstall -y /tmp/{1}"
