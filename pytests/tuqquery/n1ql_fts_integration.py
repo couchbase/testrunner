@@ -371,7 +371,7 @@ class N1qlFTSIntegrationTest(QueryTests):
         node2:['index', 'query', 'search'] '''
     def test_mixed_cluster(self):
         services_map = self._get_services_map()
-        for node in self.servers:
+        for node in self.get_nodes_in_cluster():
             test_result = self._validate_query_against_node(node, services_map, self.test_fts_query, self.test_n1ql_query)
             self.assertEquals(test_result, True, "Node " + str(node) + " test is failed.")
 
