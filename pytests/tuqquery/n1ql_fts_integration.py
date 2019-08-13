@@ -388,7 +388,7 @@ class N1qlFTSIntegrationTest(QueryTests):
         test_n1ql_query = self.n1ql_syntax_tests[test_name]['n1ql_query']
         services_map = self._get_services_map()
 
-        for node in self.servers:
+        for node in self.get_nodes_in_cluster():
             test_result = self._validate_query_against_node(node, services_map, test_fts_query, test_n1ql_query)
             self.assertEquals(test_result, True, "Node "+str(node)+" test "+test_name+" is failed.")
 
