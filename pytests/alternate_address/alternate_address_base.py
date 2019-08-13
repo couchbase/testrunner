@@ -1,6 +1,8 @@
 import random
 import time
-import json, subprocess
+import json
+import urllib
+from subprocess import Popen, PIPE, check_output, STDOUT, CalledProcessError
 
 import logger
 from basetestcase import BaseTestCase
@@ -31,14 +33,27 @@ class AltAddrBaseTest(BaseTestCase):
         self.cluster = Cluster()
         self.clusters_dic = self.input.clusters
         self.client_os = self.input.param("client_os", "linux")
+        self.alt_addr_with_xdcr = self.input.param("alt_addr_with_xdcr", False)
         if self.clusters_dic:
             if len(self.clusters_dic) > 1:
                 self.dest_nodes = self.clusters_dic[1]
                 self.dest_master = self.dest_nodes[0]
             elif len(self.clusters_dic) == 1:
                 self.log.error("=== need 2 cluster to setup xdcr in ini file ===")
+            if self.alt_addr_with_xdcr:
+                self.des_name = "des_cluster"
+                self.delete_xdcr_reference(self.clusters_dic[0][0].ip, self.clusters_dic[1][0].ip)
+                if self.skip_init_check_cbserver:
+                    for key in self.clusters_dic.keys():
+                        servers = self.clusters_dic[key]
+                        try:
+                            self.backup_reset_clusters(servers)
+                        except:
+                            self.log.error("was not able to cleanup cluster the first time")
+                            self.backup_reset_clusters(servers)
         else:
             self.log.error("**** Cluster config is setup in ini file. ****")
+
         self.shell = RemoteMachineShellConnection(self.master)
         if not self.skip_init_check_cbserver:
             self.rest = RestConnection(self.master)
@@ -52,6 +67,8 @@ class AltAddrBaseTest(BaseTestCase):
         self.debug_logs = self.input.param("debug-logs", False)
         self.should_fail = self.input.param("should-fail", False)
         self.add_hostname_node = self.input.param("add_hostname_node", False)
+        self.add_hostname_node_at_src = self.input.param("add_hostname_node_at_src", False)
+        self.add_hostname_node_at_des = self.input.param("add_hostname_node_at_des", False)
         self.num_hostname_add = self.input.param("num_hostname_add", 1)
         self.alt_addr_services_in = self.input.param("alt_addr_services_in", "kv")
         self.alt_addr_rebalance_out = self.input.param("alt_addr_rebalance_out", False)
@@ -63,6 +80,8 @@ class AltAddrBaseTest(BaseTestCase):
         self.alt_addr_eventing_function = self.input.param("alt_addr_eventing_function", False)
         self.alt_addr_fts_loader = self.input.param("alt_addr_fts_loader", False)
         self.run_alt_addr_loader = self.input.param("run_alt_addr_loader", False)
+        self.all_alt_addr_set = False
+
         info = self.shell.extract_remote_info()
         self.os_version = info.distribution_version.lower()
         self.deliverable_type = info.deliverable_type.lower()
@@ -76,7 +95,7 @@ class AltAddrBaseTest(BaseTestCase):
                                                               self.master.rest_username,
                                                               self.master.rest_password)
         cmd += '-d "path_config:component_path(bin)."'
-        bin_path  = subprocess.check_output(cmd, shell=True)
+        bin_path  = check_output(cmd, shell=True)
         if "bin" not in bin_path:
             self.fail("Check if cb server install on %s" % self.master.ip)
         else:
@@ -169,6 +188,147 @@ class AltAddrBaseTest(BaseTestCase):
                 return False
         return True
 
+    def get_internal_IP(self, server):
+        shell = RemoteMachineShellConnection(server)
+        internal_IP = shell.get_ip_address()
+        internal_IP = [x for x in internal_IP if x != "127.0.0.1"]
+        shell.disconnect()
+        if internal_IP:
+            return internal_IP[0]
+        else:
+            self.fail("Fail to get internal IP")
+
+    def backup_reset_clusters(self, servers):
+        BucketOperationHelper.delete_all_buckets_or_assert(servers, self)
+        ClusterOperationHelper.cleanup_cluster(servers, master=servers[0])
+        #ClusterOperationHelper.wait_for_ns_servers_or_assert(servers, self)
+
+    def get_external_IP(self, internal_IP):
+        found = False
+        external_IP = ""
+        for server in self.servers:
+            internalIP = self.get_internal_IP(server)
+            if internal_IP == internalIP:
+                found = True
+                external_IP = server.ip
+                break
+        if not found:
+            self.fail("Could not find server which matches internal IP")
+        else:
+            return external_IP
+
+    def setup_xdcr_cluster(self):
+        if not self.input.clusters[0] and not self.input.clusters[1]:
+            self.fail("This test needs ini set with cluster config")
+        self.log.info("Create source cluster")
+        self.create_xdcr_cluster(self.input.clusters[0])
+        self.log.info("Create destination cluster")
+        self.create_xdcr_cluster(self.input.clusters[1])
+
+    def create_xdcr_cluster(self, cluster_servers):
+        num_hostname_add = 1
+        add_host_name = False
+        if self.add_hostname_node_at_src:
+            add_host_name = True
+        if self.add_hostname_node_at_des:
+            add_host_name = True
+        shell = RemoteMachineShellConnection(cluster_servers[0])
+        services_in = self.alt_addr_services_in
+        if "-" in services_in:
+            set_services = services_in.split("-")
+        else:
+            set_services = services_in.split(",")
+
+        for server in cluster_servers[1:]:
+            add_node_IP = self.get_internal_IP(server)
+            node_services = "kv"
+            if len(set_services) == 1:
+                node_services = set_services[0]
+            elif len(set_services) > 1:
+                if len(set_services) == len(cluster_servers):
+                    node_services = set_services[i]
+                    i += 1
+            if add_host_name and num_hostname_add <= self.num_hostname_add:
+                add_node_IP = server.ip
+                num_hostname_add += 1
+
+            try:
+                shell.alt_addr_add_node(main_server=cluster_servers[0], internal_IP=add_node_IP,
+                                        server_add=server, services=node_services,
+                                        cmd_ext=self.cmd_ext)
+            except Exception as e:
+                if e:
+                    self.fail("Error: {0}".format(e))
+        rest = RestConnection(cluster_servers[0])
+        rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()], ejectedNodes=[])
+        rest.monitorRebalance()
+
+    def create_xdcr_reference(self, src_IP, des_IP):
+        cmd = "curl -u Administrator:password "
+        cmd += "http://{0}:8091/pools/default/remoteClusters ".format(src_IP)
+        cmd += "-d username=Administrator -d password=password "
+        cmd += "-d name={0} -d demandEncryption=0 ".format(self.des_name)
+        cmd += "-d hostname={0}:8091 ".format(des_IP)
+
+        mesg = "\n **** Create XDCR cluster remote reference from cluster {0} ".format(src_IP)
+        mesg += "to cluster {0}".format(des_IP)
+        self.log.info(mesg)
+        print("command to run: {0}".format(cmd))
+        try:
+            output = check_output(cmd, shell=True, stderr=STDOUT)
+        except CalledProcessError as e:
+            if e.output:
+                self.fail("\n Error: ".format(e.output))
+
+    def delete_xdcr_reference(self, src_IP, des_IP):
+        cmd = "curl -X DELETE -u Administrator:password "
+        cmd += "http://{0}:8091/pools/default/remoteClusters/{1}".format(src_IP, self.des_name)
+        print("command to run: {0}".format(cmd))
+        try:
+            output = check_output(cmd, shell=True, stderr=STDOUT)
+        except CalledProcessError as e:
+            if e.output:
+                self.fail("Error: ".format(e.output))
+
+    def create_xdcr_replication(self, src_IP, des_IP, bucket_name):
+        cmd = "curl -X POST -u Administrator:password "
+        cmd += "http://{0}:8091/controller/createReplication ".format(src_IP)
+        cmd += "-d fromBucket={0} ".format(bucket_name)
+        cmd += "-d toCluster={0} ".format(self.des_name)
+        cmd += "-d toBucket={0} ".format(bucket_name)
+        cmd += "-d replicationType=continuous -d enableCompression=1 "
+        print("command to run: {0}".format(cmd))
+        try:
+            output = check_output(cmd, shell=True, stderr=STDOUT)
+            return output
+        except CalledProcessError as e:
+            if e.output:
+                self.fail("Error: ".format(e.output))
+
+    def delete_xdcr_replication(self, src_IP, replication_id):
+        replication_id = urllib.quote(replication_id, safe='')
+        cmd = "curl -X DELETE -u Administrator:password "
+        cmd += " http://{0}:8091/controller/cancelXDCR/{1} ".format(src_IP, replication_id)
+        print("command to run: {0}".format(cmd))
+        try:
+            output = check_output(cmd, shell=True, stderr=STDOUT)
+        except CalledProcessError as e:
+            if e.output:
+                self.fail("Error: ".format(e.output))
+
+    def set_xdcr_checkpoint(self, src_IP, check_time):
+        cmd = "curl  -u Administrator:password "
+        cmd += "http://{0}:8091/settings/replications ".format(src_IP)
+        cmd += "-d goMaxProcs=10 "
+        cmd += "-d checkpointInterval={0} ".format(check_time)
+        print("command to run: {0}".format(cmd))
+        try:
+            self.log.info("Set xdcr checkpoint to {0} seconds".format(check_time))
+            output = check_output(cmd, shell=True, stderr=STDOUT)
+        except CalledProcessError as e:
+            if e.output:
+                self.fail("Error: ".format(e.output))
+
     def waitForItemCount(self, server, bucket_name, count, timeout=30):
         rest = RestConnection(server)
         for sec in range(timeout):
@@ -180,3 +340,23 @@ class AltAddrBaseTest(BaseTestCase):
                 return True
         log.info("Waiting for item count to be %d timed out", count)
         return False
+
+    def _check_output(self, word_check, output):
+        found = False
+        if len(output) >=1 :
+            if isinstance(word_check, list):
+                for ele in word_check:
+                    for x in output:
+                        if ele.lower() in x.lower():
+                            self.log.info("Found '{0} in CLI output".format(ele))
+                            found = True
+                            break
+            elif isinstance(word_check, str):
+                for x in output:
+                    if word_check.lower() in x.lower():
+                        self.log.info("Found '{0}' in CLI output".format(word_check))
+                        found = True
+                        break
+            else:
+                self.log.error("invalid {0}".format(word_check))
+        return found

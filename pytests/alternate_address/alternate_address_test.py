@@ -52,7 +52,6 @@ class AlternateAddressTests(AltAddrBaseTest):
         url_format = ""
         secure_port = ""
         secure_conn = ""
-        self.all_alt_addr_set = False
         self.skip_set_alt_addr = False
         shell = RemoteMachineShellConnection(server1)
         if self.secure_conn:
@@ -163,7 +162,7 @@ class AlternateAddressTests(AltAddrBaseTest):
         if self.alt_addr_rebalance_out:
             internal_IP = self.get_internal_IP(self.servers[-1])
             reject_node = "ns_1@{0}".format(internal_IP)
-            self.log.info("Rebalance out a node {0}".format(internal_IP)
+            self.log.info("Rebalance out a node {0}".format(internal_IP))
             rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()],\
                                                      ejectedNodes=[reject_node])
             reb_status = rest.monitorRebalance()
@@ -193,6 +192,137 @@ class AlternateAddressTests(AltAddrBaseTest):
         status = self.remove_all_alternate_address_settings()
         if not status:
             self.fail("Failed to remove all alternate address setting")
+
+    def test_alt_addr_with_xdcr(self):
+        url_format = ""
+        secure_port = ""
+        secure_conn = ""
+        self.setup_xdcr_cluster()
+        des_alt_addr_set = False
+
+        self.log.info("Create bucket at source")
+        src_master = self.clusters_dic[0][0]
+        self._create_buckets(src_master)
+        src_rest = RestConnection(src_master)
+        src_buckets = src_rest.get_buckets()
+        if src_buckets and src_buckets[0]:
+            src_bucket_name = src_buckets[0].name
+        else:
+            self.fail("Failed to create bucket at src cluster")
+
+        des_master = self.clusters_dic[1][0]
+        self.log.info("Create bucket at destination")
+        self._create_buckets(des_master)
+        des_rest = RestConnection(des_master)
+        des_buckets = des_rest.get_buckets()
+        if des_buckets and des_buckets[0]:
+            des_bucket_name = des_buckets[0].name
+        else:
+            self.fail("Failed to create bucket at des cluster")
+
+        for server in self.clusters_dic[0]:
+            internal_IP = self.get_internal_IP(server)
+            status = self.set_alternate_address(server, url_format = url_format,
+                           secure_port = secure_port, secure_conn = secure_conn,
+                           internal_IP = internal_IP)
+        self.all_alt_addr_set = True
+
+        self.kv_loader(src_master, "mac")
+        self.create_xdcr_reference(src_master.ip, des_master.ip)
+
+        src_num_docs = int(src_rest.get_active_key_count(src_bucket_name))
+        count = 0
+        src_num_docs = int(src_rest.get_active_key_count(src_bucket_name))
+        while count < 10:
+            if src_num_docs < 10000:
+                self.sleep(10, "wait for items written to bucket")
+                src_num_docs = int(src_rest.get_active_key_count(src_bucket_name))
+                count += 1
+            if src_num_docs == 10000:
+                self.log.info("all bucket items set")
+                break
+            if count == 2:
+                self.fail("bucket items does not set after 30 seconds")
+
+        self.create_xdcr_replication(src_master.ip, des_master.ip, src_bucket_name)
+        self.sleep(25, "time needed for replication to be created")
+
+        self.log.info("Reduce check point time to 30 seconds")
+        self.set_xdcr_checkpoint(src_master.ip, 30)
+        #self.set_xdcr_checkpoint(des_master.ip, 30)
+
+        self.log.info("Get xdcr configs from cluster")
+        shell = RemoteMachineShellConnection(self.master)
+        rep_id_cmd = "curl -u Administrator:password http://{0}:8091/pools/default/remoteClusters"\
+                                                                            .format(self.master.ip)
+        output, error = shell.execute_command(rep_id_cmd)
+        output = output[0][1:-1]
+        xdcr_config = json.loads(output)
+
+        cmd = "curl -u Administrator:password http://localhost:8091/sasl_logs/goxdcr " 
+        cmd += "|  grep  'Execution timed out' | tail -n 1 "
+        output, error = shell.execute_command(cmd)
+        self.log.info("Verify replication timeout due to alt addr does not enable at des cluster")
+        if xdcr_config["uuid"] in output[0] and "Execution timed out" in output[0]:
+            self.log.info("replication failed as expected as alt addr does not enable at des")
+        else:
+            self.fail("Alt addr failed to disable at des cluster")
+
+        count = 0
+        des_num_docs = int(des_rest.get_active_key_count(des_bucket_name))
+        while count < 6:
+            if src_num_docs != des_num_docs:
+                self.sleep(60, "wait for replication ...")
+                des_num_docs = int(des_rest.get_active_key_count(des_bucket_name))
+                count += 1
+            elif src_num_docs == des_num_docs:
+                self.fail("Replication should fail.  Alt addr at des does not block")
+                break
+            if count == 6:
+                if not des_alt_addr_set:
+                    self.log.info("This is expected since alt addr is not set yet")
+
+        des_alt_addr_status =[]
+        for server in self.clusters_dic[1]:
+            internal_IP = self.get_internal_IP(server)
+            des_alt_addr_status.append(self.set_alternate_address(server, url_format = url_format,
+                           secure_port = secure_port, secure_conn = secure_conn,
+                           internal_IP = internal_IP))
+        if False in des_alt_addr_status:
+            self.fail("Failed to set alt addr at des cluster")
+        else:
+            des_alt_addr_set = True
+
+        count = 0
+        self.log.info("Restart replication")
+        cmd = "curl -X POST -u Administrator:password "
+        cmd += "http://{0}:8091/settings/replications/{1}%2F{2}%2F{2} "\
+                 .format(self.master.ip, xdcr_config["uuid"], des_bucket_name)
+        cmd += "-d pauseRequested="
+        try:
+            check_output(cmd + "true", shell=True, stderr=STDOUT)
+            self.sleep(20)
+            check_output(cmd + "false", shell=True, stderr=STDOUT)
+        except CalledProcessError as e:
+            print("Error return code: {0}".format(e.returncode))
+            if e.output:
+                self.fail(e.output)
+        des_rest = RestConnection(des_master)
+
+        self.log.info("Verify docs is replicated to des cluster")
+        while count < 6:
+            if src_num_docs != des_num_docs:
+                self.sleep(60, "wait for replication start...")
+                des_num_docs = int(des_rest.get_active_key_count(des_bucket_name))
+                count += 1
+            elif src_num_docs == des_num_docs:
+                self.log.info("Replication is complete")
+                break
+            if count == 6:
+                if des_alt_addr_set:
+                    self.fail("Replication does not complete after 6 minutes")
+
+        self.delete_xdcr_replication(src_master.ip, xdcr_config["uuid"])
 
     def remove_all_alternate_address_settings(self):
         self.log.info("Remove alternate address setting in each node")
@@ -287,38 +417,16 @@ class AlternateAddressTests(AltAddrBaseTest):
         shell.disconnect()
         return cert_file_location
 
-    def get_internal_IP(self, server):
-        shell = RemoteMachineShellConnection(server)
-        internal_IP = shell.get_ip_address()
-        internal_IP = [x for x in internal_IP if x != "127.0.0.1"]
-        shell.disconnect()
-        if internal_IP:
-            return internal_IP[0]
-        else:
-            self.fail("Fail to get internal IP")
-
-    def get_external_IP(self, internal_IP):
-        found = False
-        external_IP = ""
-        for server in self.servers:
-            internalIP = self.get_internal_IP(server)
-            if internal_IP == internalIP:
-                found = True
-                external_IP = server.ip
-                break
-        if not found:
-            self.fail("Could not find server which matches internal IP")
-        else:
-            return external_IP
-
     def kv_loader(self, server = None, client_os = "linux"):
         if server is None:
-            server = self.master.ip
+            server = self.master
+        buckets = RestConnection(server).get_buckets()
         base_path = "/opt/couchbase/bin/"
         if client_os == "mac":
             base_path = "/Applications/Couchbase\ Server.app/Contents/Resources/couchbase-core/bin/"
         loader_path = "{0}cbworkloadgen{1}".format(base_path, self.cmd_ext)
-        cmd_load = " -n {0}:8091 -u Administrator -p password -j".format(server.ip)
+        cmd_load = " -n {0}:8091 -u Administrator -p password -j -b {1}"\
+                                       .format(server.ip, buckets[0].name)
         error_mesg = "No alternate address information found"
         try:
             self.log.info("Load kv doc to bucket from outside network")
@@ -427,7 +535,7 @@ class AlternateAddressTests(AltAddrBaseTest):
     def _create_buckets(self, server, num_buckets=1):
         if server is None:
             server = self.master
-        create_bucket_command = """ curl -g -v -u Administrator:password \
+        create_bucket_command = """ curl -g -u Administrator:password \
                       http://{0}:8091/pools/default/buckets \
                       -d ramQuotaMB=256 -d authType=sasl -d replicaNumber=1 """.format(server.ip)
         if num_buckets == 1:
@@ -512,23 +620,3 @@ class AlternateAddressTests(AltAddrBaseTest):
             return True
         else:
             return False
-
-    def _check_output(self, word_check, output):
-        found = False
-        if len(output) >=1 :
-            if isinstance(word_check, list):
-                for ele in word_check:
-                    for x in output:
-                        if ele.lower() in x.lower():
-                            self.log.info("Found '{0} in CLI output".format(ele))
-                            found = True
-                            break
-            elif isinstance(word_check, str):
-                for x in output:
-                    if word_check.lower() in x.lower():
-                        self.log.info("Found '{0}' in CLI output".format(word_check))
-                        found = True
-                        break
-            else:
-                self.log.error("invalid {0}".format(word_check))
-        return found
