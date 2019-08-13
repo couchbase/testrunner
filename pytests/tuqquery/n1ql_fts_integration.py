@@ -442,7 +442,7 @@ class N1qlFTSIntegrationTest(QueryTests):
                                      " " + operator + " "+ a_d + " " 
                                      "select * from (select raw meta().id from test_bucket where string_field like '%"+right_set_value+"%') q1) a order by q1")
 
-                    for node in self.servers:
+                    for node in self.get_nodes_in_cluster():
                         test_result = self._validate_query_against_node(node, services_map, fts_query, n1ql_query)
                         self.assertEquals(test_result, True, "Node " + str(node) + " test is failed.")
 
@@ -487,7 +487,7 @@ class N1qlFTSIntegrationTest(QueryTests):
                 n1ql_query = "select * from (select * from (select raw meta().id from test_bucket where string_field like '"+left_set_value+"%') q1 " \
                              + operator + a_d + \
                              "select * from ( select raw meta().id from test_bucket where string_field like '"+right_set_value+"') q1) a order by q1"
-                for node in self.servers:
+                for node in self.get_nodes_in_cluster():
                     test_result = self._validate_query_against_node(node, services_map, fts_query, n1ql_query)
                     self.assertEquals(test_result, False, "Node " + str(node) + " test is not failed.")
 
@@ -508,7 +508,7 @@ class N1qlFTSIntegrationTest(QueryTests):
                                 "   'size':100}) AS result) " \
                                 "aa unnest aa.hits as ht order by ht.id"
                     n1ql_query = "select " + a_d + r_e_v + " ht.id from (SELECT meta().id from test_bucket where string_field like 'test_string%') ht order by ht.id"
-                    for node in self.servers:
+                    for node in self.get_nodes_in_cluster():
                         test_result = self._validate_query_against_node(node, services_map, fts_query, n1ql_query)
                         self.assertEquals(test_result, True, "Node " + str(node) + " test is failed.")
 
