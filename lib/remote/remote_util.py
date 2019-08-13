@@ -1974,13 +1974,22 @@ class RemoteMachineShellConnection:
                 else:
                     self.check_pkgconfig(self.info.deliverable_type, openssl)
                     if "SUSE" in self.info.distribution_type:
-			if environment:
-			    output, error = self.execute_command("export {0};zypper -n install --allow-unsigned-rpm /tmp/{1}"
+                        if environment:
+                            if "suse 12" in self.info.distribution_version.lower():
+                                output, error = self.execute_command("export {0};zypper -n install /tmp/{1}"
+                                                         .format(environment.strip(), build.name))
+                                self.log_command_output(output, error)
+                            elif "suse 15" in self.info.distribution_version.lower():
+                                output, error = self.execute_command("export {0};zypper -n install --allow-unsigned-rpm /tmp/{1}"
                                                      .format(environment.strip(), build.name))
-			    self.log_command_output(output, error)
-			else:
-                            output, error = self.execute_command("zypper -n install --allow-unsigned-rpm /tmp/{0}".format(build.name))
-                            self.log_command_output(output, error)
+                                self.log_command_output(output, error)
+                        else:
+                            if "suse 12" in self.info.distribution_version.lower():
+                                output, error = self.execute_command("zypper -n install /tmp/{0}".format(build.name))
+                                self.log_command_output(output, error)
+                            elif "suse 15" in self.info.distribution_version.lower():
+                                output, error = self.execute_command("zypper -n install --allow-unsigned-rpm /tmp/{0}".format(build.name))
+                                self.log_command_output(output, error)
                     else:
                         rpm_cmd = "yes | {0}yum localinstall -y /tmp/{1}"
                         if force:
