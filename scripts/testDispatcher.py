@@ -114,8 +114,13 @@ def main():
 
     cb = Bucket('couchbase://' + TEST_SUITE_DB + '/QE-Test-Suites')
 
+    if options.run == "12hr_weekly" :
+        suiteString = "('12hour' in partOf or 'weekly' in partOf)"
+    else:
+        suiteString = "'" + options.run + "' in partOf"
+
     if options.component is None or options.component == 'None':
-        queryString = "select * from `QE-Test-Suites` where '" + options.run + "' in partOf order by component"
+        queryString = "select * from `QE-Test-Suites` where " + suiteString + " order by component"
     else:
         if options.subcomponent is None or options.subcomponent == 'None':
             splitComponents = options.component.split(',')
@@ -125,8 +130,7 @@ def main():
                 if i < len(splitComponents) - 1:
                     componentString = componentString + ','
 
-
-            queryString = "select * from `QE-Test-Suites` where \"{0}\" in partOf and component in [{1}] order by component;".format(options.run, componentString)
+            queryString = "select * from `QE-Test-Suites` where {0} and component in [{1}] order by component;".format(suiteString, componentString)
 
         else:
             # have a subcomponent, assume only 1 component
@@ -138,8 +142,8 @@ def main():
                 subcomponentString = subcomponentString + "'" + splitSubcomponents[i] + "'"
                 if i < len(splitSubcomponents) - 1:
                     subcomponentString = subcomponentString + ','
-            queryString = "select * from `QE-Test-Suites` where \"{0}\" in partOf and component in ['{1}'] and subcomponent in [{2}];".\
-                format(options.run, options.component, subcomponentString)
+            queryString = "select * from `QE-Test-Suites` where {0} and component in ['{1}'] and subcomponent in [{2}];".\
+                format(suiteString, options.component, subcomponentString)
 
 
     print 'the query is', queryString #.format(options.run, componentString)
