@@ -135,3 +135,17 @@ class IndexManagementAPI(FTSBaseTest):
         self.sleep(5)
         self.generate_random_queries(fts_index_2, self.num_queries, self.query_types)
         self.run_query_and_compare(fts_index_2, n1ql_executor=self._cb_cluster)
+
+    def test_index_plan_update_disallow_query(self):
+        self.load_sample_buckets(self._cb_cluster.get_master_node(), self.sample_bucket_name)
+        fts_index = self._cb_cluster.create_fts_index(name=self.sample_index_name, source_name=self.sample_bucket_name)
+        self.sleep(3)
+        self.fts_rest.disable_querying_on_fts_index(fts_index.name)
+        self.wait_for_indexing_complete()
+        self.validate_index_count(equal_bucket_doc_count=True)
+
+        self.log.info("Updating the plan")
+
+        fts_index.update_index_partitions(1)
+        self.wait_for_indexing_complete()
+        self.validate_index_count(equal_bucket_doc_count=True)
