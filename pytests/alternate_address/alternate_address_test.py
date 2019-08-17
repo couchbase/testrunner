@@ -16,8 +16,6 @@ from pprint import pprint
 from testconstants import CLI_COMMANDS, LINUX_COUCHBASE_BIN_PATH,\
                           WIN_COUCHBASE_BIN_PATH, COUCHBASE_FROM_MAD_HATTER,\
                           WIN_TMP_PATH_RAW
-from __builtin__ import True, False
-from Carbon.Aliases import true
 
 
 class AlternateAddressTests(AltAddrBaseTest):
