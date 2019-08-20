@@ -823,6 +823,7 @@ class EventingRecovery(EventingBaseTest):
         rebalance.result()
 
     def test_auto_retry_of_failed_rebalance_when_producer_killed(self):
+        gen_load_del = copy.deepcopy(self.gens_load)
         self.auto_retry_setup()
         eventing_node = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
         sock_batch_size = self.input.param('sock_batch_size', 1)
@@ -839,15 +840,16 @@ class EventingRecovery(EventingBaseTest):
         self.deploy_function(body)
         if self.pause_resume:
             self.pause_function(body)
+        # load some data
+        task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
+                                                self.buckets[0].kvs[1], 'create', compression=self.sdk_compression)
+        self.sleep(10)
         try:
             # rebalance in a eventing node when eventing is processing mutations
             services_in = ["eventing"]
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]],
                                                      [], services=services_in)
             self.sleep(5)
-            # load data
-            self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                      batch_size=self.batch_size)
             reached = RestHelper(self.rest).rebalance_reached(percentage=60)
             self.assertTrue(reached, "rebalance failed, stuck or did not complete")
             # kill eventing producer when eventing is processing mutations
@@ -866,13 +868,14 @@ class EventingRecovery(EventingBaseTest):
             self.fail("Rebalance succeeded even after killing eventing processes")
         if self.pause_resume:
             self.resume_function(body)
+        task.result()
         # Wait for eventing to catch up with all the update mutations and verify results after rebalance
         if self.is_sbm:
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2, skip_stats_validation=True)
         else:
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         # delete json documents
-        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+        self.load(gen_load_del, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size, op_type='delete')
         if self.pause_resume:
             self.pause_function(body)
