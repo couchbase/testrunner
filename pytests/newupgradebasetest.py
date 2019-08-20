@@ -95,8 +95,8 @@ class NewUpgradeBaseTest(QueryHelperTests,EventingBaseTest, FTSBaseTest):
         self.metadata_bucket_name = self.input.param('metadata_bucket_name', 'metadata')
         self.cb_bucket_name = self.input.param('cb_bucket_name', 'travel-sample')
         self.cb_server_ip = self.input.param("cb_server_ip", None)
-        self.cbas_bucket_name = self.input.param('cbas_bucket_name', 'travel')
-        self.cbas_dataset_name = self.input.param("cbas_dataset_name", 'travel_ds')
+        self.cbas_bucket_name = self.input.param('cbas_bucket_name', 'travel-sample')
+        self.cbas_dataset_name = self.input.param("cbas_dataset_name", 'travel')
         self.cbas_dataset_name_invalid = self.input.param('cbas_dataset_name_invalid',
                                                                 self.cbas_dataset_name)
         self.cbas_bucket_name_invalid = self.input.param('cbas_bucket_name_invalid',
@@ -1101,17 +1101,17 @@ class NewUpgradeBaseTest(QueryHelperTests,EventingBaseTest, FTSBaseTest):
             else:
                 return True
 
-    def create_dataset_on_bucket(self, cbas_bucket_name, cbas_dataset_name,
+    def create_dataset_on_bucket(self, cbas_dataset_name, cbas_bucket_name,
                                  where_field=None, where_value = None,
                                  validate_error_msg=False, username = None,
                                  password = None):
         """
         Creates a shadow dataset on a CBAS bucket
         """
-        cmd_create_dataset = "create shadow dataset {0} on {1};".format(
+        cmd_create_dataset = "create dataset {0} on `{1}`".format(
             cbas_dataset_name, cbas_bucket_name)
         if where_field and where_value:
-            cmd_create_dataset = "create shadow dataset {0} on {1} WHERE `{2}`=\"{3}\";"\
+            cmd_create_dataset = "create dataset {0} on {1} WHERE `{2}`=\"{3}\";"\
                                               .format(cbas_dataset_name, cbas_bucket_name,
                                                       where_field, where_value)
         status, metrics, errors, results, _ = \
@@ -1127,15 +1127,9 @@ class NewUpgradeBaseTest(QueryHelperTests,EventingBaseTest, FTSBaseTest):
                 return True
 
     def test_create_dataset_on_bucket(self):
-        # Create bucket on CBAS
-        self.create_bucket_on_cbas(cbas_bucket_name=self.cbas_bucket_name,
-                                   cb_bucket_name=self.cb_bucket_name,
-                                   cb_server_ip=self.cb_server_ip)
-
-        # Create dataset on the CBAS bucket
         result = self.create_dataset_on_bucket(
-            cbas_bucket_name=self.cbas_bucket_name_invalid,
             cbas_dataset_name=self.cbas_dataset_name,
+            cbas_bucket_name=self.cbas_bucket_name,
             validate_error_msg=self.validate_error)
         if not result:
             self.fail("FAIL : Actual error msg does not match the expected")
