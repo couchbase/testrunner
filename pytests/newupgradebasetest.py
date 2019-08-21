@@ -36,7 +36,7 @@ from testconstants import SHERLOCK_VERSION
 from testconstants import CB_VERSION_NAME
 from testconstants import COUCHBASE_MP_VERSION
 from testconstants import CE_EE_ON_SAME_FOLDER
-from testconstants import STANDARD_BUCKET_PORT
+from testconstants import STANDARD_BUCKET_PORT, IPV4_REGEX
 
 class NewUpgradeBaseTest(QueryHelperTests,EventingBaseTest, FTSBaseTest):
     def setUp(self):
@@ -414,10 +414,14 @@ class NewUpgradeBaseTest(QueryHelperTests,EventingBaseTest, FTSBaseTest):
     def verification(self, servers, check_items=True):
         if self.use_hostnames:
             for server in servers:
+                is_server_with_ipv4 = re.match(IPV4_REGEX, server.ip)
+                if is_server_with_ipv4:
+                    self.fail("ini file needs hostname in server ip to run")
                 node_info = RestConnection(server).get_nodes_self()
                 new_hostname = node_info.hostname
-                self.assertEqual("%s:%s" % (server.hostname, server.port), new_hostname,
-                                 "Hostname is incorrect for server %s. Settings are %s" % (server.ip, new_hostname))
+                self.assertEqual("{0}:{1}".format(server.ip, server.port), new_hostname,
+                                 "Hostname is incorrect for server {0}. Settings are {1}"\
+                                 .format(server.ip, new_hostname))
         if self.master.ip != self.rest.ip or \
            self.master.ip == self.rest.ip and str(self.master.port) != str(self.rest.port):
             if self.port:
