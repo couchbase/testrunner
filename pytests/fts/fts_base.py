@@ -540,7 +540,8 @@ class FTSIndex:
             "sourceType": "couchbase",
             "sourceName": "default",
             "sourceUUID": "",
-            "planParams": {}
+            "planParams": {},
+            "sourceParams": {}
         }
         self.name = self.index_definition['name'] = name
         self.es_custom_map = None

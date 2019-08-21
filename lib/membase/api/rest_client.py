@@ -2889,6 +2889,7 @@ class RestConnection(object):
     def stop_fts_index_update(self, name):
         """ method to stop fts index from updating"""
         api = self.fts_baseUrl + "api/index/{0}/ingestControl/pause".format(name)
+        log.info('calling api : {0}'.format(api))
         status, content, header = self._http_request(
             api,
             'POST',
@@ -2899,6 +2900,7 @@ class RestConnection(object):
     def resume_fts_index_update(self, name):
         """ method to stop fts index from updating"""
         api = self.fts_baseUrl + "api/index/{0}/ingestControl/resume".format(name)
+        log.info('calling api : {0}'.format(api))
         status, content, header = self._http_request(
             api,
             'POST',
@@ -2909,6 +2911,7 @@ class RestConnection(object):
     def freeze_fts_index_partitions(self, name):
         """ method to freeze index partitions asignment"""
         api = self.fts_baseUrl+ "api/index/{0}/planFreezeControl/freeze".format(name)
+        log.info('calling api : {0}'.format(api))
         status, content, header = self._http_request(
             api,
             'POST',
@@ -2919,6 +2922,7 @@ class RestConnection(object):
     def unfreeze_fts_index_partitions(self, name):
         """ method to freeze index partitions asignment"""
         api = self.fts_baseUrl+ "api/index/{0}/planFreezeControl/unfreeze".format(name)
+        log.info('calling api : {0}'.format(api))
         status, content, header = self._http_request(
             api,
             'POST',
@@ -2929,6 +2933,7 @@ class RestConnection(object):
     def disable_querying_on_fts_index(self, name):
         """ method to disable querying on index"""
         api = self.fts_baseUrl + "api/index/{0}/queryControl/disallow".format(name)
+        log.info('calling api : {0}'.format(api))
         status, content, header = self._http_request(
             api,
             'POST',
@@ -2939,6 +2944,7 @@ class RestConnection(object):
     def enable_querying_on_fts_index(self, name):
         """ method to enable querying on index"""
         api = self.fts_baseUrl + "api/index/{0}/queryControl/allow".format(name)
+        log.info('calling api : {0}'.format(api))
         status, content, header = self._http_request(
             api,
             'POST',

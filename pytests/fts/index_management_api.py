@@ -52,7 +52,7 @@ class IndexManagementAPI(FTSBaseTest):
     def test_planfreeze_control(self):
         self.load_sample_buckets(self._cb_cluster.get_master_node(), self.sample_bucket_name)
         fts_index = self._cb_cluster.create_fts_index(name=self.sample_index_name, source_name=self.sample_bucket_name)
-        self.sleep(5)
+        self.sleep(20)
         self.fts_rest.freeze_fts_index_partitions(fts_index.name)
         self.wait_for_indexing_complete()
         index_count_after_freeze = fts_index.get_indexed_doc_count()
