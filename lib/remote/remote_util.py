@@ -2135,32 +2135,27 @@ class RemoteMachineShellConnection:
                     self.log_command_output(output, error, track_words)
                 else:
                     success &= self.log_command_output(output, error, track_words, debug=False)
-        elif self.info.deliverable_type in ["zip"]:
+        elif self.info.deliverable_type in ["dmg"]:
             """ close Safari browser before install """
             self.terminate_process(self.info, "/Applications/Safari.app/Contents/MacOS/Safari")
-            o, r = self.execute_command("ps aux | grep Archive | awk '{print $2}' | xargs kill -9")
-            output, error = self.execute_command("cd ~/Downloads ; open couchbase-server*.zip")
+            self.execute_command("ps aux | grep Archive | awk '{print $2}' | xargs kill -9")
+            output, error = self.execute_command("cd ~/Downloads ; hdiutil attach couchbase-server*.dmg")
             extracted = False
             count = 1
             if not output:
-                log.info("\n****** waiting to unzip file in server: {0}".format(self.ip))
+                log.info("\n****** waiting to mount dmg file on server: {0}".format(self.ip))
                 while not extracted:
-                    found, error = self.execute_command("ls ~/Downloads/couchbase-server*/",
-                                                         debug=False)
-                    if "Couchbase Server.app" not in found:
+                    found, error = self.execute_command("ls /Volumes/Couchbase\ Installer*/",
+                                                        debug=False)
+                    if "Couchbase\ Server.app" not in found:
                         time.sleep(10)
                         count += 1
                     else:
                         extracted = True
-            else:
-                found, error = self.execute_command("ls ~/Downloads/couchbase-server*/",
-                                                     debug=False)
-                if "Couchbase Server.app" not in found:
-                    raise Exception("Faile to open zip file")
 
-            cmd1 = "mv ~/Downloads/couchbase-server*/Couchbase\ Server.app /Applications/"
+            cmd1 = "cp -R /Volumes/Couchbase*/Couchbase\ Server.app /Applications"
             cmd2 = "sudo xattr -d -r com.apple.quarantine /Applications/Couchbase\ Server.app"
-            cmd3 = "open /Applications/Couchbase\ Server.app"
+            cmd3 = "sudo open -a Couchbase\ Server.app"
             output, error = self.execute_command(cmd1)
             self.log_command_output(output, error)
             output, error = self.execute_command(cmd2)
@@ -2825,6 +2820,11 @@ class RemoteMachineShellConnection:
             self.log_command_output(output, error)
             output, error = self.execute_command("rm -rf ~/Library/Application\ Support/Couchbase")
             self.log_command_output(output, error)
+            """ Unmount existing app """
+            volumes, _ = self.execute_command("ls /Volumes | grep Couchbase\ Installer")
+            for volume in volumes:
+                output, error = self.execute_command("hdiutil unmount " + '"' + "/Volumes/" + volume + '"')
+                self.log_command_output(output, error)
         if self.nonroot:
             if self.nr_home_path != "/home/%s/" % self.username:
                 log.info("remove all non default install dir")
@@ -3514,7 +3514,7 @@ class RemoteMachineShellConnection:
             ext = { 'Ubuntu' : "deb",
                    'CentOS'  : "rpm",
                    'Red Hat' : "rpm",
-                   "Mac"     : "zip",
+                   "Mac"     : "dmg",
                    "Debian"  : "deb",
                    "openSUSE": "rpm",
                    "SUSE"    : "rpm",
