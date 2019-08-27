@@ -162,13 +162,15 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
 
     """ _commit_for_checkpoint is deprecated. Checking stats for call history recorded so far on a node """
     def get_checkpoint_call_history(self, node):
-        chkpts, count = NodeHelper.check_goxdcr_log(node,
-                                                   "num_checkpoints",
-                                                   log_name="stats.log",
-                                                   print_matches=True,
-                                                   timeout=10)
-        if count > 0:
-            total_successful_chkpts = int((chkpts[-1].split('num_checkpoints,')[1]).rstrip('},'))
+        stats_count = []
+        shell = RemoteMachineShellConnection(node)
+        output, error = shell.execute_cbstats(self.dest_cluster.get_bucket_by_name('default'), "checkpoint",
+                                              print_results=False)
+        for stat in output:
+            if re.search("num_checkpoint_items:", stat):
+                stats_count.append(int(stat.split(": ")[1]))
+        if max(stats_count) > 0:
+            total_successful_chkpts = max(stats_count)
         else:
             total_successful_chkpts = 0
         self.log.info(total_successful_chkpts)
@@ -277,25 +279,27 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
         count = 1
         # get vb0 active source node
         active_src_node = self.get_active_vb0_node(self.src_master)
-        while count <=n:
+        shell = RemoteMachineShellConnection(active_src_node)
+        while count <= n:
             remote_vbuuid, remote_highseqno = self.get_failover_log(self.dest_master)
             local_vbuuid, local_highseqno = self.get_failover_log(self.src_master)
 
-            self.log.info("Local failover log: [{0}, {1}]".format(local_vbuuid,local_highseqno))
-            self.log.info("Remote failover log: [{0}, {1}]".format(remote_vbuuid,remote_highseqno))
-            self.log.info("################ New mutation:{0} ##################".format(self.key_counter+1))
+            self.log.info("Local failover log: [{0}, {1}]".format(local_vbuuid, local_highseqno))
+            self.log.info("Remote failover log: [{0}, {1}]".format(remote_vbuuid, remote_highseqno))
+            self.log.info("################ New mutation:{0} ##################".format(self.key_counter + 1))
             self.load_one_mutation_into_source_vb0(active_src_node)
             self.sleep(60)
             if local_highseqno == "0":
                 # avoid checking very first/empty checkpoint record
                 count += 1
                 continue
-            stats_count = NodeHelper.check_goxdcr_log(
-                        active_src_node,
-                        "docs_checked,{0}".format(count),
-                        log_name="stats.log",
-                        timeout=30)
-            if stats_count > 0:
+            stats_count = []
+            output, error = shell.execute_cbstats(self.src_cluster.get_bucket_by_name('default'), "checkpoint",
+                                                  print_results=False)
+            for stat in output:
+                if re.search("num_checkpoint_items:", stat):
+                    stats_count.append(int(stat.split(": ")[1]))
+            if max(stats_count) > 0:
                 self.log.info("Checkpoint recorded as expected")
                 if not skip_validation:
                     self.log.info("Validating latest checkpoint")
