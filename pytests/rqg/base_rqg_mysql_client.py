@@ -374,6 +374,48 @@ class BaseRQGMySQLClient(MySQLClient):
                 n1ql_name = key
                 sql_name = sql_n1ql_synonim_functions[key]['sql_name']
                 query_map['sql'] = re.sub(r'([^\w]{1})'+key+'([^\w]{1})', r'\1'+sql_name+r'\2',query_map['sql'])
+        while True:
+            if "DATE_PART_STR" in query_map["sql"]:
+                date_part_substring_start = query_map["sql"].find("DATE_PART_STR")
+                date_part_substring_end = query_map["sql"].find(")", date_part_substring_start)
+                date_part_substring = query_map["sql"][date_part_substring_start:date_part_substring_end+1]
+
+                date_part_type_start = date_part_substring.find("\"")
+                date_part_type_end = date_part_substring.find("\"", date_part_type_start+1)
+                date_part_type = date_part_substring[date_part_type_start+1:date_part_type_end]
+
+                date_part_argument = date_part_substring[date_part_substring.find("(")+1:date_part_substring.find(",")]
+                mysql_date_part_call = date_part_type+"("+date_part_argument+")"
+
+                query_map["sql"] = query_map["sql"].replace(date_part_substring, mysql_date_part_call)
+            else:
+                break
+        while True:
+            if "POSITION" in query_map["sql"]:
+                position_substring_start = query_map["sql"].find("POSITION")
+                counter = 0
+                position_counter = position_substring_start
+                search_started = False
+                for c in query_map["sql"][position_substring_start:]:
+                    position_counter = position_counter+1
+                    if c == "(":
+                        counter = counter+1
+                        search_started = True
+                    if c == ")":
+                        counter = counter-1
+                    if search_started and counter == 0:
+                        break
+                position_substring_end = position_counter
+                position_part_substring = query_map["sql"][position_substring_start:position_substring_end]
+
+                args_string = position_part_substring[position_part_substring.find("(")+1:-1]
+                args = args_string.split(",")
+                if len(args) < 2:
+                    break
+                mysql_position_call = "POSITION("+str(args[1])+" IN "+str(args[0])+")"
+                query_map["sql"] = query_map["sql"].replace(position_part_substring, mysql_position_call)
+            else:
+                break
 
         return query_map
 
