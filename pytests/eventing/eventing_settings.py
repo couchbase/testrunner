@@ -150,6 +150,8 @@ class EventingSettings(EventingBaseTest):
         body['settings']['description'] = "Adding a new description"
         body['depcfg']['buckets'] = []
         body['depcfg']['buckets'].append({"alias": self.dst_bucket_name, "bucket_name": self.dst_bucket_name})
+        if self.is_sbm:
+            body['depcfg']['buckets'].append({"alias": self.src_bucket_name, "bucket_name": self.src_bucket_name,"access": "rw"})
         # For new alias values to propagate we need to deploy the function again.
         self.deploy_function(body)
         # Wait for eventing to catch up with all the delete mutations and verify results
