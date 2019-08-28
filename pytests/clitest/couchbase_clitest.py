@@ -2869,7 +2869,7 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
         bucket_create_roles = ["admin", "cluster_admin"]
         cli = CouchbaseCLI(server, user, password)
         try:
-            self.log.info("Create bucket 'bucket1' with roles %s" % roles)
+            self.log.info("Create bucket 'bucket1' with roles {0} ".format(roles))
             cli.bucket_create("bucket1", self.bucket_type, 256,
                                          self.eviction_policy, 1,
                                          1, self.priority,
@@ -2879,16 +2879,16 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
             for bucket in self.buckets:
                 if bucket.name == "bucket1":
                     if roles not in bucket_create_roles:
-                        self.fail("Roles %s should not have permission"
-                                  "to create bucket." % roles)
-                    self.log.info("Found bucket '%s' in cluster" % bucket.name)
+                        self.fail("Roles {0} should not have permission to create bucket. "\
+                                                                             .format(roles))
+                    self.log.info("Found bucket '{0}' in cluster".format(bucket.name))
                     bucket_found = True
             if not bucket_found:
-                self.fail("Failed to create bucket by user %s with roles: %s"
-                                                               % (user, roles))
+                self.fail("Failed to create bucket by user {0} with roles: {1}"\
+                                                               .format(user, roles))
         except Exception, e:
             if e and roles not in bucket_create_roles:
-                print "\nBucket permission of roles '%s' is enforced\n" % roles
+                print "\nBucket permission of roles '{0}' is enforced\n".format(roles)
                 self.log.info("Create bucket with admin roles for next test")
                 cli = CouchbaseCLI(server, "Administrator", password)
                 cli.bucket_create("bucket1", self.bucket_type, self.bucket_ram,
@@ -2904,9 +2904,9 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
                                                   self.priority, 1)
         if "SUCCESS: Bucket edited" not in output:
             if roles in bucket_edit_roles:
-                self.fail("Failed to edit bucket with roles %s " % roles)
+                self.fail("Failed to edit bucket with roles {0} ".format(roles))
             else:
-                self.log.info("%s has no permision to edit bucket" % roles)
+                self.log.info("{0} has no permision to edit bucket".format(roles))
                 print "\nEnable flush with admin roles for next test\n"
                 cli = CouchbaseCLI(server, "Administrator", password)
                 cli.bucket_edit("bucket1", self.bucket_ram,
@@ -2915,12 +2915,9 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
 
         self.log.info("Load data to bucket")
         shell = RemoteMachineShellConnection(server)
-        cmd = "%scbworkloadgen%s -c %s:8091 -j -u %s -p %s -b bucket1 " \
-                                              % (self.cli_command_path,
-                                                 self.cmd_ext,
-                                                 server.ip,
-                                                 "Administrator",
-                                                 "password")
+        cmd = "{0}cbworkloadgen{1} -n {2}:8091 -j -u {3} -p {4} -b bucket1 " \
+                                        .format(self.cli_command_path, self.cmd_ext,
+                                                server.ip, "Administrator", "password")
         shell.execute_command(cmd)
         shell.disconnect()
         cli = CouchbaseCLI(server, user, password)
@@ -2929,11 +2926,11 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
         bucket_items = rest.get_active_key_count("bucket1")
         if int(bucket_items) != 0 :
             if roles in bucket_edit_roles:
-                self.fail("Failed to flush bucket with roles %s" % roles)
+                self.fail("Failed to flush bucket with roles {0}".format(roles))
             else:
-                self.log.info("%s has no permision to flush bucket" % roles)
+                self.log.info("{0} has no permision to flush bucket".format(roles))
         else:
-            self.log.info("Roles %s success flush bucket " % roles)
+            self.log.info("Roles {0} success flush bucket ".format(roles))
 
         try:
             self.log.info("Delete bucket 'bucket1")
@@ -2943,13 +2940,12 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
             for bucket in self.buckets:
                 if bucket.name == "bucket1":
                     if roles in bucket_create_roles:
-                        self.fail("Roles %s failed to delete bucket." % roles)
+                        self.fail("Roles {0} failed to delete bucket.".format(roles))
                     else:
-                        self.log.info(
-                            "%s has no permision to delete bucket" % roles)
+                        self.log.info("{0} has no permision to delete bucket".format(roles))
         except Exception, e:
             if e:
-                print "\n%s\n", e
+                print "\n{0}\n".format(str(e))
 
 
 class XdcrCLITest(CliBaseTest):
