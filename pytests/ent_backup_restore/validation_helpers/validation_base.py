@@ -143,7 +143,15 @@ class BackupRestoreValidationBase:
             data = complete_map[bucket]
             for key in data:
                 value = data[key]
-                value = ",".join(value.split(',')[4:5])
+                if '"b\'' in value:
+                    value = ",".join(value.split(',')[4:8])
+                else:
+                    value = ",".join(value.split(',')[4:5])
+                value = value.replace('""', '"')
+                if value.startswith('"b\''):
+                    value = value[3:-2]
+                elif value.startswith("b"):
+                    value = value.split(',')[0]
                 data[key] = value
             with open(file_path, 'w') as f:
                 json.dump(data, f)
