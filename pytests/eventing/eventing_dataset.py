@@ -191,7 +191,13 @@ class EventingDataset(EventingBaseTest):
         for key in keys:
             bucket.remove(key)
         # delete a doc using n1ql query
-        self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
+        try:
+            self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
+        except Exception,ex:
+            if "Primary Index Already present, This looks like a bug" in ex.message:
+                pass
+            else:
+                raise ex
         query = "DELETE FROM " + self.src_bucket_name + " where meta().id='key11111'"
         self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_node)
         # Wait for eventing to catch up with all the delete mutations and verify results
