@@ -1388,8 +1388,12 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         rest_conn.add_zone(target_zone)
         self.log.info("Moving {0} to new zone {1}".format(self.backupset.cluster_host.ip, target_zone))
         rest_conn.shuffle_nodes_in_zones(["{0}".format(self.backupset.cluster_host.ip)], source_zone, target_zone)
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [])
+        rebalance.result()
         self.log.info("Restoring to {0} after group change".format(self.backupset.cluster_host.ip))
         try:
+            self.log.info("Flush bucket")
+            rest_conn.flush_bucket()
             self.backup_restore_validate()
         except Exception as ex:
             self.fail(str(ex))
@@ -1398,6 +1402,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             rest_conn.shuffle_nodes_in_zones(["{0}".format(self.backupset.cluster_host.ip)], target_zone, source_zone)
             self.log.info("Deleting new zone " + target_zone)
             rest_conn.delete_zone(target_zone)
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [])
+            rebalance.result()
 
     def test_backup_restore_with_firewall(self):
         """

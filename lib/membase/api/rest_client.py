@@ -2374,6 +2374,18 @@ class RestConnection(object):
                            'threadsNumber': threadsNumber,
                            'flushEnabled': flushEnabled,
                            'evictionPolicy': evictionPolicy}
+        if bucketType == "memcached":
+            log.info("Create memcached bucket")
+            init_params = {'name': bucket,
+                           'ramQuotaMB': ramQuotaMB,
+                           'authType': authType,
+                           'saslPassword': saslPassword,
+                           'bucketType': bucketType,
+                           'replicaIndex': replica_index,
+                           'threadsNumber': threadsNumber,
+                           'flushEnabled': flushEnabled,
+                           'evictionPolicy': evictionPolicy}
+
         if lww:
             init_params['conflictResolutionType'] = 'lww'
 
