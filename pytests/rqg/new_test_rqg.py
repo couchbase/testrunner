@@ -86,6 +86,9 @@ class RQGTestsNew(BaseRQGTests):
         # run the query
         for test in tests_to_run:
             if test == "BASIC":
+                if self.check_explain_plan:
+                    result_run['check_explain_plan'] = self._check_explain_plan_for_secondary_index(n1ql_query=n1ql_query);
+
                 if self.use_new_rqg:
                     result_run["run_query_without_index_hint"] = self._run_queries_and_verify_new(n1ql_query=n1ql_query,
                                                                                               sql_query=sql_query,

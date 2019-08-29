@@ -97,6 +97,7 @@ class BaseRQGTests(BaseTestCase):
             self.teardown_mysql = self.use_mysql and self.reset_database and (not self.skip_cleanup)
             self.keyword_list = self.query_helper._read_keywords_from_file("b/resources/rqg/n1ql_info/keywords.txt")
             self.use_secondary_index = self.run_query_with_secondary or self.run_explain_with_hints
+            self.check_explain_plan = self.input.param("explain_plan", False)
             if self.input_rqg_path is not None:
                 self.secondary_index_info_path = self.input_rqg_path+"/index/secondary_index_definitions.txt"
                 self.db_dump_path = self.input_rqg_path+"/db_dump/database_dump.zip"
@@ -267,6 +268,9 @@ class BaseRQGTests(BaseTestCase):
         if self.ansi_transform:
             result = self._run_explain_queries(n1ql_query=n1ql_query, keyword="u'outer':u'True'", present=False)
             result_run.update(result)
+
+        if self.check_explain_plan:
+            result_run['check_explain_plan'] = self._check_explain_plan_for_secondary_index(n1ql_query=n1ql_query);
 
         # run the query
         result_run["run_query_without_index_hint"] = self._run_queries_and_verify(aggregate=aggregate,
@@ -639,6 +643,14 @@ class BaseRQGTests(BaseTestCase):
                 print "Error in sql syntax"
         return sql_result
 
+    def _check_explain_plan_for_secondary_index(self, n1ql_query=None):
+        actual_result = self.n1ql_helper.run_cbq_query(query="EXPLAIN "+n1ql_query, server=self.n1ql_server)
+        self.log.info("EXPLAIN PLAN :: "+str(actual_result))
+        if "PrimaryScan" in str(actual_result['results'][0]['plan']):
+            return {"success": False, "result": "Fail"}
+        else:
+            return {"success": True, "result": "Pass"}
+
     def _run_queries_and_verify(self, aggregate=False, subquery=False, n1ql_query=None, sql_query=None, expected_result=None):
         if not self.create_primary_index:
             n1ql_query = n1ql_query.replace("USE INDEX(`#primary` USING GSI)", " ")
@@ -883,11 +895,12 @@ class BaseRQGTests(BaseTestCase):
                         t.join()
 
     def _build_primary_indexes(self, using_gsi=True):
-        if self.create_primary_index:
-            if not self.partitioned_indexes:
-                self.n1ql_helper.create_primary_index(using_gsi=using_gsi, server=self.n1ql_server)
-            else:
-                self.n1ql_helper.create_partitioned_primary_index(using_gsi=using_gsi, server=self.n1ql_server)
+        pass
+        #if self.create_primary_index:
+        #    if not self.partitioned_indexes:
+        #        self.n1ql_helper.create_primary_index(using_gsi=using_gsi, server=self.n1ql_server)
+        #    else:
+        #        self.n1ql_helper.create_partitioned_primary_index(using_gsi=using_gsi, server=self.n1ql_server)
 
     def _load_bulk_data_in_buckets_using_n1ql(self, bucket, data_set):
         try:
@@ -1152,12 +1165,19 @@ class BaseRQGTests(BaseTestCase):
         failure_types = []
         message = "\n ____________________________________________________\n "
         for key in result.keys():
-            if key != "test_case_number" and key != "n1ql_query" and key != "sql_query":
+            if key != "test_case_number" and key != "n1ql_query" and key != "sql_query" and key!="check_explain_plan":
                 check = check and result[key]["success"]
                 if not result[key]["success"]:
                     failure_types.append(key)
                     message += " Scenario ::  {0} \n".format(key)
                     message += " Reason :: " + str(result[key]["result"]) + "\n"
+            if key == "check_explain_plan":
+                check = check and result[key]["success"]
+                if not result[key]["success"]:
+                    failure_types.append(key)
+                    message += " Scenario ::  {0} \n".format(key)
+                    message += " Reason :: Secondary index is not in use\n"
+
         return check, message, failure_types
 
     def _check_and_push_failure_record_queue(self, result, data, failure_record_queue):
