@@ -2090,6 +2090,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             self.fail(message)
         self.backupset.start = 1
         self.backupset.end = 1
+        rest = RestConnection(self.backupset.restore_cluster_host)
+        rest.flush_bucket()
         output, error = self.backup_restore()
         if error:
             self.fail("Restoring backup failed")
