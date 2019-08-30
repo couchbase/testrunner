@@ -88,3 +88,4 @@ class EXPORTED_FUNCTION:
     NEW_BUCKET_OP ='exported_functions/Function_396275055_test_export_function.json'
     SBM_BUCKET_OP ='exported_functions/bucket_op_sbm.json'
     CURL_BUCKET_OP='exported_functions/bucket_op_curl.json'
+    N1QL_OP='exported_functions/n1ql_op.json'
