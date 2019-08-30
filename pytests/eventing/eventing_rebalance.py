@@ -1186,11 +1186,11 @@ class EventingRebalance(EventingBaseTest):
             if len(eventing_nodes) < 2:
                 self.fail("At least two eventing nodes are required")
             count=0
-            while(not self.check_eventing_rebalance() or count < 30):
+            while(not self.check_eventing_rebalance() and count < 30):
                 self.log.info("waiting for eventing rebalance to trigger")
                 self.sleep(3)
                 count=count+1
-            if(self.check_eventing_rebalance() and count == 30):
+            if(not self.check_eventing_rebalance() and count == 30):
                 raise Exception("Eventing rebalance not triggred after maximum polling")
             self.kill_consumer(eventing_nodes[0])
             self.kill_consumer(self.servers[self.nodes_init])
