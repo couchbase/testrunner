@@ -424,13 +424,22 @@ class BaseRQGQueryHelper(object):
         if len(sql_token_list) == 1:
             table_name = random.choice(table_name_list)
             table_name_alias = ""
-            if "alias_name" in table_map[table_name].keys():
-                table_name_alias = table_map[table_name]["alias_name"]
-            bucket_string = table_name
-            if table_name_alias != "":
-                table_name_alias = table_map[table_name]["alias_name"]
-                bucket_string = table_name+"  "+table_name_alias
-            return sql.replace("BUCKET_NAME", bucket_string), {table_name: table_map[table_name]}
+            if "OUTER_BUCKET_NAME" in sql:
+                if "outer_alias_name" in table_map[table_name].keys():
+                    table_name_alias = table_map[table_name]["outer_alias_name"]
+                bucket_string = table_name
+                if table_name_alias != "":
+                    table_name_alias = table_map[table_name]["outer_alias_name"]
+                    bucket_string = table_name + "  " + table_name_alias
+                return sql.replace("OUTER_BUCKET_NAME", bucket_string), {table_name: table_map[table_name]}
+            else:
+                if "alias_name" in table_map[table_name].keys():
+                    table_name_alias = table_map[table_name]["alias_name"]
+                bucket_string = table_name
+                if table_name_alias != "":
+                    table_name_alias = table_map[table_name]["alias_name"]
+                    bucket_string = table_name+"  "+table_name_alias
+                return sql.replace("BUCKET_NAME", bucket_string), {table_name: table_map[table_name]}
         for token in sql_token_list:
             use_table_entry = False
             if token.strip() not in standard_tokens:
@@ -977,7 +986,10 @@ class BaseRQGQueryHelper(object):
         if "DATETIME_FIELD" in sql:
             new_sql = new_sql.replace("DATETIME_FIELD", random.choice(datetime_field_names))
         if "OUTER_BUCKET_NAME.*" in new_sql:
-            projection = " "+table_map[table_map.keys()[0]]["alias_name"]+".* "
+            projection = " "+table_map[table_map.keys()[0]]["outer_alias_name"]+".* "
+            new_sql = new_sql.replace("OUTER_BUCKET_NAME.*", projection)
+        if "OUTER_BUCKET_NAME" in new_sql:
+            projection = " "+table_map[table_map.keys()[0]]+" "+table_map[table_map.keys()[0]]["outer_alias_name"]+" "
             new_sql = new_sql.replace("OUTER_BUCKET_NAME.*", projection)
         if "ORDER_BY_SEL_VAL" in sql:
             select_field_names_list = self.extract_field_names(sql_map['select_from'], all_field_names)
@@ -1630,7 +1642,7 @@ class BaseRQGQueryHelper(object):
 
             # Make sure that outer select uses a table that is contained inside the query
             if outer_select_alias not in from_fields[0]:
-                select_from[1] = select_from[1].replace(outer_select_alias, table_map[table_map.keys()[0]]['alias_name'])
+                select_from[1] = select_from[1].replace(outer_select_alias, table_map[table_map.keys()[0]]['outer_alias_name'])
 
             new_sql = "SELECT " + select_from[1] + "FROM (SELECT" + select_from[2] + "FROM " + from_fields[1] + "WHERE " \
                       + where_condition[0] + from_fields[0] + "WHERE " + where_condition[1]

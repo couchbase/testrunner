@@ -223,6 +223,8 @@ class BaseRQGMySQLClient(MySQLClient):
             if number_of_tables > 1:
                 table_name_alias = "t_"+str(count)
                 target_map[table_name]["alias_name"] = table_name_alias
+                outer_table_name_alias = "t_" + str(count) + "_" + str(count)
+                target_map[table_name]["outer_alias_name"] = outer_table_name_alias
             count += 1
         return target_map
 
@@ -325,7 +327,7 @@ class BaseRQGMySQLClient(MySQLClient):
             # check if ["UNION ALL", "INTERSECT ALL", "EXCEPT ALL", "UNION", "INTERSECT", "EXCEPT"] not in query
             if not helper._check_deeper_query_condition(n1ql_query):
                 if "SUBTABLE" in n1ql_query:
-                     sql_n1ql_index_map = helper._convert_sql_template_to_value_with_subqueryenhancements(n1ql_query,
+                    sql_n1ql_index_map = helper._convert_sql_template_to_value_with_subqueryenhancements(n1ql_query,
                                                                                                           table_map=table_map,
                                                                                                           define_gsi_index=define_gsi_index)
                 elif "SUBQUERY" in n1ql_query:
