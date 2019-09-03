@@ -1,1 +1,21 @@
-{"appname":"test_import_function_1","id":0,"depcfg":{"buckets":[{"alias":"dst_bucket","bucket_name":"dst_bucket"}],"metadata_bucket":"metadata","source_bucket":"src_bucket"},"appcode":"function OnUpdate(doc, meta) {\n    log('document', doc);\n    dst_bucket[meta.id] = doc;\n}\nfunction OnDelete(meta) {\n    delete dst_bucket[meta.id];\n}","settings":{"app_log_max_files":10,"app_log_max_size":10485760,"auto_swapper":true,"breakpad_on":true,"checkpoint_interval":10000,"cleanup_timers":false,"cpp_worker_thread_count":2,"cron_timers_per_doc":1000,"curl_timeout":500,"data_chan_size":10000,"dcp_gen_chan_size":10000,"dcp_num_connections":1,"dcp_stream_boundary":"everything","deadline_timeout":3,"deployment_status":true,"description":"","enable_recursive_mutation":false,"enable_snapshot_smr":false,"execution_timeout":1,"feedback_batch_size":100,"feedback_read_buffer_size":65536,"fuzz_offset":0,"lcb_inst_capacity":5,"log_level":"TRACE","lss_cleaner_max_threshold":70,"lss_cleaner_threshold":30,"lss_read_ahead_size":1048576,"max_delta_chain_len":200,"max_page_items":400,"min_page_items":50,"persist_interval":5000,"processing_status":true,"skip_timer_threshold":86400,"sock_batch_size":100,"tick_duration":60000,"timer_processing_tick_interval":500,"use_memory_manager":true,"vb_ownership_giveup_routine_count":3,"vb_ownership_takeover_routine_count":3,"worker_count":3,"worker_feedback_queue_cap":10000,"worker_queue_cap":100000,"xattr_doc_timer_entry_prune_threshold":100}}
+{
+	"appname": "test_import_function_1",
+	"id": 0,
+	"depcfg": {
+		"buckets": [{
+			"alias": "dst_bucket",
+			"bucket_name": "dst_bucket"
+		}],
+		"metadata_bucket": "metadata",
+		"source_bucket": "src_bucket"
+	},
+	"appcode": "function OnUpdate(doc, meta) {\n    log('document', doc);\n    dst_bucket[meta.id] = doc;\n}\nfunction OnDelete(meta) {\n    delete dst_bucket[meta.id];\n}",
+	"settings": {
+		"dcp_stream_boundary": "everything",
+		"deadline_timeout": 62,
+		"deployment_status": false,
+		"execution_timeout": 60,
+		"log_level": "INFO",
+		"processing_status": false
+	}
+}
