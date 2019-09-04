@@ -1952,6 +1952,19 @@ class RestConnection(object):
                 buckets.append(bucketInfo)
         return buckets
 
+    def get_bucket_by_name(self,bucket_name):
+        # get all the buckets
+        buckets = []
+        api = '{0}{1}'.format(self.baseUrl, 'pools/default/buckets?basic_stats=true')
+        status, content, header = self._http_request(api)
+        json_parsed = json.loads(content)
+        if status:
+            for item in json_parsed:
+                bucketInfo = RestParser().parse_get_bucket_json(item)
+                if bucketInfo.name == bucket_name:
+                    buckets.append(bucketInfo)
+        return buckets
+
     def get_buckets_itemCount(self):
         # get all the buckets
         bucket_map = {}

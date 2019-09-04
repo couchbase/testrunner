@@ -95,7 +95,7 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
         # Validate the data
         self.validate_eventing(self.dst_bucket_name1, self.docs_per_day * 2016)
         # Load the data in older version
-        self.load(self.gens_load, buckets=self.source_bucket_mutation, verify_data=False)
+        self.load(self.gens_load, buckets=self.sbm, verify_data=False)
         #Deploy the Source bucket handler
         self.import_function(EXPORTED_FUNCTION.SBM_BUCKET_OP)
         # Validate the data
@@ -110,7 +110,7 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
         # Delete the data on source bucket
         self.load(self.gens_load, buckets=self.src_bucket, verify_data=False, op_type='delete')
         # Delete the data on SBM bucket
-        self.load(self.gens_load, buckets=self.source_bucket_mutation, verify_data=False, op_type='delete')
+        self.load(self.gens_load, buckets=self.sbm, verify_data=False, op_type='delete')
         # Validate the data for both the functions
         self.validate_eventing(self.dst_bucket_name, 0)
         self.validate_eventing(self.dst_bucket_name1, 0)
@@ -126,7 +126,7 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
         # add data to source bucket
         self.load(self.gens_load, buckets=self.src_bucket, verify_data=False)
         # add data to SBM bucket
-        self.load(self.gens_load, buckets=self.source_bucket_mutation, verify_data=False)
+        self.load(self.gens_load, buckets=self.sbm, verify_data=False)
         # resume function
         self.resume_function(EXPORTED_FUNCTION.BUCKET_OP)
         self.resume_function(EXPORTED_FUNCTION.BUCKET_OP_WITH_TIMER)
@@ -178,7 +178,7 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
         self.restServer = self.get_nodes_from_services_map(service_type="eventing")
         self.rest = RestConnection(self.restServer)
         # Load the data source bucket
-        self.load(self.gens_load, buckets=self.source_bucket_mutation, verify_data=False)
+        self.load(self.gens_load, buckets=self.sbm, verify_data=False)
         self.import_function(EXPORTED_FUNCTION.SBM_BUCKET_OP)
         # Validate the data
         self.validate_eventing(self.source_bucket_mutation, 2*self.docs_per_day * 2016)
@@ -193,7 +193,7 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
         # Delete the data on source bucket
         self.load(self.gens_load, buckets=self.src_bucket, verify_data=False, op_type='delete')
         # Delete the data on SBM bucket
-        self.load(self.gens_load, buckets=self.source_bucket_mutation, verify_data=False, op_type='delete')
+        self.load(self.gens_load, buckets=self.sbm, verify_data=False, op_type='delete')
         # Validate the data for both the functions
         self.validate_eventing(self.dst_bucket_name, 0)
         self.validate_eventing(self.dst_bucket_name1, 0)
@@ -208,7 +208,7 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
         self.pause_function(EXPORTED_FUNCTION.N1QL_OP)
         # add data to source bucket
         self.load(self.gens_load, buckets=self.src_bucket, verify_data=False)
-        self.load(self.gens_load, buckets=self.source_bucket_mutation, verify_data=False)
+        self.load(self.gens_load, buckets=self.sbm, verify_data=False)
         self.resume_function(EXPORTED_FUNCTION.BUCKET_OP)
         self.resume_function(EXPORTED_FUNCTION.BUCKET_OP_WITH_TIMER)
         self.resume_function(EXPORTED_FUNCTION.SBM_BUCKET_OP)
@@ -252,11 +252,24 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
         self.import_function(EXPORTED_FUNCTION.BUCKET_OP_WITH_TIMER)
         # Do validations
         self.validate_eventing(self.dst_bucket_name1, self.docs_per_day * 2016)
+        # Load the data source bucket
+        self.load(self.gens_load, buckets=self.sbm, verify_data=False)
+        self.import_function(EXPORTED_FUNCTION.SBM_BUCKET_OP)
+        # Validate the data
+        self.validate_eventing(self.source_bucket_mutation, 2 * self.docs_per_day * 2016)
+        # Deploy the Source bucket handler
+        self.import_function(EXPORTED_FUNCTION.CURL_BUCKET_OP)
+        # Validate the data
+        self.validate_eventing(self.dst_bucket_curl, self.docs_per_day * 2016)
+        # Deploy the n1ql handler
+        self.import_function(EXPORTED_FUNCTION.N1QL_OP)
+        # Validate the data
+        self.validate_eventing(self.n1ql_op_dst, self.docs_per_day * 2016)
         # Delete the data on source bucket
         self.load(self.gens_load, buckets=self.src_bucket, verify_data=False, op_type='delete')
-        # Delete the data on source bucket
-        self.load(self.gens_load, buckets=self.source_bucket_mutation, verify_data=False, op_type='delete')
-        # Validate the data for all the functions
+        # Delete the data on SBM bucket
+        self.load(self.gens_load, buckets=self.sbm, verify_data=False, op_type='delete')
+        # Validate the data for both the functions
         self.validate_eventing(self.dst_bucket_name, 0)
         self.validate_eventing(self.dst_bucket_name1, 0)
         self.validate_eventing(self.source_bucket_mutation, 0)
@@ -270,9 +283,7 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
         self.pause_function(EXPORTED_FUNCTION.N1QL_OP)
         # add data to source bucket
         self.load(self.gens_load, buckets=self.src_bucket, verify_data=False)
-        # add data to SBM bucket
-        self.load(self.gens_load, buckets=self.source_bucket_mutation, verify_data=False)
-        # resume function
+        self.load(self.gens_load, buckets=self.sbm, verify_data=False)
         self.resume_function(EXPORTED_FUNCTION.BUCKET_OP)
         self.resume_function(EXPORTED_FUNCTION.BUCKET_OP_WITH_TIMER)
         self.resume_function(EXPORTED_FUNCTION.SBM_BUCKET_OP)
@@ -316,10 +327,23 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
         self.import_function(EXPORTED_FUNCTION.BUCKET_OP_WITH_TIMER)
         # Do validations
         self.validate_eventing(self.dst_bucket_name1, self.docs_per_day * 2016)
+        # Load the data source bucket
+        self.load(self.gens_load, buckets=self.sbm, verify_data=False)
+        self.import_function(EXPORTED_FUNCTION.SBM_BUCKET_OP)
+        # Validate the data
+        self.validate_eventing(self.source_bucket_mutation, 2 * self.docs_per_day * 2016)
+        # Deploy the Source bucket handler
+        self.import_function(EXPORTED_FUNCTION.CURL_BUCKET_OP)
+        # Validate the data
+        self.validate_eventing(self.dst_bucket_curl, self.docs_per_day * 2016)
+        # Deploy the n1ql handler
+        self.import_function(EXPORTED_FUNCTION.N1QL_OP)
+        # Validate the data
+        self.validate_eventing(self.n1ql_op_dst, self.docs_per_day * 2016)
         # Delete the data on source bucket
         self.load(self.gens_load, buckets=self.src_bucket, verify_data=False, op_type='delete')
         # Delete the data on SBM bucket
-        self.load(self.gens_load, buckets=self.source_bucket_mutation, verify_data=False, op_type='delete')
+        self.load(self.gens_load, buckets=self.sbm, verify_data=False, op_type='delete')
         # Validate the data for both the functions
         self.validate_eventing(self.dst_bucket_name, 0)
         self.validate_eventing(self.dst_bucket_name1, 0)
@@ -334,8 +358,7 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
         self.pause_function(EXPORTED_FUNCTION.N1QL_OP)
         # add data to source bucket
         self.load(self.gens_load, buckets=self.src_bucket, verify_data=False)
-        # add data to SBM bucket
-        self.load(self.gens_load, buckets=self.source_bucket_mutation, verify_data=False)
+        self.load(self.gens_load, buckets=self.sbm, verify_data=False)
         self.resume_function(EXPORTED_FUNCTION.BUCKET_OP)
         self.resume_function(EXPORTED_FUNCTION.BUCKET_OP_WITH_TIMER)
         self.resume_function(EXPORTED_FUNCTION.SBM_BUCKET_OP)
@@ -379,10 +402,23 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
         self.import_function(EXPORTED_FUNCTION.BUCKET_OP_WITH_TIMER)
         # Do validations
         self.validate_eventing(self.dst_bucket_name1, self.docs_per_day * 2016)
+        # Load the data source bucket
+        self.load(self.gens_load, buckets=self.sbm, verify_data=False)
+        self.import_function(EXPORTED_FUNCTION.SBM_BUCKET_OP)
+        # Validate the data
+        self.validate_eventing(self.source_bucket_mutation, 2 * self.docs_per_day * 2016)
+        # Deploy the Source bucket handler
+        self.import_function(EXPORTED_FUNCTION.CURL_BUCKET_OP)
+        # Validate the data
+        self.validate_eventing(self.dst_bucket_curl, self.docs_per_day * 2016)
+        # Deploy the n1ql handler
+        self.import_function(EXPORTED_FUNCTION.N1QL_OP)
+        # Validate the data
+        self.validate_eventing(self.n1ql_op_dst, self.docs_per_day * 2016)
         # Delete the data on source bucket
         self.load(self.gens_load, buckets=self.src_bucket, verify_data=False, op_type='delete')
         # Delete the data on SBM bucket
-        self.load(self.gens_load, buckets=self.source_bucket_mutation, verify_data=False, op_type='delete')
+        self.load(self.gens_load, buckets=self.sbm, verify_data=False, op_type='delete')
         # Validate the data for both the functions
         self.validate_eventing(self.dst_bucket_name, 0)
         self.validate_eventing(self.dst_bucket_name1, 0)
@@ -397,8 +433,7 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
         self.pause_function(EXPORTED_FUNCTION.N1QL_OP)
         # add data to source bucket
         self.load(self.gens_load, buckets=self.src_bucket, verify_data=False)
-        # add data to SBM bucket
-        self.load(self.gens_load, buckets=self.source_bucket_mutation, verify_data=False)
+        self.load(self.gens_load, buckets=self.sbm, verify_data=False)
         self.resume_function(EXPORTED_FUNCTION.BUCKET_OP)
         self.resume_function(EXPORTED_FUNCTION.BUCKET_OP_WITH_TIMER)
         self.resume_function(EXPORTED_FUNCTION.SBM_BUCKET_OP)
@@ -534,6 +569,7 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
         self.cluster.create_standard_bucket(name=self.n1ql_op_dst, port=STANDARD_BUCKET_PORT + 7,
                                             bucket_params=bucket_params)
         self.buckets = RestConnection(self.master).get_buckets()
+        self.sbm = RestConnection(self.master).get_bucket_by_name(self.source_bucket_mutation)
 
     def validate_eventing(self, bucket_name, no_of_docs):
         count = 0
