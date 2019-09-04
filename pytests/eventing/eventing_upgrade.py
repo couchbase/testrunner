@@ -94,6 +94,8 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
         self.import_function(EXPORTED_FUNCTION.BUCKET_OP_WITH_TIMER)
         # Validate the data
         self.validate_eventing(self.dst_bucket_name1, self.docs_per_day * 2016)
+        # Load the data in older version
+        self.load(self.gens_load, buckets=self.source_bucket_mutation, verify_data=False)
         #Deploy the Source bucket handler
         self.import_function(EXPORTED_FUNCTION.SBM_BUCKET_OP)
         # Validate the data
@@ -423,7 +425,6 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
         # import the previously exported function
         self.rest.save_function(body["appname"], body)
         self.deploy_function(body)
-        self.wait_for_handler_state(body["appname"],"deployed")
 
     def online_upgrade(self, services=None):
         servers_in = self.servers[self.nodes_init:self.num_servers]
