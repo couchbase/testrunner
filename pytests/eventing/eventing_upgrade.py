@@ -553,9 +553,6 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
     def deploy_function(self, body, deployment_fail=False, wait_for_bootstrap=True):
         body['settings']['deployment_status'] = True
         body['settings']['processing_status'] = True
-        if self.print_eventing_handler_code_in_logs:
-            log.info("Deploying the following handler code : {0} with {1}".format(body['appname'],body['depcfg']))
-            log.info("\n{0}".format(body['appcode']))
         content1 = self.rest.create_function(body['appname'], body)
         log.info("deploy Application : {0}".format(content1))
         if deployment_fail:
