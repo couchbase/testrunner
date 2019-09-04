@@ -422,7 +422,7 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
         body = json.loads(fh.read())
         # import the previously exported function
         self.rest.save_function(body["appname"], body)
-        self.rest.deploy_function(body["appname"], body)
+        self.deploy_function(body)
         self.wait_for_handler_state(body["appname"],"deployed")
 
     def online_upgrade(self, services=None):
@@ -548,6 +548,24 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
             raise Exception(
                 "Bucket operations from handler code took lot of time to complete or didn't go through. Current : {0} "
                 "Expected : {1} ".format(stats_dst["curr_items"], no_of_docs))
+
+    def deploy_function(self, body, deployment_fail=False, wait_for_bootstrap=True):
+        body['settings']['deployment_status'] = True
+        body['settings']['processing_status'] = True
+        if self.print_eventing_handler_code_in_logs:
+            log.info("Deploying the following handler code : {0} with {1}".format(body['appname'],body['depcfg']))
+            log.info("\n{0}".format(body['appcode']))
+        content1 = self.rest.create_function(body['appname'], body)
+        log.info("deploy Application : {0}".format(content1))
+        if deployment_fail:
+            res = json.loads(content1)
+            if not res["compile_success"]:
+                return
+            else:
+                raise Exception("Deployment is expected to be failed but no message of failure")
+        if wait_for_bootstrap:
+            # wait for the function to come out of bootstrap state
+            self.wait_for_handler_state(body['appname'], "deployed")
 
     def undeploy_and_delete_function(self, function):
         log.info("Undeploying function : {0}".format(function))
