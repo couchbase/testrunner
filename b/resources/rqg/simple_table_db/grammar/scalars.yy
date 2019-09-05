@@ -4,10 +4,10 @@ query:
 select:
     SELECT select_from FROM BUCKET_NAME WHERE where_condition ORDER BY VAL nulls_first_last|
     SELECT primary_key_id, COALESCE(field,field,field,field) as VAL FROM BUCKET_NAME WHERE where_condition ORDER BY primary_key_id nulls_first_last|
-    SELECT DISTINCT(COALESCE(numeric_field, numeric_field)) as VAL FROM BUCKET_NAME WHERE 1=1 ORDER BY VAL nulls_first_last|
-    SELECT select_from1 FROM BUCKET_NAME WHERE 1=1 GROUP BY numeric_field1 HAVING having_condition |
+    SELECT DISTINCT(COALESCE(numeric_field, numeric_field)) as VAL FROM BUCKET_NAME WHERE where_condition ORDER BY VAL nulls_first_last|
+    SELECT select_from1 FROM BUCKET_NAME WHERE where_condition GROUP BY numeric_field1 HAVING having_condition |
     SELECT primary_key_id, NVL(field, field) as VAL FROM BUCKET_NAME WHERE where_condition ORDER BY primary_key_id nulls_first_last |
-    SELECT DISTINCT(NVL(numeric_field, numeric_field)) as VAL FROM BUCKET_NAME WHERE 1=1 ORDER BY VAL nulls_first_last;
+    SELECT DISTINCT(NVL(numeric_field, numeric_field)) as VAL FROM BUCKET_NAME WHERE where_condition ORDER BY VAL nulls_first_last;
 
 nulls_first_last:
     | ASC NULLS FIRST | DESC NULLS LAST ;
@@ -40,8 +40,7 @@ aggregate_function:
     AVG | STDDEV | VARIANCE | STDDEV_SAMP | STDDEV_POP | VARIANCE_POP | VARIANCE_SAMP | MEAN ;
 
 where_condition:
-    1=1 | COALESCE(numeric_field, 10) > 0 |
-    NVL(numeric_field, 10) > 0 ;
+    COALESCE(numeric_field, 10) > 0 | NVL(numeric_field, 10) > 0 ;
 
 having_condition:
     aggregate_func(COALESCE(numeric_field1, 10)) > 0 |

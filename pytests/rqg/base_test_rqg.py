@@ -18,6 +18,7 @@ from os import listdir
 from os.path import isfile, join
 import traceback
 from rqg_postgres_client import RQGPostgresClient
+from membase.api.exception import CBQError
 
 class BaseRQGTests(BaseTestCase):
     def setUp(self):
@@ -61,6 +62,7 @@ class BaseRQGTests(BaseTestCase):
             self.reset_database = self.input.param("reset_database", True)
             self.create_primary_index = self.input.param("create_primary_index", True)
             self.create_secondary_indexes = self.input.param("create_secondary_indexes", False)
+            self.use_advisor = self.input.param("use_advisor", False)
             self.items = self.input.param("items", 1000)
             self.mysql_url = self.input.param("mysql_url", "localhost")
             self.mysql_url = self.mysql_url.replace("_", ".")
@@ -157,6 +159,7 @@ class BaseRQGTests(BaseTestCase):
             query_template_list = self.extract_query_templates()
             # Generate the query batches based on the given template file and the concurrency count
             batches = self.generate_batches(table_list, query_template_list)
+
             result_queue = Queue.Queue()
             failure_queue = Queue.Queue()
             input_queue = Queue.Queue()
@@ -230,6 +233,10 @@ class BaseRQGTests(BaseTestCase):
                 thread_list = []
                 test_case_number = start_test_case_number
                 for test_case_input in sql_n1ql_index_map_list:
+                    if self.use_advisor:
+                        n1ql_query = test_case_input["n1ql"]
+                        self.create_secondary_index(n1ql_query)
+                for test_case_input in sql_n1ql_index_map_list:
                     t = threading.Thread(target=self._run_basic_test, args=(test_case_input, test_case_number, result_queue, failure_record_queue))
                     test_case_number += 1
                     t.daemon = True
@@ -246,6 +253,40 @@ class BaseRQGTests(BaseTestCase):
                 count += 1
                 if count > 1000:
                     return
+
+    def create_secondary_index(self, n1ql_query=""):
+        advise_result = self.n1ql_helper.run_cbq_query(query="ADVISE " + n1ql_query,
+                                                       server=self.n1ql_server)
+        index_statement = ""
+        if "No index recommendation at this time." != str(
+                str(advise_result["results"][0]["advice"]["adviseinfo"][0]["recommended_indexes"])):
+            if "indexes" in advise_result["results"][0]["advice"]["adviseinfo"][0][
+                "recommended_indexes"].keys():
+                index_statement = \
+                    advise_result["results"][0]["advice"]["adviseinfo"][0]["recommended_indexes"][
+                        "indexes"][0]["index_statement"]
+            elif "covering_indexes" in advise_result["results"][0]["advice"]["adviseinfo"][0][
+                "recommended_indexes"].keys():
+                index_statement = \
+                    advise_result["results"][0]["advice"]["adviseinfo"][0]["recommended_indexes"][
+                        "covering_indexes"][0][
+                        "index_statement"]
+        if index_statement != "":
+            if self.count_secondary_indexes() >= 15:
+                self.remove_all_secondary_indexes()
+            self.n1ql_helper.wait_for_all_indexes_online()
+            try:
+                self.n1ql_helper.run_cbq_query(index_statement)
+            except CBQError, ex:
+                if "already exists" in str(ex):
+                    return
+
+    def count_secondary_indexes(self):
+        count = self.n1ql_helper.run_cbq_query("select count(*) from system:indexes")
+        return int(count["results"][0]["$1"])
+
+    def remove_all_secondary_indexes(self):
+        self.n1ql_helper.drop_all_indexes()
 
     def _run_basic_test(self, query_test_map, test_case_number, result_queue, failure_record_queue=None):
         n1ql_query = query_test_map["n1ql"]
@@ -268,6 +309,7 @@ class BaseRQGTests(BaseTestCase):
         if self.ansi_transform:
             result = self._run_explain_queries(n1ql_query=n1ql_query, keyword="u'outer':u'True'", present=False)
             result_run.update(result)
+
 
         if self.check_explain_plan:
             result_run['check_explain_plan'] = self._check_explain_plan_for_secondary_index(n1ql_query=n1ql_query);

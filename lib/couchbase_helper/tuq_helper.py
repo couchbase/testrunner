@@ -44,6 +44,76 @@ class N1QLHelper():
         actual_result = self.run_cbq_query()
         return actual_result, expected_result
 
+    def drop_all_indexes(self, bucket=None, leave_primary=True):
+        current_indexes = self.get_parsed_indexes()
+        if bucket is not None:
+            current_indexes = [index for index in current_indexes if index['bucket'] == bucket]
+        if leave_primary:
+            current_indexes = [index for index in current_indexes if index['is_primary'] is False]
+        for index in current_indexes:
+            bucket = index['bucket']
+            index_name = index['name']
+            self.run_cbq_query("drop index %s.%s" % (bucket, index_name))
+        for index in current_indexes:
+            bucket = index['bucket']
+            index_name = index['name']
+            self.wait_for_index_drop(bucket, index_name)
+
+    def wait_for_index_drop(self, bucket_name, index_name, fields_set=None, using=None):
+        self.with_retry(lambda: self.is_index_present(bucket_name, index_name, fields_set=fields_set, using=using, status="any"), eval=False, delay=1, tries=30)
+
+    def with_retry(self, func, eval=None, delay=5, tries=10, func_params=None):
+        attempts = 0
+        while attempts < tries:
+            attempts = attempts + 1
+            try:
+                res = func()
+                if eval is None:
+                    return res
+                elif res == eval:
+                    return res
+                else:
+                    time.sleep(delay)
+            except Exception as ex:
+                time.sleep (delay)
+        raise Exception('timeout, invalid results: %s' % res)
+
+    def is_index_present(self, bucket_name, index_name, fields_set=None, using=None, status="online"):
+        query_response = self.run_cbq_query("SELECT * FROM system:indexes")
+        if fields_set is None and using is None:
+            if status is "any":
+                desired_index = (index_name, bucket_name)
+                current_indexes = [(i['indexes']['name'],
+                                    i['indexes']['keyspace_id']) for i in query_response['results']]
+            else:
+                desired_index = (index_name, bucket_name, status)
+                current_indexes = [(i['indexes']['name'],
+                                i['indexes']['keyspace_id'],
+                                i['indexes']['state']) for i in query_response['results']]
+        else:
+            if status is "any":
+                desired_index = (index_name, bucket_name, frozenset([field for field in fields_set]), using)
+                current_indexes = [(i['indexes']['name'],
+                                    i['indexes']['keyspace_id'],
+                                    frozenset([(key.replace('`', '').replace('(', '').replace(')', '').replace('meta.id', 'meta().id'), j)
+                                               for j, key in enumerate(i['indexes']['index_key'], 0)]),
+                                    i['indexes']['using']) for i in query_response['results']]
+            else:
+                desired_index = (index_name, bucket_name, frozenset([field for field in fields_set]), status, using)
+                current_indexes = [(i['indexes']['name'],
+                                i['indexes']['keyspace_id'],
+                                frozenset([(key.replace('`', '').replace('(', '').replace(')', '').replace('meta.id', 'meta().id'), j)
+                                           for j, key in enumerate(i['indexes']['index_key'], 0)]),
+                                i['indexes']['state'],
+                                i['indexes']['using']) for i in query_response['results']]
+
+        if desired_index in current_indexes:
+            return True
+        else:
+            self.log.info("waiting for: \n" + str(desired_index) + "\n")
+            self.log.info("current indexes: \n" + str(current_indexes) + "\n")
+            return False
+
     def run_cbq_query(self, query=None, min_output_size=10, server=None, query_params={}, is_prepared=False,
                       scan_consistency=None, scan_vector=None, verbose=True):
         if query is None:
@@ -100,6 +170,45 @@ class N1QLHelper():
             raise CBQError(error_result, server.ip)
         self.log.info("TOTAL ELAPSED TIME: %s" % result["metrics"]["elapsedTime"])
         return result
+
+    def wait_for_all_indexes_online(self):
+        cur_indexes = self.get_parsed_indexes()
+        for index in cur_indexes:
+            self._wait_for_index_online(index['bucket'], index['name'])
+
+    def get_parsed_indexes(self):
+        query_response = self.run_cbq_query("SELECT * FROM system:indexes")
+        current_indexes = [{'name': i['indexes']['name'],
+                            'bucket': i['indexes']['keyspace_id'],
+                            'fields': frozenset([(key.replace('`', '').replace('(', '').replace(')', '').replace('meta.id', 'meta().id'), j)
+                                                 for j, key in enumerate(i['indexes']['index_key'], 0)]),
+                            'state': i['indexes']['state'],
+                            'using': i['indexes']['using'],
+                            'where': i['indexes'].get('condition', ''),
+                            'is_primary': i['indexes'].get('is_primary', False)} for i in query_response['results']]
+        return current_indexes
+
+    def _wait_for_index_online(self, bucket, index_name, timeout=12000):
+        end_time = time.time() + timeout
+        res = {}
+        while time.time() < end_time:
+            query = "SELECT * FROM system:indexes where name='%s'" % index_name
+            res = self.run_cbq_query(query)
+            for item in res['results']:
+                if 'keyspace_id' not in item['indexes']:
+                    self.log.error(item)
+                    continue
+                bucket_name = ""
+                if isinstance(bucket, str) or isinstance(bucket, unicode):
+                    bucket_name = bucket
+                else:
+                    bucket_name = bucket.name
+                if item['indexes']['keyspace_id'] == bucket_name:
+                    if item['indexes']['state'] == "online":
+                        return
+            time.sleep(timeout)
+        raise Exception('index %s is not online. last response is %s' % (index_name, res))
+
 
     def _verify_results(self, actual_result, expected_result, missing_count = 1, extra_count = 1):
         self.log.info(" Analyzing Actual Result")
