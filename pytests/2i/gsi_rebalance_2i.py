@@ -3013,7 +3013,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
 
     def _create_restore(self, server, username="Administrator", password="password"):
         remote_client = RemoteMachineShellConnection(server)
-        cmd = "cbbackupmgr restore --archive /data/backups --repo example{0} --cluster couchbase://127.0.0.1 --username {1} --password {2}".format(
+        cmd = "cbbackupmgr restore --archive /data/backups --repo example{0} --cluster couchbase://127.0.0.1 --username {1} --password {2} --force-updates".format(
             self.rand, username, password)
         command = "{0}{1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
