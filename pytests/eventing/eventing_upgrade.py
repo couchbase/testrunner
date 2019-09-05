@@ -34,13 +34,6 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
         self.n1ql_op_dst=self.input.param('n1ql_op_dst', 'n1ql_op_dst')
         self.gens_load = self.generate_docs(self.docs_per_day)
         self.upgrade_version = self.input.param("upgrade_version")
-        self.n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
-        self.n1ql_helper = N1QLHelper(shell=self.shell, max_verify=self.max_verify, buckets=self.buckets,
-                                      item_flag=self.item_flag, n1ql_port=self.n1ql_port,
-                                      full_docs_list=self.full_docs_list, log=self.log, input=self.input,
-                                      master=self.master, use_rest=True)
-        # primary index is required as we run some queries from handler code
-        self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
 
     def tearDown(self):
         super(EventingUpgrade, self).tearDown()
@@ -112,6 +105,9 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
         self.import_function(EXPORTED_FUNCTION.CURL_BUCKET_OP)
         # Validate the data
         self.validate_eventing(self.dst_bucket_curl, self.docs_per_day * 2016)
+        ### index creation for n1ql
+        self.create_primary_index()
+        # deploy n1ql handler
         self.import_function(EXPORTED_FUNCTION.N1QL_OP)
         # Validate the data
         self.validate_eventing(self.n1ql_op_dst, self.docs_per_day * 2016)
@@ -194,6 +190,8 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
         self.import_function(EXPORTED_FUNCTION.CURL_BUCKET_OP)
         # Validate the data
         self.validate_eventing(self.dst_bucket_curl, self.docs_per_day * 2016)
+        ### index creation for n1ql
+        self.create_primary_index()
         # Deploy the n1ql handler
         self.import_function(EXPORTED_FUNCTION.N1QL_OP)
         # Validate the data
@@ -269,6 +267,8 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
         self.import_function(EXPORTED_FUNCTION.CURL_BUCKET_OP)
         # Validate the data
         self.validate_eventing(self.dst_bucket_curl, self.docs_per_day * 2016)
+        ### index creation for n1ql
+        self.create_primary_index()
         # Deploy the n1ql handler
         self.import_function(EXPORTED_FUNCTION.N1QL_OP)
         # Validate the data
@@ -344,6 +344,8 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
         self.import_function(EXPORTED_FUNCTION.CURL_BUCKET_OP)
         # Validate the data
         self.validate_eventing(self.dst_bucket_curl, self.docs_per_day * 2016)
+        ### index creation for n1ql
+        self.create_primary_index()
         # Deploy the n1ql handler
         self.import_function(EXPORTED_FUNCTION.N1QL_OP)
         # Validate the data
@@ -419,6 +421,8 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
         self.import_function(EXPORTED_FUNCTION.CURL_BUCKET_OP)
         # Validate the data
         self.validate_eventing(self.dst_bucket_curl, self.docs_per_day * 2016)
+        ### index creation for n1ql
+        self.create_primary_index()
         # Deploy the n1ql handler
         self.import_function(EXPORTED_FUNCTION.N1QL_OP)
         # Validate the data
@@ -661,3 +665,12 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
             count+=1
         if count == iterations:
             raise Exception('Eventing took lot of time for handler {} to {}'.format(name,status))
+
+    def create_primary_index(self):
+        self.n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
+        self.n1ql_helper = N1QLHelper(shell=self.shell, max_verify=self.max_verify, buckets=self.buckets,
+                                      item_flag=self.item_flag, n1ql_port=self.n1ql_port,
+                                      full_docs_list=self.full_docs_list, log=self.log, input=self.input,
+                                      master=self.master, use_rest=True)
+        # primary index is required as we run some queries from handler code
+        self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
