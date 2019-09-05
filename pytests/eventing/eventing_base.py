@@ -236,6 +236,11 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
             stats_dst = self.rest.get_bucket_stats(bucket)
             if curr_items == stats_dst["curr_items"]:
                 count += 1
+        try:
+            stats_src = self.rest.get_bucket_stats(self.src_bucket_name)
+            log.info("Documents in source bucket : {}".format(stats_src["curr_items"]))
+        except :
+            pass
         if stats_dst["curr_items"] != expected_dcp_mutations:
             total_dcp_backlog = 0
             timers_in_past = 0

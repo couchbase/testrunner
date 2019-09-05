@@ -6,7 +6,7 @@ function OnUpdate(doc, meta) {
         }
     } catch (e) {
         log(e);
-        if(e["message"] == "Unable to schedule query : Operation not supported\n"){
+        if(e["message"].includes("Operation not supported")){
             dst_bucket[meta.id]=e;
         }
     }
@@ -19,7 +19,7 @@ function OnDelete(meta) {
         }
     } catch (e) {
         log(e);
-         if(e["message"] == "Unable to schedule query : Operation not supported\n"){
+         if(e["message"].includes("Operation not supported")){
             delete dst_bucket[meta.id];
         }
     }

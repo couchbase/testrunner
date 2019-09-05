@@ -2,6 +2,7 @@ import Queue
 import copy
 
 from TestInput import TestInputSingleton
+from couchbase_helper.tuq_helper import N1QLHelper
 from newupgradebasetest import NewUpgradeBaseTest
 from membase.api.rest_client import RestHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
@@ -33,6 +34,13 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
         self.n1ql_op_dst=self.input.param('n1ql_op_dst', 'n1ql_op_dst')
         self.gens_load = self.generate_docs(self.docs_per_day)
         self.upgrade_version = self.input.param("upgrade_version")
+        self.n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
+        self.n1ql_helper = N1QLHelper(shell=self.shell, max_verify=self.max_verify, buckets=self.buckets,
+                                      item_flag=self.item_flag, n1ql_port=self.n1ql_port,
+                                      full_docs_list=self.full_docs_list, log=self.log, input=self.input,
+                                      master=self.master, use_rest=True)
+        # primary index is required as we run some queries from handler code
+        self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
 
     def tearDown(self):
         super(EventingUpgrade, self).tearDown()
