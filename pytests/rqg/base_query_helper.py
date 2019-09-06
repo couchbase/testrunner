@@ -1548,7 +1548,7 @@ class BaseRQGQueryHelper(object):
         tokens = sql.split("WHERE")
         new_map[source_table]["alias_name"] = target_table
         where_condition = self._convert_condition_template_to_value(tokens[1], new_map)
-        merge_sql = "MERGE INTO {0} USING {1} ON KEY copy_simple_table.primary_key_id".format(target_table,  source_table)
+        merge_sql = "MERGE INTO {0} USING {1} ON {2}.primary_key_id={3}.primary_key_id".format(target_table,  source_table, target_table, source_table)
         merge_sql +=" WHEN MATCHED THEN"
         new_sql = " DELETE FROM {0} ".format(target_table)
         new_sql += " WHERE "+where_condition
