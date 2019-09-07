@@ -2155,7 +2155,7 @@ class RemoteMachineShellConnection:
 
             cmd1 = "cp -R /Volumes/Couchbase*/Couchbase\ Server.app /Applications"
             cmd2 = "sudo xattr -d -r com.apple.quarantine /Applications/Couchbase\ Server.app"
-            cmd3 = "sudo open -a Couchbase\ Server.app"
+            cmd3 = "sudo open -a /Applications/Couchbase\ Server.app"
             output, error = self.execute_command(cmd1)
             self.log_command_output(output, error)
             output, error = self.execute_command(cmd2)
