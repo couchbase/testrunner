@@ -6,6 +6,7 @@ function OnUpdate(doc, meta) {
     "Postman-Token": "a3e931fe-8fe2-413c-be82-546062d28377"
     }
     };
+    while(true){
     try {
     	var response = curl("DELETE", server, request);
     	log('response body received from server:', response.body);
@@ -14,14 +15,17 @@ function OnUpdate(doc, meta) {
     	var res= new Uint8Array(response.body);
     	if(response.status == 200){
     	    dst_bucket[meta.id]=response.body;
+    	    break;
     	}
     	else{
     	    dst_bucket[meta.id]=response.status;
+    	    break;
     	}
     }
     catch (e) {
     	log('error:', e);
         }
+    }
 }
 
 
@@ -34,6 +38,7 @@ function OnDelete(meta) {
     "Postman-Token": "a3e931fe-8fe2-413c-be82-546062d28377"
     }
     };
+    while(true){
     try {
     	var response = curl("DELETE", server, request);
     	log('response body received from server:', response.body);
@@ -42,12 +47,15 @@ function OnDelete(meta) {
     	var res= new Uint8Array(response.body);
     	if(response.status == 200){
     	    delete dst_bucket[meta.id];
+    	    break;
     	}
     	else{
     	    delete dst_bucket[meta.id];
+    	    break;
     	}
     }
     catch (e) {
     	log('error:', e);
         }
+    }
 }
