@@ -702,6 +702,7 @@ class BaseRQGTests(BaseTestCase):
         return sql_result
 
     def _check_explain_plan_for_secondary_index(self, n1ql_query=None):
+        self.n1ql_query_runner_wrapper(n1ql_query=n1ql_query, server=self.n1ql_server)
         actual_result = self.n1ql_helper.run_cbq_query(query="EXPLAIN "+n1ql_query, server=self.n1ql_server)
         self.log.info("EXPLAIN PLAN :: "+str(actual_result))
         if "PrimaryScan" in str(actual_result['results'][0]['plan']):

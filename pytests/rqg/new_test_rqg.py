@@ -113,8 +113,7 @@ class RQGTestsNew(BaseRQGTests):
         client = RQGMySQLClientNew(database=self.database, host=self.mysql_url, user_id=self.user_id, password=self.password)
 
         try:
-
-            actual_result = self.n1ql_helper.run_cbq_query(query=n1ql_query, server=self.n1ql_server, scan_consistency="request_plus")
+            actual_result = self.n1ql_query_runner_wrapper(n1ql_query=n1ql_query, server=self.n1ql_server, scan_consistency="request_plus")
             n1ql_result = actual_result["results"]
             # Run SQL Query
             sql_result = expected_result
@@ -279,12 +278,12 @@ class RQGTestsNew(BaseRQGTests):
                 query_params = {'timeout': '1200s'}
             else:
                 query_params={}
-            actual_result = self.n1ql_helper.run_cbq_query(query=n1ql_query, server=self.n1ql_server, query_params=query_params, scan_consistency="request_plus")
+            actual_result = self.n1ql_query_runner_wrapper(n1ql_query=n1ql_query, server=self.n1ql_server, query_params=query_params, scan_consistency="request_plus")
             if self.prepared:
                 name = actual_result["results"][0]['name']
                 prepared_query = "EXECUTE '%s'" % name
                 self.log.info(" N1QL QUERY :: {0}".format(prepared_query))
-                actual_result = self.n1ql_helper.run_cbq_query(query=prepared_query, server=self.n1ql_server, query_params=query_params, scan_consistency="request_plus")
+                actual_result = self.n1ql_query_runner_wrapper(n1ql_query=prepared_query, server=self.n1ql_server, query_params=query_params, scan_consistency="request_plus")
             n1ql_result = actual_result["results"]
 
             # Run SQL Query
