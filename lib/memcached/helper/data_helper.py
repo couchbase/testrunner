@@ -25,7 +25,6 @@ import memcacheConstants
 
 from Queue import Queue
 from threading import Thread
-from Carbon.QuickTime import codecLowQuality
 
 log = logger.Logger.get_logger()
 try:
@@ -909,8 +908,6 @@ class VBucketAwareMemcached(object):
             try:
                 return func(self, key, *args, **keyargs)
             except MemcachedError as error:
-                print "\nError message: ", error.status
-                print "\nvberror: ", vb_error:codecLowQuality
                 if error.status == ERR_NOT_MY_VBUCKET and vb_error < 5:
                     self.reset_vbuckets(self.rest, set([self._get_vBucket_id(key)]),
                                         forward_map=self._parse_not_my_vbucket_error(error))
