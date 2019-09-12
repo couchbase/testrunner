@@ -265,7 +265,6 @@ class BaseRQGTests(BaseTestCase):
         if self.count_secondary_indexes() >= 15:
             self.remove_all_secondary_indexes()
         self.n1ql_helper.wait_for_all_indexes_online()
-
         advise_result = self.n1ql_helper.run_cbq_query(query="ADVISE " + n1ql_query,
                                                        server=self.n1ql_server)
         if len(advise_result["results"][0]["advice"]["adviseinfo"]) == 0:
@@ -954,12 +953,11 @@ class BaseRQGTests(BaseTestCase):
                         t.join()
 
     def _build_primary_indexes(self, using_gsi=True):
-        pass
-        #if self.create_primary_index:
-        #    if not self.partitioned_indexes:
-        #        self.n1ql_helper.create_primary_index(using_gsi=using_gsi, server=self.n1ql_server)
-        #    else:
-        #        self.n1ql_helper.create_partitioned_primary_index(using_gsi=using_gsi, server=self.n1ql_server)
+        if self.create_primary_index:
+            if not self.partitioned_indexes:
+                self.n1ql_helper.create_primary_index(using_gsi=using_gsi, server=self.n1ql_server)
+            else:
+                self.n1ql_helper.create_partitioned_primary_index(using_gsi=using_gsi, server=self.n1ql_server)
 
     def _load_bulk_data_in_buckets_using_n1ql(self, bucket, data_set):
         try:
