@@ -1420,6 +1420,9 @@ class ESRunQueryCompare(Task):
                     query_type = 'emp'
                     if int(TestInputSingleton.input.param("doc_maps", 1)) > 1:
                         query_type = 'wiki'
+                    wiki_fields = ["revision.text", "title"]
+                    if any(field in str(json.dumps(self.fts_query)) for field in wiki_fields):
+                        query_type = 'wiki'
                 else:
                     query_type = self.fts_index.dataset
 
