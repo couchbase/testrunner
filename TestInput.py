@@ -27,6 +27,7 @@ class TestInput(object):
         self.test_params = {}
         self.tuq_client = {}
         self.elastic = []
+        self.advisor = []
         self.cbas = []
         #servers , each server can have u,p,port,directory
 
@@ -217,6 +218,8 @@ class TestInputParser():
                 input.tuq_client = TestInputParser.get_tuq_config(config, section)
             elif section == 'elastic':
                 input.elastic = TestInputParser.get_elastic_config(config, section, global_properties)
+            elif section == 'advisor':
+                input.advisor = TestInputParser.get_advisor_config(config, section, global_properties)
             elif section == 'cbas':
                 input.cbas = TestInputParser.get_cbas_config(config, section)
             elif result is not None:
@@ -354,6 +357,22 @@ class TestInputParser():
             server.ssh_username = global_properties['username']
         if server.ssh_password == '' and 'password' in global_properties:
             server.ssh_password = global_properties['password']
+        return server
+
+    @staticmethod
+    def get_advisor_config(config, section, global_properties):
+        server = TestInputServer()
+        options = config.options(section)
+        for option in options:
+            if option == 'ip':
+                server.ip = config.get(section, option)
+            if option == 'port':
+                server.port = config.get(section, option)
+            if option == 'username':
+                server.username = config.get(section, option)
+            if option == 'password':
+                server.password = config.get(section, option)
+
         return server
 
     @staticmethod
