@@ -2976,11 +2976,11 @@ class CouchbaseCluster:
         for failover_node in self.__fail_over_nodes:
             for server_node in server_nodes:
                 if server_node.ip == failover_node.ip:
-                    rest.add_back_node(server_node.id)
                     if recovery_type:
                         rest.set_recovery_type(
                             otpNode=server_node.id,
                             recoveryType=recovery_type)
+                    rest.add_back_node(server_node.id)
         for node in self.__fail_over_nodes:
             if node not in self.__nodes:
                 self.__nodes.append(node)
