@@ -60,7 +60,7 @@ class BaseRQGTests(BaseTestCase):
             self.generate_input_only = self.input.param("generate_input_only", False)
             self.using_gsi = self.input.param("using_gsi", True)
             self.reset_database = self.input.param("reset_database", True)
-            self.create_primary_index = self.input.param("create_primary_index", True)
+            self.create_primary_index = self.input.param("create_primary_index", False)
             self.create_secondary_indexes = self.input.param("create_secondary_indexes", False)
             self.use_advisor = self.input.param("use_advisor", False)
             self.items = self.input.param("items", 1000)
@@ -178,14 +178,6 @@ class BaseRQGTests(BaseTestCase):
                 #for t in thread_list:
                     #t.join()
             else:
-                for table_name in table_list:
-                    # Create threads based on number of tables (each table has its own thread)
-                    t = threading.Thread(target=self._rqg_worker,
-                                         args=(table_name, table_map, input_queue, result_queue,
-                                               failure_queue))
-                    t.daemon = True
-                    t.start()
-                    thread_list.append(t)
                 while not batches.empty():
                     # Split up the batches and send them to the worker threads
                     try:
@@ -197,8 +189,20 @@ class BaseRQGTests(BaseTestCase):
                                      "query_template_list": test_query_template_list})
                     start_test_case_number += len(test_query_template_list)
 
-                for t in thread_list:
-                    t.join()
+                for table_name in table_list:
+                    # Create threads based on number of tables (each table has its own thread)
+                    self._rqg_worker(table_name, table_map, input_queue, result_queue,
+                                               failure_queue)
+                    #t = threading.Thread(target=self._rqg_worker,
+                    #                     args=(table_name, table_map, input_queue, result_queue,
+                    #                           failure_queue))
+                    #t.daemon = True
+                    #t.start()
+                    #thread_list.append(t)
+                #for t in thread_list:
+                #    if(t.is_alive()):
+                #        t.join()
+
             # Analyze the results for the failure and assert on the run
             self.analyze_test(result_queue, failure_queue)
         except Exception, ex:
@@ -239,6 +243,7 @@ class BaseRQGTests(BaseTestCase):
                         self.create_secondary_index(n1ql_query)
                 for test_case_input in sql_n1ql_index_map_list:
                     t = threading.Thread(target=self._run_basic_test, args=(test_case_input, test_case_number, result_queue, failure_record_queue))
+                    #self._run_basic_test(test_case_input, test_case_number, result_queue, failure_record_queue)
                     test_case_number += 1
                     t.daemon = True
                     t.start()
@@ -247,7 +252,6 @@ class BaseRQGTests(BaseTestCase):
 
                 for t in thread_list:
                     t.join()
-
                 if self.use_secondary_index and self.drop_secondary_indexes:
                     self._drop_secondary_indexes_in_batches(sql_n1ql_index_map_list)
             else:

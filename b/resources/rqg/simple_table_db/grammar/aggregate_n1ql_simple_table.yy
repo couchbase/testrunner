@@ -177,8 +177,8 @@ string_values:
 # BOOLEAN RULES
 
 bool_condition:
-	bool_field |
-	NOT (bool_field) |
+	bool_field = true|
+	NOT (bool_field = true) |
 	bool_equals_condition |
 	bool_not_equals_condition ;
 
