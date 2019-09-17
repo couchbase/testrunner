@@ -85,7 +85,7 @@ class QueryArrayQueryTests(QueryTests):
         for i in xrange(self.num_queries):
             query_list = ArrayGenerator().generate_query_pairs()
             final_query_list += query_list
-        x = 0
+        x = 1
         # Execute queries sequentially and compare against analytics results, capture results of comparison
         for query in final_query_list:
             # Generate primary_index query we wish to run
@@ -115,13 +115,18 @@ class QueryArrayQueryTests(QueryTests):
                         failed_queries.append(
                             ("N1QL Query: %s , CBAS Query: %s" % (query, cbas_query), "Query is not using the created index"))
 
+                self.log.info("=" * 50 + " Running Query %s " % str(x) + "=" * 50)
                 actual_result = self.run_cbq_query(query=query)
 
                 if self.compare_primary or "within" in query:
                     expected_result = self.run_cbq_query(query=primary_index_query)
+                    self.log.info("=" * 100)
                 else:
                     # Need to slightly rewrite queries to run against analytics
-                    cbas_query = query.replace("ANY", "(ANY")
+                    cbas_query = query
+                    cbas_query = cbas_query.replace("ANY ", "(ANY ")
+                    cbas_query = cbas_query.replace("EVERY ", "(EVERY ")
+                    cbas_query = cbas_query.replace("SOME ", "(SOME ")
                     cbas_query = cbas_query.replace("END", "END)")
                     cbas_query = cbas_query.replace("`travel-sample`", "`travel-sample` t")
                     cbas_query = cbas_query.replace("schedule", "t.schedule")
@@ -130,6 +135,7 @@ class QueryArrayQueryTests(QueryTests):
                     self.log.info("RUN cbas query: %s" % cbas_query)
                     response = cbas_connection.execute_statement_on_cbas(cbas_query, None, username=cbas_connection.username, password=cbas_connection.password)
                     expected_result = json.loads(response)
+                    self.log.info("=" * 100)
                 if actual_result['results'] != expected_result['results']:
                     total_failed_queries += 1
                     failed_queries.append(("N1QL Query: %s , CBAS Query: %s" % (query,cbas_query), "Mismatch of results"))
@@ -147,9 +153,9 @@ class QueryArrayQueryTests(QueryTests):
                         self.log.error("Something went wrong while dropping index!: "  + str(e))
             x+=1
 
-        self.log.info("=" * 50)
+        self.log.info("=" * 100)
         self.log.info("Queries Passed: %s , Queries Failed: %s" % (total_passed_queries, total_failed_queries))
-        self.log.info("=" * 50)
+        self.log.info("=" * 100)
 
         if total_failed_queries != 0:
             for query in failed_queries:

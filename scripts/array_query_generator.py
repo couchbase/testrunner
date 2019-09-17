@@ -329,7 +329,6 @@ class ArrayGenerator(object):
 					for j in xrange(0, len(array_condition)):
 						s1, s2 = self.generate_statement(i, t2, cond, array_condition[j])
 						query_array.append(s2)
-						print s2
 						cnt = cnt + 1
 		return query_array
 
