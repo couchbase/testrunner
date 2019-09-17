@@ -370,12 +370,17 @@ class BaseRQGMySQLClient(MySQLClient):
                                       'STDDEV': {"n1ql_name": "STDDEV", "sql_name": "STDDEV_SAMP"},
                                       'MEAN': {"n1ql_name": "MEAN", "sql_name": "AVG"},
                                       'NULLS FIRST': {'n1ql_name': 'NULLS FIRST', 'sql_name': ''},
-                                      'NULLS LAST': {'n1ql_name': 'NULLS LAST', 'sql_name': ''}}
+                                      'NULLS LAST': {'n1ql_name': 'NULLS LAST', 'sql_name': ''},
+                                      'POSITION': {'n1ql_name': 'POSITION1', 'sql_name': 'POSITION'}}
         for key in sql_n1ql_synonim_functions:
             if key.lower() in query_map['sql'].lower():
                 n1ql_name = key
                 sql_name = sql_n1ql_synonim_functions[key]['sql_name']
                 query_map['sql'] = re.sub(r'([^\w]{1})'+key+'([^\w]{1})', r'\1'+sql_name+r'\2',query_map['sql'])
+            if key.lower() in query_map['n1ql'].lower():
+                n1ql_name = key
+                n1ql_name_corrected = sql_n1ql_synonim_functions[key]['n1ql_name']
+                query_map['n1ql'] = re.sub(r'([^\w]{1})' + key + '([^\w]{1})', r'\1' + n1ql_name_corrected + r'\2', query_map['n1ql'])
         while True:
             if "DATE_PART_STR" in query_map["sql"]:
                 date_part_substring_start = query_map["sql"].find("DATE_PART_STR")
