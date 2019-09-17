@@ -322,7 +322,7 @@ class MovingTopFTS(FTSBaseTest):
                           %(index.name,index.get_indexed_doc_count()))
         task = self._cb_cluster.async_failover(graceful=True)
         task.result()
-        self.sleep(30)
+        self.sleep(60)
         self._cb_cluster.add_back_node(recovery_type='full', services=["kv, fts"])
         for index in self._cb_cluster.get_indexes():
             self.is_index_partitioned_balanced(index)
