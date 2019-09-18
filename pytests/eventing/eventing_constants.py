@@ -51,7 +51,9 @@ class HANDLER_CODE:
     BUCKET_OP_SOURCE_DOC_MUTATION = 'handler_code/bucket_op_source_doc_mutation.js'
     BUCKET_OP_SOURCE_DOC_MUTATION_WITH_TIMERS= 'handler_code/bucket_op_source_doc_mutation_with_timers.js'
     BUCKET_OP_WITH_SOURCE_BUCKET_MUTATION= 'handler_code/bucket_op_with_source_bucket_mutation.js'
+    BUCKET_OP_WITH_SOURCE_BUCKET_MUTATION_RECOVERY= 'handler_code/bucket_op_with_source_bucket_mutation_recovery.js'
     BUCKET_OP_SOURCE_BUCKET_MUTATION_WITH_TIMERS= 'handler_code/bucket_op_source_bucket_mutation_with_timer.js'
+    BUCKET_OP_SOURCE_BUCKET_MUTATION_WITH_TIMERS_RECOVERY= 'handler_code/bucket_op_source_bucket_mutation_with_timer_recovery.js'
     BUCKET_OP_SOURCE_BUCKET_MUTATION_DELETE='handler_code/bucket_op_with_source_bucket_mutation_delete.js'
     BUCKET_OP_SOURCE_BUCKET_MUTATION_TIMERS_DELETE='handler_code/bucket_op_source_bucket_mutation_with_timer_delete.js'
 

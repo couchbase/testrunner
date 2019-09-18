@@ -62,9 +62,9 @@ class EventingRecovery(EventingBaseTest):
             self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
             self.handler_code = HANDLER_CODE.N1QL_OPS_WITH_TIMERS
         elif handler_code == 'source_bucket_mutation':
-            self.handler_code = HANDLER_CODE.BUCKET_OP_WITH_SOURCE_BUCKET_MUTATION
+            self.handler_code = HANDLER_CODE.BUCKET_OP_WITH_SOURCE_BUCKET_MUTATION_RECOVERY
         elif handler_code == 'source_bucket_mutation_with_timers':
-            self.handler_code = HANDLER_CODE.BUCKET_OP_SOURCE_BUCKET_MUTATION_WITH_TIMERS
+            self.handler_code = HANDLER_CODE.BUCKET_OP_SOURCE_BUCKET_MUTATION_WITH_TIMERS_RECOVERY
         elif handler_code == 'bucket_op_curl_get':
             self.handler_code = HANDLER_CODE_CURL.BUCKET_OP_WITH_CURL_GET
         elif handler_code == 'bucket_op_curl_post':
@@ -760,7 +760,7 @@ class EventingRecovery(EventingBaseTest):
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         # kill eventing consumer when eventing is processing mutations
         self.kill_consumer(eventing_node)
-        self.wait_for_handler_state(body['appname'], "deployed")
+        self.wait_for_handler_state(body['appname'], "paused")
         rebalance.result()
         if self.pause_resume:
             self.resume_function(body)
@@ -818,7 +818,7 @@ class EventingRecovery(EventingBaseTest):
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]], [],
                                                      services=services_in)
             self.sleep(5)
-            reached = RestHelper(self.rest).rebalance_reached(percentage=60)
+            reached = RestHelper(self.rest).rebalance_reached(percentage=30)
             self.assertTrue(reached, "rebalance failed, stuck or did not complete")
             # kill eventing producer when eventing is processing mutations
             self.kill_producer(eventing_node)
@@ -851,7 +851,6 @@ class EventingRecovery(EventingBaseTest):
         if self.pause_resume:
             self.pause_function(body)
             self.sleep(30)
-            self.resume_function(body)
         # kill eventing producer when eventing is processing mutations
         self.kill_producer(eventing_node)
         self.sleep(120)
@@ -933,7 +932,6 @@ class EventingRecovery(EventingBaseTest):
         if self.pause_resume:
             self.pause_function(body)
             self.sleep(30)
-            self.resume_function(body)
         # kill eventing producer when eventing is processing mutations
         self.kill_producer(eventing_node)
         self.sleep(120)
