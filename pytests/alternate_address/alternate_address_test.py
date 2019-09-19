@@ -174,10 +174,11 @@ class AlternateAddressTests(AltAddrBaseTest):
             remove_node = internal_IP
         if self.alt_addr_rebalance_in and self.alt_addr_rebalance_out:
             if remove_node:
+                free_node = remove_node
                 if self.add_hostname_node:
-                    remove_node = self.get_external_IP(remove_node)
+                    free_node = self.get_external_IP(remove_node)
                 cmd = 'curl -X POST -d  "hostname={0}&user={1}&password={2}&services={3}" '\
-                             .format(remove_node, server1.rest_username, server1.rest_password,
+                             .format(free_node_IP, server1.rest_username, server1.rest_password,
                                      self.alt_addr_rebalance_in_services)
                 cmd += '-u Administrator:password http://{0}:8091/controller/addNode'\
                              .format(server1.ip)
@@ -186,6 +187,14 @@ class AlternateAddressTests(AltAddrBaseTest):
                                                                     ejectedNodes=[])
                 reb_status = rest.monitorRebalance()
                 self.assertTrue(reb_status, "Rebalance back in failed")
+                status = self.set_alternate_address(self.servers[-1], url_format = url_format,
+                                                    secure_port = secure_port,
+                                                    secure_conn = secure_conn,
+                                                    internal_IP = free_node)
+                if status:
+                    self.all_alt_addr_set = True
+                else:
+                    self.all_alt_addr_set = False
             else:
                 self.fail("We need a free node to add to cluster")
             if self.run_alt_addr_loader:
