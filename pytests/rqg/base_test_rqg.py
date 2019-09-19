@@ -283,6 +283,7 @@ class BaseRQGTests(BaseTestCase):
                         self.n1ql_helper.wait_for_all_indexes_online()
                         try:
                             self.n1ql_helper.run_cbq_query(index_statement)
+                            self.n1ql_helper.wait_for_all_indexes_online()
                         except CBQError, ex:
                             if "already exists" in str(ex):
                                 continue
@@ -295,6 +296,7 @@ class BaseRQGTests(BaseTestCase):
                         self.n1ql_helper.wait_for_all_indexes_online()
                         try:
                             self.n1ql_helper.run_cbq_query(index_statement)
+                            self.n1ql_helper.wait_for_all_indexes_online()
                         except CBQError, ex:
                             if "already exists" in str(ex):
                                 continue
