@@ -178,7 +178,7 @@ class AlternateAddressTests(AltAddrBaseTest):
                 if self.add_hostname_node:
                     free_node = self.get_external_IP(remove_node)
                 cmd = 'curl -X POST -d  "hostname={0}&user={1}&password={2}&services={3}" '\
-                             .format(free_node_IP, server1.rest_username, server1.rest_password,
+                             .format(free_node, server1.rest_username, server1.rest_password,
                                      self.alt_addr_rebalance_in_services)
                 cmd += '-u Administrator:password http://{0}:8091/controller/addNode'\
                              .format(server1.ip)
