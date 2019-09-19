@@ -128,6 +128,12 @@ class AlternateAddressTests(AltAddrBaseTest):
         rest = RestConnection(self.master)
         rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()], ejectedNodes=[])
         rest.monitorRebalance()
+        self.log.info("Create default bucket")
+        self._create_default_bucket(self.master)
+        buckets = rest.get_buckets()
+        status = RestHelper(rest).vbucket_map_ready(buckets[0].name)
+        if not status:
+            self.fail("Failed to create bucket.")
 
         if self.run_alt_addr_loader:
             if self.alt_addr_kv_loader:
@@ -560,6 +566,18 @@ class AlternateAddressTests(AltAddrBaseTest):
                     self.fail("Could not create bucket {0}".format(bucket_name))
                 count += 1
                 self.sleep(5)
+
+    def _create_default_bucket(self, server):
+        if server is None:
+            server = self.master
+        create_bucket_command = """ curl -g -u Administrator:password \
+                      http://{0}:8091/pools/default/buckets -d name=default \
+                      -d ramQuotaMB=256 -d authType=sasl -d replicaNumber=1 """.format(server.ip)
+        self.log.info("Create default bucket ")
+        output = check_output("{0}".format(create_bucket_command), shell=True,
+                                           stderr=STDOUT)
+        if output:
+            self.log.info("Output from create bucket default {0}".format(output))
 
     def _create_eventing_function(self, server):
         eventing_name = "eventingalt"
