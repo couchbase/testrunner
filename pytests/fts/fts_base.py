@@ -4126,6 +4126,10 @@ class FTSBaseTest(unittest.TestCase):
         )
         geo_index.index_definition["params"] = {
             "mapping": {
+                "default_mapping": {
+                    "dynamic": True,
+                    "enabled": False
+                },
                 "types": {
                     "earthquake": {
                         "enabled": True,
