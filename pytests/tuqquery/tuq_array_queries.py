@@ -50,20 +50,21 @@ class QueryArrayQueryTests(QueryTests):
         # Second server is the cbas server
         cbas_connection = RestConnection(self.servers[1])
 
-        # Create analytics dataset on travel-sample
-        cmd_create_dataset = "create dataset `travel-sample` on `travel-sample`;"
-        response = cbas_connection.execute_statement_on_cbas(cmd_create_dataset, None,
-                                                             username=cbas_connection.username,
-                                                             password=cbas_connection.password)
-        response = json.loads(response)
-        self.assertTrue(response['status'] == 'success', "Dataverse failed to be created with error: %s" % response)
+        if not self.compare_primary:
+            # Create analytics dataset on travel-sample
+            cmd_create_dataset = "create dataset `travel-sample` on `travel-sample`;"
+            response = cbas_connection.execute_statement_on_cbas(cmd_create_dataset, None,
+                                                                 username=cbas_connection.username,
+                                                                 password=cbas_connection.password)
+            response = json.loads(response)
+            self.assertTrue(response['status'] == 'success', "Dataverse failed to be created with error: %s" % response)
 
-        cmd_connect_bucket = "connect link Local;"
-        response = cbas_connection.execute_statement_on_cbas(cmd_connect_bucket, None,
-                                                             username=cbas_connection.username,
-                                                             password=cbas_connection.password)
-        response = json.loads(response)
-        self.assertTrue(response['status'] == 'success', "Dataverse failed to link with error: %s" % response)
+            cmd_connect_bucket = "connect link Local;"
+            response = cbas_connection.execute_statement_on_cbas(cmd_connect_bucket, None,
+                                                                 username=cbas_connection.username,
+                                                                 password=cbas_connection.password)
+            response = json.loads(response)
+            self.assertTrue(response['status'] == 'success', "Dataverse failed to link with error: %s" % response)
 
         # Sleep to let dataverse load all items
         time.sleep(60)
@@ -94,6 +95,7 @@ class QueryArrayQueryTests(QueryTests):
             required_index = ''
             cbas_query = ''
             try:
+                self.log.info("=" * 50 + " Running Query %s " % str(x) + "=" * 50)
                 # Get the covering index required to run the query (we want to test optimized query paths
                 advise_result = self.run_cbq_query(query= "advise " + query, server=self.advisor_node, username=self.rest.username, password= self.rest.password)
                 required_index = advise_result['results'][0]['advice']['adviseinfo'][0]['recommended_indexes']['covering_indexes'][0]['index_statement']
@@ -115,7 +117,6 @@ class QueryArrayQueryTests(QueryTests):
                         failed_queries.append(
                             ("N1QL Query: %s , CBAS Query: %s" % (query, cbas_query), "Query is not using the created index"))
 
-                self.log.info("=" * 50 + " Running Query %s " % str(x) + "=" * 50)
                 actual_result = self.run_cbq_query(query=query)
 
                 if self.compare_primary or "within" in query:
