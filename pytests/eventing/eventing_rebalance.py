@@ -1181,7 +1181,7 @@ class EventingRebalance(EventingBaseTest):
                                                      [],
                                                      services=services_in)
             self.sleep(5)
-            reached = RestHelper(self.rest).rebalance_reached(percentage=30)
+            reached = RestHelper(self.rest).rebalance_reached(percentage=10)
             # kill eventing process when eventing rebalance is going on
             if len(eventing_nodes) < 2:
                 self.fail("At least two eventing nodes are required")
@@ -1534,13 +1534,17 @@ class EventingRebalance(EventingBaseTest):
                                                      [],
                                                      services=services_in)
             self.sleep(15)
-            reached = RestHelper(self.rest).rebalance_reached(percentage=30)
+            reached = RestHelper(self.rest).rebalance_reached(percentage=10)
             # kill eventing process when eventing rebalance is going on
             if len(eventing_nodes) < 2:
                 self.fail("At least two eventing nodes are required")
-            while(not self.check_eventing_rebalance()):
+            count = 0
+            while (not self.check_eventing_rebalance() and count < 30):
                 self.log.info("waiting for eventing rebalance to trigger")
                 self.sleep(3)
+                count = count + 1
+            if (not self.check_eventing_rebalance() and count == 30):
+                raise Exception("Eventing rebalance not triggred after maximum polling")
             self.kill_consumer(eventing_nodes[0])
             self.kill_consumer(self.servers[self.nodes_init])
             self.kill_producer(eventing_nodes[1])
