@@ -1185,13 +1185,11 @@ class EventingRebalance(EventingBaseTest):
             # kill eventing process when eventing rebalance is going on
             if len(eventing_nodes) < 2:
                 self.fail("At least two eventing nodes are required")
-            count=0
-            while(not self.check_eventing_rebalance() and count < 30):
+            while (not self.check_eventing_rebalance() and not RestHelper(self.rest).is_cluster_rebalanced()):
                 self.log.info("waiting for eventing rebalance to trigger")
                 self.sleep(3)
-                count=count+1
-            if(not self.check_eventing_rebalance() and count == 30):
-                raise Exception("Eventing rebalance not triggred after maximum polling")
+            if (RestHelper(self.rest).is_cluster_rebalanced()):
+                raise Exception("Rebalance completed before killing")
             self.kill_consumer(eventing_nodes[0])
             self.kill_consumer(self.servers[self.nodes_init])
             self.kill_producer(eventing_nodes[1])
@@ -1538,13 +1536,11 @@ class EventingRebalance(EventingBaseTest):
             # kill eventing process when eventing rebalance is going on
             if len(eventing_nodes) < 2:
                 self.fail("At least two eventing nodes are required")
-            count = 0
-            while (not self.check_eventing_rebalance() and count < 30):
+            while (not self.check_eventing_rebalance() and not RestHelper(self.rest).is_cluster_rebalanced()):
                 self.log.info("waiting for eventing rebalance to trigger")
                 self.sleep(3)
-                count = count + 1
-            if (not self.check_eventing_rebalance() and count == 30):
-                raise Exception("Eventing rebalance not triggred after maximum polling")
+            if (RestHelper(self.rest).is_cluster_rebalanced()):
+                raise Exception("Rebalance completed before killing")
             self.kill_consumer(eventing_nodes[0])
             self.kill_consumer(self.servers[self.nodes_init])
             self.kill_producer(eventing_nodes[1])
