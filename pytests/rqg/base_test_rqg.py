@@ -213,6 +213,7 @@ class BaseRQGTests(BaseTestCase):
     def _rqg_worker(self, table_name, table_map, input_queue, result_queue, failure_record_queue=None):
         count = 0
         table_name_description_map = {table_name: table_map[table_name]}
+
         while True:
             if self.total_queries <= self.query_count:
                 break
@@ -237,10 +238,6 @@ class BaseRQGTests(BaseTestCase):
                     self._generate_secondary_indexes_in_batches(sql_n1ql_index_map_list)
                 thread_list = []
                 test_case_number = start_test_case_number
-                for test_case_input in sql_n1ql_index_map_list:
-                    if self.use_advisor:
-                        n1ql_query = test_case_input["n1ql"]
-                        self.create_secondary_index(n1ql_query)
                 for test_case_input in sql_n1ql_index_map_list:
                     t = threading.Thread(target=self._run_basic_test, args=(test_case_input, test_case_number, result_queue, failure_record_queue))
                     #self._run_basic_test(test_case_input, test_case_number, result_queue, failure_record_queue)
