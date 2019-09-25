@@ -1793,7 +1793,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
 
             self.sleep(10)
             output = backup_result.result(timeout=200)
-            mesg = "Error backing up cluster: Unable to find the latest vbucket sequence numbers."
+            mesg = "Error backing up cluster: Unable to find the latest vbucket sequence numbers"
             self.assertTrue(self._check_output(mesg, output),
                 "Expected error message not thrown by Backup 180 seconds after memcached crash")
             self.log.info("Expected error thrown by Backup 180 seconds after memcached crash")
@@ -2034,6 +2034,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             strip_backupset = [s[:-6] for s in self.backups]
 
         for line in output:
+            if "entbackup" in line:
+                continue
             if re.search("\d{4}-\d{2}-\d{2}T\d{2}_\d{2}_\d{2}.\d+", line):
                 backup_name = re.search("\d{4}-\d{2}-\d{2}T\d{2}_\d{2}_\d{2}.\d+", line).group()
                 if self.debug_logs:
@@ -2058,6 +2060,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             strip_backupset = [s[:-6] for s in self.backups]
 
         for line in output:
+            if "entbackup" in line:
+                continue
             if re.search("\d{4}-\d{2}-\d{2}T\d{2}_\d{2}_\d{2}.\d+", line):
                 backup_name = re.search("\d{4}-\d{2}-\d{2}T\d{2}_\d{2}_\d{2}.\d+", line).group()
                 if self.debug_logs:
