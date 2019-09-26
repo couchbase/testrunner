@@ -286,7 +286,7 @@ class BaseRQGTests(BaseTestCase):
                             if "already exists" in str(ex):
                                 continue
 
-            elif "covering_indexes" in advise_result["results"][0]["advice"]["adviseinfo"][0][
+            if "covering_indexes" in advise_result["results"][0]["advice"]["adviseinfo"][0][
                 "recommended_indexes"].keys():
                 for index_statement_array in advise_result["results"][0]["advice"]["adviseinfo"][0]["recommended_indexes"]["covering_indexes"]:
                     index_statement = index_statement_array["index_statement"]
