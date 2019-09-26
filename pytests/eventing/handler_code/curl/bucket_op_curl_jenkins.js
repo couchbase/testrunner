@@ -36,7 +36,7 @@ function OnDelete(meta) {
     	    delete dst_bucket[meta.id];
     	}
     	else{
-    	    dst_bucket[meta.id] = response.status;
+    	    delete dst_bucket[meta.id];
     	}
     }
     catch (e) {

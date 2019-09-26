@@ -786,7 +786,7 @@ class EventingRebalance(EventingBaseTest):
             # This sleep is intentional, if this is not present, rebalance_reached reports 100% (rebalance completed)
             # before rebalance could even start
             self.sleep(30)
-            reached = RestHelper(self.rest).rebalance_reached(percentage=30)
+            reached = RestHelper(self.rest).rebalance_reached(percentage=30,retry_count=150)
             self.assertTrue(reached, "Rebalance failed or did not reach {0}%".format(30))
             if not RestHelper(self.rest).is_cluster_rebalanced():
                 # stop the rebalance
