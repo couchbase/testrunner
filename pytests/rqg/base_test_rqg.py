@@ -100,6 +100,7 @@ class BaseRQGTests(BaseTestCase):
             self.keyword_list = self.query_helper._read_keywords_from_file("b/resources/rqg/n1ql_info/keywords.txt")
             self.use_secondary_index = self.run_query_with_secondary or self.run_explain_with_hints
             self.check_explain_plan = self.input.param("explain_plan", False)
+            self.index_limit = self.input.param("index_limit", 5)
             if self.input_rqg_path is not None:
                 self.secondary_index_info_path = self.input_rqg_path+"/index/secondary_index_definitions.txt"
                 self.db_dump_path = self.input_rqg_path+"/db_dump/database_dump.zip"
@@ -263,7 +264,7 @@ class BaseRQGTests(BaseTestCase):
         return result
 
     def create_secondary_index(self, n1ql_query=""):
-        if self.count_secondary_indexes() >= 15:
+        if self.count_secondary_indexes() >= self.index_limit:
             self.remove_all_secondary_indexes()
         self.n1ql_helper.wait_for_all_indexes_online()
         advise_result = self.n1ql_helper.run_cbq_query(query="ADVISE " + n1ql_query,
