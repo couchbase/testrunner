@@ -271,7 +271,7 @@ class BaseRQGTests(BaseTestCase):
                                                        server=self.n1ql_server)
         if len(advise_result["results"][0]["advice"]["adviseinfo"]) == 0:
             return
-        if "No index recommendation at this time." != str(
+        if "No index recommendation at this time" not in str(
                 str(advise_result["results"][0]["advice"]["adviseinfo"][0]["recommended_indexes"])):
             if "indexes" in advise_result["results"][0]["advice"]["adviseinfo"][0][
                 "recommended_indexes"].keys():
