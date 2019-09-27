@@ -1884,7 +1884,9 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         restore_buckets_items = rest.get_buckets_itemCount()
         buckets = rest.get_buckets()
         keys_fail = {}
+        max_failed_keys = 10
         for bucket in buckets:
+            count = 0
             keys_fail[bucket.name] = {}
             if len(bk_file_data[bucket.name].keys()) != \
                                     int(restore_buckets_items[bucket.name]):
@@ -1898,15 +1900,18 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                         ttl_matched = False
                     if self.replace_ttl == "expired" and self.bk_with_ttl is not None:
                         ttl_matched = False
-                    keys_fail[bucket.name][key] = []
-                    keys_fail[bucket.name][key].append(items_info[key]['meta']['expiration'])
-                    keys_fail[bucket.name][key].append(int(ttl_set))
+                    if count < max_failed_keys:
+                        keys_fail[bucket.name][key] = []
+                        keys_fail[bucket.name][key].append(items_info[key]['meta']['expiration'])
+                        keys_fail[bucket.name][key].append(int(ttl_set))
+                        count += 1
                     if self.debug_logs:
                         print("ttl time set: ", ttl_set)
                         print("key {0} failed to set ttl with {1}".format(key,
                                    items_info[key]['meta']['expiration']))
 
             if not ttl_matched:
+                self.log.error("Here are keys not set correcttly {0}".format(keys_fail))
                 self.fail("ttl value did not set correctly")
             else:
                 self.log.info("all ttl value set matched")
