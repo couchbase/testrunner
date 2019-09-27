@@ -257,3 +257,16 @@ class EventingSanity(EventingBaseTest):
         # Wait for eventing to catch up with all the update mutations and verify results
         self.verify_eventing_results(self.function_name, self.docs_per_day * 2016*2)
         self.undeploy_and_delete_function(body)
+
+    def test_compress_handler(self):
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        body = self.create_save_function_body(self.function_name,"handler_code/compress.js")
+        self.deploy_function(body)
+        # Wait for eventing to catch up with all the update mutations and verify results
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016)
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size, op_type='delete')
+        # Wait for eventing to catch up with all the delete mutations and verify results
+        self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+        self.undeploy_and_delete_function(body)
