@@ -15,6 +15,7 @@ log = logging.getLogger()
 class EventingNegative(EventingBaseTest):
     def setUp(self):
         super(EventingNegative, self).setUp()
+        self.rest.set_service_memoryQuota(service='memoryQuota', memoryQuota=1200)
         if self.create_functions_buckets:
             self.bucket_size = 100
             log.info(self.bucket_size)
@@ -449,6 +450,7 @@ class EventingNegative(EventingBaseTest):
                                       master=self.master, use_rest=True)
         # primary index is required as we run some queries from handler code
         self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
+        self.load_sample_buckets(self.server, "travel-sample")
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                  batch_size=self.batch_size)
         body = self.create_save_function_body(self.function_name, 'handler_code/n1ql_op_connection.js', worker_count=1)

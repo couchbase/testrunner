@@ -1,17 +1,17 @@
 function OnUpdate(doc, meta) {
     try{
-    SELECT * FROM src_bucket limit 1;
-    SELECT * FROM src_bucket limit 1;
-    SELECT * FROM src_bucket limit 1;
-    SELECT * FROM src_bucket limit 1;
-    SELECT * FROM src_bucket limit 1;
-    SELECT * FROM src_bucket limit 1;
-    SELECT * FROM src_bucket limit 1;
-    SELECT * FROM src_bucket limit 1;
-    SELECT * FROM src_bucket limit 1;
-    SELECT * FROM src_bucket limit 1;
-    SELECT * FROM src_bucket limit 1;
-    SELECT * FROM src_bucket limit 1;
+    SELECT * FROM `travel-sample` limit 1;
+    SELECT * FROM `travel-sample` limit 1;
+    SELECT * FROM `travel-sample` limit 1;
+    SELECT * FROM `travel-sample` limit 1;
+    SELECT * FROM `travel-sample` limit 1;
+    SELECT * FROM `travel-sample` limit 1;
+    SELECT * FROM `travel-sample` limit 1;
+    SELECT * FROM `travel-sample` limit 1;
+    SELECT * FROM `travel-sample` limit 1;
+    SELECT * FROM `travel-sample` limit 1;
+    SELECT * FROM `travel-sample` limit 1;
+    SELECT * FROM `travel-sample` limit 1;
     } catch (e) {
         log (e);
         if (e.message === 'Connection pool maximum capacity reached') {
@@ -24,18 +24,18 @@ function OnUpdate(doc, meta) {
 
 function OnDelete(meta){
     try{
-    SELECT * FROM src_bucket limit 1;
-    SELECT * FROM src_bucket limit 1;
-    SELECT * FROM src_bucket limit 1;
-    SELECT * FROM src_bucket limit 1;
-    SELECT * FROM src_bucket limit 1;
-    SELECT * FROM src_bucket limit 1;
-    SELECT * FROM src_bucket limit 1;
-    SELECT * FROM src_bucket limit 1;
-    SELECT * FROM src_bucket limit 1;
-    SELECT * FROM src_bucket limit 1;
-    SELECT * FROM src_bucket limit 1;
-    SELECT * FROM src_bucket limit 1;
+    SELECT * FROM `travel-sample` limit 1;
+    SELECT * FROM `travel-sample` limit 1;
+    SELECT * FROM `travel-sample` limit 1;
+    SELECT * FROM `travel-sample` limit 1;
+    SELECT * FROM `travel-sample` limit 1;
+    SELECT * FROM `travel-sample` limit 1;
+    SELECT * FROM `travel-sample` limit 1;
+    SELECT * FROM `travel-sample` limit 1;
+    SELECT * FROM `travel-sample` limit 1;
+    SELECT * FROM `travel-sample` limit 1;
+    SELECT * FROM `travel-sample` limit 1;
+    SELECT * FROM `travel-sample` limit 1;
     } catch (e) {
         log (e);
         if (e.message === 'Connection pool maximum capacity reached') {
