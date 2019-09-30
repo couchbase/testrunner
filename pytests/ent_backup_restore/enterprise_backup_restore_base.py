@@ -353,6 +353,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             args += " --disable-ft-indexes"
         if self.backupset.disable_data:
             args += " --disable-data"
+        if self.backupset.log_to_stdout:
+            args += " --log-to-stdout"
         if self.vbucket_filter:
             if self.vbucket_filter == "all":
                 all_vbuckets = "0"
@@ -370,6 +372,33 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         remote_client.log_command_output(output, error)
         remote_client.disconnect()
         return output, error
+
+    def backup_info(self, json_out=True):
+        args = "info --archive {0} --repo {1}".format(self.backupset.directory, self.backupset.name)
+        if json_out:
+            args += " --json"
+
+        remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
+        command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, args)
+        output, error = remote_client.execute_command(command)
+        remote_client.log_command_output(output, error)
+        remote_client.disconnect()
+        return output, error
+
+
+    def _verify_backup_directory_count(self, expected):
+        shell = RemoteMachineShellConnection(self.backupset.backup_host)
+        output, _ = shell.execute_command("ls -l {}/{} | wc -l".format(self.backupset.directory,
+                                                                       self.backupset.name))
+        output = " ".join(output)
+        try:
+            count = int(output)
+            if count != expected + 2:
+                self.fail("Number of backup directories {0} does not match expected {1}".format(count - 2, expected +2))
+        except ValueError as e:
+            self.fail("Could not get the number of backups in the archive due to: {0}".format(e))
+
+        shell.disconnect()
 
     def backup_create_validate(self):
         output, error = self.backup_create()
@@ -435,6 +464,10 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             args += " --value-compression compressed"
         if self.num_shards is not None:
             args += " --shards {0} ".format(self.num_shards)
+        if self.backupset.log_to_stdout:
+            args += " --log-to-stdout"
+        if self.backupset.auto_select_threads:
+            args += " --auto-select-threads"
         user_env = ""
         password_env = ""
         if self.backupset.user_env:
@@ -529,7 +562,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         elif self.backupset.passwd_env_with_prompt:
             password_input = "-p "
 
-        if "4.6" <= RestConnection(self.backupset.backup_host).get_nodes_version():
+        version = RestConnection(self.backupset.backup_host).get_nodes_version()
+        if "4.6" <= version:
             self.cluster_flag = "--cluster"
 
         args = "restore --archive {0} --repo {1} {2} http{9}://{3}:{10}{4} "\
@@ -542,6 +576,10 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                                        user_input,
                                        password_input,
                                        backup_start, backup_end, url_format, secure_port)
+        if version >= "6.5" and self.backupset.auto_select_threads:
+            args += " --auto-select-threads"
+        if version >= "6.5" and self.backupset.log_to_stdout:
+            args += " --log-to-stdout"
         if self.backupset.no_ssl_verify:
             args += " --no-ssl-verify"
         if self.backupset.secure_conn:
@@ -851,8 +889,11 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             return True, output, "Compaction of backup success"
         remote_client.disconnect()
 
-    def backup_remove(self):
+    def backup_remove(self, backup_range=None):
         args = "remove --archive {0} --repo {1}".format(self.backupset.directory, self.backupset.name)
+        if backup_range is not None:
+            args += " --backups {0}".format(backup_range)
+
         remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, args)
         output, error = remote_client.execute_command(command)
@@ -861,6 +902,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.verify_cluster_stats()
         if error:
             return False, error, "Removing backup failed."
+        elif "failed" in " ".join(output):
+            return False, output, "Removing backup failed."
         else:
             return True, output, "Removing of backup success"
 
@@ -1110,20 +1153,26 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.log.info("backups before merge: " + str(self.backups))
         self.log.info("number_of_backups_taken before merge: " \
                                                    + str(self.number_of_backups_taken))
-        if self.backupset.deleted_backups:
-            self.backupset.end -= len(self.backupset.deleted_backups)
-        try:
-            backup_start = self.backups[int(self.backupset.start) - 1]
-        except IndexError:
-            backup_start = "{0}{1}".format(self.backups[-1], self.backupset.start)
-        try:
-            backup_end = self.backups[int(self.backupset.end) - 1]
-        except IndexError:
-            backup_end = "{0}{1}".format(self.backups[-1], self.backupset.end)
-        args = "merge --archive {0} --repo {1} --start {2} --end {3}"\
-                                      .format(self.backupset.directory,
-                                              self.backupset.name,
-                                              backup_start, backup_end)
+        if self.backupset.date_range == '':
+            if self.backupset.deleted_backups:
+                self.backupset.end -= len(self.backupset.deleted_backups)
+            try:
+                backup_start = self.backups[int(self.backupset.start) - 1]
+            except IndexError:
+                backup_start = "{0}{1}".format(self.backups[-1], self.backupset.start)
+            try:
+                backup_end = self.backups[int(self.backupset.end) - 1]
+            except IndexError:
+                backup_end = "{0}{1}".format(self.backups[-1], self.backupset.end)
+            args = "merge --archive {0} --repo {1} --start {2} --end {3}"\
+                                          .format(self.backupset.directory,
+                                                  self.backupset.name,
+                                                  backup_start, backup_end)
+        else:
+            args = "merge --archive {0} --repo {1} --date-range {2}".format(self.backupset.directory,
+                                                                            self.backupset.name,
+                                                                            self.backupset.date_range)
+
         remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, args)
         output, error = remote_client.execute_command(command)
@@ -1506,6 +1555,11 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                             self.log.info(mesg)
             if index_found < len(self.gsi_names):
                 self.fail("GSI indexes are not restored in bucket {0}".format(bucket.name))
+        shell.disconnect()
+
+    def _delete_repo(self):
+        shell = RemoteMachineShellConnection(self.backupset.backup_host)
+        shell.execute_command("rm -rf {}/{}".format(self.backupset.directory, self.backupset.name))
         shell.disconnect()
 
     def _check_output(self, word_check, output):
@@ -2234,6 +2288,9 @@ class Backupset:
         self.new_buckets = []
         self.flushed_buckets = []
         self.deleted_backups = []
+        self.log_to_stdout = False
+        self.auto_select_threads = False
+        self.date_range = ''
 
 
 class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):

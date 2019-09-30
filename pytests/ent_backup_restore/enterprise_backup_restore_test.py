@@ -3881,3 +3881,361 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             self.fail("Mutations were blocked for over 60 seconds, "
                       "but this wasn't logged.")
         backup_client.disconnect()
+
+    def test_log_to_stdout(self):
+        """
+        Test that if the log-to-stdout flag is provided cbbackupmgr will log to stdout
+        :return:
+        """
+
+        version = RestConnection(self.backupset.backup_host).get_nodes_version()
+        if "6.5" > version[:3]:
+            self.fail("Test not supported for versions pre 6.5.0"
+                      "Version was run with {}".format(version))
+
+        self.backupset.log_to_stdout = True
+        # Test config
+        output, err = self.backup_create()
+        if err:
+            self.fail("Could not create backup directory")
+
+        # This is a line that is normally printed in the logs but should now instead be printed to stdout
+        if "(Cmd) cbbackupmgr version" not in " ".join(output):
+            self.fail("Did not log to standard out")
+
+        # Test backup
+        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
+        self._load_all_buckets(self.master, gen, "create", 0)
+        output, err = self.backup_cluster()
+        if err:
+            self.fail("Could not backup")
+
+        if "(Cmd) cbbackupmgr version" not in " ".join(output):
+            self.fail("Did not log to standard out")
+
+        self.backupset.force_updates = True
+
+        # Test restore
+        output, err = self.backup_restore()
+        if err:
+            self.fail("Could not restore")
+
+        if "(Cmd) cbbackupmgr version" not in " ".join(output):
+            self.fail("Did not log to standard out")
+
+    def test_auto_select_threads(self):
+        """
+        Test that the --auto-select-threads flag actually selects the threads
+        :return:
+        """
+
+        version = RestConnection(self.backupset.backup_host).get_nodes_version()
+        if "6.5" > version[:3]:
+            self.fail("Test not supported for versions pre 6.5.0"
+                      "Version was run with {}".format(version))
+
+        self.backupset.auto_select_threads = True
+
+        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
+        self._load_all_buckets(self.master, gen, "create", 0)
+        self.backup_create()
+        self.backup_cluster()
+
+        # If the threads where auto-selected then a log message should appear
+        shell = RemoteMachineShellConnection(self.backupset.backup_host)
+        output, _ = shell.execute_command("cat {}/logs/backup-*.log | grep"
+                                          " '(Cmd) Automatically set the number"
+                                          " of threads to'".format(self.backupset.directory))
+        if not output:
+            self.fail("Threads were not automatically selected")
+
+        # Remove the logs and test the same thing for restore
+        shell.execute_command("rm -r {}/logs".format(self.backupset.directory))
+
+        self.backupset.force_updates = True
+        self.backup_restore()
+        output, _ = shell.execute_command("cat {}/logs/backup-*.log | grep"
+                                          " '(Cmd) Automatically set the number"
+                                          " of threads to'".format(self.backupset.directory))
+        if not output:
+            self.fail("Threads were not automatically selected")
+
+        shell.disconnect()
+
+    def test_backup_remove_take_backup_range(self):
+        """
+        Test the remove --backups flag it should be able to take:
+         - backup indexes e.g (0,3)
+         - backup directory names range
+         - dd-mm-yyyy ranges
+
+        To do this the steps are as follow:
+        1. Load some data to cluster
+        2. Create 3 backups
+        3. Try the different inputs and verify expected outputs
+
+        :return:
+        """
+        version = RestConnection(self.backupset.backup_host).get_nodes_version()
+        if "6.5" > version[:3]:
+            self.fail("Test not supported for versions pre 6.5.0"
+                      "Version was run with {}".format(version))
+
+        # Test based on actual directory names have to be dynamically created based on the directory names.
+        test_ranges_positive_cases = [
+            "0,2", # valid index range
+            "10-01-2000,10-01-3000", # valid date range
+        ]
+
+        test_range_invalid_cases = [
+            "1,-10", # invalid end range negative number
+            "0,100", # invalid range as there are only 3 backups
+            "2,0", # invalid range start bigger than end
+            "01/01/2000,01/01/3000", # invalid date format
+            "01-30-2000,01-30-3000", # invalid date format
+        ]
+
+        # Load some data into the cluser
+        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
+        self._load_all_buckets(self.master, gen, "create", 0)
+
+        for test in test_ranges_positive_cases:
+            # create the backup repository and make three backups
+            self.backup_create()
+            self._take_n_backups(n=3)
+
+            # remove the backup directory
+            success, _, _ = self.backup_remove(test)
+            if not success:
+                self.fail("Failed to remove backups")
+
+            self._verify_backup_directory_count(0)
+
+        for test in test_range_invalid_cases:
+            # create the backup repository and make three backups
+            self.backup_create()
+            self._take_n_backups(n=3)
+
+            success, _, _ = self.backup_remove(test)
+            if success:
+                self.fail("Test should have failed")
+
+            self._verify_backup_directory_count(3)
+            self._delete_repo()
+
+        #  Test based on dynamic file names
+        self.backup_create()
+        self._take_n_backups(n=3)
+
+        shell = RemoteMachineShellConnection(self.backupset.backup_host)
+        list_dir, _ = shell.execute_command("ls -l {}/{}".format(self.backupset.directory, self.backupset.name))
+        list_dir = " ".join(list_dir)
+        shell.disconnect()
+
+        dir_names = re.findall(r'(?P<dir>\d{4}-\d{2}-\d{2}T\d{2}_\d{2}_\d{2}\.\d+(?:(?:[+-]\d{2}_\d{2})|Z))', list_dir)
+        dir_names.sort()
+
+        if len(dir_names) != 3:
+            self.fail("Expected 3 backups instead have {0}".format(len(dir_names)))
+
+        # test non existent directory name
+        success, _, _ = self.backup_remove("3000-09-30T10_42_37.64647+01_00")
+        if success:
+            self.fail("Should not be able to remove non existent directory")
+
+        self._verify_backup_directory_count(3)
+
+        # test start > backup start
+        success, _, _ = self.backup_remove("3000-09-30T10_42_37.64647+01_00,3000-09-30T10_43_37.64647+01_00")
+        if success:
+            self.fail("Should not be able to remove by directory range where the start is in the future")
+
+        self._verify_backup_directory_count(3)
+
+        # test start == backup start end > backup end
+        success, _, _ = self.backup_remove("{0}.64647+01_00,3000-09-30T10_43_37.64647+01_00".format(dir_names[0]))
+        if success:
+            self.fail("Should not be able to remove by directory range where the end is in the future")
+
+        self._verify_backup_directory_count(3)
+
+        # test start before end
+        success, _, _ = self.backup_remove("{0},{1}".format(dir_names[-1], dir_names[0]))
+        if success:
+            self.fail("Should not be able to remove by directory range where start is after end")
+
+        self._verify_backup_directory_count(3)
+
+        # test valid single directory
+        success, _, _ = self.backup_remove("{0}".format(dir_names[0]))
+        if not success:
+            self.fail("Should not have failed to remove directories by backup directory name")
+
+        self._verify_backup_directory_count(2)
+
+        # test valid
+        success, _, _ = self.backup_remove("{0},{1}".format(dir_names[1], dir_names[-1]))
+        if not success:
+            self.fail("Should not have failed to remove directories by backup directory name range")
+
+        self._verify_backup_directory_count(0)
+
+    def test_backup_merge_date_range(self):
+        """
+        Test the merge --date-range flag it should be able to take:
+         - backup indexes e.g (0,3)
+         - backup directory names range
+         - dd-mm-yyyy ranges
+
+        To do this the steps are as follow:
+        1. Load some data to cluster
+        2. Create 3 backups
+        3. Try the different inputs and verify expected outputs
+
+        :return:
+        """
+        version = RestConnection(self.backupset.backup_host).get_nodes_version()
+        if "6.5" > version[:3]:
+            self.fail("Test not supported for versions pre 6.5.0"
+                      "Version was run with {}".format(version))
+
+        # Test based on actual directory names have to be dynamically created based on the directory names.
+        test_ranges_positive_cases = [
+            "0,2", # valid index range
+            "10-01-2000,10-01-3000", # valid date range
+        ]
+
+        test_range_invalid_cases = [
+            "1,-10", # invalid end range negative number
+            "0,100", # invalid range as there are only 3 backups
+            "2,0", # invalid range start bigger than end
+            "01/01/2000,01/01/3000", # invalid date format
+            "01-30-2000,01-30-3000", # invalid date format
+        ]
+
+        # Load some data into the cluser
+        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
+        self._load_all_buckets(self.master, gen, "create", 0)
+
+        for test in test_ranges_positive_cases:
+            # create the backup repository and make three backups
+            self.backup_create()
+            self._take_n_backups(3)
+
+            self.backupset.date_range = test
+            status, output , _ = self.backup_merge()
+            if not status:
+                self.fail("Failed to merge backups: {0}".format(output))
+
+
+
+            self._verify_backup_directory_count(1)
+            self._delete_repo()
+
+        for test in test_range_invalid_cases:
+            # create the backup repository and make three backups
+            self.backup_create()
+            self._take_n_backups(3)
+
+            self.backupset.date_range = test
+            status, output, _ = self.backup_merge()
+            if status:
+                self.fail("Test should have failed")
+
+            self._verify_backup_directory_count(3)
+
+        #  Test based on dynamic file names
+        shell = RemoteMachineShellConnection(self.backupset.backup_host)
+        list_dir, _ = shell.execute_command("ls -l {}/{}".format(self.backupset.directory, self.backupset.name))
+        list_dir = " ".join(list_dir)
+        shell.disconnect()
+
+        dir_names = re.findall(r'(?P<dir>\d{4}-\d{2}-\d{2}T\d{2}_\d{2}_\d{2}\.\d+(?:(?:[+-]\d{2}_\d{2})|Z))', list_dir)
+        dir_names.sort()
+
+        if len(dir_names) != 3:
+            self.fail("Expected 3 backups instead have {0}".format(len(dir_names)))
+
+        # test start > backup start
+        self.backupset.date_range = "3000-09-30T10_42_37.64647+01_00,3000-09-30T10_43_37.64647+01_00"
+        status, _, _ = self.backup_merge()
+        if status:
+            self.fail("Should not be able to merge by directory range where the start is in the future")
+
+        self._verify_backup_directory_count(3)
+
+        # test start == backup start end > backup end
+        self.backupset.date_range = "{0}.64647+01_00,3000-09-30T10_43_37.64647+01_00".format(dir_names[0])
+        status, _, _ = self.backup_merge()
+        if status:
+            self.fail("Should not be able to merge by directory range where the end is in the future")
+
+        self._verify_backup_directory_count(3)
+
+        # test start before end
+        self.backupset.date_range = "{0},{1}".format(dir_names[-1], dir_names[0])
+        status, _, _ = self.backup_merge()
+        if status:
+            self.fail("Should not be able to merge by directory range where the start is after the end")
+
+        self._verify_backup_directory_count(3)
+
+        # test valid
+        self.backupset.date_range = "{0},{1}".format(dir_names[0], dir_names[-1])
+        status, _, _ = self.backup_merge()
+        if not status:
+            self.fail("Should not have failed to merge")
+
+        self._verify_backup_directory_count(1)
+
+    def test_info_while_other_task_runs(self):
+        """
+        Test that info can run at the same time as other backup tasks
+        1. Load some data to the cluster
+        2. Create a backup repository
+        3. Start an async backup
+        4. Constantly run info
+        4. It should not expect error
+        :return:
+        """
+        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
+        self._load_all_buckets(self.master, gen, "create", 0)
+        self.backup_create()
+
+        # Test with backup
+        backup_result = self.cluster.async_backup_cluster(cluster_host=self.backupset.cluster_host,
+                                                          backup_host=self.backupset.backup_host,
+                                                          directory=self.backupset.directory, name=self.backupset.name,
+                                                          resume=self.backupset.resume, purge=self.backupset.purge,
+                                                          no_progress_bar=self.no_progress_bar,
+                                                          cli_command_location=self.cli_command_location,
+                                                          cb_version=self.cb_version)
+
+        for i in range(10):
+            _, err = self.backup_info(True)
+            if err:
+                self.fail("Should have been able to run at the same time as the backup")
+            self.sleep(2)
+
+        output = backup_result.result(timeout=200)
+        self.assertTrue(self._check_output("Backup successfully completed", output),
+                        "Backup failed with concurrent info")
+
+        # Test with merge
+        self._take_n_backups(5)
+        merge_result = self.cluster.async_merge_cluster(backup_host=self.backupset.backup_host,
+                                                        backups=self.backups,
+                                                        start=1, end=5,
+                                                        directory=self.backupset.directory,
+                                                        name=self.backupset.name,
+                                                        cli_command_location=self.cli_command_location)
+        for i in range(10):
+            _, err = self.backup_info(True)
+            if err:
+                self.fail("Should have been able to run at the same time as the merge")
+            self.sleep(2)
+
+        output = merge_result.result(timeout=200)
+        self.assertTrue(self._check_output("Merge completed successfully", output),
+                        "Merge failed while running info at the same time")
+
