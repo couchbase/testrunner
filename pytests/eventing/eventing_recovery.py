@@ -760,7 +760,10 @@ class EventingRecovery(EventingBaseTest):
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         # kill eventing consumer when eventing is processing mutations
         self.kill_consumer(eventing_node)
-        self.wait_for_handler_state(body['appname'], "paused")
+        if self.pause_resume:
+            self.wait_for_handler_state(body['appname'], "paused")
+        else:
+            self.wait_for_handler_state(body['appname'], "deployed")
         rebalance.result()
         if self.pause_resume:
             self.resume_function(body)
