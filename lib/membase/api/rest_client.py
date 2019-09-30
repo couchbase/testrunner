@@ -909,6 +909,7 @@ class RestConnection(object):
             self.init_node_services(username=self.username, password=self.password,
                                                        services=self.node_services)
         self.init_cluster(username=self.username, password=self.password)
+        return kv_quota
 
     def init_node_services(self, username='Administrator', password='password', hostname='127.0.0.1', port='8091', services=None):
         api = self.baseUrl + '/node/controller/setupServices'

@@ -631,9 +631,11 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                         self.log.info("ephemeral bucket needs to set restore cluster "
                                       "to memopt for gsi.")
                         self.test_storage_mode = "memory_optimized"
-                        self._reset_storage_mode(rest_conn, self.test_storage_mode)
+                        kv_quota = self._reset_storage_mode(rest_conn, self.test_storage_mode)
                         if self.test_fts:
                             self._create_restore_cluster()
+                        if not self.self.dgm_run and int(kv_quota) > 0:
+                            bucket_size = kv_quota
 
                     self.log.info("replica in bucket {0} is {1}".format(bucket.name, replicas))
                     rest_conn.create_bucket(bucket=bucket_name,
@@ -719,7 +721,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                 args += " --replace-ttl {0}".format(self.replace_ttl)
         command = "{3} {2} {0}/cbbackupmgr {1}".format(self.cli_command_location, args,
                                                    password_env, user_env)
-        output, error = shell.execute_command(command)
+        output, error = shell.execute_command_raw(command)
         shell.log_command_output(output, error)
         self._verify_bucket_compression_mode(bucket_compression_mode)
         errors_check = ["Unable to process value for", "Error restoring cluster",
@@ -1548,7 +1550,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                                           password='password',
                                           storageMode=storageMode)
         self.log.info("Done reset node")
-        rest.init_node()
+        kv_quota = rest.init_node()
+        return kv_quota
 
     def _collect_logs(self):
         """
