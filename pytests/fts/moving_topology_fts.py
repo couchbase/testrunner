@@ -440,6 +440,8 @@ class MovingTopFTS(FTSBaseTest):
                                       services=["kv,fts"])
         for index in self._cb_cluster.get_indexes():
             self.is_index_partitioned_balanced(index)
+
+        self.sleep(20)
         for index in self._cb_cluster.get_indexes():
             hits, _, _, _ = index.execute_query(query=self.query,
                                              expected_hits=self._num_items)
