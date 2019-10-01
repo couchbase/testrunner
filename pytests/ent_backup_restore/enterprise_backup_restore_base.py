@@ -634,7 +634,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                         kv_quota = self._reset_storage_mode(rest_conn, self.test_storage_mode)
                         if self.test_fts:
                             self._create_restore_cluster()
-                        if not self.self.dgm_run and int(kv_quota) > 0:
+                        if not self.dgm_run and int(kv_quota) > 0:
                             bucket_size = kv_quota
 
                     self.log.info("replica in bucket {0} is {1}".format(bucket.name, replicas))
