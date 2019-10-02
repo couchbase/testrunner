@@ -1241,10 +1241,15 @@ class CouchbaseCluster:
             if eviction_policy in EVICTION_POLICY.EPH:
                 bucket_params['eviction_policy'] = eviction_policy
             else:
+                bucket_params['eviction_policy'] = EVICTION_POLICY.NO_EVICTION
+            # NRU eviction for src bkt implemented in 6.0.2
+            # AllowSourceNRUCreation internal setting needs to be enabled for 6.0.2 to 6.5.0
+            # It is enabled by default for 6.5.0 and up
+            if "6.0." in NodeHelper.get_cb_version(server):
+                self.set_internal_setting("AllowSourceNRUCreation", "true")
                 bucket_params['eviction_policy'] = EVICTION_POLICY.NRU_EVICTION
-            if eviction_policy == EVICTION_POLICY.NRU_EVICTION:
-                if "6.0.2-" in NodeHelper.get_cb_version(server):
-                    self.set_internal_setting("AllowSourceNRUCreation", "true")
+            elif "6.5." in NodeHelper.get_cb_version(server):
+                bucket_params['eviction_policy'] = EVICTION_POLICY.NRU_EVICTION
         else:
             if eviction_policy in EVICTION_POLICY.CB:
                 bucket_params['eviction_policy'] = eviction_policy
