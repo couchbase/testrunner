@@ -4,7 +4,7 @@ import random
 
 from string import lowercase
 from couchbase.bucket import Bucket
-from couchbase_helper.documentgenerator import  DocumentGenerator
+from couchbase_helper.documentgenerator import DocumentGenerator
 from couchbase_helper.data import FIRST_NAMES, COUNTRIES
 from couchbase_helper.query_definitions import QueryDefinition
 from couchbase_helper.tuq_generators import TuqGenerators
@@ -15,6 +15,7 @@ from base_2i import BaseSecondaryIndexingTests
 DATATYPES = [unicode, "scalar", int, dict, "missing", "empty", "null"]
 
 log = logging.getLogger()
+
 
 class SecondaryIndexArrayIndexTests(BaseSecondaryIndexingTests):
     def setUp(self):
@@ -34,6 +35,7 @@ class SecondaryIndexArrayIndexTests(BaseSecondaryIndexingTests):
     def tearDown(self):
         super(SecondaryIndexArrayIndexTests, self).tearDown()
 
+
     def test_create_query_drop_all_array_index(self):
         self.multi_create_index_using_rest(
             buckets=self.buckets, query_definitions=self.query_definitions)
@@ -44,6 +46,91 @@ class SecondaryIndexArrayIndexTests(BaseSecondaryIndexingTests):
                                                     verify_result=True)
         self.multi_drop_index_using_rest(
             buckets=self.buckets, query_definitions=self.query_definitions)
+
+    def _create_bucket(self, bucketname):
+        self.rest.create_bucket(bucket=bucketname, ramQuotaMB=100, authType="sasl",
+                                saslPassword="password")
+        ready = BucketOperationHelper.wait_for_memcached(self.master, bucketname)
+        self.assertTrue(ready, msg="wait_for_memcached failed")
+
+    def _load_aggregate_function_dataset(self, buckets=[]):
+        generators = []
+        document_template = '{{        "name":"{0}"   , "str_arr" : {1} , ' \
+                                      '"int_num": {2} , "int_arr": {3} , ' \
+                                    '"float_num" : {4} , "float_arr" : {5}    }}'
+        num_items = 1000
+        for i in range(num_items):
+            name = random.choice(FIRST_NAMES)
+            str_arr=[random.choice(COUNTRIES) for i in range(10)]
+            int_num = random.randint(0, 100)
+            int_arr = [random.randint(30, 100) for i in range(100)]
+            float_num = random.uniform(0.0,100.0)
+            float_arr = [random.uniform(30.0, 100.0) for i in range(100)]
+            doc_id = "student_" + str(random.random() * 100000)
+            generators.append(
+            DocumentGenerator(doc_id, document_template,
+                                  [name],[str_arr],
+                                  [int_num], [int_arr],
+                                  [float_num],[float_arr],
+                                  start=0, end=1))
+        self.load(generators, buckets=buckets, flag=self.item_flag,
+                  verify_data=False, batch_size=self.batch_size)
+        self.full_docs_list = self.generate_full_docs_list(generators)
+        self.gen_results = TuqGenerators(self.log, self.full_docs_list)
+
+    def generate_query_definition_for_aggr_data(self):
+        query_definitions = []
+        query_definition = QueryDefinition(
+            index_name="agg_func_int_arr",
+            index_fields=["int_num", "ALL ARRAY t FOR t in int_arr END"],
+            query_template="SELECT {0} int_num){1} FROM %s where any t in int_arr satisfies t > 50 end")
+        query_definitions.append(query_definition)
+        query_definition = QueryDefinition(
+            index_name="agg_func_float_arr",
+            index_fields=["float_num", "ALL ARRAY t FOR t in float_arr END"],
+            query_template="SELECT {0} float_num){1} FROM %s where any t in float_arr satisfies t > 50.0 end")
+        query_definitions.append(query_definition)
+        query_definition = QueryDefinition(
+            index_name="agg_func_str_arr",
+            index_fields=["name", "ALL ARRAY t FOR t in str_arr END"],
+            query_template="SELECT {0} name){1} FROM %s where any t in str_arr satisfies t = \"India\" end")
+        query_definitions.append(query_definition)
+        return query_definitions
+
+    def test_aggregate_function(self):
+        self.rest.delete_bucket("default")
+        self._create_bucket("aggregate_with_idx")
+        self._create_bucket("aggregate_without_idx")
+        bucket_with_idx = self.rest.get_bucket("aggregate_with_idx")
+        bucket_without_idx = self.rest.get_bucket("aggregate_without_idx")
+        self._load_aggregate_function_dataset([bucket_with_idx, bucket_without_idx])
+        query_definitions = self.generate_query_definition_for_aggr_data()
+        self.multi_create_index_using_rest(buckets=[bucket_with_idx], query_definitions=query_definitions)
+        aggregate_functions = ["round(sum(","round(avg(","round(sum(distinct","round(avg(distinct","count(","countn(","min(","max(","array_agg(",
+                                "count(distinct", "countn(distinct", "array_agg(distinct"]
+        self.n1ql_helper.buckets=[bucket_without_idx]
+        self.n1ql_helper.create_primary_index()
+        wrong_results = []
+        function_count=0
+        for aggregate_function in aggregate_functions:
+            for query_definition in query_definitions:
+                paran=""
+                if function_count <= 3:
+                    paran=")"
+                query_with_idx = query_definition.generate_query(bucket=bucket_with_idx).format(aggregate_function,paran)
+                query_without_idx = query_definition.generate_query(bucket=bucket_without_idx).format(aggregate_function,paran)
+                expected_result = self.n1ql_helper.run_cbq_query(query=query_without_idx, server=self.n1ql_node)
+                msg, check = self.n1ql_helper.run_query_and_verify_result(query=query_with_idx, server=self.n1ql_node,
+                                                                          timeout=500,
+                                                                          expected_result=expected_result['results'],
+                                                                          scan_consistency="request_plus")
+                if not check:
+                    wrong_results.append(query_with_idx)
+            function_count+=1
+        self.assertEqual(len(wrong_results), 0, str(wrong_results))
+
+
+
 
     def test_simple_indexes_mutation(self):
         query_definitions = []
@@ -57,7 +144,7 @@ class SecondaryIndexArrayIndexTests(BaseSecondaryIndexingTests):
                                            query_definitions=query_definitions)
         self.sleep(20)
         index_map = self.rest.get_index_id_map()
-        doc_list = self.full_docs_list[:len(self.full_docs_list)/2]
+        doc_list = self.full_docs_list[:len(self.full_docs_list) / 2]
         for bucket in self.buckets:
             index_id = str(index_map[bucket.name][query_definition.index_name]["id"])
             for data in DATATYPES:
@@ -65,13 +152,13 @@ class SecondaryIndexArrayIndexTests(BaseSecondaryIndexingTests):
                                              "travel_history",
                                              doc_list, data, query_definition)
                 actual_result = self.rest.full_table_scan_gsi_index_with_rest(
-                        index_id, body={"stale": "false"})
+                    index_id, body={"stale": "false"})
                 expected_result = self._get_expected_results_for_full_table_scan(
-                        query_definition)
+                    query_definition)
                 msg = "Results don't match for index {0}. Actual number: {1}, Expected number: {2}"
                 self.assertEqual(sorted(actual_result), sorted(expected_result),
-                             msg.format(query_definition.index_name,
-                                        actual_result, expected_result))
+                                 msg.format(query_definition.index_name,
+                                            actual_result, expected_result))
                 self.full_docs_list = self.generate_full_docs_list(self.gens_load)
         self.multi_drop_index_using_rest(buckets=self.buckets,
                                          query_definitions=query_definitions)
@@ -82,32 +169,32 @@ class SecondaryIndexArrayIndexTests(BaseSecondaryIndexingTests):
             pass
         else:
             query_definition = QueryDefinition(index_name="index_name_travel_history_leading",
-                                                index_fields=["ALL `travel_history` END", "name", "age"],
-                                                query_template="SELECT {0} FROM %s WHERE `travel_history` IS NOT NULL",
-                                                groups=["array"], index_where_clause=" `travel_history` IS NOT NULL ")
+                                               index_fields=["ALL `travel_history` END", "name", "age"],
+                                               query_template="SELECT {0} FROM %s WHERE `travel_history` IS NOT NULL",
+                                               groups=["array"], index_where_clause=" `travel_history` IS NOT NULL ")
             definitions_list.append(query_definition)
             query_definition = QueryDefinition(index_name="index_name_travel_history_non_leading_end",
-                                                index_fields=["name", "age", "ALL `travel_history` END"],
-                                                query_template="SELECT {0} FROM %s WHERE `travel_history` IS NOT NULL",
-                                                groups=["array"], index_where_clause=" `travel_history` IS NOT NULL ")
+                                               index_fields=["name", "age", "ALL `travel_history` END"],
+                                               query_template="SELECT {0} FROM %s WHERE `travel_history` IS NOT NULL",
+                                               groups=["array"], index_where_clause=" `travel_history` IS NOT NULL ")
             definitions_list.append(query_definition)
             query_definition = QueryDefinition(index_name="index_name_travel_history_non_leading_middle",
-                                                index_fields=["name", "ALL `travel_history` END", "age"],
-                                                query_template="SELECT {0} FROM %s WHERE `travel_history` IS NOT NULL",
-                                                groups=["array"], index_where_clause=" `travel_history` IS NOT NULL ")
+                                               index_fields=["name", "ALL `travel_history` END", "age"],
+                                               query_template="SELECT {0} FROM %s WHERE `travel_history` IS NOT NULL",
+                                               groups=["array"], index_where_clause=" `travel_history` IS NOT NULL ")
             definitions_list.append(query_definition)
             self.multi_create_index_using_rest(buckets=self.buckets, query_definitions=definitions_list)
             self.sleep(20)
             index_map = self.rest.get_index_id_map()
             for query_definition in definitions_list:
                 for bucket in self.buckets:
-                    doc_list = self.full_docs_list[:len(self.full_docs_list)/2]
+                    doc_list = self.full_docs_list[:len(self.full_docs_list) / 2]
                     index_id = str(index_map[bucket.name][query_definition.index_name]["id"])
                     for data in DATATYPES:
                         self.change_index_field_type(bucket.name, "travel_history",
                                                      doc_list, data, query_definition)
                         actual_result = self.rest.full_table_scan_gsi_index_with_rest(
-                        index_id, body={"stale": "false"})
+                            index_id, body={"stale": "false"})
                         expected_result = self._get_expected_results_for_full_table_scan(
                             query_definition)
                         msg = "Results don't match for index {0}. Actual number: {1}, Expected number: {2}"
@@ -120,13 +207,15 @@ class SecondaryIndexArrayIndexTests(BaseSecondaryIndexingTests):
     def test_create_query_drop_index_on_missing_empty_null_field(self):
         data_types = ["empty", "null"]
         index_field, data_type = self._find_datatype(self.query_definitions[0])
-        doc_list = self.full_docs_list[:len(self.full_docs_list)/2]
+        doc_list = self.full_docs_list[:len(self.full_docs_list) / 2]
         for data_type in data_types:
             definitions_list = []
-            query_definition =  QueryDefinition(index_name="index_name_{0}_duplicate".format(data_type),
-                                                index_fields=["ALL `{0}`".format(index_field)],
-                                                query_template="SELECT {0} FROM %s WHERE `{0}` IS NOT NULL".format(index_field),
-                                                groups=["array"], index_where_clause=" `{0}` IS NOT NULL ".format(index_field))
+            query_definition = QueryDefinition(index_name="index_name_{0}_duplicate".format(data_type),
+                                               index_fields=["ALL `{0}`".format(index_field)],
+                                               query_template="SELECT {0} FROM %s WHERE `{0}` IS NOT NULL".format(
+                                                   index_field),
+                                               groups=["array"],
+                                               index_where_clause=" `{0}` IS NOT NULL ".format(index_field))
             definitions_list.append(query_definition)
             for bucket in self.buckets:
                 for query_definition in definitions_list:
@@ -143,8 +232,8 @@ class SecondaryIndexArrayIndexTests(BaseSecondaryIndexingTests):
                         query_definition)
                     msg = "Results don't match for index {0}. Actual number: {1}, Expected number: {2}"
                     self.assertEqual(sorted(actual_result), sorted(expected_result),
-                                 msg.format(query_definition.index_name,
-                                            len(actual_result), len(expected_result)))
+                                     msg.format(query_definition.index_name,
+                                                len(actual_result), len(expected_result)))
             self.multi_drop_index_using_rest(buckets=self.buckets, query_definitions=definitions_list)
             self.full_docs_list = self.generate_full_docs_list(self.gens_load)
 
@@ -158,7 +247,7 @@ class SecondaryIndexArrayIndexTests(BaseSecondaryIndexingTests):
         for bucket in self.buckets:
             for data in DATATYPES:
                 start = end
-                end = end + len(self.full_docs_list)/len(DATATYPES)
+                end = end + len(self.full_docs_list) / len(DATATYPES)
                 doc_list = self.full_docs_list[start:end]
                 self.change_index_field_type(bucket.name,
                                              "travel_history",
@@ -170,9 +259,9 @@ class SecondaryIndexArrayIndexTests(BaseSecondaryIndexingTests):
         for bucket in self.buckets:
             index_id = str(index_map[bucket.name][query_definition.index_name]["id"])
             actual_result = self.rest.full_table_scan_gsi_index_with_rest(
-                        index_id, body={"stale": "false"})
+                index_id, body={"stale": "false"})
             expected_result = self._get_expected_results_for_full_table_scan(
-                        query_definition)
+                query_definition)
             msg = "Results don't match for index {0}. Actual number: {1}, Expected number: {2}"
             self.assertEqual(sorted(actual_result), sorted(expected_result),
                              msg.format(query_definition.index_name,
@@ -211,10 +300,10 @@ class SecondaryIndexArrayIndexTests(BaseSecondaryIndexingTests):
                     self.run_full_table_scan_using_rest(bucket, query_definition)
 
     def test_array_item_limit(self):
-        query_definition =  QueryDefinition(index_name="index_name_big_values",
-                                                index_fields=["DISTINCT ARRAY t FOR t in bigValues END"],
-                                                query_template="SELECT {0} FROM %s WHERE bigValues IS NOT NULL",
-                                                groups=["array"], index_where_clause=" bigValues IS NOT NULL ")
+        query_definition = QueryDefinition(index_name="index_name_big_values",
+                                           index_fields=["DISTINCT ARRAY t FOR t in bigValues END"],
+                                           query_template="SELECT {0} FROM %s WHERE bigValues IS NOT NULL",
+                                           groups=["array"], index_where_clause=" bigValues IS NOT NULL ")
         self.rest.flush_bucket(self.buckets[0])
         generators = []
         template = '{{"name":"{0}", "age":{1}, "bigValues":{2} }}'
@@ -268,7 +357,7 @@ class SecondaryIndexArrayIndexTests(BaseSecondaryIndexingTests):
                     if doc["_id"] == self.full_docs_list[i]["_id"]:
                         self.full_docs_list[i] = doc
                         continue
-            query_definition.query_template = 'SELECT * FROM %s WHERE ANY t IN `{0}` SATISFIES t = "{1}" END ORDER BY _id'.\
+            query_definition.query_template = 'SELECT * FROM %s WHERE ANY t IN `{0}` SATISFIES t = "{1}" END ORDER BY _id'. \
                 format(index_field, random.choice(FIRST_NAMES))
         if data_type is int:
             for doc in doc_list:
@@ -278,19 +367,19 @@ class SecondaryIndexArrayIndexTests(BaseSecondaryIndexingTests):
                     if doc["_id"] == self.full_docs_list[i]["_id"]:
                         self.full_docs_list[i] = doc
                         continue
-            query_definition.query_template = "SELECT * FROM %s WHERE ANY t IN `{0}` SATISFIES t > {1} END ORDER BY _id".\
+            query_definition.query_template = "SELECT * FROM %s WHERE ANY t IN `{0}` SATISFIES t > {1} END ORDER BY _id". \
                 format(index_field, random.randint(1000000, 9999999))
         if data_type is dict:
             for doc in doc_list:
-                doc[index_field] = [{"first_name" : random.choice(FIRST_NAMES),
+                doc[index_field] = [{"first_name": random.choice(FIRST_NAMES),
                                      "country": random.choice(COUNTRIES)} for i in range(10)]
                 self._update_document(bucket_name, doc["_id"], doc)
                 for i in range(len(self.full_docs_list)):
                     if doc["_id"] == self.full_docs_list[i]["_id"]:
                         self.full_docs_list[i] = doc
                         continue
-            query_definition.query_template = "SELECT * FROM %s WHERE ANY t IN `{0}` SATISFIES t > {1} END ORDER BY _id".\
-                format(index_field, {"first_name" : random.choice(FIRST_NAMES),
+            query_definition.query_template = "SELECT * FROM %s WHERE ANY t IN `{0}` SATISFIES t > {1} END ORDER BY _id". \
+                format(index_field, {"first_name": random.choice(FIRST_NAMES),
                                      "country": random.choice(COUNTRIES)})
         if data_type is "null":
             for doc in doc_list:
@@ -300,7 +389,7 @@ class SecondaryIndexArrayIndexTests(BaseSecondaryIndexingTests):
                     if doc["_id"] == self.full_docs_list[i]["_id"]:
                         self.full_docs_list[i] = doc
                         continue
-            query_definition.query_template = "SELECT * FROM %s WHERE ANY t IN `{0}` SATISFIES t = NULL END ORDER BY _id".\
+            query_definition.query_template = "SELECT * FROM %s WHERE ANY t IN `{0}` SATISFIES t = NULL END ORDER BY _id". \
                 format(index_field)
         if data_type is "empty":
             for doc in doc_list:
@@ -326,7 +415,7 @@ class SecondaryIndexArrayIndexTests(BaseSecondaryIndexingTests):
                     if doc["_id"] == self.full_docs_list[i]["_id"]:
                         self.full_docs_list[i] = doc
                         break
-            query_definition.query_template = 'SELECT * FROM %s WHERE ANY t IN TO_ARRAY(`{0}`) SATISFIES t = "{1}" END ORDER BY _id'.\
+            query_definition.query_template = 'SELECT * FROM %s WHERE ANY t IN TO_ARRAY(`{0}`) SATISFIES t = "{1}" END ORDER BY _id'. \
                 format(index_field, random.choice(FIRST_NAMES))
 
     def _change_array_size(self, array_size):
