@@ -181,7 +181,7 @@ NUM_ERLANG_THREADS = 16
 MIN_KV_QUOTA = 256
 INDEX_QUOTA = 256
 FTS_QUOTA = 512
-EVENTING_QUOTA = 256
+EVENTING_QUOTA = 512
 CBAS_QUOTA = 1024
 """ when we run with small server, it needs to increase cluster quota so that small
     server could have many services in.
