@@ -101,6 +101,11 @@ class BaseRQGTests(BaseTestCase):
             self.use_secondary_index = self.run_query_with_secondary or self.run_explain_with_hints
             self.check_explain_plan = self.input.param("explain_plan", False)
             self.index_limit = self.input.param("index_limit", 5)
+
+            self.advise_server = self.input.advisor
+            self.advise_buckets = ["bucket_01", "bucket_02", "bucket_03", "bucket_04", "bucket_05", "bucket_06", "bucket_07", "bucket_08", "bucket_09", "bucket_10"]
+            self.advise_dict={}
+
             if self.input_rqg_path is not None:
                 self.secondary_index_info_path = self.input_rqg_path+"/index/secondary_index_definitions.txt"
                 self.db_dump_path = self.input_rqg_path+"/db_dump/database_dump.zip"
@@ -259,16 +264,28 @@ class BaseRQGTests(BaseTestCase):
 
     def n1ql_query_runner_wrapper(self, n1ql_query="", server=None, query_params={}, scan_consistency=None, verbose=True):
         if self.use_advisor:
-            self.create_secondary_index(n1ql_query)
+            self.create_secondary_index(n1ql_query=n1ql_query)
         result = self.n1ql_helper.run_cbq_query(query=n1ql_query, server=server, query_params=query_params, scan_consistency=scan_consistency, verbose=verbose)
         return result
+
+    def prepare_advise_query(self, n1ql_query=""):
+        for bucket in self.advise_dict.keys():
+            n1ql_query = n1ql_query.replace(bucket, self.advise_dict[bucket])
+        return n1ql_query
+
+    def translate_index_statement(self, n1ql_query=""):
+        for key in self.advise_dict.keys():
+            n1ql_query = n1ql_query.replace(self.advise_dict[key], key)
+        return n1ql_query
 
     def create_secondary_index(self, n1ql_query=""):
         if self.count_secondary_indexes() >= self.index_limit:
             self.remove_all_secondary_indexes()
         self.n1ql_helper.wait_for_all_indexes_online()
-        advise_result = self.n1ql_helper.run_cbq_query(query="ADVISE " + n1ql_query,
-                                                       server=self.n1ql_server)
+        advise_query = self.prepare_advise_query(n1ql_query=n1ql_query)
+
+        advise_result = self.n1ql_helper.run_cbq_query(query="ADVISE " + advise_query,
+                                                       server=self.advise_server)
         if len(advise_result["results"][0]["advice"]["adviseinfo"]) == 0:
             return
         if "No index recommendation at this time" not in str(
@@ -280,7 +297,8 @@ class BaseRQGTests(BaseTestCase):
                     if index_statement != "":
                         self.n1ql_helper.wait_for_all_indexes_online()
                         try:
-                            self.n1ql_helper.run_cbq_query(index_statement)
+                            prepared_index_statement = self.translate_index_statement(index_statement)
+                            self.n1ql_helper.run_cbq_query(prepared_index_statement)
                             self.n1ql_helper.wait_for_all_indexes_online()
                         except CBQError, ex:
                             if "already exists" in str(ex):
@@ -293,7 +311,8 @@ class BaseRQGTests(BaseTestCase):
                     if index_statement != "":
                         self.n1ql_helper.wait_for_all_indexes_online()
                         try:
-                            self.n1ql_helper.run_cbq_query(index_statement)
+                            prepared_index_statement = self.translate_index_statement(index_statement)
+                            self.n1ql_helper.run_cbq_query(prepared_index_statement)
                             self.n1ql_helper.wait_for_all_indexes_online()
                         except CBQError, ex:
                             if "already exists" in str(ex):
@@ -586,6 +605,7 @@ class BaseRQGTests(BaseTestCase):
             explain_check = False
         finally:
             return {"success": explain_check, "result": message}
+
 
     def _run_basic_crud_test(self, test_data, verification_query, test_case_number, result_queue, failure_record_queue=None, table_name=None):
         self.log.info(" <<<<<<<<<<<<<<<<<<<<<<<<<<<< BEGIN RUNNING TEST {0}  >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>".format(test_case_number))
@@ -1320,6 +1340,13 @@ class BaseRQGTests(BaseTestCase):
                                 self.client._insert_execute_query(insert_sql)
         shutil.rmtree(data_file_path, ignore_errors=True)
 
+    def fill_advise_dict(self, bucket_list=[]):
+        for bucket in bucket_list:
+            if bucket not in self.advise_dict.keys():
+                self.advise_dict[bucket] = self.advise_buckets[0]
+                self.advise_buckets.remove(self.advise_buckets[0])
+
+
     def _setup_and_load_buckets(self):
         # Remove any previous buckets
         if self.skip_setup_cleanup:
@@ -1348,8 +1375,8 @@ class BaseRQGTests(BaseTestCase):
                 new_bucket_list.append(self.database + "_" + bucket)
                 if self.subquery:
                     break
-
         # Create New Buckets
+        self.fill_advise_dict(new_bucket_list)
         self._create_buckets(self.master, new_bucket_list, server_id=None, bucket_size=bucket_size)
         self.log.info("buckets created")
 

@@ -369,9 +369,9 @@ class TestInputParser():
             if option == 'port':
                 server.port = config.get(section, option)
             if option == 'username':
-                server.username = config.get(section, option)
+                server.rest_username = config.get(section, option)
             if option == 'password':
-                server.password = config.get(section, option)
+                server.rest_password = config.get(section, option)
 
         return server
 
