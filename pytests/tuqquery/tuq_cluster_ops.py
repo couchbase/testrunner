@@ -30,6 +30,7 @@ class QueriesOpsTests(QuerySanityTests):
         self.rebalance_out = self.input.param("rebalance_out", False)
         self.num_retries = self.input.param("num_retries", 1)
         self.fail = False
+        self.sleep_time = self.input.param("sleep_time", 10)
 
     def suite_setUp(self):
         super(QueriesOpsTests, self).suite_setUp()
