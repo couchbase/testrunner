@@ -60,7 +60,8 @@ class SecondaryIndexMemdbOomTests(BaseSecondaryIndexingTests):
     def test_plasma_oom_for_disable_persistence(self):
         self.multi_drop_index(query_definitions=self.load_query_definitions)
         doc = {"indexer.plasma.disablePersistence": True}
-        self.rest.set_index_settings(doc)
+        rest = RestConnection(self.oomServer)
+        rest.set_index_settings(doc)
         self.sleep(15)
         self.multi_create_index(buckets=self.buckets,
                                 query_definitions=self.load_query_definitions,

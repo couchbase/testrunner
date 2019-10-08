@@ -237,7 +237,7 @@ class QueryTests(BaseTestCase):
                     count = int(count)
                 shell.disconnect()
                 if count > 0:
-                    self.log.info("===== PANIC OBSERVED IN INDEXER LOGS ON SERVER {0}=====".format(server.ip))
+                    self.fail("===== PANIC OBSERVED IN INDEXER LOGS ON SERVER {0}=====".format(server.ip))
         projectors = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
         if not projectors:
             return None
@@ -254,4 +254,4 @@ class QueryTests(BaseTestCase):
                     count = int(count)
                 shell.disconnect()
                 if count > 0:
-                    self.log.info("===== PANIC OBSERVED IN PROJECTOR LOGS ON SERVER {0}=====".format(server.ip))
+                    self.fail("===== PANIC OBSERVED IN PROJECTOR LOGS ON SERVER {0}=====".format(server.ip))
