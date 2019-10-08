@@ -651,7 +651,7 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
         fts_state_index.index_definition['uuid'] = fts_state_index.get_uuid()
         fts_state_index.update()
 
-        fts_job_index =  self._create_fts_index(index_name="idx_default_fts_job_title", doc_count=2016, source_name='default')
+        #fts_job_index =  self._create_fts_index(index_name="idx_default_fts_job_title", doc_count=2016, source_name='default')
         union_intersect_except = [" union ", " intersect ", " except "]
         test_name = self.input.param("test_name", '')
 
@@ -1257,6 +1257,7 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
         indexed_doc_count = 0
         while indexed_doc_count < doc_count:
             try:
+                self.sleep(10)
                 indexed_doc_count = fts_index.get_indexed_doc_count()
             except KeyError, k:
                 continue
