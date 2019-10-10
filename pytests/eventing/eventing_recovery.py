@@ -45,7 +45,7 @@ class EventingRecovery(EventingBaseTest):
         elif handler_code == 'bucket_op_with_timers':
             self.handler_code = HANDLER_CODE.BUCKET_OPS_WITH_TIMERS
         elif handler_code == 'bucket_op_with_cron_timers':
-            self.handler_code = HANDLER_CODE.BUCKET_OPS_WITH_CRON_TIMERS
+            self.handler_code = HANDLER_CODE.BUCKET_OPS_WITH_CRON_TIMERS_RECOVERY
         elif handler_code == 'n1ql_op_with_timers':
             # index is required for delete operation through n1ql
             self.n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
@@ -82,7 +82,7 @@ class EventingRecovery(EventingBaseTest):
         elif handler_code == 'timer_op_curl_delete':
             self.handler_code = HANDLER_CODE_CURL.TIMER_OP_WITH_CURL_DELETE
         else:
-            self.handler_code = HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE
+            self.handler_code = HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE_RECOVERY
 
     def tearDown(self):
         super(EventingRecovery, self).tearDown()
@@ -173,7 +173,7 @@ class EventingRecovery(EventingBaseTest):
         # Wait for eventing to catch up with all the delete mutations and verify results
         # See MB-30772
         if self.is_sbm:
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2, skip_stats_validation=True)
+            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         else:
             self.verify_eventing_results(self.function_name,0, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
@@ -283,7 +283,7 @@ class EventingRecovery(EventingBaseTest):
     def test_killing_kv_erlang_when_eventing_is_processing_mutations(self):
         kv_node = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=False)
         eventing_node = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
-        body = self.create_save_function_body(self.function_name, self.handler_code)
+        body = self.create_save_function_body(self.function_name, self.handler_code,execution_timeout=30)
         if self.is_curl:
             body['depcfg']['curl'] = []
             body['depcfg']['curl'].append({"hostname": self.hostname, "value": "server", "auth_type": self.auth_type,
