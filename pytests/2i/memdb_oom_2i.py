@@ -209,7 +209,7 @@ class SecondaryIndexMemdbOomTests(BaseSecondaryIndexingTests):
         :return:
         """
         self.assertTrue(self._push_indexer_off_the_cliff(), "OOM Can't be achieved")
-        kv_node = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)[1]
+        kv_node = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)[0]
         self.log.info("Rebalancing KV node {ip} out...".format(ip=kv_node.ip))
         rebalance = self.cluster.async_rebalance(self.servers, [], [kv_node])
         rebalance.result()
@@ -229,7 +229,7 @@ class SecondaryIndexMemdbOomTests(BaseSecondaryIndexingTests):
         :return:
         """
         self.assertTrue(self._push_indexer_off_the_cliff(), "OOM Can't be achieved")
-        kv_node = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)[1]
+        kv_node = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)[0]
         self.log.info("Stopping Couchbase on {0}".format(kv_node.ip))
         remote = RemoteMachineShellConnection(kv_node)
         remote.stop_server()
