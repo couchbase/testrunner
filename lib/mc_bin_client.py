@@ -148,7 +148,6 @@ class MemcachedClient(object):
         assert (magic in (RES_MAGIC_BYTE, REQ_MAGIC_BYTE, ALT_RES_MAGIC_BYTE, ALT_REQ_MAGIC_BYTE)), "Got magic: 0x%x" % magic
 
         cmd = 0
-        frameextralen = 0
         keylen = 0
         extralen = 0
         dtype = 0
@@ -157,7 +156,7 @@ class MemcachedClient(object):
         opaque = 0
         cas = 0
         if magic == ALT_RES_MAGIC_BYTE or magic == ALT_REQ_MAGIC_BYTE:
-            magic, cmd, frameextralen, keylen, extralen, dtype, errcode, remaining, opaque, cas = \
+            magic, cmd,  keylen, extralen, dtype, errcode, remaining, opaque, cas = \
                 struct.unpack(ALT_RES_PKT_FMT, response)
         else:
             magic, cmd, keylen, extralen, dtype, errcode, remaining, opaque, cas = \
@@ -175,10 +174,10 @@ class MemcachedClient(object):
             else:
                 raise exceptions.EOFError("Timeout waiting for socket recv. from {0}".format(self.host))
 
-        return cmd, errcode, opaque, cas, keylen, extralen, dtype, rv, frameextralen
+        return cmd, errcode, opaque, cas, keylen, extralen, dtype, rv
 
     def _handleKeyedResponse(self, myopaque):
-        cmd, errcode, opaque, cas, keylen, extralen, dtype, rv, frameextralen = self._recvMsg()
+        cmd, errcode, opaque, cas, keylen, extralen, dtype, rv = self._recvMsg()
         assert myopaque is None or opaque == myopaque, \
             "expected opaque %x, got %x" % (myopaque, opaque)
         if errcode != 0:
@@ -189,10 +188,10 @@ class MemcachedClient(object):
                 msg = "{name} : {desc} : {rv}".format(rv=rv, **err)
 
             raise MemcachedError(errcode,  msg)
-        return cmd, opaque, cas, keylen, extralen, rv, frameextralen
+        return cmd, opaque, cas, keylen, extralen, rv
 
     def _handleSingleResponse(self, myopaque):
-        cmd, opaque, cas, keylen, extralen, data, frameextralen = self._handleKeyedResponse(myopaque)
+        cmd, opaque, cas, keylen, extralen, data = self._handleKeyedResponse(myopaque)
         return opaque, cas, data
 
     def _doCmd(self, cmd, key, val, extraHeader='', cas=0, collection=None,extended_meta_data='',extraHeaderLength=None):
@@ -316,19 +315,19 @@ class MemcachedClient(object):
 
 
     # doMeta - copied from the mc bin client on github
-    def _doMetaCmd(self, cmd, key, value, cas, exp, flags, seqno, remote_cas, options, meta_len, collection):
+    def _doMetaCmd(self, cmd, key, value, cas, exp, flags, seqno, remote_cas, options, collection):
         #extra = struct.pack('>IIQQI', flags, exp, seqno, remote_cas, 0)
         exp = 0
-        extra = struct.pack('>IIQQIH', flags, exp, seqno, remote_cas, options, meta_len)
+        extra = struct.pack('>IIQQI', flags, exp, seqno, remote_cas, options)
 
         collection = self.collection_name(collection)
         return self._doCmd(cmd, key, value, extra, cas, collection)
 
-    def setWithMeta(self, key, value, exp, flags, seqno, remote_cas, meta_len, options=2, collection=None):
+    def setWithMeta(self, key, value, exp, flags, seqno, remote_cas, options=2, collection=None):
         """Set a value and its meta data in the memcached server."""
         collection = self.collection_name(collection)
         return self._doMetaCmd(memcacheConstants.CMD_SET_WITH_META,
-                               key, value, 0, exp, flags, seqno, remote_cas, options, meta_len, collection)
+                               key, value, 0, exp, flags, seqno, remote_cas, options, collection)
 
     def setWithMetaInvalid(self, key, value, exp, flags, seqno, remote_cas, options=2, collection=None):
         """Set a value with meta that can be an invalid number memcached server."""
@@ -355,7 +354,7 @@ class MemcachedClient(object):
         self._set_vbucket(key, -1)
 
         return self._doCmd(memcacheConstants.CMD_SET_WITH_META, key, value,
-                struct.pack(memcacheConstants.META_EXTRA_FMT, flags, exp,  SEQNO, cas, META_LEN),collection=collection)
+                struct.pack(memcacheConstants.META_EXTRA_FMT, flags, exp,  SEQNO, cas),collection=collection)
 
 
     # set with meta using the LWW conflict resolution CAS
@@ -375,7 +374,7 @@ class MemcachedClient(object):
 
         return self._doCmd(memcacheConstants.CMD_DEL_WITH_META, key, '',
                 struct.pack('>IIQQI', flags, exp,  SEQNO, cas, memcacheConstants.FORCE_ACCEPT_WITH_META_OPS),collection=collection)
-                #struct.pack(memcacheConstants.META_EXTRA_FMT, flags, exp,  SEQNO, cas, META_LEN))
+                #struct.pack(memcacheConstants.META_EXTRA_FMT, flags, exp,  SEQNO, cas))
 
 
 
@@ -772,7 +771,7 @@ class MemcachedClient(object):
         done = False
         rv = {}
         while not done:
-            cmd, opaque, cas, klen, extralen, data, frameextralen = self._handleKeyedResponse(None)
+            cmd, opaque, cas, klen, extralen, data = self._handleKeyedResponse(None)
             if klen:
                 rv[data[0:klen]] = data[klen:]
             else:
