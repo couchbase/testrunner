@@ -472,7 +472,7 @@ class SecondaryIndexMemdbOomTests(BaseSecondaryIndexingTests):
         return int(content['indexMemoryQuota'])
 
     def _reboot_node(self, node):
-        self.self.log.info("Rebooting node '{0}'....".format(node.ip))
+        self.log.info("Rebooting node '{0}'....".format(node.ip))
         shell = RemoteMachineShellConnection(node)
         if shell.extract_remote_info().type.lower() == 'windows':
             o, r = shell.execute_command("shutdown -r -f -t 0")
