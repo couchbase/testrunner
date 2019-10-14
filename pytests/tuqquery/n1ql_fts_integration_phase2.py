@@ -895,10 +895,10 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
         # inner sort fields: single field, multiple fields, score, id
         # missing values: first, last
         # mode: min, max, offset
-        inner_sorting_field_values = ["", "city"]
+        inner_sorting_field_values = [""]
         inner_sorting_order_values = ["", "min", "max"]
         inner_offset_values = ["", "10"]
-        outer_sorting_field_values = ["", "city", "name"]
+        outer_sorting_field_values = ["", "meta().id"]
         outer_sorting_order_values = ["", "asc", "desc"]
         outer_offset_values = ["", "10"]
 
@@ -932,7 +932,7 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
                                 search_results = self.run_cbq_query(search_query)['results']
                                 if outer_sort_expression == "":
                                     if inner_sort_expression != "":
-                                        fts_request_str = "{\"query\":{\"field\": \"state\", \"match\":\"California\"}, \"size\":1000,"+inner_sort_expression+"}"
+                                        fts_request_str = "{\"query\":{\"field\": \"state\", \"match\":\"California\"}, \"size\":1000 "+inner_sort_expression+"}"
                                     else:
                                         fts_request_str = "{\"query\":{\"field\": \"state\", \"match\":\"California\"}, \"size\":10000}"
                                     fts_request = json.loads(fts_request_str)
@@ -1079,7 +1079,7 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
             },
             "use_hash_keys_build_l": {
                 "query": "select * from `beer-sample` l join `beer-sample` r use hash(build) keys [\"512_brewing_company\"] on l.city=r.city where search(l, \"city:Austin\")",
-                "expected_result": "negative"
+                "expected_result": "positive"
             },
             "use_hash_keys_build_r": {
                 "query": "select * from `beer-sample` l join `beer-sample` r use hash(build) keys [\"512_brewing_company\"] on l.city=r.city where search(r, \"city:Austin\")",
@@ -1087,7 +1087,7 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
             },
             "use_hash_keys_probe_l": {
                 "query": "select * from `beer-sample` l join `beer-sample` r use hash(probe) keys [\"512_brewing_company\"] on l.city=r.city where search(l, \"city:Austin\")",
-                "expected_result": "negative"
+                "expected_result": "positive"
             },
             "use_hash_keys_probe_r": {
                 "query": "select * from `beer-sample` l join `beer-sample` r use hash(probe) keys [\"512_brewing_company\"] on l.city=r.city where search(r, \"city:Austin\")",
@@ -1095,7 +1095,7 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
             },
             "lookup_l": {
                 "query": "select * from `beer-sample` l join `beer-sample` r on keys l.brewery_id where search(l, \"city:Austin\")",
-                "expected_result": "negative"
+                "expected_result": "positive"
             },
             "lookup_r": {
                 "query": "select * from `beer-sample` l join `beer-sample` r on keys l.brewery_id  where search(r, \"city:Austin\")",
@@ -1103,7 +1103,7 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
             },
             "index_l": {
                 "query": "select * from `beer-sample` l join `beer-sample` r on key r.brewery_id for l where search(l, \"city:Austin\")",
-                "expected_result": "negative"
+                "expected_result": "positive"
             },
             "index_r": {
                 "query": "select * from `beer-sample` l join `beer-sample` r on key r.brewery_id for l where search(r, \"city:Austin\")",
