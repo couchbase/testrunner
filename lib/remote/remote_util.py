@@ -1878,8 +1878,7 @@ class RemoteMachineShellConnection:
     """
     def install_server(self, build, startserver=True, path='/tmp', vbuckets=None,
                        swappiness=10, force=False, openssl='', upr=None, xdcr_upr=None,
-                       fts_query_limit=None, cbft_env_options=None, enable_ipv6=None,
-                       debug_logs=True):
+                       fts_query_limit=None, cbft_env_options=None, debug_logs=True):
 
         log.info('*****install server ***')
         server_type = None
@@ -2111,15 +2110,6 @@ class RemoteMachineShellConnection:
                 success &= self.log_command_output(output, error, track_words)
                 startserver = True
 
-            if enable_ipv6:
-                """ dist_cfg contains {dist_type,inet_tcp}. in IPv4.
-                    We need to change it to {dist_type,inet6_tcp}. in IPv6 server
-                """
-                output, error = self.execute_command("echo '{{dist_type,inet6_tcp}}.' > {0}"\
-                                                                  .format(LINUX_DIST_CONFIG))
-                success &= self.log_command_output(output, error, track_words)
-                startserver = True
-
             # skip output: [WARNING] couchbase-server is already started
             # dirname error skipping for CentOS-6.6 (MB-12536)
             track_words = ("error", "fail", "dirname")
@@ -2169,19 +2159,14 @@ class RemoteMachineShellConnection:
 
     def install_server_win(self, build, version, startserver=True,
                            vbuckets=None, fts_query_limit=None,
-                           enable_ipv6=None, windows_msi=False, cbft_env_options=None):
+                           windows_msi=False, cbft_env_options=None):
 
 
         log.info('******start install_server_win ********')
         if windows_msi:
             self.remove_win_backup_dir()
             self.remove_win_collect_tmp()
-            if enable_ipv6:
-                output, error = self.execute_command("cd /cygdrive/c/tmp;"
-                                                 "msiexec /i {0}.msi USE_IPV6=true /qn "\
-                                                    .format(version))
-            else:
-                output, error = self.execute_command("cd /cygdrive/c/tmp;"
+            output, error = self.execute_command("cd /cygdrive/c/tmp;"
                                                      "msiexec /i {0}.msi /qn " \
                                                      .format(version))
             self.log_command_output(output, error)
@@ -2193,93 +2178,8 @@ class RemoteMachineShellConnection:
                     ipv6=enable_ipv6
                 )
             return len(error) == 0
-        remote_path = None
-        success = True
-        track_words = ("warning", "error", "fail")
-        if build.name.lower().find("membase") != -1:
-            remote_path = testconstants.WIN_MB_PATH
-            abbr_product = "mb"
-        elif build.name.lower().find("couchbase") != -1:
-            remote_path = WIN_CB_PATH
-            abbr_product = "cb"
-
-        if remote_path is None:
-            raise Exception("its not a membase or couchbase?")
-        self.extract_remote_info()
-        log.info('deliverable_type : {0}'.format(self.info.deliverable_type))
-        if self.info.type.lower() == 'windows':
-            task = "install"
-            bat_file = "install.bat"
-            dir_paths = ['/cygdrive/c/automation', '/cygdrive/c/tmp']
-            capture_iss_file = ""
-            # build = self.build_url(params)
-            self.create_multiple_dir(dir_paths)
-            self.copy_files_local_to_remote('resources/windows/automation', \
-                                                    '/cygdrive/c/automation')
-            #self.create_windows_capture_file(task, abbr_product, version)
-            capture_iss_file = self.modify_bat_file('/cygdrive/c/automation', \
-                                             bat_file, abbr_product, version, task)
-            self.stop_schedule_tasks()
-            self.remove_win_backup_dir()
-            self.remove_win_collect_tmp()
-            log.info('sleep for 5 seconds before running task '
-                                'schedule uninstall on {0}'.format(self.ip))
-
-            """ the code below need to remove when bug MB-11985
-                                                            is fixed in 3.0.1 """
-            if task == "install" and (version[:5] in COUCHBASE_VERSION_2 or \
-                                      version[:5] in COUCHBASE_FROM_VERSION_3):
-                log.info("due to bug MB-11985, we need to delete below registry "
-                                        "before install version 2.x.x and 3.x.x")
-                output, error = self.execute_command("reg delete \
-                         'HKLM\Software\Wow6432Node\Ericsson\Erlang\ErlSrv' /f ")
-                self.log_command_output(output, error)
-            """ end remove code """
-
-            """ run task schedule to install cb server """
-            output, error = self.execute_command("cmd /c schtasks /run /tn installme")
-            success &= self.log_command_output(output, error, track_words)
-            file_check = 'VERSION.txt'
-            self.wait_till_file_added(remote_path, file_check, timeout_in_seconds=600)
-            if version[:3] != "2.5":
-                ended = self.wait_till_process_ended(build.product_version[:10])
-                if not ended:
-                    sys.exit("*****  Node %s failed to install  *****" % (self.ip))
-            if version[:3] == "2.5":
-                self.sleep(20, "wait for server to start up completely")
-            else:
-                self.sleep(10, "wait for server to start up completely")
-            output, error = self.execute_command("rm -f *-diag.zip")
-            self.log_command_output(output, error, track_words)
-            if vbuckets and int(vbuckets) != 1024:
-                self.set_vbuckets_win(build.version_number, vbuckets)
-            if fts_query_limit:
-                self.set_fts_query_limit_win(
-                    build = version,
-                    name="CBFT_ENV_OPTIONS",
-                    value="bleveMaxResultWindow={0}".format(int(fts_query_limit)),
-                    ipv6=enable_ipv6
-                )
-
-            if "4.0" in version[:5]:
-                """  remove folder if it exists in work around of bub MB-13046 """
-                self.execute_command("rm -rf \
-                /cygdrive/c/Jenkins/workspace/sherlock-windows/couchbase/install/etc/security")
-                """ end remove code for bug MB-13046 """
-            if capture_iss_file:
-                    log.info("****Delete {0} in windows automation directory" \
-                                                          .format(capture_iss_file))
-                    output, error = self.execute_command("rm -f \
-                               /cygdrive/c/automation/{0}".format(capture_iss_file))
-                    self.log_command_output(output, error)
-                    log.info("Delete {0} in slave resources/windows/automation dir" \
-                             .format(capture_iss_file))
-                    os.system("rm -f resources/windows/automation/{0}" \
-                                                          .format(capture_iss_file))
-            self.delete_file(WIN_TMP_PATH, build.product_version[:10] + ".exe")
-            log.info('***** done install_server_win *****')
-            return success
-
+        else:
+            raise Exception("Windows does not support this file type")
 
     def install_server_via_repo(self, deliverable_type, cb_edition, remote_client):
         success = True

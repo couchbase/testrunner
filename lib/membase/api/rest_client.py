@@ -4716,15 +4716,33 @@ class RestConnection(object):
                 return user
         return {}
 
-    '''
-    Update IP version on server.
-    afamily: The value must be one of the following: [ipv4,ipv6] 
-    '''
-    def set_ip_version(self, afamily='ipv4'):
-        params = urllib.urlencode({'afamily': afamily})
-        api = "%snode/controller/setupNetConfig" % (self.baseUrl)
+    """ From 6.5.0, enable IPv6 on cluster/node needs 2 settings
+        default is set to IPv6
+        We need to disable auto failover first, then set network version
+        Then enable autofaiover again. """
+    def enable_ip_version(self, afamily='ipv6'):
+        log.info("Start enable {0} on this node {1}".format(afamily, self.baseUrl))
+        self.update_autofailover_settings(False, 60)
+        params = urllib.urlencode({'afamily': afamily,
+                                   'nodeEncryption': 'off'})
+        api = "{0}node/controller/enableExternalListener".format(self.baseUrl)
         status, content, header = self._http_request(api, 'POST', params)
-        return status, content
+        if status:
+            params = urllib.urlencode({'afamily': afamily,
+                                       'nodeEncryption': 'off'})
+            api = "{0}node/controller/setupNetConfig".format(self.baseUrl)
+            status, content, header = self._http_request(api, 'POST', params)
+            if status:
+                log.info("Done enable {0} on this node {1}".format(afamily, self.baseUrl))
+            else:
+                log.error("Failed to set 'setupNetConfig' on this node {0}"
+                                                    .format(self.baseUrl))
+                raise Exception(content)
+        else:
+            log.error("Failed to set 'enableExternalListener' on this node {0}"
+                                                         .format(self.baseUrl))
+            raise Exception(content)
+        self.update_autofailover_settings(True, 60)
 
     # These methods are added for Auto-Rebalance On Failure tests
     def set_retry_rebalance_settings(self, body):

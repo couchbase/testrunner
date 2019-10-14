@@ -515,6 +515,7 @@ class CouchbaseServerInstaller(Installer):
                     RemoteUtilHelper.use_hostname_for_server_settings(server)
 
                 if params.get('enable_ipv6', 0):
+                    rest.enable_ip_version()
                     status, content = RestConnection(server).rename_node(
                         hostname=server.ip.replace('[', '').replace(']', ''))
                     if status:
@@ -753,7 +754,6 @@ class CouchbaseServerInstaller(Installer):
                                        vbuckets=vbuckets,
                                        fts_query_limit=fts_query_limit,
                                        cbft_env_options=cbft_env_options,
-                                       enable_ipv6=enable_ipv6,
                                        windows_msi=self.msi )
             else:
                 downloaded = remote_client.download_build(build)
@@ -770,7 +770,6 @@ class CouchbaseServerInstaller(Installer):
                                          openssl=openssl, upr=upr, xdcr_upr=xdcr_upr,
                                          fts_query_limit=fts_query_limit,
                                          cbft_env_options= cbft_env_options,
-                                         enable_ipv6=enable_ipv6,
                                          debug_logs=debug_logs)
                     log.info('wait 5 seconds for Couchbase server to start')
                     time.sleep(5)
