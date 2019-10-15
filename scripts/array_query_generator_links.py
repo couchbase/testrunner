@@ -375,7 +375,7 @@ class ArrayGeneratorLinks(object):
 					cond_btw = self.betweenclause(t2, idxfield, alias)
 					array_condition.append(cond_btw)
 					# Like cluase needs to be on a string field
-					if idxfield != "memid" and idxfield != "id" and idxfield != "Country" and idxfield != "occur" and idxfield != "day" and idxfield != "mon" and idxfield != "year":
+					if idxfield != "memid" and idxfield != "id" and idxfield != "Country" and idxfield != "occur" and idxfield != "day" and idxfield != "mon" and idxfield != "year" and idxfield != "validated":
 						cond_like = self.likeclause_leading(t2, idxfield, alias)
 						array_condition.append(cond_like)
 					idx2 = random.randint(0, len(objectElements[t2]) - 1)

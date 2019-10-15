@@ -101,15 +101,18 @@ class QueryArrayQueryTests(QueryTests):
             try:
                 self.log.info("=" * 50 + " Running Query %s " % str(x) + "=" * 50)
                 # Get the covering index required to run the query (we want to test optimized query paths
-                advise_result = self.run_cbq_query(query= "advise " + query, server=self.advisor_node, username=self.rest.username, password= self.rest.password)
+                advise_query = "advise " + query
+                advise_query = advise_query.replace("`travel-sample`", "bucket_01")
+                advise_result = self.run_cbq_query(query= advise_query, server=self.advisor_node, username=self.rest.username, password= self.rest.password)
                 required_index = advise_result['results'][0]['advice']['adviseinfo'][0]['recommended_indexes']['covering_indexes'][0]['index_statement']
             except Exception as e:
                 # Sometimes the advisor will not advise a covering index, so in this case we need to grab a different index recommendation
                 if str(e) == "'covering_indexes'":
-                    advise_result = self.run_cbq_query(query="advise " + query, server=self.advisor_node, username=self.rest.username, password= self.rest.password)
+                    advise_result = self.run_cbq_query(query=advise_query, server=self.advisor_node, username=self.rest.username, password= self.rest.password)
                     required_index = advise_result['results'][0]['advice']['adviseinfo'][0]['recommended_indexes']['indexes'][0]['index_statement']
             try:
                 if required_index:
+                    required_index = required_index.replace("bucket_01", "travel-sample")
                     self.run_cbq_query(query=required_index)
                     self.wait_for_all_indexes_online()
                     index_name = required_index.split("INDEX")[1].split("ON")[0].strip()
@@ -225,8 +228,6 @@ class QueryArrayQueryTests(QueryTests):
         # Execute queries sequentially and compare against analytics results, capture results of comparison
         for query in final_query_list:
             # Generate primary_index query we wish to run
-            split_query = query.split("WHERE")
-            primary_index_query= split_query[0] + "USE INDEX (`#primary`) WHERE" + split_query[1]
             query = query.replace("b.", "b.bdayinfo.")
             query = query.replace("Number", "`Number`")
             query = query.replace("E.Emails", "E")
@@ -234,20 +235,25 @@ class QueryArrayQueryTests(QueryTests):
             query = query.replace("p.prefixes", "p")
             query = query.replace("last", "`last`")
             query = query.replace("first", "`first`")
+            split_query = query.split("WHERE")
+            primary_index_query= split_query[0] + "USE INDEX (`#primary`) WHERE" + split_query[1]
             required_index = ''
             cbas_query = ''
             try:
                 self.log.info("=" * 50 + " Running Query %s " % str(x) + "=" * 50)
                 # Get the covering index required to run the query (we want to test optimized query paths
-                advise_result = self.run_cbq_query(query= "advise " + query, server=self.advisor_node, username=self.rest.username, password= self.rest.password)
+                advise_query = "advise " + query
+                advise_query = advise_query.replace("default", "bucket_01")
+                advise_result = self.run_cbq_query(query= advise_query, server=self.advisor_node, username=self.rest.username, password= self.rest.password)
                 required_index = advise_result['results'][0]['advice']['adviseinfo'][0]['recommended_indexes']['covering_indexes'][0]['index_statement']
             except Exception as e:
                 # Sometimes the advisor will not advise a covering index, so in this case we need to grab a different index recommendation
                 if str(e) == "'covering_indexes'":
-                    advise_result = self.run_cbq_query(query="advise " + query, server=self.advisor_node, username=self.rest.username, password= self.rest.password)
+                    advise_result = self.run_cbq_query(query=advise_query, server=self.advisor_node, username=self.rest.username, password= self.rest.password)
                     required_index = advise_result['results'][0]['advice']['adviseinfo'][0]['recommended_indexes']['indexes'][0]['index_statement']
             try:
                 if required_index:
+                    required_index = required_index.replace("bucket_01", "default")
                     self.run_cbq_query(query=required_index)
                     self.wait_for_all_indexes_online()
                     index_name = required_index.split("INDEX")[1].split("ON")[0].strip()
