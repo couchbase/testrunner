@@ -1113,10 +1113,6 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
                 "query": "select * from `beer-sample` l join `beer-sample` r on l.brewery_id in r.code where search(l, \"city:Austin\")",
                 "expected_result": "positive"
             },
-            "in_r": {
-                "query": "select * from `beer-sample` l join `beer-sample` r on l.brewery_id in r.code where search(r, \"city:Austin\")",
-                "expected_result": "negative"
-            },
             "any_satisfies_l": {
                 "query": "select * from `beer-sample` l join `beer-sample` r on l.address=r.address and any v in r.address satisfies (v='563 Second Street') end where search(l, \"city:Austin\")",
                 "expected_result": "positive"
