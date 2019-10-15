@@ -256,9 +256,26 @@ class EventingTools(EventingBaseTest, EnterpriseBackupRestoreBase, NewUpgradeBas
                                      "SUCCESS: Events imported",
                                      file_name="Function_396275055_test_export_function.json")
         # deploy the function
-        self._couchbase_cli_eventing(eventing_node, "Function_396275055_test_export_function", "deploy",
+        self._couchbase_cli_eventing(eventing_node, "Function_396275055_test_export_function", "deploy --boundary from-everything",
                                      "SUCCESS: Request to deploy the function was accepted")
+        self.wait_for_handler_state("Function_396275055_test_export_function","deployed")
+        # verify result
         self.verify_eventing_results("Function_396275055_test_export_function", self.docs_per_day * 2016,
+                                     skip_stats_validation=True)
+        # pause function
+        self._couchbase_cli_eventing(eventing_node, "Function_396275055_test_export_function",
+                                     "pause",
+                                     "SUCCESS: Function was paused")
+        self.wait_for_handler_state("Function_396275055_test_export_function", "paused")
+        # delete all documents
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size, op_type='delete')
+        # resume function
+        self._couchbase_cli_eventing(eventing_node, "Function_396275055_test_export_function",
+                                     "resume", "SUCCESS: Function was resumed")
+        self.wait_for_handler_state("Function_396275055_test_export_function", "deployed")
+        # verify result
+        self.verify_eventing_results("Function_396275055_test_export_function", 0,
                                      skip_stats_validation=True)
         # list the function
         self._couchbase_cli_eventing(eventing_node, "Function_396275055_test_export_function", "list",
@@ -284,7 +301,7 @@ class EventingTools(EventingBaseTest, EnterpriseBackupRestoreBase, NewUpgradeBas
         # undeploy the function
         self._couchbase_cli_eventing(eventing_node, "Function_396275055_test_export_function", "undeploy",
                                      "SUCCESS: Request to undeploy the function was accepted")
-        self.sleep(120)
+        self.wait_for_handler_state("Function_396275055_test_export_function","undeployed")
         # delete the function
         self._couchbase_cli_eventing(eventing_node, "Function_396275055_test_export_function", "delete",
                                      "SUCCESS: Request to delete the function was accepted")
