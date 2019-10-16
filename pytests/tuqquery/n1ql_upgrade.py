@@ -49,9 +49,9 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
             self.user_xattr_data = []
             self.meta_ids = []
         if self.feature == "curl-whitelist":
-            self.google_error_msg = "Errorevaluatingprojection.-cause:URLendpointisn'twhitelisted" \
+            self.google_error_msg = "Errorevaluatingprojection.-cause:URLendpointisntwhitelisted" \
                                     "https://maps.googleapis.com/maps/api/geocode/json."
-            self.jira_error_msg ="Errorevaluatingprojection.-cause:URLendpointisn'twhitelistedhttps://jira.atlassian." \
+            self.jira_error_msg ="Errorevaluatingprojection.-cause:URLendpointisntwhitelistedhttps://jira.atlassian." \
                                  "com/rest/api/latest/issue/JRA-9.PleasemakesuretowhitelisttheURLontheUI."
             self.cbqpath = '%scbq' % self.path + " -e %s:%s -q -u %s -p %s" \
                                                  % (self.master.ip, self.n1ql_port, self.rest.username, self.rest.password)
