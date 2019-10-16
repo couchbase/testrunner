@@ -3125,7 +3125,7 @@ class RemoteMachineShellConnection:
         output = re.sub('\s+', '', output)
         return (output)
 
-    def execute_command(self, command, info=None, debug=True, use_channel=False):
+    def execute_command(self, command, info=None, debug=True, use_channel=False, timeout=600):
         if getattr(self, "info", None) is None and info is not None :
             self.info = info
         else:
@@ -3137,7 +3137,7 @@ class RemoteMachineShellConnection:
         if self.use_sudo:
             command = "sudo " + command
 
-        return self.execute_command_raw(command, debug=debug, use_channel=use_channel)
+        return self.execute_command_raw(command, debug=debug, use_channel=use_channel, timeout=timeout)
 
     def execute_command_raw(self, command, debug=True, use_channel=False, timeout=600):
         if debug:
