@@ -232,10 +232,12 @@ class FailoverTests(FailoverBaseTest):
                 self.rest.add_back_node(node.id)
 
         # Doc_mutation before triggering rebalance
-        tasks = self._async_load_all_buckets(
-            self.master, self.gen_update, "update", 0)
-        for task in tasks:
-            task.result()
+        if self.flusher_batch_split_trigger and \
+                self.num_replicas >= self.num_failed_nodes:
+            tasks = self._async_load_all_buckets(
+                self.master, self.gen_update, "update", 0)
+            for task in tasks:
+                task.result()
 
         self.sleep(20, "After failover before invoking rebalance...")
         self.rest.rebalance(otpNodes=[node.id for node in self.nodes],
