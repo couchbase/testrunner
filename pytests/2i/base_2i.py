@@ -860,23 +860,23 @@ class BaseSecondaryIndexingTests(QueryTests):
             for index_info in index_status.values():
                 for idx_name in index_info.keys():
                     if idx_name == index_name:
-                        for index_state in index_info.values():
-                            if defer_build:
-                                if index_state["status"] == "Created":
-                                    check = True
-                                else:
-                                    check = False
-                                    time.sleep(1)
-                                    next_time = time.time()
-                                    break
+                        index_state = index_info[idx_name]
+                        if defer_build:
+                            if index_state["status"] == "Created":
+                                check = True
                             else:
-                                if index_state["status"] == "Ready":
-                                    check = True
-                                else:
-                                    check = False
-                                    time.sleep(1)
-                                    next_time = time.time()
-                                    break
+                                check = False
+                                time.sleep(1)
+                                next_time = time.time()
+                                break
+                        else:
+                            if index_state["status"] == "Ready":
+                                check = True
+                            else:
+                                check = False
+                                time.sleep(1)
+                                next_time = time.time()
+                                break
             check = check or (next_time - init_time > timeout)
         return check
 
