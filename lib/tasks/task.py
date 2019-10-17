@@ -126,7 +126,9 @@ class NodeInitializeTask(Task):
                 self.set_exception(error)
                 return
         info = Future.wait_until(lambda: rest.get_nodes_self(),
-                                 lambda x: x.memoryTotal > 0, 10)
+                                 lambda x: x.memoryTotal > 0,
+                                 timeout_secs=60, interval_time=0.1,
+                                 exponential_backoff=False)
         self.log.info("server: %s, nodes/self: %s", self.server, info.__dict__)
 
         username = self.server.rest_username
