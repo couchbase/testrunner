@@ -414,7 +414,7 @@ class QueriesOpsTests(QuerySanityTests):
             thread1.join()
             self.assertFalse(self.fail, "Queries did not recover")
         except Exception as e:
-            self.log.error(str(e))
+            self.assertFalse(True, str(e))
         finally:
             if self.stop_source or self.stop_server:
                 remote.start_server()
@@ -424,6 +424,7 @@ class QueriesOpsTests(QuerySanityTests):
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init+1],
             [], [self.servers[0]])
             rebalance.result()
+            self.sleep(60)
             rebalance = self.cluster.async_rebalance(self.servers[1:self.nodes_init+1],
             [self.servers[0]], [], services =['kv,n1ql,index'])
             rebalance.result()
@@ -441,7 +442,7 @@ class QueriesOpsTests(QuerySanityTests):
             thread1.join()
             self.assertFalse(self.fail, "Queries did not recover")
         except Exception as e:
-            self.log.error(str(e))
+            self.assertFalse(True, str(e))
         finally:
             self.stop_firewall_on_node(self.servers[(self.nodes_init)])
             self.sleep(300)
@@ -495,7 +496,7 @@ class QueriesOpsTests(QuerySanityTests):
             thread1.join()
             self.assertFalse(self.fail, "Queries failed")
         except Exception as e:
-            self.log.error(str(e))
+            self.assertFalse(True, str(e))
 
 
     def test_swap_rebalance_nodes(self):
@@ -531,7 +532,7 @@ class QueriesOpsTests(QuerySanityTests):
             thread1.join()
             self.assertFalse(self.fail, "Queries failed")
         except Exception as e:
-            self.log.error(str(e))
+            self.assertFalse(True, str(e))
 
 
     def test_swap_rebalance_kv_n1ql_index(self):
@@ -550,7 +551,7 @@ class QueriesOpsTests(QuerySanityTests):
             thread1.join()
             self.assertFalse(self.fail, "Queries failed")
         except Exception as e:
-            self.log.error(str(e))
+            self.assertFalse(True, str(e))
 
 ###########################################################################################################
     def test_prepared_with_incr_rebalance_in(self):

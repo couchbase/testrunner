@@ -3124,7 +3124,7 @@ class QueryTests(BaseTestCase):
 #
 ##############################################################################################
 
-    def run_queries_until_timeout(self,timeout=120):
+    def run_queries_until_timeout(self,timeout=300):
         self.log.info("Running queries for %s seconds to ensure no issues" % timeout)
         init_time = time.time()
         check = False
