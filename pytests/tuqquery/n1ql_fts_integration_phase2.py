@@ -277,13 +277,13 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
 
         for option_val in test_cases[test_name]:
             self._create_fts_index(index_name='idx_beer_sample_fts', doc_count=7303, source_name='beer-sample')
-            n1ql_query = "select meta().id from `beer-sample` where search(`beer-sample`, {\"query\":{\"field\": \"state\", \"match\":\"California\"}, \"size\": 10000, \"sort\": [{\"by\":\"field\",\"field\":\"name\",\"mode\":\"max\",\"missing\":\"last\"}]}, {\""+test_name+"\": "+str(option_val)+"})"
+            n1ql_query = "select meta().id from `beer-sample` where search(`beer-sample`, {\"query\":{\"field\": \"state\", \"match\":\"California\"}, \"size\": 10000, \"sort\": [\"_id\"]}, {\""+test_name+"\": "+str(option_val)+"})"
             if test_name == "size":
-                n1ql_query = "select meta().id from `beer-sample` where search(`beer-sample`, {\"query\":{\"field\": \"state\", \"match\":\"California\"}, \"sort\": [{\"by\":\"field\",\"field\":\"name\",\"mode\":\"max\",\"missing\":\"last\"}], \""+test_name+"\":"+ str(option_val)+"})"
+                n1ql_query = "select meta().id from `beer-sample` where search(`beer-sample`, {\"query\":{\"field\": \"state\", \"match\":\"California\"}, \"sort\": [\"_id\"], \""+test_name+"\":"+ str(option_val)+"})"
             if test_name == 'size':
-                fts_request_str = "{\"query\":{\"field\": \"state\", \"match\":\"California\"}, \"size\":"+str(option_val)+ ", \"sort\": [{\"by\":\"field\",\"field\":\"name\",\"mode\":\"max\",\"missing\":\"last\"}]}"
+                fts_request_str = "{\"query\":{\"field\": \"state\", \"match\":\"California\"}, \"size\":"+str(option_val)+ ", \"sort\": [\"_id\"]}"
             else:
-                fts_request_str = "{\"query\":{\"field\": \"state\", \"match\":\"California\"}, \"sort\": [{\"by\":\"field\",\"field\":\"name\",\"mode\":\"max\",\"missing\":\"last\"}], \"size\":10000, \""+test_name+"\":"+str(option_val)+"}"
+                fts_request_str = "{\"query\":{\"field\": \"state\", \"match\":\"California\"}, \"sort\": [\"_id\"], \"size\":10000, \""+test_name+"\":"+str(option_val)+"}"
             fts_request = json.loads(fts_request_str)
             n1ql_results = self.run_cbq_query(n1ql_query)['results']
             total_hits, hits, took, status = \
@@ -709,9 +709,9 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
                 "expected_result": "success"
             },
             "named_prepared_option_settings": {
-                "prepared": "select meta().id from `beer-sample` where search(`beer-sample`, {\"query\":{\"field\": \"state\", \"match\":\"California\"},'size': $size})",
+                "prepared": "select meta().id from `beer-sample` where search(`beer-sample`, {\"query\":{\"field\": \"state\", \"match\":\"California\"},'size': $size, \"sort\":[\"_id\"]})",
                 "params": "$size=15",
-                "n1ql": "select meta().id from `beer-sample` where search(`beer-sample`, {\"query\":{\"field\": \"state\", \"match\":\"California\"},'size': 15})",
+                "n1ql": "select meta().id from `beer-sample` where search(`beer-sample`, {\"query\":{\"field\": \"state\", \"match\":\"California\"},'size': 15, 'sort':['_id']})",
                 "expected_result": "success"
             },
             "named_prepared_option_out": {
@@ -736,9 +736,8 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
             },
             "positional_prepared_option_settings": {
                 "prepared": "select meta().id from `beer-sample` where search(`beer-sample`, 'state:California', $1)",
-                "params": "args=[{'size': 15}]",
-                "params": "args=[15]",
-                "n1ql": "select meta().id from `beer-sample` where search(`beer-sample`, 'state:California', {'size': 15})",
+                "params": "args=[{'size': 15, 'sort':['_id']}]",
+                "n1ql": "select meta().id from `beer-sample` where search(`beer-sample`, 'state:California', {'size': 15, 'sort':['_id']})",
                 "expected_result": "success"
             },
             "positional_prepared_option_out": {
@@ -806,9 +805,9 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
             },
             # MB-33724
             "named_prepared_option_settings": {
-                "prepared": "select meta().id from `beer-sample` where search(`beer-sample`, \"state:California\", {\"size\": $size})",
+                "prepared": "select meta().id from `beer-sample` where search(`beer-sample`, \"state:California\", {\"size\": $size, \"sort\":[\"_id\"]})",
                 "params": "$size=15",
-                "n1ql": "select meta().id from `beer-sample` where search(`beer-sample`, 'state:California', {'size': 15})",
+                "n1ql": "select meta().id from `beer-sample` where search(`beer-sample`, 'state:California', {'size': 15, 'sort':['_id']})",
                 "expected_result": "success"
             },
             "named_prepared_option_out": {
@@ -830,9 +829,9 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
                 "expected_result": "success"
             },
             "positional_prepared_option_settings": {
-                "prepared": "select meta().id from `beer-sample` where search(`beer-sample`, \"state:California\", {\"size\": $1})",
+                "prepared": "select meta().id from `beer-sample` where search(`beer-sample`, \"state:California\", {\"size\": $1, \"sort\":[\"_id\"]})",
                 "params": "args=[15]",
-                "n1ql": "select meta().id from `beer-sample` where search(`beer-sample`, 'state:California', {'size': 15})",
+                "n1ql": "select meta().id from `beer-sample` where search(`beer-sample`, 'state:California', {'size': 15, 'sort':['_id']})",
                 "expected_result": "success"
             },
             "positional_prepared_option_out": {
@@ -895,10 +894,10 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
         # inner sort fields: single field, multiple fields, score, id
         # missing values: first, last
         # mode: min, max, offset
-        inner_sorting_field_values = [""]
+        inner_sorting_field_values = ["_id"]
         inner_sorting_order_values = ["", "min", "max"]
         inner_offset_values = ["", "10"]
-        outer_sorting_field_values = ["", "meta().id"]
+        outer_sorting_field_values = ["meta().id"]
         outer_sorting_order_values = ["", "asc", "desc"]
         outer_offset_values = ["", "10"]
 
@@ -1326,3 +1325,5 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
         rest.username = user
         rest.password = password
         return rest
+
+
