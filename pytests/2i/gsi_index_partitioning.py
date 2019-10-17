@@ -201,7 +201,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
             else:
                 continue
 
-    '''Test that equivalent indexes/replicas are being updated properly, if you specifically use an index any of 
+    '''Test that equivalent indexes/replicas are being updated properly, if you specifically use an index any of
        its equivalent indexes can be used, however both should not be used'''
     def test_index_last_query_stat_equivalent_indexes(self):
         if not self.use_replica_index:
@@ -1378,7 +1378,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
                                            server=self.n1ql_node)
         except Exception, ex:
             self.log.info(str(ex))
-            if not "Index build will be retried in background" in str(ex):
+            if not ("Index build will be retried in background" in str(ex) or "Terminate Request during cleanup" in str(ex)):
                 self.fail("index building failed with error : {0}".format(str(ex)))
             else:
                 self.log.info("Index build failed with expected error")
