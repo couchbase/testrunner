@@ -12,7 +12,6 @@ from security.auditmain import audit
 import socket
 import urllib
 
-
 class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
 
     def setUp(self):
@@ -63,7 +62,9 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
             self.filter = self.input.param("filter", False)
         self.log.info("==============  QueriesUpgradeTests setup has completed ==============")
 
+
     def suite_setUp(self):
+
         super(QueriesUpgradeTests, self).suite_setUp()
         self.log.info("==============  QueriesUpgradeTests suite_setup has started ==============")
         self.log.info("==============  QueriesUpgradeTests suite_setup has completed ==============")
@@ -93,6 +94,7 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
         super(QueriesUpgradeTests, self).suite_tearDown()
 
     def test_upgrade(self):
+
         """
         Upgrade Test.
         1) Run pre-upgrade feature test
@@ -131,7 +133,8 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
 
         if self.upgrade_type == "offline":
             # stop server, upgrade, rebalance
-            self.offline_upgrade(mixed_servers)
+            self.offline_upgrade(self.servers)
+
 
         if self.upgrade_type == "online":
             # rebalance out, upgrade, rebalance in
@@ -169,9 +172,9 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
         # upgrade remaining servers
         self.log.info("upgrading remaining servers")
 
-        if self.upgrade_type == "offline":
-            # stop server, upgrade, rebalance in
-            self.offline_upgrade(remaining_servers)
+        #if self.upgrade_type == "offline":
+        #    # stop server, upgrade, rebalance in
+        #    self.offline_upgrade(remaining_servers)
 
         if self.upgrade_type == "online":
             # rebalance out, upgrade, rebalance in
@@ -246,6 +249,8 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                 if cluster_node.ip == server.ip:
                     rest.add_back_node(cluster_node.id)
                     rest.set_recovery_type(otpNode=cluster_node.id, recoveryType="full")
+
+
             participating_servers.remove(server)
             self.log.info("participating servers: {0}".format(str(participating_servers)))
             rebalance = self.cluster.async_rebalance(participating_servers, [], [])

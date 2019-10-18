@@ -704,7 +704,7 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
             # MB-33724
             "named_prepared_option_index_name": {
                 "prepared": "select meta().id from `beer-sample` where search(`beer-sample`, 'state:California', $idx_name)",
-                "params": "$idx_name={'index': '$idx_name'}",
+                "params": "$idx_name={\"index\": \"idx_beer_sample_fts\"}",
                 "n1ql": "select meta().id from `beer-sample` where search(`beer-sample`, 'state:California', {'index': 'idx_beer_sample_fts'})",
                 "expected_result": "success"
             },
@@ -735,9 +735,9 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
                 "expected_result": "cannot_execute"
             },
             "positional_prepared_option_settings": {
-                "prepared": "select meta().id from `beer-sample` where search(`beer-sample`, 'state:California', $1)",
-                "params": "args=[{'size': 15, 'sort':['_id']}]",
-                "n1ql": "select meta().id from `beer-sample` where search(`beer-sample`, 'state:California', {'size': 15, 'sort':['_id']})",
+                "prepared": "select meta().id from `beer-sample` where search(`beer-sample`, {\"query\":{\"field\": \"state\", \"match\":\"California\"},'size': $1, \"sort\":[\"_id\"]})",
+                "params": "args=[15]",
+                "n1ql": "select meta().id from `beer-sample` where search(`beer-sample`, {\"query\":{\"field\": \"state\", \"match\":\"California\"},'size': 15, 'sort':['_id']})",
                 "expected_result": "success"
             },
             "positional_prepared_option_out": {
