@@ -1979,7 +1979,7 @@ class RemoteMachineShellConnection:
                                                          .format(environment.strip(), build.name))
                                 self.log_command_output(output, error)
                             elif "suse 15" in self.info.distribution_version.lower():
-                                output, error = self.execute_command("export {0};zypper -n install --allow-unsigned-rpm /tmp/{1}"
+                                output, error = self.execute_command("export {0};zypper --no-gpg-checks -n install --allow-unsigned-rpm /tmp/{1}"
                                                      .format(environment.strip(), build.name))
                                 self.log_command_output(output, error)
                         else:
@@ -1987,7 +1987,7 @@ class RemoteMachineShellConnection:
                                 output, error = self.execute_command("zypper -n install /tmp/{0}".format(build.name))
                                 self.log_command_output(output, error)
                             elif "suse 15" in self.info.distribution_version.lower():
-                                output, error = self.execute_command("zypper -n install --allow-unsigned-rpm /tmp/{0}".format(build.name))
+                                output, error = self.execute_command("zypper --no-gpg-checks -n install --allow-unsigned-rpm /tmp/{0}".format(build.name))
                                 self.log_command_output(output, error)
                     else:
                         rpm_cmd = "yes | {0}yum localinstall -y /tmp/{1}"
