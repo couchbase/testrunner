@@ -52,8 +52,8 @@ class NodeHelper:
         self.info = self.shell.extract_remote_info()
         self.build = None
         self.queue = None
-        self.halt_thread = False
-        self.state = None
+        self.thread = None
+        self.rest = None
 
     def get_services(self):
         if not self.node.services:
@@ -70,108 +70,99 @@ class NodeHelper:
         return os
 
     def uninstall_cb(self):
-        self.state = "start-uninstall"
-        self.shell.execute_command(install_constants.CMDS[self.info.deliverable_type]["uninstall"],
+        if install_constants.CMDS[self.info.deliverable_type]["uninstall"]:
+            cmd = install_constants.CMDS[self.info.deliverable_type]["uninstall"]
+            cmd = cmd.replace("buildbinary", self.build.name)
+            cmd = cmd.replace("buildpath", self.build.path)
+            self.shell.execute_command(cmd,
                                    debug=self.params["debug_logs"])
-        self.state = "end-uninstall"
 
     def pre_install_cb(self):
         if install_constants.CMDS[self.info.deliverable_type]["pre_install"]:
-            if "HDIUTIL_DETACH_ATTACH" in install_constants.CMDS[self.info.deliverable_type]["pre_install"]:
-                print(self.shell, self.build.path, self.build.version)
+            cmd = install_constants.CMDS[self.info.deliverable_type]["pre_install"]
+            if "HDIUTIL_DETACH_ATTACH" in cmd:
                 hdiutil_attach(self.shell, self.build.path, self.build.version)
 
     def install_cb(self):
         self.pre_install_cb()
-        self.state = "start-install"
-        output, _ = self.shell.execute_command(install_constants.CMDS[self.info.deliverable_type]["install"]
-                                               .format(self.build.path),
+        if install_constants.CMDS[self.info.deliverable_type]["install"]:
+            cmd = install_constants.CMDS[self.info.deliverable_type]["install"]
+            cmd = cmd.replace("buildbinary", self.build.name)
+            cmd = cmd.replace("buildpath", self.build.path)
+            output, _ = self.shell.execute_command(cmd,
                                                debug=self.params["debug_logs"],
-                                               timeout=install_constants.WAIT_TIMES[self.info.deliverable_type][
-                                                   "install"])
+                                               timeout=install_constants.WAIT_TIMES[self.info.deliverable_type]
+                                               ["install"])
         # if "Existing lock /var/run/yum.pid:" in output:
         #     other_pid = ''.join(start, test, end)
         #     self.shell
         self.post_install_cb()
-        self.state = "end-install"
 
     def post_install_cb(self):
         duration, event, timeout = install_constants.WAIT_TIMES[self.info.deliverable_type]["post_install"]
-        self.wait_for_completion(duration, event)
-        install_success = False
         start_time = time.time()
         while time.time() < start_time + timeout:
-            o, e = self.shell.execute_command(install_constants.CMDS[self.info.deliverable_type]["post_install"],
-                                              debug=self.params["debug_logs"])
-            if o == ['1']:
-                install_success = True
-                break
+            if install_constants.CMDS[self.info.deliverable_type]["post_install"]:
+                cmd = install_constants.CMDS[self.info.deliverable_type]["post_install"]
+                o, e = self.shell.execute_command(cmd, debug=self.params["debug_logs"])
+                if o == ['1']:
+                    break
+                else:
+                    if install_constants.CMDS[self.info.deliverable_type]["post_install_retry"]:
+                        self.shell.execute_command(install_constants.CMDS[self.info.deliverable_type]["post_install_retry"],
+                                               debug=self.params["debug_logs"])
+            self.wait_for_completion(duration, event)
+
+    def pre_init_cb(self):
+        # Optionally change node name and restart server
+        if params.get('use_domain_names', 0):
+            RemoteUtilHelper.use_hostname_for_server_settings(self.node)
+
+        if params.get('enable_ipv6', 0):
+            status, content = self.shell.rename_node(
+                hostname=self.ip.replace('[', '').replace(']', ''))
+            if status:
+                log.info("Node {0} renamed to {1}".format(self.ip,
+                                                          self.ip.replace('[', '').
+                                                          replace(']', '')))
             else:
-                self.shell.execute_command(install_constants.CMDS[self.info.deliverable_type]["post_install_retry"],
-                                           debug=self.params["debug_logs"])
-                self.wait_for_completion(duration, event)
-        if not install_success:
-            print_error_and_exit("Install on {0} failed".format(self.ip))
+                log.error("Error renaming node {0} to {1}: {2}".
+                          format(self.ip,
+                                 self.ip.replace('[', '').replace(']', ''),
+                                 content))
+        # Optionally disable consistency check
+        if params["disable_consistency"]:
+            self.rest.set_couchdb_option(section='couchdb',
+                                         option='consistency_check_ratio',
+                                         value='0.0')
+
+
 
     def init_cb(self):
-        self.state = "start-init"
-        cluster_initialized = False
-        start_time = time.time()
-        while time.time() < start_time + 5 * 60:
-            try:
-                # Optionally change node name and restart server
-                if params.get('use_domain_names', 0):
-                    RemoteUtilHelper.use_hostname_for_server_settings(self.node)
+        self.pre_init_cb()
+        self.wait_for_completion(5, "Waiting for node to be initialized")
+        # Initialize cluster
+        self.rest = RestConnection(self.node)
+        info = self.rest.get_nodes_self()
+        kv_quota = int(info.mcdMemoryReserved * testconstants.CLUSTER_QUOTA_RATIO)
+        if kv_quota < 256:
+            kv_quota = 256
+        log.debug("quota for kv: %s MB" % kv_quota)
+        self.rest.init_cluster_memoryQuota(self.node.rest_username, \
+                                           self.node.rest_password, \
+                                           kv_quota)
+        if params["version"][:5] in testconstants.COUCHBASE_FROM_VULCAN:
+            self.rest.init_node_services(username=self.node.rest_username,
+                                         password=self.node.rest_password,
+                                         services=self.get_services())
+        if "index" in self.get_services():
+            self.rest.set_indexer_storage_mode(storageMode=params["storage_mode"])
 
-                if params.get('enable_ipv6', 0):
-                    status, content = self.shell.rename_node(
-                        hostname=self.ip.replace('[', '').replace(']', ''))
-                    if status:
-                        log.info("Node {0} renamed to {1}".format(self.ip,
-                                                                  self.ip.replace('[', '').
-                                                                  replace(']', '')))
-                    else:
-                        log.error("Error renaming node {0} to {1}: {2}".
-                                  format(self.ip,
-                                         self.ip.replace('[', '').replace(']', ''),
-                                         content))
-
-                # Initialize cluster
-                self.rest = RestConnection(self.node)
-                info = self.rest.get_nodes_self()
-                kv_quota = int(info.mcdMemoryReserved * testconstants.CLUSTER_QUOTA_RATIO)
-                if kv_quota < 256:
-                    kv_quota = 256
-                log.debug("quota for kv: %s MB" % kv_quota)
-                self.rest.init_cluster_memoryQuota(self.node.rest_username, \
-                                                   self.node.rest_password, \
-                                                   kv_quota)
-                if params["version"][:5] in testconstants.COUCHBASE_FROM_VULCAN:
-                    self.rest.init_node_services(username=self.node.rest_username,
-                                                 password=self.node.rest_password,
-                                                 services=self.get_services())
-                if "index" in self.get_services():
-                    self.rest.set_indexer_storage_mode(storageMode=params["storage_mode"])
-
-                self.rest.init_cluster(username=self.node.rest_username,
-                                       password=self.node.rest_password)
-
-                # Optionally disable consistency check
-                if params["disable_consistency"]:
-                    self.rest.set_couchdb_option(section='couchdb',
-                                                 option='consistency_check_ratio',
-                                                 value='0.0')
-                cluster_initialized = True
-                break
-            except Exception as e:
-                log.error("Exception thrown while initializing the cluster@{0}:\n{1}\n".format(self.ip, e.message))
-            self.wait_for_completion(5, "Waiting for node to be initialized")
-        if not cluster_initialized:
-            print_error_and_exit("Unable to initialize couchbase node")
-        self.state = "end-init"
+        self.rest.init_cluster(username=self.node.rest_username,
+                               password=self.node.rest_password)
 
     def wait_for_completion(self, duration, event):
-        log.info(event.format(duration))
+        log.info(event.format(duration, self.ip))
         time.sleep(duration)
 
     def cleanup_cb(self):
@@ -183,7 +174,6 @@ class NodeHelper:
 
 
 def _get_mounted_volumes(shell, name="Couchbase\ Installer"):
-    print(name * 5)
     volumes, _ = shell.execute_command("ls /Volumes | grep '{0}'".format(name))
     return volumes
 
@@ -196,11 +186,11 @@ def hdiutil_detach(shell, volumes, max_attempts=3):
         else:
             """ Unmount existing app """
             for volume in volumes:
-                shell.execute_command("hdiutil detach " + '"' + "/Volumes/" + volume + '"' + "; sleep 10")
-            volumes = _get_mounted_volumes()
+                shell.execute_command("hdiutil detach " + '"' + "/Volumes/" + volume + '"', timeout=10)
+            volumes = _get_mounted_volumes(shell)
     else:
         log.warn("Unable to detach {0} after {1} attempts".format(volumes, max_attempts))
-
+    log.debug("Done detaching Couchbase Server Volumes")
 
 def hdiutil_attach(shell, dmg_path, dmg_version, max_attempts=3):
     volumes = _get_mounted_volumes(shell)
@@ -340,8 +330,8 @@ def pre_install_steps():
     _download_build()
 
 
-def _execute_local(command):
-    process = subprocess.Popen(command, stdout=subprocess.PIPE, shell=True)
+def _execute_local(command, timeout):
+    process = subprocess.Popen(command, stdout=subprocess.PIPE, shell=True, timeout=timeout)
     process.communicate()[0].strip()
 
 
@@ -384,9 +374,10 @@ def _download_build():
     if params["all_nodes_same_os"] and not params["skip_local_download"]:
         build_url = NodeHelpers[0].build.url
         filepath = NodeHelpers[0].build.path
+        timeout = install_constants.WAIT_TIMES[NodeHelpers[0].info.deliverable_type]["download_binary"]
         cmd = install_constants.WGET_CMD.format(__get_download_dir(NodeHelpers[0].get_os()), build_url)
         log.debug("Downloading build binary to {0}..".format(filepath))
-        _execute_local(cmd)
+        _execute_local(cmd ,timeout)
         _copy_to_nodes(filepath, filepath)
     else:
         for node in NodeHelpers:
@@ -394,12 +385,12 @@ def _download_build():
             filepath = node.build.path
             cmd = install_constants.DOWNLOAD_CMD[node.info.deliverable_type]
             if "curl" in cmd:
-                cmd.format(build_url, filepath,
+                cmd = cmd.format(build_url, filepath,
                            install_constants.WAIT_TIMES[node.info.deliverable_type]
                            ["download_binary"])
 
             elif "wget" in cmd:
-                cmd.format(__get_download_dir(node.get_os()), build_url)
+                cmd = cmd.format(__get_download_dir(node.get_os()), build_url)
             logging.info("Downloading build binary to {0}:{1}..".format(node.ip, filepath))
             check_and_retry_download_binary(cmd, node)
     log.debug("Done downloading build binary")
@@ -437,14 +428,23 @@ def __get_download_dir(os):
 
 def __get_build_binary_name(node):
     # couchbase-server-enterprise-6.5.0-4557-centos7.x86_64.rpm
-    if "centos" in node.get_os():
+    # couchbase-server-enterprise-6.5.0-4557-suse15.x86_64.rpm
+    # couchbase-server-enterprise-6.5.0-4557-rhel8.x86_64.rpm
+    # couchbase-server-enterprise-6.5.0-4557-oel7.x86_64.rpm
+    # couchbase-server-enterprise-6.5.0-4557-amzn2.x86_64.rpm
+    x86 = ["centos", "suse", "rhel", "oel", "amzn2"]
+    amd64 = ["ubuntu", "debian"]
+
+    if node.get_os() in x86:
         return "{0}-{1}-{2}.{3}.{4}".format(params["cb_edition"],
                                             params["version"],
                                             node.get_os(),
                                             node.info.architecture_type,
                                             node.info.deliverable_type)
+
     # couchbase-server-enterprise_6.5.0-4557-ubuntu16.04_amd64.deb
-    elif "ubuntu" in node.get_os():
+    # couchbase-server-enterprise_6.5.0-4557-debian8_amd64.deb
+    elif node.get_os() in amd64:
         return "{0}_{1}-{2}_{3}.{4}".format(params["cb_edition"],
                                             params["version"],
                                             node.get_os(),
@@ -457,8 +457,12 @@ def __get_build_binary_name(node):
                                             "macos",
                                             node.info.architecture_type,
                                             node.info.deliverable_type)
-    # couchbase-server-enterprise_6.5.0-4557-debian8_amd64.deb
-    # couchbase-server-enterprise-6.5.0-4557-suse15.x86_64.rpm
-    # couchbase-server-enterprise-6.5.0-4557-rhel8.x86_64.rpm
-    # couchbase-server-enterprise-6.5.0-4557-oel7.x86_64.rpm
-    # couchbase-server-enterprise-6.5.0-4557-amzn2.x86_64.rpm
+    # couchbase-server-enterprise_6.5.0-4557-windows_amd64.msi
+    elif "windows" in node.get_os():
+        node.info.deliverable_type = "msi"
+        return "{0}_{1}-{2}_{3}.{4}".format(params["cb_edition"],
+                                            params["version"],
+                                            node.get_os(),
+                                            "amd64",
+                                            node.info.deliverable_type)
+

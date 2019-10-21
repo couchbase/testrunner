@@ -223,3 +223,6 @@ class XDCRCheckpointException(MembaseHttpException):
 class BucketCompactionException(MembaseHttpException):
     def __init__(self, bucket_name=''):
         self._message = 'Bucket compaction failed: {0}'.format(bucket_name)
+
+class InstallException(Exception):
+    pass

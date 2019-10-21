@@ -55,10 +55,15 @@ SUSE = [ "suse12", "suse15"]
 UBUNTU = ["ubuntu16.04", "ubuntu18.04"]
 LINUX_DISTROS = AMAZON + CENTOS + DEBIAN + OEL + RHEL + SUSE + UBUNTU
 MACOS_VERSIONS = ["10.14", "10.13.5", "macos"]
-WINDOWS_SERVER = ["2016", "2019"]
+WINDOWS_SERVER = ["2016", "2019", "windows"]
 SUPPORTED_OS = LINUX_DISTROS + MACOS_VERSIONS + WINDOWS_SERVER
 DOWNLOAD_DIR = {"LINUX_DISTROS": "/tmp/",
-                "MACOS_VERSIONS": "~/Downloads/"}
+                "MACOS_VERSIONS": "~/Downloads/",
+                "WINDOWS_SERVER": "/cygdrive/c/tmp/"
+}
+
+DEFAULT_INSTALL_DIR = {"LINUX_DISTROS": "/opt/couchbase"}
+
 WGET_CMD = "cd {0}; wget -N {1}"
 CURL_CMD = "curl {0} -o {1} -z {1} -s -m {2}"
 CB_ENTERPRISE = "couchbase-server-enterprise"
@@ -70,12 +75,12 @@ CMDS = {
     "deb": {
         "uninstall": "systemctl stop couchbase-server.service; "
                      "dpkg --remove couchbase-server; "
-                     "rm -rf /opt/couchbase",
+                     "rm -rf " + DEFAULT_INSTALL_DIR["LINUX_DISTROS"],
         "pre_install": None,
-        "install": "dpkg -i {0}",
+        "install": "dpkg -i buildpath",
         "post_install": "systemctl -q is-active couchbase-server.service && echo 1 || echo 0",
         "post_install_retry": "systemctl restart couchbase-server.service",
-        "init": ""
+        "init": None
     },
     "dmg": {
         "uninstall": "osascript -e 'quit app \"Couchbase Server\"'; "
@@ -87,49 +92,62 @@ CMDS = {
         "install": "cp -R /Volumes/Couchbase{0}/Couchbase\ Server.app /Applications; "
                    "sudo xattr -d -r com.apple.quarantine /Applications/Couchbase\ Server.app; "
                    "sudo open -a /Applications/Couchbase\ Server.app",
-        "init": ""
+        "post_install": "launchctl list | grep couchbase-server > /dev/null && echo 1 || echo 0",
+        "post_install_retry": None,
+        "init": None
     },
     "msi": {
-        "uninstall": "",
-        "install": "",
-        "init": ""
+        "uninstall": "cd " + DOWNLOAD_DIR["WINDOWS_SERVER"] + "; start /wait msiexec /x buildbinary /qn",
+        "pre_install": None,
+        "install": "cd " + DOWNLOAD_DIR["WINDOWS_SERVER"] + "; start /wait msiexec /i buildbinary /qn",
+        "post_install": None,
+        "post_install_retry": None,
+        "init": None
     },
     "rpm": {
         "uninstall": "systemctl stop couchbase-server; "
-                     "rpm -e couchbase-server; ",
+                     "rpm -e couchbase-server; "
+                     "rm -rf " + DEFAULT_INSTALL_DIR["LINUX_DISTROS"],
         "pre_install": None,
         "install": "yes | yum localinstall -y {0}",
         "post_install": "systemctl -q is-active couchbase-server && echo 1 || echo 0",
         "post_install_retry": "systemctl restart couchbase-server",
-        "init": "",
+        "init": None,
     }
 
 }
 
+INSTALL_TIMEOUT = 600
+INSTALL_POLL_INTERVAL = INSTALL_TIMEOUT//10
+
 WAIT_TIMES = {
     "msi": {
         "download_binary": 10,
-        "post_install": (10, "Waiting {0}s for couchbase-service to become active", 60)
+        "install": 30,
+        "post_install": (60, "Waiting {0}s for couchbase-service to become active on {1}..", 120)
     },
     "rpm": {
         "download_binary": 10,
         "install": 100,
-        "post_install": (10, "Waiting {0}s for couchbase-service to become active", 60)
+        "post_install": (10, "Waiting {0}s for couchbase-service to become active on {1}..", 60)
     },
     "deb": {
         "download_binary": 10,
-        "post_install": (10, "Waiting {0}s for couchbase-service to become active", 60)
+        "install": 30,
+        "post_install": (10, "Waiting {0}s for couchbase-service to become active on {1}..", 60)
 
     },
     "dmg": {
         "download_binary": 150,
-        "pre_install": (10, "Waiting for dmg to be mounted", 30)
+        "pre_install": (10, "Waiting for dmg to be mounted..", 30),
+        "install": 30,
+        "post_install": (10, "Waiting {0}s for couchbase-service to become active on {1}..", 60)
     }
 
 }
 
 DOWNLOAD_CMD = {
-    "msi": None,
+    "msi": WGET_CMD,
     "rpm": WGET_CMD,
     "deb": WGET_CMD,
     "dmg": CURL_CMD
