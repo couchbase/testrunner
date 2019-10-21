@@ -57,6 +57,8 @@ LINUX_DISTROS = AMAZON + CENTOS + DEBIAN + OEL + RHEL + SUSE + UBUNTU
 MACOS_VERSIONS = ["10.14", "10.13.5", "macos"]
 WINDOWS_SERVER = ["2016", "2019", "windows"]
 SUPPORTED_OS = LINUX_DISTROS + MACOS_VERSIONS + WINDOWS_SERVER
+X86 = CENTOS + SUSE + RHEL + OEL + AMAZON
+AMD64 = DEBIAN + UBUNTU + WINDOWS_SERVER
 DOWNLOAD_DIR = {"LINUX_DISTROS": "/tmp/",
                 "MACOS_VERSIONS": "~/Downloads/",
                 "WINDOWS_SERVER": "/cygdrive/c/tmp/"
@@ -107,24 +109,26 @@ CMDS = {
     "rpm": {
         "uninstall": "systemctl stop couchbase-server; "
                      "rpm -e couchbase-server; "
-                     "rm -rf " + DEFAULT_INSTALL_DIR["LINUX_DISTROS"],
+                     "rm -rf /var/lib/rpm/.rpm.lock; "
+                     "pkill -u couchbase",
+                     #"rm -rf " + DEFAULT_INSTALL_DIR["LINUX_DISTROS"],
         "pre_install": None,
-        "install": "yes | yum localinstall -y {0}",
+        "install": "yes | yum localinstall -y buildpath",
         "post_install": "systemctl -q is-active couchbase-server && echo 1 || echo 0",
-        "post_install_retry": "systemctl restart couchbase-server",
+        "post_install_retry": "systemctl daemon-reexec; systemctl restart couchbase-server",
         "init": None,
     }
 
 }
 
-INSTALL_TIMEOUT = 600
+INSTALL_TIMEOUT = 300
 INSTALL_POLL_INTERVAL = INSTALL_TIMEOUT//10
 
 WAIT_TIMES = {
     "msi": {
         "download_binary": 10,
         "install": 30,
-        "post_install": (60, "Waiting {0}s for couchbase-service to become active on {1}..", 120)
+        "post_install": (30, "Waiting {0}s for couchbase-service to become active on {1}..", 60)
     },
     "rpm": {
         "download_binary": 10,

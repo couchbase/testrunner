@@ -11,6 +11,7 @@ import install_utils, install_constants
 import logging.config
 import os
 from membase.api.exception import InstallException
+import traceback
 
 logging.config.fileConfig("scripts.logging.conf")
 log = logging.getLogger()
@@ -18,35 +19,33 @@ q = Queue.Queue()
 
 
 def node_installer(node, install_tasks):
-    #force_stop = time.time() + install_constants.INSTALL_TIMEOUT
     while True:
-        #if time.time() < force_stop: # and not node.halt_thread:
         install_task = install_tasks.get()
-        do_install_task(install_task, node)
-        install_tasks.task_done()
-        #else:
-        #    break
-
+        if install_task is None:
+            break
+        else:
+            do_install_task(install_task, node)
+            install_tasks.task_done()
 
 def on_install_error(install_task, node, err):
     node.queue.empty()
     node.halt_thread = True
-    install_utils.print_error_and_exit("Error occurred on {0} during {1}".format(node.ip, install_task))
+    log.error("Error {0} occurred on {1} during {2}".format(err, node.ip, install_task))
 
 
 def do_install_task(task, node):
-    # try:
-    if task == "uninstall":
-        node.uninstall_cb()
-    elif task == "install":
-        node.install_cb()
-    elif task == "init":
-        node.init_cb()
-    elif task == "cleanup":
-        node.cleanup_cb()
-    log.debug("Done with %s on %s." % (task, node.ip))
-    # except Exception as e:
-    #    on_install_error(task, node, e.message)
+    try:
+        if task == "uninstall":
+            node.uninstall_cb()
+        elif task == "install":
+            node.install_cb()
+        elif task == "init":
+            node.init_cb()
+        elif task == "cleanup":
+            node.cleanup_cb()
+        log.info("Done with %s on %s." % (task, node.ip))
+    except Exception as e:
+        on_install_error(task, node, ''.join(traceback.format_exception(etype=type(e), value=e, tb=e.message)))
 
 
 def validate_install(version):

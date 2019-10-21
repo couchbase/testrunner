@@ -54,6 +54,7 @@ class NodeHelper:
         self.queue = None
         self.thread = None
         self.rest = None
+        self.halt_thread = False
 
     def get_services(self):
         if not self.node.services:
@@ -167,10 +168,9 @@ class NodeHelper:
 
     def cleanup_cb(self):
         self.shell.execute_command(
-            "ls -td {0}*.{1} | awk 'NR>{2}' | xargs rm -f".format(''.join(self.build.path.split('couchbase')[:-1]),
-                                                                  self.info.deliverable_type, 1),
-            debug=self.params["debug_logs"])
-        # self.shell.disconnect()
+            "ls -td {0}*.{1} | awk 'NR>{2}' | xargs rm -f"
+                .format(''.join(self.build.path.split('couchbase')[:-1]),
+                self.info.deliverable_type, 2),debug=self.params["debug_logs"])
 
 
 def _get_mounted_volumes(shell, name="Couchbase\ Installer"):
@@ -432,10 +432,7 @@ def __get_build_binary_name(node):
     # couchbase-server-enterprise-6.5.0-4557-rhel8.x86_64.rpm
     # couchbase-server-enterprise-6.5.0-4557-oel7.x86_64.rpm
     # couchbase-server-enterprise-6.5.0-4557-amzn2.x86_64.rpm
-    x86 = ["centos", "suse", "rhel", "oel", "amzn2"]
-    amd64 = ["ubuntu", "debian"]
-
-    if node.get_os() in x86:
+    if node.get_os() in install_constants.X86:
         return "{0}-{1}-{2}.{3}.{4}".format(params["cb_edition"],
                                             params["version"],
                                             node.get_os(),
@@ -444,25 +441,21 @@ def __get_build_binary_name(node):
 
     # couchbase-server-enterprise_6.5.0-4557-ubuntu16.04_amd64.deb
     # couchbase-server-enterprise_6.5.0-4557-debian8_amd64.deb
-    elif node.get_os() in amd64:
-        return "{0}_{1}-{2}_{3}.{4}".format(params["cb_edition"],
-                                            params["version"],
-                                            node.get_os(),
-                                            "amd64",
-                                            node.info.deliverable_type)
-    # couchbase-server-enterprise_6.5.0-4557-macos_x86_64.dmg
-    elif node.get_os() in install_constants.MACOS_VERSIONS:
-        return "{0}_{1}-{2}_{3}.{4}".format(params["cb_edition"],
-                                            params["version"],
-                                            "macos",
-                                            node.info.architecture_type,
-                                            node.info.deliverable_type)
     # couchbase-server-enterprise_6.5.0-4557-windows_amd64.msi
-    elif "windows" in node.get_os():
-        node.info.deliverable_type = "msi"
+    elif node.get_os() in install_constants.AMD64:
+        if "windows" in node.get_os():
+            node.info.deliverable_type = "msi"
         return "{0}_{1}-{2}_{3}.{4}".format(params["cb_edition"],
                                             params["version"],
                                             node.get_os(),
                                             "amd64",
                                             node.info.deliverable_type)
 
+    # couchbase-server-enterprise_6.5.0-4557-macos_x86_64.dmg
+    elif node.get_os() in install_constants.MACOS_VERSIONS:
+        print(node.get_os())
+        return "{0}_{1}-{2}_{3}.{4}".format(params["cb_edition"],
+                                            params["version"],
+                                            "macos",
+                                            node.info.architecture_type,
+                                            node.info.deliverable_type)
