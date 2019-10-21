@@ -145,6 +145,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             raise Exception("OS not supported.")
         self.backup_validation_files_location = "/tmp/backuprestore" + self.master.ip
         self.backupset.backup_host = self.input.clusters[1][0]
+        self.backupset.directory += "_" + self.master.ip
         self.backupset.name = self.input.param("name", "backup")
         self.non_master_host = self.input.param("non-master", False)
         self.compact_backup = self.input.param("compact-backup", False)
@@ -278,7 +279,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                 backup_directory = WIN_TMP_PATH_RAW + "entbackup"
             else:
                 raise Exception("OS not supported.")
-            backup_directory += self.master.ip
+            backup_directory += "_" + self.master.ip
             validation_files_location = "%sbackuprestore" % self.tmp_path + self.master.ip
             if info == 'linux':
                 command = "rm -rf {0}".format(backup_directory)
@@ -367,7 +368,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, args)
         if del_old_backup:
             self.log.info("Remove any old dir before create new one")
-            remote_client.execute_command("rm -rf %s" % self.backupset.directory)
+            remote_client.execute_command("rm -rf {0}".format(self.backupset.directory))
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
         remote_client.disconnect()
