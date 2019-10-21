@@ -247,7 +247,7 @@ class auditTest(BaseTestCase):
             #Get a REST Command for loading sample
 
         elif (ops == 'enableAutoFailover'):
-            expectedResults = {'max_nodes':1, "timeout":120, 'source':source, "user":user, 'ip':self.ipAddress, 'port':12345}
+            expectedResults = {'max_nodes':1, "timeout":120, 'source':source, "user":user, 'ip':self.ipAddress, 'port':12345,'failover_server_group':False}
             rest.update_autofailover_settings(True, expectedResults['timeout'])
 
         elif (ops == 'disableAutoFailover'):
