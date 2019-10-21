@@ -314,7 +314,7 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
         self._install(self.servers[:self.nodes_init])
         self.initial_version = self.upgrade_version
         self._install(self.servers[self.nodes_init:self.num_servers])
-        self.operations(self.servers[:self.nodes_init], services="kv,kv,eventing,eventing")
+        self.operations(self.servers[:self.nodes_init], services="kv,eventing,index,n1ql")
         self.create_buckets()
         # Load the data in older version
         log.info("Load the data in older version in the initial version")
@@ -327,7 +327,7 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
         # Do validations
         self.validate_eventing(self.dst_bucket_name, self.docs_per_day * 2016)
         # swap and rebalance the servers
-        self.online_upgrade_swap_rebalance(services=["kv", "kv", "eventing", "eventing"])
+        self.online_upgrade_swap_rebalance(services=["kv", "eventing", "index", "n1ql"])
         self.restServer = self.get_nodes_from_services_map(service_type="eventing")
         self.rest = RestConnection(self.restServer)
         self.add_built_in_server_user()
