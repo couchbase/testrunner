@@ -54,7 +54,7 @@ RHEL = ["rhel8"]
 SUSE = [ "suse12", "suse15"]
 UBUNTU = ["ubuntu16.04", "ubuntu18.04"]
 LINUX_DISTROS = AMAZON + CENTOS + DEBIAN + OEL + RHEL + SUSE + UBUNTU
-MACOS_VERSIONS = ["10.14", "10.13.5", "macos"]
+MACOS_VERSIONS = ["10.14", "10.13.5", "10.13.6", "macos"]
 WINDOWS_SERVER = ["2016", "2019", "windows"]
 SUPPORTED_OS = LINUX_DISTROS + MACOS_VERSIONS + WINDOWS_SERVER
 X86 = CENTOS + SUSE + RHEL + OEL + AMAZON
@@ -62,7 +62,7 @@ AMD64 = DEBIAN + UBUNTU + WINDOWS_SERVER
 DOWNLOAD_DIR = {"LINUX_DISTROS": "/tmp/",
                 "MACOS_VERSIONS": "~/Downloads/",
                 "WINDOWS_SERVER": "/cygdrive/c/tmp/"
-}
+                }
 
 DEFAULT_INSTALL_DIR = {"LINUX_DISTROS": "/opt/couchbase"}
 
@@ -76,8 +76,9 @@ CB_DOWNLOAD_SERVER = "172.23.120.24"
 CMDS = {
     "deb": {
         "uninstall": "systemctl stop couchbase-server.service; "
-                     "dpkg --remove couchbase-server; "
-                     "rm -rf " + DEFAULT_INSTALL_DIR["LINUX_DISTROS"],
+                     "rm /var/lib/dpkg/info/couchbase-server.*; "
+                     "rm -rf " + DEFAULT_INSTALL_DIR["LINUX_DISTROS"] +
+                     "; dpkg --remove couchbase-server; ",
         "pre_install": None,
         "install": "dpkg -i buildpath",
         "post_install": "systemctl -q is-active couchbase-server.service && echo 1 || echo 0",
@@ -85,11 +86,11 @@ CMDS = {
         "init": None
     },
     "dmg": {
-        "uninstall": "osascript -e 'quit app \"Couchbase Server\"'; "
-                     "rm -rf /Applications\Couchbase\ Server.app; "
+        "uninstall": "rm -rf /Applications\Couchbase\ Server.app; "
                      "rm -rf ~/Library/Application\ Support/Couchbase; "
                      "rm -rf ~/Library/Application\ Support/membase; "
-                     "rm -rf ~/Library/Python/couchbase-py;",
+                     "rm -rf ~/Library/Python/couchbase-py;"
+                     "osascript -e 'quit app \"Couchbase Server\"'; ",
         "pre_install": "HDIUTIL_DETACH_ATTACH",
         "install": "cp -R /Volumes/Couchbase{0}/Couchbase\ Server.app /Applications; "
                    "sudo xattr -d -r com.apple.quarantine /Applications/Couchbase\ Server.app; "
@@ -103,15 +104,16 @@ CMDS = {
         "pre_install": None,
         "install": "cd " + DOWNLOAD_DIR["WINDOWS_SERVER"] + "; start /wait msiexec /i buildbinary /qn",
         "post_install": None,
-        "post_install_retry": None,
+        "post_install_retry": "cd " + DOWNLOAD_DIR["WINDOWS_SERVER"] + "; start /wait msiexec /fa %s /norestart",
         "init": None
     },
     "rpm": {
-        "uninstall": "systemctl stop couchbase-server; "
-                     "rpm -e couchbase-server; "
+        "uninstall":
+                    "systemctl stop couchbase-server; "
+                     #"rm -rf " + DEFAULT_INSTALL_DIR["LINUX_DISTROS"] + "; "
                      "rm -rf /var/lib/rpm/.rpm.lock; "
-                     "pkill -u couchbase",
-                     #"rm -rf " + DEFAULT_INSTALL_DIR["LINUX_DISTROS"],
+                     "pkill -u couchbase; "
+                     "rpm -e couchbase-server",
         "pre_install": None,
         "install": "yes | yum localinstall -y buildpath",
         "post_install": "systemctl -q is-active couchbase-server && echo 1 || echo 0",
@@ -137,7 +139,7 @@ WAIT_TIMES = {
     },
     "deb": {
         "download_binary": 10,
-        "install": 30,
+        "install": 45,
         "post_install": (10, "Waiting {0}s for couchbase-service to become active on {1}..", 60)
 
     },

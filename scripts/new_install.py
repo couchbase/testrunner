@@ -45,7 +45,7 @@ def do_install_task(task, node):
             node.cleanup_cb()
         log.info("Done with %s on %s." % (task, node.ip))
     except Exception as e:
-        on_install_error(task, node, ''.join(traceback.format_exception(etype=type(e), value=e, tb=e.message)))
+        on_install_error(task, node, e.message)
 
 
 def validate_install(version):
@@ -56,7 +56,7 @@ def validate_install(version):
             for item in node_status:
                 if version in item['version'] and item['status'] == "healthy":
                     node.install_success = True
-                    log.debug("node:{0}\tversion:{1}\tstatus:{2}\tservices:{3}".format(item['hostname'],
+                    log.info("node:{0}\tversion:{1}\tstatus:{2}\tservices:{3}".format(item['hostname'],
                                                                                      item['version'],
                                                                                      item['status'],
                                                                                      item['services']))
@@ -95,20 +95,33 @@ def do_install(params):
         node_helper.queue = q
         node_helper.thread = t
 
+    force_stop = time.time() + install_constants.INSTALL_TIMEOUT
     for node in install_utils.NodeHelpers:
-        force_stop = time.time() + install_constants.INSTALL_TIMEOUT
         try:
-            while time.time() < force_stop:  # and not node.halt_thread:
+            while node.queue.unfinished_tasks and time.time() < force_stop:
                 time.sleep(install_constants.INSTALL_POLL_INTERVAL)
             else:
                 raise InstallException
-        except InstallException as e:
-            log.error("INSTALL TIMED OUT AFTER {0}s.VALIDATING..".format(install_constants.INSTALL_TIMEOUT))
-            validate_install(params["version"])
-            sys.exit(e)
-        node.thread.join()
-        node.queue.join()
-        validate_install(params["version"])
+        except InstallException:
+            if time.time() >= force_stop:
+                log.error("INSTALL TIMED OUT AFTER {0}s.VALIDATING..".format(install_constants.INSTALL_TIMEOUT))
+    validate_install(params["version"])
+
+    # for node in install_utils.NodeHelpers:
+    #     force_stop = time.time() + install_constants.INSTALL_TIMEOUT
+    #     try:
+    #         while time.time() < force_stop:  # and not node.halt_thread:
+    #             #print("HEREEEEE {0}".node.ip)
+    #             time.sleep(install_constants.INSTALL_POLL_INTERVAL)
+    #         else:
+    #             raise InstallException
+    #     except InstallException as e:
+    #         log.error("INSTALL TIMED OUT AFTER {0}s.VALIDATING..".format(install_constants.INSTALL_TIMEOUT))
+    #         validate_install(params["version"])
+    #         sys.exit(e)
+    #     #node.thread.join()
+    #     node.queue.join()
+    #     validate_install(params["version"])
 
 
 def main():

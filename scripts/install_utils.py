@@ -123,7 +123,7 @@ class NodeHelper:
             status, content = self.shell.rename_node(
                 hostname=self.ip.replace('[', '').replace(']', ''))
             if status:
-                log.info("Node {0} renamed to {1}".format(self.ip,
+                log.debug("Node {0} renamed to {1}".format(self.ip,
                                                           self.ip.replace('[', '').
                                                           replace(']', '')))
             else:
@@ -159,6 +159,7 @@ class NodeHelper:
         if "index" in self.get_services():
             self.rest.set_indexer_storage_mode(storageMode=params["storage_mode"])
 
+        #self.shell.set_cbauth_env(self.node)
         self.rest.init_cluster(username=self.node.rest_username,
                                password=self.node.rest_password)
 
@@ -453,7 +454,6 @@ def __get_build_binary_name(node):
 
     # couchbase-server-enterprise_6.5.0-4557-macos_x86_64.dmg
     elif node.get_os() in install_constants.MACOS_VERSIONS:
-        print(node.get_os())
         return "{0}_{1}-{2}_{3}.{4}".format(params["cb_edition"],
                                             params["version"],
                                             "macos",
