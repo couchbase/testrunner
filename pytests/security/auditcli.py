@@ -163,7 +163,7 @@ class auditcli(BaseTestCase):
                 options = "--server-failover={0}:8091".format(self.servers[nodes_add - nodes_rem - num].ip)
                 options += " --force"
                 output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user=self.ldapUser, password=self.ldapPass)
-                expectedResults = {'source':source, "real_userid:user":self.ldapUser, 'user':self.master.rest_username, "ip":'::1', "port":57457, 'type':'hard', 'node':'ns_1@' + self.servers[nodes_add - nodes_rem - num].ip}
+                expectedResults = {'source':source, "real_userid:user":self.ldapUser, 'user':self.master.rest_username, "ip":'::1', "port":57457, 'type':'hard', 'nodes':'[ns_1@' + self.servers[nodes_add - nodes_rem - num].ip + ']'}
                 self.checkConfig(self.eventID, self.master, expectedResults)
 
         if (cli_command == "server-readd"):
@@ -249,12 +249,12 @@ class auditcli(BaseTestCase):
         options = "--bucket={0}".format(bucket)
         if enable_flush_new is not None:
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user=self.ldapUser, password=self.ldapPass)
-        expectedResults = {"bucket_name":"BBB", "source":self.source, "user":self.ldapUser, "ip":"127.0.0.1", 'port':57457}
+        expectedResults = {"bucket_name":"BBB", "source":self.source, "user":self.ldapUser, "ip":"::1", 'port':57457}
         self.checkConfig(8204, self.master, expectedResults)
 
         cli_command = "bucket-delete"
         output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user=self.ldapUser, password=self.ldapPass)
-        expectedResults = {"bucket_name":"BBB", "source":self.source, "user":self.ldapUser, "ip":"127.0.0.1", "port":57457}
+        expectedResults = {"bucket_name":"BBB", "source":self.source, "user":self.ldapUser, "ip":"::1", "port":57457}
         self.checkConfig(8203, self.master, expectedResults)
 
         remote_client.disconnect()
