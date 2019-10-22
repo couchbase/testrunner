@@ -3498,6 +3498,8 @@ class RemoteMachineShellConnection:
                     mesg = "Need to set domain name in server {0} like 'sc.couchbase.com'"\
                                                                            .format(self.ip)
                     raise Exception(mesg)
+            else:
+                return "{0}.{1}".format(info.hostname[0], 'sc.couchbase.com')
 
     def get_cpu_info(self, win_info=None, mac=False):
         if win_info:

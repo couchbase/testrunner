@@ -9,7 +9,7 @@ class HostnameMgmtMultiTests(HostnameBaseTests):
     def setUp(self):
         super(HostnameMgmtMultiTests, self).setUp()
         self.name_prefix = self.input.param('name_prefix','hstmgmt_')
-        self.domain = self.input.param('domain','hq.couchbase.com')
+        self.domain = self.input.param('domain','sc.couchbase.com')
         self.use_names = self.input.param('use_names', 1)
         self.old_files = {}
         try:
