@@ -12,6 +12,7 @@ from membase.api.rest_client import RestConnection
 import install_constants
 import TestInput
 import logging.config
+from subprocess import STDOUT, check_output
 
 logging.config.fileConfig("scripts.logging.conf")
 log = logging.getLogger()
@@ -54,7 +55,6 @@ class NodeHelper:
         self.queue = None
         self.thread = None
         self.rest = None
-        self.halt_thread = False
 
     def get_services(self):
         if not self.node.services:
@@ -76,7 +76,7 @@ class NodeHelper:
             cmd = cmd.replace("buildbinary", self.build.name)
             cmd = cmd.replace("buildpath", self.build.path)
             self.shell.execute_command(cmd,
-                                   debug=self.params["debug_logs"])
+                                       debug=self.params["debug_logs"])
 
     def pre_install_cb(self):
         if install_constants.CMDS[self.info.deliverable_type]["pre_install"]:
@@ -87,16 +87,22 @@ class NodeHelper:
     def install_cb(self):
         self.pre_install_cb()
         if install_constants.CMDS[self.info.deliverable_type]["install"]:
-            cmd = install_constants.CMDS[self.info.deliverable_type]["install"]
+            if "suse" in self.get_os():
+                cmd = install_constants.CMDS[self.info.deliverable_type]["suse_install"]
+            else:
+                cmd = install_constants.CMDS[self.info.deliverable_type]["install"]
             cmd = cmd.replace("buildbinary", self.build.name)
             cmd = cmd.replace("buildpath", self.build.path)
-            output, _ = self.shell.execute_command(cmd,
-                                               debug=self.params["debug_logs"])
-                                               #,timeout=install_constants.WAIT_TIMES[self.info.deliverable_type]
-                                               #["install"])
-        # if "Existing lock /var/run/yum.pid:" in output:
-        #     other_pid = ''.join(start, test, end)
-        #     self.shell
+            cmd = cmd.replace("mountpoint", "/tmp/couchbase-server-" + params["version"])
+            timeout = install_constants.WAIT_TIMES[self.info.deliverable_type]
+            if not timeout:
+                output, _ = self.shell.execute_command(cmd,
+                                                       debug=self.params["debug_logs"])
+            else:
+                output, _ = self.shell.execute_command(cmd,
+                                                       debug=self.params["debug_logs"],
+                                                       timeout=install_constants.WAIT_TIMES[self.info.deliverable_type]
+                                                       ["install"])
         self.post_install_cb()
 
     def post_install_cb(self):
@@ -110,8 +116,9 @@ class NodeHelper:
                     break
                 else:
                     if install_constants.CMDS[self.info.deliverable_type]["post_install_retry"]:
-                        self.shell.execute_command(install_constants.CMDS[self.info.deliverable_type]["post_install_retry"],
-                                               debug=self.params["debug_logs"])
+                        self.shell.execute_command(
+                            install_constants.CMDS[self.info.deliverable_type]["post_install_retry"],
+                            debug=self.params["debug_logs"])
             self.wait_for_completion(duration, event)
 
     def pre_init_cb(self):
@@ -124,8 +131,8 @@ class NodeHelper:
                 hostname=self.ip.replace('[', '').replace(']', ''))
             if status:
                 log.debug("Node {0} renamed to {1}".format(self.ip,
-                                                          self.ip.replace('[', '').
-                                                          replace(']', '')))
+                                                           self.ip.replace('[', '').
+                                                           replace(']', '')))
             else:
                 log.error("Error renaming node {0} to {1}: {2}".
                           format(self.ip,
@@ -136,8 +143,6 @@ class NodeHelper:
             self.rest.set_couchdb_option(section='couchdb',
                                          option='consistency_check_ratio',
                                          value='0.0')
-
-
 
     def init_cb(self):
         self.pre_init_cb()
@@ -159,54 +164,55 @@ class NodeHelper:
         if "index" in self.get_services():
             self.rest.set_indexer_storage_mode(storageMode=params["storage_mode"])
 
-        #self.shell.set_cbauth_env(self.node)
+        # self.shell.set_cbauth_env(self.node)
         self.rest.init_cluster(username=self.node.rest_username,
                                password=self.node.rest_password)
 
     def wait_for_completion(self, duration, event):
-        log.info(event.format(duration, self.ip))
+        log.debug(event.format(duration, self.ip))
         time.sleep(duration)
 
     def cleanup_cb(self):
         self.shell.execute_command(
             "ls -td {0}*.{1} | awk 'NR>{2}' | xargs rm -f"
                 .format(''.join(self.build.path.split('couchbase')[:-1]),
-                self.info.deliverable_type, 2),debug=self.params["debug_logs"])
+                        self.info.deliverable_type, 2), debug=self.params["debug_logs"])
 
 
-def _get_mounted_volumes(shell, name="Couchbase\ Installer"):
-    volumes, _ = shell.execute_command("ls /Volumes | grep '{0}'".format(name))
+def _get_mounted_volumes(shell):
+    volumes, _ = shell.execute_command("ls /tmp | grep '{0}'".format("couchbase-server-"))
     return volumes
 
 
 def hdiutil_detach(shell, volumes, max_attempts=3):
-    while len(volumes) != 0:
-        attempt = max_attempts - 1
-        if attempt == 0:
-            break
-        else:
-            """ Unmount existing app """
-            for volume in volumes:
-                shell.execute_command("hdiutil detach " + '"' + "/Volumes/" + volume + '"', timeout=10)
-            volumes = _get_mounted_volumes(shell)
+    attempt = 0
+    while len(volumes) > 0 and attempt <= max_attempts:
+        """ Unmount existing app """
+        for volume in volumes:
+            shell.execute_command("hdiutil detach " + '"' + "/tmp/" + volume + '"', timeout=10)
+        volumes = _get_mounted_volumes(shell)
+        attempt += 1
     else:
-        log.warn("Unable to detach {0} after {1} attempts".format(volumes, max_attempts))
+        if len(volumes) > 0:
+            log.warn("Unable to detach {0} after {1} attempts".format(volumes, max_attempts))
     log.debug("Done detaching Couchbase Server Volumes")
 
-def hdiutil_attach(shell, dmg_path, dmg_version, max_attempts=3):
+
+def hdiutil_attach(shell, dmg_path, max_attempts=3):
     volumes = _get_mounted_volumes(shell)
-    if len(volumes) > 1:
-        hdiutil_detach(shell, volumes)
-    volumes = _get_mounted_volumes(shell, name="Couchbase\ Installer\ {0}".format(dmg_version))
-    while len(volumes) != 1:
-        attempt = max_attempts - 1
-        if attempt == 0:
-            break
-        else:
-            shell.execute_command("hdiutil attach {0}; sleep 10".format(dmg_path))
-            volumes = _get_mounted_volumes(shell, name="Couchbase\ Installer\ {0}".format(dmg_version))
+    hdiutil_detach(shell, volumes)
+
+    attempt = 0
+    while len(volumes) < 1 and attempt <= max_attempts:
+        shell.execute_command("hdiutil attach {0} -mountpoint /tmp/{1}; sleep 10".format(dmg_path,
+                                                                                         "couchbase-server-"
+                                                                                         + params["version"]))
+        volumes = _get_mounted_volumes(shell)
+        attempt += 1
     else:
-        log.warn("Unable to attach {0} after {1} attempts".format(dmg_path, max_attempts))
+        if len(volumes) < 1:
+            log.warn("Unable to attach {0} after {1} attempts".format(dmg_path, max_attempts))
+    log.debug("Done attaching Couchbase Server Volumes")
 
 
 def get_node_helper(ip):
@@ -278,6 +284,8 @@ def process_user_input():
             params["storage_mode"] = value
         if key == "disable_consistency":
             params["disable_consistency"] = True if value.lower() == "true" else False
+        if key == "skip_local_download":
+            params["skip_local_download"] = False if value.lower() == "false" else True
 
     # Validation based on 2 or more params
     if not params["version"] and not params["url"]:
@@ -332,7 +340,7 @@ def pre_install_steps():
 
 
 def _execute_local(command, timeout):
-    process = subprocess.Popen(command, stdout=subprocess.PIPE, shell=True, timeout=timeout)
+    process = subprocess.Popen(command, stdout=subprocess.PIPE, shell=True).wait(timeout)
     process.communicate()[0].strip()
 
 
@@ -387,8 +395,8 @@ def _download_build():
             cmd = install_constants.DOWNLOAD_CMD[node.info.deliverable_type]
             if "curl" in cmd:
                 cmd = cmd.format(build_url, filepath,
-                           install_constants.WAIT_TIMES[node.info.deliverable_type]
-                           ["download_binary"])
+                                 install_constants.WAIT_TIMES[node.info.deliverable_type]
+                                 ["download_binary"])
 
             elif "wget" in cmd:
                 cmd = cmd.format(__get_download_dir(node.get_os()), build_url)

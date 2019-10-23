@@ -27,28 +27,29 @@ def node_installer(node, install_tasks):
             do_install_task(install_task, node)
             install_tasks.task_done()
 
+
 def on_install_error(install_task, node, err):
     node.queue.empty()
-    node.halt_thread = True
     log.error("Error {0} occurred on {1} during {2}".format(err, node.ip, install_task))
 
 
 def do_install_task(task, node):
     try:
-      if task == "uninstall":
-          node.uninstall_cb()
-      elif task == "install":
-          node.install_cb()
-      elif task == "init":
-          node.init_cb()
-      elif task == "cleanup":
-          node.cleanup_cb()
-      log.info("Done with %s on %s." % (task, node.ip))
+        if task == "uninstall":
+            node.uninstall_cb()
+        elif task == "install":
+            node.install_cb()
+        elif task == "init":
+            node.init_cb()
+        elif task == "cleanup":
+            node.cleanup_cb()
+        log.info("Done with %s on %s." % (task, node.ip))
     except Exception as e:
         on_install_error(task, node, e.message)
 
 
 def validate_install(version):
+    log.info("-" * 100)
     for node in install_utils.NodeHelpers:
         node.install_success = False
         if node.rest:
@@ -57,9 +58,9 @@ def validate_install(version):
                 if version in item['version'] and item['status'] == "healthy":
                     node.install_success = True
                     log.info("node:{0}\tversion:{1}\tstatus:{2}\tservices:{3}".format(item['hostname'],
-                                                                                     item['version'],
-                                                                                     item['status'],
-                                                                                     item['services']))
+                                                                                      item['version'],
+                                                                                      item['status'],
+                                                                                      item['services']))
     print_result()
 
 
@@ -75,7 +76,6 @@ def print_result():
     for _ in fail:
         log.error("INSTALL FAILED ON: \t{0}".format(_))
     log.info("-" * 100)
-
     for _ in success:
         log.info("INSTALL COMPLETED ON: \t{0}".format(_))
     log.info("-" * 100)
@@ -95,7 +95,7 @@ def do_install(params):
         node_helper.queue = q
         node_helper.thread = t
 
-    force_stop = time.time() + install_constants.INSTALL_TIMEOUT
+    force_stop = start_time + install_constants.INSTALL_TIMEOUT
     for node in install_utils.NodeHelpers:
         try:
             while node.queue.unfinished_tasks and time.time() < force_stop:
@@ -105,6 +105,7 @@ def do_install(params):
         except InstallException:
             if time.time() >= force_stop:
                 log.error("INSTALL TIMED OUT AFTER {0}s.VALIDATING..".format(install_constants.INSTALL_TIMEOUT))
+                break
     validate_install(params["version"])
 
 

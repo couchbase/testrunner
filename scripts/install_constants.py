@@ -91,9 +91,10 @@ CMDS = {
                      "rm -rf ~/Library/Application\ Support/Couchbase; "
                      "rm -rf ~/Library/Application\ Support/membase; "
                      "rm -rf ~/Library/Python/couchbase-py;"
+                     "rm -rf /Volumes\Couchbase\ Server*;"
                      "osascript -e 'quit app \"Couchbase Server\"'; ",
         "pre_install": "HDIUTIL_DETACH_ATTACH",
-        "install": "cp -R /Volumes/Couchbase{0}/Couchbase\ Server.app /Applications; "
+        "install": "cp -R mountpoint/Couchbase\ Server.app /Applications; "
                    "sudo xattr -d -r com.apple.quarantine /Applications/Couchbase\ Server.app; "
                    "sudo open -a /Applications/Couchbase\ Server.app",
         "post_install": "launchctl list | grep couchbase-server > /dev/null && echo 1 || echo 0",
@@ -117,6 +118,7 @@ CMDS = {
                      "rpm -e couchbase-server",
         "pre_install": None,
         "install": "yes | yum localinstall -y buildpath",
+        "suse_install": "rpm -i buildpath",
         "post_install": "systemctl -q is-active couchbase-server && echo 1 || echo 0",
         "post_install_retry": "systemctl daemon-reexec; systemctl restart couchbase-server",
         "init": None,
@@ -140,14 +142,14 @@ WAIT_TIMES = {
     },
     "deb": {
         "download_binary": 10,
-        "install": 120,
+        "install": None, # Install time varies too much
         "post_install": (10, "Waiting {0}s for couchbase-service to become active on {1}..", 60)
 
     },
     "dmg": {
         "download_binary": 150,
         "pre_install": (10, "Waiting for dmg to be mounted..", 30),
-        "install": 100,
+        "install": None,
         "post_install": (10, "Waiting {0}s for couchbase-service to become active on {1}..", 60)
     }
 
