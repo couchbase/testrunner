@@ -352,13 +352,11 @@ class MemcachedClientHelper(object):
         for node in nodes:
             RestHelper(rest).vbucket_map_ready(bucket, 60)
             vBuckets = rest.get_vbuckets(bucket)
-            port_moxi = standalone_moxi_port or node.moxi
+            port_moxi = standalone_moxi_port or node.memcached
             if ascii:
-                log = logger.Logger.get_logger()
                 log.info("creating ascii client {0}:{1} {2}".format(server.ip, port_moxi, bucket))
                 client = MemcachedAsciiClient(server.ip, port_moxi, timeout=timeout)
             else:
-                log = logger.Logger.get_logger()
                 if isinstance(server, dict):
                     log.info("creating proxy client {0}:{1} {2}".format(server["ip"], port_moxi, bucket))
                     client = MemcachedClient(server["ip"], port_moxi, timeout=timeout)

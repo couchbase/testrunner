@@ -420,7 +420,7 @@ class MemcachedClient(object):
         """Set a value in the memcached server."""
         self._set_vbucket(key, vbucket, collection=collection)
         collection = self.collection_name(collection)
-        resp = self._doCmd(memcacheConstants.CMD_DEL_WITH_META, key, '',
+        resp = self._doCmd(memcacheConstants.CMD_DELETE_WITH_META, key, '',
 
                        struct.pack(memcacheConstants.EXTENDED_META_CMD_FMT, flags,
                                    exp, seqno, cas, options, 0),collection=collection )
