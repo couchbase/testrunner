@@ -3,6 +3,11 @@ import logger
 log = logger.Logger.get_logger()
 from couchbase.bucket import Bucket
 import couchbase.subdocument as SD
+from couchbase.cluster import Cluster, ClusterOptions
+from couchbase.cluster import _N1QLQuery
+from couchbase.exceptions import CouchbaseException, BucketNotFoundException, AuthenticationException
+from couchbase_core.cluster import PasswordAuthenticator
+import time
 
 
 class TestMemcachedClient():
@@ -82,19 +87,24 @@ class TestSDK():
         result = False
         connection_string = 'couchbase://' + client_ip + '/' + bucket_name + '?username=' + user + '&select_bucket=true'
         log.info (" Value of connection string is - {0}".format(connection_string))
+        time.sleep(2)
         try:
-            cb = Bucket(connection_string, password=password)
+            cluster = Cluster('couchbase://' + client_ip,
+                                       ClusterOptions(PasswordAuthenticator(user, password)))
+            cb = cluster.bucket(bucket_name)
+            default_collection = cb.default_collection()
             if cb is not None:
                 result = True
-                return cb, result
+                return default_collection, result
         except Exception as ex:
+            log.info ("Exception in creating an SDK connection {0}".format(ex))
             return result
 
     def set_xattr(self, sdk_conn):
         try:
             k = "sdk_1"
             sdk_conn.upsert(k, {})
-            sdk_conn.mutate_in(k, SD.upsert('my', {'value': 1}, xattr=True))
+            sdk_conn.mutate_in(k, [SD.upsert('my', {'value': 1}, xattr=True)])
             return True
         except Exception as e:
             log.info("Exception is from set_xattr function {0}".format(e))
@@ -105,7 +115,7 @@ class TestSDK():
             temp_conn, result = self.connection(client_ip, bucket_name, 'Administrator', 'password')
             self.set_xattr(temp_conn)
             k = 'sdk_1'
-            rv = sdk_conn.lookup_in(k, SD.get('my', xattr=True))
+            rv = sdk_conn.lookup_in(k, [SD.get('my', xattr=True)])
             return True
         except Exception as e:
             log.info("Exception is from get_xattr function {0}".format(e))

@@ -30,6 +30,8 @@ class LdapUser(UserBase):
         fileName = 'name.ldif'
         # Execute ldapadd command to add users to the system
         shell = RemoteMachineShellConnection(self.host)
+        o =''
+        r =''
         try:
             shell.write_remote_file("/tmp", fileName, userCreateCmmd)
             command = "ldapadd -h " + self.LDAP_HOST + " -p " + self.LDAP_PORT + " -f /tmp/" + fileName + " -D " + \
@@ -45,6 +47,8 @@ class LdapUser(UserBase):
 
 
     def delete_user(self):
+        if isinstance(self.user_name, list)==True and len(self.user_name)==1:
+            self.user_name=self.user_name[0]
         userDeleteCmd = 'ldapdelete -h ' + self.LDAP_HOST + " -p " + self.LDAP_PORT + ' cn=' + self.user_name + "," + self.LDAP_DN
         shell = RemoteMachineShellConnection(self.host)
         try:

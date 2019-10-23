@@ -1,22 +1,10 @@
-from security.ldaptest import ldaptest
 from membase.api.rest_client import RestConnection
-import urllib.request, urllib.parse, urllib.error
-from security.rbacmain import rbacmain
-import json
-from remote.remote_util import RemoteMachineShellConnection
-from newupgradebasetest import NewUpgradeBaseTest
-from security.auditmain import audit
-import subprocess
-import socket
-import fileinput
-import sys
-from subprocess import Popen, PIPE
-from security.rbac_base import RbacBase
 from basetestcase import BaseTestCase
-from .testmemcached import TestMemcachedClient
-from .testmemcached import TestSDK
-from membase.api.rest_client import RestConnection, RestHelper
-from couchbase_helper.documentgenerator import BlobGenerator
+from security.testmemcached import TestMemcachedClient
+from security.testmemcached import TestSDK
+from security.rbacmain import rbacmain
+from security.rbac_base import RbacBase
+import time
 
 
 class dataRoles():
@@ -25,42 +13,42 @@ class dataRoles():
     def _datareader_role_master():
         per_set = {
             "name": "Data Reader Role",
-            "permissionSet": "read!True,write!False,statsRead!False,ReadMeta!True,WriteMeta!False,ReadXattr!True,WriteXattr!False"}
+            "permissionSet": "read!True,write!False,statsRead!False,ReadMeta!True,WriteMeta!False,ReadXattr!False,WriteXattr!False"}
         return per_set
 
     @staticmethod
     def _datareaderwrite_role_master():
         per_set = {
             "name": "Data Reader Writer Role",
-            "permissionSet": "read!False,write!True,statsRead!False,ReadMeta!False,WriteMeta!False,ReadXattr!False,WriteXattr!True"}
+            "permissionSet": "read!False,write!True,statsRead!False,ReadMeta!False,WriteMeta!False,ReadXattr!False,WriteXattr!False"}
         return per_set
 
     @staticmethod
     def _view_admin_role_master():
         per_set = {
             "name": "View Admin Role",
-            "permissionSet": "read!True,write!False,statsRead!False,ReadMeta!True,WriteMeta!False"}
+            "permissionSet": "read!True,write!False,statsRead!True,ReadMeta!True,WriteMeta!False"}
         return per_set
 
     @staticmethod
     def _replication_admin_role_master():
         per_set = {
             "name": "Replication Admin Role",
-            "permissionSet": "read!True,write!False,statsRead!False,ReadMeta!True,WriteMeta!False"}
+            "permissionSet": "read!True,write!False,statsRead!True,ReadMeta!True,WriteMeta!False"}
         return per_set
 
     @staticmethod
     def _bucket_admin_role_master():
         per_set = {
             "name": "Bucket Admin Role",
-            "permissionSet": "read!True,write!True,statsRead!True,ReadMeta!True,WriteMeta!True"}
+            "permissionSet": "read!False,write!False,statsRead!True,ReadMeta!False,WriteMeta!False"}
         return per_set
 
     @staticmethod
     def _cluster_admin_role_master():
         per_set = {
             "name": "Cluster Admin Role",
-            "permissionSet": "read!True,write!True,statsRead!True,ReadMeta!True,WriteMeta!True"}
+            "permissionSet": "read!False,write!False,statsRead!True,ReadMeta!False,WriteMeta!False"}
         return per_set
 
     @staticmethod
@@ -95,7 +83,7 @@ class dataRoles():
     def _data_backup_master():
         per_set = {
             "name": "Data Backup",
-            "permissionSet": "read!True,write!True,statsRead!True,ReadMeta!False,WriteMeta!False"}
+            "permissionSet": "read!True,write!True,statsRead!True,ReadMeta!True,WriteMeta!True"}
         return per_set
 
     @staticmethod
@@ -162,6 +150,7 @@ class dataRoles():
 
 
 class RbacTestMemcached(BaseTestCase):
+    LDAP_GROUP_DN = "ou=Groups,dc=couchbase,dc=com"
 
     def setUp(self):
         super(RbacTestMemcached, self).setUp()
@@ -198,6 +187,20 @@ class RbacTestMemcached(BaseTestCase):
                 testuser = [{'id': user[0], 'name': user[0], 'password': user[1]}]
                 RbacBase().create_user_source(testuser, 'builtin', self.master)
                 self.sleep(10)
+        elif self.auth_type == 'LDAPGrp':
+            from security.ldapGroupBase import ldapGroupBase
+            self.group_name = self.input.param('group_name','testgrp')
+            ldapGroupBase().create_group_ldap(self.group_name,self.ldap_users[0],self.master)
+            group_dn = 'cn=' + self.group_name + ',' + self.LDAP_GROUP_DN
+            final_role = self._return_roles(self.user_role)
+            ldapGroupBase().add_role_group(self.group_name,final_role,group_dn,self.master)
+            ldapGroupBase().create_ldap_config(self.master)
+        elif self.auth_type == 'InternalGrp':
+            from security.ldapGroupBase import ldapGroupBase
+            self.group_name = self.input.param('group_name','testgrp')
+            final_role = self._return_roles(self.user_role)
+            ldapGroupBase().create_int_group(self.group_name,self.ldap_users[0],final_role,final_role,self.master)
+
 
     def _return_roles(self, user_role):
         final_roles = ''
@@ -228,8 +231,10 @@ class RbacTestMemcached(BaseTestCase):
         return action_list.split(",")
 
     def rbac_test_memcached(self):
-        self.log.info ("Current role assingment is - {0}".format(self.user_role))
-        self._assign_user_role()
+        time.sleep(30)
+        self.log.info ("Current role assignment is - {0}".format(self.user_role))
+        if self.auth_type != 'InternalGrp' and self.auth_type != 'LDAPGrp':
+            self._assign_user_role()
         self.log.info("Current role mapping is - {0}".format(self.role_map))
         action_list = self._return_actions(self.role_map)
         for action in action_list:
@@ -239,8 +244,8 @@ class RbacTestMemcached(BaseTestCase):
                         mc, result = TestMemcachedClient().connection(self.master.ip, self.no_access_bucket_name, users[0], users[1])
                     else:
                         mc, result = TestMemcachedClient().connection(self.master.ip, self.bucket_name, users[0], users[1])
-                        sdk_conn, result = TestSDK().connection(self.master.ip, self.bucket_name, users[0],\
-                                                                      users[1])
+                        sdk_conn, result = TestSDK().connection(self.master.ip, self.bucket_name, users[0], users[1])
+                    time.sleep(10)
                     if (result):
                         result_action = None
                         if temp_action[0] == 'write':
@@ -270,6 +275,3 @@ class RbacTestMemcached(BaseTestCase):
                             self.assertFalse(result_action)
                         else:
                             self.assertTrue(result_action)
-
-
-

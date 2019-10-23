@@ -1,3 +1,4 @@
+from pytests.security.ldapGroupBase import ldapGroupBase
 from security.ldaptest import ldaptest
 from membase.api.rest_client import RestConnection
 import urllib.request, urllib.parse, urllib.error
@@ -47,20 +48,34 @@ class rbacTest(ldaptest):
         self.ldap_users = rbacmain().returnUserList(self.user_id)
         if self.auth_type == 'ldap' or self.auth_type == 'pam':
             rbacmain(self.master, 'builtin')._delete_user('cbadminbucket')
-        rbacmain(self.master, self.auth_type)._delete_user_from_roles(self.master)
-        if self.auth_type == 'ldap':
-            rbacmain().setup_auth_mechanism(self.servers, 'ldap', rest)
+        # rbacmain(self.master, self.auth_type)._delete_user_from_roles(self.master)
+        if self.auth_type == 'ldap' or self.auth_type=='LDAPGroup':
+            # rbacmain().setup_auth_mechanism(self.servers,'ldap',rest)
             self._removeLdapUserRemote(self.ldap_users)
             self._createLDAPUser(self.ldap_users)
         elif self.auth_type == "pam":
-            rbacmain().setup_auth_mechanism(self.servers, 'pam', rest)
+            rbacmain().setup_auth_mechanism(self.servers,'pam', rest)
             rbacmain().add_remove_local_user(self.servers, self.ldap_users, 'deluser')
-            rbacmain().add_remove_local_user(self.servers, self.ldap_users, 'adduser')
-        elif self.auth_type == "builtin":
+            rbacmain().add_remove_local_user(self.servers, self.ldap_users,'adduser')
+        elif self.auth_type == "builtin" or self.auth_type=='InternalGroup':
             for user in self.ldap_users:
                 testuser = [{'id': user[0], 'name': user[0], 'password': user[1]}]
                 RbacBase().create_user_source(testuser, 'builtin', self.master)
                 self.sleep(10)
+        elif self.auth_type == 'LDAPGroup':
+            self.group_name = self.input.param('group_name','testgrp')
+            LDAP_GROUP_DN = "ou=Groups,dc=couchbase,dc=com"
+            ldapGroupBase().create_group_ldap(self.group_name,self.ldap_users[0],self.master)
+            group_dn = 'cn=' + self.group_name + ',' + LDAP_GROUP_DN
+            ldapGroupBase().add_role_group(self.group_name,[self.user_role],group_dn,self.master)
+        elif self.auth_type == "ExternalGroup":
+            self.group_name = self.input.param("group_name","testgrp")
+            ldapGroupBase().create_group_ldap(self.group_name, self.ldap_users[0], self.master)
+            LDAP_GROUP_DN = "ou=Groups,dc=couchbase,dc=com"
+            group_dn = 'cn=' + self.group_name + ',' + LDAP_GROUP_DN
+            print(self.user_role)
+            ldapGroupBase().add_role_group(self.group_name, self.user_role, group_dn, self.master)
+            ldapGroupBase().create_grp_usr_external([self.ldap_users[0][0]], self.master, [''], self.group_name)
         self.ldap_server = ServerInfo(self.ldapHost, self.ldapPort, 'root', 'couchbase')
         self.ipAddress = self.getLocalIPAddress()
 
@@ -376,6 +391,7 @@ class rbacTest(ldaptest):
         self.assertTrue(fieldVerification, "One of the fields is not matching")
         self.assertTrue(valueVerification, "Values for one of the fields is not matching")
 
+'''
 class rbac_upgrade(NewUpgradeBaseTest, ldaptest):
 
     def setUp(self):
@@ -431,6 +447,6 @@ class rbac_upgrade(NewUpgradeBaseTest, ldaptest):
         for server in serv_upgrade:
             status, content, header = rbacmain(server)._retrieve_user_roles()
             self.assertFalse(status, "Incorrect status for rbac cluster in mixed cluster {0} - {1} - {2}".format(status, content, header))
-
+'''
 
 

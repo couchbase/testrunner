@@ -4279,6 +4279,108 @@ class RestConnection(object):
         status, content, header = self._http_request(api, 'POST', params)
         log.info ("Status of executeValidateCredentials command - {0}".format(status))
         return status, json.loads(content)
+    
+    '''MadHatter LDAP Group Support'''
+
+    ''' 
+        Assign group roles
+    '''
+
+    def add_group_role(self,group_name,description,roles,ldap_group_ref=None):
+        api = self.baseUrl + "/settings/rbac/groups/" + group_name
+        if ldap_group_ref is not None:
+
+            params = urllib.parse.urlencode({
+                                        'description':'{0}'.format(description),
+                                        'roles':'{0}'.format(roles),
+                                        'ldap_group_ref':'{0}'.format(ldap_group_ref)
+                                    })
+
+        else:
+            params = urllib.parse.urlencode({
+                                        'description':'{0}'.format(description),
+                                        'roles':'{0}'.format(roles)
+                                    })
+        status, content, header = self._http_request(api, 'PUT', params)
+        log.info ("Status of Adding role to group command is {0}".format(status))
+        return status, json.loads(content)
+
+    def delete_group(self,group_name):
+        api = self.baseUrl + "/settings/rbac/groups/" + group_name
+        status, content, header = self._http_request(api, 'DELETE')
+        log.info ("Status of Delete role from CB is {0}".format(status))
+        return status, json.loads(content)
+
+    def get_group_list(self):
+        api = self.baseUrl + "/settings/rbac/groups/"
+        status, content, header = self._http_request(api, 'GET')
+        return status, json.loads(content)
+
+    def get_group_details(self, group_name):
+        api = self.baseUrl + "/settings/rbac/groups/" + group_name
+        status, content, header = self._http_request(api, 'GET')
+        return status, json.loads(content)
+
+    def add_user_group(self,group_name,user_name):
+        api = self.baseUrl + "/settings/rbac/users/local/" + user_name
+        params = urllib.parse.urlencode({
+                                    'groups':'{0}'.format(group_name)
+                                })
+        status, content, header = self._http_request(api, 'PUT', params)
+        log.info ("Status of Adding role to group command is {0}".format(status))
+        return status, json.loads(content)
+
+    def get_user_group(self,user_name):
+        api = self.baseUrl + "/settings/rbac/users/local/" + user_name
+        status, content, header = self._http_request(api, 'GET')
+        log.info ("Status of Adding role to group command is {0}".format(status))
+        return status, json.loads(content)
+
+    def grp_invalidate_cache(self):
+        api = self.baseUrl + "/settings/invalidateLDAPCache/"
+        status, content, header = self._http_request(api, 'POST')
+        log.info("Status of Adding role to group command is {0}".format(status))
+        return status, json.loads(content)
+
+    def invalidate_ldap_cache(self):
+        api = self.baseUrl + '/settings/invalidateLDAPCache'
+        status, content, header = self._http_request(api, 'POST')
+        log.info("Status of Invalidate LDAP Cached is {0}".format(status))
+        return status, json.loads(content)
+
+
+    def ldap_validate_conn(self):
+        api = self.baseUrl + "/settings/ldap/validate/connectivity"
+        status, content, header = self._http_request(api, 'POST')
+        log.info("Status of Adding role to group command is {0}".format(status))
+        return status, json.loads(content)
+
+    def ldap_validate_authen(self, user_name, password='password'):
+        api = self.baseUrl + "/settings/ldap/validate/authentication"
+        params = urllib.parse.urlencode({
+            'auth_user': '{0}'.format(user_name),
+            'auth_pass': '{0}'.format(password)
+        })
+        status, content, header = self._http_request(api, 'POST', params)
+        log.info("Status of Adding role to group command is {0}".format(status))
+        return status, json.loads(content)
+
+    def ldap_validate_grp_query(self, user):
+        api = self.baseUrl + "/settings/ldap/validate/groups_query"
+        params = urllib.parse.urlencode({
+                                    'groups_query_user':'{0}'.format(user)
+                                })
+        status, content, header = self._http_request(api, 'POST',params)
+        log.info ("Status of Adding role to group command is {0}".format(status))
+        return status, json.loads(content)
+
+    def setup_ldap(self, data, extraparam):
+        api = self.baseUrl + '/settings/ldap/'
+        params = urllib.parse.urlencode(data)
+        params = params + "&" + extraparam
+        status, content, header = self._http_request(api, 'POST',params)
+        log.info ("Status of Setting up LDAP command is {0}".format(status))
+        return status, json.loads(content)
 
     '''
     Audit Commands
@@ -4333,6 +4435,7 @@ class RestConnection(object):
         log.info("Content of the response is {0}".format(content))
         log.info ("Header of the response is {0}".format(header))
         return status
+
 
     def set_downgrade_storage_mode_with_rest(self, downgrade=True, username="Administrator",
                                                                    password="password"):
@@ -4571,6 +4674,30 @@ class RestConnection(object):
         if not status:
             raise Exception(content)
         return json.loads(content)
+    
+    '''
+    Add External User
+    '''
+    def add_external_user(self,user_id,payload):
+        url = "settings/rbac/users/external/" + user_id
+        api = self.baseUrl + url
+        status, content, header = self._http_request(api, 'PUT', payload)
+        if not status:
+            raise Exception(content)
+        return json.loads(content)
+
+    '''
+    Delete External User
+    '''
+    def delete_external_user(self,user_id):
+        url = "settings/rbac/users/external/" + user_id
+        api = self.baseUrl + url
+        status, content, header = self._http_request(api, 'DELETE')
+        if not status:
+            raise Exception(content)
+        return json.loads(content)
+
+
 
     '''
     Delete built-in user
