@@ -989,7 +989,7 @@ class SubdocXattrSdkTest(SubdocBaseTest):
             try:
                 self.client.lookup_in(k, SD.exists(vxattr, xattr=True))
             except Exception as e:
-                self.assertEqual(e.message, 'Operational Error')
+                self.assertEqual(e.message, 'Subcommand failure')
                 self.assertEqual(e.result.errstr,
                                  'The server replied with an unrecognized status code. '
                                  'A newer version of this library may be able to decode it')
