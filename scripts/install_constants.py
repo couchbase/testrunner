@@ -77,6 +77,7 @@ CMDS = {
     "deb": {
         "uninstall": "systemctl stop couchbase-server.service; "
                      "rm /var/lib/dpkg/info/couchbase-server.*; "
+                     "rm /var/lib/dpkg/lock; "
                      "rm -rf " + DEFAULT_INSTALL_DIR["LINUX_DISTROS"] +
                      "; dpkg --remove couchbase-server; ",
         "pre_install": None,
@@ -123,13 +124,13 @@ CMDS = {
 
 }
 
-INSTALL_TIMEOUT = 300
+INSTALL_TIMEOUT = 600
 INSTALL_POLL_INTERVAL = INSTALL_TIMEOUT//10
 
 WAIT_TIMES = {
     "msi": {
         "download_binary": 10,
-        "install": 30,
+        "install": 100,
         "post_install": (30, "Waiting {0}s for couchbase-service to become active on {1}..", 60)
     },
     "rpm": {
@@ -139,14 +140,14 @@ WAIT_TIMES = {
     },
     "deb": {
         "download_binary": 10,
-        "install": 45,
+        "install": 120,
         "post_install": (10, "Waiting {0}s for couchbase-service to become active on {1}..", 60)
 
     },
     "dmg": {
         "download_binary": 150,
         "pre_install": (10, "Waiting for dmg to be mounted..", 30),
-        "install": 30,
+        "install": 100,
         "post_install": (10, "Waiting {0}s for couchbase-service to become active on {1}..", 60)
     }
 

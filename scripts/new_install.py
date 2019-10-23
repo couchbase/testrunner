@@ -35,15 +35,15 @@ def on_install_error(install_task, node, err):
 
 def do_install_task(task, node):
     try:
-        if task == "uninstall":
-            node.uninstall_cb()
-        elif task == "install":
-            node.install_cb()
-        elif task == "init":
-            node.init_cb()
-        elif task == "cleanup":
-            node.cleanup_cb()
-        log.info("Done with %s on %s." % (task, node.ip))
+      if task == "uninstall":
+          node.uninstall_cb()
+      elif task == "install":
+          node.install_cb()
+      elif task == "init":
+          node.init_cb()
+      elif task == "cleanup":
+          node.cleanup_cb()
+      log.info("Done with %s on %s." % (task, node.ip))
     except Exception as e:
         on_install_error(task, node, e.message)
 
@@ -106,22 +106,6 @@ def do_install(params):
             if time.time() >= force_stop:
                 log.error("INSTALL TIMED OUT AFTER {0}s.VALIDATING..".format(install_constants.INSTALL_TIMEOUT))
     validate_install(params["version"])
-
-    # for node in install_utils.NodeHelpers:
-    #     force_stop = time.time() + install_constants.INSTALL_TIMEOUT
-    #     try:
-    #         while time.time() < force_stop:  # and not node.halt_thread:
-    #             #print("HEREEEEE {0}".node.ip)
-    #             time.sleep(install_constants.INSTALL_POLL_INTERVAL)
-    #         else:
-    #             raise InstallException
-    #     except InstallException as e:
-    #         log.error("INSTALL TIMED OUT AFTER {0}s.VALIDATING..".format(install_constants.INSTALL_TIMEOUT))
-    #         validate_install(params["version"])
-    #         sys.exit(e)
-    #     #node.thread.join()
-    #     node.queue.join()
-    #     validate_install(params["version"])
 
 
 def main():
