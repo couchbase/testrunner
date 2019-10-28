@@ -3224,6 +3224,13 @@ class FTSBaseTest(unittest.TestCase):
                                 "log_level",
                                 None)))
 
+    def _set_bleve_max_result_window(self):
+        bmrw_value = self._input.param("bmrw_value", 100000000)
+        for node in self._cb_cluster.get_fts_nodes():
+            self.log.info("updating bleve_max_result_window of node : {0}".format(node))
+            rest = RestConnection(node)
+            rest.set_bleve_max_result_window(bmrw_value)
+
     def __setup_for_test(self):
         use_hostanames = self._input.param("use_hostnames", False)
         no_buckets = self._input.param("no_buckets", False)
@@ -3249,6 +3256,8 @@ class FTSBaseTest(unittest.TestCase):
         # Assign user to role
         role_list = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'roles': 'admin'}]
         RbacBase().add_user_role(role_list, RestConnection(master), 'builtin')
+
+        self._set_bleve_max_result_window()
         
         self.__set_free_servers()
         if not no_buckets:

@@ -2945,6 +2945,22 @@ class RestConnection(object):
             headers=self._create_capi_headers())
         return status
 
+    def set_bleve_max_result_window(self, bmrw_value):
+        """create or edit fts index , returns {"status":"ok"} on success"""
+        api = self.fts_baseUrl + "api/managerOptions"
+        params = {"bleveMaxResultWindow": str(bmrw_value)}
+        log.info(json.dumps(params))
+        status, content, header = self._http_request(api,
+                                                     'PUT',
+                                                     json.dumps(params, ensure_ascii=False),
+                                                     headers=self._create_capi_headers(),
+                                                     timeout=30)
+        if status:
+            log.info("Updated bleveMaxResultWindow")
+        else:
+            raise Exception("Error Updating bleveMaxResultWindow: {0}".format(content))
+        return status
+
     def unfreeze_fts_index_partitions(self, name):
         """ method to freeze index partitions asignment"""
         api = self.fts_baseUrl+ "api/index/{0}/planFreezeControl/unfreeze".format(name)
