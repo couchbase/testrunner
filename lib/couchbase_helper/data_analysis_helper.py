@@ -787,6 +787,7 @@ class DataCollector(object):
         backup_data = {}
         status = False
         now = datetime.datetime.now()
+        shards_with_data = []
         for bucket in buckets:
             backup_data[bucket.name] = {}
             print "---- Collecting data in backup repo"
@@ -801,6 +802,7 @@ class DataCollector(object):
                                                    i, master_key)
                 output, error = conn.execute_command(cmd2, debug=False)
                 if output:
+                    shards_with_data.append(i)
                     """ remove empty element """
                     output = [x.strip(' ') for x in output]
                     """ remove '--' element """
@@ -825,6 +827,7 @@ class DataCollector(object):
                 return  backup_data, status
             print "---- Done extract data from backup files in backup repo of bucket {0}"\
                                                                    .format(bucket.name)
+            print "---- shards with data in: {0}".format(shards_with_data)
         return backup_data, status
 
     def get_views_definition_from_backup_file(self, server, backup_dir, buckets):

@@ -4,6 +4,7 @@ import json
 import urllib, datetime
 
 from basetestcase import BaseTestCase
+from TestInput import TestInputSingleton, TestInputServer
 from couchbase_helper.data_analysis_helper import DataCollector
 from membase.helper.rebalance_helper import RebalanceHelper
 from couchbase_helper.documentgenerator import BlobGenerator,DocumentGenerator
@@ -186,10 +187,12 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.bucket_delete = self.input.param("bucket_delete", False)
         self.bucket_flush = self.input.param("bucket_flush", False)
         if self.same_cluster:
+            self.backupset.restore_cluster = self.servers
             self.backupset.restore_cluster_host = self.servers[0]
             self.backupset.restore_cluster_host_username = self.servers[0].rest_username
             self.backupset.restore_cluster_host_password = self.servers[0].rest_password
         else:
+            self.backupset.restore_cluster = self.input.clusters[0]
             self.backupset.restore_cluster_host = self.input.clusters[0][0]
             self.backupset.restore_cluster_host_username = self.input.clusters[0][0].rest_username
             self.backupset.restore_cluster_host_password = self.input.clusters[0][0].rest_password
@@ -675,6 +678,26 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                             self._create_restore_cluster()
                         if not self.dgm_run and int(kv_quota) > 0:
                             bucket_size = kv_quota
+
+                    self.log.info("Check services on restore and backup cluster")
+                    bk_rest = RestConnection(self.backupset.cluster_host)
+                    bk_servc_map = bk_rest.get_nodes_services()
+
+                    for key in bk_servc_map.keys():
+                        if self.backupset.cluster_host.ip in key:
+                            bk_servc_map = bk_servc_map[key]
+                            break
+                    rs_rest = RestConnection(self.backupset.restore_cluster_host)
+                    rs_servc_map = rs_rest.get_nodes_services()
+                    for key in rs_servc_map.keys():
+                        if self.backupset.restore_cluster_host.ip in key:
+                            rs_servc_map = rs_servc_map[key]
+                            break
+
+                    if bk_servc_map != rs_servc_map:
+                        bucket_size = self._reset_restore_cluster_with_bk_services(bk_servc_map)
+                        if int(bucket_size) > 256:
+                            rest_conn = RestConnection(self.backupset.restore_cluster_host)
 
                     self.log.info("replica in bucket {0} is {1}".format(bucket.name, replicas))
                     rest_conn.create_bucket(bucket=bucket_name,
@@ -1608,6 +1631,40 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         kv_quota = rest.init_node()
         return kv_quota
 
+    def _reset_restore_cluster_with_bk_services(self, bk_services):
+        master = self.backupset.restore_cluster_host
+
+        BucketOperationHelper.delete_all_buckets_or_assert(
+                                         self.backupset.restore_cluster, self)
+        ClusterOperationHelper.cleanup_cluster(
+                                self.backupset.restore_cluster, master=master)
+
+        rest = RestConnection(master).force_eject_node()
+        rest = RestConnection(master)
+        ready = RestHelper(rest).is_ns_server_running()
+        if ready:
+            shell = RemoteMachineShellConnection(master)
+            shell.enable_diag_eval_on_non_local_hosts()
+            shell.disconnect()
+        else:
+            self.fail("NS server is not ready after reset node")
+        bk_services =['kv', 'index', 'n1ql']
+        for i in range(len(self.servers)):
+            if self.servers[i].ip == master.ip:
+                self.backupset.restore_cluster_host.services = ",".join(bk_services)
+                break
+        rest = RestConnection(self.backupset.restore_cluster_host)
+        kv_quota = rest.init_node()
+        self.log.info("Done reset node")
+        if len(self.input.clusters[1]) > 1:
+            num_servers = len(self.backupset.restore_cluster) - 1
+            self.cluster.rebalance(
+                            self.backupset.restore_cluster[:num_servers],
+                            self.backupset.restore_cluster[1:num_servers],
+                            [],
+                            services=self.services)
+        return kv_quota
+
     def _collect_logs(self):
         """
            CB_ARCHIVE_PATH env: param log-archive-env=False
@@ -1726,11 +1783,19 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                     logs_path, zip_file))
                 if 'redacted-' in zip_file:
                     # Redacted logs include the backup archive one layer deeper
-                    log_archive_names.append("{}/{}".format(
-                        zip_file.split(".")[0],
-                        zip_file.split(".")[0].split('-', 1)[1]))
+                    if self.master.ip in zip_file:
+                        log_archive_names.append("{}/{}".format(
+                            ".".join(zip_file.split(".")[:-1]),
+                            ".".join(zip_file.split(".")[:-1]).split('-', 1)[1]))
+                    else:
+                        log_archive_names.append("{}/{}".format(
+                            zip_file.split(".")[0],
+                            zip_file.split(".")[0].split('-', 1)[1]))
                 else:
-                    log_archive_names.append(zip_file.split(".")[0])
+                    if self.master.ip in zip_file:
+                        log_archive_names.append(".".join(zip_file.split(".")[:-1]))
+                    else:
+                        log_archive_names.append(zip_file.split(".")[0])
 
         if self.backupset.log_redaction:
             # Verify logs were redacted correctly
@@ -2241,6 +2306,8 @@ class Backupset:
         self.cluster_host_password = ''
         self.cluster_new_user = None
         self.cluster_new_role = None
+        self.backup_cluster = None
+        self.restore_cluster = None
         self.restore_cluster_host = None
         self.restore_cluster_host_username = ''
         self.restore_cluster_host_password = ''
