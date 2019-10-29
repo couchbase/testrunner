@@ -38,11 +38,11 @@ class AutoReprovisionBaseTest(unittest.TestCase):
         # Add built-in user
         testuser = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'password': 'password'}]
         RbacBase().create_user_source(testuser, 'builtin', servers[0])
-   
+
         # Assign user to role
         role_list = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'roles': 'admin'}]
         RbacBase().add_user_role(role_list, RestConnection(servers[0]), 'builtin')
-   
+
         log.info("==============  common_setup was finished for test #{0} {1} ==============" \
                  .format(testcase.case_number, testcase._testMethodName))
 
@@ -168,6 +168,9 @@ class AutoReprovisionTests(unittest.TestCase):
             self.master = self.servers[1]
         else:
             self.server_fail = self.servers[1]
+        for server in self.servers:
+            remote = RemoteMachineShellConnection(server)
+            output, error = remote.enable_diag_eval_on_non_local_hosts()
 
     def tearDown(self):
         AutoReprovisionBaseTest.common_tearDown(self.servers, self)
@@ -298,10 +301,7 @@ class AutoReprovisionTests(unittest.TestCase):
         elif shell.extract_remote_info().type.lower() == 'linux':
             o, r = shell.execute_command("reboot")
         shell.log_command_output(o, r)
-        if shell.extract_remote_info().type.lower() == 'windows':
-            time.sleep(wait_timeout * 5)
-        else:
-            time.sleep(wait_timeout)
+        time.sleep(wait_timeout * 5)
         # disable firewall on the node
         shell = RemoteMachineShellConnection(self.server_fail)
         shell.disable_firewall()
@@ -719,7 +719,7 @@ class AutoReprovisionTests(unittest.TestCase):
 
         if num_buckets == 1:
             bucket_name = "default"
-            bucket_ram = info.memoryQuota * 2 / 3
+            bucket_ram = 200
             rest.create_bucket(bucket=bucket_name,
                                ramQuotaMB=bucket_ram,
                                replicaNumber=self.replicas,
