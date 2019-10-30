@@ -18,6 +18,7 @@ class XDCRAdvFilterTests(XDCRNewBaseTest):
         self.src_rest = RestConnection(self.src_master)
         self.dest_rest = RestConnection(self.dest_master)
         initial_xdcr = random.choice([True, False])
+        self.skip_validation = self._input.param("ok_if_random_filter_invalid", False)
         try:
             if initial_xdcr:
                  self.load_data()
@@ -26,7 +27,7 @@ class XDCRAdvFilterTests(XDCRNewBaseTest):
                 self.setup_xdcr()
                 self.load_data()
         except Exception as e:
-            if self._input.param("ok_if_random_filter_invalid", False):
+            if self.skip_validation:
                 if "create replication failed : status:False,content:{\"errors\":{\"filterExpression\":" in e.message:
                     self.log.warn("Random filter generated may not be valid, skipping doc count validation")
                     self.tearDown()
@@ -122,4 +123,5 @@ class XDCRAdvFilterTests(XDCRNewBaseTest):
         self.sleep(30)
         self.perform_update_delete()
 
-        self.verify_results()
+        if not self.skip_validation:
+            self.verify_results()
