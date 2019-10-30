@@ -795,7 +795,7 @@ class XDCReplication:
     def __get_random_filter(self, filter_type):
         from scripts.edgyjson.main import JSONDoc
         obj = JSONDoc(template="query.json", filter=True, load=False)
-        filter_type = filter_type.split("random-")[1]
+        filter_type = filter_type.split("-")[1]
         if filter_type == "random":
             filter_type = random.choice(obj.filters_json_objs_dict.keys())
         num_exps = random.randint(0, 5)
