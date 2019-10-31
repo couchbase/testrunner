@@ -60,9 +60,7 @@ class MemcapableTestBase(object):
             info = rest.get_nodes_self()
             available_ram = info.memoryQuota * node_ram_ratio
             rest.create_bucket(bucket=name, ramQuotaMB=int(available_ram))
-            ready = BucketOperationHelper.wait_for_memcached(master, name)
             BucketOperationHelper.wait_for_vbuckets_ready_state(master, name)
-            unittest.assertTrue(ready, msg="wait_for_memcached failed")
         unittest.assertTrue(helper.bucket_exists(name),
                             msg="unable to create {0} bucket".format(name))
 
@@ -137,6 +135,7 @@ class MemcapableTestBase(object):
     def tearDown(self):
         ClusterOperationHelper.cleanup_cluster([self.master])
         BucketOperationHelper.delete_all_buckets_or_assert([self.master], self)
+
 
 class SimpleSetMembaseBucketDefaultPort(unittest.TestCase):
     memcapableTestBase = None
