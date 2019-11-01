@@ -158,6 +158,11 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.gsi_names = ["num1", "num2"]
         self.enable_firewall = False
         self.eventing_log_level = self.input.param('eventing_log_level', 'INFO')
+        self.timer_storage_chan_size = self.input.param('timer_storage_chan_size', 10000)
+        self.dcp_gen_chan_size = self.input.param('dcp_gen_chan_size', 10000)
+        self.is_sbm = self.input.param('source_bucket_mutation',False)
+        self.is_curl = self.input.param('curl',False)
+        self.print_eventing_handler_code_in_logs = self.input.param('print_eventing_handler_code_in_logs', True)
         self.do_restore = self.input.param("do-restore", False)
         self.do_verify = self.input.param("do-verify", False)
         self.create_views = self.input.param("create-views", False)
@@ -2138,6 +2143,49 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             deadline_timeout = execution_timeout + 1
         body['settings']['deadline_timeout'] = deadline_timeout
         return body
+
+    def bkrs_resume_function(self, body, rest, wait_for_resume=True):
+        body['settings']['deployment_status'] = True
+        body['settings']['processing_status'] = True
+        if "dcp_stream_boundary" in body['settings']:
+            body['settings'].pop('dcp_stream_boundary')
+        self.log.info("Settings after deleting dcp_stream_boundary : {0}"
+                                               .format(body['settings']))
+        content1 = rest.set_settings_for_function(body['appname'], body['settings'])
+        self.log.info("Resume Application : {0}".format(body['appname']))
+        if wait_for_resume:
+            self.bkrs_wait_for_handler_state(body['appname'], "deployed", rest)
+
+    def bkrs_wait_for_handler_state(self, name, status, rest, iterations=20):
+        self.sleep(20, message="Waiting for {} to {}...".format(name,status))
+        result = rest.get_composite_eventing_status()
+        count = 0
+        composite_status = None
+        while composite_status != status and count < iterations:
+            self.sleep(20,"Waiting for {} to {}...".format(name,status))
+            result = rest.get_composite_eventing_status()
+            for i in range(len(result['apps'])):
+                if result['apps'][i]['name'] == name:
+                    composite_status = result['apps'][i]['composite_status']
+            count+=1
+        if count == iterations:
+            raise Exception('Eventing took lot of time for handler {} to {}'.format(name,status))
+
+    def bkrs_undeploy_and_delete_function(self, body, rest):
+        self.bkrs_undeploy_function(body, rest)
+        self.sleep(5)
+        self.bkrs_delete_function(body, rest)
+
+    def bkrs_undeploy_function(self, body, rest):
+        content = rest.undeploy_function(body['appname'])
+        self.log.info("Undeploy Application : {0}".format(body['appname']))
+        self.bkrs_wait_for_handler_state(body['appname'],"undeployed", rest)
+        return content
+
+    def bkrs_delete_function(self, body, rest):
+        content1 = rest.delete_single_function(body['appname'])
+        self.log.info("Delete Application : {0}".format(body['appname']))
+        return content1
 
     def _verify_backup_events_definition(self, bk_fxn):
         backup_path = self.backupset.directory + "/backup/{0}/".format(self.backups[0])

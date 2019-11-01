@@ -3652,15 +3652,15 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             bk_events_created = True
             self.backup_create()
             self.backup_cluster()
-            rest_src = RestConnection(self.backupset.cluster_host)
-            bk_fxn = rest_src.get_all_functions()
+            rest_bk = RestConnection(self.backupset.cluster_host)
+            bk_fxn = rest_bk.get_all_functions()
             if bk_fxn != "":
                 self._verify_backup_events_definition(json.loads(bk_fxn))
             self.backup_restore()
-            self.rest = RestConnection(self.backupset.restore_cluster_host)
-            self.wait_for_handler_state(body['appname'], "deployed")
+            rest_rs = RestConnection(self.backupset.restore_cluster_host)
+            self.bkrs_resume_function(body, rest_rs)
             rs_events_created = True
-            self._verify_restore_events_definition(bk_fxn)
+            #self._verify_restore_events_definition(bk_fxn)
         except Exception as e:
             self.fail(e)
 
@@ -3668,11 +3668,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             master_nodes = [self.backupset.cluster_host,
                             self.backupset.restore_cluster_host]
             for node in master_nodes:
-                self.rest = RestConnection(node)
-                buckets = self.rest.get_buckets()
-                for bucket in buckets:
-                    items = self.rest.get_active_key_count(bucket)
-                self.undeploy_and_delete_function(body)
+                rest = RestConnection(node)
+                self.bkrs_undeploy_and_delete_function(body, rest)
             self.rest = RestConnection(self.master)
 
     def test_cbbackupmgr_with_n_vbuckets_per_shard(self):
