@@ -812,7 +812,7 @@ class RemoteMachineShellConnection:
             self.log_command_output(o, r)
         else:
             raise Exception("stopping standalone moxi is not supported on windows")
-    def is_url_live(self, url):
+    def is_url_live(self, url, exit_if_not_live=True):
         live_url = False
         #log.info("Check if url {0} is ok".format(url))
         status = urllib.urlopen(url).getcode()
@@ -825,7 +825,8 @@ class RemoteMachineShellConnection:
                    "        is failed to connect.\n"\
                    "        Check version in params to make sure it correct pattern or build number.\n"\
                    "===============\n".format(url)
-            self.stop_current_python_running(mesg)
+            if exit_if_not_live:
+                self.stop_current_python_running(mesg)
         return live_url
 
     def is_ntp_installed(self):

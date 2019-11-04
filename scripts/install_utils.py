@@ -1,7 +1,7 @@
 import getopt
 import re
-import sys
 import subprocess
+import sys
 import threading
 import time
 
@@ -12,7 +12,6 @@ from membase.api.rest_client import RestConnection
 import install_constants
 import TestInput
 import logging.config
-from subprocess import STDOUT, check_output
 
 logging.config.fileConfig("scripts.logging.conf")
 log = logging.getLogger()
@@ -21,6 +20,7 @@ NodeHelpers = []
 # Default params
 params = {
     "version": None,
+    "install_tasks": install_constants.DEFAULT_INSTALL_TASKS,
     "url": None,
     "debug_logs": False,
     "cb_edition": install_constants.CB_ENTERPRISE,
@@ -29,9 +29,10 @@ params = {
     "all_nodes_same_os": False,
     "skip_local_download": True,
     "init_nodes": True,
-    "fts_quota": testconstants.FTS_QUOTA,
     "storage_mode": "plasma",
-    "disable_consistency": False
+    "disable_consistency": False,
+    "enable_ipv6": False,
+    "use_domain_names": False
 }
 
 
@@ -73,10 +74,26 @@ class NodeHelper:
     def uninstall_cb(self):
         if install_constants.CMDS[self.info.deliverable_type]["uninstall"]:
             cmd = install_constants.CMDS[self.info.deliverable_type]["uninstall"]
-            cmd = cmd.replace("buildbinary", self.build.name)
-            cmd = cmd.replace("buildpath", self.build.path)
-            self.shell.execute_command(cmd,
-                                       debug=self.params["debug_logs"])
+            if "msi" in cmd:
+                '''WINDOWS UNINSTALL'''
+                self.shell.terminate_processes(self.info, [s for s in testconstants.WIN_PROCESSES_KILLED])
+                self.shell.terminate_processes(self.info, \
+                                               [s + "-*" for s in testconstants.COUCHBASE_FROM_VERSION_3])
+                installed_version, _ = self.shell.execute_command(
+                    "cat " + install_constants.DEFAULT_INSTALL_DIR["WINDOWS_SERVER"] + "VERSION.txt")
+                if len(installed_version) == 1:
+                    installed_msi, _ = self.shell.execute_command(
+                        "cd " + install_constants.DOWNLOAD_DIR["WINDOWS_SERVER"] + "; ls *" + installed_version[
+                            0] + "*.msi")
+                    if len(installed_msi) == 1:
+                        self.shell.execute_command(
+                            install_constants.CMDS[self.info.deliverable_type]["uninstall"].replace("installed-msi",
+                                                                                                    installed_msi[0]))
+                for browser in install_constants.WIN_BROWSERS:
+                    self.shell.execute_command("taskkill /F /IM " + browser + " /T")
+            else:
+                self.shell.execute_command(cmd,
+                                           debug=self.params["debug_logs"])
 
     def pre_install_cb(self):
         if install_constants.CMDS[self.info.deliverable_type]["pre_install"]:
@@ -110,45 +127,57 @@ class NodeHelper:
         start_time = time.time()
         while time.time() < start_time + timeout:
             if install_constants.CMDS[self.info.deliverable_type]["post_install"]:
-                cmd = install_constants.CMDS[self.info.deliverable_type]["post_install"]
+                cmd = install_constants.CMDS[self.info.deliverable_type]["post_install"].replace("buildversion",
+                                                                                                 self.build.version)
                 o, e = self.shell.execute_command(cmd, debug=self.params["debug_logs"])
                 if o == ['1']:
                     break
                 else:
                     if install_constants.CMDS[self.info.deliverable_type]["post_install_retry"]:
-                        self.shell.execute_command(
-                            install_constants.CMDS[self.info.deliverable_type]["post_install_retry"],
-                            debug=self.params["debug_logs"])
+                        if self.info.deliverable_type == "msi":
+                            check_if_downgrade, _ = self.shell.execute_command(
+                                "cd " + install_constants.DOWNLOAD_DIR["WINDOWS_SERVER"] +
+                                "; vi +\"set nobomb | set fenc=ascii | x\" install_status.txt; "
+                                "grep 'Adding WIX_DOWNGRADE_DETECTED property' install_status.txt")
+                            print(check_if_downgrade * 10)
+                        else:
+                            self.shell.execute_command(
+                                install_constants.CMDS[self.info.deliverable_type]["post_install_retry"],
+                                debug=self.params["debug_logs"])
             self.wait_for_completion(duration, event)
 
-    def pre_init_cb(self):
+    def post_init_cb(self):
         # Optionally change node name and restart server
-        if params.get('use_domain_names', 0):
+        if params.get('use_domain_names', False):
             RemoteUtilHelper.use_hostname_for_server_settings(self.node)
 
-        if params.get('enable_ipv6', 0):
-            status, content = self.shell.rename_node(
-                hostname=self.ip.replace('[', '').replace(']', ''))
-            if status:
-                log.debug("Node {0} renamed to {1}".format(self.ip,
-                                                           self.ip.replace('[', '').
-                                                           replace(']', '')))
-            else:
-                log.error("Error renaming node {0} to {1}: {2}".
-                          format(self.ip,
-                                 self.ip.replace('[', '').replace(']', ''),
-                                 content))
         # Optionally disable consistency check
-        if params["disable_consistency"]:
+        if params.get('disable_consistency', False):
             self.rest.set_couchdb_option(section='couchdb',
                                          option='consistency_check_ratio',
                                          value='0.0')
 
     def init_cb(self):
-        self.pre_init_cb()
         self.wait_for_completion(5, "Waiting for node to be initialized")
         # Initialize cluster
         self.rest = RestConnection(self.node)
+
+        if params.get('enable_ipv6', 0):
+            RemoteUtilHelper.use_hostname_for_server_settings(self.node)
+            self.rest.enable_ip_version()
+            if self.node.ip.startswith('['):
+                status, content = self.rest.rename_node(
+                    hostname=self.node.ip.replace('[', '').replace(']', ''))
+                if status:
+                    log.debug("Node {0} renamed to {1}".format(self.node.ip,
+                                                               self.node.ip.replace('[', '').
+                                                               replace(']', '')))
+                else:
+                    log.error("Error renaming node {0} to {1}: {2}".
+                              format(self.node.ip,
+                                     self.node.ip.replace('[', '').replace(']', ''),
+                                     content))
+
         info = self.rest.get_nodes_self()
         kv_quota = int(info.mcdMemoryReserved * testconstants.CLUSTER_QUOTA_RATIO)
         if kv_quota < 256:
@@ -157,22 +186,29 @@ class NodeHelper:
         self.rest.init_cluster_memoryQuota(self.node.rest_username, \
                                            self.node.rest_password, \
                                            kv_quota)
+
         if params["version"][:5] in testconstants.COUCHBASE_FROM_VULCAN:
             self.rest.init_node_services(username=self.node.rest_username,
                                          password=self.node.rest_password,
                                          services=self.get_services())
+
         if "index" in self.get_services():
             self.rest.set_indexer_storage_mode(storageMode=params["storage_mode"])
 
-        # self.shell.set_cbauth_env(self.node)
         self.rest.init_cluster(username=self.node.rest_username,
                                password=self.node.rest_password)
+
+        self.post_init_cb()
 
     def wait_for_completion(self, duration, event):
         log.debug(event.format(duration, self.ip))
         time.sleep(duration)
 
     def cleanup_cb(self):
+        print("ls -td {0}*.{1} | awk 'NR>{2}' | xargs rm -f"
+              .format(''.join(self.build.path.split('couchbase')[:-1]),
+                      self.info.deliverable_type, 2))
+
         self.shell.execute_command(
             "ls -td {0}*.{1} | awk 'NR>{2}' | xargs rm -f"
                 .format(''.join(self.build.path.split('couchbase')[:-1]),
@@ -227,6 +263,12 @@ def print_error_and_exit(err=None):
 
 
 def process_user_input():
+    params = _parse_user_input()
+    _params_validation()
+    return params
+
+
+def _parse_user_input():
     try:
         (opts, args) = getopt.getopt(sys.argv[1:], 'hi:p:', [])
         for o, a in opts:
@@ -245,11 +287,19 @@ def process_user_input():
         print_error_and_exit("No servers specified. Please use the -i parameter." + "\n" + install_constants.USAGE)
     else:
         params["servers"] = userinput.servers
-    if not "product" in userinput.test_params.keys():
-        print_error_and_exit("No product specified. Please use the product parameter." + "\n" + install_constants.USAGE)
 
     # Validate and extract remaining params
     for key, value in userinput.test_params.items():
+        if key == "install_tasks":
+            tasks = []
+            for task in value.split('-'):
+                if task in install_constants.DEFAULT_INSTALL_TASKS:
+                    tasks.append(task)
+            if len(tasks) > 0:
+                params["install_tasks"] = tasks
+            log.info("INSTALL TASKS: {0}".format(params["install_tasks"]))
+            if params["install_tasks"] == ["uninstall"]:
+                return params  # No other parameters needed
         if key == 'v' or key == "version":
             if re.match('^[0-9\.\-]*$', value) and len(value) > 5:
                 params["version"] = value
@@ -268,16 +318,12 @@ def process_user_input():
             params["toy"] = value if len(value) > 1 else None
         if key == "openssl":
             params["openssl"] = int(value)
-        # if key == "linux_repo":
-        #     params["linux_repo"] = True if value.lower() == "true" else False
         if key == "debug_logs":
             params["debug_logs"] = True if value.lower() == "true" else False
         if key == "type" or key == "edition" and value.lower() in install_constants.CB_EDITIONS:
             params["edition"] = value.lower()
         if key == "timeout" and int(value) > 0:
             params["timeout"] = int(value)
-        if key == "fts_quota" and int(value) > 0:
-            params["fts_quota"] = int(value)
         if key == "init_nodes":
             params["init_nodes"] = False if value.lower() == "false" else True
         if key == "storage_mode":
@@ -286,11 +332,26 @@ def process_user_input():
             params["disable_consistency"] = True if value.lower() == "true" else False
         if key == "skip_local_download":
             params["skip_local_download"] = False if value.lower() == "false" else True
+        if key == "enable_ipv6":
+            if value.lower() == "true":
+                for server in params["servers"]:
+                    if re.match('\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}', server.ip):
+                        print_error_and_exit(
+                            "Cannot enable IPv6 on an IPv4 machine: {0}. Please run without enable_ipv6=True.".format(
+                                server.ip))
+                params["enable_ipv6"] = True
 
     # Validation based on 2 or more params
+    if not "product" in userinput.test_params.keys():
+        print_error_and_exit("No product specified. Please use the product parameter." + "\n" + install_constants.USAGE)
+
     if not params["version"] and not params["url"]:
         print_error_and_exit("Need valid build version or url to proceed")
 
+    return params
+
+
+def _params_validation():
     # Create 1 NodeHelper instance per VM
     for server in params["servers"]:
         NodeHelpers.append(NodeHelper(server))
@@ -308,7 +369,6 @@ def process_user_input():
     else:
         for node in NodeHelpers:
             _check_version_compatibility(node)
-    return params
 
 
 # TODO: check if cb version is compatible with os
@@ -317,26 +377,27 @@ def _check_version_compatibility(node):
 
 
 def pre_install_steps():
-    if params["url"] is not None:
-        if NodeHelpers[0].shell.is_url_live(params["url"]):
-            params["all_nodes_same_os"] = True
+    if "install" in params["install_tasks"]:
+        if params["url"] is not None:
+            if NodeHelpers[0].shell.is_url_live(params["url"]):
+                params["all_nodes_same_os"] = True
+                for node in NodeHelpers:
+                    build_binary = __get_build_binary_name(node)
+                    build_url = params["url"]
+                    filepath = __get_download_dir(node.get_os()) + build_binary
+                    node.build = build(build_binary, build_url, filepath)
+            else:
+                print_error_and_exit("URL {0} is not live. Exiting.".format(params["url"]))
+        else:
             for node in NodeHelpers:
                 build_binary = __get_build_binary_name(node)
-                build_url = params["url"]
+                build_url = __get_build_url(node, build_binary)
+                if not build_url:
+                    print_error_and_exit(
+                        "Build is not present in latestbuilds or release repos, please check {0}".format(build_binary))
                 filepath = __get_download_dir(node.get_os()) + build_binary
                 node.build = build(build_binary, build_url, filepath)
-        else:
-            print_error_and_exit("URL {0} is not live. Exiting.".format(params["url"]))
-    else:
-        for node in NodeHelpers:
-            build_binary = __get_build_binary_name(node)
-            build_url = __get_build_url(node, build_binary)
-            if not build_url:
-                print_error_and_exit(
-                    "Build is not present in latestbuilds or release repos, please check {0}".format(build_binary))
-            filepath = __get_download_dir(node.get_os()) + build_binary
-            node.build = build(build_binary, build_url, filepath)
-    _download_build()
+        _download_build()
 
 
 def _execute_local(command, timeout):
@@ -372,9 +433,9 @@ def __get_build_url(node, build_binary):
         testconstants.CB_VERSION_NAME[(params["version"]).split('-')[0][:-2]],
         params["version"].split('-')[1],
         build_binary)
-    if node.shell.is_url_live(latestbuilds_url):
+    if node.shell.is_url_live(latestbuilds_url, exit_if_not_live=False):
         return latestbuilds_url
-    elif node.shell.is_url_live(release_url):
+    elif node.shell.is_url_live(release_url, exit_if_not_live=False):
         return release_url
     return None
 
@@ -386,7 +447,7 @@ def _download_build():
         timeout = install_constants.WAIT_TIMES[NodeHelpers[0].info.deliverable_type]["download_binary"]
         cmd = install_constants.WGET_CMD.format(__get_download_dir(NodeHelpers[0].get_os()), build_url)
         log.debug("Downloading build binary to {0}..".format(filepath))
-        _execute_local(cmd ,timeout)
+        _execute_local(cmd, timeout)
         _copy_to_nodes(filepath, filepath)
     else:
         for node in NodeHelpers:

@@ -85,7 +85,7 @@ def do_install(params):
     # Per node, spawn one thread, which will process a queue of install tasks
     for server in params["servers"]:
         node_helper = install_utils.get_node_helper(server.ip)
-        install_tasks = ["uninstall", "install", "init", "cleanup"]
+        install_tasks = params["install_tasks"]
         q = Queue.Queue()
         for _ in install_tasks:
             q.put(_)
@@ -106,7 +106,8 @@ def do_install(params):
             if time.time() >= force_stop:
                 log.error("INSTALL TIMED OUT AFTER {0}s.VALIDATING..".format(install_constants.INSTALL_TIMEOUT))
                 break
-    validate_install(params["version"])
+    if "init" in params["install_tasks"]:
+        validate_install(params["version"])
 
 
 def main():
