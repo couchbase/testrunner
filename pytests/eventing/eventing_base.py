@@ -159,6 +159,7 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
                                            "allow_cookies": self.cookies})
             if self.auth_type=="bearer":
                 body['depcfg']['curl'][0]['bearer_key']=self.bearer_key
+        body['settings']['language_compatibility']=self.cb_version[:5]
         return body
 
     def wait_for_bootstrap_to_complete(self, name, iterations=20):
