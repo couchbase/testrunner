@@ -19,7 +19,8 @@ from testconstants import COUCHBASE_VERSION_2_WITH_REL
 from testconstants import COUCHBASE_RELEASE_FROM_VERSION_3,\
                           COUCHBASE_RELEASE_FROM_SPOCK
 from testconstants import COUCHBASE_FROM_VERSION_3, COUCHBASE_FROM_SPOCK,\
-                          COUCHBASE_FROM_MAD_HATTER, COUCHBASE_FROM_601
+                          COUCHBASE_FROM_MAD_HATTER, COUCHBASE_FROM_601, \
+                          COUCHBASE_FROM_CHESHIRE_CAT
 from testconstants import CB_RELEASE_REPO
 from testconstants import CB_LATESTBUILDS_REPO
 
@@ -373,7 +374,8 @@ class BuildQuery(object):
                         elif "oracle linux" in os_version.lower():
                             os_name = "oel6"
                         elif "amazon linux 2" in os_version.lower():
-                            if build_version[:5] in COUCHBASE_FROM_MAD_HATTER or \
+                            if build_version[:5] in COUCHBASE_FROM_CHESHIRE_CAT or \
+                                            build_version[:5] in COUCHBASE_FROM_MAD_HATTER or \
                                             build_version[:5] in COUCHBASE_FROM_601:
                                 os_name = "amzn2"
                             else:
@@ -396,7 +398,8 @@ class BuildQuery(object):
                         elif "ubuntu 16.04" in os_version.lower():
                             os_name = "ubuntu16.04"
                         elif "ubuntu 18.04" in os_version.lower():
-                            if build_version[:5] in COUCHBASE_FROM_MAD_HATTER or \
+                            if build_version[:5] in COUCHBASE_FROM_CHESHIRE_CAT or \
+                                build_version[:5] in COUCHBASE_FROM_MAD_HATTER or \
                                 build_version[:5] in COUCHBASE_FROM_601:
                                 os_name = "ubuntu18.04"
                             else:
@@ -447,7 +450,8 @@ class BuildQuery(object):
                         elif "oracle linux" in os_version.lower():
                             os_name = "oel6"
                         elif "amazon linux 2" in os_version.lower():
-                            if build_version[:5] in COUCHBASE_FROM_MAD_HATTER or \
+                            if build_version[:5] in COUCHBASE_FROM_CHESHIRE_CAT or \
+                               build_version[:5] in COUCHBASE_FROM_MAD_HATTER or \
                                             build_version[:5] in COUCHBASE_FROM_601:
                                 os_name = "amzn2"
                             else:
@@ -467,7 +471,8 @@ class BuildQuery(object):
                         elif "ubuntu 16.04" in os_version.lower():
                             os_name = "ubuntu16.04"
                         elif "ubuntu 18.04" in os_version.lower():
-                            if build_version[:5] in COUCHBASE_FROM_MAD_HATTER or \
+                            if build_version[:5] in COUCHBASE_FROM_CHESHIRE_CAT or \
+                                build_version[:5] in COUCHBASE_FROM_MAD_HATTER or \
                                 build_version[:5] in COUCHBASE_FROM_601:
                                 os_name = "ubuntu18.04"
                             else:
@@ -856,7 +861,8 @@ class BuildQuery(object):
                         self.fail("suse 12 does not support on this version %s "
                                                                   % version[:5])
                 elif "suse 15" in distribution_version:
-                    if version[:5] in COUCHBASE_FROM_MAD_HATTER:
+                    if version[:5] in COUCHBASE_FROM_CHESHIRE_CAT or \
+                       version[:5] in COUCHBASE_FROM_MAD_HATTER:
                         suse_version="suse15"
                         build.distribution_version = "suse15"
                     else:
@@ -875,7 +881,8 @@ class BuildQuery(object):
                    "-" + os_name + "." + build.architecture_type + \
                    "." + build.deliverable_type
             elif "amazon linux release 2" in distribution_version:
-                if version[:5] in COUCHBASE_FROM_MAD_HATTER or \
+                if version[:5] in COUCHBASE_FROM_CHESHIRE_CAT or \
+                   version[:5] in COUCHBASE_FROM_MAD_HATTER or \
                                 version[:5] in COUCHBASE_FROM_601:
                     build.distribution_version = "amazon linux 2"
                     os_name = "amzn2"
@@ -898,7 +905,8 @@ class BuildQuery(object):
                 elif "ubuntu 16.04" in distribution_version:
                     os_name = "ubuntu16.04"
                 elif "ubuntu 18.04" in distribution_version.lower():
-                    if version[:5] in COUCHBASE_FROM_MAD_HATTER or \
+                    if version[:5] in COUCHBASE_FROM_CHESHIRE_CAT or \
+                       version[:5] in COUCHBASE_FROM_MAD_HATTER or \
                         version[:5] in COUCHBASE_FROM_601:
                         os_name = "ubuntu18.04"
                     else:
