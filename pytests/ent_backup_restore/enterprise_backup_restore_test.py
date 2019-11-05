@@ -1833,9 +1833,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         conn.kill_erlang(self.os_name)
         conn.start_couchbase()
         conn.disconnect()
-        timeout_now = 400
-        if self.os_name == "windows":
-            timeout_now = 600
+        timeout_now = 600
         output = restore_result.result(timeout=timeout_now)
         self.assertTrue(self._check_output("Restore completed successfully", output),
                         "Restore failed with erlang crash and restart within 180 seconds")
