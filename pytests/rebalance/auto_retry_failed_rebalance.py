@@ -305,6 +305,7 @@ class AutoRetryFailedRebalance(RebalanceBaseTest):
     def _recover_from_error(self, error_condition):
         if error_condition == "stop_server" or error_condition == "kill_erlang":
             self.start_server(self.servers[1])
+            self.sleep(self.sleep_time * 4)
         elif error_condition == "enable_firewall":
             self.stop_firewall_on_node(self.servers[1])
         elif error_condition == "reboot_server":
