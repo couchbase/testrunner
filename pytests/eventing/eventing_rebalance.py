@@ -1142,6 +1142,7 @@ class EventingRebalance(EventingBaseTest):
             log.info("Rebalance failed as expected after reboot of kv and eventing: {0}".format(str(ex)))
         else:
             self.fail("Rebalance succeeded even after rebooting kv and eventing node")
+        self.sleep(180,"waiting for node to come up")
         self.wait_for_handler_state(self.function_name,"deployed")
         # retry the failed rebalance
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init + 1], [], [])
