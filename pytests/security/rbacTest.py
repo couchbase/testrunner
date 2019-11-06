@@ -359,13 +359,13 @@ class rbacTest(ldaptest):
         else:
             source = 'external'
         expectedResults = {"full_name":"'RitamSharma'","roles":["admin"],"identity:source":source,"identity:user":userid[0],
-                           "real_userid:source":"ns_server","real_userid:user":"Administrator",
+                           "real_userid:source":"ns_server","real_userid:user":"Administrator","groups": [],
                             "ip":self.ipAddress, "port":123456}
         if ops == 'edit':
             payload = "name=" + user_name + "&roles=" + 'admin,cluster_admin'
             status, content, header =  rbacmain(self.master, self.auth_type)._set_user_roles(user_name=userid[0],payload=payload)
             expectedResults = {"full_name":"'RitamSharma'","roles":["admin","cluster_admin"],"identity:source":source,"identity:user":userid[0],
-                           "real_userid:source":"ns_server","real_userid:user":"Administrator",
+                           "real_userid:source":"ns_server","real_userid:user":"Administrator","groups": [],
                             "ip":self.ipAddress, "port":123456}
         elif ops == 'remove':
             status, content, header = rbacmain(self.master,self.auth_type)._delete_user(userid[0])
