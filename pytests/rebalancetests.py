@@ -125,7 +125,7 @@ class RebalanceBaseTest(unittest.TestCase):
                                    bucket.name)
                 if not failed_over:
                     stats = rest.get_bucket_stats(bucket=bucket.name)
-                    RebalanceHelper.print_taps_from_all_nodes(rest, bucket.name)
+                    # RebalanceHelper.print_taps_from_all_nodes(rest, bucket.name)
                     msg = "curr_items : {0} is not equal to actual # of keys inserted : {1} : bucket: {2}"
 
                     if bucket_data[bucket.name]['kv_store'] is None:

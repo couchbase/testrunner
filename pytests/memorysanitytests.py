@@ -34,7 +34,7 @@ class MemorySanity(BaseTestCase):
 
     def repetitive_create_delete(self):
         self.repetitions = self.input.param("repetition_count", 1)
-        self.bufferspace = self.input.param("bufferspace", 600000)
+        self.bufferspace = self.input.param("bufferspace", 6000000)
         # the first front end load
         self._load_all_buckets(self.master, self.gen_create, "create", 0,
                                batch_size=10000, pause_secs=5, timeout_secs=100)
