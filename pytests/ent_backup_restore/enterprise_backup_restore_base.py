@@ -684,28 +684,6 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                         if not self.dgm_run and int(kv_quota) > 0:
                             bucket_size = kv_quota
 
-                    self.log.info("Check services on restore and backup cluster")
-                    bk_rest = RestConnection(self.backupset.cluster_host)
-                    bk_servc_map = bk_rest.get_nodes_services()
-
-                    for key in bk_servc_map.keys():
-                        if self.backupset.cluster_host.ip in key:
-                            bk_servc_map = bk_servc_map[key]
-                            break
-                    rs_rest = RestConnection(self.backupset.restore_cluster_host)
-                    rs_servc_map = rs_rest.get_nodes_services()
-                    for key in rs_servc_map.keys():
-                        if self.backupset.restore_cluster_host.ip in key:
-                            rs_servc_map = rs_servc_map[key]
-                            break
-                    s = set(rs_servc_map)
-                    s_diff = [x for x in bk_servc_map if x not in s]
-
-                    if "fts" in s_diff or "index" in s_diff or "eventing" in s_diff:
-                        bucket_size = self._reset_restore_cluster_with_bk_services(bk_servc_map)
-                        if int(bucket_size) > 256:
-                            rest_conn = RestConnection(self.backupset.restore_cluster_host)
-
                     self.log.info("replica in bucket {0} is {1}".format(bucket.name, replicas))
                     rest_conn.create_bucket(bucket=bucket_name,
                                     ramQuotaMB=int(bucket_size) - 1,
