@@ -284,7 +284,7 @@ class FailoverTests(FailoverBaseTest):
         self.verify_for_recovery_type(chosen, self.server_map, self.buckets, recoveryTypeMap, fileMapsForVerification, self.deltaRecoveryBuckets)
 
         # Comparison of all data if required
-        if not self.withMutationOps:
+        if not self.withMutationOps and self.flusher_batch_split_trigger is None:
             self.sleep(60)
             self.data_analysis_all(record_static_data_set, self.servers, self.buckets, path=None, addedItems=None)
 
@@ -560,7 +560,7 @@ class FailoverTests(FailoverBaseTest):
         prefix = ("", "dev_")[is_dev_ddoc]
 
         query = {}
-        query["connectionTimeout"] = 60000;
+        query["connectionTimeout"] = 60000
         query["full_set"] = "true"
 
         views = []
@@ -596,7 +596,7 @@ class FailoverTests(FailoverBaseTest):
         ddoc_name = "ddoc1"
         prefix = ("", "dev_")[is_dev_ddoc]
         query = {}
-        query["connectionTimeout"] = 60000;
+        query["connectionTimeout"] = 60000
         query["full_set"] = "true"
         expected_rows = None
         timeout = None

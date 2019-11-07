@@ -26,12 +26,12 @@ class RebalanceBaseTest(BaseTestCase):
         # To validate MB-34173
         self.sleep_before_rebalance = \
             self.input.param("sleep_before_rebalance", None)
-        flusher_batch_split_trigger = \
+        self.flusher_batch_split_trigger = \
             self.input.param("flusher_batch_split_trigger", None)
 
-        if flusher_batch_split_trigger:
+        if self.flusher_batch_split_trigger:
             self.set_flusher_batch_split_trigger(
-                flusher_batch_split_trigger, self.buckets)
+                self.flusher_batch_split_trigger, self.buckets)
 
         if self.blob_generator:
             # gen_load is used to create initial docs (1000 items by default)
