@@ -53,7 +53,10 @@ def validate_install(version):
     for node in install_utils.NodeHelpers:
         node.install_success = False
         if node.rest:
-            node_status = node.rest.cluster_status()["nodes"]
+            try:
+                node_status = node.rest.cluster_status()["nodes"]
+            except:
+                continue
             for item in node_status:
                 if version in item['version'] and item['status'] == "healthy":
                     node.install_success = True

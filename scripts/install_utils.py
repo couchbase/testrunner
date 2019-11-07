@@ -98,8 +98,16 @@ class NodeHelper:
     def pre_install_cb(self):
         if install_constants.CMDS[self.info.deliverable_type]["pre_install"]:
             cmd = install_constants.CMDS[self.info.deliverable_type]["pre_install"]
-            if "HDIUTIL_DETACH_ATTACH" in cmd:
-                hdiutil_attach(self.shell, self.build.path, self.build.version)
+            duration, event, timeout = install_constants.WAIT_TIMES[self.info.deliverable_type]["pre_install"]
+            if cmd is not None and "HDIUTIL_DETACH_ATTACH" in cmd:
+                start_time = time.time()
+                while time.time() < start_time + timeout:
+                    try:
+                        ret = hdiutil_attach(self.shell, self.build.path, self.build.version)
+                        if ret:
+                            break
+                    except:
+                        self.wait_for_completion(duration, event)
 
     def install_cb(self):
         self.pre_install_cb()
@@ -111,15 +119,14 @@ class NodeHelper:
             cmd = cmd.replace("buildbinary", self.build.name)
             cmd = cmd.replace("buildpath", self.build.path)
             cmd = cmd.replace("mountpoint", "/tmp/couchbase-server-" + params["version"])
-            timeout = install_constants.WAIT_TIMES[self.info.deliverable_type]
+            timeout = install_constants.WAIT_TIMES[self.info.deliverable_type]["install"]
             if not timeout:
                 output, _ = self.shell.execute_command(cmd,
                                                        debug=self.params["debug_logs"])
             else:
                 output, _ = self.shell.execute_command(cmd,
                                                        debug=self.params["debug_logs"],
-                                                       timeout=install_constants.WAIT_TIMES[self.info.deliverable_type]
-                                                       ["install"])
+                                                       timeout=timeout)
         self.post_install_cb()
 
     def post_install_cb(self):
@@ -158,25 +165,16 @@ class NodeHelper:
                                          value='0.0')
 
     def init_cb(self):
-        self.wait_for_completion(5, "Waiting for node to be initialized")
-        # Initialize cluster
-        self.rest = RestConnection(self.node)
-
-        if params.get('enable_ipv6', 0):
-            RemoteUtilHelper.use_hostname_for_server_settings(self.node)
-            self.rest.enable_ip_version()
-            if self.node.ip.startswith('['):
-                status, content = self.rest.rename_node(
-                    hostname=self.node.ip.replace('[', '').replace(']', ''))
-                if status:
-                    log.debug("Node {0} renamed to {1}".format(self.node.ip,
-                                                               self.node.ip.replace('[', '').
-                                                               replace(']', '')))
-                else:
-                    log.error("Error renaming node {0} to {1}: {2}".
-                              format(self.node.ip,
-                                     self.node.ip.replace('[', '').replace(']', ''),
-                                     content))
+        timeout = install_constants.WAIT_TIMES[self.info.deliverable_type]["init"]
+        start_time = time.time()
+        while time.time() < start_time + timeout:
+            try:
+                # Initialize cluster
+                self.rest = RestConnection(self.node)
+                if self.rest is not None:
+                    break
+            except:
+                self.wait_for_completion(10, "Waiting for rest connection")
 
         info = self.rest.get_nodes_self()
         kv_quota = int(info.mcdMemoryReserved * testconstants.CLUSTER_QUOTA_RATIO)
@@ -187,10 +185,9 @@ class NodeHelper:
                                            self.node.rest_password, \
                                            kv_quota)
 
-        if params["version"][:5] in testconstants.COUCHBASE_FROM_VULCAN:
-            self.rest.init_node_services(username=self.node.rest_username,
-                                         password=self.node.rest_password,
-                                         services=self.get_services())
+        self.rest.init_node_services(username=self.node.rest_username,
+                                     password=self.node.rest_password,
+                                     services=self.get_services())
 
         if "index" in self.get_services():
             self.rest.set_indexer_storage_mode(storageMode=params["storage_mode"])
@@ -205,14 +202,14 @@ class NodeHelper:
         time.sleep(duration)
 
     def cleanup_cb(self):
-        print("ls -td {0}*.{1} | awk 'NR>{2}' | xargs rm -f"
-              .format(''.join(self.build.path.split('couchbase')[:-1]),
-                      self.info.deliverable_type, 2))
-
-        self.shell.execute_command(
-            "ls -td {0}*.{1} | awk 'NR>{2}' | xargs rm -f"
-                .format(''.join(self.build.path.split('couchbase')[:-1]),
-                        self.info.deliverable_type, 2), debug=self.params["debug_logs"])
+        try:
+            # Delete all but the most recently accessed build binary
+            self.shell.execute_command(
+                "ls -td {0}*.{1} | awk 'NR>{2}' | xargs rm -f"
+                    .format(''.join(self.build.path.split('couchbase')[:-1]),
+                            self.info.deliverable_type, 2), debug=self.params["debug_logs"])
+        except:
+            log.warn("Exception thrown during cleanup..ok to ignore")
 
 
 def _get_mounted_volumes(shell):
@@ -248,7 +245,9 @@ def hdiutil_attach(shell, dmg_path, max_attempts=3):
     else:
         if len(volumes) < 1:
             log.warn("Unable to attach {0} after {1} attempts".format(dmg_path, max_attempts))
+            return 0
     log.debug("Done attaching Couchbase Server Volumes")
+    return 1
 
 
 def get_node_helper(ip):
@@ -423,20 +422,29 @@ def _copy_to_nodes(src_path, dest_path):
 
 
 def __get_build_url(node, build_binary):
-    latestbuilds_url = "{0}{1}/{2}/{3}".format(
-        testconstants.CB_REPO,
+    if params["enable_ipv6"]:
+        ipv6_url = "{0}{1}/{2}/{3}".format(
+        testconstants.CB_FQDN_REPO,
         testconstants.CB_VERSION_NAME[(params["version"]).split('-')[0][:-2]],
         params["version"].split('-')[1],
         build_binary)
-    release_url = "{0}{1}/{2}/{3}".format(
-        testconstants.CB_RELEASE_REPO,
-        testconstants.CB_VERSION_NAME[(params["version"]).split('-')[0][:-2]],
-        params["version"].split('-')[1],
-        build_binary)
-    if node.shell.is_url_live(latestbuilds_url, exit_if_not_live=False):
-        return latestbuilds_url
-    elif node.shell.is_url_live(release_url, exit_if_not_live=False):
-        return release_url
+        if node.shell.is_url_live(ipv6_url, exit_if_not_live=False):
+            return ipv6_url
+    else:
+        latestbuilds_url = "{0}{1}/{2}/{3}".format(
+            testconstants.CB_REPO,
+            testconstants.CB_VERSION_NAME[(params["version"]).split('-')[0][:-2]],
+            params["version"].split('-')[1],
+            build_binary)
+        release_url = "{0}{1}/{2}/{3}".format(
+            testconstants.CB_RELEASE_REPO,
+            testconstants.CB_VERSION_NAME[(params["version"]).split('-')[0][:-2]],
+            params["version"].split('-')[1],
+            build_binary)
+        if node.shell.is_url_live(latestbuilds_url, exit_if_not_live=False):
+            return latestbuilds_url
+        elif node.shell.is_url_live(release_url, exit_if_not_live=False):
+            return release_url
     return None
 
 
@@ -476,13 +484,16 @@ def check_file_exists(node, filepath):
 
 def check_and_retry_download_binary(cmd, node, retry=3):
     attempt = 0
+    timeout = install_constants.WAIT_TIMES[node.info.deliverable_type]["download_binary"]
     while attempt < retry:
+        try:
+            node.shell.execute_command(cmd, debug=params["debug_logs"], timeout=timeout)
+            if check_file_exists(node, node.build.path):
+                break
+        except:
+            log.warn("Unable to download build, retrying..")
+            time.sleep(5)
         attempt += 1
-        if check_file_exists(node, node.build.path):
-            break
-        else:
-            time.sleep(install_constants.WAIT_TIMES[node.info.deliverable_type]["download_binary"])
-            node.shell.execute_command(cmd, debug=params["debug_logs"])
     else:
         print_error_and_exit("Cannot download binary after {0} attempts, exiting".format(retry))
 
