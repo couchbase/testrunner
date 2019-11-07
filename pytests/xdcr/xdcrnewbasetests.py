@@ -1245,10 +1245,11 @@ class CouchbaseCluster:
             # NRU eviction for src bkt implemented in 6.0.2
             # AllowSourceNRUCreation internal setting needs to be enabled for 6.0.2 to 6.5.0
             # It is enabled by default for 6.5.0 and up
-            if "6.0." in NodeHelper.get_cb_version(server):
+            rest = RestConnection(server)
+            if rest.check_node_versions("6.0"):
                 self.set_internal_setting("AllowSourceNRUCreation", "true")
                 bucket_params['eviction_policy'] = EVICTION_POLICY.NRU_EVICTION
-            elif "6.5." in NodeHelper.get_cb_version(server):
+            elif rest.check_node_versions("6.5"):
                 bucket_params['eviction_policy'] = EVICTION_POLICY.NRU_EVICTION
         else:
             if eviction_policy in EVICTION_POLICY.CB:
