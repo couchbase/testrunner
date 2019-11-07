@@ -65,7 +65,7 @@ class EventingN1QL(EventingBaseTest):
         body = self.create_save_function_body(self.function_name, HANDLER_CODE.N1QL_PREPARE, worker_count=3)
         self.deploy_function(body)
         # Wait for eventing to catch up with all the create mutations and verify results
-        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, on_delete=True)
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, on_delete=True,skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
         query = "drop primary index on " + self.src_bucket_name
         self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_node)

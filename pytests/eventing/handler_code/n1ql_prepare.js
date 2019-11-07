@@ -1,8 +1,15 @@
 function OnUpdate(doc, meta) {
-    log('document', doc);
-    var query=Execute test;
-//    query.execQuery();
+    try{
+        log('document', doc);
+        var query=Execute test;
+    }catch(e){
+        log(e);
+    }
 }
 function OnDelete(meta) {
-    dst_bucket[meta.id]='deleted';
+    try{
+        dst_bucket[meta.id]='deleted';
+    }catch(e){
+    log(e);
+    }
 }
