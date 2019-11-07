@@ -51,7 +51,7 @@ class EventingRQG(EventingBaseTest):
 
     update_map = {"STRING_FIELD ": "email ", "NUMERIC_FIELD ": "age ", "UPPER_BOUND_VALUE": "8",
                   "LOWER_BOUND_VALUE": "0", "NUMERIC_FIELD_LIST": "age", "STRING_FIELD_LIST": "email",
-                  "( LIST )": "[1,2,3]","STRING_FIELD,NUMERIC_FIELD,DATETIME_FIELD":"email=\"update@a.c\",age=4,created='2010-09-15 00:00:00'"}
+                  "( LIST )": "[1,2,3]","STRING_FIELD,NUMERIC_FIELD,DATETIME_FIELD":"email=\"update@a.c\",age=4,created=\"2010-09-15 00:00:00\""}
 
     join_map = {"PREVIOUS_TABLE.FIELD":"src_bucket.email","CURRENT_TABLE.FIELD":"_bucket.email","STRING_FIELD ": "email ", "NUMERIC_FIELD ": "age ", "UPPER_BOUND_VALUE": "8",
                   "LOWER_BOUND_VALUE": "0", "NUMERIC_FIELD_LIST": "age", "STRING_FIELD_LIST": "email",
