@@ -1427,7 +1427,7 @@ class ESRunQueryCompare(Task):
                         query_type = 'wiki'
                 else:
                     query_type = self.fts_index.dataset
-                geo_strings = ["geo"]
+                geo_strings = ['"field": "geo"']
                 if any(geo_str in str(json.dumps(self.fts_query)) for geo_str in geo_strings):
                     query_type = 'earthquake'
 
