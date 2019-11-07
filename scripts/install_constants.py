@@ -99,7 +99,7 @@ CMDS = {
         "pre_install": "HDIUTIL_DETACH_ATTACH",
         "install": "cp -R mountpoint/Couchbase\ Server.app /Applications; "
                    "sudo xattr -d -r com.apple.quarantine /Applications/Couchbase\ Server.app; "
-                   "sudo open -a /Applications/Couchbase\ Server.app",
+                   "open /Applications/Couchbase\ Server.app",
         "post_install": "launchctl list | grep couchbase-server > /dev/null && echo 1 || echo 0",
         "post_install_retry": None,
         "init": None
