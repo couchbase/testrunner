@@ -235,29 +235,28 @@ class EvictionKV(EvictionBase):
                                               " all -u Administrator -p password | grep ephemeral")
         if self.input.param('eviction_policy', 'noEviction') == 'noEviction':
             self.assertEquals([' ep_bucket_type:                                        ephemeral',
-                               ' ep_dcp_ephemeral_backfill_type:                        buffered',
                                ' ep_ephemeral_full_policy:                              fail_new_data',
-                               ' ep_ephemeral_metadata_purge_age:                       259200',
-                               ' ep_ephemeral_metadata_purge_chunk_duration:            20',
-                               ' ep_ephemeral_metadata_purge_interval:                  60'], output)
+                               ' ep_ephemeral_metadata_mark_stale_chunk_duration:       20',
+                               ' ep_ephemeral_metadata_purge_age:                       86400',
+                               ' ep_ephemeral_metadata_purge_interval:                  60',
+                               ' ep_ephemeral_metadata_purge_stale_chunk_duration:      20'], output)
         else:
             self.assertEquals([' ep_bucket_type:                                        ephemeral',
-                               ' ep_dcp_ephemeral_backfill_type:                        buffered',
                                ' ep_ephemeral_full_policy:                              auto_delete',
-                               ' ep_ephemeral_metadata_purge_age:                       259200',
-                               ' ep_ephemeral_metadata_purge_chunk_duration:            20',
-                               ' ep_ephemeral_metadata_purge_interval:                  60'], output)
+                               ' ep_ephemeral_metadata_mark_stale_chunk_duration:       20',
+                               ' ep_ephemeral_metadata_purge_age:                       86400',
+                               ' ep_ephemeral_metadata_purge_interval:                  60',
+                               ' ep_ephemeral_metadata_purge_stale_chunk_duration:      20'], output)
 
         output, error = shell.execute_command("/opt/couchbase/bin/cbstats localhost:11210 -b default "
                                               "vbucket-details -u Administrator -p password "
                                               "| grep seqlist_deleted_count")
-        self.assertEquals(' vb_0:seqlist_deleted_count:              0', output[0])
+        self.assertEquals(' vb_0:seqlist_deleted_count:            0', output[0])
 
         item_count = rest.get_bucket(self.buckets[0]).stats.itemCount
         self.log.info('rest.get_bucket(self.buckets[0]).stats.itemCount: %s' % item_count)
         output, error = shell.execute_command("/opt/couchbase/bin/cbstats localhost:11210 -b default all"
                                               " -u Administrator -p password | grep curr_items")
-        self.log.info(output)
         self.assertEquals(' curr_items:                                            %s' % item_count, output[0])
 
         self.log.info('The number of items when almost reached OOM is {0}'.format(item_count))
@@ -286,11 +285,10 @@ class EvictionKV(EvictionBase):
         output, error = shell.execute_command("/opt/couchbase/bin/cbstats localhost:11210 -b default "
                                               "vbucket-details -u Administrator -p password "
                                               "| grep seqlist_deleted_count")
-        self.log.info(output)
         if self.input.param('eviction_policy', 'noEviction') == 'noEviction':
-            self.assertEquals(' vb_0:seqlist_deleted_count:              0', output[0], 'have deleted items!')
+            self.assertEquals(' vb_0:seqlist_deleted_count:            0', output[0], 'have deleted items!')
         else:
-            self.assertTrue(int(output[0].replace(' vb_0:seqlist_deleted_count:              ', '')) > 0,
+            self.assertTrue(int(output[0].replace('vb_0:seqlist_deleted_count:', '').strip()) > 0,
                             'no deleted items!')
 
     # https://issues.couchbase.com/browse/MB-23988
@@ -354,7 +352,7 @@ class EphemeralBackupRestoreTest(EvictionBase):
                                                    "--username Administrator --password password --start %s" % output[
                                                        0])
         self.log.info(output)
-        self.assertEquals('Restore completed successfully', output[1])
+        self.assertEquals('Restore bucket "default" succeeded', output[1])
         self._verify_all_buckets(self.master)
 
 
