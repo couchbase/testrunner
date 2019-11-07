@@ -78,6 +78,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                 self.cli_command_location = bin_path.replace('"','') + "/"
 
         self.debug_logs = self.input.param("debug-logs", False)
+        self.vbuckets_filter_no_data = False
         self.backupset.directory = self.input.param("dir", "/tmp/entbackup")
         self.backupset.user_env = self.input.param("user-env", False)
         self.backupset.passwd_env = self.input.param("passwd-env", False)
@@ -520,7 +521,13 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         if not skip_backup:
             output, error = self.backup_cluster()
             if error or not self._check_output(self.bk_printout, output):
-                self.fail("Taking cluster backup failed. Check printout below. "
+                if self.vbucket_filter is not None:
+                    self.log.info("These vbuckets {0} may not contain data"
+                                  .format(self.vbucket_filter))
+                    self.vbuckets_filter_no_data = True
+                    return
+                else:
+                    self.fail("Taking cluster backup failed. Check printout below. "
                           "\nErrors: {0} \nOutput: {1}".format(error, output))
         self.backup_list()
         if repeats < 2 and validate_directory_structure:
@@ -544,6 +551,9 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                 self.backups.append("2017-05-18T13_40_30.842368123-07_00")
             else:
                 self.backups.append("2017-05-18T11_55_22.009680763-07_00")
+        if self.vbuckets_filter_no_data:
+            self.log.info("No data in backup repo as expected.")
+            return
         try:
             backup_start = self.backups[int(self.backupset.start) - 1]
         except IndexError:
@@ -812,6 +822,9 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                                 seqno_compare_function="==",
                                 replicas=False, mode="memory",
                                 expected_error=None):
+        if self.vbuckets_filter_no_data:
+            self.log.info("No data in backup repo as expected.")
+            return
         output, error =self.backup_restore()
         if expected_error:
             output.extend(error)
