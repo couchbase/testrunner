@@ -1570,7 +1570,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                                  self.value_size, end=self.num_items)
             self._load_all_buckets(self.master, gen, "create", 0)
             output, error = self.backup_cluster()
-        error_msg = "Error backing up cluster: Unable to read data because range.json is corrupt,"
+        error_msg = "no space left on device"
         self.assertTrue(self._check_output(error_msg, output),
                         "Expected error message not thrown by backup when disk is full")
         self.log.info("Expected error thrown by backup command")

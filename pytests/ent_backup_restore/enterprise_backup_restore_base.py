@@ -698,8 +698,10 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                         if self.backupset.restore_cluster_host.ip in key:
                             rs_servc_map = rs_servc_map[key]
                             break
+                    s = set(rs_servc_map)
+                    s_diff = [x for x in bk_servc_map if x not in s]
 
-                    if bk_servc_map != rs_servc_map:
+                    if "fts" in s_diff or "index" in s_diff or "eventing" in s_diff:
                         bucket_size = self._reset_restore_cluster_with_bk_services(bk_servc_map)
                         if int(bucket_size) > 256:
                             rest_conn = RestConnection(self.backupset.restore_cluster_host)
@@ -717,8 +719,17 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                     bucket_ready = rest_helper.vbucket_map_ready(bucket_name)
                     if not bucket_ready:
                         self.fail("Bucket {0} not created after 120 seconds.".format(bucket_name))
+
+                    count = 0
+                    bucket_status = rest_conn.get_bucket_status(bucket_name)
+                    while bucket_status == "warmup":
+                        self.sleep(5, "wait for bucket is up")
+                        bucket_status = rest_conn.get_bucket_status(bucket_name)
+                        count += 1
+                        if count == 15:
+                            raise Exception ("Bucket does not ready after 30 seconds")
                     if has_index_node:
-                        self.sleep(5, "wait for index service ready")
+                        self.sleep(15, "wait for index service ready")
                 elif self.backupset.map_buckets and self.same_cluster:
                     bucket_maps = ""
                     bucket_name = bucket.name + "_" + str(count)
