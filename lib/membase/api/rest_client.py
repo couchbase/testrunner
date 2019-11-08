@@ -1039,8 +1039,11 @@ class RestConnection(object):
         api = self.cbas_base_url + "/analytics/service"
         headers = self._create_capi_headers_with_auth(username, password)
 
-        params = {'statement': statement, 'mode': mode, 'pretty': pretty,
-                  'client_context_id': client_context_id}
+        params = {'statement': statement, 'pretty': pretty, 'client_context_id': client_context_id}
+
+        if mode is not None:
+            params['mode'] = mode
+
         params = json.dumps(params)
         status, content, header = self._http_request(api, 'POST',
                                                      headers=headers,
