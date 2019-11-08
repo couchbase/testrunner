@@ -1136,7 +1136,10 @@ class NewUpgradeBaseTest(QueryHelperTests,EventingBaseTest, FTSBaseTest):
             cbas_bucket_name=self.cbas_bucket_name,
             validate_error_msg=self.validate_error)
         if not result:
-            self.fail("FAIL : Actual error msg does not match the expected")
+            if self.validate_error:
+                self.fail("FAIL : Actual error msg does not match the expected")
+            else:
+                self.fail("Failed to create data set on bucket")
 
     def create_replica_index(self):
         self.log.info("create_index")

@@ -2332,7 +2332,12 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                 self.fail("This test needs at least 5 servers to run")
             nodes_init = 4
             if initial_services_setting is not None:
-                initial_services_setting += "-kv,fts,index"
+                tmp = initial_services_setting.split("-")
+                if nodes_init > len(tmp):
+                    if (nodes_init - len(tmp)) == 1:
+                        initial_services_setting += "-kv,fts,index"
+                    elif (nodes_init - len(tmp)) == 2:
+                        initial_services_setting += "-kv,n1ql-kv,fts,index"
                 self.is_fts_in_pre_upgrade = True
         self._install(self.servers[:nodes_init])
         # Configure the nodes with services
@@ -2347,9 +2352,9 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
 
         self.buckets = RestConnection(self.master).get_buckets()
         if 5 <= int(self.initial_version[:1]) and 5.5 > float(self.initial_version[:3]):
-            self.pre_upgrade(self.servers[:3])
+            self.pre_upgrade(self.servers[:nodes_init])
         elif 5.5 <= float(self.initial_version[:3]) and self.num_index_replicas > 0:
-            self.pre_upgrade(self.servers[:4])
+            self.pre_upgrade(self.servers[:nodes_init])
         seqno_expected = 1
         if self.ddocs_num:
             self.create_ddocs_and_views()
