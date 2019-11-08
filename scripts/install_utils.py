@@ -165,17 +165,9 @@ class NodeHelper:
                                          value='0.0')
 
     def init_cb(self):
-        timeout = install_constants.WAIT_TIMES[self.info.deliverable_type]["init"]
-        start_time = time.time()
-        while time.time() < start_time + timeout:
-            try:
-                # Initialize cluster
-                self.rest = RestConnection(self.node)
-                if self.rest is not None:
-                    break
-            except:
-                self.wait_for_completion(10, "Waiting for rest connection")
-
+        self.wait_for_completion(5, "Waiting for node to be initialized")
+        # Initialize cluster
+        self.rest = RestConnection(self.node)
         info = self.rest.get_nodes_self()
         kv_quota = int(info.mcdMemoryReserved * testconstants.CLUSTER_QUOTA_RATIO)
         if kv_quota < 256:
@@ -184,10 +176,10 @@ class NodeHelper:
         self.rest.init_cluster_memoryQuota(self.node.rest_username, \
                                            self.node.rest_password, \
                                            kv_quota)
-
-        self.rest.init_node_services(username=self.node.rest_username,
-                                     password=self.node.rest_password,
-                                     services=self.get_services())
+        if params["version"][:5] in testconstants.COUCHBASE_FROM_VULCAN:
+            self.rest.init_node_services(username=self.node.rest_username,
+                                         password=self.node.rest_password,
+                                         services=self.get_services())
 
         if "index" in self.get_services():
             self.rest.set_indexer_storage_mode(storageMode=params["storage_mode"])

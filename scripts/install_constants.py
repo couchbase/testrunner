@@ -118,7 +118,7 @@ CMDS = {
     "rpm": {
         "uninstall":
             "systemctl stop couchbase-server; "
-            # "rm -rf " + DEFAULT_INSTALL_DIR["LINUX_DISTROS"] + "; "
+            "rm -rf " + DEFAULT_INSTALL_DIR["LINUX_DISTROS"] + "; "
             "rm -rf /var/lib/rpm/.rpm.lock; "
             "pkill -u couchbase; "
             "rpm -e couchbase-server",
