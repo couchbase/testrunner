@@ -64,25 +64,7 @@ def validate_install(version):
                                                                                       item['version'],
                                                                                       item['status'],
                                                                                       item['services']))
-    print_result()
-
-
-def print_result():
-    success = []
-    fail = []
-    for node in install_utils.NodeHelpers:
-        if node.install_success:
-            success.append(node.ip)
-        elif not node.install_success:
-            fail.append(node.ip)
-    log.info("-" * 100)
-    for _ in fail:
-        log.error("INSTALL FAILED ON: \t{0}".format(_))
-    log.info("-" * 100)
-    for _ in success:
-        log.info("INSTALL COMPLETED ON: \t{0}".format(_))
-    log.info("-" * 100)
-
+    install_utils.print_result_and_exit()
 
 def do_install(params):
     # Per node, spawn one thread, which will process a queue of install tasks
@@ -124,4 +106,4 @@ if __name__ == "__main__":
     main()
     end_time = time.time()
     log.info("TOTAL INSTALL TIME = {0} seconds".format(round(end_time - start_time)))
-    sys.exit()
+    sys.exit(0)

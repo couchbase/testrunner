@@ -56,6 +56,7 @@ class NodeHelper:
         self.queue = None
         self.thread = None
         self.rest = None
+        self.install_success = False
 
     def get_services(self):
         if not self.node.services:
@@ -246,12 +247,28 @@ def get_node_helper(ip):
     for node_helper in NodeHelpers:
         if node_helper.ip == ip:
             return node_helper
+    return None
 
-
-def print_error_and_exit(err=None):
-    log.error(err)
-    sys.exit()
-
+def print_result_and_exit(err=None):
+    if err:
+        log.error(err)
+    success = []
+    fail = []
+    for server in params["servers"]:
+        node = get_node_helper(server.ip)
+        if not node or not node.install_success:
+            fail.append(server.ip)
+        elif node.install_success:
+            success.append(server.ip)
+    log.info("-" * 100)
+    for _ in fail:
+        log.error("INSTALL FAILED ON: \t{0}".format(_))
+    log.info("-" * 100)
+    for _ in success:
+        log.info("INSTALL COMPLETED ON: \t{0}".format(_))
+    log.info("-" * 100)
+    if len(fail) > 0:
+        sys.exit(1)
 
 def process_user_input():
     params = _parse_user_input()
@@ -264,18 +281,18 @@ def _parse_user_input():
         (opts, args) = getopt.getopt(sys.argv[1:], 'hi:p:', [])
         for o, a in opts:
             if o == "-h":
-                print_error_and_exit(install_constants.USAGE)
+                print_result_and_exit(install_constants.USAGE)
         if len(sys.argv) <= 1:
-            print_error_and_exit(install_constants.USAGE)
+            print_result_and_exit(install_constants.USAGE)
         userinput = TestInput.TestInputParser.get_test_input(sys.argv)
     except IndexError:
-        print_error_and_exit(install_constants.USAGE)
+        print_result_and_exit(install_constants.USAGE)
     except getopt.GetoptError, err:
-        print_error_and_exit(str(err))
+        print_result_and_exit(str(err))
 
     # Mandatory params
     if not userinput.servers:
-        print_error_and_exit("No servers specified. Please use the -i parameter." + "\n" + install_constants.USAGE)
+        print_result_and_exit("No servers specified. Please use the -i parameter." + "\n" + install_constants.USAGE)
     else:
         params["servers"] = userinput.servers
 
@@ -304,7 +321,7 @@ def _parse_user_input():
             if val in install_constants.SUPPORTED_PRODUCTS:
                 params["product"] = val
             else:
-                print_error_and_exit("Please specify valid product")
+                print_result_and_exit("Please specify valid product")
         if key == "toy":
             params["toy"] = value if len(value) > 1 else None
         if key == "openssl":
@@ -327,17 +344,17 @@ def _parse_user_input():
             if value.lower() == "true":
                 for server in params["servers"]:
                     if re.match('\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}', server.ip):
-                        print_error_and_exit(
+                        print_result_and_exit(
                             "Cannot enable IPv6 on an IPv4 machine: {0}. Please run without enable_ipv6=True.".format(
                                 server.ip))
                 params["enable_ipv6"] = True
 
     # Validation based on 2 or more params
     if not "product" in userinput.test_params.keys():
-        print_error_and_exit("No product specified. Please use the product parameter." + "\n" + install_constants.USAGE)
+        print_result_and_exit("No product specified. Please use the product parameter." + "\n" + install_constants.USAGE)
 
     if not params["version"] and not params["url"]:
-        print_error_and_exit("Need valid build version or url to proceed")
+        print_result_and_exit("Need valid build version or url to proceed")
 
     return params
 
@@ -351,7 +368,7 @@ def _params_validation():
     node_os = []
     for node in NodeHelpers:
         if node.get_os() not in install_constants.SUPPORTED_OS:
-            print_error_and_exit("Install on {0} OS is not supported".format(node.get_os()))
+            print_result_and_exit("Install on {0} OS is not supported".format(node.get_os()))
         else:
             node_os.append(node.get_os())
     if len(set(node_os)) == 1:
@@ -378,13 +395,13 @@ def pre_install_steps():
                     filepath = __get_download_dir(node.get_os()) + build_binary
                     node.build = build(build_binary, build_url, filepath)
             else:
-                print_error_and_exit("URL {0} is not live. Exiting.".format(params["url"]))
+                print_result_and_exit("URL {0} is not live. Exiting.".format(params["url"]))
         else:
             for node in NodeHelpers:
                 build_binary = __get_build_binary_name(node)
                 build_url = __get_build_url(node, build_binary)
                 if not build_url:
-                    print_error_and_exit(
+                    print_result_and_exit(
                         "Build is not present in latestbuilds or release repos, please check {0}".format(build_binary))
                 filepath = __get_download_dir(node.get_os()) + build_binary
                 node.build = build(build_binary, build_url, filepath)
@@ -487,7 +504,7 @@ def check_and_retry_download_binary(cmd, node, retry=3):
             time.sleep(5)
         attempt += 1
     else:
-        print_error_and_exit("Cannot download binary after {0} attempts, exiting".format(retry))
+        print_result_and_exit("Cannot download binary after {0} attempts, exiting".format(retry))
 
 
 def __get_download_dir(os):
