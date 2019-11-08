@@ -63,8 +63,9 @@ class RebalanceInOutTests(RebalanceBaseTest):
         new_failover_stats = self.compare_failovers_logs(prev_failover_stats, result_nodes, self.buckets)
         new_vbucket_stats = self.compare_vbucket_seqnos(prev_vbucket_stats, result_nodes, self.buckets,
                                                         perNode=False)
-        self.compare_vbucketseq_failoverlogs(new_vbucket_stats, new_failover_stats)
-        self.sleep(30)
+        if self.flusher_batch_split_trigger is None:
+            self.compare_vbucketseq_failoverlogs(new_vbucket_stats, new_failover_stats)
+            self.sleep(30)
         self.data_analysis_active_replica_all(disk_active_dataset, disk_replica_dataset, result_nodes, self.buckets,
                                               path=None)
         self.verify_unacked_bytes_all_buckets()
@@ -157,7 +158,8 @@ class RebalanceInOutTests(RebalanceBaseTest):
         prev_failover_stats = self.get_failovers_logs(self.servers[:self.nodes_init], self.buckets)
         disk_replica_dataset, disk_active_dataset = self.get_and_compare_active_replica_data_set_all(
             self.servers[:self.nodes_init], self.buckets, path=None)
-        self.compare_vbucketseq_failoverlogs(prev_vbucket_stats, prev_failover_stats)
+        if self.flusher_batch_split_trigger is None:
+            self.compare_vbucketseq_failoverlogs(prev_vbucket_stats, prev_failover_stats)
         self.rest = RestConnection(self.master)
         chosen = RebalanceHelper.pick_nodes(self.master, howmany=1)
         result_nodes = list(set(self.servers[:self.nodes_init] + servs_in) - set(servs_out))
@@ -185,8 +187,9 @@ class RebalanceInOutTests(RebalanceBaseTest):
             self.check_snap_start_corruption()
 
         self.verify_cluster_stats(result_nodes, check_ep_items_remaining=True)
-        self.compare_failovers_logs(prev_failover_stats, result_nodes, self.buckets)
-        self.sleep(30)
+        if self.flusher_batch_split_trigger is None:
+            self.compare_failovers_logs(prev_failover_stats, result_nodes, self.buckets)
+            self.sleep(30)
         self.data_analysis_active_replica_all(disk_active_dataset, disk_replica_dataset, result_nodes, self.buckets,
                                               path=None)
         self.verify_unacked_bytes_all_buckets()
