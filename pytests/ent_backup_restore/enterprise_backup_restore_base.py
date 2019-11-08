@@ -707,17 +707,6 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                     bucket_ready = rest_helper.vbucket_map_ready(bucket_name)
                     if not bucket_ready:
                         self.fail("Bucket {0} not created after 120 seconds.".format(bucket_name))
-
-                    count = 0
-                    bucket_status = rest_conn.get_bucket_status(bucket_name)
-                    while bucket_status == "warmup":
-                        self.sleep(5, "wait for bucket is up")
-                        bucket_status = rest_conn.get_bucket_status(bucket_name)
-                        count += 1
-                        if count == 15:
-                            raise Exception ("Bucket does not ready after 30 seconds")
-                    if has_index_node:
-                        self.sleep(15, "wait for index service ready")
                 elif self.backupset.map_buckets and self.same_cluster:
                     bucket_maps = ""
                     bucket_name = bucket.name + "_" + str(count)
@@ -737,6 +726,16 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                     bucket_ready = rest_helper.vbucket_map_ready(bucket_name)
                     if not bucket_ready:
                         self.fail("Bucket {0} not created after 120 seconds.".format(bucket_name))
+                count = 0
+                bucket_status = rest_conn.get_bucket_status(bucket_name)
+                while bucket_status == "warmup":
+                    self.sleep(5, "wait for bucket is up")
+                    bucket_status = rest_conn.get_bucket_status(bucket_name)
+                    count += 1
+                    if count == 15:
+                        raise Exception ("Bucket does not ready after 30 seconds")
+                if has_index_node:
+                    self.sleep(15, "wait for index service ready")
                 buckets.append("%s=%s" % (bucket.name, bucket_name))
                 count +=1
             bucket_maps = ",".join(buckets)
