@@ -589,7 +589,7 @@ class N1qlFTSIntegrationTest(QueryTests):
         idx_result_node4_after_rebalance = self._run_query_against_node(self.servers[3], self.test_fts_query)
         alias_result_node4_after_rebalance = self._run_query_against_node(self.servers[3], self.test_fts_alias_query)
 
-        self.assertEuqals(idx_result_node2_before_failover == idx_result_node4_after_rebalance and
+        self.assertEquals(idx_result_node2_before_failover == idx_result_node4_after_rebalance and
                           idx_result_node2_before_failover == alias_result_node4_after_rebalance, True, "Results after rebalance are not the same.")
 
 
