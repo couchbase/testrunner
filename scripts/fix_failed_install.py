@@ -59,6 +59,15 @@ for row in row_iter:
 		print('STDERR:')
 		print(err_5)
 		print('STDOUT:')
+                print(out_5)
+		cmds = 'iptables -F'
+                ssh_stdin, ssh_stdout, ssh_stderr = ssh.exec_command(cmds)
+                out_6 = ssh_stdout.read()
+                err_6 = ssh_stderr.read()
+                print('STDERR:')
+                print(err_6)
+                print('STDOUT:')
+                print(out_6)
 		if out_2 == '':
 			fixed_ips.append(server)
 			#ssh_stdin, ssh_stdout, ssh_stderr = ssh.exec_command('reboot')
