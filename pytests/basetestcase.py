@@ -318,7 +318,13 @@ class BaseTestCase(unittest.TestCase):
                             [],
                             services=self.services)
                 elif self.nodes_init > 1 and not self.skip_init_check_cbserver:
-                    self.services = self.get_services(self.servers[:self.nodes_init], self.services_init)
+                    self.services = self.get_services(self.servers[:self.nodes_init],
+                                                      self.services_init)
+                    """ if there is not node service in ini file, kv needs to be added in
+                        to avoid exception when add node """
+                    if int(self.nodes_init) - len(self.services) > 0:
+                        for i in range(0, int(self.nodes_init) - len(self.services)):
+                            self.services.append("kv")
                     self.cluster.rebalance(self.servers[:1],
                                            self.servers[1:self.nodes_init],
                                            [],
