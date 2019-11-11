@@ -93,8 +93,17 @@ class NodeHelper:
                 for browser in install_constants.WIN_BROWSERS:
                     self.shell.execute_command("taskkill /F /IM " + browser + " /T")
             else:
-                self.shell.execute_command(cmd,
-                                           debug=self.params["debug_logs"])
+                duration, event, timeout = install_constants.WAIT_TIMES[self.info.deliverable_type]["uninstall"]
+                start_time = time.time()
+                while time.time() < start_time + timeout:
+                    try:
+                        o, e = self.shell.execute_command(cmd, debug=self.params["debug_logs"])
+                        if o == ['1']:
+                            break
+                    except:
+                        self.wait_for_completion(duration, event)
+
+
 
     def pre_install_cb(self):
         if install_constants.CMDS[self.info.deliverable_type]["pre_install"]:
@@ -120,14 +129,16 @@ class NodeHelper:
             cmd = cmd.replace("buildbinary", self.build.name)
             cmd = cmd.replace("buildpath", self.build.path)
             cmd = cmd.replace("mountpoint", "/tmp/couchbase-server-" + params["version"])
-            timeout = install_constants.WAIT_TIMES[self.info.deliverable_type]["install"]
-            if not timeout:
-                output, _ = self.shell.execute_command(cmd,
-                                                       debug=self.params["debug_logs"])
-            else:
-                output, _ = self.shell.execute_command(cmd,
-                                                       debug=self.params["debug_logs"],
-                                                       timeout=timeout)
+            duration, event, timeout = install_constants.WAIT_TIMES[self.info.deliverable_type]["install"]
+            start_time = time.time()
+            while time.time() < start_time + timeout:
+                try:
+                    o, e = self.shell.execute_command(cmd, debug=self.params["debug_logs"])
+                    if o == ['1']:
+                        break
+                except:
+                    self.wait_for_completion(duration, event)
+
         self.post_install_cb()
 
     def post_install_cb(self):
@@ -166,27 +177,36 @@ class NodeHelper:
                                          value='0.0')
 
     def init_cb(self):
-        self.wait_for_completion(5, "Waiting for node to be initialized")
-        # Initialize cluster
-        self.rest = RestConnection(self.node)
-        info = self.rest.get_nodes_self()
-        kv_quota = int(info.mcdMemoryReserved * testconstants.CLUSTER_QUOTA_RATIO)
-        if kv_quota < 256:
-            kv_quota = 256
-        log.debug("quota for kv: %s MB" % kv_quota)
-        self.rest.init_cluster_memoryQuota(self.node.rest_username, \
-                                           self.node.rest_password, \
-                                           kv_quota)
-        if params["version"][:5] in testconstants.COUCHBASE_FROM_VULCAN:
-            self.rest.init_node_services(username=self.node.rest_username,
-                                         password=self.node.rest_password,
-                                         services=self.get_services())
+        duration, event, timeout = install_constants.WAIT_TIMES[self.info.deliverable_type]["init"]
+        self.wait_for_completion(duration, event)
+        start_time = time.time()
+        while time.time() < start_time + timeout:
+            try:
+                init_success = False
+                self.rest = RestConnection(self.node)
+                info = self.rest.get_nodes_self()
+                kv_quota = int(info.mcdMemoryReserved * testconstants.CLUSTER_QUOTA_RATIO)
+                if kv_quota < 256:
+                    kv_quota = 256
+                log.debug("quota for kv: %s MB" % kv_quota)
+                self.rest.init_cluster_memoryQuota(self.node.rest_username, \
+                                                   self.node.rest_password, \
+                                                   kv_quota)
 
-        if "index" in self.get_services():
-            self.rest.set_indexer_storage_mode(storageMode=params["storage_mode"])
+                self.rest.init_node_services(username=self.node.rest_username,
+                                                 password=self.node.rest_password,
+                                                 services=self.get_services())
 
-        self.rest.init_cluster(username=self.node.rest_username,
-                               password=self.node.rest_password)
+                if "index" in self.get_services():
+                    self.rest.set_indexer_storage_mode(storageMode=params["storage_mode"])
+
+                self.rest.init_cluster(username=self.node.rest_username,
+                                       password=self.node.rest_password)
+                init_success = True
+                if init_success:
+                    break
+            except Exception as e:
+                self.wait_for_completion(duration, event)
 
         self.post_init_cb()
 
@@ -298,15 +318,17 @@ def _parse_user_input():
 
     # Validate and extract remaining params
     for key, value in userinput.test_params.items():
+        if key == "debug_logs":
+            params["debug_logs"] = True if value.lower() == "true" else False
         if key == "install_tasks":
             tasks = []
             for task in value.split('-'):
-                if task in install_constants.DEFAULT_INSTALL_TASKS:
+                if task in install_constants.DEFAULT_INSTALL_TASKS and task not in tasks:
                     tasks.append(task)
             if len(tasks) > 0:
                 params["install_tasks"] = tasks
             log.info("INSTALL TASKS: {0}".format(params["install_tasks"]))
-            if params["install_tasks"] == ["uninstall"]:
+            if "install" not in params["install_tasks"] and "init" not in params["install_tasks"]:
                 return params  # No other parameters needed
         if key == 'v' or key == "version":
             if re.match('^[0-9\.\-]*$', value) and len(value) > 5:
@@ -326,8 +348,6 @@ def _parse_user_input():
             params["toy"] = value if len(value) > 1 else None
         if key == "openssl":
             params["openssl"] = int(value)
-        if key == "debug_logs":
-            params["debug_logs"] = True if value.lower() == "true" else False
         if key == "type" or key == "edition" and value.lower() in install_constants.CB_EDITIONS:
             params["edition"] = value.lower()
         if key == "timeout" and int(value) > 0:
@@ -490,21 +510,20 @@ def check_file_exists(node, filepath):
             return True
     return False
 
-
-def check_and_retry_download_binary(cmd, node, retry=3):
-    attempt = 0
-    timeout = install_constants.WAIT_TIMES[node.info.deliverable_type]["download_binary"]
-    while attempt < retry:
+def check_and_retry_download_binary(cmd, node):
+    duration, event, timeout = install_constants.WAIT_TIMES[node.info.deliverable_type]["download_binary"]
+    time.sleep(duration)
+    start_time = time.time()
+    while time.time() < start_time + timeout:
         try:
-            node.shell.execute_command(cmd, debug=params["debug_logs"], timeout=timeout)
             if check_file_exists(node, node.build.path):
                 break
+            node.shell.execute_command(cmd, debug=params["debug_logs"])
         except:
             log.warn("Unable to download build, retrying..")
-            time.sleep(5)
-        attempt += 1
+            time.sleep(duration)
     else:
-        print_result_and_exit("Cannot download binary after {0} attempts, exiting".format(retry))
+        print_result_and_exit("Unable to download build in {0}s, exiting".format(timeout))
 
 
 def __get_download_dir(os):

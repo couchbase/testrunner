@@ -117,13 +117,11 @@ CMDS = {
     },
     "rpm": {
         "uninstall":
-            "systemctl stop couchbase-server; "
-            "rm -rf " + DEFAULT_INSTALL_DIR["LINUX_DISTROS"] + "; "
-            "rm -rf /var/lib/rpm/.rpm.lock; "
-            "pkill -u couchbase; "
-            "rpm -e couchbase-server",
+            "systemctl stop couchbase-server; " +
+            "rpm -e couchbase-server; " +
+            "rm -rf " + DEFAULT_INSTALL_DIR["LINUX_DISTROS"] + "> /dev/null && echo 1 || echo 0",
         "pre_install": None,
-        "install": "yes | yum localinstall -y buildpath",
+        "install": "yes | yum localinstall -y buildpath > /dev/null && echo 1 || echo 0",
         # "install": "yes | INSTALL_DONT_START_SERVER=1 yum localinstall -y buildpath",
         "suse_install": "rpm -i buildpath",
         "post_install": "systemctl -q is-active couchbase-server && echo 1 || echo 0",
@@ -134,30 +132,39 @@ CMDS = {
 }
 
 INSTALL_TIMEOUT = 600
-INSTALL_POLL_INTERVAL = INSTALL_TIMEOUT // 10
+INSTALL_POLL_INTERVAL = INSTALL_TIMEOUT // 30
 
 WAIT_TIMES = {
+    # (<sleep between retries>, <message>, <give up after>)
     "msi": {
-        "download_binary": 10,
-        "install": None,
-        "post_install": (30, "Waiting {0}s for couchbase-service to become active on {1}..", 120)
+        "download_binary": (20, "Waiting {0}s for couchbase-service to become active on {1}..", 100),
+        "uninstall": (10, "Waiting {0}s for couchbase-service to become active on {1}..", 30),
+        "install": (10, "Waiting {0}s for couchbase-service to become active on {1}..", 100),
+        "post_install": (30, "Waiting {0}s for couchbase-service to become active on {1}..", 120),
+        "init": (30, "Waiting {0}s for {1} to be initialized..", 300)
     },
     "rpm": {
-        "download_binary": 10,
-        "install": 100,
-        "post_install": (10, "Waiting {0}s for couchbase-service to become active on {1}..", 60)
+        "download_binary": (10, "Waiting {0}s for couchbase-service to become active on {1}..", 100),
+        "uninstall": (10, "Waiting {0}s for couchbase-service to become active on {1}..", 30),
+        "install": (10, "Waiting {0}s for couchbase-service to become active on {1}..", 100),
+        "post_install": (10, "Waiting {0}s for couchbase-service to become active on {1}..", 60),
+        "init": (30, "Waiting {0}s for {1} to be initialized..", 300)
     },
     "deb": {
-        "download_binary": 10,
-        "install": None,  # Install time varies too much
-        "post_install": (10, "Waiting {0}s for couchbase-service to become active on {1}..", 60)
+        "download_binary": (10, "Waiting {0}s for couchbase-service to become active on {1}..", 100),
+        "uninstall": (10, "Waiting {0}s for couchbase-service to become active on {1}..", 30),
+        "install": (10, "Waiting {0}s for couchbase-service to become active on {1}..", 100),
+        "post_install": (10, "Waiting {0}s for couchbase-service to become active on {1}..", 60),
+        "init": (30, "Waiting {0}s for {1} to be initialized..", 300)
 
     },
     "dmg": {
-        "download_binary": 150,
+        "download_binary": (10, "Waiting {0}s for couchbase-service to become active on {1}..", 100),
+        "uninstall": (10, "Waiting {0}s for couchbase-service to become active on {1}..", 30),
         "pre_install": (10, "Waiting for dmg to be mounted..", 30),
-        "install": None,
-        "post_install": (10, "Waiting {0}s for couchbase-service to become active on {1}..", 60)
+        "install": (10, "Waiting {0}s for couchbase-service to become active on {1}..", 100),
+        "post_install": (10, "Waiting {0}s for couchbase-service to become active on {1}..", 60),
+        "init": (30, "Waiting {0}s for {1} to be initialized..", 300)
     }
 
 }

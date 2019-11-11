@@ -28,9 +28,9 @@ def node_installer(node, install_tasks):
             install_tasks.task_done()
 
 
-def on_install_error(install_task, node, err):
+def on_install_error(install_task, node, e):
     node.queue.empty()
-    log.error("Error {0} occurred on {1} during {2}".format(err, node.ip, install_task))
+    log.error("Error {0}:{1} occurred on {2} during {3}".format(repr(e), e.message, node.ip, install_task))
 
 
 def do_install_task(task, node):
@@ -45,7 +45,8 @@ def do_install_task(task, node):
             node.cleanup_cb()
         log.info("Done with %s on %s." % (task, node.ip))
     except Exception as e:
-        on_install_error(task, node, e.message)
+        on_install_error(task, node, e)
+        traceback.print_exc()
 
 
 def validate_install(version):
