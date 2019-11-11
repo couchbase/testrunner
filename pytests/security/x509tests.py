@@ -982,8 +982,8 @@ class x509tests(BaseTestCase):
         rest = RestConnection(self.master)
         rest.create_bucket(bucket='default', ramQuotaMB=100)
         
-        status, output = x509main()._execute_command_clientcert(host.ip, url='/pools/default', port=18091, headers="", client_cert=True, curl=False)
-        self.assertEqual(status, 401 , "Invalid user gets authenticated successfully")
+        status = x509main()._execute_command_clientcert(host.ip, url='/pools/default', port=18091, headers="", client_cert=True, curl=False)
+        self.assertEqual(status[0], 'error' , "Invalid user gets authenticated successfully")
 
     def test_upload_json_tests(self):
         rest = RestConnection(self.master)

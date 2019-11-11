@@ -327,7 +327,7 @@ class x509main:
             except Exception, ex:
                 log.info ("into exception form validate_ssl_login with client cert")
                 log.info (" Exception is {0}".format(ex))
-                return 'error'
+                return 'error','error'
         else:
             try:
                 r = requests.get("https://" + str(self.host.ip) + ":18091", verify=x509main.CERT_FILE)
@@ -339,7 +339,7 @@ class x509main:
             except Exception, ex:
                 log.info ("into exception form validate_ssl_login")
                 log.info (" Exception is {0}".format(ex))
-                return 'error'
+                return 'error','error'
 
     '''
     Call in curl requests to execute rest api's
