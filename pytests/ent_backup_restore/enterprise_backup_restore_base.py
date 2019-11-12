@@ -78,6 +78,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                 self.cli_command_location = bin_path.replace('"','') + "/"
 
         self.debug_logs = self.input.param("debug-logs", False)
+        self.show_bk_list = self.input.param("show_bk_list", True)
         self.vbuckets_filter_no_data = False
         self.backupset.directory = self.input.param("dir", "/tmp/entbackup")
         self.backupset.user_env = self.input.param("user-env", False)
@@ -529,7 +530,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                 else:
                     self.fail("Taking cluster backup failed. Check printout below. "
                           "\nErrors: {0} \nOutput: {1}".format(error, output))
-        self.backup_list()
+        if self.show_bk_list:
+            self.backup_list()
         if repeats < 2 and validate_directory_structure:
             status, msg = self.validation_helper.validate_backup()
             if not status:
@@ -2533,6 +2535,8 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         Backup the cluster and validate the backupset.
         :return: Nothing
         """
+        if not self.debug_logs:
+            self.show_bk_list = False
         self.backup_cluster_validate(repeats=self.number_of_repeats)
 
     def backup_with_expiry(self):
