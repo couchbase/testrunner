@@ -275,16 +275,8 @@ class basic_ops(BaseTestCase):
             self.verify_stat(items=self.num_items, value="off")
 
     def do_get_random_key(self):
-        # MB-31548, get_Random key gets hung sometimes.
-        self.log.info("Creating few docs in the bucket")
+        # MB-31548, get_Random key from empty bucket gets hung sometimes.
         rest = RestConnection(self.master)
-        client = VBucketAwareMemcached(rest, 'default')
-        key = "test_docs-"
-        for index in range(1000):
-            doc_key = key + str(index)
-            client.memcached(doc_key).set(doc_key, 0, 0,
-                                          json.dumps({'value': 'value1'}))
-
         self.log.info("Performing random_gets")
         mc = MemcachedClient(self.master.ip, 11210)
         mc.sasl_auth_plain(self.master.rest_username,
