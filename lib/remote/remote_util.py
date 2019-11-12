@@ -209,7 +209,7 @@ class RemoteMachineShellConnection:
             log.info("Can't establish SSH session with {0}".format(self.ip))
             exit(1)
 
-    def __init__(self, serverInfo):
+    def __init__(self, serverInfo, exit_on_failure=True):
         # let's create a connection
         self.username = serverInfo.ssh_username
         self.password = serverInfo.ssh_password
@@ -248,10 +248,17 @@ class RemoteMachineShellConnection:
                 break
             except paramiko.AuthenticationException:
                 log.error("Authentication failed")
-                exit(1)
+                if exit_on_failure:
+                    exit(1)
+                else:
+                    break
             except paramiko.BadHostKeyException:
                 log.error("Invalid Host key")
-                exit(1)
+                if exit_on_failure:
+                    exit(1)
+                else:
+                    break
+
             except Exception as e:
                 if str(e).find('PID check failed. RNG must be re-initialized') != -1 and\
                         attempt != max_attempts_connect:
@@ -262,7 +269,11 @@ class RemoteMachineShellConnection:
                 else:
                     log.error("Can't establish SSH session to node {1} :\
                                                    {0}".format(e, self.ip))
-                    exit(1)
+                    if exit_on_failure:
+                        exit(1)
+                    else:
+                        break
+
         log.info("Connected to {0}".format(serverInfo.ip))
         """ self.info.distribution_type.lower() == "ubuntu" """
         self.cmd_ext = ""

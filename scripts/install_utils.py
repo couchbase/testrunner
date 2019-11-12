@@ -50,7 +50,10 @@ class NodeHelper:
         self.node = node
         self.ip = node.ip
         self.params = params
-        self.shell = RemoteMachineShellConnection(node)
+        try:
+            self.shell = RemoteMachineShellConnection(node, exit_on_failure=False)
+        except Exception as e:
+            print_result_and_exit(e.message)
         self.info = self.shell.extract_remote_info()
         self.build = None
         self.queue = None
