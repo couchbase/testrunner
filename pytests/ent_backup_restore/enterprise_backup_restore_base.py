@@ -1,7 +1,7 @@
 import copy
 import os, shutil, ast, re, subprocess
 import json
-import urllib, datetime
+import urllib, datetime, time
 
 from basetestcase import BaseTestCase
 from TestInput import TestInputSingleton, TestInputServer
@@ -2263,8 +2263,14 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             num_shards = 0
             now = datetime.datetime.now()
             backup_date = now.year
-            cmd1 = "cd {0}/backup/; ls  | grep{2} '07_00' "\
-                           .format(self.backupset.directory, backup_date, self.cmd_ext)
+            """ handle change in daylight saving time """
+            time_diff = "08_00"
+            is_dst = time.localtime().tm_isdst
+            if is_dst:
+                time_diff = "07_00"
+
+            cmd1 = "cd {0}/backup/; ls  | grep{1} '{2}' "\
+                           .format(self.backupset.directory, self.cmd_ext, time_diff)
             output, error = shell.execute_command(cmd1)
 
             if output and len(output) >= 1:
