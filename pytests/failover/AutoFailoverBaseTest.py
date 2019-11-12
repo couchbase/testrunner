@@ -232,7 +232,7 @@ class AutoFailoverBaseTest(BaseTestCase):
         self.task_manager.schedule(task)
         try:
             task.result()
-        except Exception, e:
+        except Exception as e:
             self.fail("Exception: {}".format(e))
 
     def disable_firewall(self):
@@ -251,7 +251,7 @@ class AutoFailoverBaseTest(BaseTestCase):
         self.task_manager.schedule(task)
         try:
             task.result()
-        except Exception, e:
+        except Exception as e:
             self.fail("Exception: {}".format(e))
 
     def restart_couchbase_server(self):
@@ -276,7 +276,7 @@ class AutoFailoverBaseTest(BaseTestCase):
         self.task_manager.schedule(task)
         try:
             task.result()
-        except Exception, e:
+        except Exception as e:
             self.fail("Exception: {}".format(e))
 
     def stop_couchbase_server(self):
@@ -317,7 +317,7 @@ class AutoFailoverBaseTest(BaseTestCase):
         self.task_manager.schedule(task)
         try:
             task.result()
-        except Exception, e:
+        except Exception as e:
             self.fail("Exception: {}".format(e))
 
     def stop_restart_network(self):
@@ -343,7 +343,7 @@ class AutoFailoverBaseTest(BaseTestCase):
         self.task_manager.schedule(task)
         try:
             task.result()
-        except Exception, e:
+        except Exception as e:
             self.fail("Exception: {}".format(e))
 
     def restart_machine(self):
@@ -368,7 +368,7 @@ class AutoFailoverBaseTest(BaseTestCase):
         self.task_manager.schedule(task)
         try:
             task.result()
-        except Exception, e:
+        except Exception as e:
 
             self.fail("Exception: {}".format(e))
         finally:
@@ -406,7 +406,7 @@ class AutoFailoverBaseTest(BaseTestCase):
         self.task_manager.schedule(task)
         try:
             task.result()
-        except Exception, e:
+        except Exception as e:
             self.fail("Exception: {}".format(e))
         finally:
             task = AutoFailoverNodesFailureTask(self.orchestrator,
@@ -435,7 +435,7 @@ class AutoFailoverBaseTest(BaseTestCase):
         self.task_manager.schedule(task)
         try:
             task.result()
-        except Exception, e:
+        except Exception as e:
             self.fail("Exception: {}".format(e))
         self.disable_firewall()
 
@@ -705,7 +705,7 @@ class DiskAutoFailoverBasetest(AutoFailoverBaseTest):
         self.task_manager.schedule(task)
         try:
             task.result()
-        except Exception, e:
+        except Exception as e:
             self.fail("Exception: {}".format(e))
 
     def fail_disk_via_disk_full(self):
@@ -727,7 +727,7 @@ class DiskAutoFailoverBasetest(AutoFailoverBaseTest):
         self.task_manager.schedule(task)
         try:
             task.result()
-        except Exception, e:
+        except Exception as e:
             self.fail("Exception: {}".format(e))
 
     def bring_back_failed_nodes_up(self):
@@ -744,7 +744,7 @@ class DiskAutoFailoverBasetest(AutoFailoverBaseTest):
             self.task_manager.schedule(task)
             try:
                 task.result()
-            except Exception, e:
+            except Exception as e:
                 self.fail("Exception: {}".format(e))
         elif self.failover_action == "disk_full":
             task = AutoFailoverNodesFailureTask(self.orchestrator,
@@ -759,7 +759,7 @@ class DiskAutoFailoverBasetest(AutoFailoverBaseTest):
             self.task_manager.schedule(task)
             try:
                 task.result()
-            except Exception, e:
+            except Exception as e:
                 self.fail("Exception: {}".format(e))
         else:
             super(DiskAutoFailoverBasetest, self).bring_back_failed_nodes_up()
