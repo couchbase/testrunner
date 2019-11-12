@@ -641,11 +641,11 @@ class MemcachedClient(object):
         return self._doCmd(memcacheConstants.CMD_START_PERSISTENCE, '', '')
 
     def set_flush_param(self, key, val):
-        print "setting flush param:", key, val
+        self.log.info("setting flush param: {} {}".format(key, val))
         return self._doCmd(memcacheConstants.CMD_SET_FLUSH_PARAM, key, val)
 
     def set_param(self, key, val, type):
-        print "setting param:", key, val
+        self.log.info("setting param: {} {}".format(key, val))
         type = struct.pack(memcacheConstants.GET_RES_FMT, type)
         return self._doCmd(memcacheConstants.CMD_SET_FLUSH_PARAM, key, val, type)
 
@@ -659,7 +659,7 @@ class MemcachedClient(object):
         return self._doCmd(memcacheConstants.CMD_REVERT_ONLINEUPDATE, '', '')
 
     def set_tap_param(self, key, val):
-        print "setting tap param:", key, val
+        self.log.info("setting tap param: {} {}".format(key, val))
         return self._doCmd(memcacheConstants.CMD_SET_TAP_PARAM, key, val)
 
     def set_vbucket_state(self, vbucket, stateName):
