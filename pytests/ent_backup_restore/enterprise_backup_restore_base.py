@@ -901,7 +901,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, args)
         output, error = remote_client.execute_command(command)
-        remote_client.log_command_output(output, error)
+        if self.debug_logs:
+            remote_client.log_command_output(output, error)
         remote_client.disconnect()
         if error:
             return False, error, "Getting backup list failed."
