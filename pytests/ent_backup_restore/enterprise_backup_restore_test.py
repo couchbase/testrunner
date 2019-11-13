@@ -3125,7 +3125,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         if "ephemeral" in self.bucket_type:
             self.log.info("ephemeral bucket needs to set backup cluster to memopt for gsi.")
             self.test_storage_mode = "memory_optimized"
-            self._reset_storage_mode(rest_src, self.test_storage_mode)
+            self.quota = self._reset_storage_mode(rest_src, self.test_storage_mode)
             rest_src.add_node(self.servers[1].rest_username, self.servers[1].rest_password,
                           self.servers[1].ip, services=['kv', 'index'])
             rebalance = self.cluster.async_rebalance(self.cluster_to_backup, [], [])
