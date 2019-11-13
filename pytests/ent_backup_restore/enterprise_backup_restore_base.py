@@ -847,13 +847,15 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         command = "grep 'Transfer plan finished successfully' " + self.backupset.directory + \
                   "/logs/{0}".format(bk_log_file_name)
         output, error = remote_client.execute_command(command)
-        remote_client.log_command_output(output, error)
+        if self.debug_logs:
+            remote_client.log_command_output(output, error)
         if not output:
             self.fail("Restoring backup failed.")
         command = "grep 'Transfer failed' " + self.backupset.directory + \
                   "/logs/{0}".format(bk_log_file_name)
         output, error = remote_client.execute_command(command)
-        remote_client.log_command_output(output, error)
+        if self.debug_logs:
+            remote_client.log_command_output(output, error)
         if output:
             self.fail("Restoring backup failed.")
 
