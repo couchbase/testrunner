@@ -24,11 +24,9 @@ params = {
     "url": None,
     "debug_logs": False,
     "cb_edition": install_constants.CB_ENTERPRISE,
-    "timeout": 300,
-    "toy": None,
+    "timeout": install_constants.INSTALL_TIMEOUT,
     "all_nodes_same_os": False,
     "skip_local_download": True,
-    "init_nodes": True,
     "storage_mode": "plasma",
     "disable_consistency": False,
     "enable_ipv6": False,
@@ -50,16 +48,29 @@ class NodeHelper:
         self.node = node
         self.ip = node.ip
         self.params = params
-        try:
-            self.shell = RemoteMachineShellConnection(node, exit_on_failure=False)
-        except Exception as e:
-            print_result_and_exit(e.message)
-        self.info = self.shell.extract_remote_info()
         self.build = None
         self.queue = None
         self.thread = None
         self.rest = None
         self.install_success = False
+        self.connect_ok = False
+        self.shell = None
+        self.info = None
+        self.check_node_reachable()
+
+    def check_node_reachable(self):
+        start_time = time.time()
+        # Try 3 times
+        while time.time() < start_time + 60:
+            try:
+                self.shell = RemoteMachineShellConnection(self.node, exit_on_failure=False)
+                self.info = self.shell.extract_remote_info()
+                self.connect_ok = True
+                if self.connect_ok:
+                    break
+            except Exception as e:
+                log.warn("{0} unreachable, {1}, retrying..".format(self.ip, e.message))
+                time.sleep(20)
 
     def get_services(self):
         if not self.node.services:
@@ -103,7 +114,8 @@ class NodeHelper:
                         o, e = self.shell.execute_command(cmd, debug=self.params["debug_logs"])
                         if o == ['1']:
                             break
-                    except:
+                    except Exception as e:
+                        log.warn("Exception {0} occurred on {1}, retrying..".format(e.message, self.ip))
                         self.wait_for_completion(duration, event)
 
 
@@ -119,7 +131,8 @@ class NodeHelper:
                         ret = hdiutil_attach(self.shell, self.build.path, self.build.version)
                         if ret:
                             break
-                    except:
+                    except Exception as e:
+                        log.warn("Exception {0} occurred on {1}, retrying..".format(e.message, self.ip))
                         self.wait_for_completion(duration, event)
 
     def install_cb(self):
@@ -139,7 +152,8 @@ class NodeHelper:
                     o, e = self.shell.execute_command(cmd, debug=self.params["debug_logs"])
                     if o == ['1']:
                         break
-                except:
+                except Exception as e:
+                    log.warn("Exception {0} occurred on {1}, retrying..".format(e.message, self.ip))
                     self.wait_for_completion(duration, event)
 
         self.post_install_cb()
@@ -181,7 +195,7 @@ class NodeHelper:
 
     def init_cb(self):
         duration, event, timeout = install_constants.WAIT_TIMES[self.info.deliverable_type]["init"]
-        self.wait_for_completion(duration, event)
+        self.wait_for_completion(duration*2, event)
         start_time = time.time()
         while time.time() < start_time + timeout:
             try:
@@ -209,23 +223,24 @@ class NodeHelper:
                 if init_success:
                     break
             except Exception as e:
+                log.warn("Exception {0} occurred on {1}, retrying..".format(e.message, self.ip))
                 self.wait_for_completion(duration, event)
 
         self.post_init_cb()
 
     def wait_for_completion(self, duration, event):
-        log.debug(event.format(duration, self.ip))
+        if params["debug_logs"]:
+            log.info(event.format(duration, self.ip))
         time.sleep(duration)
 
     def cleanup_cb(self):
-        try:
-            # Delete all but the most recently accessed build binary
-            self.shell.execute_command(
-                "ls -td {0}*.{1} | awk 'NR>{2}' | xargs rm -f"
-                    .format(''.join(self.build.path.split('couchbase')[:-1]),
-                            self.info.deliverable_type, 2), debug=self.params["debug_logs"])
-        except:
-            log.warn("Exception thrown during cleanup..ok to ignore")
+        cmd = install_constants.CMDS[self.info.deliverable_type]["cleanup"]
+        if cmd:
+            try:
+                # Delete all but the most recently accessed build binaries
+                self.shell.execute_command(cmd, debug=self.params["debug_logs"])
+            except:
+                log.warn("Exception thrown during cleanup..ok to ignore")
 
 
 def _get_mounted_volumes(shell):
@@ -341,22 +356,10 @@ def _parse_user_input():
                 params["url"] = value
             else:
                 log.warn("URL:{0} is not valid, will use version to locate build".format(value))
-        if key == "product":
-            val = value.lower()
-            if val in install_constants.SUPPORTED_PRODUCTS:
-                params["product"] = val
-            else:
-                print_result_and_exit("Please specify valid product")
-        if key == "toy":
-            params["toy"] = value if len(value) > 1 else None
-        if key == "openssl":
-            params["openssl"] = int(value)
         if key == "type" or key == "edition" and value.lower() in install_constants.CB_EDITIONS:
             params["edition"] = value.lower()
-        if key == "timeout" and int(value) > 0:
-            params["timeout"] = int(value)
-        if key == "init_nodes":
-            params["init_nodes"] = False if value.lower() == "false" else True
+        if key == "timeout" and int(value) > 60:
+                params["timeout"] = int(value)
         if key == "storage_mode":
             params["storage_mode"] = value
         if key == "disable_consistency":
@@ -372,10 +375,6 @@ def _parse_user_input():
                                 server.ip))
                 params["enable_ipv6"] = True
 
-    # Validation based on 2 or more params
-    if not "product" in userinput.test_params.keys():
-        print_result_and_exit("No product specified. Please use the product parameter." + "\n" + install_constants.USAGE)
-
     if not params["version"] and not params["url"]:
         print_result_and_exit("Need valid build version or url to proceed")
 
@@ -383,6 +382,27 @@ def _parse_user_input():
 
 
 def _params_validation():
+    reachable = []
+    unreachable = []
+    for server in params["servers"]:
+        try:
+            RemoteMachineShellConnection(server, exit_on_failure=False)
+            reachable.append(server.ip)
+        except Exception as e:
+            log.error(e.message)
+            unreachable.append(server.ip)
+
+    if len(unreachable) > 0:
+        log.info("-" * 100)
+        for _ in unreachable:
+            log.error("INSTALL FAILED ON: \t{0}".format(_))
+        log.info("-" * 100)
+        for _ in reachable:
+            # Marking this node as "completed" so it is not moved to failedInstall state
+            log.info("INSTALL COMPLETED ON: \t{0}".format(_))
+        log.info("-" * 100)
+        sys.exit(1)
+
     # Create 1 NodeHelper instance per VM
     for server in params["servers"]:
         NodeHelpers.append(NodeHelper(server))
@@ -522,11 +542,11 @@ def check_and_retry_download_binary(cmd, node):
             if check_file_exists(node, node.build.path):
                 break
             node.shell.execute_command(cmd, debug=params["debug_logs"])
-        except:
-            log.warn("Unable to download build, retrying..")
+        except Exception as e:
+            log.warn("Unable to download build: {0}, retrying..".format(e.message))
             time.sleep(duration)
     else:
-        print_result_and_exit("Unable to download build in {0}s, exiting".format(timeout))
+        print_result_and_exit("Unable to download build in {0}s on {1}, exiting".format(timeout, node.ip))
 
 
 def __get_download_dir(os):

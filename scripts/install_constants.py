@@ -1,48 +1,24 @@
 USAGE = """\
-            Syntax: install.py [options]
+            Syntax: new_install.py [options]
             
             Options:
-             -p <key=val,...> Comma-separated key=value info.
-             -i <file>        Path to .ini file containing cluster information.
+             -p <param=val,...> Comma-separated key=value info
+             -i <file>          Path to .ini file containing cluster information
             
-            Available keys:
-             product=cb|mb              Used to specify couchbase or membase.
-             version=SHORT_VERSION      Example: "2.0.0r-71".
-             parallel=false             Useful when you're installing a cluster.
-             toy=                       Install a toy build
-             init_nodes=False           Initialize nodes
-             vbuckets=                  The number of vbuckets in the server installation.
-             sync_threads=True          Sync or acync threads(+S or +A)
-             erlang_threads=            Number of erlang threads (default=16:16 for +S type)
-             upr=True                   Enable UPR replication
-             xdcr_upr=                  Enable UPR for XDCR (temporary param until XDCR with UPR is stable), values: None | True | False
-             fts_query_limit=1000000    Set a limit for the max results to be returned by fts for any query
-             cbft_env_options           Additional fts environment variables
-             change_indexer_ports=false Sets indexer ports values to non-default ports
-             storage_mode=plasma        Sets indexer storage mode
-             enable_ipv6=False          Enable ipv6 mode in ns_server
-             ntp=True                   Check if ntp is installed. Default is true. Set ntp=False, in case systemctl is not allowed, such as in docker container
-             fts_quota=256              Set quota for fts services.  It must be equal or greater 256.  If fts_quota does not pass,
-                                        it will take FTS_QUOTA value in lib/testconstants.py
-             debug_logs=false            If you don't want to print install logs, set this param value to false. By default, this value preset to true.
-            
-            
+            Available params:
+             debug_logs=False                               Print debug logs
+             install_tasks=uninstall-install-init-cleanup   Pick 1 or more tasks  
+             v, version=<numeric version>                   Example: "6.5.0-1234".
+             url=<build url>                                Example: "http://172.23.120.24/builds/latestbuilds/couchbase-server/mad-hatter/1234/couchbase-server-enterprise-6.5.0-1234-centos7.x86_64.rpm
+             edition, type=enterprise                       CB edition, community or enterprise
+             timeout=600                                    End install after timeout seconds
+             storage_mode=plasma                            Sets indexer storage mode
+             enable_ipv6=False                              Enable ipv6 mode in ns_server
+        
             Examples:
-             install.py -i /tmp/ubuntu.ini -p product=cb,version=2.2.0-792
-             install.py -i /tmp/ubuntu.ini -p product=cb,version=2.2.0-792,url=http://builds.hq.northscale.net/latestbuilds....
-             install.py -i /tmp/ubuntu.ini -p product=mb,version=1.7.1r-38,parallel=true,toy=keith
-             install.py -i /tmp/ubuntu.ini -p product=mongo,version=2.0.2
-             install.py -i /tmp/ubuntu.ini -p product=cb,version=0.0.0-704,toy=couchstore,parallel=true,vbuckets=1024
-            
-             # to run with build with require openssl version 1.0.0
-               install.py -i /tmp/ubuntu.ini -p product=cb,version=2.2.0-792,openssl=1
-            
-             # to install latest release of couchbase server via repo (apt-get and yum)
-               install.py -i /tmp/ubuntu.ini -p product=cb,linux_repo=true
-            
-             # to install non-root non default path, add nr_install_dir params
-               install.py -i /tmp/ubuntu.ini -p product=cb,version=5.0.0-1900,nr_install_dir=testnow1
-            
+             new_install.py -i /tmp/test.ini -p install_tasks=uninstall,debug_logs=true
+             new_install.py -i /tmp/test.ini -p url=http://...,timeout=100
+             new_install.py -i /tmp/test.ini -p version=6.5.0-1234,enable_ipv6=True
             """
 DEFAULT_INSTALL_TASKS = ["uninstall", "install", "init", "cleanup"]
 SUPPORTED_PRODUCTS = ["couchbase", "couchbase-server", "cb"]
@@ -75,6 +51,7 @@ CB_EDITIONS = [CB_COMMUNITY, CB_ENTERPRISE]
 CB_DOWNLOAD_SERVER = "172.23.120.24"
 
 WIN_BROWSERS = ["MicrosoftEdge.exe", "iexplore.exe"]
+RETAIN_NUM_BINARIES_AFTER_INSTALL = "2"
 
 CMDS = {
     "deb": {
@@ -87,7 +64,9 @@ CMDS = {
         "install": "dpkg -i buildpath",
         "post_install": "systemctl -q is-active couchbase-server.service && echo 1 || echo 0",
         "post_install_retry": "systemctl restart couchbase-server.service",
-        "init": None
+        "init": None,
+        "cleanup": "ls -td " + DOWNLOAD_DIR[
+            "LINUX_DISTROS"] + "couchbase*.deb | awk 'NR>" + RETAIN_NUM_BINARIES_AFTER_INSTALL + "' | xargs rm -f"
     },
     "dmg": {
         "uninstall": "rm -rf /Applications\Couchbase\ Server.app; "
@@ -102,7 +81,9 @@ CMDS = {
                    "open /Applications/Couchbase\ Server.app",
         "post_install": "launchctl list | grep couchbase-server > /dev/null && echo 1 || echo 0",
         "post_install_retry": None,
-        "init": None
+        "init": None,
+        "cleanup": "ls -td " + DOWNLOAD_DIR[
+            "MACOS_VERSIONS"] + "couchbase*.dmg | awk 'NR>" + RETAIN_NUM_BINARIES_AFTER_INSTALL + "' | xargs rm -f"
     },
     "msi": {
         "uninstall": "cd " + DOWNLOAD_DIR["WINDOWS_SERVER"] + "; msiexec /x installed-msi /passive",
@@ -112,8 +93,9 @@ CMDS = {
             "WINDOWS_SERVER"] + "; vi +\"set nobomb | set fenc=ascii | x\" install_status.txt; grep 'buildversion.*Configuration completed successfully.' install_status.txt && echo 1 || echo 0",
         "post_install_retry": "cd " + DOWNLOAD_DIR[
             "WINDOWS_SERVER"] + "; msiexec /i buildbinary /passive /L*V install_status.txt",
-        # "cd " + DOWNLOAD_DIR["WINDOWS_SERVER"] + "; msiexec /fa buildbinary /norestart /Lx install_status.txt ",
-        "init": None
+        "init": None,
+        "cleanup": "ls -td " + DOWNLOAD_DIR[
+            "WINDOWS_SERVER"] + "couchbase*.msi | awk 'NR>" + RETAIN_NUM_BINARIES_AFTER_INSTALL + "' | xargs rm -f"
     },
     "rpm": {
         "uninstall":
@@ -127,6 +109,8 @@ CMDS = {
         "post_install": "systemctl -q is-active couchbase-server && echo 1 || echo 0",
         "post_install_retry": "systemctl daemon-reexec; systemctl restart couchbase-server",
         "init": None,
+        "cleanup": "ls -td " + DOWNLOAD_DIR[
+            "LINUX_DISTROS"] + "couchbase*.rpm | awk 'NR>" + RETAIN_NUM_BINARIES_AFTER_INSTALL + "' | xargs rm -f"
     }
 
 }
@@ -135,21 +119,8 @@ INSTALL_TIMEOUT = 600
 INSTALL_POLL_INTERVAL = INSTALL_TIMEOUT // 30
 
 WAIT_TIMES = {
+    # unit seconds
     # (<sleep between retries>, <message>, <give up after>)
-    "msi": {
-        "download_binary": (20, "Waiting {0}s for couchbase-service to become active on {1}..", 100),
-        "uninstall": (10, "Waiting {0}s for couchbase-service to become active on {1}..", 30),
-        "install": (10, "Waiting {0}s for couchbase-service to become active on {1}..", 100),
-        "post_install": (30, "Waiting {0}s for couchbase-service to become active on {1}..", 120),
-        "init": (30, "Waiting {0}s for {1} to be initialized..", 300)
-    },
-    "rpm": {
-        "download_binary": (10, "Waiting {0}s for couchbase-service to become active on {1}..", 100),
-        "uninstall": (10, "Waiting {0}s for couchbase-service to become active on {1}..", 30),
-        "install": (10, "Waiting {0}s for couchbase-service to become active on {1}..", 100),
-        "post_install": (10, "Waiting {0}s for couchbase-service to become active on {1}..", 60),
-        "init": (30, "Waiting {0}s for {1} to be initialized..", 300)
-    },
     "deb": {
         "download_binary": (10, "Waiting {0}s for couchbase-service to become active on {1}..", 100),
         "uninstall": (10, "Waiting {0}s for couchbase-service to become active on {1}..", 30),
@@ -165,13 +136,26 @@ WAIT_TIMES = {
         "install": (10, "Waiting {0}s for couchbase-service to become active on {1}..", 100),
         "post_install": (10, "Waiting {0}s for couchbase-service to become active on {1}..", 60),
         "init": (30, "Waiting {0}s for {1} to be initialized..", 300)
+    },
+    "msi": {
+        "download_binary": (20, "Waiting {0}s for download to complete on {1}..", 100),
+        "uninstall": (10, "Waiting {0}s for uninstall to complete on {1}..", 30),
+        "install": (10, "Waiting {0}s for install to complete on {1}..", 100),
+        "post_install": (30, "Waiting {0}s for couchbase-service to become active on {1}..", 120),
+        "init": (30, "Waiting {0}s for {1} to be initialized..", 300)
+    },
+    "rpm": {
+        "download_binary": (10, "Waiting {0}s for download to complete on {1}..", 100),
+        "uninstall": (10, "Waiting {0}s for uninstall to complete on {1}..", 30),
+        "install": (10, "Waiting {0}s for install to complete on {1}..", 100),
+        "post_install": (10, "Waiting {0}s for couchbase-service to become active on {1}..", 60),
+        "init": (30, "Waiting {0}s for {1} to be initialized..", 300)
     }
-
 }
 
 DOWNLOAD_CMD = {
-    "msi": WGET_CMD,
-    "rpm": WGET_CMD,
     "deb": WGET_CMD,
-    "dmg": CURL_CMD
+    "dmg": CURL_CMD,
+    "msi": WGET_CMD,
+    "rpm": WGET_CMD
 }

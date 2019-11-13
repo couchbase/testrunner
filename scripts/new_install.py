@@ -81,7 +81,7 @@ def do_install(params):
         node_helper.queue = q
         node_helper.thread = t
 
-    force_stop = start_time + install_constants.INSTALL_TIMEOUT
+    force_stop = start_time + params["timeout"]
     for node in install_utils.NodeHelpers:
         try:
             while node.queue.unfinished_tasks and time.time() < force_stop:
@@ -90,7 +90,7 @@ def do_install(params):
                 raise InstallException
         except InstallException:
             if time.time() >= force_stop:
-                log.error("INSTALL TIMED OUT AFTER {0}s.VALIDATING..".format(install_constants.INSTALL_TIMEOUT))
+                log.error("INSTALL TIMED OUT AFTER {0}s.VALIDATING..".format(params["timeout"]))
                 break
     if "init" in params["install_tasks"]:
         validate_install(params["version"])
