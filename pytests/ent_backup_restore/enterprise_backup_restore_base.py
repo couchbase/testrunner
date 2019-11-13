@@ -1017,10 +1017,10 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         conn_bk.pause_memcached(timesleep=8)
         conn_bk.unpause_memcached()
         conn_bk.disconnect()
-        output = backup_result.result(timeout=200)
+        output = backup_result.result(timeout=600)
         if self.debug_logs:
             if output:
-                print "\nOutput from backup cluster: %s " % output
+                self.log.info("\nOutput from backup cluster: {0} ".format(output))
             else:
                 self.fail("No output printout.")
         self.assertTrue(self._check_output("Backup successfully completed", output),
@@ -1065,7 +1065,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         conn = RemoteMachineShellConnection(self.backupset.cluster_host)
         conn.kill_erlang()
         conn.start_couchbase()
-        output = backup_result.result(timeout=200)
+        output = backup_result.result(timeout=600)
         self.assertTrue(self._check_output("Backup successfully completed", output),
                         "Backup failed with erlang crash and restart within 180 seconds")
         self.log.info("Backup succeeded with erlang crash and restart within 180 seconds")
@@ -1109,7 +1109,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         conn = RemoteMachineShellConnection(self.backupset.cluster_host)
         conn.stop_couchbase()
         conn.start_couchbase()
-        output = backup_result.result(timeout=200)
+        output = backup_result.result(timeout=600)
         self.assertTrue(self._check_output("Backup successfully completed", output),
                         "Backup failed with couchbase stop and start within 180 seconds")
         self.log.info("Backup succeeded with couchbase stop and start within 180 seconds")
@@ -1140,7 +1140,10 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         num_shards = ""
         if self.num_shards is not None:
             num_shards += " --shards {0} ".format(self.num_shards)
-        backup_result = self.cluster.async_backup_cluster(
+        conn = RemoteMachineShellConnection(self.backupset.cluster_host)
+        started_couchbase = False
+        try:
+            backup_result = self.cluster.async_backup_cluster(
                                            cluster_host=self.backupset.cluster_host,
                                            backup_host=self.backupset.backup_host,
                                            directory=self.backupset.directory,
@@ -1151,36 +1154,51 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                                            cli_command_location=self.cli_command_location,
                                            cb_version=self.cb_version,
                                            num_shards=num_shards)
-        self.sleep(3)
-        conn = RemoteMachineShellConnection(self.backupset.cluster_host)
-        conn.kill_erlang(self.os_name)
-        output = backup_result.result(timeout=200)
-        self.log.info(str(output))
-        status, output, message = self.backup_list()
-        if not status:
-            self.fail(message)
-        for line in output:
-            if re.search("\d{4}-\d{2}-\d{2}T\d{2}_\d{2}_\d{2}.\d+-\d{2}_\d{2}", line):
-                old_backup_name = re.search("\d{4}-\d{2}-\d{2}T\d{2}_\d{2}"
+            self.sleep(3)
+            conn.kill_erlang(self.os_name)
+            output = backup_result.result(timeout=600)
+            self.log.info(str(output))
+            status, output, message = self.backup_list()
+            if not status:
+                self.fail(message)
+            for line in output:
+                if "enterprise" in line:
+                    continue
+                if re.search("\d{4}-\d{2}-\d{2}T\d{2}_\d{2}_\d{2}.\d+-\d{2}_\d{2}", line):
+                    old_backup_name = re.search("\d{4}-\d{2}-\d{2}T\d{2}_\d{2}"
                                             "_\d{2}.\d+-\d{2}_\d{2}", line).group()
-                self.log.info("Backup name before resume: " + old_backup_name)
-        conn.start_couchbase()
-        conn.disconnect()
-        self.sleep(30)
-        output, error = self.backup_cluster()
-        if error or not self._check_output("Backup successfully completed", output):
-            self.fail("Taking cluster backup failed.")
-        status, output, message = self.backup_list()
-        if not status:
-            self.fail(message)
-        for line in output:
-            if re.search("\d{4}-\d{2}-\d{2}T\d{2}_\d{2}_\d{2}.\d+-\d{2}_\d{2}", line):
-                new_backup_name = re.search("\d{4}-\d{2}-\d{2}T\d{2}_\d{2}"
+                    self.log.info("Backup name before resume: " + old_backup_name)
+            conn.start_couchbase()
+            ready = RestHelper(RestConnection(self.backupset.cluster_host)).is_ns_server_running()
+            if not ready:
+                self.fail("Server failed to start")
+            else:
+                started_couchbase = True
+            output, error = self.backup_cluster()
+            if error or not self._check_output("Backup successfully completed", output):
+                self.fail("Taking cluster backup failed.")
+            status, output, message = self.backup_list()
+            if not status:
+                self.fail(message)
+            for line in output:
+                if "enterprise" in line:
+                    continue
+                if re.search("\d{4}-\d{2}-\d{2}T\d{2}_\d{2}_\d{2}.\d+-\d{2}_\d{2}", line):
+                    new_backup_name = re.search("\d{4}-\d{2}-\d{2}T\d{2}_\d{2}"
                                             "_\d{2}.\d+-\d{2}_\d{2}", line).group()
-                self.log.info("Backup name after resume: " + new_backup_name)
-        self.assertEqual(old_backup_name, new_backup_name,
+                    self.log.info("Backup name after resume: " + new_backup_name)
+            self.assertEqual(old_backup_name, new_backup_name,
                          "Old backup name and new backup name are not same when resume is used")
-        self.log.info("Old backup name and new backup name are same when resume is used")
+            self.log.info("Old backup name and new backup name are same when resume is used")
+        except Exception as ex:
+            self.fail(str(ex))
+        finally:
+            if not started_couchbase:
+                conn.start_couchbase()
+            conn.disconnect()
+            ready = RestHelper(RestConnection(self.backupset.cluster_host)).is_ns_server_running()
+            if not ready:
+                self.fail("Server failed to start")
 
     def backup_merge(self):
         self.log.info("backups before merge: " + str(self.backups))
