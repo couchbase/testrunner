@@ -44,7 +44,7 @@ DEFAULT_INSTALL_DIR = {"LINUX_DISTROS": "/opt/couchbase",
                        "WINDOWS_SERVER": "/cygdrive/c/Program\ Files/Couchbase/Server/"}
 
 WGET_CMD = "cd {0}; wget -N {1}"
-CURL_CMD = "curl {0} -o {1} -z {1} -s -m {2}"
+CURL_CMD = "curl {0} -o {1} -z {1} -s -m 30"
 CB_ENTERPRISE = "couchbase-server-enterprise"
 CB_COMMUNITY = "couchbase-server-community"
 CB_EDITIONS = [CB_COMMUNITY, CB_ENTERPRISE]
@@ -76,8 +76,9 @@ CMDS = {
                      "rm -rf /Volumes\Couchbase\ Server*;"
                      "osascript -e 'quit app \"Couchbase Server\"'; ",
         "pre_install": "HDIUTIL_DETACH_ATTACH",
-        "install": "cp -R mountpoint/Couchbase\ Server.app /Applications; "
-                   "sudo xattr -d -r com.apple.quarantine /Applications/Couchbase\ Server.app; "
+        "install": "rm -rf /Applications\Couchbase\ Server.app; "
+                   "cp -R mountpoint/Couchbase\ Server.app /Applications/Couchbase\ Server.app; "
+                   #"sudo xattr -d -r com.apple.quarantine /Applications/Couchbase\ Server.app; "
                    "open /Applications/Couchbase\ Server.app",
         "post_install": "launchctl list | grep couchbase-server > /dev/null && echo 1 || echo 0",
         "post_install_retry": None,
@@ -124,30 +125,30 @@ WAIT_TIMES = {
     "deb": {
         "download_binary": (10, "Waiting {0}s for download to complete on {1}..", 100),
         "uninstall": (10, "Waiting {0}s for uninstall to complete on {1}..", 30),
-        "install": (10, "Waiting {0}s for install to complete on {1}..", 100),
+        "install": (20, "Waiting {0}s for install to complete on {1}..", 100),
         "post_install": (10, "Waiting {0}s for couchbase-service to become active on {1}..", 60),
         "init": (30, "Waiting {0}s for {1} to be initialized..", 300)
 
     },
     "dmg": {
-        "download_binary": (10, "Waiting {0}s for download to complete on {1}..", 100),
+        "download_binary": (20, "Waiting {0}s for download to complete on {1}..", 100),
         "uninstall": (10, "Waiting {0}s for uninstall to complete on {1}..", 30),
         "pre_install": (10, "Waiting for dmg to be mounted..", 30),
-        "install": (10, "Waiting {0}s for install to complete on {1}..", 100),
+        "install": (50, "Waiting {0}s for install to complete on {1}..", 100),
         "post_install": (10, "Waiting {0}s for couchbase-service to become active on {1}..", 60),
         "init": (30, "Waiting {0}s for {1} to be initialized..", 300)
     },
     "msi": {
         "download_binary": (20, "Waiting {0}s for download to complete on {1}..", 100),
         "uninstall": (10, "Waiting {0}s for uninstall to complete on {1}..", 30),
-        "install": (10, "Waiting {0}s for install to complete on {1}..", 100),
+        "install": (50, "Waiting {0}s for install to complete on {1}..", 100),
         "post_install": (30, "Waiting {0}s for couchbase-service to become active on {1}..", 120),
         "init": (30, "Waiting {0}s for {1} to be initialized..", 300)
     },
     "rpm": {
         "download_binary": (10, "Waiting {0}s for download to complete on {1}..", 100),
         "uninstall": (10, "Waiting {0}s for uninstall to complete on {1}..", 30),
-        "install": (10, "Waiting {0}s for install to complete on {1}..", 100),
+        "install": (20, "Waiting {0}s for install to complete on {1}..", 100),
         "post_install": (10, "Waiting {0}s for couchbase-service to become active on {1}..", 60),
         "init": (30, "Waiting {0}s for {1} to be initialized..", 300)
     }

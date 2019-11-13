@@ -109,6 +109,7 @@ class NodeHelper:
                         o, e = self.shell.execute_command(cmd, debug=self.params["debug_logs"])
                         if o == ['1']:
                             break
+                        self.wait_for_completion(duration, event)
                     except Exception as e:
                         log.warn("Exception {0} occurred on {1}, retrying..".format(e.message, self.ip))
                         self.wait_for_completion(duration, event)
@@ -126,6 +127,7 @@ class NodeHelper:
                         ret = hdiutil_attach(self.shell, self.build.path, self.build.version)
                         if ret:
                             break
+                        self.wait_for_completion(duration, event)
                     except Exception as e:
                         log.warn("Exception {0} occurred on {1}, retrying..".format(e.message, self.ip))
                         self.wait_for_completion(duration, event)
@@ -147,6 +149,7 @@ class NodeHelper:
                     o, e = self.shell.execute_command(cmd, debug=self.params["debug_logs"])
                     if o == ['1']:
                         break
+                    self.wait_for_completion(duration, event)
                 except Exception as e:
                     log.warn("Exception {0} occurred on {1}, retrying..".format(e.message, self.ip))
                     self.wait_for_completion(duration, event)
@@ -157,25 +160,30 @@ class NodeHelper:
         duration, event, timeout = install_constants.WAIT_TIMES[self.info.deliverable_type]["post_install"]
         start_time = time.time()
         while time.time() < start_time + timeout:
-            if install_constants.CMDS[self.info.deliverable_type]["post_install"]:
-                cmd = install_constants.CMDS[self.info.deliverable_type]["post_install"].replace("buildversion",
-                                                                                                 self.build.version)
-                o, e = self.shell.execute_command(cmd, debug=self.params["debug_logs"])
-                if o == ['1']:
-                    break
-                else:
-                    if install_constants.CMDS[self.info.deliverable_type]["post_install_retry"]:
-                        if self.info.deliverable_type == "msi":
-                            check_if_downgrade, _ = self.shell.execute_command(
-                                "cd " + install_constants.DOWNLOAD_DIR["WINDOWS_SERVER"] +
-                                "; vi +\"set nobomb | set fenc=ascii | x\" install_status.txt; "
-                                "grep 'Adding WIX_DOWNGRADE_DETECTED property' install_status.txt")
-                            print(check_if_downgrade * 10)
-                        else:
-                            self.shell.execute_command(
-                                install_constants.CMDS[self.info.deliverable_type]["post_install_retry"],
-                                debug=self.params["debug_logs"])
-            self.wait_for_completion(duration, event)
+            try:
+                if install_constants.CMDS[self.info.deliverable_type]["post_install"]:
+                    cmd = install_constants.CMDS[self.info.deliverable_type]["post_install"].replace("buildversion",
+                                                                                                     self.build.version)
+                    o, e = self.shell.execute_command(cmd, debug=self.params["debug_logs"])
+                    if o == ['1']:
+                        break
+                    else:
+                        if install_constants.CMDS[self.info.deliverable_type]["post_install_retry"]:
+                            if self.info.deliverable_type == "msi":
+                                check_if_downgrade, _ = self.shell.execute_command(
+                                    "cd " + install_constants.DOWNLOAD_DIR["WINDOWS_SERVER"] +
+                                    "; vi +\"set nobomb | set fenc=ascii | x\" install_status.txt; "
+                                    "grep 'Adding WIX_DOWNGRADE_DETECTED property' install_status.txt")
+                                print(check_if_downgrade * 10)
+                            else:
+                                self.shell.execute_command(
+                                    install_constants.CMDS[self.info.deliverable_type]["post_install_retry"],
+                                    debug=self.params["debug_logs"])
+                        self.wait_for_completion(duration, event)
+            except Exception as e:
+                log.warn("Exception {0} occurred on {1}, retrying..".format(e.message, self.ip))
+                self.wait_for_completion(duration, event)
+
 
     def post_init_cb(self):
         # Optionally change node name and restart server
@@ -250,6 +258,7 @@ class NodeHelper:
                 init_success = True
                 if init_success:
                     break
+                self.wait_for_completion(duration, event)
             except Exception as e:
                 log.warn("Exception {0} occurred on {1}, retrying..".format(e.message, self.ip))
                 self.wait_for_completion(duration, event)
@@ -573,6 +582,7 @@ def check_and_retry_download_binary(cmd, node):
             node.shell.execute_command(cmd, debug=params["debug_logs"])
             if check_file_exists(node, node.build.path):
                 break
+            time.sleep(duration)
         except Exception as e:
             log.warn("Unable to download build: {0}, retrying..".format(e.message))
             time.sleep(duration)
