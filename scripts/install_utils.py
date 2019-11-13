@@ -30,7 +30,8 @@ params = {
     "storage_mode": "plasma",
     "disable_consistency": False,
     "enable_ipv6": False,
-    "use_domain_names": False
+    "use_domain_names": False,
+    "fts_quota": testconstants.FTS_QUOTA
 }
 
 
@@ -71,12 +72,6 @@ class NodeHelper:
             except Exception as e:
                 log.warn("{0} unreachable, {1}, retrying..".format(self.ip, e.message))
                 time.sleep(20)
-
-    def get_services(self):
-        if not self.node.services:
-            return ["kv"]
-        elif self.node.services:
-            return self.node.services.split(',')
 
     def get_os(self):
         os = self.info.distribution_version.lower()
@@ -193,6 +188,40 @@ class NodeHelper:
                                          option='consistency_check_ratio',
                                          value='0.0')
 
+    def get_services(self):
+        if not self.node.services:
+            return ["kv"]
+        elif self.node.services:
+            return self.node.services.split(',')
+
+
+    def allocate_memory_quotas(self):
+        kv_quota = 0
+        info = self.rest.get_nodes_self()
+        kv_quota = int(info.mcdMemoryReserved * testconstants.CLUSTER_QUOTA_RATIO)
+        """ for fts, we need to grep quota from ns_server
+                    but need to make it works even RAM of vm is
+                    smaller than 2 GB """
+
+        self.services = self.get_services()
+        if "index" in self.services:
+            log.info("Setting INDEX memory quota as {0} MB on {1}".format(testconstants.INDEX_QUOTA, self.ip))
+            self.rest.set_service_memoryQuota(service='indexMemoryQuota', memoryQuota=testconstants.INDEX_QUOTA)
+            kv_quota -= testconstants.INDEX_QUOTA
+        if "fts" in self.services:
+            log.info("Setting FTS memory quota as {0} MB on {1}".format(params["fts_quota"], self.ip))
+            self.rest.set_service_memoryQuota(service='ftsMemoryQuota', memoryQuota=params["fts_quota"])
+            kv_quota -= params["fts_quota"]
+        if "cbas" in self.services:
+            log.info("Setting CBAS memory quota as {0} MB on {1}".format(testconstants.CBAS_QUOTA, self.ip))
+            self.rest.set_service_memoryQuota(service="cbasMemoryQuota", memoryQuota=testconstants.CBAS_QUOTA)
+            kv_quota -= testconstants.CBAS_QUOTA
+        if kv_quota < testconstants.MIN_KV_QUOTA:
+            raise Exception("KV memory quota is {0}MB but needs to be at least {1}MB on {2}".format(kv_quota, testconstants.MIN_KV_QUOTA, self.ip))
+        kv_quota -= 1
+        log.info("Setting KV memory quota as {0} MB on {1}".format(kv_quota, self.ip))
+        self.rest.init_cluster_memoryQuota(self.node.rest_username, self.node.rest_password, kv_quota)
+
     def init_cb(self):
         duration, event, timeout = install_constants.WAIT_TIMES[self.info.deliverable_type]["init"]
         self.wait_for_completion(duration*2, event)
@@ -201,15 +230,14 @@ class NodeHelper:
             try:
                 init_success = False
                 self.rest = RestConnection(self.node)
-                info = self.rest.get_nodes_self()
-                kv_quota = int(info.mcdMemoryReserved * testconstants.CLUSTER_QUOTA_RATIO)
-                if kv_quota < 256:
-                    kv_quota = 256
-                log.debug("quota for kv: %s MB" % kv_quota)
-                self.rest.init_cluster_memoryQuota(self.node.rest_username, \
-                                                   self.node.rest_password, \
-                                                   kv_quota)
 
+                # Make sure that data_path and index_path are writable by couchbase user
+                for path in set(filter(None, [self.node.data_path, self.node.index_path])):
+                    for cmd in ("rm -rf {0}/*".format(path),
+                                "chown -R couchbase:couchbase {0}".format(path)):
+                        self.shell.execute_command(cmd)
+                self.rest.set_data_path(data_path=self.node.data_path, index_path=self.node.index_path)
+                self.allocate_memory_quotas()
                 self.rest.init_node_services(username=self.node.rest_username,
                                                  password=self.node.rest_password,
                                                  services=self.get_services())
@@ -374,6 +402,9 @@ def _parse_user_input():
                             "Cannot enable IPv6 on an IPv4 machine: {0}. Please run without enable_ipv6=True.".format(
                                 server.ip))
                 params["enable_ipv6"] = True
+        if key == "fts_quota" and value >= 256:
+            params["fts_quota"] = int(value)
+
 
     if not params["version"] and not params["url"]:
         print_result_and_exit("Need valid build version or url to proceed")
