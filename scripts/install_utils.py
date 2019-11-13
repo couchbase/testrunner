@@ -570,9 +570,9 @@ def check_and_retry_download_binary(cmd, node):
     start_time = time.time()
     while time.time() < start_time + timeout:
         try:
+            node.shell.execute_command(cmd, debug=params["debug_logs"])
             if check_file_exists(node, node.build.path):
                 break
-            node.shell.execute_command(cmd, debug=params["debug_logs"])
         except Exception as e:
             log.warn("Unable to download build: {0}, retrying..".format(e.message))
             time.sleep(duration)
