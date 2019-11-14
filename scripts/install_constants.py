@@ -69,17 +69,15 @@ CMDS = {
             "LINUX_DISTROS"] + "couchbase*.deb | awk 'NR>" + RETAIN_NUM_BINARIES_AFTER_INSTALL + "' | xargs rm -f"
     },
     "dmg": {
-        "uninstall": "rm -rf /Applications\Couchbase\ Server.app; "
-                     "rm -rf ~/Library/Application\ Support/Couchbase; "
-                     "rm -rf ~/Library/Application\ Support/membase; "
-                     "rm -rf ~/Library/Python/couchbase-py;"
-                     "rm -rf /Volumes\Couchbase\ Server*;"
-                     "osascript -e 'quit app \"Couchbase Server\"'; ",
+        "uninstall": "osascript -e 'quit app \"Couchbase Server\"'; "
+                     "rm -rf /Applications/Couchbase\ Server.app; "
+                     "rm -rf ~/Library/Application\ Support/Couchbase && rm -rf ~/Library/Application\ Support/membase && rm -rf ~/Library/Python/couchbase-py; "
+                     "umount /Volumes/Couchbase* > /dev/null && echo 1 || echo 0",
         "pre_install": "HDIUTIL_DETACH_ATTACH",
         "install": "rm -rf /Applications\Couchbase\ Server.app; "
                    "cp -R mountpoint/Couchbase\ Server.app /Applications/Couchbase\ Server.app; "
                    #"sudo xattr -d -r com.apple.quarantine /Applications/Couchbase\ Server.app; "
-                   "open /Applications/Couchbase\ Server.app",
+                   "open /Applications/Couchbase\ Server.app > /dev/null && echo 1 || echo 0",
         "post_install": "launchctl list | grep couchbase-server > /dev/null && echo 1 || echo 0",
         "post_install_retry": None,
         "init": None,
@@ -133,7 +131,7 @@ WAIT_TIMES = {
     "dmg": {
         "download_binary": (20, "Waiting {0}s for download to complete on {1}..", 100),
         "uninstall": (10, "Waiting {0}s for uninstall to complete on {1}..", 30),
-        "pre_install": (10, "Waiting for dmg to be mounted..", 30),
+        "pre_install": (30, "Waiting for dmg to be mounted..", 60),
         "install": (50, "Waiting {0}s for install to complete on {1}..", 100),
         "post_install": (10, "Waiting {0}s for couchbase-service to become active on {1}..", 60),
         "init": (30, "Waiting {0}s for {1} to be initialized..", 300)

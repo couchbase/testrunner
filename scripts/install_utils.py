@@ -114,8 +114,6 @@ class NodeHelper:
                         log.warn("Exception {0} occurred on {1}, retrying..".format(e.message, self.ip))
                         self.wait_for_completion(duration, event)
 
-
-
     def pre_install_cb(self):
         if install_constants.CMDS[self.info.deliverable_type]["pre_install"]:
             cmd = install_constants.CMDS[self.info.deliverable_type]["pre_install"]
@@ -184,7 +182,6 @@ class NodeHelper:
                 log.warn("Exception {0} occurred on {1}, retrying..".format(e.message, self.ip))
                 self.wait_for_completion(duration, event)
 
-
     def post_init_cb(self):
         # Optionally change node name and restart server
         if params.get('use_domain_names', False):
@@ -201,7 +198,6 @@ class NodeHelper:
             return ["kv"]
         elif self.node.services:
             return self.node.services.split(',')
-
 
     def allocate_memory_quotas(self):
         kv_quota = 0
@@ -225,14 +221,16 @@ class NodeHelper:
             self.rest.set_service_memoryQuota(service="cbasMemoryQuota", memoryQuota=testconstants.CBAS_QUOTA)
             kv_quota -= testconstants.CBAS_QUOTA
         if kv_quota < testconstants.MIN_KV_QUOTA:
-            raise Exception("KV memory quota is {0}MB but needs to be at least {1}MB on {2}".format(kv_quota, testconstants.MIN_KV_QUOTA, self.ip))
+            raise Exception("KV memory quota is {0}MB but needs to be at least {1}MB on {2}".format(kv_quota,
+                                                                                                    testconstants.MIN_KV_QUOTA,
+                                                                                                    self.ip))
         kv_quota -= 1
         log.info("Setting KV memory quota as {0} MB on {1}".format(kv_quota, self.ip))
         self.rest.init_cluster_memoryQuota(self.node.rest_username, self.node.rest_password, kv_quota)
 
     def init_cb(self):
         duration, event, timeout = install_constants.WAIT_TIMES[self.info.deliverable_type]["init"]
-        self.wait_for_completion(duration*2, event)
+        self.wait_for_completion(duration * 2, event)
         start_time = time.time()
         while time.time() < start_time + timeout:
             try:
@@ -247,8 +245,8 @@ class NodeHelper:
                 self.rest.set_data_path(data_path=self.node.data_path, index_path=self.node.index_path)
                 self.allocate_memory_quotas()
                 self.rest.init_node_services(username=self.node.rest_username,
-                                                 password=self.node.rest_password,
-                                                 services=self.get_services())
+                                             password=self.node.rest_password,
+                                             services=self.get_services())
 
                 if "index" in self.get_services():
                     self.rest.set_indexer_storage_mode(storageMode=params["storage_mode"])
@@ -285,37 +283,15 @@ def _get_mounted_volumes(shell):
     return volumes
 
 
-def hdiutil_detach(shell, volumes, max_attempts=3):
-    attempt = 0
-    while len(volumes) > 0 and attempt <= max_attempts:
-        """ Unmount existing app """
-        for volume in volumes:
-            shell.execute_command("hdiutil detach " + '"' + "/tmp/" + volume + '"', timeout=10)
-        volumes = _get_mounted_volumes(shell)
-        attempt += 1
-    else:
-        if len(volumes) > 0:
-            log.warn("Unable to detach {0} after {1} attempts".format(volumes, max_attempts))
-    log.debug("Done detaching Couchbase Server Volumes")
-
-
 def hdiutil_attach(shell, dmg_path, max_attempts=3):
     volumes = _get_mounted_volumes(shell)
-    hdiutil_detach(shell, volumes)
+    for volume in volumes:
+        shell.execute_command("hdiutil detach " + '"' + "/tmp/" + volume + '"')
+        shell.execute_command("umount " + '"' + "/tmp/" + volume + '"')
 
-    attempt = 0
-    while len(volumes) < 1 and attempt <= max_attempts:
-        shell.execute_command("hdiutil attach {0} -mountpoint /tmp/{1}; sleep 10".format(dmg_path,
-                                                                                         "couchbase-server-"
-                                                                                         + params["version"]))
-        volumes = _get_mounted_volumes(shell)
-        attempt += 1
-    else:
-        if len(volumes) < 1:
-            log.warn("Unable to attach {0} after {1} attempts".format(dmg_path, max_attempts))
-            return 0
-    log.debug("Done attaching Couchbase Server Volumes")
-    return 1
+    shell.execute_command("hdiutil attach {0} -mountpoint /tmp/{1}".
+                          format(dmg_path, "couchbase-server-" + params["version"]))
+    return shell.file_exists("/tmp/", "couchbase-server-" + params["version"])
 
 
 def get_node_helper(ip):
@@ -323,6 +299,7 @@ def get_node_helper(ip):
         if node_helper.ip == ip:
             return node_helper
     return None
+
 
 def print_result_and_exit(err=None):
     if err:
@@ -344,6 +321,7 @@ def print_result_and_exit(err=None):
     log.info("-" * 100)
     if len(fail) > 0:
         sys.exit(1)
+
 
 def process_user_input():
     params = _parse_user_input()
@@ -396,7 +374,7 @@ def _parse_user_input():
         if key == "type" or key == "edition" and value.lower() in install_constants.CB_EDITIONS:
             params["edition"] = value.lower()
         if key == "timeout" and int(value) > 60:
-                params["timeout"] = int(value)
+            params["timeout"] = int(value)
         if key == "storage_mode":
             params["storage_mode"] = value
         if key == "disable_consistency":
@@ -413,7 +391,6 @@ def _parse_user_input():
                 params["enable_ipv6"] = True
         if key == "fts_quota" and value >= 256:
             params["fts_quota"] = int(value)
-
 
     if not params["version"] and not params["url"]:
         print_result_and_exit("Need valid build version or url to proceed")
@@ -516,10 +493,10 @@ def _copy_to_nodes(src_path, dest_path):
 def __get_build_url(node, build_binary):
     if params["enable_ipv6"]:
         ipv6_url = "{0}{1}/{2}/{3}".format(
-        testconstants.CB_FQDN_REPO,
-        testconstants.CB_VERSION_NAME[(params["version"]).split('-')[0][:-2]],
-        params["version"].split('-')[1],
-        build_binary)
+            testconstants.CB_FQDN_REPO,
+            testconstants.CB_VERSION_NAME[(params["version"]).split('-')[0][:-2]],
+            params["version"].split('-')[1],
+            build_binary)
         if node.shell.is_url_live(ipv6_url, exit_if_not_live=False):
             return ipv6_url
     else:
@@ -572,6 +549,7 @@ def check_file_exists(node, filepath):
         if line.find('No such file or directory') == -1:
             return True
     return False
+
 
 def check_and_retry_download_binary(cmd, node):
     duration, event, timeout = install_constants.WAIT_TIMES[node.info.deliverable_type]["download_binary"]
