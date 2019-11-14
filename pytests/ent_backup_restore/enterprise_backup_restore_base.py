@@ -103,6 +103,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                         self.input.param("user-env-with-prompt", False)
         self.backupset.passwd_env_with_prompt = \
                         self.input.param("passwd-env-with-prompt", False)
+        self.backup_corrupted = False
         shell = RemoteMachineShellConnection(self.servers[0])
         info = shell.extract_remote_info().type.lower()
         self.root_path = LINUX_ROOT_PATH
@@ -1254,7 +1255,11 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
     def backup_merge_validate(self, repeats=1, skip_validation=False):
         status, output, message = self.backup_merge()
         if not status:
-            self.fail(message)
+            if self.backup_corrupted:
+                self.log.info("Merge failed as expected.  This is negative test.")
+                return
+            else:
+                self.fail(message)
 
         if repeats < 2 and not skip_validation:
             self.validation_helper.store_keys(self.cluster_to_backup, self.buckets, self.number_of_backups_taken,
@@ -3094,6 +3099,7 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
                                     backup_to_corrupt + "/" + data_dir + "/data/shard_0.sqlite.0" +
                                     " bs=1024 count=100 seek=10 conv=notrunc")
         conn.log_command_output(o, e)
+        self.backup_corrupted = True
         conn.disconnect()
 
     def _flush_bucket(self, bucket_to_flush):
