@@ -754,7 +754,8 @@ class CouchbaseServerInstaller(Installer):
                                        vbuckets=vbuckets,
                                        fts_query_limit=fts_query_limit,
                                        cbft_env_options=cbft_env_options,
-                                       windows_msi=self.msi )
+                                       windows_msi=self.msi,
+                                       enable_ipv6=enable_ipv6)
             else:
                 downloaded = remote_client.download_build(build)
 
