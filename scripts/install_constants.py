@@ -55,13 +55,10 @@ RETAIN_NUM_BINARIES_AFTER_INSTALL = "2"
 
 CMDS = {
     "deb": {
-        "uninstall": "systemctl stop couchbase-server.service; "
-                     "rm /var/lib/dpkg/info/couchbase-server.*; "
-                     "rm /var/lib/dpkg/lock; "
-                     "rm -rf " + DEFAULT_INSTALL_DIR["LINUX_DISTROS"] +
-                     "; dpkg --remove couchbase-server; ",
+        "uninstall": "dpkg -r couchbase-server; "
+                     "rm -rf " + DEFAULT_INSTALL_DIR["LINUX_DISTROS"] + " > /dev/null && echo 1 || echo 0",
         "pre_install": None,
-        "install": "dpkg -i buildpath",
+        "install": "apt-get update; dpkg -i buildpath; apt-get -f install > /dev/null && echo 1 || echo 0",
         "post_install": "systemctl -q is-active couchbase-server.service && echo 1 || echo 0",
         "post_install_retry": "systemctl restart couchbase-server.service",
         "init": None,
