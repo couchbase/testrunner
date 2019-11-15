@@ -41,7 +41,15 @@ DOWNLOAD_DIR = {"LINUX_DISTROS": "/tmp/",
                 }
 
 DEFAULT_INSTALL_DIR = {"LINUX_DISTROS": "/opt/couchbase",
-                       "WINDOWS_SERVER": "/cygdrive/c/Program\ Files/Couchbase/Server/"}
+                       "MACOS_VERSIONS": "/Applications/Couchbase\ Server.app",
+                       "WINDOWS_SERVER": "/cygdrive/c/Program\ Files/Couchbase/Server"}
+
+DEFAULT_CLI_PATH = \
+    {
+        "LINUX_DISTROS": DEFAULT_INSTALL_DIR["LINUX_DISTROS"] + "/bin/couchbase-cli",
+        "MACOS_VERSIONS": DEFAULT_INSTALL_DIR["MACOS_VERSIONS"] + "/Contents/Resources/couchbase-core/bin/couchbase-cli",
+        "WINDOWS_SERVER": DEFAULT_INSTALL_DIR["WINDOWS_SERVER"] + "/bin/couchbase-cli"
+    }
 
 WGET_CMD = "cd {0}; wget -N {1}"
 CURL_CMD = "curl {0} -o {1} -z {1} -s -m 30"
@@ -53,9 +61,18 @@ CB_DOWNLOAD_SERVER = "172.23.120.24"
 WIN_BROWSERS = ["MicrosoftEdge.exe", "iexplore.exe"]
 RETAIN_NUM_BINARIES_AFTER_INSTALL = "2"
 
-CBFT_ENV_OPTIONS = {
-    "fts_query_limit": "sed -i 's/export PATH/export PATH\\nexport CBFT_ENV_OPTIONS=bleveMaxResultWindow=10000000/' /opt/couchbase/bin/couchbase-server > /dev/null && echo 1 || echo 0"
-}
+CBFT_ENV_OPTIONS = \
+    {
+        "fts_query_limit":
+        "sed -i 's/export PATH/export PATH\\nexport CBFT_ENV_OPTIONS=bleveMaxResultWindow={0}/' /opt/couchbase/bin/couchbase-server; "
+        "grep bleveMaxResultWindow={0} /opt/couchbase/bin/couchbase-server > /dev/null && echo 1 || echo 0"
+    }
+
+# eg: /opt/couchbase/bin/couchbase-cli node-init
+#                                      -c [fd63:6f75:6368:20d4:1f76:3dfa:d8e9:40ac]
+#                                      --node-init-hostname s12707-ip6.qe.couchbase.com
+#                                      --ipv6 -u Administrator -p password
+ENABLE_IPV6 = "{0} node-init -c {1} --node-init-hostname {2}.{3} --ipv6 -u {4} -p {5}"
 
 CMDS = {
     "deb": {
@@ -71,7 +88,7 @@ CMDS = {
     },
     "dmg": {
         "uninstall": "osascript -e 'quit app \"Couchbase Server\"'; "
-                     "rm -rf /Applications/Couchbase\ Server.app; "
+                     "rm -rf " + DEFAULT_INSTALL_DIR["MACOS_VERSIONS"] + " ;&& "
                      "rm -rf ~/Library/Application\ Support/Couchbase && "
                      "rm -rf ~/Library/Application\ Support/membase && "
                      "rm -rf ~/Library/Python/couchbase-py; "

@@ -186,7 +186,7 @@ class NodeHelper:
         if self.get_os() in install_constants.LINUX_DISTROS:
             while retries > 0:
                 if self.shell.file_exists("/opt/couchbase/bin/", "couchbase-server"):
-                    ret, _ = self.shell.execute_command(install_constants.CBFT_ENV_OPTIONS[name])
+                    ret, _ = self.shell.execute_command(install_constants.CBFT_ENV_OPTIONS[name].format(value))
                     self.shell.stop_server()
                     self.shell.start_server()
                     if ret == ['1']:
@@ -198,9 +198,25 @@ class NodeHelper:
             else:
                 print_result_and_exit("Unable to set fts_query_limit on {0}".format(self.ip))
 
+    def _get_cli_path(self):
+        if self.get_os() in install_constants.LINUX_DISTROS:
+            return install_constants.DEFAULT_CLI_PATH["LINUX_DISTROS"]
+        elif self.get_os() in install_constants.MACOS_VERSIONS:
+            return install_constants.DEFAULT_CLI_PATH["MACOS_VERSIONS"]
+        elif self.get_os() in install_constants.WINDOWS_SERVER:
+            return install_constants.DEFAULT_CLI_PATH["WINDOWS_SERVER"]
+
     def pre_init_cb(self):
         if params["fts_query_limit"] > 0:
             self.set_cbft_env_options("fts_query_limit", params["fts_query_limit"])
+        if params["enable_ipv6"]:
+            self.shell.execute_command(
+                install_constants.ENABLE_IPV6.format(self._get_cli_path(),
+                                                     self.ip,
+                                                     ''.join(self.info.hostname),
+                                                     ''.join(self.info.domain[0]),
+                                                     self.node.rest_username,
+                                                     self.node.rest_password))
 
     def post_init_cb(self):
         # Optionally change node name and restart server
@@ -241,9 +257,10 @@ class NodeHelper:
             self.rest.set_service_memoryQuota(service="cbasMemoryQuota", memoryQuota=testconstants.CBAS_QUOTA)
             kv_quota -= testconstants.CBAS_QUOTA
         if kv_quota < testconstants.MIN_KV_QUOTA:
-            raise Exception("KV memory quota is {0}MB but needs to be at least {1}MB on {2}".format(kv_quota,
+            log.warning("KV memory quota is {0}MB but needs to be at least {1}MB on {2}".format(kv_quota,
                                                                                                     testconstants.MIN_KV_QUOTA,
                                                                                                     self.ip))
+            kv_quota = testconstants.MIN_KV_QUOTA
         kv_quota -= 1
         log.info("Setting KV memory quota as {0} MB on {1}".format(kv_quota, self.ip))
         self.rest.init_cluster_memoryQuota(self.node.rest_username, self.node.rest_password, kv_quota)
