@@ -53,6 +53,10 @@ CB_DOWNLOAD_SERVER = "172.23.120.24"
 WIN_BROWSERS = ["MicrosoftEdge.exe", "iexplore.exe"]
 RETAIN_NUM_BINARIES_AFTER_INSTALL = "2"
 
+CBFT_ENV_OPTIONS = {
+    "fts_query_limit": "sed -i 's/export PATH/export PATH\\nexport CBFT_ENV_OPTIONS=bleveMaxResultWindow=10000000/' /opt/couchbase/bin/couchbase-server > /dev/null && echo 1 || echo 0"
+}
+
 CMDS = {
     "deb": {
         "uninstall": "dpkg -r couchbase-server; "
@@ -68,12 +72,14 @@ CMDS = {
     "dmg": {
         "uninstall": "osascript -e 'quit app \"Couchbase Server\"'; "
                      "rm -rf /Applications/Couchbase\ Server.app; "
-                     "rm -rf ~/Library/Application\ Support/Couchbase && rm -rf ~/Library/Application\ Support/membase && rm -rf ~/Library/Python/couchbase-py; "
+                     "rm -rf ~/Library/Application\ Support/Couchbase && "
+                     "rm -rf ~/Library/Application\ Support/membase && "
+                     "rm -rf ~/Library/Python/couchbase-py; "
                      "umount /Volumes/Couchbase* > /dev/null && echo 1 || echo 0",
         "pre_install": "HDIUTIL_DETACH_ATTACH",
         "install": "rm -rf /Applications\Couchbase\ Server.app; "
                    "cp -R mountpoint/Couchbase\ Server.app /Applications/Couchbase\ Server.app; "
-                   #"sudo xattr -d -r com.apple.quarantine /Applications/Couchbase\ Server.app; "
+        # "sudo xattr -d -r com.apple.quarantine /Applications/Couchbase\ Server.app; "
                    "open /Applications/Couchbase\ Server.app > /dev/null && echo 1 || echo 0",
         "post_install": "launchctl list | grep couchbase-server > /dev/null && echo 1 || echo 0",
         "post_install_retry": None,
@@ -86,7 +92,9 @@ CMDS = {
         "pre_install": "",
         "install": "cd " + DOWNLOAD_DIR["WINDOWS_SERVER"] + "; msiexec /i buildbinary /passive /L*V install_status.txt",
         "post_install": "cd " + DOWNLOAD_DIR[
-            "WINDOWS_SERVER"] + "; vi +\"set nobomb | set fenc=ascii | x\" install_status.txt; grep 'buildversion.*Configuration completed successfully.' install_status.txt && echo 1 || echo 0",
+            "WINDOWS_SERVER"] + "; vi +\"set nobomb | set fenc=ascii | x\" install_status.txt; "
+                                "grep 'buildversion.*Configuration completed successfully.' install_status.txt && "
+                                "echo 1 || echo 0",
         "post_install_retry": "cd " + DOWNLOAD_DIR[
             "WINDOWS_SERVER"] + "; msiexec /i buildbinary /passive /L*V install_status.txt",
         "init": None,

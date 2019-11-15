@@ -31,7 +31,8 @@ params = {
     "disable_consistency": False,
     "enable_ipv6": False,
     "use_domain_names": False,
-    "fts_quota": testconstants.FTS_QUOTA
+    "fts_quota": testconstants.FTS_QUOTA,
+    "fts_query_limit": 0
 }
 
 
@@ -151,7 +152,6 @@ class NodeHelper:
                 except Exception as e:
                     log.warn("Exception {0} occurred on {1}, retrying..".format(e.message, self.ip))
                     self.wait_for_completion(duration, event)
-
         self.post_install_cb()
 
     def post_install_cb(self):
@@ -181,6 +181,26 @@ class NodeHelper:
             except Exception as e:
                 log.warn("Exception {0} occurred on {1}, retrying..".format(e.message, self.ip))
                 self.wait_for_completion(duration, event)
+
+    def set_cbft_env_options(self, name, value, retries=3):
+        if self.get_os() in install_constants.LINUX_DISTROS:
+            while retries > 0:
+                if self.shell.file_exists("/opt/couchbase/bin/", "couchbase-server"):
+                    ret, _ = self.shell.execute_command(install_constants.CBFT_ENV_OPTIONS[name])
+                    self.shell.stop_server()
+                    self.shell.start_server()
+                    if ret == ['1']:
+                        log.info("{0} set to {1} on {2}".format(name, value, self.ip))
+                        break
+                else:
+                    time.sleep(20)
+                retries -= 1
+            else:
+                print_result_and_exit("Unable to set fts_query_limit on {0}".format(self.ip))
+
+    def pre_init_cb(self):
+        if params["fts_query_limit"] > 0:
+            self.set_cbft_env_options("fts_query_limit", params["fts_query_limit"])
 
     def post_init_cb(self):
         # Optionally change node name and restart server
@@ -229,6 +249,7 @@ class NodeHelper:
         self.rest.init_cluster_memoryQuota(self.node.rest_username, self.node.rest_password, kv_quota)
 
     def init_cb(self):
+        self.pre_init_cb()
         duration, event, timeout = install_constants.WAIT_TIMES[self.info.deliverable_type]["init"]
         self.wait_for_completion(duration * 2, event)
         start_time = time.time()
@@ -260,7 +281,6 @@ class NodeHelper:
             except Exception as e:
                 log.warn("Exception {0} occurred on {1}, retrying..".format(e.message, self.ip))
                 self.wait_for_completion(duration, event)
-
         self.post_init_cb()
 
     def wait_for_completion(self, duration, event):
@@ -389,8 +409,10 @@ def _parse_user_input():
                             "Cannot enable IPv6 on an IPv4 machine: {0}. Please run without enable_ipv6=True.".format(
                                 server.ip))
                 params["enable_ipv6"] = True
-        if key == "fts_quota" and value >= 256:
+        if key == "fts_quota" and int(value) >= 256:
             params["fts_quota"] = int(value)
+        if key == "fts_query_limit" and int(value) > 0:
+            params["fts_query_limit"] = int(value)
 
     if not params["version"] and not params["url"]:
         print_result_and_exit("Need valid build version or url to proceed")
@@ -398,7 +420,7 @@ def _parse_user_input():
     return params
 
 
-def _params_validation():
+def __check_servers_reachable():
     reachable = []
     unreachable = []
     for server in params["servers"]:
@@ -419,6 +441,10 @@ def _params_validation():
             log.info("INSTALL COMPLETED ON: \t{0}".format(_))
         log.info("-" * 100)
         sys.exit(1)
+
+
+def _params_validation():
+    __check_servers_reachable()
 
     # Create 1 NodeHelper instance per VM
     for server in params["servers"]:
