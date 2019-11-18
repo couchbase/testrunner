@@ -898,7 +898,6 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
 
         for thread in threads:
             thread.start()
-            self.sleep(3)
 
         for thread in threads:
             thread.join()
@@ -1006,10 +1005,10 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
             for thread in threads:
                 thread.join()
 
-            if self.expected_err_msg:
-                if self.expected_err_msg not in self.alter_index_error:
+            if self.expect_failure:
+                if not self.alter_index_error:
                     self.log.error(self.alter_index_error)
-                    self.fail("Move index failed with unexpected error")
+                    self.fail("Alter index did not error!")
                 self.alter_index_error = ''
             else:
                 self.sleep(5)
