@@ -498,8 +498,10 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
             if index["name"] == "idx1":
                 self.log.info("Expected Hosts : {0}".format(expected_hosts))
                 self.log.info("Actual Hosts   : {0}".format(index["hosts"]))
-                self.assertEqual(index["hosts"], expected_hosts,
+                self.assertNotIn(self.node_list[0], index["hosts"],
                                  "Planner did not ignore excluded node during index creation")
+                #self.assertEqual(index["hosts"], expected_hosts,
+                #                 "Planner did not ignore excluded node during index creation")
                 validated = True
 
         if not validated:
@@ -4261,10 +4263,13 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         self.log.info(index_map)
 
         if self.node_out > 0:
-            if node_out == self.index_servers[0]:
+            if self.node_out == self.index_servers[0]:
                 rest = RestConnection(self.index_servers[1])
             else:
                 rest = self.rest
+        else:
+            rest = self.rest
+
 
         index_metadata = rest.get_indexer_metadata()
         self.log.info("Indexer Metadata After Build:")
@@ -4454,7 +4459,7 @@ class GSIIndexPartitioningTests(GSIReplicaIndexesTests):
         index_detail["defer_build"] = False
         index_detail[
             "definition"] = "CREATE INDEX idx1 on default(name,dept) partition by hash(salary) USING GSI"
-        index_detail["num_partitions_post_restore"] = 4
+        index_detail["num_partitions_post_restore"] = 8
         index_details.append(index_detail)
         index_detail = {}
 
