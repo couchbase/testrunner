@@ -290,6 +290,8 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
 
         self._create_index_query(index_statement=create_index_query, index_name=index_name_prefix)
 
+        self.wait_until_indexes_online()
+
         index_map = self.get_index_map()
 
         for index in index_map['default']:
@@ -302,8 +304,6 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
         else:
             error = self._alter_index_replicas(index_name=index_name_prefix, num_replicas=expected_num_replicas)
             self.sleep(10)
-
-        self.wait_until_indexes_online()
 
         index_map = self.get_index_map()
 
@@ -325,27 +325,27 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
                             rebalance.result()
 
         else:
-            # REbalance out the node that contains the decreased replica
+            new_nodes_list = []
             for index in index_map['default']:
-                if index_map['default'][index]['hosts'] in nodes_with_replicas:
-                    for node in nodes_list:
-                        if index_map['default'][index]['hosts'] == node[1]:
-                            del nodes_list[node[0]]
-                            for server in nodes_with_replicas:
-                                if node[1] == server:
-                                    nodes_with_replicas.remove(server)
+                if index_map['default'][index]['hosts'] not in new_nodes_list:
+                    new_nodes_list.append(index_map['default'][index]['hosts'])
+
+            # Rebalance out the node that contains the decreased replica
+            rebalance_out_node =list(set(nodes_with_replicas) - set(new_nodes_list))[0]
+            rebalance_in_server=''
             for node in nodes_list:
-                for server in nodes_with_replicas:
-                    if node[1] == server:
-                        rebalance_in_server = node[0]
-                        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [self.servers[node[0]]])
-                        reached = RestHelper(self.rest).rebalance_reached()
-                        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
-                        rebalance.result()
+                if node[1] == rebalance_out_node:
+                    rebalance_in_server = self.servers[node[0]]
+                    rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [],
+                                                             [self.servers[node[0]]])
+                    reached = RestHelper(self.rest).rebalance_reached()
+                    self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+                    rebalance.result()
+
             # Replica that was removed should not be re-created because it is not a broken replica
             if self.check_repair:
                 pre_rebalance_in_map = self.get_index_map()
-                rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[rebalance_in_server]], [],services=["index"])
+                rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [rebalance_in_server], [],services=["index"])
                 reached = RestHelper(self.rest).rebalance_reached()
                 self.assertTrue(reached, "rebalance failed, stuck or did not complete")
                 rebalance.result()
@@ -668,7 +668,7 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
                                                                                 [self.servers[self.nodes_init-1]]))
 
         t1.start()
-        self.sleep(3)
+        self.sleep(2)
 
         error = self._alter_index_replicas(index_name=index_name_prefix, num_replicas=expected_num_replicas)
 
@@ -1627,10 +1627,13 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
         create_index_query = "CREATE INDEX " + index_name_prefix + " ON default(age) USING GSI;"
 
         self._create_index_query(index_statement=create_index_query, index_name=index_name_prefix)
+        self.wait_until_indexes_online()
+
 
         error = self._alter_index_replicas(index_name=index_name_prefix, num_replicas=expected_num_replicas)
-
         self.sleep(10)
+        self.wait_until_indexes_online()
+
 
         index_map = self.get_index_map()
         self.log.info(index_map)
@@ -1660,6 +1663,7 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
                         "rebalance failed, stuck or did not complete")
         rebalance.result()
 
+        self.wait_until_indexes_online()
         index_metadata = self.rest.get_indexer_metadata()
         self.log.info(index_metadata)
 
@@ -1669,11 +1673,15 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
 
         error = self._alter_index_replicas(index_name=index_name_prefix, drop_replica=True, replicaId=replica_id)
         self.sleep(30)
+        self.wait_until_indexes_online()
+
+        index_map = self.get_index_map()
 
         self.n1ql_helper.verify_replica_indexes([index_name_prefix], index_map, (expected_num_replicas - 1),
                                                 dropped_replica=True, replicaId=replica_id)
 
         error = self._alter_index_replicas(index_name=index_name_prefix, num_replicas=expected_num_replicas)
         self.sleep(10)
+        self.wait_until_indexes_online()
 
         self.n1ql_helper.verify_replica_indexes([index_name_prefix], index_map, expected_num_replicas )
