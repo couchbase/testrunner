@@ -172,10 +172,11 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
 
         create_index_query = "CREATE INDEX " + index_name_prefix + " ON default(age) USING GSI;"
         self._create_index_query(index_statement=create_index_query, index_name=index_name_prefix)
+        self.wait_until_indexes_online()
 
         create_index_query = "CREATE INDEX " + index_name_prefix + " ON standard_bucket0(age) USING GSI;"
         self._create_index_query(index_statement=create_index_query, index_name=index_name_prefix)
-
+        self.wait_until_indexes_online()
 
         error = self._alter_index_replicas(index_name=index_name_prefix, num_replicas=expected_num_replicas)
 
