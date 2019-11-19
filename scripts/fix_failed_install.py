@@ -3,19 +3,26 @@ from couchbase.n1ql import N1QLQuery
 import paramiko
 import sys
 
+if len(sys.argv) < 4:
+	print("Usage: fix_failed_install.py <poolid> <osusername> <osuserpwd>")
+	sys.exit(1)
+
 poolId = sys.argv[1]
 username = sys.argv[2]
 password = sys.argv[3]
 cb = Bucket('couchbase://172.23.105.177/QE-server-pool')
-query = 'select * from `QE-server-pool` where "%s" in poolId and state = "failedInstall";' % str(poolId)
+query = 'select * from `QE-server-pool` where ("%s" in poolId or poolId="%s") and state = "failedInstall";' % (str(poolId),str(poolId))
 print('Running: %s' % query)
 row_iter = cb.n1ql_query(N1QLQuery(query))
 fixed_ips = []
+index=1
 for row in row_iter: 
 	try:
 		print('********************************')
+		ipcount=len(row['QE-server-pool'])
 		server = row['QE-server-pool']['ipaddr']
-		print('Server: %s' % server)
+		print('Server#%d: %s' % (index,server))
+		index=index+1
 		cmds = 'rpm -e `rpm -qa | grep couchbase-server` && rm -rf /etc/systemd/system/multi-user.target.wants/couchbase-server.service && systemctl daemon-reload && systemctl list-units --type service --all'
 		print('cmds: %s' % cmds)
 		ssh = paramiko.SSHClient()
@@ -59,15 +66,15 @@ for row in row_iter:
 		print('STDERR:')
 		print(err_5)
 		print('STDOUT:')
-                print(out_5)
+		print(out_5)
 		cmds = 'iptables -F'
-                ssh_stdin, ssh_stdout, ssh_stderr = ssh.exec_command(cmds)
-                out_6 = ssh_stdout.read()
-                err_6 = ssh_stderr.read()
-                print('STDERR:')
-                print(err_6)
-                print('STDOUT:')
-                print(out_6)
+		ssh_stdin, ssh_stdout, ssh_stderr = ssh.exec_command(cmds)
+		out_6 = ssh_stdout.read()
+		err_6 = ssh_stderr.read()
+		print('STDERR:')
+		print(err_6)
+		print('STDOUT:')
+		print(out_6)
 		if out_2 == '':
 			fixed_ips.append(server)
 			#ssh_stdin, ssh_stdout, ssh_stderr = ssh.exec_command('reboot')
@@ -80,7 +87,7 @@ for row in row_iter:
 	print('********************************\n\n\n')
 
 for ip in fixed_ips:
-	query = "update `QE-server-pool` set state='available' where '%s' in poolId and state='failedInstall' and ipaddr='%s';" % (str(poolId),str(ip))
+	query = "update `QE-server-pool` set state='available' where ('%s' in poolId or poolId='%s') and state='failedInstall' and ipaddr='%s';" % (str(poolId),str(poolId),str(ip))
 	print('Running: %s' % query)
 	row_iter = cb.n1ql_query(N1QLQuery(query))
 	for row in row_iter:
