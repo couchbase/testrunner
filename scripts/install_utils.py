@@ -325,15 +325,15 @@ class NodeHelper:
                 # Delete all but the most recently accessed build binaries
                 self.shell.execute_command(cmd, debug=self.params["debug_logs"])
             except:
-                log.warn("Exception thrown during cleanup..ok to ignore")
-
+                #ok to ignore
+                pass
 
 def _get_mounted_volumes(shell):
     volumes, _ = shell.execute_command("ls /tmp | grep '{0}'".format("couchbase-server-"))
     return volumes
 
 
-def hdiutil_attach(shell, dmg_path, max_attempts=3):
+def hdiutil_attach(shell, dmg_path):
     volumes = _get_mounted_volumes(shell)
     for volume in volumes:
         shell.execute_command("hdiutil detach " + '"' + "/tmp/" + volume + '"')
