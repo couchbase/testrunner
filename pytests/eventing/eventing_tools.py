@@ -197,6 +197,7 @@ class EventingTools(EventingBaseTest, EnterpriseBackupRestoreBase, NewUpgradeBas
         self.should_fail = self.input.param("should-fail", False)
         self.restore_compression_mode = self.input.param("restore-compression-mode", None)
         self.enable_firewall = False
+        self.vbuckets_filter_no_data = False
 
     def tearDown(self):
         super(EventingTools, self).tearDown()
