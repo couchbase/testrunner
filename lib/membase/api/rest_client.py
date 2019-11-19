@@ -916,13 +916,17 @@ class RestConnection(object):
         if services == None:
             log.info(" services are marked as None, will not work")
             return False
-        if hostname == "127.0.0.1":
+        if not hostname:
+            params = urllib.urlencode({'user': username,
+                                       'password': password,
+                                       'services': ",".join(services)})
+        elif hostname == "127.0.0.1":
             hostname = "{0}:{1}".format(hostname, port)
-        params = urllib.urlencode({ 'hostname': hostname,
+            params = urllib.urlencode({ 'hostname': hostname,
                                     'user': username,
                                     'password': password,
                                     'services': ",".join(services)})
-        log.info('/node/controller/setupServices params on {0}: {1}:{2}'.format(self.ip, self.port, params))
+        log.info('/node/controller/setupServices params on {0}:{1}:{2}'.format(self.ip, self.port, params))
         status, content, header = self._http_request(api, 'POST', params)
         error_message = "cannot change node services after cluster is provisioned"
         if not status and error_message in content:

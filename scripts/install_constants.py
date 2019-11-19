@@ -72,7 +72,7 @@ CBFT_ENV_OPTIONS = \
 #                                      -c [fd63:6f75:6368:20d4:1f76:3dfa:d8e9:40ac]
 #                                      --node-init-hostname s12707-ip6.qe.couchbase.com
 #                                      --ipv6 -u Administrator -p password
-ENABLE_IPV6 = "{0} node-init -c {1} --node-init-hostname {2}.{3} --ipv6 -u {4} -p {5}"
+
 
 CMDS = {
     "deb": {
@@ -135,6 +135,12 @@ CMDS = {
     }
 
 }
+
+NODE_INIT = {
+    "ipv4": "{0} node-init -c {1} -u {2} -p {3}",
+    "ipv6": "{0} node-init -c {1} --node-init-hostname {2} --ipv6 -u {3} -p {4}"
+}
+
 
 INSTALL_TIMEOUT = 600
 INSTALL_POLL_INTERVAL = INSTALL_TIMEOUT // 30

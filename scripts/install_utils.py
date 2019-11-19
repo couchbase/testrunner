@@ -207,16 +207,28 @@ class NodeHelper:
             return install_constants.DEFAULT_CLI_PATH["WINDOWS_SERVER"]
 
     def pre_init_cb(self):
-        if params["fts_query_limit"] > 0:
-            self.set_cbft_env_options("fts_query_limit", params["fts_query_limit"])
-        if params["enable_ipv6"]:
-            self.shell.execute_command(
-                install_constants.ENABLE_IPV6.format(self._get_cli_path(),
-                                                     self.ip,
-                                                     ''.join(self.info.hostname),
-                                                     ''.join(self.info.domain[0]),
-                                                     self.node.rest_username,
-                                                     self.node.rest_password))
+        try:
+            if params["fts_query_limit"] > 0:
+                self.set_cbft_env_options("fts_query_limit", params["fts_query_limit"])
+
+            if params["enable_ipv6"]:
+                if self.node.ip.startswith("["):
+                    hostname = self.node.ip[self.node.ip.find("[") + 1:self.node.ip.find("]")]
+                else:
+                    hostname = self.node.ip
+                cmd = install_constants.NODE_INIT["ipv6"].format(self._get_cli_path(),
+                                                    self.ip,
+                                                    hostname,
+                                                    self.node.rest_username,
+                                                    self.node.rest_password)
+            else:
+                cmd = install_constants.NODE_INIT["ipv4"].format(self._get_cli_path(),
+                                                    self.ip,
+                                                    self.node.rest_username,
+                                                    self.node.rest_password)
+            self.shell.execute_command(cmd)
+        except Exception as e:
+            log.warn("Exception {0} occurred during pre-init".format(e.message))
 
     def post_init_cb(self):
         # Optionally change node name and restart server
@@ -266,15 +278,15 @@ class NodeHelper:
         self.rest.init_cluster_memoryQuota(self.node.rest_username, self.node.rest_password, kv_quota)
 
     def init_cb(self):
-        self.pre_init_cb()
         duration, event, timeout = install_constants.WAIT_TIMES[self.info.deliverable_type]["init"]
         self.wait_for_completion(duration * 2, event)
         start_time = time.time()
         while time.time() < start_time + timeout:
             try:
                 init_success = False
-                self.rest = RestConnection(self.node)
+                self.pre_init_cb()
 
+                self.rest = RestConnection(self.node)
                 # Make sure that data_path and index_path are writable by couchbase user
                 for path in set(filter(None, [self.node.data_path, self.node.index_path])):
                     for cmd in ("rm -rf {0}/*".format(path),
@@ -282,7 +294,8 @@ class NodeHelper:
                         self.shell.execute_command(cmd)
                 self.rest.set_data_path(data_path=self.node.data_path, index_path=self.node.index_path)
                 self.allocate_memory_quotas()
-                self.rest.init_node_services(username=self.node.rest_username,
+                self.rest.init_node_services(hostname=None,
+                                             username=self.node.rest_username,
                                              password=self.node.rest_password,
                                              services=self.get_services())
 
