@@ -269,6 +269,7 @@ class cbrecovery(CBRbaseclass, XDCRReplicationBaseTest):
                 self.cluster.failover(self.src_nodes, self.failed_nodes)
                 for node in self.failed_nodes:
                     self.src_nodes.remove(node)
+                self.sleep(10)
                 add_nodes = self._floating_servers_set[0:self._add_count]
                 for node in add_nodes:
                     rest.add_node(user=node.rest_username, password=node.rest_password, remoteIp=node.ip, port=node.port)
@@ -342,6 +343,7 @@ class cbrecovery(CBRbaseclass, XDCRReplicationBaseTest):
                 self.cluster.failover(self.dest_nodes, self.failed_nodes)
                 for node in self.failed_nodes:
                     self.dest_nodes.remove(node)
+                self.sleep(10)
                 add_nodes = self._floating_servers_set[0:self._add_count]
                 for node in add_nodes:
                     rest.add_node(user=node.rest_username, password=node.rest_password, remoteIp=node.ip, port=node.port)
@@ -414,6 +416,7 @@ class cbrecovery(CBRbaseclass, XDCRReplicationBaseTest):
                 self.log.info("Failing over {0} nodes on source ..".format(self._failover_count))
                 self.failed_nodes = self.src_nodes[(len(self.src_nodes) - self._failover_count):len(self.src_nodes)]
                 self.cluster.failover(self.src_nodes, self.failed_nodes)
+                self.sleep(10)
                 for node in self.failed_nodes:
                     self.src_nodes.remove(node)
                 add_nodes = self._floating_servers_set[0:self._add_count]
@@ -477,6 +480,7 @@ class cbrecovery(CBRbaseclass, XDCRReplicationBaseTest):
                 self.log.info("Triggering {0} over {1} nodes on source ..".format(self.failover_reason, self._failover_count))
                 self.failed_nodes = self.src_nodes[(len(self.src_nodes) - self._failover_count):len(self.src_nodes)]
                 self.auto_fail_over(self.src_master)
+                self.sleep(10)
                 for node in self.failed_nodes:
                     self.src_nodes.remove(node)
                 add_nodes = self._floating_servers_set[0:self._add_count]
