@@ -400,12 +400,15 @@ class QueriesOpsTests(QuerySanityTests):
             if self.stop_source:
                 remote = RemoteMachineShellConnection(self.servers[0])
                 remote.stop_server()
+            self.sleep(60)
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init+1],
                                                      self.servers[2:(self.nodes_init + 2)], [],services=['n1ql'])
             rebalance.result()
             if self.stop_server:
+                self.log.info("Stopping server %s" % self.servers[2])
                 remote = RemoteMachineShellConnection(self.servers[2])
                 remote.stop_server()
+                self.sleep(60)
             elif self.network_partition:
                 self.start_firewall_on_node(self.servers[2])
                 self.sleep(10)
