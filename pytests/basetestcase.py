@@ -191,6 +191,7 @@ class BaseTestCase(unittest.TestCase):
             self.sasl_bucket_name = "bucket"
             self.sasl_bucket_priority = self.input.param("sasl_bucket_priority", None)
             self.standard_bucket_priority = self.input.param("standard_bucket_priority", None)
+            self.magma_storage = self.input.param("magma_storage", False)
             # end of bucket parameters spot (this is ongoing)
             self.disable_diag_eval_on_non_local_host = self.input.param("disable_diag_eval_non_local", False)
 
@@ -658,6 +659,26 @@ class BaseTestCase(unittest.TestCase):
         self._create_standard_buckets(self.master, self.standard_buckets)
         self._create_memcached_buckets(self.master, self.memcached_buckets)
 
+        if self.magma_storage:
+            command = "backend"
+            value = "magma"
+            self.log.info("Changing the bucket properties by changing {0} to {1}".
+                          format(command, value))
+            rest = RestConnection(self.master)
+
+            shell = RemoteMachineShellConnection(self.master)
+            shell.enable_diag_eval_on_non_local_hosts()
+            shell.disconnect()
+            for bucket in self.buckets:
+                cmd = 'ns_bucket:update_bucket_props("%s", [{extra_config_string, "%s=%s"}]).'%(bucket.name, command, value)
+                rest.diag_eval(cmd)
+
+            # Restart Memcached in all cluster nodes to reflect the settings
+            for server in self.get_kv_nodes(master=self.master):
+                shell = RemoteMachineShellConnection(server)
+                shell.restart_couchbase()
+                shell.disconnect()
+                self.wait_node_restarted(server)
 
     def _get_bucket_size(self, mem_quota, num_buckets):
         # min size is 100MB now
