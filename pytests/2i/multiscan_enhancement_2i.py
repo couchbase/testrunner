@@ -56,6 +56,7 @@ class SecondaryIndexingMultiscanTests(BaseSecondaryIndexingTests):
         msg = "Failed Scans: {0}".format(failed_scans)
         self.assertEqual(len(failed_scans), 0, msg)
 
+    # This test is failing because of MB-30274
     def test_simple_index_multiple_seek(self):
         failed_scans = []
         query_definition = QueryDefinition(

@@ -4161,10 +4161,10 @@ class RestConnection(object):
                                                      params=params)
         if not status:
             raise Exception(content)
-        #Below line is there because of MB-20758
-        content = content.split("[]")[0]
+
         # Following line is added since the content uses chunked encoding
         chunkless_content = content.replace("][", ", \n")
+
         if chunkless_content:
             return json.loads(chunkless_content)
         else:
