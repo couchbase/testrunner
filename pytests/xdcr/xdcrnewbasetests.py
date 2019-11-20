@@ -3669,7 +3669,9 @@ class XDCRNewBaseTest(unittest.TestCase):
             doc_count = self.__execute_query(server, "SELECT COUNT(*) FROM "
                                              + bucket +
                                              " WHERE " + exp)
-        return doc_count if doc_count else 0
+            if not doc_count:
+                return 0
+        return doc_count
 
     def verify_filtered_items(self, src_master, dest_master, replications, skip_index=False):
         # Assuming src and dest bucket of replication have the same name

@@ -32,7 +32,7 @@ class XDCRAdvFilterTests(XDCRNewBaseTest):
                     self.log.warn("Random filter generated may not be valid, skipping doc count validation")
                     self.tearDown()
             else:
-                self.fail(Exception.message)
+                self.fail(e.message)
 
     def tearDown(self):
         XDCRNewBaseTest.tearDown(self)
