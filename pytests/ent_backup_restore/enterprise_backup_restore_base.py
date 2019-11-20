@@ -3231,7 +3231,8 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
 
         index_definition = INDEX_DEFINITION
         index_name = index_definition['name'] = "age"
-        rest_fts = RestConnection(self.servers[1])
+        fts_server = self.get_nodes_from_services_map(service_type="fts")
+        rest_fts = RestConnection(fts_server)
         try:
             self.log.info("Create fts index")
             rest_fts.create_fts_index(index_name, index_definition)
