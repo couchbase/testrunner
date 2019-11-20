@@ -539,7 +539,7 @@ class N1qlFTSIntegrationTest(QueryTests):
         self.assertEquals(idx_result_node1_before_failover == alias_result_node1_before_failover, True, "Results before failover are not the same.")
 
         self.cluster.failover(servers=self.servers, failover_nodes=[self.servers[2]], graceful=False)
-
+        self.sleep(20)
         idx_result_node1_after_failover = self._run_query_against_node(self.servers[0], self.test_fts_query)
         alias_result_node1_after_failover = self._run_query_against_node(self.servers[0], self.test_fts_alias_query)
         self.assertEquals(idx_result_node1_before_failover == idx_result_node1_after_failover and

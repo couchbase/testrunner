@@ -105,13 +105,13 @@ class N1qlFTSIntegrationPhase2ClusteropsTest(QueryTests):
         self.load_test_buckets()
         self.cbcluster = CouchbaseCluster(name='cluster', nodes=self.servers, log=self.log)
         fts_idx = self._create_fts_index(index_name="idx_beer_sample_fts", doc_count=7303, source_name='beer-sample')
+        self.run_cbq_query("drop index `beer-sample`.beer_primary")
 
         n1ql_query = "select meta().id from `beer-sample` where search(`beer-sample`, {\"query\":{\"field\":\"state\", \"match\":\"California\"}, \"size\":10000})"
         n1ql_results_before_failover = self.run_cbq_query(n1ql_query)['results']
         n1ql_doc_ids_before_failover = []
         for result in n1ql_results_before_failover:
             n1ql_doc_ids_before_failover.append(result['id'])
-
         self.cluster.failover(servers=self.servers, failover_nodes=[self.servers[2]], graceful=False)
         error_found = False
         try:
