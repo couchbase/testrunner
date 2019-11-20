@@ -47,7 +47,8 @@ DEFAULT_INSTALL_DIR = {"LINUX_DISTROS": "/opt/couchbase",
 DEFAULT_CLI_PATH = \
     {
         "LINUX_DISTROS": DEFAULT_INSTALL_DIR["LINUX_DISTROS"] + "/bin/couchbase-cli",
-        "MACOS_VERSIONS": DEFAULT_INSTALL_DIR["MACOS_VERSIONS"] + "/Contents/Resources/couchbase-core/bin/couchbase-cli",
+        "MACOS_VERSIONS": DEFAULT_INSTALL_DIR[
+                              "MACOS_VERSIONS"] + "/Contents/Resources/couchbase-core/bin/couchbase-cli",
         "WINDOWS_SERVER": DEFAULT_INSTALL_DIR["WINDOWS_SERVER"] + "/bin/couchbase-cli"
     }
 
@@ -64,15 +65,9 @@ RETAIN_NUM_BINARIES_AFTER_INSTALL = "2"
 CBFT_ENV_OPTIONS = \
     {
         "fts_query_limit":
-        "sed -i 's/export PATH/export PATH\\nexport CBFT_ENV_OPTIONS=bleveMaxResultWindow={0}/' /opt/couchbase/bin/couchbase-server; "
-        "grep bleveMaxResultWindow={0} /opt/couchbase/bin/couchbase-server > /dev/null && echo 1 || echo 0"
+            "sed -i 's/export PATH/export PATH\\nexport CBFT_ENV_OPTIONS=bleveMaxResultWindow={0}/' /opt/couchbase/bin/couchbase-server; "
+            "grep bleveMaxResultWindow={0} /opt/couchbase/bin/couchbase-server > /dev/null && echo 1 || echo 0"
     }
-
-# eg: /opt/couchbase/bin/couchbase-cli node-init
-#                                      -c [fd63:6f75:6368:20d4:1f76:3dfa:d8e9:40ac]
-#                                      --node-init-hostname s12707-ip6.qe.couchbase.com
-#                                      --ipv6 -u Administrator -p password
-
 
 CMDS = {
     "deb": {
@@ -89,10 +84,10 @@ CMDS = {
     "dmg": {
         "uninstall": "osascript -e 'quit app \"Couchbase Server\"'; "
                      "rm -rf " + DEFAULT_INSTALL_DIR["MACOS_VERSIONS"] + " ;&& "
-                     "rm -rf ~/Library/Application\ Support/Couchbase && "
-                     "rm -rf ~/Library/Application\ Support/membase && "
-                     "rm -rf ~/Library/Python/couchbase-py; "
-                     "umount /Volumes/Couchbase* > /dev/null && echo 1 || echo 0",
+                                                                         "rm -rf ~/Library/Application\ Support/Couchbase && "
+                                                                         "rm -rf ~/Library/Application\ Support/membase && "
+                                                                         "rm -rf ~/Library/Python/couchbase-py; "
+                                                                         "umount /Volumes/Couchbase* > /dev/null && echo 1 || echo 0",
         "pre_install": "HDIUTIL_DETACH_ATTACH",
         "install": "rm -rf /Applications\Couchbase\ Server.app; "
                    "cp -R mountpoint/Couchbase\ Server.app /Applications/Couchbase\ Server.app; "
@@ -140,7 +135,6 @@ NODE_INIT = {
     "ipv4": "{0} node-init -c {1} -u {2} -p {3}",
     "ipv6": "{0} node-init -c {1} --node-init-hostname {2} --ipv6 -u {3} -p {4}"
 }
-
 
 INSTALL_TIMEOUT = 600
 INSTALL_POLL_INTERVAL = INSTALL_TIMEOUT // 30

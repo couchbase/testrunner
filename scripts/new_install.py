@@ -61,10 +61,14 @@ def validate_install(version):
             for item in node_status:
                 if version in item['version'] and item['status'] == "healthy":
                     node.install_success = True
-                    log.info("node:{0}\tversion:{1}\tstatus:{2}\tservices:{3}".format(item['hostname'],
-                                                                                      item['version'],
-                                                                                      item['status'],
-                                                                                      item['services']))
+
+                if node.enable_ipv6 and not item["addressFamily"] == "inet6":
+                    node.install_success = False
+
+                log.info("node:{0}\tversion:{1}\taFamily:{2}\tservices:{3}".format(item['hostname'],
+                                                                              item['version'],
+                                                                              item['addressFamily'],
+                                                                              item['services']))
     install_utils.print_result_and_exit()
 
 def do_install(params):

@@ -58,6 +58,7 @@ class NodeHelper:
         self.connect_ok = False
         self.shell = None
         self.info = None
+        self.enable_ipv6 = False
         self.check_node_reachable()
 
     def check_node_reachable(self):
@@ -206,27 +207,34 @@ class NodeHelper:
         elif self.get_os() in install_constants.WINDOWS_SERVER:
             return install_constants.DEFAULT_CLI_PATH["WINDOWS_SERVER"]
 
+    def _set_ip_version(self):
+        if params["enable_ipv6"]:
+            self.enable_ipv6 = True
+            if self.node.ip.startswith("["):
+                hostname = self.node.ip[self.node.ip.find("[") + 1:self.node.ip.find("]")]
+            else:
+                hostname = self.node.ip
+            cmd = install_constants.NODE_INIT["ipv6"].format(self._get_cli_path(),
+                                                         self.ip,
+                                                         hostname,
+                                                         self.node.rest_username,
+                                                         self.node.rest_password)
+        else:
+            cmd = install_constants.NODE_INIT["ipv4"].format(self._get_cli_path(),
+                                                         self.ip,
+                                                         self.node.rest_username,
+                                                         self.node.rest_password)
+
+        self.shell.execute_command(cmd)
+
     def pre_init_cb(self):
         try:
+            self._set_ip_version()
+
             if params["fts_query_limit"] > 0:
                 self.set_cbft_env_options("fts_query_limit", params["fts_query_limit"])
 
-            if params["enable_ipv6"]:
-                if self.node.ip.startswith("["):
-                    hostname = self.node.ip[self.node.ip.find("[") + 1:self.node.ip.find("]")]
-                else:
-                    hostname = self.node.ip
-                cmd = install_constants.NODE_INIT["ipv6"].format(self._get_cli_path(),
-                                                    self.ip,
-                                                    hostname,
-                                                    self.node.rest_username,
-                                                    self.node.rest_password)
-            else:
-                cmd = install_constants.NODE_INIT["ipv4"].format(self._get_cli_path(),
-                                                    self.ip,
-                                                    self.node.rest_username,
-                                                    self.node.rest_password)
-            self.shell.execute_command(cmd)
+
         except Exception as e:
             log.warn("Exception {0} occurred during pre-init".format(e.message))
 
@@ -250,10 +258,11 @@ class NodeHelper:
     def allocate_memory_quotas(self):
         kv_quota = 0
         info = self.rest.get_nodes_self()
-        kv_quota = int(info.mcdMemoryReserved * testconstants.CLUSTER_QUOTA_RATIO)
-        """ for fts, we need to grep quota from ns_server
-                    but need to make it works even RAM of vm is
-                    smaller than 2 GB """
+
+        start_time = time.time()
+        while time.time() < start_time + 30 and kv_quota == 0:
+            kv_quota = int(info.mcdMemoryReserved * testconstants.CLUSTER_QUOTA_RATIO)
+            time.sleep(1)
 
         self.services = self.get_services()
         if "index" in self.services:
@@ -268,13 +277,13 @@ class NodeHelper:
             log.info("Setting CBAS memory quota as {0} MB on {1}".format(testconstants.CBAS_QUOTA, self.ip))
             self.rest.set_service_memoryQuota(service="cbasMemoryQuota", memoryQuota=testconstants.CBAS_QUOTA)
             kv_quota -= testconstants.CBAS_QUOTA
-        if kv_quota < testconstants.MIN_KV_QUOTA:
-            log.warning("KV memory quota is {0}MB but needs to be at least {1}MB on {2}".format(kv_quota,
-                                                                                                    testconstants.MIN_KV_QUOTA,
-                                                                                                    self.ip))
-            kv_quota = testconstants.MIN_KV_QUOTA
-        kv_quota -= 1
-        log.info("Setting KV memory quota as {0} MB on {1}".format(kv_quota, self.ip))
+        if "kv" in self.services:
+            if kv_quota < testconstants.MIN_KV_QUOTA:
+                log.warning("KV memory quota is {0}MB but needs to be at least {1}MB on {2}".format(kv_quota,
+                                                                                                        testconstants.MIN_KV_QUOTA,
+                                                                                                        self.ip))
+                kv_quota = testconstants.MIN_KV_QUOTA
+            log.info("Setting KV memory quota as {0} MB on {1}".format(kv_quota, self.ip))
         self.rest.init_cluster_memoryQuota(self.node.rest_username, self.node.rest_password, kv_quota)
 
     def init_cb(self):
@@ -360,6 +369,7 @@ def print_result_and_exit(err=None):
         node = get_node_helper(server.ip)
         if not node or not node.install_success:
             fail.append(server.ip)
+
         elif node.install_success:
             success.append(server.ip)
     log.info("-" * 100)
