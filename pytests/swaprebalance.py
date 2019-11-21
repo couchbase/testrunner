@@ -476,6 +476,7 @@ class SwapRebalanceBase(unittest.TestCase):
             self.log.info("nodes are still in cluster: {0}".format([(node.ip, node.port) for node in knownNodes]))
             ejectedNodes = list(set(optNodesIds) & set([node.id for node in knownNodes]))
             rest.rebalance(otpNodes=[node.id for node in knownNodes], ejectedNodes=ejectedNodes)
+            self.sleep(10, "Wait for rebalance to start")
             self.assertTrue(rest.monitorRebalance(),
                             msg="rebalance operation failed after adding node {0}".format(toBeEjectedNodes))
         else:
