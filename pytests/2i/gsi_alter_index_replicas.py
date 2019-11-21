@@ -306,6 +306,7 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
             error = self._alter_index_replicas(index_name=index_name_prefix, num_replicas=expected_num_replicas)
             self.sleep(10)
 
+        self.wait_until_indexes_online()
         index_map = self.get_index_map()
 
         if self.drop_replica:
@@ -343,10 +344,16 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
                     self.assertTrue(reached, "rebalance failed, stuck or did not complete")
                     rebalance.result()
 
+
             # Replica that was removed should not be re-created because it is not a broken replica
             if self.check_repair:
+                self.sleep(30)
                 pre_rebalance_in_map = self.get_index_map()
-                rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [rebalance_in_server], [],services=["index"])
+                if rebalance_in_server == self.servers[0]:
+                    rebalance = self.cluster.async_rebalance(self.servers[1:self.nodes_init], [rebalance_in_server], [],
+                                                             services=["index"])
+                else:
+                    rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [rebalance_in_server], [],services=["index"])
                 reached = RestHelper(self.rest).rebalance_reached()
                 self.assertTrue(reached, "rebalance failed, stuck or did not complete")
                 rebalance.result()
@@ -678,8 +685,8 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
         self.sleep(5)
         self.wait_until_indexes_online()
 
-        if self.expected_err_msg not in error[0]:
-            self.fail("Move index failed with unexpected error")
+        if not error and self.expect_failure:
+            self.fail("Move did not fail and it should have")
 
     '''Put the indexer in a DGM/Paused state (depending on plasma/moi), try to execute alter indexes'''
     def test_alter_index_one_node_in_paused_state(self):
@@ -889,9 +896,8 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
 
         if self.flush_bucket:
             threads = [
-                Thread(target=self._alter_index_replicas, name="alter_index",
-                       args=(index_name_prefix, "default", expected_num_replicas, True)),
-                Thread(target=self.rest.flush_bucket, name="flush bucket", args="default")]
+                Thread(target=self._alter_index_replicas, name="alter_index", args=(index_name_prefix,"default",expected_num_replicas,True)),
+                Thread(target=self.rest.flush_bucket, name="flush bucket", args=["default"])]
         else:
             threads = [
                 Thread(target=self._alter_index_replicas, name="alter_index", args=(index_name_prefix,"default",expected_num_replicas,True)),
@@ -939,7 +945,7 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
 
         self.run_doc_ops()
 
-        self.sleep(10)
+        self.sleep(30)
 
         # Kill memcached on Node A so that Node B becomes master
         self.log.info("Kill Memcached process on NodeA")
@@ -954,7 +960,7 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
 
         # Failover Node B
         self.log.info("Failing over NodeB")
-        self.sleep(10)
+        self.sleep(30)
         failover_task = self.cluster.async_failover(
             self.servers[:self.nodes_init], [self.servers[1]], self.graceful,
             wait_for_pending=10)
@@ -1261,6 +1267,8 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
             self.assertTrue(reached,
                             "rebalance failed, stuck or did not complete")
             rebalance.result()
+
+            self.sleep(60)
 
             self._create_restore(kv_node)
 
@@ -1676,6 +1684,7 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
         self.sleep(30)
         self.wait_until_indexes_online()
 
+        self.sleep(30)
         index_map = self.get_index_map()
 
         self.n1ql_helper.verify_replica_indexes([index_name_prefix], index_map, (expected_num_replicas - 1),
