@@ -72,23 +72,29 @@ class ClusterOperationHelper(object):
 
     #wait_if_warmup=True is useful in tearDown method for (auto)failover tests
     @staticmethod
-    def wait_for_ns_servers_or_assert(servers, testcase, wait_time=360, wait_if_warmup=False):
+    def wait_for_ns_servers_or_assert(servers, testcase, wait_time=360,
+                                      wait_if_warmup=False, debug=True):
         for server in servers:
             rest = RestConnection(server)
             log = logger.Logger.get_logger()
-            log.info("waiting for ns_server @ {0}:{1}".format(server.ip, server.port))
+            if debug:
+                log.info("waiting for ns_server @ {0}:{1}"
+                         .format(server.ip, server.port))
             if RestHelper(rest).is_ns_server_running(wait_time):
-                log.info("ns_server @ {0}:{1} is running".format(server.ip, server.port))
+                if debug:
+                    log.info("ns_server @ {0}:{1} is running"
+                             .format(server.ip, server.port))
 
             elif wait_if_warmup:
                 # wait when warmup completed
                 buckets = rest.get_buckets()
                 for bucket in buckets:
-                    testcase.assertTrue(ClusterOperationHelper._wait_warmup_completed(testcase, \
+                    testcase.assertTrue(ClusterOperationHelper._wait_warmup_completed(testcase,\
                                 [server], bucket.name, wait_time), "warmup was not completed!")
 
             else:
-                testcase.fail("ns_server {0} is not running in {1} sec".format(server.ip, wait_time))
+                testcase.fail("ns_server {0} is not running in {1} sec"
+                                         .format(server.ip, wait_time))
 
     # returns true if warmup is completed in wait_time sec
     # otherwise return false

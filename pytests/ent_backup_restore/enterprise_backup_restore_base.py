@@ -341,7 +341,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
     def backup_reset_clusters(self, servers):
         BucketOperationHelper.delete_all_buckets_or_assert(servers, self)
         ClusterOperationHelper.cleanup_cluster(servers, master=servers[0])
-        ClusterOperationHelper.wait_for_ns_servers_or_assert(servers, self)
+        ClusterOperationHelper.wait_for_ns_servers_or_assert(servers,
+                                                             self, debug=False)
 
     def store_vbucket_seqno(self):
         vseqno = self.get_vbucket_seqnos(self.cluster_to_backup,
