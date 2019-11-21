@@ -3658,6 +3658,7 @@ class XDCRNewBaseTest(unittest.TestCase):
                                  + "ON " + bucket)
 
     def _get_doc_count(self, server):
+        doc_count = 0
         for bucket in self.filter_exp.keys():
             exp = self.filter_exp[bucket]
             if len(exp) > 1:
