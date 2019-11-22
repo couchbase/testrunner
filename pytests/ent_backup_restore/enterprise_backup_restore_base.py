@@ -551,10 +551,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
 
     def backup_restore(self):
         if self.restore_only:
-            if self.create_fts_index:
-                self.backups.append("2017-05-18T13_40_30.842368123-07_00")
-            else:
-                self.backups.append("2017-05-18T11_55_22.009680763-07_00")
+            self.backups.append("2019-11-21T14_54_50.808254198-08_00")
         if self.vbuckets_filter_no_data:
             self.log.info("No data in backup repo as expected.")
             return

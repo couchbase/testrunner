@@ -3312,9 +3312,7 @@ class RemoteMachineShellConnection:
                         os_distro = 'Oracle Linux'
                         os_version = etc_issue
                         is_linux_distro = True
-                    else:
-                        log.info("It could be other operating system."
-                                 "  Go to check at other location")
+
                     file.close()
                     # now remove this file
                     os.remove(filename)
