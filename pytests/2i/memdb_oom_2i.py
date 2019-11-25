@@ -281,6 +281,10 @@ class SecondaryIndexMemdbOomTests(BaseSecondaryIndexingTests):
         3. Check if indexer hits OOM
         :return:
         """
+        rest = RestConnection(self.oomServer)
+        self.log.info("Setting indexer memory quota to 512 MB...")
+        rest.set_service_memoryQuota(service='indexMemoryQuota', memoryQuota=512)
+        self.sleep(30)
         indexer_memQuota = self.get_indexer_mem_quota()
         self.log.info("Current Indexer Memory Quota is {}".format(indexer_memQuota))
         rest = RestConnection(self.oomServer)
@@ -295,6 +299,7 @@ class SecondaryIndexMemdbOomTests(BaseSecondaryIndexingTests):
             if check:
                 self.log.info("Indexer is Paused after setting memory quota to {0}".format(set_memory))
                 break
+            count = count + 1
         if count == 5:
             self.assertFalse(self._validate_indexer_status_oom(), "Indexer still in OOM")
 
