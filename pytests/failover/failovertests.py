@@ -266,6 +266,7 @@ class FailoverTests(FailoverBaseTest):
             self.rest.rebalance(otpNodes=[node.id for node in self.nodes],
                                 ejectedNodes=[],
                                 deltaRecoveryBuckets=self.deltaRecoveryBuckets)
+            self.sleep(10, "Wait for rebalance to start")
 
         # Check if node has to be killed or restarted during rebalance
         # Monitor Rebalance
