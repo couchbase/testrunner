@@ -99,6 +99,7 @@ class AutoFailoverTests(AutoFailoverBaseTest):
         self.enable_autofailover_and_validate()
         self.sleep(5)
         self.failover_actions[self.failover_action](self)
+        self.sleep(300)
         for node in self.servers_to_add:
             self.rest.add_node(user=self.orchestrator.rest_username,
                                password=self.orchestrator.rest_password,
