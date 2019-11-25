@@ -256,7 +256,7 @@ class QueryN1QLAuditTests(auditTest,QueryTests):
             cbqpath = '%scbq' % self.path + " -e %s:%s -u 'no_select' -p 'password' -q " % (self.master.ip, self.n1ql_port)
             query = 'select * from default limit 100'
             self.shell.execute_commands_inside(cbqpath, query, '', '', '', '', '')
-            expectedResults ={'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'stopped', 'isAdHoc': True,
+            expectedResults ={'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'fatal', 'isAdHoc': True,
                               'statement': 'select * from default limit 100;',
                               'description': 'A N1QL SELECT statement was executed',
                               'real_userid': {'source': 'local', 'user': 'no_select'},
