@@ -337,7 +337,8 @@ class BaseTestCase(unittest.TestCase):
                         self.cluster.rebalance(self.servers, self.servers[1:],
                                            [], services=self.services)
                 self.setDebugLevel(service_type="index")
-                if not self.disable_diag_eval_on_non_local_host:
+                if not self.disable_diag_eval_on_non_local_host and \
+                                   not self.skip_init_check_cbserver:
                     self.enable_diag_eval_on_non_local_hosts()
             except BaseException, e:
                 # increase case_number to retry tearDown in setup for the next test
