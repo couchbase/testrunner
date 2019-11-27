@@ -2921,9 +2921,16 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
         shell.execute_command(cmd)
         shell.disconnect()
         cli = CouchbaseCLI(server, user, password)
-        cli.bucket_flush("bucket1", True)
+        _, _, flushed = cli.bucket_flush("bucket1", True)
         rest = RestConnection(server)
+        count = 0
         bucket_items = rest.get_active_key_count("bucket1")
+        while int(bucket_items) != 0 and count < 3:
+            self.sleep(2, "**** wait for items in bucket clear")
+            bucket_items = rest.get_active_key_count("bucket1")
+            count += 1
+            if count == 3 and int(bucket_items) != 0:
+                self.log.error("**** items in bucket does not clear")
         if int(bucket_items) != 0 :
             if roles in bucket_edit_roles:
                 self.fail("Failed to flush bucket with roles {0}".format(roles))
