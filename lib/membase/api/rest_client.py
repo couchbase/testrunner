@@ -4996,7 +4996,7 @@ class RestParser(object):
         for key in parsed.keys():
             tokens = key.split(":")
             val = parsed[key]
-            if len(tokens) > 2:
+            if len(tokens) == 3:
                 bucket = tokens[0]
                 index_name = tokens[1]
                 stats_name = tokens[2]
