@@ -385,6 +385,7 @@ class UpgradeSecondaryIndexInt64(UpgradeSecondaryIndex):
             testuser.append({'id': bucket.name, 'name': bucket.name, 'password': 'password'})
             rolelist.append({'id': bucket.name, 'name': bucket.name, 'roles': 'admin'})
         self.add_built_in_server_user(testuser=testuser, rolelist=rolelist)
+        self.sleep(3)
         for doc in self.full_docs_list:
             doc["name"] = random.choice(FIRST_NAMES)
             self._update_document(doc["_id"], doc)

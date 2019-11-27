@@ -2218,7 +2218,7 @@ class BaseTestCase(unittest.TestCase):
                                                                        node.ip))
         RbacBase().create_user_source(testuser, 'builtin', node)
         # Some times in upgraded envs, user creation is taking some time. Added a small sleep to mitigate failures in subsequent steps.
-        self.sleep(15)
+        self.sleep(5)
         self.log.info("**** add '%s' role to '%s' user ****" % (rolelist[0]["roles"],
                                                                 testuser[0]["name"]))
         status = RbacBase().add_user_role(rolelist, RestConnection(node), 'builtin')
