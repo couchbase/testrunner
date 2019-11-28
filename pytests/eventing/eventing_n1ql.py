@@ -355,14 +355,15 @@ class EventingN1QL(EventingBaseTest):
         self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
         self.load_sample_buckets(self.server,"travel-sample")
         body = self.create_save_function_body(self.function_name,"handler_code/n1ql_op_timeout.js",
-                                              dcp_stream_boundary="from_now", execution_timeout=15)
+                                              dcp_stream_boundary="from_now", execution_timeout=10)
         self.deploy_function(body)
         key = datetime.datetime.now().time()
         query = "insert into src_bucket (KEY, VALUE) VALUES (\"" + str(key) + "\",\"doc created\")"
         self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_node)
         self.sleep(30)
-        stats = self.rest.get_event_failure_stats(self.function_name)
-        if stats["timeout_count"]==1:
+        stats = self.rest.get_all_eventing_stats()
+        log.info("Stats {0}".format(json.dumps(stats, sort_keys=True, indent=4)))
+        if stats[0]["lcb_exception_stats"]["23"]==1:
             pass
         else:
             raise Exception("Timeout not happened for the long running query")
