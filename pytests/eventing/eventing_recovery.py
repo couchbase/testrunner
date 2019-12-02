@@ -43,7 +43,7 @@ class EventingRecovery(EventingBaseTest):
         if handler_code == 'bucket_op':
             self.handler_code = HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE
         elif handler_code == 'bucket_op_with_timers':
-            self.handler_code = HANDLER_CODE.BUCKET_OPS_WITH_TIMERS
+            self.handler_code = HANDLER_CODE.BUCKET_OPS_WITH_TIMERS_RECOVERY
         elif handler_code == 'bucket_op_with_cron_timers':
             self.handler_code = HANDLER_CODE.BUCKET_OPS_WITH_CRON_TIMERS_RECOVERY
         elif handler_code == 'n1ql_op_with_timers':

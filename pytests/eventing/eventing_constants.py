@@ -20,6 +20,7 @@ class HANDLER_CODE:
     MULTIPLE_TIMER_OPS_OF_SAME_TYPE_ON_UPDATE = 'handler_code/multiple_timer_operations_of_same_type_on_update.js'
     MULTIPLE_ALIAS_BINDINGS_FOR_SAME_BUCKET = 'handler_code/multiple_alias_bindings_for_same_bucket.js'
     BUCKET_OPS_WITH_TIMERS = 'handler_code/bucket_op_with_timers.js'
+    BUCKET_OPS_WITH_TIMERS_RECOVERY = 'handler_code/bucket_op_with_timers_recovery.js'
     BUCKET_OPS_WITH_CRON_TIMERS = 'handler_code/bucket_op_with_cron_timers.js'
     BUCKET_OPS_WITH_CRON_TIMERS_RECOVERY = 'handler_code/bucket_op_with_cron_timer_recovery.js'
     READ_BUCKET_OP_ON_DST = 'handler_code/read_bucket_on_dst_bucket.js'
