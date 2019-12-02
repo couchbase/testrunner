@@ -563,6 +563,11 @@ class CouchbaseServerInstaller(Installer):
                         kv_quota = int(rest.get_nodes_self().mcdMemoryReserved)
                     info = rest.get_nodes_self()
                     cb_version = info.version[:5]
+                    cb_version_build = info.version[:3]
+                    version_no_eventing_support = ["4.5", "4.6", "4.7", "5.0", "5.1"]
+                    if cb_version_build in version_no_eventing_support:
+                        if "eventing" in set_services:
+                            set_services.remove("eventing")
                     kv_quota = int(info.mcdMemoryReserved * CLUSTER_QUOTA_RATIO)
                     """ for fts, we need to grep quota from ns_server
                                 but need to make it works even RAM of vm is
