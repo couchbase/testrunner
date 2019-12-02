@@ -2289,9 +2289,6 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
         self.run_operation(phase="before")
-        self.sleep(30)
-        self.run_operation(phase="during")
-        self.run_operation(phase="after")
 
     def test_gsi_rebalance_in_indexer_node_with_node_eject_only_as_false(self):
         self.run_operation(phase="before")
