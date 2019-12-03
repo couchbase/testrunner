@@ -1079,7 +1079,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         conn = RemoteMachineShellConnection(self.backupset.cluster_host)
         conn.kill_erlang()
         conn.start_couchbase()
-        output = backup_result.result(timeout=600)
+        output = backup_result.result(timeout=700)
         self.assertTrue(self._check_output("Backup successfully completed", output),
                         "Backup failed with erlang crash and restart within 180 seconds")
         self.log.info("Backup succeeded with erlang crash and restart within 180 seconds")
@@ -1123,7 +1123,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         conn = RemoteMachineShellConnection(self.backupset.cluster_host)
         conn.stop_couchbase()
         conn.start_couchbase()
-        output = backup_result.result(timeout=600)
+        output = backup_result.result(timeout=700)
         self.assertTrue(self._check_output("Backup successfully completed", output),
                         "Backup failed with couchbase stop and start within 180 seconds")
         self.log.info("Backup succeeded with couchbase stop and start within 180 seconds")
