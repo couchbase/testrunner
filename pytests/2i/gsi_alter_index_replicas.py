@@ -180,7 +180,7 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
 
         error = self._alter_index_replicas(index_name=index_name_prefix, num_replicas=expected_num_replicas)
 
-        self.sleep(5)
+        self.sleep(30)
         self.wait_until_indexes_online()
 
         index_map = self.get_index_map()
@@ -1514,7 +1514,8 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
                                        index_list=index_name_prefix,
                                        expect_failure=expect_failure,
                                            alter_index=self.alter_index)
-        self.sleep(30)
+        self.sleep(60)
+        self.wait_until_indexes_online()
         index_map = self.get_index_map()
         self.n1ql_helper.verify_replica_indexes([index_name_prefix], index_map, len(dest_nodes) - 1, dest_nodes)
 
@@ -1527,6 +1528,7 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
             error = self._alter_index_replicas(index_name=index_name_prefix,  num_replicas=expected_num_replica)
             self.sleep(10)
 
+        self.wait_until_indexes_online()
         index_map = self.get_index_map()
         self.log.info(index_map)
 
