@@ -3233,7 +3233,15 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
         if "Index created" not in output[-1]:
-            self.fail("GSI index cannot be created")
+            err_msg = "cannot proceed due to rebalance in progress"
+            if self._check_output(err_msg, output) or \
+                                  self._check_output(err_msg, error):
+                self.sleep(15, "wait for rebalance complete")
+                output, error = remote_client.execute_command(command)
+                if "Index created" not in output[-1]:
+                    self.fail("GSI index cannot be created")
+            else:
+                self.fail("GSI index cannot be created")
         cmd = "cbindex -type create -bucket default -using plasma -index " \
               "name_idx -fields=name -auth {0}:{1}".format(self.servers[0].rest_username,
                                                            self.servers[0].rest_password,)
