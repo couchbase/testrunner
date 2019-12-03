@@ -237,6 +237,8 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
             stats_dst = self.rest.get_bucket_stats(bucket)
             if curr_items == stats_dst["curr_items"]:
                 count += 1
+            else:
+                count=0
         try:
             stats_src = self.rest.get_bucket_stats(self.src_bucket_name)
             log.info("Documents in source bucket : {}".format(stats_src["curr_items"]))
