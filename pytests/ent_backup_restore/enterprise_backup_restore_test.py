@@ -2266,7 +2266,12 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             if node.ip == self.servers[1].ip:
                 rest.fail_over(otpNode=node.id, graceful=self.graceful)
                 self.sleep(30)
-                rest.set_recovery_type(otpNode=node.id, recoveryType=self.recoveryType)
+                try:
+                    rest.set_recovery_type(otpNode=node.id, recoveryType=self.recoveryType)
+                except Exception as e:
+                    if "Set RecoveryType failed" in  str(e):
+                        self.sleep(15)
+                        rest.set_recovery_type(otpNode=node.id, recoveryType=self.recoveryType)
                 rest.add_back_node(otpNode=node.id)
         rebalance = self.cluster.async_rebalance(self.servers, [], [])
         rebalance.result()

@@ -696,7 +696,20 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                             bucket_size = kv_quota
 
                     self.log.info("replica in bucket {0} is {1}".format(bucket.name, replicas))
-                    rest_conn.create_bucket(bucket=bucket_name,
+                    try:
+                        rest_conn.create_bucket(bucket=bucket_name,
+                                    ramQuotaMB=int(bucket_size) - 1,
+                                    replicaNumber=replicas,
+                                    authType=bucket.authType if bucket.authType else 'none',
+                                    bucketType=self.bucket_type,
+                                    proxyPort=bucket.port,
+                                    evictionPolicy=self.eviction_policy,
+                                    lww=self.lww_new,
+                                    compressionMode=bucket_compression_mode)
+                    except Exception as e:
+                        if "unable to create bucket" in str(e):
+                            self.sleep(15, "wait for cluster ready if it was reset")
+                            rest_conn.create_bucket(bucket=bucket_name,
                                     ramQuotaMB=int(bucket_size) - 1,
                                     replicaNumber=replicas,
                                     authType=bucket.authType if bucket.authType else 'none',
