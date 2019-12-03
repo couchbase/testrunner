@@ -6,10 +6,7 @@ function OnUpdate(doc, meta) {
         }
     } catch (e) {
         log(e);
-        var obj=JSON.parse(e["message"]);
-        if(obj["errors"][0]["code"]==4000){
-            dst_bucket[meta.id]=JSON.parse(e["message"]);
-        }
+        dst_bucket[meta.id]="caught the error";
     }
 }
 function OnDelete(meta) {
@@ -20,9 +17,6 @@ function OnDelete(meta) {
         }
     } catch (e) {
         log(e);
-        var obj=JSON.parse(e["message"]);
-        if(obj["errors"][0]["code"]==4000){
-            delete dst_bucket[meta.id];
-        }
+        delete dst_bucket[meta.id];
     }
 }
