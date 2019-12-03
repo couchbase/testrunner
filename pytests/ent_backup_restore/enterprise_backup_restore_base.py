@@ -2794,6 +2794,9 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
             node.ip for node in nodes_in_cluster]]
         serv_in = serv_in[:self.nodes_in]
         serv_out = serv_out[serv_out.__len__() - self.nodes_out:]
+        cluster_healthy = RestHelper(rest).is_cluster_healthy()
+        if not cluster_healthy:
+            self.sleep(15, "wait for cluster ready")
         rebalance = self.cluster.async_rebalance(self.cluster_to_backup,
                                                  serv_in, serv_out)
         return rebalance
