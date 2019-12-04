@@ -56,7 +56,7 @@ class EventingRQG(EventingBaseTest):
     join_map = {"PREVIOUS_TABLE.FIELD":"src_bucket.email","CURRENT_TABLE.FIELD":"_bucket.email","STRING_FIELD ": "email ", "NUMERIC_FIELD ": "age ", "UPPER_BOUND_VALUE": "8",
                   "LOWER_BOUND_VALUE": "0", "NUMERIC_FIELD_LIST": "age", "STRING_FIELD_LIST": "email",
                   "( LIST )": "[1,2,3]"}
-    field_map = {"NUMERIC_VALUE":"0","'%STRING_VALUES%":"\"%a@b.c%\"","'%STRING_VALUES":"\"%a@b.c\"","STRING_VALUES":"\"a@b.c\""}
+    field_map = {"NUMERIC_VALUE":"0","'%STRING_VALUES%":"\"%a@b.c%\"","'%STRING_VALUES":"\"%a@b.c\"","'STRING_VALUES%":"\"a@b.c%\"","STRING_VALUES":"\"a@b.c\""}
 
     def tearDown(self):
         super(EventingRQG, self).tearDown()
@@ -217,9 +217,9 @@ class EventingRQG(EventingBaseTest):
 
 
     def verify_n1ql_stats(self, total_query):
-        n1ql_query = "select failed_query.query from dst_bucket where failed_query is not null"
+        n1ql_query = "select failed_query from dst_bucket where failed_query is not null"
         failed = self.n1ql_helper.run_cbq_query(query=n1ql_query, server=self.n1ql_node)
-        n1ql_query = "select passed_query.query from dst_bucket where passed_query is not null"
+        n1ql_query = "select passed_query from dst_bucket where passed_query is not null"
         passed = self.n1ql_helper.run_cbq_query(query=n1ql_query, server=self.n1ql_node)
         log.info("passed: {}".format(len(passed["results"])))
         log.info("failed: {}".format(len(failed["results"])))

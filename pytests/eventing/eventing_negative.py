@@ -79,9 +79,7 @@ class EventingNegative(EventingBaseTest):
         # set both src and metadata bucket as same
         body['depcfg']['metadata_bucket'] = self.src_bucket_name
         try:
-            self.rest.save_function(body['appname'], body)
-            # Try to deploy the function
-            self.rest.deploy_function(body['appname'], body)
+            self.rest.create_function(self.function_name,body)
         except Exception as ex:
             if "Source bucket same as metadata bucket" not in str(ex):
                 self.fail("Eventing function allowed both source and metadata bucket to be same")
