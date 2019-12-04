@@ -134,6 +134,7 @@ class QueryN1QLAuditTests(auditTest,QueryTests):
                                'description': 'A N1QL EXPLAIN statement was executed'}
 
         elif(query_type == 'prepare'):
+            self.run_cbq_query("delete from system:prepareds where name='a1'")
             if self.filter:
                 self.execute_filtered_query()
             self.run_cbq_query(query="prepare a1 from select * from default")
@@ -144,6 +145,7 @@ class QueryN1QLAuditTests(auditTest,QueryTests):
                                'description': 'A N1QL PREPARE statement was executed'}
 
         elif(query_type == 'adhoc_false'):
+            self.run_cbq_query("delete from system:prepareds where name='a1'")
             if self.filter:
                 self.execute_filtered_query()
             self.run_cbq_query(query='prepare a1 from INFER default WITH {"sample_size":10000,"num_sample_values":1,"similarity_metric":0.0}')
