@@ -621,9 +621,14 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         o=os.system('python scripts/curl_setup.py start')
         self.log.info("=== started docker container =======".format(o))
         self.sleep(10)
+        if o!=0:
+            self.log.info("script result {}".format(o))
+            raise Exception("unable to start docker")
         o=os.system('python scripts/curl_setup.py setup')
         self.log.info("=== setup done =======")
-        self.log.info(o)
+        if o!=0:
+            self.log.info("script result {}".format(o))
+            raise Exception("curl setup fail")
 
     def teardown_curl(self):
         o = os.system('python scripts/curl_setup.py stop')
