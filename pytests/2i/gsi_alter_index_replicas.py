@@ -1352,7 +1352,7 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
         # Increase number of replicas
         expected_num_replicas = self.num_replicas + 1
         error = self._alter_index_replicas(index_name=index_name_prefix, num_replicas=expected_num_replicas)
-        self.sleep(5)
+        self.sleep(30)
         self.wait_until_indexes_online()
         index_map = self.get_index_map()
         definitions = self.rest.get_index_statements()
@@ -1644,7 +1644,7 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
 
 
         error = self._alter_index_replicas(index_name=index_name_prefix, num_replicas=expected_num_replicas)
-        self.sleep(10)
+        self.sleep(30)
         self.wait_until_indexes_online()
 
 
@@ -1676,6 +1676,7 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
                         "rebalance failed, stuck or did not complete")
         rebalance.result()
 
+        self.sleep(30)
         self.wait_until_indexes_online()
         index_metadata = self.rest.get_indexer_metadata()
         self.log.info(index_metadata)
