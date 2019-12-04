@@ -2995,7 +2995,7 @@ class XdcrCLITest(CliBaseTest):
             }
             XdcrCLITest.SSL_MANAGE_SUCCESS = \
                           {'retrieve': "SUCCESS: retrieve certificate to \'PATH\'",
-                           'regenerate': "SUCCESS: Certificate regenerate and copied to \'PATH\'"
+                           'regenerate': 'SUCCESS: Certificate regenerate and copied to `PATH`'
                           }
 
     def tearDown(self):

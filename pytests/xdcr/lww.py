@@ -166,7 +166,8 @@ class Lww(XDCRNewBaseTest):
 
     def _kill_processes(self, crashed_nodes=[]):
         try:
-            NodeHelper.kill_erlang(node)
+            for node in crashed_nodes:
+                NodeHelper.kill_erlang(node)
         except:
             self.log.info('Could not kill erlang process on node, continuing..')
 
@@ -1181,8 +1182,8 @@ class Lww(XDCRNewBaseTest):
 
         self.sleep(self._wait_timeout / 2)
 
+        self._kill_processes([self.c1_cluster.get_master_node()])
         conn = RemoteMachineShellConnection(self.c1_cluster.get_master_node())
-        conn.kill_erlang()
         conn.start_couchbase()
         self.wait_service_started(self.c1_cluster.get_master_node())
         self.sleep(600, "Slepping so that vBuckets are ready and to avoid \
