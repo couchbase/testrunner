@@ -146,13 +146,13 @@ class QueryN1QLAuditTests(auditTest,QueryTests):
         elif(query_type == 'adhoc_false'):
             if self.filter:
                 self.execute_filtered_query()
-            self.run_cbq_query(query="prepare a1 from select * from default")
+            self.run_cbq_query(query='prepare a1 from INFER default WITH {"sample_size":10000,"num_sample_values":1,"similarity_metric":0.0}')
             self.run_cbq_query(query="execute a1")
             expectedResults = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success', 'isAdHoc': False,
-                               'name': 'SELECT statement', 'real_userid': {'source': source, 'user': user},
-                               'statement': 'prepare a1 from select * from default',
+                               'name': 'INFER statement', 'real_userid': {'source': source, 'user': user},
+                               'statement': 'prepare a1 from INFER default WITH {"sample_size":10000,"num_sample_values":1,"similarity_metric":0.0}',
                                'userAgent': 'Python-httplib2/$Rev: 259 $', 'id': self.eventID, 'preparedId': 'a1',
-                               'description': 'A N1QL SELECT statement was executed'}
+                               'description': 'A N1QL INFER statement was executed'}
 
         elif(query_type == 'unrecognized'):
             if self.filter:
