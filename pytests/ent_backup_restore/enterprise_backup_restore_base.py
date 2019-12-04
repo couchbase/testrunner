@@ -260,6 +260,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.auto_failover = self.input.param("enable-autofailover", False)
         self.auto_failover_timeout = self.input.param("autofailover-timeout", 30)
         self.graceful = self.input.param("graceful",False)
+        self.done_failover = False
         self.recoveryType = self.input.param("recoveryType", "full")
         self.skip_buckets = self.input.param("skip_buckets", False)
         self.lww_new = self.input.param("lww_new", False)
@@ -345,10 +346,17 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                                                              self, debug=False)
 
     def store_vbucket_seqno(self):
-        vseqno = self.get_vbucket_seqnos(self.cluster_to_backup,
+        try:
+            vseqno = self.get_vbucket_seqnos(self.cluster_to_backup,
                                          self.buckets,
                                          self.skip_consistency, self.per_node)
-        self.vbucket_seqno.append(vseqno)
+            self.vbucket_seqno.append(vseqno)
+        except Exception as e:
+            if e:
+                if "Memcached error #1 'Not found'" in str(e) and self.done_failover:
+                    self.log.info("error as expected")
+                else:
+                    self.fail(e)
 
     def backup_create(self, del_old_backup=True):
         args = "config --archive {0} --repo {1}".format(self.backupset.directory, self.backupset.name)
@@ -541,7 +549,10 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             self.log.info(msg)
         if not self.backupset.deleted_buckets:
             if not self.backupset.force_updates:
-                self.store_vbucket_seqno()
+                if not self.done_failover:
+                    self.store_vbucket_seqno()
+                else:
+                    return
             self.validation_helper.store_keys(self.cluster_to_backup, self.buckets, self.number_of_backups_taken,
                                               self.backup_validation_files_location)
             self.validation_helper.store_latest(self.cluster_to_backup, self.buckets, self.number_of_backups_taken,
@@ -2832,7 +2843,8 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
             ip_to_failover = self.servers[1].ip
         for node in nodes_all:
             if node.ip == ip_to_failover:
-                rest.fail_over(otpNode=node.id, graceful=self.graceful)
+                status = rest.fail_over(otpNode=node.id, graceful=self.graceful)
+        return status
 
     def async_failover_and_recover(self):
         """
@@ -2880,7 +2892,12 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         Failover a node and add back the node.
         :return: Nothing
         """
-        self.async_failover()
+        status = self.async_failover()
+        if not status:
+            self.fail("Failed to failover a node")
+        else:
+            self.log.info("Done failover a node")
+            self.done_failover = True
 
     def failover_with_ops(self):
         """
