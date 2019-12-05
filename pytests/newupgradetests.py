@@ -799,6 +799,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         after_upgrade_buckets_in = self.input.param("after_upgrade_buckets_in", False)
         after_upgrade_buckets_out = self.input.param("after_upgrade_buckets_out", False)
         after_upgrade_buckets_flush = self.input.param("after_upgrade_buckets_flush", False)
+        self.index_quota_percent = self.input.param("index_quota_percent", 30)
 
         self.swap_num_servers = self.input.param('swap_num_servers', 4)
         # Install initial version on the specified nodes
@@ -2389,6 +2390,16 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                                                   fts_query_limit=10000000)
                     if "You have successfully installed Couchbase Server." not in output:
                         self.fail("Upgrade failed. See logs above!")
+                    if total_nodes == 1:
+                        rest_upgrade = RestConnection(upgrade_nodes[total_nodes])
+                        healthy = RestHelper(rest_upgrade).is_cluster_healthy
+                        count = 0
+                        while not healthy:
+                            self.sleep(5, "wait for cluster to update its config")
+                            healthy = RestHelper(rest_upgrade).is_cluster_healthy
+                            count +=1
+                            if count == 5:
+                                self.fail("Cluster does not ready after 1 minute")
                     self.cluster.rebalance(self.servers[:nodes_init], [], [])
                     total_nodes -= 1
                 if total_nodes == 0:
