@@ -174,7 +174,7 @@ class SecondaryIndexMemdbOomTests(BaseSecondaryIndexingTests):
                     self.buckets = []
                 break
             self.log.info("Indexer Still in OOM...")
-        self.sleep(60)
+        self.sleep(180)
         self.assertFalse(self._validate_indexer_status_oom(), "Indexer still in OOM")
         self._verify_bucket_count_with_index_count(self.load_query_definitions)
         self.multi_query_using_index(buckets=self.buckets,
