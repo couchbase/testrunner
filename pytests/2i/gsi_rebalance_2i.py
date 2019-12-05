@@ -385,8 +385,12 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         failover_task.result()
         self.sleep(30)
         # do a full recovery and rebalance
-        self.rest.set_recovery_type('ns_1@' + index_server.ip, "full")
-        self.rest.add_back_node('ns_1@' + index_server.ip)
+        add_back_ip = index_server.ip
+        if add_back_ip.startswith("["):
+            hostname = add_back_ip[add_back_ip.find("[") + 1:add_back_ip.find("]")]
+            add_back_ip = hostname
+        self.rest.set_recovery_type('ns_1@' + add_back_ip, "full")
+        self.rest.add_back_node('ns_1@' + add_back_ip)
         reb1 = self.cluster.rebalance(self.servers[:self.nodes_init], [], [])
         if self.ansi_join:
             self.ansi_join_query(stage="post_rebalance", expected=expected_result)
