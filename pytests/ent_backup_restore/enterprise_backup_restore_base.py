@@ -2841,6 +2841,7 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
             ip_to_failover = ip
         else:
             ip_to_failover = self.servers[1].ip
+        status = False
         for node in nodes_all:
             if node.ip == ip_to_failover:
                 status = rest.fail_over(otpNode=node.id, graceful=self.graceful)
