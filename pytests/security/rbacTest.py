@@ -62,15 +62,13 @@ class rbacTest(ldaptest):
                 RbacBase().create_user_source(testuser, 'builtin', self.master)
                 self.sleep(10)
         self.ldap_server = ServerInfo(self.ldapHost, self.ldapPort, 'root', 'couchbase')
-        #self.ipAddress = self.getLocalIPAddress()
-        self.ipAddress = '127.0.0.1'
+        self.ipAddress = self.getLocalIPAddress()
 
 
     def tearDown(self):
         super(rbacTest, self).tearDown()
 
     def getLocalIPAddress(self):
-        '''
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.connect(('couchbase.com', 0))
         return s.getsockname()[0]
@@ -79,6 +77,7 @@ class rbacTest(ldaptest):
         if '1' not in ipAddress:
             status, ipAddress = commands.getstatusoutput("ifconfig eth0 | grep  -Eo 'inet (addr:)?([0-9]*\.){3}[0-9]*' | awk '{print $2}'")
         return ipAddress
+        '''
 
     def test_compare_orig_roles(self):
         status, content, header = rbacmain(self.master)._retrive_all_user_role(self.user_id)
