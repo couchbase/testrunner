@@ -867,14 +867,25 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         bk_log_file_name = "backup.log"
         if "6.5" <= RestConnection(self.backupset.backup_host).get_nodes_version():
             bk_log_file_name = "backup-*.log"
-        command = "grep 'Transfer plan finished successfully' " + self.backupset.directory + \
+        ipv6_raw_format = [":", "[", "]"]
+        ipv6_raw_ip = False
+        bk_raw_ipv6_dir = ""
+        if ":" in self.backupset.directory:
+            ipv6_raw_ip = True
+            bk_raw_ipv6_dir = self.backupset.directory
+            for x in ipv6_raw_format:
+                bk_raw_ipv6_dir = bk_raw_ipv6_dir.replace(x, "\\" + x)
+        bk_dir = self.backupset.directory
+        if ipv6_raw_ip:
+            bk_dir = bk_raw_ipv6_dir
+        command = "grep 'Transfer plan finished successfully' " + bk_dir + \
                   "/logs/{0}".format(bk_log_file_name)
         output, error = remote_client.execute_command(command)
         if self.debug_logs:
             remote_client.log_command_output(output, error)
         if not output:
             self.fail("Restoring backup failed.")
-        command = "grep 'Transfer failed' " + self.backupset.directory + \
+        command = "grep 'Transfer failed' " + bk_dir + \
                   "/logs/{0}".format(bk_log_file_name)
         output, error = remote_client.execute_command(command)
         if self.debug_logs:
