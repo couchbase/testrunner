@@ -134,26 +134,26 @@ class QueryN1QLAuditTests(auditTest,QueryTests):
                                'description': 'A N1QL EXPLAIN statement was executed'}
 
         elif(query_type == 'prepare'):
-            self.run_cbq_query("delete from system:prepareds where name='a1'")
+            prepared_name = self.gen_vacant_prepared_name("a")
             if self.filter:
                 self.execute_filtered_query()
-            self.run_cbq_query(query="prepare a1 from select * from default")
+            self.run_cbq_query(query="prepare {0} from select * from default".format(prepared_name))
             expectedResults = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success', 'isAdHoc': True,
                                'name': 'PREPARE statement', 'real_userid': {'source': source, 'user': user},
-                               'statement': 'prepare a1 from select * from default',
+                               'statement': 'prepare {0} from select * from default'.format(prepared_name),
                                'userAgent': 'Python-httplib2/$Rev: 259 $', 'id': self.eventID,
                                'description': 'A N1QL PREPARE statement was executed'}
 
         elif(query_type == 'adhoc_false'):
-            self.run_cbq_query("delete from system:prepareds where name='a1'")
+            prepared_name = self.gen_vacant_prepared_name("a")
             if self.filter:
                 self.execute_filtered_query()
-            self.run_cbq_query(query='prepare a1 from INFER default WITH {"sample_size":10000,"num_sample_values":1,"similarity_metric":0.0}')
-            self.run_cbq_query(query="execute a1")
+            self.run_cbq_query(query='prepare {0}'.format(prepared_name)+' from INFER default WITH {"sample_size":10000,"num_sample_values":1,"similarity_metric":0.0}')
+            self.run_cbq_query(query="execute {0}".format(prepared_name))
             expectedResults = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success', 'isAdHoc': False,
                                'name': 'INFER statement', 'real_userid': {'source': source, 'user': user},
-                               'statement': 'prepare a1 from INFER default WITH {"sample_size":10000,"num_sample_values":1,"similarity_metric":0.0}',
-                               'userAgent': 'Python-httplib2/$Rev: 259 $', 'id': self.eventID, 'preparedId': 'a1',
+                               'statement': 'prepare {0}'.format(prepared_name) + 'from INFER default WITH {"sample_size":10000,"num_sample_values":1,"similarity_metric":0.0}',
+                               'userAgent': 'Python-httplib2/$Rev: 259 $', 'id': self.eventID, 'preparedId': '{0}'.format(prepared_name),
                                'description': 'A N1QL INFER statement was executed'}
 
         elif(query_type == 'unrecognized'):
@@ -274,6 +274,14 @@ class QueryN1QLAuditTests(auditTest,QueryTests):
             if self.filter:
                 self.checkFilter(self.unauditedID, self.master)
 
+    def gen_vacant_prepared_name(self, prefix):
+        vacant_prepared_name = "a"
+        for i in range(1, 10000):
+            query = "select count(*) from system:prepareds where name='{0}'".format(vacant_prepared_name+str(i))
+            result = self.run_cbq_query(query)["results"][0]["$1"]
+            if int(result) == 0:
+                return vacant_prepared_name+str(i)
+        raise Exception("Cannot generate vacant name for prepared statement!")
 
     def test_user_filter(self):
         self.set_audit(disable_user=True)

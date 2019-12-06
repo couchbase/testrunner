@@ -80,8 +80,8 @@ class auditTest(BaseTestCase):
     #Check to make sure the audit code DOES NOT appear in the logs (for audit n1ql filtering)
     def checkFilter(self, eventID, host):
         Audit = audit(eventID=eventID, host=host)
-        exists, entry = Audit.validateEmpty()
-        self.assertTrue(exists, "There was an audit entry found. Audits for the code %s should not be logged. Here is the entry: %s" % (eventID, entry))
+        not_exists, entry = Audit.validateEmpty()
+        self.assertTrue(not_exists, "There was an audit entry found. Audits for the code %s should not be logged. Here is the entry: %s" % (eventID, entry))
 
 
     #Tests to check for bucket events
