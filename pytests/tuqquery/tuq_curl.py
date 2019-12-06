@@ -852,8 +852,7 @@ class QueryCurlTests(QueryTests):
             error_msg = "Errorevaluatingprojection.-cause:curl:SSLconnecterror"
             wrong_host_msg = str(error_msg)
         else:
-            error_msg = "Errorevaluatingprojection.-cause:curl:Peercertificatecannotbeauthenticated" \
-                        "withgivenCAcertificates"
+            error_msg = "Errorevaluatingprojection.-cause:curl:SSLpeercertificateorSSHremotekeywasnotOK"
             wrong_host_msg = "Errorevaluatingprojection.-cause:curl:SSLpeercertificateorSSHremotekey" \
                              "wasnotOK"
         url = "'https://expired.badssl.com/'"
