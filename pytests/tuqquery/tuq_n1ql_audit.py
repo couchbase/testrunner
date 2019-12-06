@@ -55,7 +55,7 @@ class QueryN1QLAuditTests(auditTest,QueryTests):
         query_type = self.input.param("ops", None)
         user = self.master.rest_username
         source = 'ns_server'
-
+        self.sleep(60)
         if (query_type =='create_index'):
             if self.filter:
                 self.execute_filtered_query()
