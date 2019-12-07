@@ -59,8 +59,9 @@ class XDCRAdvFilterTests(XDCRNewBaseTest):
                     num_docs=num_docs, template="query.json", xattrs=True)
             self.sleep(30, "Waiting for docs to be loaded")
         except Exception as e:
-            self.fail(
-                "Errors encountered while loading data: {0}".format(e.message))
+            self.warn(
+                "Errors encountered while loading edgyjson docs: {0}. Trying to load binary docs".format(e.message))
+            self.load_data_topology()
 
     def verify_results(self):
         rdirection = self._input.param("rdirection", "unidirection")
