@@ -118,6 +118,7 @@ class RebalanceProgressTests(RebalanceBaseTest):
             failover_nodes.extend(filter(lambda node: node.ip == failover_server.ip and \
                                          str(node.port) == failover_server.port, nodes_all))
         self.cluster.failover(servers_init, servers_failover)
+        self.sleep(30)
         for node in failover_nodes:
             self.rest.add_back_node(node.id)
 
