@@ -42,6 +42,11 @@ class CliBaseTest(BaseTestCase):
         else:
             self.log.error("**** Cluster config is setup in ini file. ****")
         self.shell = RemoteMachineShellConnection(self.master)
+        if str(self.__class__).find('epctlTests') != -1:
+            if self.cb_version[:5] == "6.5.0":
+                self.log.info("\n\n******* Due to issue in MB-36904, \
+                               \nthis test will be skipped in 6.5.0 ********")
+                return
         if not self.skip_init_check_cbserver:
             self.rest = RestConnection(self.master)
             self.cb_version = self.rest.get_nodes_version()
