@@ -74,7 +74,8 @@ class RbacFTS(FTSBaseTest):
         for user in self.inp_users:
             user_role_list.append({att: user[att] for att in ('id',
                                                               'name',
-                                                              'roles')})
+                                                              'roles',
+                                                              'password')})
         return user_role_list
 
     def get_rest_handle_for_credentials(self, user , password):
