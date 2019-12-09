@@ -104,7 +104,7 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
                                   sock_batch_size=1, tick_duration=5000, timer_processing_tick_interval=500,
                                   timer_worker_pool_size=3, worker_count=3, processing_status=True,
                                   cpp_worker_thread_count=1, multi_dst_bucket=False, execution_timeout=20,
-                                  data_chan_size=10000, worker_queue_cap=100000, deadline_timeout=62):
+                                  data_chan_size=10000, worker_queue_cap=100000, deadline_timeout=62,language_compatibility='6.5.0'):
         body = {}
         body['appname'] = appname
         script_dir = os.path.dirname(__file__)
@@ -159,7 +159,7 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
                                            "allow_cookies": self.cookies})
             if self.auth_type=="bearer":
                 body['depcfg']['curl'][0]['bearer_key']=self.bearer_key
-        body['settings']['language_compatibility']=self.cb_version[:5]
+        body['settings']['language_compatibility']=language_compatibility
         return body
 
     def wait_for_bootstrap_to_complete(self, name, iterations=20):

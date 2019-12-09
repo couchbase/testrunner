@@ -460,3 +460,14 @@ class EventingNegative(EventingBaseTest):
         # Wait for eventing to catch up with all the delete mutations and verify results
         self.verify_eventing_results(self.function_name, 0, on_delete=True,skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
+
+    #MB-32127
+    def test_field_boundary_update_for_deployed_function(self):
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_ON_UPDATE, worker_count=3,dcp_stream_boundary="from_now")
+        self.deploy_function(body)
+        update_body={"deployment_status":True, "processing_status":True, "dcp_stream_boundary":"everything"}
+        try:
+            self.rest.set_settings_for_function(self.function_name,update_body)
+        except Exception as e:
+            if "ERR_APP_ALREADY_DEPLOYED" not in str(e):
+                raise Exception("Feed boundary updated when app is deployed")

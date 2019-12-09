@@ -7,6 +7,7 @@ from lib.testconstants import STANDARD_BUCKET_PORT
 from pytests.eventing.eventing_constants import HANDLER_CODE
 from pytests.eventing.eventing_base import EventingBaseTest
 import logging
+from couchbase.bucket import Bucket
 
 log = logging.getLogger()
 
@@ -136,3 +137,21 @@ class EventingSourceMutation(EventingBaseTest):
         # Wait for eventing to catch up with all the create mutations and verify results
         self.verify_eventing_results(self.function_name, self.docs_per_day * 2016*4,skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
+
+    #MB-32516
+    def test_indistinguishable_mutation(self):
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OP_WITH_SOURCE_BUCKET_MUTATION,
+                                              worker_count=3)
+        self.deploy_function(body)
+        url = 'couchbase://{ip}/{name}'.format(ip=self.master.ip, name=self.src_bucket_name)
+        bucket = Bucket(url, username="cbadminbucket", password="password")
+        bucket.insert('customer123', {'some': 'value'})
+        self.verify_eventing_results(self.function_name,2,skip_stats_validation=True)
+        self.pause_function(body)
+        bucket.replace('customer123', {'some': 'value1'})
+        bucket.replace('customer123', {'some': 'value'})
+        self.bucket_compaction()
+        self.resume_function(body)
+        self.verify_eventing_results(self.function_name,3,skip_stats_validation=True)
+
+
