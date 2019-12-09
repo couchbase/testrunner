@@ -825,9 +825,9 @@ class BaseSecondaryIndexingTests(QueryTests):
         rest = RestConnection(self.master)
         init_time = time.time()
         check = False
-        next_time = init_time
         while not check:
             index_status = rest.get_index_status()
+            next_time = time.time()
             for index_info in index_status.values():
                 for index_state in index_info.values():
                     if defer_build:
@@ -836,7 +836,6 @@ class BaseSecondaryIndexingTests(QueryTests):
                         else:
                             check = False
                             time.sleep(1)
-                            next_time = time.time()
                             break
                     else:
                         if index_state["status"] == "Ready":
@@ -844,7 +843,6 @@ class BaseSecondaryIndexingTests(QueryTests):
                         else:
                             check = False
                             time.sleep(1)
-                            next_time = time.time()
                             break
             check = check or (next_time - init_time > timeout)
         return check
