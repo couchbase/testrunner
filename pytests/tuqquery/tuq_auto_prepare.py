@@ -336,7 +336,7 @@ class QueryAutoPrepareTests(QueryTests):
 
             self.run_cbq_query(query="PREPARE P1 FROM select * from default WHERE join_day = 10 limit 5",
                                server=self.servers[0])
-            self.sleep(10)
+            self.sleep(30)
             prepared_results = self.run_cbq_query(query="select * from system:prepareds")
             self.assertEqual(prepared_results['metrics']['resultCount'], self.nodes_init, "Count mismatch dumping results from system:prepareds: " % prepared_results)
 
