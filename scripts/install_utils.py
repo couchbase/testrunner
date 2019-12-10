@@ -124,7 +124,7 @@ class NodeHelper:
                 start_time = time.time()
                 while time.time() < start_time + timeout:
                     try:
-                        ret = hdiutil_attach(self.shell, self.build.path, self.build.version)
+                        ret = hdiutil_attach(self.shell, self.build.path)
                         if ret:
                             break
                         self.wait_for_completion(duration, event)
