@@ -427,7 +427,7 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
 
         error = self._alter_index_replicas(index_name=index_name_prefix, num_replicas=expected_num_replicas)
 
-        self.sleep(5)
+        self.sleep(30)
         if not self.build_index:
             self.wait_until_indexes_online(defer_build=True)
         else:
@@ -1689,7 +1689,7 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
         self.sleep(30)
         self.wait_until_indexes_online()
 
-        self.sleep(30)
+        self.sleep(60)
         index_map = self.get_index_map()
 
         self.n1ql_helper.verify_replica_indexes([index_name_prefix], index_map, (expected_num_replicas - 1),
