@@ -209,9 +209,11 @@ class SecondaryIndexMemdbOomTests(BaseSecondaryIndexingTests):
         :return:
         """
         self.assertTrue(self._push_indexer_off_the_cliff(), "OOM Can't be achieved")
-        kv_node = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)[0]
-        self.log.info("Rebalancing KV node {ip} out...".format(ip=kv_node.ip))
-        rebalance = self.cluster.async_rebalance(self.servers, [], [kv_node])
+        kv_nodes = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
+        kv_node_to_rebalance = kv_nodes[0]
+        self.master = kv_nodes[1]
+        self.log.info("Rebalancing KV node {ip} out...".format(ip=kv_node_to_rebalance.ip))
+        rebalance = self.cluster.async_rebalance(self.servers, [], [kv_node_to_rebalance])
         rebalance.result()
         self._bring_indexer_back_to_life()
         self.sleep(60)
