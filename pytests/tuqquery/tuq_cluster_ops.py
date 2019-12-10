@@ -413,6 +413,7 @@ class QueriesOpsTests(QuerySanityTests):
                 self.start_firewall_on_node(self.servers[2])
                 self.sleep(10)
             else:
+                self.sleep(60)
                 self.cluster.failover(self.servers[:self.nodes_init+2], self.servers[2:self.nodes_init+2])
             thread1.join()
             self.assertFalse(self.fail, "Queries did not recover")
