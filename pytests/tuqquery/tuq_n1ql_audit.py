@@ -55,7 +55,7 @@ class QueryN1QLAuditTests(auditTest,QueryTests):
         query_type = self.input.param("ops", None)
         user = self.master.rest_username
         source = 'ns_server'
-        self.sleep(60)
+        self.sleep(180)
         if (query_type =='create_index'):
             if self.filter:
                 self.execute_filtered_query()
@@ -152,7 +152,7 @@ class QueryN1QLAuditTests(auditTest,QueryTests):
             self.run_cbq_query(query="execute {0}".format(prepared_name))
             expectedResults = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success', 'isAdHoc': False,
                                'name': 'INFER statement', 'real_userid': {'source': source, 'user': user},
-                               'statement': 'prepare {0}'.format(prepared_name) + 'from INFER default WITH {"sample_size":10000,"num_sample_values":1,"similarity_metric":0.0}',
+                               'statement': 'prepare {0}'.format(prepared_name) + ' from INFER default WITH {"sample_size":10000,"num_sample_values":1,"similarity_metric":0.0}',
                                'userAgent': 'Python-httplib2/$Rev: 259 $', 'id': self.eventID, 'preparedId': '{0}'.format(prepared_name),
                                'description': 'A N1QL INFER statement was executed'}
 
