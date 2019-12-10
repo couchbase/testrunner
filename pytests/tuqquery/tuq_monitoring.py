@@ -313,7 +313,7 @@ class QueryMonitoringTests(QueryTests):
                     self.log.error(node2)
                     return
 
-                time.sleep(30)
+                time.sleep(60)
 
                 logging.info('CHECKING IF SYSTEM:COMPLETED_REQUESTS RESULTS CAN BE FILTERED BY NODE')
                 result = self.run_cbq_query('select * from system:completed_requests')
@@ -786,8 +786,8 @@ class QueryMonitoringTests(QueryTests):
         self.run_cbq_query('select * from default union select * from default union select * from default')
         self.run_cbq_query('select * from default union select * from default union select * from default')
         # Run a query that runs for a normal amount of time ~2 seconds
-        self.run_cbq_query('select * from default')
-        self.run_cbq_query('select * from default')
+        self.run_cbq_query('select * from default limit 1000')
+        self.run_cbq_query('select * from default limit 1000')
 
         # Only the queries run for longer than 8 seconds should show up
         result=self.run_cbq_query('select * from system:completed_requests')
