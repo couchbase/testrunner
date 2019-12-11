@@ -232,6 +232,7 @@ class NewUpgradeBaseTest(BaseTestCase):
                 server.hostname = hostname
 
     def initial_services(self, services=None):
+        set_services = services
         if services is not None:
             if "-" in services:
                 set_services = services.split("-")
@@ -240,8 +241,6 @@ class NewUpgradeBaseTest(BaseTestCase):
                     set_services = services.split()
                 else:
                     set_services = services.split(",")
-        else:
-            set_services = services
         return set_services
 
     def initialize_nodes(self, servers, services=None):

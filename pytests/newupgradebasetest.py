@@ -52,6 +52,7 @@ class NewUpgradeBaseTest(QueryHelperTests,EventingBaseTest, FTSBaseTest):
         self.initial_version = self.input.param('initial_version', '2.5.1-1083')
         self.use_domain_name = self.input.param('use_domain_names', 0)
         self.initial_vbuckets = self.input.param('initial_vbuckets', 1024)
+        self.clean_upgrade_install = self.input.param("clean_upgrade_install", True)
         self.upgrade_versions = self.input.param('upgrade_version', '4.1.0-4963')
         self.upgrade_versions = self.upgrade_versions.split(";")
         self.skip_cleanup = self.input.param("skip_cleanup", False)
@@ -227,13 +228,12 @@ class NewUpgradeBaseTest(QueryHelperTests,EventingBaseTest, FTSBaseTest):
                 server.hostname = hostname
 
     def operations(self, servers, services=None):
+        set_services = services
         if services is not None:
             if "-" in services:
                 set_services = services.split("-")
             else:
                 set_services = services.split(",")
-        else:
-            set_services = services
 
         if 4.5 > float(self.initial_version[:3]):
             self.gsi_type = "forestdb"
