@@ -2,6 +2,7 @@ from gsi_index_partitioning import GSIIndexPartitioningTests
 from lib.remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection, RestHelper
 from lib.memcached.helper.data_helper import MemcachedClientHelper
+from membase.helper.bucket_helper import BucketOperationHelper
 import random
 from threading import Thread
 
@@ -28,6 +29,9 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
         self.shell.execute_cbworkloadgen(self.rest.username, self.rest.password, 400000, 100, "default", 1024, '-j')
 
     def tearDown(self):
+        BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
+        # Adding sleep due to MB-37067, once resolved, remove this sleep and delete_all_buckets
+        self.sleep(120)
         super(GSIAlterIndexesTests, self).tearDown()
 
     # Create an index and verify the replicas
