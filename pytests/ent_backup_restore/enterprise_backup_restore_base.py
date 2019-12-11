@@ -2868,9 +2868,17 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         for node in nodes_all:
             if node.ip == self.servers[1].ip:
                 rest.fail_over(otpNode=node.id, graceful=self.graceful)
-                self.sleep(60)
-                rest.set_recovery_type(otpNode=node.id,
+                self.sleep(90)
+                try:
+                    rest.set_recovery_type(otpNode=node.id,
                                        recoveryType=self.recoveryType)
+                except Exception as e:
+                    if "Set RecoveryType failed" in str(e):
+                        self.sleep(30, "Wait for node to complete failover")
+                        status = rest.set_recovery_type(otpNode=node.id,
+                                       recoveryType=self.recoveryType)
+                        if not status:
+                            self.fail("Fail to set recovery mode")
                 rest.add_back_node(otpNode=node.id)
         rebalance = self.cluster.async_rebalance(self.servers, [], [])
         return rebalance
