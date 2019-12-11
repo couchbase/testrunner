@@ -251,11 +251,11 @@ class EventingNegative(EventingBaseTest):
                                    'create', compression=self.sdk_compression)
         # create a function which sleeps for 5 secs and set execution_timeout to 1s
         body = self.create_save_function_body(self.function_name, HANDLER_CODE_ERROR.EXECUTION_TIME_MORE_THAN_TIMEOUT,
-                                              execution_timeout=30)
+                                              execution_timeout=10)
         # deploy the function
         self.deploy_function(body)
         # This is intentionally added so that we wait for some mutations to process and we decide none are processed
-        self.sleep(60)
+        self.sleep(100)
         # No docs should be present in dst_bucket as the all the function executions should have timed out
         self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         eventing_nodes = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)

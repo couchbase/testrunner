@@ -154,4 +154,27 @@ class EventingSourceMutation(EventingBaseTest):
         self.resume_function(body)
         self.verify_eventing_results(self.function_name,3,skip_stats_validation=True)
 
+    #MB-34912
+    def cycle_check_bypass(self):
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OP_WITH_SOURCE_BUCKET_MUTATION,
+                                              worker_count=3)
+        self.deploy_function(body)
+        body1 = self.create_save_function_body(self.function_name+"_2", HANDLER_CODE.BUCKET_OP_WITH_SOURCE_BUCKET_MUTATION,
+                                              worker_count=3)
+        try:
+            self.deploy_function(body1)
+        except Exception as ex:
+            if "ERR_INTER_FUNCTION_RECURSION" in str(ex):
+                pass
+            else:
+                raise Exception("No inter handler recursion observed")
+        self.rest.allow_interbucket_recursion()
+        try:
+            self.deploy_function(body1)
+        except Exception as ex:
+            if "ERR_INTER_FUNCTION_RECURSION" in str(ex):
+                raise Exception("Inter handler recursion observed even for allow_interbucket_recursion=true")
+
 

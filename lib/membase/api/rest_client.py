@@ -4662,6 +4662,21 @@ class RestConnection(object):
         return content
 
     '''
+         allow inter bucket recursion
+    '''
+    def allow_interbucket_recursion(self):
+        authorization = base64.encodestring('%s:%s' % (self.username, self.password))
+        url = "_p/event/api/v1/config"
+        api = self.baseUrl + url
+        headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
+        body = "{\"allow_interbucket_recursion\": true}"
+        status, content, header = self._http_request(api, 'POST', headers=headers, params=body)
+        if not status:
+            raise Exception(content)
+        return content
+
+
+    '''
           Get eventing rebalance status
     '''
     def get_eventing_rebalance_status(self):
