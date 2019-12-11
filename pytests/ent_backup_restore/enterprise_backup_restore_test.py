@@ -512,7 +512,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         version = RestConnection(self.backupset.backup_host).get_nodes_version()
         if version[:5] == "6.5.0":
             self.log.info("\n\n******* Due to issue in MB-36904, \
-                               \nthis test will be skipped in 6.5.0 ********")
+                               \nthis test will be skipped in 6.5.0 ********\n")
             return
         gen1 = BlobGenerator("ent-backup1", "ent-backup-", self.value_size, end=100000)
         gen2 = BlobGenerator("ent-backup2", "ent-backup-", self.value_size, end=100000)
