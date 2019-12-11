@@ -105,7 +105,7 @@ class EventingSourceMutation(EventingBaseTest):
         try:
             self.deploy_function(body1)
         except Exception as ex:
-            if "Inter Handler Recursion Error" in str(ex):
+            if "ERR_INTER_FUNCTION_RECURSION" in str(ex):
                 pass
             else:
                 raise Exception("No inter handler recursion observed")
@@ -114,7 +114,7 @@ class EventingSourceMutation(EventingBaseTest):
         try:
             self.deploy_function(body)
         except Exception as ex:
-            if "Inter Handler Recursion Error" in str(ex):
+            if "ERR_INTER_FUNCTION_RECURSION" in str(ex):
                 pass
             else:
                 raise Exception("No inter handler recursion observed")
