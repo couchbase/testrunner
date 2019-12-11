@@ -813,7 +813,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                                                    password_env, user_env)
         output, error = shell.execute_command_raw(command)
         shell.log_command_output(output, error)
-        self._verify_bucket_compression_mode(bucket_compression_mode)
+        if not self.enable_firewall:
+            self._verify_bucket_compression_mode(bucket_compression_mode)
         errors_check = ["Unable to process value for", "Error restoring cluster",
                         "Expected argument for option"]
         if "Error restoring cluster" in output[0] or "Unable to process value" in output[0] \
