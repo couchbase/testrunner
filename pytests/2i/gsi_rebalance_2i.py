@@ -32,7 +32,12 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         shell = RemoteMachineShellConnection(self.servers[0])
         info = shell.extract_remote_info().type.lower()
         if info == 'linux':
-            self.cli_command_location = testconstants.LINUX_COUCHBASE_BIN_PATH
+            if self.nonroot:
+                nonroot_base_path = "/home/{0}".format(self.master.ssh_username)
+                self.cli_command_location = nonroot_base_path + \
+                                       testconstants.LINUX_COUCHBASE_BIN_PATH
+            else:
+                self.cli_command_location = testconstants.LINUX_COUCHBASE_BIN_PATH
         elif info == 'windows':
             self.cmd_ext = ".exe"
             self.cli_command_location = testconstants.WIN_COUCHBASE_BIN_PATH_RAW

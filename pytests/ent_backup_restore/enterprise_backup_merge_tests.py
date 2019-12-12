@@ -48,11 +48,10 @@ class EnterpriseBackupMergeTest(EnterpriseBackupMergeBase):
                 self._initialize_nodes(Cluster(),
                                        self.servers[:self.nodes_init])
             else:
-                reset_server = self.input.clusters[0][0]
-                shell = RemoteMachineShellConnection(reset_server)
+                shell = RemoteMachineShellConnection(self.input.clusters[0][0])
                 shell.enable_diag_eval_on_non_local_hosts()
                 shell.disconnect()
-                rest = RestConnection(reset_server)
+                rest = RestConnection(self.input.clusters[0][0])
                 rest.force_eject_node()
                 master_services = self.get_services([self.backupset.cluster_host],
                                                  self.services_init, start_node=0)
