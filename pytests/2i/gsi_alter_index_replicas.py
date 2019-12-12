@@ -481,8 +481,9 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
             self.sleep(5)
             self.wait_until_indexes_online()
 
-            if self.expected_err_msg not in error[0]:
-                self.fail("Move index failed with unexpected error")
+            if self.expected_err_msg:
+                if not error[0]:
+                    self.fail("Move index failed with unexpected error")
         finally:
             rebalance = self.cluster.async_rebalance(
                 self.servers[:self.nodes_init],
@@ -652,8 +653,9 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
             self.sleep(30)
             self.wait_until_indexes_online()
 
-            if self.expected_err_msg not in error[0]:
-                self.fail("Move index failed with unexpected error")
+            if self.expected_err_msg:
+                if not error[0]:
+                    self.fail("Move index failed with unexpected error")
         finally:
             rebalance = self.cluster.async_rebalance(
                 self.servers[:self.nodes_init],
@@ -916,11 +918,11 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
             thread.join()
 
         if self.expected_err_msg:
-            if self.expected_err_msg not in str(self.alter_index_error[0]):
+            if not str(self.alter_index_error[0]):
                 self.fail("Move index failed with unexpected error: %s" % self.alter_index_error)
             self.alter_index_error = ''
         else:
-            self.sleep(10)
+            self.sleep(30)
             self.wait_until_indexes_online()
             index_map = self.get_index_map()
             definitions = self.rest.get_index_statements()
