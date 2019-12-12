@@ -1404,8 +1404,12 @@ class RestConnection(object):
         return True
 
     def force_eject_node(self):
-        self.diag_eval("gen_server:cast(ns_cluster, leave).")
-        self.check_delay_restart_coucbase_server()
+        status, content = self.diag_eval("gen_server:cast(ns_cluster, leave).")
+        if status:
+            self.check_delay_restart_coucbase_server()
+        else:
+            log.error("Fail to reset a node: {0}".format(self.ip))
+        return status, content
 
     """ when we do reset couchbase server by force reject, couchbase server will not
         down right away but delay few seconds to be down depend on server spec.

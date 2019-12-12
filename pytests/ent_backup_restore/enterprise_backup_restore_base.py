@@ -1,7 +1,7 @@
 import copy
 import os, shutil, ast, re, subprocess
 import json
-import urllib, datetime, time
+import urllib, datetime, time, random
 
 from basetestcase import BaseTestCase
 from TestInput import TestInputSingleton, TestInputServer
@@ -2849,14 +2849,25 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         """
         rest = RestConnection(self.backupset.cluster_host)
         nodes_all = rest.node_statuses()
+        for x in nodes_all:
+            if x.ip == self.master.ip:
+                nodes_all.remove(x)
+                if len(nodes_all) == 0:
+                    self.fail("No more node to failover.")
         if ip:
             ip_to_failover = ip
         else:
-            ip_to_failover = self.servers[1].ip
+            ip_to_failover = random.choice(nodes_all).ip
+            self.log.info("Node needs to failover: {0}".format(ip_to_failover))
         status = False
         for node in nodes_all:
             if node.ip == ip_to_failover:
                 status = rest.fail_over(otpNode=node.id, graceful=self.graceful)
+                if not status:
+                    self.sleep(10)
+                    healthy = RestHelper(rest).is_cluster_healthy()
+                    if healthy:
+                        status = rest.fail_over(otpNode=node.id, graceful=self.graceful)
         return status
 
     def async_failover_and_recover(self):
