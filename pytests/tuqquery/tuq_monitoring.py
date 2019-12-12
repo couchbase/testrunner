@@ -293,6 +293,7 @@ class QueryMonitoringTests(QueryTests):
             event_is_set = e.wait(t)
             logging.debug('event set: %s', event_is_set)
             if event_is_set:
+                time.sleep(3)
                 logging.info('CHECKING IF SYSTEM:ACTIVE_REQUESTS RESULTS CAN BE FILTERED BY NODE')
                 result = self.run_cbq_query('select * from system:active_requests')
                 node1 = self.run_cbq_query('select * from system:active_requests where node = "%s:%s"'
@@ -313,7 +314,7 @@ class QueryMonitoringTests(QueryTests):
                     self.log.error(node2)
                     return
 
-                time.sleep(60)
+                time.sleep(90)
 
                 logging.info('CHECKING IF SYSTEM:COMPLETED_REQUESTS RESULTS CAN BE FILTERED BY NODE')
                 result = self.run_cbq_query('select * from system:completed_requests')
