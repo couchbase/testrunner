@@ -526,6 +526,8 @@ class N1qlFTSIntegrationTest(QueryTests):
     def test_clusterops_fts_node_failover(self):
         self._update_replica_for_fts_index(self.fts_indexes['index1'], 1)
         self.sleep(30)
+        self.run_cbq_query("DROP index `test_bucket`.`#primary`")
+        self.run_cbq_query("CREATE PRIMARY INDEX `#primary` ON `test_bucket` with {'num_replica': 1}")
         services_string = self.input.param("services_init", '')
         services = services_string.split("-")
         new_services = []
