@@ -1,9 +1,6 @@
 function OnUpdate(doc, meta) {
     var request = {
-	path : 'headers',
-	headers: {
-    "sample-header": "\test"
-    }
+	path : '//slash'
     };
     try {
     	var response = curl("GET", server, request);
@@ -14,9 +11,6 @@ function OnUpdate(doc, meta) {
     	if(response.status == 200){
     	    dst_bucket[meta.id]=response.body;
     	}
-    	else{
-    	    dst_bucket[meta.id]=response.status;
-    	}
     }
     catch (e) {
     	log('error:', e);
@@ -24,13 +18,9 @@ function OnUpdate(doc, meta) {
 }
 
 
-
 function OnDelete(meta) {
     var request = {
-	path : 'headers',
-	headers: {
-    "sample-header": "\test"
-    }
+	path : '//slash'
     };
     try {
     	var response = curl("GET", server, request);
@@ -39,9 +29,6 @@ function OnDelete(meta) {
     	log('response status received from server:', response.status);
     	var res= new Uint8Array(response.body);
     	if(response.status == 200){
-    	    delete dst_bucket[meta.id];
-    	}
-    	else{
     	    delete dst_bucket[meta.id];
     	}
     }

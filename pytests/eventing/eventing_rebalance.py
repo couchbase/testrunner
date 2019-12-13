@@ -1046,6 +1046,7 @@ class EventingRebalance(EventingBaseTest):
                                                      services=services_in)
             self.sleep(15)
             reached = RestHelper(self.rest).rebalance_reached(percentage=30)
+            self.log.info(self.check_eventing_rebalance())
             # kill memcached on kv and eventing when eventing rebalance is going on
             for node in [kv_node, eventing_node]:
                 self.kill_memcached_service(node)

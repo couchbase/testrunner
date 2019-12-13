@@ -135,7 +135,7 @@ class EventingSourceMutation(EventingBaseTest):
                   batch_size=self.batch_size*2)
         self.resume_function(body)
         # Wait for eventing to catch up with all the create mutations and verify results
-        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016*4,skip_stats_validation=True)
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016*5,skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
 
     #MB-32516
