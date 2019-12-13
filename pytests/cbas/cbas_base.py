@@ -64,6 +64,7 @@ class CBASBaseTest(BaseTestCase):
         self.expect_failure = self.input.param('expect_failure', False)
         self.index_name = self.input.param('index_name', None)
         self.index_fields = self.input.param('index_fields', None)
+        self.print_query_log = self.input.param('print_query_log', True)
         if self.index_fields:
             self.index_fields = self.index_fields.split("-")
         self.otpNodes = []
@@ -702,41 +703,49 @@ class CBASBaseTest(BaseTestCase):
                 if status == "success":
                     if validate_item_count:
                         if results[0]['$1'] != expected_count:
-                            self.log.info("Query result : %s", results[0]['$1'])
-                            self.log.info(
-                                "********Thread %s : failure**********",
-                                name)
+                            if self.print_query_log:
+                                self.log.info("Query result : %s", results[0]['$1'])
+                                self.log.info(
+                                    "********Thread %s : failure**********",
+                                    name)
                             self.failed_count += 1
                         else:
-                            self.log.info(
-                                "--------Thread %s : success----------",
-                                name)
+                            if self.print_query_log:
+                                self.log.info(
+                                    "--------Thread %s : success----------",
+                                    name)
                             self.success_count += 1
                     else:
-                        self.log.info("--------Thread %s : success----------",
-                                      name)
+                        if self.print_query_log:
+                            self.log.info("--------Thread %s : success----------",
+                                          name)
                         self.success_count += 1
                 else:
-                    self.log.info("Status = %s", status)
-                    self.log.info("********Thread %s : failure**********", name)
+                    if self.print_query_log:
+                        self.log.info("Status = %s", status)
+                        self.log.info("********Thread %s : failure**********", name)
                     self.failed_count += 1
 
             elif mode == "async":
                 if status == "running" and handle:
-                    self.log.info("--------Thread %s : success----------", name)
+                    if self.print_query_log:
+                        self.log.info("--------Thread %s : success----------", name)
                     self.success_count += 1
                 else:
-                    self.log.info("Status = %s", status)
-                    self.log.info("********Thread %s : failure**********", name)
+                    if self.print_query_log:
+                        self.log.info("Status = %s", status)
+                        self.log.info("********Thread %s : failure**********", name)
                     self.failed_count += 1
 
             elif mode == "deferred":
                 if status == "success" and handle:
-                    self.log.info("--------Thread %s : success----------", name)
+                    if self.print_query_log:
+                        self.log.info("--------Thread %s : success----------", name)
                     self.success_count += 1
                 else:
-                    self.log.info("Status = %s", status)
-                    self.log.info("********Thread %s : failure**********", name)
+                    if self.print_query_log:
+                        self.log.info("Status = %s", status)
+                        self.log.info("********Thread %s : failure**********", name)
                     self.failed_count += 1
         except Exception, e:
             if str(e) == "Request Rejected":
