@@ -2410,12 +2410,27 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         shell.disconnect()
 
     def _create_restore_cluster(self, node_services=["kv"]):
-        if self.test_fts:
-            node_services = ["kv", "fts"]
-        rest_target = RestConnection(self.backupset.restore_cluster_host)
-        rest_target.add_node(self.input.clusters[0][1].rest_username,
+        rest_bk = RestConnection(self.backupset.cluster_host)
+        bk_cluster_services = rest_bk.get_nodes_services().values()
+        bk_services = max(bk_cluster_services, key=len)
+
+        rest_rs = RestConnection(self.backupset.restore_cluster_host)
+        if self.test_fts and "fts" not in bk_services:
+            bk_services.append("fts")
+        self.backupset.restore_cluster_host.services = ",".join(bk_services)
+        rest_rs.force_eject_node()
+        ready = RestHelper(rest_rs).is_ns_server_running()
+        if ready:
+            shell = RemoteMachineShellConnection(self.backupset.restore_cluster_host)
+            shell.enable_diag_eval_on_non_local_hosts()
+            shell.disconnect()
+        kv_quota = rest_rs.init_node()
+        bk_cluster_services.remove(bk_services)
+        if not bk_cluster_services:
+            bk_cluster_services = append(self.input.clusters[0][1].services)
+        rest_rs.add_node(self.input.clusters[0][1].rest_username,
                              self.input.clusters[0][1].rest_password,
-                             self.input.clusters[0][1].ip, services=node_services)
+                             self.input.clusters[0][1].ip, services=bk_cluster_services[0])
         rebalance = self.cluster.async_rebalance(self.cluster_to_restore, [], [])
         rebalance.result()
 
