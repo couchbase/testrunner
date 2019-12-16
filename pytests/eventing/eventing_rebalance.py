@@ -1086,13 +1086,8 @@ class EventingRebalance(EventingBaseTest):
                                                      [],
                                                      services=services_in)
             self.sleep(2)
-            reached = RestHelper(self.rest).rebalance_reached(percentage=30)
-            # while (not self.check_eventing_rebalance() and not RestHelper(self.rest).is_cluster_rebalanced()):
-            #     self.log.info("waiting for eventing rebalance to trigger")
-            # if (RestHelper(self.rest).is_cluster_rebalanced()):
-            #     raise Exception("Rebalance completed before killing")
-            # kill erlang process on kv and eventing when eventing rebalance is going on
-            for node in [kv_node, eventing_node]:
+            reached = RestHelper(self.rest).rebalance_reached(percentage=60)
+            for node in [eventing_node]:
                 self.kill_erlang_service(node)
             self.assertTrue(reached, "rebalance failed, stuck or did not complete")
             rebalance.result()
