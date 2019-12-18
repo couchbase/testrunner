@@ -238,7 +238,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         rebalance.result()
         # rebalance out a node
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [index_server])
-        self.sleep(2)
+        self.sleep(15)
         try:
             # when rebalance is in progress, run drop index
             self._drop_index(self.query_definitions[0], self.buckets[0])
@@ -1417,7 +1417,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         # rebalance out a indexer node
         try:
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [index_server])
-            self.sleep(5)
+            self.sleep(15)
             # reboot a kv node during gsi rebalance
             self.reboot_node(kv_server[1])
             reached = RestHelper(self.rest).rebalance_reached()
@@ -2743,7 +2743,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         rest = RestConnection(self.master)
         rest.set_retry_rebalance_settings(body)
         result = rest.get_retry_rebalance_settings()
-        self.shell.execute_cbworkloadgen(rest.username, rest.password, 1000000, 100, "default", 1024, '-j')
+        self.shell.execute_cbworkloadgen(rest.username, rest.password, 2000000, 100, "default", 1024, '-j')
         if not self.build_index:
             self.run_operation(phase="before")
             self.sleep(30)
@@ -2766,7 +2766,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
                 rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
                                                          [self.servers[self.nodes_init]], [],
                                                          services=services_in)
-            self.sleep(5)
+            self.sleep(4)
             # reboot an index node during gsi rebalance
             if not self.build_index:
                 self.reboot_node(index_server)
