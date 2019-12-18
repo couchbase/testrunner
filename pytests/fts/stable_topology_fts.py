@@ -1890,11 +1890,13 @@ class StableTopFTS(FTSBaseTest):
         f.write(cert)
         f.close()
 
+        fts_node = self._cb_cluster.get_random_fts_node()
+
         cmd = "curl -g -k "+\
               "-XPUT -H \"Content-Type: application/json\" "+\
               "-u Administrator:password "+\
               "https://{0}:{1}/api/index/default_idx -d ".\
-                  format(self._master.ip, fts_ssl_port) +\
+                  format(fts_node.ip, fts_ssl_port) +\
               "\'{0}\'".format(json.dumps(idx))
 
         self.log.info("Running command : {0}".format(cmd))
@@ -1904,7 +1906,7 @@ class StableTopFTS(FTSBaseTest):
                     "-XPOST -H \"Content-Type: application/json\" " + \
                     "-u Administrator:password " + \
                     "https://{0}:18094/api/index/default_idx/query -d ". \
-                        format(self._master.ip, fts_ssl_port) + \
+                        format(fts_node.ip, fts_ssl_port) + \
                     "\'{0}\'".format(json.dumps(qry))
             self.sleep(20, "wait for indexing to complete")
             output = subprocess.check_output(query, shell=True)
