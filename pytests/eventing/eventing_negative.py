@@ -471,3 +471,36 @@ class EventingNegative(EventingBaseTest):
         except Exception as e:
             if "ERR_APP_ALREADY_DEPLOYED" not in str(e):
                 raise Exception("Feed boundary updated when app is deployed")
+
+    #MB-31140
+    def test_eventing_error_type(self):
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        body = self.create_save_function_body(self.function_name, 'handler_code/eventing_error.js', worker_count=1)
+        self.deploy_function(body)
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+
+
+    #MB-31140
+    def test_n1ql_error_type(self):
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        body = self.create_save_function_body(self.function_name, 'handler_code/n1ql_error.js', worker_count=1)
+        self.deploy_function(body)
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+
+    #MB-31140
+    def test_curl_error_type(self):
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        body = self.create_save_function_body(self.function_name, 'handler_code/curl_error.js', worker_count=1)
+        self.deploy_function(body)
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+
+    #MB-35750
+    def test_non_json(self):
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        body = self.create_save_function_body(self.function_name, 'handler_code/non_json.js', worker_count=1)
+        self.deploy_function(body)
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016*3, skip_stats_validation=True)
