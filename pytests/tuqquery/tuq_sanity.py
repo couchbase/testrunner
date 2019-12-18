@@ -4153,10 +4153,10 @@ class QuerySanityTests(QueryTests):
             expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
-            self.query = "select name, join_date as date from %s let join_date = reverse(tostr(join_yr)) || '-' || reverse(tostr(join_mo)) order by meta().id limit 10" % (bucket.name)
+            self.query = "select name, join_date as date from %s let join_date = reverse(tostr(join_yr)) || '-' || reverse(tostr(join_mo)) order by name, meta().id limit 10" % (bucket.name)
             actual_list2 = self.run_cbq_query()
             actual_result2 = actual_list2['results']
-            expected_result2 = [{u'date': u'1102-01', u'name': u'employee-9'}, {u'date': u'1102-01', u'name': u'employee-9'}, {u'date': u'1102-01', u'name': u'employee-9'}, {u'date': u'1102-01', u'name': u'employee-9'}, {u'date': u'1102-01', u'name': u'employee-9'}, {u'date': u'1102-01', u'name': u'employee-9'}, {u'date': u'0102-11', u'name': u'employee-4'}, {u'date': u'0102-11', u'name': u'employee-4'}, {u'date': u'0102-11', u'name': u'employee-4'}, {u'date': u'0102-11', u'name': u'employee-4'}]
+            expected_result2 = [{u'date': u'1102-9', u'name': u'employee-1'}, {u'date': u'1102-9', u'name': u'employee-1'}, {u'date': u'1102-9', u'name': u'employee-1'}, {u'date': u'1102-9', u'name': u'employee-1'}, {u'date': u'1102-9', u'name': u'employee-1'}, {u'date': u'1102-9', u'name': u'employee-1'}, {u'date': u'1102-9', u'name': u'employee-1'}, {u'date': u'1102-9', u'name': u'employee-1'}, {u'date': u'1102-9', u'name': u'employee-1'}, {u'date': u'1102-9', u'name': u'employee-1'}]
             self._verify_results(actual_result2, expected_result2)
 
     def test_letting(self):
