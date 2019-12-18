@@ -1917,7 +1917,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                     if self.init_installed_servers == len(self.servers):
                         upgrade_threads = self._async_update(upgrade_version, [self.servers[6]])
                     else:
-                        self._install(self.servers[6], version=upgrade_version)
+                        self._install([self.servers[6]], version=upgrade_version)
                 if self.init_installed_servers == len(self.servers):
                     for upgrade_thread in upgrade_threads:
                         upgrade_thread.join()
