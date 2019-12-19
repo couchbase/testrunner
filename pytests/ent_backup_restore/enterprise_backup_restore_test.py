@@ -1165,8 +1165,20 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                 fail_msg.append('Backed up bucket "{0}" failed'.format(bucket.name))
             if self.cluster_new_role in users_can_backup_all:
                 if not self._check_output(success_msg, output):
-                    self.fail("User {0} failed to backup data.\n".format(self.cluster_new_role) + \
-                              "Here is the output {0} ".format(output))
+                    rest_bk = RestConnection(self.backupset.cluster_host)
+                    eventing_service_in = False
+                    bk_cluster_services = rest_bk.get_nodes_services().values()
+                    for srv in bk_cluster_services:
+                        if "eventing" in srv:
+                            eventing_service_in = True
+                    eventing_err = "Invalid permissions to backup eventing data"
+                    if eventing_service_in and self._check_output(eventing_err, output) and \
+                        "admin" not in self.cluster_new_role:
+                        self.log.info("Only admin role could backup eventing service")
+                    else:
+                        self.fail("User {0} failed to backup data.\n"
+                                          .format(self.cluster_new_role) + \
+                                          "Here is the output {0} ".format(output))
             elif self.cluster_new_role in users_can_not_backup_all:
                 if not self._check_output(fail_msg, output):
                     self.fail("cbbackupmgr failed to block user to backup")
@@ -1311,6 +1323,17 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             if self.cluster_new_role in users_can_not_restore_all:
                 self.should_fail = True
             output, error = self.backup_restore()
+            rest_rs = RestConnection(self.backupset.restore_cluster_host)
+            eventing_service_in = False
+            rs_cluster_services = rest_rs.get_nodes_services().values()
+            for srv in rs_cluster_services:
+                if "eventing" in srv:
+                    eventing_service_in = True
+            eventing_err = "User needs one of the following permissions: cluster.eventing"
+            if eventing_service_in and self._check_output(eventing_err, output) and \
+                "admin" not in self.cluster_new_role:
+                self.log.info("Only admin role could backup eventing service")
+                return
             success_msg = 'Restore completed successfully'
             fail_msg = "Error restoring cluster:"
 

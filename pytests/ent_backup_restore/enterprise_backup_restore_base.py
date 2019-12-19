@@ -815,12 +815,25 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         shell.log_command_output(output, error)
         if not self.enable_firewall:
             self._verify_bucket_compression_mode(bucket_compression_mode)
-        errors_check = ["Unable to process value for", "Error restoring cluster",
-                        "Expected argument for option"]
-        if "Error restoring cluster" in output[0] or "Unable to process value" in output[0] \
-            or "Expected argument for option" in output[0]:
+
+        eventing_service_in = False
+        errs_check = ["Unable to process value", "Error restoring cluster",
+                      "Expected argument for option"]
+        rest_rs = RestConnection(self.backupset.restore_cluster_host)
+        rs_cluster_services = rest_rs.get_nodes_services().values()
+        for srv in rs_cluster_services:
+            if "eventing" in srv:
+                eventing_service_in = True
+                errs_check.append("User needs one of the following permissions: cluster.eventing")
+        accepted_errs = False
+        for err in errs_check:
+            if self._check_output(err, output):
+                accepted_errs = True
+                break
+
+        if accepted_errs:
             if not self.should_fail:
-                if not self.restore_should_fail:
+                if not self.restore_should_fail and not eventing_service_in:
                     self.fail("Failed to restore cluster")
             else:
                 self.log.info("This test is for negative test")
