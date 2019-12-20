@@ -81,6 +81,9 @@ class NodeHelper:
         for _ in to_be_replaced:
             if _ in os:
                 os = os.replace(_, '')
+        if self.info.deliverable_type == "dmg":
+            major_version = os.split('.')
+            os = major_version[0] + '.' + major_version[1]
         return os
 
     def uninstall_cb(self):
