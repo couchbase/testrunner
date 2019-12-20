@@ -2412,7 +2412,9 @@ class QueryTests(BaseTestCase):
                 actual_result_list.append(actual_result['results'][i]['default']['_id'])
             elif test in ["test_desc_isReverse_ascOrder"]:
                 actual_result_list.append(actual_result['results'][i]['id'])
-        self.assertEqual(actual_result_list, expected_result_list)
+        if test != "do_not_test_against_hardcode":
+            self.assertEqual(actual_result_list, expected_result_list)
+
         query = query.replace("from default", "from default use index(`#primary`)")
         expected_result = self.run_cbq_query(query)
         self.assertEqual(actual_result['results'], expected_result['results'])
