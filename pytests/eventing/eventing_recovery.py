@@ -66,7 +66,7 @@ class EventingRecovery(EventingBaseTest):
         elif handler_code == 'source_bucket_mutation_with_timers':
             self.handler_code = HANDLER_CODE.BUCKET_OP_SOURCE_BUCKET_MUTATION_WITH_TIMERS_RECOVERY
         elif handler_code == 'bucket_op_curl_get':
-            self.handler_code = HANDLER_CODE_CURL.BUCKET_OP_WITH_CURL_GET
+            self.handler_code = HANDLER_CODE_CURL.BUCKET_OP_WITH_CURL_GET_RECOVERY
         elif handler_code == 'bucket_op_curl_post':
             self.handler_code = HANDLER_CODE_CURL.BUCKET_OP_WITH_CURL_POST
         elif handler_code == 'bucket_op_curl_put':
@@ -80,7 +80,7 @@ class EventingRecovery(EventingBaseTest):
         elif handler_code == 'timer_op_curl_put':
             self.handler_code = HANDLER_CODE_CURL.TIMER_OP_WITH_CURL_PUT
         elif handler_code == 'timer_op_curl_delete':
-            self.handler_code = HANDLER_CODE_CURL.TIMER_OP_WITH_CURL_DELETE
+            self.handler_code = HANDLER_CODE_CURL.TIMER_OP_WITH_CURL_DELETE_RECOVERY
         else:
             self.handler_code = HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE_RECOVERY
 
