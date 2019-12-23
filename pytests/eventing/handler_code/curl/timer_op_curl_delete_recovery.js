@@ -53,7 +53,7 @@ function timerCallback(context) {
     "Postman-Token": "a3e931fe-8fe2-413c-be82-546062d28377"
     }
     };
-    while(true){}
+    while(true){
     try {
     	var response = curl("DELETE", server, request);
     	log('response body received from server:', response.body);
