@@ -2427,12 +2427,19 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
 
     def _create_restore_cluster(self, node_services=["kv"]):
         rest_bk = RestConnection(self.backupset.cluster_host)
+        eventing_service_in = False
         bk_cluster_services = rest_bk.get_nodes_services().values()
+        for srv in bk_cluster_services:
+            if "eventing" in srv:
+                eventing_service_in = True
+                break
         bk_services = max(bk_cluster_services, key=len)
 
         rest_rs = RestConnection(self.backupset.restore_cluster_host)
         if self.test_fts and "fts" not in bk_services:
             bk_services.append("fts")
+        if "eventing" not in bk_services:
+            bk_services.append("eventing")
         self.backupset.restore_cluster_host.services = ",".join(bk_services)
         rest_rs.force_eject_node()
         ready = RestHelper(rest_rs).is_ns_server_running()
@@ -2441,7 +2448,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             shell.enable_diag_eval_on_non_local_hosts()
             shell.disconnect()
         kv_quota = rest_rs.init_node()
-        bk_cluster_services.remove(bk_services)
+        if len(bk_cluster_services) > 1:
+            bk_cluster_services.remove(bk_services)
         if len(self.input.clusters[0]) > 1:
             if not bk_cluster_services:
                 bk_cluster_services = bk_cluster_services.append(self.input.clusters[0][1].services)
