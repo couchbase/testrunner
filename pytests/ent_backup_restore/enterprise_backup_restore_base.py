@@ -684,6 +684,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             replicas = self.num_replicas
             if self.new_replicas:
                 replicas = self.new_replicas
+            reset_restore_cluster = False
             for bucket in self.buckets:
                 bucket_name = bucket.name
                 if not rest_helper.bucket_exists(bucket_name):
@@ -703,9 +704,11 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                         kv_quota = self._reset_storage_mode(rest_conn, self.test_storage_mode)
                         if self.test_fts:
                             self._create_restore_cluster()
+                            reset_restore_cluster = True
                         if not self.dgm_run and int(kv_quota) > 0:
                             bucket_size = kv_quota
-
+                    if not reset_restore_cluster:
+                        self._create_restore_cluster()
                     self.log.info("replica in bucket {0} is {1}".format(bucket.name, replicas))
                     try:
                         rest_conn.create_bucket(bucket=bucket_name,
@@ -2439,13 +2442,16 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             shell.disconnect()
         kv_quota = rest_rs.init_node()
         bk_cluster_services.remove(bk_services)
-        if not bk_cluster_services:
-            bk_cluster_services = append(self.input.clusters[0][1].services)
-        rest_rs.add_node(self.input.clusters[0][1].rest_username,
-                             self.input.clusters[0][1].rest_password,
-                             self.input.clusters[0][1].ip, services=bk_cluster_services[0])
-        rebalance = self.cluster.async_rebalance(self.cluster_to_restore, [], [])
-        rebalance.result()
+        if len(self.input.clusters[0]) > 1:
+            if not bk_cluster_services:
+                bk_cluster_services = bk_cluster_services.append(self.input.clusters[0][1].services)
+            rest_rs.add_node(self.input.clusters[0][1].rest_username,
+                                 self.input.clusters[0][1].rest_password,
+                                 self.input.clusters[0][1].ip, services=bk_cluster_services[0])
+            rebalance = self.cluster.async_rebalance(self.cluster_to_restore, [], [])
+            rebalance.result()
+        else:
+            self.log.info("No availabe node to create cluster.")
 
 class Backupset:
     def __init__(self):
