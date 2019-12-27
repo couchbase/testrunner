@@ -260,6 +260,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.auto_failover = self.input.param("enable-autofailover", False)
         self.auto_failover_timeout = self.input.param("autofailover-timeout", 30)
         self.graceful = self.input.param("graceful",False)
+        self.failover_ip = None
         self.done_failover = False
         self.recoveryType = self.input.param("recoveryType", "full")
         self.skip_buckets = self.input.param("skip_buckets", False)
@@ -2904,6 +2905,7 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         status = False
         for node in nodes_all:
             if node.ip == ip_to_failover:
+                self.failover_ip = node.ip
                 status = rest.fail_over(otpNode=node.id, graceful=self.graceful)
                 if not status:
                     self.sleep(10)
@@ -2944,11 +2946,17 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         """
         rest = RestConnection(self.backupset.cluster_host)
         nodes_all = rest.node_statuses()
+
+        recovery_node = self.servers[1].ip
+        if self.failover_ip is not None:
+            recovery_node = self.failover_ip
+        self.log.info("recovery node: {0} ******".format(recovery_node))
         for node in nodes_all:
-            if node.ip == self.servers[1].ip:
+            if node.ip == recovery_node:
                 rest.set_recovery_type(otpNode=node.id,
                                        recoveryType=self.recoveryType)
                 rest.add_back_node(otpNode=node.id)
+                self.failover_ip = None
         rebalance = self.cluster.async_rebalance(self.servers, [], [])
         return rebalance
 
