@@ -60,6 +60,10 @@ class auditTest(BaseTestCase):
         return ipAddress
         '''
 
+    def getLocalIPV6Address(self):
+        result = socket.getaddrinfo(socket.gethostname(), 0, socket.AF_INET6)
+        return result[0][4][0]
+
     def setupLDAPSettings (self,rest):
         api = rest.baseUrl + 'settings/saslauthdAuth'
         params = urllib.urlencode({"enabled":'true',"admins":[],"roAdmins":[]})
@@ -90,6 +94,9 @@ class auditTest(BaseTestCase):
         user = self.master.rest_username
         source = 'ns_server'
         rest = RestConnection(self.master)
+
+        if "ip6" in self.master.ip or self.master.ip.startswith("["):
+            self.ipAddress = self.getLocalIPV6Address()
 
         if (ops in ['create']):
             expectedResults = {'bucket_name':'TestBucket', 'ram_quota':104857600, 'num_replicas':1,
