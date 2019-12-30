@@ -62,7 +62,7 @@ class AlternateAddressTests(AltAddrBaseTest):
                 secure_conn = "--no-ssl-verify"
         output = self.list_alt_address(server=server1, url_format = url_format,
                                           secure_port = secure_port, secure_conn = secure_conn)
-        if output:
+        if self._check_output(server1.ip, output):
             output, _ = self.remove_alt_address_setting(server=server1,
                                                         url_format = url_format,
                                                         secure_port = secure_port,
@@ -73,7 +73,7 @@ class AlternateAddressTests(AltAddrBaseTest):
         output = self.list_alt_address(server=server1, url_format = url_format,
                                           secure_port = secure_port,
                                           secure_conn = secure_conn)
-        if output and output[0] != "[]":
+        if output and self._check_output(server1.ip, output):
             self.fail("Fail to remove alternate address with remove command")
 
         self.log.info("Start to set alternate address")
@@ -84,16 +84,14 @@ class AlternateAddressTests(AltAddrBaseTest):
         setting_cmd += " -c http{0}://{1}:{2}{3} --username {4} --password {5} {6}"\
                        .format(url_format, internal_IP , secure_port, server1.port,
                                server1.rest_username, server1.rest_password, secure_conn)
-        setting_cmd = setting_cmd + "--set --hostname {0} ".format(server1.ip)
+        setting_cmd = setting_cmd + "--set --node {0} --hostname {1} "\
+                                        .format(internal_IP, server1.ip)
         shell.execute_command(setting_cmd)
         output = self.list_alt_address(server=server1, url_format = url_format,
                                                      secure_port = secure_port,
                                                      secure_conn = secure_conn)
-        if output and output[0]:
-            output = output[0]
-            output = output[1:-1]
-            output = ast.literal_eval(output)
-            if output["hostname"] != server1.ip:
+        if output and output[2]:
+            if not self._check_output(server1.ip, output):
                 self.fail("Fail to set correct hostname")
         else:
             self.fail("Fail to set alternate address")
@@ -367,7 +365,7 @@ class AlternateAddressTests(AltAddrBaseTest):
                             sub_command, url_format, server.ip, secure_port,
                             server.port, server.rest_username, server.rest_password,
                             secure_conn)
-        remove_cmd = cmd + " --remove"
+        remove_cmd = cmd + " --remove --node {0}".format(server.ip)
         shell = RemoteMachineShellConnection(server)
         output, error = shell.execute_command(remove_cmd)
         shell.disconnect()
