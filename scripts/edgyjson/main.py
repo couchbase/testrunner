@@ -49,6 +49,8 @@ class JSONDoc(object):
         # connect to cb cluster
         try:
             connection = "couchbase://" + self.server
+            if "ip6" in self.server or self.server.startswith("["):
+                connection = connection+"?ipv6=allow"
             cluster = Cluster(connection)
             authenticator = PasswordAuthenticator(self.username, self.password)
             cluster.authenticate(authenticator)
