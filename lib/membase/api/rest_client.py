@@ -865,16 +865,18 @@ class RestConnection(object):
         status, content, header = self._http_request(api, 'POST', params)
         return status
 
-    def init_node(self):
+    def init_node(self, set_node_services=None):
         """ need a standalone method to initialize a node that could call
             anywhere with quota from testconstant """
         self.node_services = []
-        if self.services_node_init is None and self.services == "":
+        if set_node_services is None:
+            set_node_services = self.services_node_init
+        if set_node_services is None and self.services == "":
             self.node_services = ["kv"]
-        elif self.services_node_init is None and self.services != "":
+        elif set_node_services is None and self.services != "":
             self.node_services = self.services.split(",")
-        elif self.services_node_init is not None:
-            self.node_services = self.services_node_init.split("-")
+        elif set_node_services is not None:
+            self.node_services = set_node_services.split("-")
         kv_quota = 0
         while kv_quota == 0:
             time.sleep(1)
