@@ -956,7 +956,7 @@ class ImportExportTests(CliBaseTest):
                                         enable_replica_index=self.enable_replica_index,
                                         eviction_policy=self.eviction_policy)
                 self.cluster.create_default_bucket(bucket_params)
-                imp_cmd_str = "%s%s%s %s -c %s -u %s -p '%s' -b %s "\
+                imp_cmd_str = "%s%s%s %s -c couchbase://%s -u %s -p '%s' -b %s "\
                                         "-d file://%s -f %s -g key::%%%s%%"\
                                         % (self.cli_command_path, "cbimport",
                                            self.cmd_ext, self.imex_type,
