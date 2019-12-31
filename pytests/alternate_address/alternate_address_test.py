@@ -399,7 +399,8 @@ class AlternateAddressTests(AltAddrBaseTest):
         setting_cmd += " -c http{0}://{1}:{2}{3} --username {4} --password {5} {6}"\
                        .format(url_format, internal_IP , secure_port, server.port,
                                server.rest_username, server.rest_password, secure_conn)
-        setting_cmd = setting_cmd + "--set --hostname {0} ".format(server.ip)
+        setting_cmd = setting_cmd + "--set --node {0} --hostname {1} "\
+                                         .format(internal_IP, server.ip)
         shell.execute_command(setting_cmd)
         output = self.list_alt_address(server=server, url_format = url_format,
                                           secure_port = secure_port,
