@@ -686,6 +686,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             if self.new_replicas:
                 replicas = self.new_replicas
             reset_restore_cluster = False
+            reset_cluster_count = 0
             for bucket in self.buckets:
                 bucket_name = bucket.name
                 if not rest_helper.bucket_exists(bucket_name):
@@ -704,11 +705,12 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                         self.test_storage_mode = "memory_optimized"
                         kv_quota = self._reset_storage_mode(rest_conn, self.test_storage_mode)
                         if self.test_fts:
-                            self._create_restore_cluster()
-                            reset_restore_cluster = True
+                            if reset_cluster_count == 0:
+                                self._create_restore_cluster()
+                                reset_restore_cluster = True
                         if not self.dgm_run and int(kv_quota) > 0:
                             bucket_size = kv_quota
-                    if not reset_restore_cluster:
+                    if not reset_restore_cluster and reset_cluster_count == 0:
                         self._create_restore_cluster()
                     self.log.info("replica in bucket {0} is {1}".format(bucket.name, replicas))
                     try:
@@ -767,6 +769,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                     self.sleep(15, "wait for index service ready")
                 buckets.append("%s=%s" % (bucket.name, bucket_name))
                 count +=1
+                reset_cluster_count +=1
             bucket_maps = ",".join(buckets)
         if self.backupset.map_buckets:
             args += " --map-buckets %s " % bucket_maps
@@ -2437,6 +2440,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         bk_services = max(bk_cluster_services, key=len)
 
         rest_rs = RestConnection(self.backupset.restore_cluster_host)
+        nodes_all = rest_rs.node_statuses()
         if self.test_fts and "fts" not in bk_services:
             bk_services.append("fts")
         if "eventing" not in bk_services:
@@ -2448,7 +2452,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             shell = RemoteMachineShellConnection(self.backupset.restore_cluster_host)
             shell.enable_diag_eval_on_non_local_hosts()
             shell.disconnect()
-        kv_quota = rest_rs.init_node()
+        kv_quota = rest_rs.init_node(self.backupset.restore_cluster_host.services)
         if len(bk_cluster_services) > 1:
             bk_cluster_services.remove(bk_services)
         if len(self.input.clusters[0]) > 1:
