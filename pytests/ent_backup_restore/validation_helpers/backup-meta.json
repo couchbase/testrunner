@@ -2,12 +2,11 @@
   "exclude_buckets": [],
   "include_buckets": [],
   "exclude_collections": [],
-  "include_collections": [],
   "filter_keys": "",
   "filter_values": "",
   "allow_bucket_creation": false,
   "disable_queries": true,
-  "disable_cluster_config": true,
+  "disable_cluster_config": false,
   "disable_bucket_config": false,
   "disable_views": false,
   "disable_gsi_indexes": false,
@@ -17,5 +16,9 @@
   "filter_vbuckets": {"enabled": false, "list": []},
   "create_missing_buckets": false,
   "disable_analytics": false,
-  "disable_ft_alias": false
+  "disable_ft_alias": false,
+  "create_missing_collections": false,
+  "auto_delete_collections": false,
+  "include_data": [],
+  "exclude_data": []
 }

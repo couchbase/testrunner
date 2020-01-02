@@ -72,8 +72,12 @@ class BackupRestoreValidationBase:
                 if key not in extra:
                     extra[key] = []
                 extra[key].append(actual[key])
+        """ from 7.0, there are 2 keys with value None """
+        keys_with_value_none = ["exclude_buckets", "include_buckets"]
         for expected_key in expected.keys():
             if expected_key in actual:
+                if expected_key in keys_with_value_none:
+                    continue
                 if not isinstance(expected[expected_key], dict) and not isinstance(expected[expected_key], list):
                     if unicode(expected[expected_key]) != unicode(actual[expected_key]):
                         is_equal = False
