@@ -708,6 +708,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                             if reset_cluster_count == 0:
                                 self._create_restore_cluster()
                                 reset_restore_cluster = True
+                                reset_cluster_count +=1
                         if not self.dgm_run and int(kv_quota) > 0:
                             bucket_size = kv_quota
                     if not reset_restore_cluster and reset_cluster_count == 0:
@@ -2430,6 +2431,9 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         shell.disconnect()
 
     def _create_restore_cluster(self, node_services=["kv"]):
+        BucketOperationHelper.delete_all_buckets_or_assert(self.backupset.restore_cluster, self)
+        ClusterOperationHelper.cleanup_cluster(self.backupset.restore_cluster,
+                                               master=self.backupset.restore_cluster_host)
         rest_bk = RestConnection(self.backupset.cluster_host)
         eventing_service_in = False
         bk_cluster_services = rest_bk.get_nodes_services().values()
