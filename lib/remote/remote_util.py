@@ -165,8 +165,10 @@ class RemoteMachineHelper(object):
             processes = self.remote_shell.get_running_processes()
             for process in processes:
                 if process.name == process_name:
+                    log.info("process is running on {0}: {1}".format(self.remote_shell.ip, process.pid))
                     return process
                 elif process_name in process.args:
+                    log.info("process is running on {0}: {1}".format(self.remote_shell.ip, process.args))
                     return process
             return None
 
@@ -604,6 +606,7 @@ class RemoteMachineShellConnection:
             # Changed from kill -9 $(ps aux | grep 'memcached' | awk '{print $2}'
             # as grep was also returning eventing
             # process which was using memcached-cert
+            RemoteMachineHelper(self).is_process_running('memcached')
             o, r = self.execute_command("kill -9 $(ps aux | pgrep 'memcached')"
                                                                  , debug=False)
             self.log_command_output(o, r, debug=False)
@@ -612,9 +615,11 @@ class RemoteMachineShellConnection:
     def stop_memcached(self):
         self.extract_remote_info()
         if self.info.type.lower() == 'windows':
+            RemoteMachineHelper(self).is_process_running('memcached')
             o, r = self.execute_command("taskkill /F /T /IM memcached*")
             self.log_command_output(o, r, debug=False)
         else:
+            RemoteMachineHelper(self).is_process_running('memcached')
             o, r = self.execute_command("kill -SIGSTOP $(pgrep memcached)")
             self.log_command_output(o, r, debug=False)
         return o, r
@@ -623,9 +628,11 @@ class RemoteMachineShellConnection:
         self.extract_remote_info()
         if self.info.type.lower() == 'windows':
             o, r = self.execute_command("taskkill /F /T /IM memcached*")
+            RemoteMachineHelper(self).is_process_running('memcached')
             self.log_command_output(o, r)
         else:
             o, r = self.execute_command("kill -SIGCONT $(pgrep memcached)")
+            RemoteMachineHelper(self).is_process_running('memcached')
             self.log_command_output(o, r)
         return o, r
 
@@ -642,9 +649,11 @@ class RemoteMachineShellConnection:
     def kill_eventing_process(self, name):
         self.extract_remote_info()
         if self.info.type.lower() == 'windows':
+            RemoteMachineHelper(self).is_process_running(name)
             o, r = self.execute_command(command="taskkill /F /T /IM {0}*".format(name))
             self.log_command_output(o, r)
         else:
+            RemoteMachineHelper(self).is_process_running(name)
             o, r = self.execute_command(command="killall -9 {0}".format(name))
             self.log_command_output(o, r)
         return o, r
@@ -784,6 +793,13 @@ class RemoteMachineShellConnection:
                     log.info("{0} **** The version file {1} {2}  exists".format(self.ip,
                                                       LINUX_CB_PATH, VERSION_FILE ))
                     return True
+        return False
+
+    def is_couchbase_running(self):
+        self.extract_remote_info()
+        o=RemoteMachineHelper(self).is_process_running('beam.smp')
+        if o !=None:
+            return True
         return False
 
     def is_moxi_installed(self):
@@ -3634,31 +3650,49 @@ class RemoteMachineShellConnection:
             self.log_command_output(o, r)
 
     def start_couchbase(self):
-        self.extract_remote_info()
-        if self.info.type.lower() == 'windows':
-            o, r = self.execute_command("net start couchbaseserver")
-            self.log_command_output(o, r)
-        if self.info.type.lower() == "linux":
-            if self.nonroot:
-                log.info("Start Couchbase Server with non root method")
-                o, r = self.execute_command('%s%scouchbase-server \-- -noinput -detached '\
-                                                           % (self.nr_home_path,
-                                                              LINUX_COUCHBASE_BIN_PATH))
+        running=self.is_couchbase_running()
+        retry=0
+        while not running and retry < 3:
+            log.info("Starting couchbase server")
+            self.extract_remote_info()
+            if self.info.type.lower() == 'windows':
+                o, r = self.execute_command("net start couchbaseserver")
                 self.log_command_output(o, r)
-            else:
-                fv, sv, bn = self.get_cbversion("linux")
-                if self.info.distribution_version.lower() in SYSTEMD_SERVER \
-                       and sv in COUCHBASE_FROM_WATSON:
-                    """from watson, systemd is used in centos 7, suse 12 """
-                    log.info("Running systemd command on this server")
-                    o, r = self.execute_command("systemctl start couchbase-server.service")
+                running = self.is_couchbase_running()
+                retry=retry+1
+            if self.info.type.lower() == "linux":
+                if self.nonroot:
+                    log.info("Start Couchbase Server with non root method")
+                    o, r = self.execute_command('%s%scouchbase-server \-- -noinput -detached '\
+                                                               % (self.nr_home_path,
+                                                                  LINUX_COUCHBASE_BIN_PATH))
                     self.log_command_output(o, r)
+                    running = self.is_couchbase_running()
+                    retry = retry + 1
                 else:
-                    o, r = self.execute_command("/etc/init.d/couchbase-server start")
-                    self.log_command_output(o, r)
-        if self.info.distribution_type.lower() == "mac":
-            o, r = self.execute_command("open /Applications/Couchbase\ Server.app")
-            self.log_command_output(o, r)
+                    fv, sv, bn = self.get_cbversion("linux")
+                    if self.info.distribution_version.lower() in SYSTEMD_SERVER \
+                           and sv in COUCHBASE_FROM_WATSON:
+                        """from watson, systemd is used in centos 7, suse 12 """
+                        log.info("Running systemd command on this server")
+                        o, r = self.execute_command("systemctl start couchbase-server.service")
+                        self.log_command_output(o, r)
+                        running = self.is_couchbase_running()
+                        retry = retry + 1
+                    else:
+                        o, r = self.execute_command("/etc/init.d/couchbase-server start")
+                        self.log_command_output(o, r)
+                        running = self.is_couchbase_running()
+                        retry = retry + 1
+            if self.info.distribution_type.lower() == "mac":
+                o, r = self.execute_command("open /Applications/Couchbase\ Server.app")
+                self.log_command_output(o, r)
+                running = self.is_couchbase_running()
+                retry = retry + 1
+        if not running and retry >= 3:
+            sys.exit("Server not started even after 3 retries")
+
+
 
     def pause_memcached(self, os="linux", timesleep=30):
         log.info("*** pause memcached process ***")
