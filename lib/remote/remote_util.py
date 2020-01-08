@@ -1179,13 +1179,16 @@ class RemoteMachineShellConnection:
         return True
 
     def rmtree(self, sftp, remote_path, level=0):
+        count = 0
         for f in sftp.listdir_attr(remote_path):
             rpath = remote_path + "/" + f.filename
             if stat.S_ISDIR(f.st_mode):
                 self.rmtree(sftp, rpath, level=(level + 1))
             else:
                 rpath = remote_path + "/" + f.filename
-                print('removing %s' % (rpath))
+                if count < 10:
+                    print('removing %s' % (rpath))
+                    count += 1
                 sftp.remove(rpath)
         print('removing %s' % (remote_path))
         sftp.rmdir(remote_path)
