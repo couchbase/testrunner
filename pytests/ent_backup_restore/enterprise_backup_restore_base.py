@@ -2431,7 +2431,10 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         shell.disconnect()
 
     def _create_restore_cluster(self, node_services=["kv"]):
-        BucketOperationHelper.delete_all_buckets_or_assert(self.backupset.restore_cluster, self)
+        rest_rs = RestConnection(self.backupset.restore_cluster_host)
+        rs_bucket = rest_rs.get_buckets()
+        if rs_bucket:
+            BucketOperationHelper.delete_all_buckets_or_assert(self.backupset.restore_cluster, self)
         ClusterOperationHelper.cleanup_cluster(self.backupset.restore_cluster,
                                                master=self.backupset.restore_cluster_host)
         rest_bk = RestConnection(self.backupset.cluster_host)
@@ -2447,7 +2450,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         nodes_all = rest_rs.node_statuses()
         if self.test_fts and "fts" not in bk_services:
             bk_services.append("fts")
-        if "eventing" not in bk_services:
+        if "eventing" not in bk_services and eventing_service_in:
             bk_services.append("eventing")
         self.backupset.restore_cluster_host.services = ",".join(bk_services)
         rest_rs.force_eject_node()
