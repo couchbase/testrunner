@@ -2283,6 +2283,7 @@ class BaseTestCase(unittest.TestCase):
                     data_path = rest.get_data_path()
                     # Stop node
                     self.stop_server(node)
+                    self.sleep(5)
                     # Delete Path
                     shell.cleanup_data_config(data_path)
                     self.start_server(node)

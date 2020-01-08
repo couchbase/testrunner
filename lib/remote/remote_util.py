@@ -165,12 +165,13 @@ class RemoteMachineHelper(object):
             processes = self.remote_shell.get_running_processes()
             for process in processes:
                 if process.name == process_name:
-                    log.info("process is running on {0}: {1}".format(self.remote_shell.ip, process.pid))
+                    ##log.info(process.name)
+                    log.info("process {2} is running on {0}: with pid {1}".format(self.remote_shell.ip, process.pid,process_name))
                     return process
                 elif process_name in process.args:
-                    log.info("process is running on {0}: {1}".format(self.remote_shell.ip, process.args))
+                    log.info("process is running in args {0}: {1}".format(self.remote_shell.ip, process.args))
                     return process
-            return None
+        return None
 
 
 class RemoteMachineShellConnection:
@@ -339,6 +340,7 @@ class RemoteMachineShellConnection:
         # ps -Ao pid,comm
         processes = []
         output, error = self.execute_command('ps -Ao pid,comm,vsz,rss,args', debug=False)
+        ##log.info(output)
         if output:
             for line in output:
                 # split to words
@@ -790,7 +792,7 @@ class RemoteMachineShellConnection:
                     return True
             else:
                 if self.file_exists(LINUX_CB_PATH, VERSION_FILE):
-                    log.info("{0} **** The version file {1} {2}  exists".format(self.ip,
+                    log.info("{0} **** The linux version file {1} {2}  exists".format(self.ip,
                                                       LINUX_CB_PATH, VERSION_FILE ))
                     return True
         return False
