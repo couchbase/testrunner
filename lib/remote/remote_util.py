@@ -538,7 +538,7 @@ class RemoteMachineShellConnection:
             self.log_command_output(o, r)
         if self.info.type.lower() == "linux":
             fv, sv, bn = self.get_cbversion("linux")
-            if "centos 7" in self.info.distribution_version.lower() \
+            if self.info.distribution_version.lower() in SYSTEMD_SERVER \
                     and sv in COUCHBASE_FROM_WATSON:
                 """from watson, systemd is used in centos 7 """
                 log.info("this node is centos 7.x")
@@ -3381,17 +3381,28 @@ class RemoteMachineShellConnection:
                             etc_issue = line
                             break
                             # strip all extra characters
-                    etc_issue = etc_issue.rstrip('\n').rstrip(' ').rstrip('\\l').rstrip(' ').rstrip('\\n').rstrip(' ')
-                    os_distro = 'Amazon Linux 2'
-                    os_version = etc_issue
-                    is_linux_distro = True
-                    file.close()
-                    # now remove this file
-                    os.remove(filename)
-                    break
+                    if etc_issue.lower().find('oracle linux') != -1:
+                        os_distro = 'Oracle Linux'
+                        for i in etc_issue:
+                            if i.isdigit():
+                                dist_version = i
+                                break
+                        os_version = "oel{}".format(dist_version)
+                        is_linux_distro = True
+                        break
+                    elif etc_issue.lower().find('Amazon Linux 2') != -1:
+                        etc_issue = etc_issue.rstrip('\n').rstrip(' ').rstrip('\\l').rstrip(' ').rstrip('\\n').rstrip(
+                            ' ')
+                        os_distro = 'Amazon Linux 2'
+                        os_version = etc_issue
+                        is_linux_distro = True
+                        file.close()
+                        # now remove this file
+                        os.remove(filename)
+                        break
             """ for centos 7 or rhel8 """
             for name in filenames:
-                if name == "redhat-release":
+                if name == "redhat-release" and os_distro == "":
                     filename = 'redhat-release-{0}'.format(uuid.uuid4())
                     if self.remote:
                         sftp.get(localpath=filename, remotepath='/etc/redhat-release')
@@ -3830,7 +3841,7 @@ class RemoteMachineShellConnection:
             shell.send('net start CouchbaseServer\n')
         elif self.info.type.lower() == "linux":
             shell.send('export {0}={1}\n'.format(name, value))
-            if "centos 7" in self.info.distribution_version.lower():
+            if self.info.distribution_version.lower() in SYSTEMD_SERVER:
                 """from watson, systemd is used in centos 7 """
                 log.info("this node is centos 7.x")
                 shell.send("systemctl restart couchbase-server.service\n")
@@ -3884,7 +3895,7 @@ class RemoteMachineShellConnection:
         self.log_command_output(o, r)
 
         if self.info.type.lower() == "linux":
-            if "centos 7" in self.info.distribution_version.lower():
+            if self.info.distribution_version.lower() in SYSTEMD_SERVER:
                 """from watson, systemd is used in centos 7 """
                 log.info("this node is centos 7.x")
                 o, r = self.execute_command("service couchbase-server restart")
@@ -3921,7 +3932,7 @@ class RemoteMachineShellConnection:
         o, r = self.execute_command("mv " + backupfile + " " + sourceFile)
         self.log_command_output(o, r)
         if self.info.type.lower() == "linux":
-            if "centos 7" in self.info.distribution_version.lower():
+            if self.info.distribution_version.lower() in SYSTEMD_SERVER:
                 """from watson, systemd is used in centos 7 """
                 log.info("this node is centos 7.x")
                 o, r = self.execute_command("service couchbase-server restart")
