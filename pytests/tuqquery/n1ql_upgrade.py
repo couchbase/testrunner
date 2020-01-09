@@ -80,8 +80,11 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                 self.log.info("setting intial_version to: 4.6.5-4742")
                 self.initial_version = "4.6.5-4742"
             elif int(upgrade_major) == 6:
-                self.log.info("setting intial_version to: 5.5.2-3733")
-                self.initial_version = "5.5.2-3733"
+                self.log.info("setting intial_version to: 5.5.6-4733")
+                self.initial_version = "5.5.6-4733"
+            elif int(upgrade_major) == 7:
+                self.log.info("setting intial_version to: 6.0.3-2895")
+                self.initial_version = "6.0.3-2895"
             else:
                 self.log.info("upgrade version invalid: " + str(self.upgrade_versions[0]))
                 self.fail()
