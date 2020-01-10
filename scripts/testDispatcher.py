@@ -264,7 +264,7 @@ def main():
     if options.url is not None:
         launchString = launchString + '&url=' + options.url
     if options.cherrypick is not None:
-        launchString = launchString + '&cherrypick=' + options.cherrypick
+        launchString = launchString + '&cherrypick=' + urllib.quote(options.cherrypick)
 
     summary = []
 
