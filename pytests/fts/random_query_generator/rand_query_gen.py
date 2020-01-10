@@ -1,14 +1,17 @@
 import random
 import json
-#import sys
-#sys.path.append("/Users/apiravi/testrunner")
+# import sys
+# sys.path.append("/Users/apiravi/testrunner")
 from emp_querables import EmployeeQuerables
 from wiki_queryables import WikiQuerables
 import Geohash
+import math
+import random
+
 
 class DATASET:
     FIELDS = {'emp': {'str': ["name", "dept", "manages_reports",
-                               "languages_known", "email", "type"],
+                              "languages_known", "email", "type"],
                       'text': ["name", "manages_reports"],
                       'num': ["mutated", "manages_team_size", "salary"],
                       'bool': ["is_manager"],
@@ -22,10 +25,11 @@ class DATASET:
                        'date': ["revision_timestamp"]}
               }
 
+
 class QUERY_TYPE:
     VALUES = ["match", "bool", "match_phrase",
               "prefix", "fuzzy", "conjunction", "disjunction"
-              "wildcard", "regexp",  "query_string",
+                                                "wildcard", "regexp", "query_string",
               "numeric_range", "date_range", "term_range",
               "match_all", "match_none"]
 
@@ -36,11 +40,12 @@ class QUERY_TYPE:
                  "prefix", "wildcard", "query_string",
                  "conjunction", "disjunction", "term_range"],
         'str': ["match", "bool", "match_phrase",
-                 "prefix", "wildcard", "query_string",
-                 "conjunction", "disjunction", "term_range"],
+                "prefix", "wildcard", "query_string",
+                "conjunction", "disjunction", "term_range"],
         'num': ["numeric_range"],
         'date': ["date_range"]
     }
+
 
 class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
 
@@ -73,7 +78,6 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
         else:
             print "No string/number/date fields indexed for smart" \
                   " query generation "
-
 
     def construct_fields(self):
         all_fields = {}
@@ -119,7 +123,7 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
     def replace_underscores(self, query):
         replace_dict = {
             "manages_": "manages.",
-            "revision_text_text":  "revision.text.#text",
+            "revision_text_text": "revision.text.#text",
             "revision_contributor_username": "revision.contributor.username",
             "revision_contributor_id": "revision.contributor.id",
             "revision_date": "revision.date"
@@ -257,10 +261,10 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
 
     def construct_prefix_query(self):
         fts_prefix_query = {}
-        es_prefix_query = {'prefix':{}}
+        es_prefix_query = {'prefix': {}}
         fts_match_query, _ = self.construct_match_query()
         prefix_search = fts_match_query["match"][:random.randint(1, 4)]
-        fts_prefix_query["prefix"] =  prefix_search
+        fts_prefix_query["prefix"] = prefix_search
         fts_prefix_query["field"] = fts_match_query["field"]
         es_prefix_query['prefix'][fts_match_query["field"]] = prefix_search
         return fts_prefix_query, es_prefix_query
@@ -316,14 +320,14 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
             fts_numeric_query['inclusive_max'] = True
             es_numeric_query['filtered']['filter']['range'][fieldname]['gte'] = \
                 low
-            es_numeric_query['filtered']['filter']['range'][fieldname]['lte'] =\
+            es_numeric_query['filtered']['filter']['range'][fieldname]['lte'] = \
                 high
         else:
             fts_numeric_query['inclusive_min'] = False
             fts_numeric_query['inclusive_max'] = False
             es_numeric_query['filtered']['filter']['range'][fieldname]['gt'] = \
                 low
-            es_numeric_query['filtered']['filter']['range'][fieldname]['lt'] =\
+            es_numeric_query['filtered']['filter']['range'][fieldname]['lt'] = \
                 high
         return fts_numeric_query, es_numeric_query
 
@@ -335,7 +339,7 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
         """
         if not fieldname:
             fieldname = self.get_random_value(self.fields['str'] +
-                                          self.fields['text'])
+                                              self.fields['text'])
         str = eval("self.get_queryable_%s" % fieldname + "()")
         terms = str.split(' ')
         return terms[0]
@@ -392,7 +396,7 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
             if bool(random.getrandbits(1)) and not self.smart_queries:
                 return match_str
             else:
-                return fieldname+':'+ match_str
+                return fieldname + ':' + match_str
         else:
             # numeric range
             operators = ['>', '>=', '<', '<=']
@@ -400,18 +404,18 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
             val = eval("self.get_queryable_%s" % fieldname + "()")
             if bool(random.getrandbits(1)):
                 # upper or lower bound specified
-                end_point = fieldname + ':'+ \
+                end_point = fieldname + ':' + \
                             self.get_random_value(operators) + str(val)
                 return end_point
             else:
                 # both upper and lower bounds specified
                 # +age:>=10 +age:<20
                 high_val = val + random.randint(2, 10000)
-                range_str = fieldname + ':'+ \
-                             self.get_random_value(operators[:1]) + str(val) +\
-                            ' +' +fieldname + ':'+ \
-                             self.get_random_value(operators[2:]) +\
-                             str(high_val)
+                range_str = fieldname + ':' + \
+                            self.get_random_value(operators[:1]) + str(val) + \
+                            ' +' + fieldname + ':' + \
+                            self.get_random_value(operators[2:]) + \
+                            str(high_val)
                 return range_str
 
     def construct_query_string_query(self):
@@ -449,7 +453,6 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
             # if there are no sufficient num or str/text fields passed
             return {}, {}
 
-
     def construct_wildcard_query(self):
         """
         Wildcards supported:
@@ -464,15 +467,15 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
         fts_query = {}
         es_query = {"wildcard": {}}
         fieldname = self.get_random_value(self.fields['str'] +
-                                              self.fields['text'])
+                                          self.fields['text'])
         match_str = eval("self.get_queryable_%s" % fieldname + "()")
         if bool(random.getrandbits(1)):
             # '*' query
-            pos = random.randint(0, len(match_str)-1)
+            pos = random.randint(0, len(match_str) - 1)
             match_str = match_str[:pos] + '*'
         else:
             # '?' query
-            pos = random.randint(0, len(match_str)-1)
+            pos = random.randint(0, len(match_str) - 1)
             match_str = match_str.replace(match_str[pos], '?')
 
         fts_query['field'] = fieldname
@@ -513,7 +516,7 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
         if bool(random.getrandbits(1)):
             match_str = match_str[1:]
         else:
-            match_str = match_str[:len(match_str)-2]
+            match_str = match_str[:len(match_str) - 2]
 
         fts_query['field'] = fieldname
         fts_query['match'] = match_str
@@ -544,21 +547,21 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
                 "lon": lon,
                 "lat": lat
             },
-            "distance": str(distance)+dist_unit,
+            "distance": str(distance) + dist_unit,
             "field": "geo"
         }
 
-        es_query= {
+        es_query = {
             "query": {
-                "match_all" : {}
+                "match_all": {}
             },
-            "filter" : {
-                "geo_distance" : {
-                     "distance" : str(distance)+dist_unit,
-                     "geo" : {
-                         "lat" : lat,
-                         "lon" : lon
-                     }
+            "filter": {
+                "geo_distance": {
+                    "distance": str(distance) + dist_unit,
+                    "geo": {
+                        "lat": lat,
+                        "lon": lon
+                    }
                 }
             }
         }
@@ -585,8 +588,208 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
         return fts_query, es_query
 
     @staticmethod
+    def generate_polygon(longitude, latitude, ave_radius, irregularity, spikeyness, num_vertices):
+        """Start with the centre of the polygon at latitude, longitude,
+            then creates the polygon by sampling points on a circle around the centre.
+            Random noise is added by varying the angular spacing between sequential points,
+            and by varying the radial distance of each point from the centre.
+
+            Params:
+            latitude, longitude - coordinates of the "centre" of the polygon
+            ave_radius - in px, the average radius of this polygon, this roughly controls how large the polygon is, really only useful for order of magnitude.
+            irregularity - [0,1] indicating how much variance there is in the angular spacing of vertices. [0,1] will map to [0, 2pi/numberOfVerts]
+            spikeyness - [0,1] indicating how much variance there is in each vertex from the circle of radius ave_radius. [0,1] will map to [0, ave_radius]
+            num_vertices - self-explanatory
+
+            Returns a list of vertices, in CCW order.
+            """
+
+        irregularity = FTSESQueryGenerator.clip(irregularity, 0, 1) * 2 * math.pi / num_vertices
+        spikeyness = FTSESQueryGenerator.clip(spikeyness, 0, 1) * ave_radius
+
+        # generate n angle steps
+        angle_steps = []
+        lower = (2 * math.pi / num_vertices) - irregularity
+        upper = (2 * math.pi / num_vertices) + irregularity
+        sum = 0.0
+        for i in range(num_vertices):
+            tmp = random.uniform(lower, upper)
+            angle_steps.append(tmp)
+            sum = sum + tmp
+
+        # normalize the steps so that point 0 and point n+1 are the same
+        k = sum / (2 * math.pi)
+        for i in range(num_vertices):
+            angle_steps[i] = angle_steps[i] / k
+
+        # now generate the points
+        points = []
+        angle = random.uniform(0, 2 * math.pi)
+        for i in range(num_vertices):
+            r_i = FTSESQueryGenerator.clip(random.gauss(ave_radius, spikeyness), 0, 2 * ave_radius)
+            x = latitude + r_i * math.cos(angle)
+            y = longitude + r_i * math.sin(angle)
+            if x > 90: x = (-1 * x) + 90
+            if x < -90: x = abs(x) - 90
+            if y > 180: y = (-1*y) + 180
+            if y < -180: y = abs(y) - 180
+            points.append((float(x), float(y)))
+
+            angle = angle + angle_steps[i]
+
+        return points
+
+    @staticmethod
+    def clip(x, min1, max1):
+        if min1 > max1:
+            return x
+        elif x < min1:
+            return min1
+        elif x > max1:
+            return max1
+        else:
+            return x
+
+    @staticmethod
+    def get_self_intersect_vertices(verts):
+        mod_verts = []
+        mid_vert = (len(verts) - 1) / 2
+
+        mod_verts.append(verts[0])
+        mod_verts.append(verts[mid_vert])
+
+        x = 1
+
+        while (mid_vert + x) < (len(verts)-1):
+            mod_verts.append(verts[mid_vert + x])
+            mod_verts.append(verts[mid_vert - x])
+            x += 1
+
+        mod_verts.append(verts[len(verts)-1])
+
+        return mod_verts
+
+    @staticmethod
+    def construct_geo_polygon_query(center=None, polygon_feature="regular", num_vertices=None):
+        """
+        Returns a geo polygon query for Couchbase and Elastic search
+        """
+
+        if polygon_feature == "irregular":
+            irregularity = 0.8
+            spikeyness = 0.5
+        else:
+            irregularity = 0
+            spikeyness = 0
+
+        if polygon_feature == "self-intersect":
+            num_vertices = random.randrange(5,20,2)
+
+
+        ave_radius = random.randint(5, 50)
+
+        if not num_vertices:
+            num_vertices = random.randint(3, 20)
+
+        verts = FTSESQueryGenerator.generate_polygon(center[0], center[1], ave_radius, irregularity,
+                                                     spikeyness, num_vertices)
+
+        if polygon_feature == "self-intersect":
+            verts = FTSESQueryGenerator.get_self_intersect_vertices(verts)
+
+        fts_query = {
+            "polygon_points": [],
+            "field": "geo"
+        }
+
+        es_query = {
+            "query": {
+                "match_all": {}
+            },
+            "filter": {
+                "geo_polygon": {
+                    "geo": {
+                        "points": []
+                    }
+                }
+            }
+        }
+
+        case = random.randint(0, 4)
+        format = None
+
+        # Geo Location as map
+        if case == 0:
+            format = "map"
+            verts_map_list = []
+            for vert in verts:
+                vert_map = {"lat": vert[0], "lon": vert[1]}
+                verts_map_list.append(vert_map)
+
+            fts_query['polygon_points'] = verts_map_list
+            es_query['filter']['geo_polygon']['geo']['points'] = verts_map_list
+
+        # Geo Location as array
+        if case == 1:
+            format = "array"
+            verts_list = []
+            for vert in verts:
+                verts_list.append([vert[1], vert[0]])
+            fts_query['polygon_points'] = verts_list
+            es_query['filter']['geo_polygon']['geo']['points'] = verts_list
+
+        # Geo Location as string
+        if case == 2:
+            format = "string"
+            verts_list = []
+            for vert in verts:
+                verts_list.append(str(vert[0]) + "," + str(vert[1]))
+
+            fts_query['polygon_points'] = verts_list
+            es_query['filter']['geo_polygon']['geo']['points'] = verts_list
+
+        # Geo Location as Geohash
+        if case == 3:
+            format = "Geohash"
+            verts_list = []
+            precision = random.randint(3, 8)
+            for vert in verts:
+                verts_list.append(Geohash.encode(vert[0], vert[1], precision))
+
+            fts_query['polygon_points'] = verts_list
+            es_query['filter']['geo_polygon']['geo']['points'] = verts_list
+
+        # Geo Location as mixed
+        if case == 4:
+            format = "Mixed"
+            verts_list = []
+            for vert in verts:
+                mixed_case = random.randint(0, 3)
+                if mixed_case == 0:
+                    # Geo Location as map
+                    mixed_vert = {"lat": vert[0], "lon": vert[1]}
+                if mixed_case == 1:
+                    # Geo Location as array
+                    mixed_vert = [vert[1], vert[0]]
+                if mixed_case == 2:
+                    # Geo Location as string
+                    mixed_vert = str(vert[0]) + "," + str(vert[1])
+                if mixed_case == 3:
+                    # Geo Location as Geohash
+                    precision = random.randint(3, 8)
+                    mixed_vert = Geohash.encode(vert[0], vert[1], precision)
+
+                verts_list.append(mixed_vert)
+
+            fts_query['polygon_points'] = verts_list
+            es_query['filter']['geo_polygon']['geo']['points'] = verts_list
+
+        # Geo Location as an object of lat and lon if case == 0
+        return fts_query, es_query, ave_radius, num_vertices, format
+
+    @staticmethod
     def construct_geo_bounding_box_query(lon1=None, lat1=None,
-                                     lon2=None, lat2=None):
+                                         lon2=None, lat2=None):
         """
         Returns a geo bounding box query for Couchbase and Elastic search
         """
@@ -612,25 +815,24 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
         }
 
         es_query = {
-            "query" : {
-                "match_all" : {}
+            "query": {
+                "match_all": {}
             },
-            "filter" : {
-                "geo_bounding_box" : {
-                    "geo" : {
-                        "top_left" : {
-                            "lat" : lat1,
-                            "lon" : lon1
+            "filter": {
+                "geo_bounding_box": {
+                    "geo": {
+                        "top_left": {
+                            "lat": lat1,
+                            "lon": lon1
                         },
-                        "bottom_right" : {
-                            "lat" : lat2,
-                            "lon" : lon2
+                        "bottom_right": {
+                            "lat": lat2,
+                            "lon": lon2
                         }
                     }
                 }
             }
         }
-
 
         if bool(random.getrandbits(1)):
             fts_query['top_left'] = [lon1, lat1]
@@ -661,7 +863,7 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
             fts, es = self.construct_match_phrase_query()
             fts_compound_query.append(fts)
             es_compound_query.append(es)
-        if bool(random.getrandbits(1))and 'date_range' in self.query_types:
+        if bool(random.getrandbits(1)) and 'date_range' in self.query_types:
             fts, es = self.construct_date_range_query()
             fts_compound_query.append(fts)
             es_compound_query.append(es)
@@ -675,12 +877,17 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
         doc_types = DATASET.FIELDS.keys()
         return self.get_random_value(doc_types)
 
+
 if __name__ == "__main__":
-    #query_type=['match_phrase', 'match', 'date_range', 'numeric_range', 'bool',
+    # query_type=['match_phrase', 'match', 'date_range', 'numeric_range', 'bool',
     #              'conjunction', 'disjunction', 'prefix']
-    query_type = ['term_range']
-    query_gen = FTSESQueryGenerator(100, query_type=query_type, dataset='all')
-    for index, query in enumerate(query_gen.fts_queries):
-        print json.dumps(query, ensure_ascii=False, indent=3)
-        print json.dumps(query_gen.es_queries[index], ensure_ascii=False, indent=3)
-        print "------------"
+    # query_type = ['term_range']
+    # query_gen = FTSESQueryGenerator(100, query_type=query_type, dataset='all')
+    # for index, query in enumerate(query_gen.fts_queries):
+    #    print json.dumps(query, ensure_ascii=False, indent=3)
+    #    print json.dumps(query_gen.es_queries[index], ensure_ascii=False, indent=3)
+    #    print "------------"
+
+    fts_query, es_query = FTSESQueryGenerator.construct_geo_polygon_query([-118.77, 34.243], "regular", None)
+    print(fts_query)
+    print(es_query)
