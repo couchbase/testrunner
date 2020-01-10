@@ -60,6 +60,8 @@ def main():
     parser.add_option('-u','--url', dest='url', default=None)
     parser.add_option('-j','--jenkins', dest='jenkins', default=None)
     parser.add_option('-b','--branch', dest='branch', default='master')
+    parser.add_option('-g','--cherrypick', dest='cherrypick', default=None)
+
 
     # dashboardReportedParameters is of the form param1=abc,param2=def
     parser.add_option('-d','--dashboardReportedParameters', dest='dashboardReportedParameters', default=None)
@@ -79,6 +81,7 @@ def main():
 
 
     print 'url is', options.url
+    print 'cherrypick command is', options.cherrypick
 
     print 'the reportedParameters are', options.dashboardReportedParameters
 
@@ -260,6 +263,8 @@ def main():
                          '11}&owners={12}&mailing_list={13}&mode={14}&timeout={15}'
     if options.url is not None:
         launchString = launchString + '&url=' + options.url
+    if options.cherrypick is not None:
+        launchString = launchString + '&cherrypick=' + options.cherrypick
 
     summary = []
 
