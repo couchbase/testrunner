@@ -1749,6 +1749,53 @@ class StableTopFTS(FTSBaseTest):
             n1ql_executor = None
         self.run_query_and_compare(geo_index, n1ql_executor=n1ql_executor)
 
+    def test_geo_polygon_query(self):
+        """
+        Tests both geo polygon queries
+        compares results against ES
+        :return: Nothing
+        """
+        geo_index = self.create_geo_index_and_load()
+        self.generate_random_geo_polygon_queries(geo_index, self.num_queries, self.polygon_feature, self.num_vertices)
+        if self.run_via_n1ql:
+            n1ql_executor = self._cb_cluster
+        else:
+            n1ql_executor = None
+        self.run_query_and_compare(geo_index, n1ql_executor=n1ql_executor)
+
+    def test_geo_polygon_on_edge_corner_query(self):
+        expected_hits = int(self._input.param("expected_hits", 0))
+        expected_doc_ids = self._input.param("expected_doc_ids", None)
+        polygon_points = str(self._input.param("polygon_points", None))
+        geo_index = self.create_geo_index_and_load()
+
+        query = '{"field": "geo", "polygon_points" : ' + polygon_points + '}'
+
+        self.log.info(query)
+
+        query = json.loads(query)
+
+        contents = ""
+
+        for index in self._cb_cluster.get_indexes():
+            hits, contents, _, _ = index.execute_query(query=query,
+                                                       zero_results_ok=True,
+                                                       expected_hits=expected_hits,
+                                                       return_raw_hits=True)
+
+            self.log.info("Hits: %s" % hits)
+            self.log.info("Content: %s" % contents)
+
+        for doc_id in expected_doc_ids.split(","):
+            doc_exist = False
+            for content in contents:
+                if content['id'] == doc_id:
+                    self.log.info(content)
+                    doc_exist = True
+            if not doc_exist:
+                self.fail("expected doc_id : " + str(doc_id) + " does not exist")
+
+
 
     def test_sort_geo_query(self):
         """

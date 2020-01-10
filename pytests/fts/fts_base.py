@@ -9,6 +9,8 @@ import logger
 import logging
 import re
 import json
+import math
+import random
 
 from couchbase_helper.cluster import Cluster
 from membase.api.rest_client import RestConnection, Bucket
@@ -3316,6 +3318,8 @@ class FTSBaseTest(unittest.TestCase):
         self.__eviction_policy = self._input.param("eviction_policy", 'valueOnly')
         self.__mixed_priority = self._input.param("mixed_priority", None)
         self.expected_no_of_results = self._input.param("expected_no_of_results", None)
+        self.polygon_feature = self._input.param("polygon_feature", "regular")
+        self.num_vertices = self._input.param("num_vertices", None)
 
         # Public init parameters - Used in other tests too.
         # Move above private to this section if needed in future, but
@@ -3973,6 +3977,40 @@ class FTSBaseTest(unittest.TestCase):
         else:
             return index.fts_queries
 
+    def generate_random_geo_polygon_queries(self, index, num_queries=1, polygon_feature="regular", num_vertices=None):
+        """
+        Generates a bunch of geo polygon queries for
+        fts and es.
+        :param num_vertices: number of vertexes in the polygon
+        :param polygon_feature: regular or irregular
+        :param index: fts index object
+        :param num_queries: no of queries to be generated
+        :return: fts or fts and es queries
+        """
+        import random
+        from random_query_generator.rand_query_gen import FTSESQueryGenerator
+        gen_queries = 0
+        from lib.couchbase_helper.data import LON_LAT
+        while gen_queries < num_queries:
+            center = random.choice(LON_LAT)
+            fts_query, es_query, ave_radius, num_verts, format = FTSESQueryGenerator.construct_geo_polygon_query(center, polygon_feature, num_vertices)
+
+            index.fts_queries.append(
+                json.loads(json.dumps(fts_query, ensure_ascii=False)))
+
+            if self.compare_es:
+                self.es.es_queries.append(
+                    json.loads(json.dumps(es_query, ensure_ascii=False)))
+
+            gen_queries += 1
+
+            self.log.info("query " + str(gen_queries) + " generated for the polygon with center: " + str(center) + ", num_vertices: " + str(num_verts) +
+                          ", ave_radius: " + str(ave_radius) + " and format: " + str(format))
+
+        if self.es:
+            return index.fts_queries, self.es.es_queries
+        else:
+            return index.fts_queries
 
     def create_index(self, bucket, index_name, index_params=None,
                      plan_params=None):
