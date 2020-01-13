@@ -610,8 +610,10 @@ class RemoteMachineShellConnection:
             # process which was using memcached-cert
             RemoteMachineHelper(self).is_process_running('memcached')
             o, r = self.execute_command("kill -9 $(ps aux | pgrep 'memcached')"
-                                                                 , debug=False)
+                                                                 , debug=True)
             self.log_command_output(o, r, debug=False)
+            out,err=self.execute_command('pgrep memcached')
+            log.info("memcached pid:{} and err: {}".format(out,err))
         return o, r
 
     def stop_memcached(self):
