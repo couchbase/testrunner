@@ -1796,6 +1796,33 @@ class StableTopFTS(FTSBaseTest):
                 self.fail("expected doc_id : " + str(doc_id) + " does not exist")
 
 
+    def test_geo_polygon_with_holes_must_not(self):
+        geo_index = self.create_geo_index_and_load()
+
+        query = '{"must": {"conjuncts": [{"field": "geo", "polygon_points": ' \
+                '[[-124.29807832031247, 38.01868304390075], ' \
+                '[-122.34800507812497, 37.12617594722073], [-120.52976777343747, 38.35114759945404], ' \
+                '[-120.72752167968747, 39.44978110907268], [-122.90834850139811, 40.22582625155702], ' \
+                '[-124.24868053264811, 39.61072953444142]]}]}, ' \
+                '"must_not": {"disjuncts": [{"field": "geo", "polygon_points": ' \
+                '[[-122.56773164062497, 39.72703407666045], ' \
+                '[-123.02915742187497, 38.96238669420149], [-122.07334687499997, 38.189396892659744], ' \
+                '[-120.79893281249997, 38.585519836298694]]}]}}'
+
+        self.log.info(query)
+
+        query = json.loads(query)
+
+        for index in self._cb_cluster.get_indexes():
+            hits, contents, _, _ = index.execute_query(query=query,
+                                                       zero_results_ok=False,
+                                                       expected_hits=18,
+                                                       return_raw_hits=True)
+
+            self.log.info("Hits: %s" % hits)
+            self.log.info("Content: %s" % contents)
+
+
 
     def test_sort_geo_query(self):
         """

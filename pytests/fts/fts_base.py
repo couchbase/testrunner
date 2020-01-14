@@ -32,6 +32,7 @@ from lib.membase.api.exception import FTSException
 from es_base import ElasticSearchBase
 from security.rbac_base import RbacBase
 from lib.couchbase_helper.tuq_helper import N1QLHelper
+from random_query_generator.rand_query_gen import FTSESQueryGenerator
 
 
 class RenameNodeException(FTSException):
@@ -3987,8 +3988,6 @@ class FTSBaseTest(unittest.TestCase):
         :param num_queries: no of queries to be generated
         :return: fts or fts and es queries
         """
-        import random
-        from random_query_generator.rand_query_gen import FTSESQueryGenerator
         gen_queries = 0
         from lib.couchbase_helper.data import LON_LAT
         while gen_queries < num_queries:
