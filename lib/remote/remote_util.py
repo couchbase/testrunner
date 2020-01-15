@@ -612,6 +612,7 @@ class RemoteMachineShellConnection:
             o, r = self.execute_command("kill -9 $(ps aux | pgrep 'memcached')"
                                                                  , debug=True)
             self.log_command_output(o, r, debug=False)
+            self.sleep(5,"waiting for memcached to start")
             out,err=self.execute_command('pgrep memcached')
             log.info("memcached pid:{} and err: {}".format(out,err))
         return o, r
