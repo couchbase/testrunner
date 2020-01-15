@@ -3318,6 +3318,13 @@ class RestConnection(object):
             return json_parsed["sendStats"]
         return None
 
+    def get_num_rollback_stat(self, bucket):
+        api = self.index_baseUrl + 'stats'
+        status, content, header = self._http_request(api)
+        json_parsed = json.loads(content)
+        num_rollback = json_parsed["{}:num_rollbacks".format(bucket)]
+        return num_rollback
+
     def get_logs(self, last_n=10, contains_text=None):
         api = self.baseUrl + 'logs'
         status, content, header = self._http_request(api)
