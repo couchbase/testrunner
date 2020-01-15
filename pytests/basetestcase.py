@@ -480,7 +480,7 @@ class BaseTestCase(unittest.TestCase):
                               .format(self.case_number, self._testMethodName))
         except BaseException:
             # kill memcached
-            self.kill_memcached()
+            # self.kill_memcached()
             # increase case_number to retry tearDown in setup for the next test
             self.case_number += 1000
         finally:
