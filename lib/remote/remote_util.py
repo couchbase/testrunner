@@ -3685,6 +3685,9 @@ class RemoteMachineShellConnection:
                         log.info("Running systemd command on this server")
                         o, r = self.execute_command("systemctl start couchbase-server.service")
                         self.log_command_output(o, r)
+                        self.sleep(5,"waiting for couchbase server to come up")
+                        o, r = self.execute_command("systemctl status couchbase-server.service | grep ExecStop=/opt/couchbase/bin/couchbase-server")
+                        log.info("Couchbase server status: {}".format(o))
                         running = self.is_couchbase_running()
                         retry = retry + 1
                     else:
