@@ -29,7 +29,12 @@ from scripts.measure_sched_delays import SchedDelays
 from scripts.getcoredumps import Getcoredumps, Clearcoredumps
 import signal
 import shutil
-
+import glob
+import xml.dom.minidom
+import logging
+log = logging.getLogger(__name__)
+logging.info(__name__)
+print("*** TestRunner ***")
 
 def usage(err=None):
     print """\
@@ -49,28 +54,57 @@ def parse_args(argv):
     parser.add_option("-q", action="store_false", dest="verbose")
 
     tgroup = OptionGroup(parser, "TestCase/Runlist Options")
-    tgroup.add_option("-i", "--ini",
-                      dest="ini", help="Path to .ini file containing server information,e.g -i tmp/local.ini")
+    tgroup.add_option("-i", "--ini", dest="ini",
+                      help="Path to .ini file containing server information,e.g -i tmp/local.ini")
     tgroup.add_option("-c", "--config", dest="conf",
-                      help="Config file name (located in the conf subdirectory), e.g -c py-view.conf")
-    tgroup.add_option("-t", "--test",
-                      dest="testcase", help="Test name (multiple -t options add more tests) e.g -t performance.perf.DiskDrainRate")
+                      help="Config file name (located in the conf subdirectory), "
+                           "e.g -c py-view.conf")
+    tgroup.add_option("-t", "--test", dest="testcase",
+                      help="Test name (multiple -t options add more tests) e.g -t "
+                           "performance.perf.DiskDrainRate")
+    tgroup.add_option("-d", "--include_tests", dest="include_tests",
+                      help="Value can be 'failed' (or) 'passed' (or) 'failed=<junit_xml_path (or) "
+                           "jenkins_build_url>' (or) 'passed=<junit_xml_path or "
+                           "jenkins_build_url>' (or) 'file=<filename>' (or) '<regular "
+                           "expression>' to include tests in the run. Use -g option to search "
+                           "entire conf files. e.g. -d 'failed' or -d 'failed=report.xml' or -d "
+                           "'^2i.*nodes_init=2.*'")
+    tgroup.add_option("-e", "--exclude_tests", dest="exclude_tests",
+                      help="Value can be 'failed' (or) 'passed' (or) 'failed=<junit_xml_path (or) "
+                           "jenkins_build_url>' (or) 'passed=<junit_xml_path (or) "
+                           "jenkins_build_url>' or 'file=<filename>' (or) '<regular expression>' "
+                           "to exclude tests in the run. Use -g option to search entire conf "
+                           "files. e.g. -e 'passed'")
+    tgroup.add_option("-r", "--rerun", dest="rerun",
+                      help="Rerun fail or pass tests with given =count number of times maximum. "
+                           "\ne.g. -r 'fail=3'")
+    tgroup.add_option("-g", "--globalsearch", dest="globalsearch",
+                      help="Option to get tests from given conf file path pattern, "
+                           "like conf/**/*.conf. Useful for include or exclude conf files to "
+                           "filter tests. e.g. -g 'conf/**/.conf'",
+                      default="")
+    tgroup.add_option("-m", "--merge", dest="merge",
+                      help="Merge the report files path pattern, like logs/**/.xml. e.g.  -m '["
+                           "logs/**/*.xml]'",
+                      default="")
     parser.add_option_group(tgroup)
 
-    parser.add_option("-p", "--params",
-                      dest="params", help="Optional key=value parameters, comma-separated -p k=v,k2=v2,...",
+    parser.add_option("-p", "--params", dest="params",
+                      help="Optional key=value parameters, comma-separated -p k=v,k2=v2,...",
                       default="")
     parser.add_option("-n", "--noop", action="store_true",
                       help="NO-OP - emit test names, but don't actually run them e.g -n true")
-    parser.add_option("-l", "--log-level",
-                      dest="loglevel", default="INFO", help="e.g -l info,warning,error")
+    parser.add_option("-l", "--log-level", dest="loglevel", default="INFO",
+                      help="e.g -l info,warning,error")
     options, args = parser.parse_args()
 
     tests = []
     test_params = {}
 
+    setLogLevel(options.loglevel)
+    log.info("Checking arguments...")
     if not options.ini:
-        parser.error("please specify an .ini file (-i)")
+        parser.error("Please specify an .ini file (-i) option.")
         parser.print_help()
     else:
         test_params['ini'] = options.ini
@@ -79,19 +113,92 @@ def parse_args(argv):
 
     test_params['cluster_name'] = splitext(os.path.basename(options.ini))[0]
 
-    if not options.testcase and not options.conf:
-        parser.error("please specify a configuration file (-c) or a test case (-t)")
+    if not options.testcase and not options.conf and not options.globalsearch and not options.include_tests and not options.exclude_tests:
+        parser.error("Please specify a configuration file (-c) or a test case (-t) or a globalsearch (-g) option.")
         parser.print_help()
-    if options.conf:
+    if options.conf and not options.globalsearch:
         parse_conf_file(options.conf, tests, test_params)
+    if options.globalsearch:
+        parse_global_conf_file(options.globalsearch, tests, test_params)
+    if options.include_tests:
+        tests = process_include_or_filter_exclude_tests("include", options.include_tests, tests,
+                                                        options)
+    if options.exclude_tests:
+        tests = process_include_or_filter_exclude_tests("exclude", options.exclude_tests, tests, options)
+
     if options.testcase:
         tests.append(options.testcase)
     if options.noop:
-        print("\n".join(tests))
+        print("---\n"+"\n".join(tests)+"\n---\nTotal="+str(len(tests)))
         sys.exit(0)
 
     return tests, test_params, options.ini, options.params, options
 
+def setLogLevel(log_level):
+    if log_level and log_level.lower() == 'info':
+        log.setLevel(logging.INFO)
+    elif log_level and log_level.lower() == 'warning':
+        log.setLevel(logging.WARNING)
+    elif log_level and log_level.lower() == 'debug':
+        log.setLevel(logging.DEBUG)
+    elif log_level and log_level.lower() == 'critical':
+        log.setLevel(logging.CRITICAL)
+    elif log_level and log_level.lower() == 'fatal':
+        log.setLevel(logging.FATAL)
+    else:
+        log.setLevel(logging.NOTSET)
+
+def process_include_or_filter_exclude_tests(filtertype, option, tests, options):
+    if filtertype == 'include' or filtertype == 'exclude':
+
+        if option.startswith('failed') or option.startswith('passed') or option.startswith("http://") or option.startswith("https://"):
+            passfail = option.split("=")
+            tests_list = []
+            if len(passfail) == 2:
+                if passfail[1].startswith("http://") or passfail[1].startswith("https://"):
+                    tp, tf = parse_testreport_result_xml(passfail[1])
+                else:
+                    tp, tf = parse_junit_result_xml(passfail[1])
+            elif option.startswith("http://") or option.startswith("https://"):
+                tp, tf = parse_testreport_result_xml(option)
+                tests_list=tp+tf
+            else:
+                tp, tf = parse_junit_result_xml()
+
+            if option.startswith('failed') and tf:
+                tests_list = tf
+            elif option.startswith('passed') and tp:
+                tests_list = tp
+            if filtertype == 'include':
+                tests = tests_list
+            else:
+                for line in tests_list:
+                    isexisted, t = check_if_exists_with_params(tests, line, options.params)
+                    if isexisted:
+                        tests.remove(t)
+        elif option.startswith("file="):
+            filterfile = locate_conf_file(option.split("=")[1])
+            if filtertype == 'include':
+                tests_list = []
+                if filterfile:
+                    for line in filterfile:
+                        tests_list.append(line.strip())
+                tests = tests_list
+            else:
+                for line in filterfile:
+                    isexisted, t = check_if_exists_with_params(tests, line.strip(), options.params)
+                    if isexisted:
+                        tests.remove(t)
+        else:  # pattern
+            if filtertype == 'include':
+                tests = [i for i in tests if re.search(option, i)]
+            else:
+                tests = [i for i in tests if not re.search(option, i)]
+
+    else:
+        log.warning("Warning: unknown filtertype given (only include/exclude supported)!")
+
+    return tests
 
 def create_log_file(log_config_file_name, log_file_name, level):
     tmpl_log_file = open("logging.conf.sample")
@@ -121,7 +228,7 @@ def append_test(tests, name):
 
 
 def locate_conf_file(filename):
-    print "filename: %s" % filename
+    log.info("Conf filename: %s" % filename)
     if filename:
         if os.path.exists(filename):
             return file(filename)
@@ -152,6 +259,7 @@ def parse_conf_file(filename, tests, params):
             num_creates=400000
             ....
     """
+
     f = locate_conf_file(filename)
     if not f:
         usage("unable to locate configuration file: " + filename)
@@ -162,7 +270,7 @@ def parse_conf_file(filename, tests, params):
             continue
         if stripped.endswith(":"):
             prefix = stripped.split(":")[0]
-            print "prefix: {0}".format(prefix)
+            log.info("Test prefix: {0}".format(prefix))
             continue
         name = stripped
         if prefix and prefix.lower() == "params":
@@ -182,6 +290,141 @@ def parse_conf_file(filename, tests, params):
 
     params['conf_file'] = filename
 
+def parse_global_conf_file(dirpath, tests, params):
+    log.info("dirpath="+dirpath)
+    if os.path.isdir(dirpath):
+        dirpath=dirpath+os.sep+"**"+os.sep+"*.conf"
+        log.info("Global filespath=" + dirpath)
+
+    conf_files = glob.glob(dirpath)
+    for file in conf_files:
+        parse_conf_file(file, tests, params)
+
+def check_if_exists(test_list, test_line):
+    new_test_line = ''.join(sorted(test_line))
+    for t in test_list:
+        t1 = ''.join(sorted(t))
+        if t1 == new_test_line:
+            return True, t
+    return False, ""
+
+def check_if_exists_with_params(test_list, test_line, test_params):
+    new_test_line = ''.join(sorted(test_line))
+    for t in test_list:
+        if test_params:
+            t1 = ''.join(sorted(t+","+test_params.strip()))
+        else:
+            t1 = ''.join(sorted(t))
+
+        if t1 == new_test_line:
+            return True, t
+    return False, ""
+
+def transform_and_write_to_file(tests_list, filename):
+    new_test_list = []
+    for test in tests_list:
+        line = filter_fields(test)
+        line = line.rstrip(",")
+        isexisted, _ = check_if_exists(new_test_list, line)
+        if not isexisted:
+            new_test_list.append(line)
+
+    file = open(filename, "w+")
+    for line in new_test_list:
+        file.writelines((line) + "\n")
+    file.close()
+    return new_test_list
+
+def getNodeText(nodelist):
+    rc = []
+    for node in nodelist:
+        if node.nodeType == node.TEXT_NODE:
+            rc.append(node.data)
+    return ''.join(rc)
+
+def parse_testreport_result_xml(filepath=""):
+    if filepath.startswith("http://") or filepath.startswith("https://"):
+        url_path = filepath+"/testReport/api/xml?pretty=true"
+        jobnamebuild = filepath.split('/')
+        if not os.path.exists('logs'):
+            os.mkdir('logs')
+        newfilepath = 'logs'+''.join(os.sep)+'_'.join(jobnamebuild[-3:])+"_testresult.xml"
+        log.info("Downloading " + url_path +" to "+newfilepath)
+        try:
+            filedata = urllib2.urlopen(url_path)
+            datatowrite = filedata.read()
+            filepath = newfilepath
+            with open(filepath, 'wb') as f:
+                f.write(datatowrite)
+        except Exception as ex:
+            log.error("Error:: "+str(ex)+"! Please check if " + url_path + " URL is accessible!! "
+                                                                        "Exiting...")
+            sys.exit(1)
+    if filepath == "":
+        filepath = "logs/**/*.xml"
+    log.info("Loading result data from "+filepath)
+    xml_files = glob.glob(filepath)
+    passed_tests=[]
+    failed_tests=[]
+    for xml_file in xml_files:
+        log.info("-- "+xml_file+" --")
+        doc = xml.dom.minidom.parse(xml_file)
+        testresultelem = doc.getElementsByTagName("testResult")
+        testsuitelem = testresultelem[0].getElementsByTagName("suite")
+        for ts in testsuitelem:
+            testcaseelem = ts.getElementsByTagName("case")
+            for tc in testcaseelem:
+                tcname = getNodeText((tc.getElementsByTagName("name")[0]).childNodes)
+                tcstatus = getNodeText((tc.getElementsByTagName("status")[0]).childNodes)
+                if tcstatus == 'PASSED':
+                    failed=False
+                    passed_tests.append(tcname)
+                else:
+                    failed=True
+                    failed_tests.append(tcname)
+
+    if failed_tests:
+        failed_tests = transform_and_write_to_file(failed_tests,"failed_tests.conf")
+
+    if passed_tests:
+        passed_tests = transform_and_write_to_file(passed_tests, "passed_tests.conf")
+
+    return passed_tests, failed_tests
+
+def parse_junit_result_xml(filepath=""):
+    if filepath.startswith("http://") or filepath.startswith("https://"):
+        parse_testreport_result_xml(filepath)
+        return
+    if filepath == "":
+        filepath = "logs/**/*.xml"
+    log.info("Loading result data from "+filepath)
+    xml_files = glob.glob(filepath)
+    passed_tests=[]
+    failed_tests=[]
+    for xml_file in xml_files:
+        log.info("-- "+xml_file+" --")
+        doc = xml.dom.minidom.parse(xml_file)
+        testsuitelem = doc.getElementsByTagName("testsuite")
+        for ts in testsuitelem:
+            tsname = ts.getAttribute("name")
+            testcaseelem = ts.getElementsByTagName("testcase")
+            failed=False
+            for tc in testcaseelem:
+                tcname = tc.getAttribute("name")
+                tcerror = tc.getElementsByTagName("error")
+                for tce in tcerror:
+                    failed_tests.append(tcname)
+                    failed = True
+                if not failed:
+                    passed_tests.append(tcname)
+
+    if failed_tests:
+        failed_tests = transform_and_write_to_file(failed_tests,"failed_tests.conf")
+
+    if passed_tests:
+        passed_tests = transform_and_write_to_file(passed_tests, "passed_tests.conf")
+
+    return passed_tests, failed_tests
 
 def create_headers(username, password):
     authorization = base64.encodestring('%s:%s' % (username, password))
@@ -192,9 +435,9 @@ def create_headers(username, password):
 
 def get_server_logs(input, path):
     for server in input.servers:
-        print "grabbing diags from ".format(server.ip)
+        log.info("grabbing diags from ".format(server.ip))
         diag_url = "http://{0}:{1}/diag".format(server.ip, server.port)
-        print diag_url
+        log.info(diag_url)
 
         try:
             req = urllib2.Request(diag_url)
@@ -217,13 +460,13 @@ def get_server_logs(input, path):
             zipped.close()
 
             os.remove(filename)
-            print "downloaded and zipped diags @ : {0}".format("{0}.gz".format(filename))
+            log.info("downloaded and zipped diags @ : {0}".format("{0}.gz".format(filename)))
         except urllib2.URLError:
-            print "unable to obtain diags from %s" % diag_url
+            log.error("unable to obtain diags from %s" % diag_url)
         except BadStatusLine:
-            print "unable to obtain diags from %s" % diag_url
+            log.error("unable to obtain diags from %s" % diag_url)
         except Exception as e:
-            print "unable to obtain diags from %s %s" % (diag_url, e)
+            log.error("unable to obtain diags from %s %s" % (diag_url, e))
 
 def get_logs_cluster_run(input, path, ns_server_path):
     print "grabbing logs (cluster-run)"
@@ -232,7 +475,7 @@ def get_logs_cluster_run(input, path, ns_server_path):
     try:
         shutil.make_archive(path + os.sep + "logs", 'zip', logs_path)
     except Exception as e:
-        print "NOT POSSIBLE TO GRAB LOGS (CLUSTER_RUN)"
+        log.error("NOT POSSIBLE TO GRAB LOGS (CLUSTER_RUN)")
 
 def get_cbcollect_info(input, path):
     for server in input.servers:
@@ -241,7 +484,7 @@ def get_cbcollect_info(input, path):
         try:
             cbcollectRunner(server, path).run()
         except Exception as e:
-            print "NOT POSSIBLE TO GRAB CBCOLLECT FROM {0}: {1}".format(server.ip, e)
+            log.error("NOT POSSIBLE TO GRAB CBCOLLECT FROM {0}: {1}".format(server.ip, e))
 
 def get_couch_dbinfo(input, path):
     for server in input.servers:
@@ -250,7 +493,7 @@ def get_couch_dbinfo(input, path):
         try:
             couch_dbinfo_Runner(server, path).run()
         except Exception as e:
-            print "NOT POSSIBLE TO GRAB dbinfo FROM {0}: {1}".format(server.ip, e)
+            log.error("NOT POSSIBLE TO GRAB dbinfo FROM {0}: {1}".format(server.ip, e))
 
 def clear_old_core_dumps(_input, path):
     for server in _input.servers:
@@ -258,7 +501,7 @@ def clear_old_core_dumps(_input, path):
         try:
             Clearcoredumps(server, path).run()
         except Exception as e:
-            print "Unable to clear core dumps on {0} : {1}".format(server.ip, e)
+            log.error("Unable to clear core dumps on {0} : {1}".format(server.ip, e))
 
 def get_core_dumps(_input, path):
     ret = False
@@ -269,8 +512,8 @@ def get_core_dumps(_input, path):
             if Getcoredumps(server, path).run():
                 ret = True
         except Exception as e:
-            print "NOT POSSIBLE TO GRAB CORE DUMPS FROM {0} : {1}".\
-                format(server.ip, e)
+            log.error("NOT POSSIBLE TO GRAB CORE DUMPS FROM {0} : {1}".\
+                format(server.ip, e))
     return ret
 
 
@@ -300,19 +543,11 @@ class StoppableThreadWithResult(Thread):
         Thread.join(self, timeout=None)
         return self._return
 
-def main():
 
+def runtests(names, options, arg_i, arg_p, runtime_test_params):
+    log.info("\nNumber of tests to be executed: " + str(len(names)))
     BEFORE_SUITE = "suite_setUp"
     AFTER_SUITE = "suite_tearDown"
-    names, runtime_test_params, arg_i, arg_p, options = parse_args(sys.argv)
-    # get params from command line
-    TestInputSingleton.input = TestInputParser.get_test_input(sys.argv)
-    # ensure command line params get higher priority
-    runtime_test_params.update(TestInputSingleton.input.test_params)
-    TestInputSingleton.input.test_params = runtime_test_params
-    print "Global Test input params:"
-    pprint(TestInputSingleton.input.test_params)
-
     xunit = XUnitTestResult()
     # Create root logs directory
     abs_path = os.path.dirname(os.path.abspath(sys.argv[0]))
@@ -324,6 +559,7 @@ def main():
 
     results = []
     case_number = 1
+
     if "GROUP" in runtime_test_params:
         print "Only cases in GROUPs '{0}' will be executed".format(runtime_test_params["GROUP"])
     if "EXCLUDE_GROUP" in runtime_test_params:
@@ -338,8 +574,6 @@ def main():
         start_time = time.time()
         argument_split = [a.strip() for a in re.split("[,]?([^,=]+)=", name)[1:]]
         params = dict(zip(argument_split[::2], argument_split[1::2]))
-
-
 
         # Note that if ALL is specified at runtime then tests which have no groups are still run - just being
         # explicit on this
@@ -362,8 +596,6 @@ def main():
                 len(set(runtime_test_params["EXCLUDE_GROUP"].split(";")) & set(params["GROUP"].split(";"))) > 0:
                     print "test '{0}' skipped, is in an excluded group".format(name)
                     continue
-
-
 
         # Create Log Directory
         logs_folder = os.path.join(root_log_dir, "test_%s" % case_number)
@@ -400,7 +632,7 @@ def main():
                             result.errors = [(name, "Failing test : new core dump(s) "
                                              "were found and collected."
                                              " Check testrunner logs folder.")]
-                            print("FAIL: New core dump(s) was found and collected")
+                            log.info("FAIL: New core dump(s) was found and collected")
             except AttributeError as ex:
                 pass
         try:
@@ -427,7 +659,7 @@ def main():
                         result.errors = [(name, "Failing test : new core dump(s) "
                                              "were found and collected."
                                              " Check testrunner logs folder.")]
-                        print("FAIL: New core dump(s) was found and collected")
+                        log.info("FAIL: New core dump(s) was found and collected")
             if not result:
                 for t in threading.enumerate():
                     if t != threading.current_thread():
@@ -523,6 +755,205 @@ def main():
             else:
                 t._Thread__stop()
 
+    return results, xunit, "{0}{2}report-{1}".format(os.path.dirname(logs_folder), str_time, os.sep)
+
+
+
+def filter_fields(testname):
+    testwords = testname.split(",")
+    line = ""
+    for fw in testwords:
+        if not fw.startswith("logs_folder") and not fw.startswith("conf_file") \
+                and not fw.startswith("cluster_name:") \
+                and not fw.startswith("ini:") \
+                and not fw.startswith("case_number:") \
+                and not fw.startswith("num_nodes:") \
+                and not fw.startswith("spec:"):
+            line = line + fw.replace(":", "=", 1)
+            if fw != testwords[-1]:
+                line = line + ","
+
+    return line
+
+def compare_with_sort(dict, key):
+    for k in dict.keys():
+        if "".join(sorted(k)) == "".join(sorted(key)):
+            return True
+
+    return False
+
+
+def merge_reports(filespath):
+    log.info("Merging of report files from "+str(filespath))
+
+    testsuites = {}
+    if not isinstance(filespath, list):
+        filespaths = filespath.split(",")
+    else:
+        filespaths = filespath
+    for filepath in filespaths:
+        xml_files = glob.glob(filepath)
+        if not isinstance(filespath, list) and filespath.find("*"):
+            xml_files.sort(key=os.path.getmtime)
+        for xml_file in xml_files:
+            log.info("-- " + xml_file + " --")
+            doc = xml.dom.minidom.parse(xml_file)
+            testsuitelem = doc.getElementsByTagName("testsuite")
+            for ts in testsuitelem:
+                tsname = ts.getAttribute("name")
+                tserros = ts.getAttribute("errors")
+                tsfailures = ts.getAttribute("failures")
+                tsskips = ts.getAttribute("skips")
+                tstime = ts.getAttribute("time")
+                tstests = ts.getAttribute("tests")
+                issuite_existed = False
+                tests = {}
+                testsuite = {}
+                # fill testsuite details
+                if tsname in testsuites.keys():
+                    testsuite = testsuites[tsname]
+                    tests = testsuite['tests']
+                else:
+                    testsuite['name'] = tsname
+                testsuite['errors'] = tserros
+                testsuite['failures'] = tsfailures
+                testsuite['skips'] = tsskips
+                testsuite['time'] = tstime
+                testsuite['testcount'] = tstests
+                issuite_existed = False
+                testcaseelem = ts.getElementsByTagName("testcase")
+                # fill test case details
+                for tc in testcaseelem:
+                    testcase = {}
+                    tcname = tc.getAttribute("name")
+                    tctime = tc.getAttribute("time")
+                    tcerror = tc.getElementsByTagName("error")
+
+                    tcname_filtered = filter_fields(tcname)
+                    if compare_with_sort(tests, tcname_filtered):
+                        testcase = tests[tcname_filtered]
+                        testcase['name'] = tcname
+                    else:
+                        testcase['name'] = tcname
+                    testcase['time'] = tctime
+                    testcase['error'] = ""
+                    if tcerror:
+                        testcase['error']  = str(tcerror[0].firstChild.nodeValue)
+
+                    tests[tcname_filtered] = testcase
+                testsuite['tests'] = tests
+                testsuites[tsname] = testsuite
+
+    log.info("\nNumber of TestSuites="+str(len(testsuites)))
+    tsindex = 0
+    for tskey in testsuites.keys():
+        tsindex = tsindex+1
+        log.info("\nTestSuite#"+str(tsindex)+") "+str(tskey)+", Number of Tests="+str(len(testsuites[tskey]['tests'])))
+        pass_count = 0
+        fail_count = 0
+        tests = testsuites[tskey]['tests']
+        xunit = XUnitTestResult()
+        for testname in tests.keys():
+            testcase = tests[testname]
+            tname = testcase['name']
+            ttime = testcase['time']
+            inttime = float(ttime)
+            terrors = testcase['error']
+            tparams = ""
+            if "," in tname:
+                tparams = tname[tname.find(","):]
+                tname = tname[:tname.find(",")]
+
+            if terrors:
+                failed = True
+                fail_count = fail_count + 1
+                xunit.add_test(name=tname, status='fail', time=inttime,
+                               errorType='membase.error', errorMessage=str(terrors), params=tparams
+                               )
+            else:
+                passed = True
+                pass_count = pass_count + 1
+                xunit.add_test(name=tname, time=inttime, params=tparams
+                    )
+
+        str_time = time.strftime("%y-%b-%d_%H-%M-%S", time.localtime())
+        abs_path = os.path.dirname(os.path.abspath(sys.argv[0]))
+        root_log_dir = os.path.join(abs_path, "logs{0}testrunner-{1}".format(os.sep, str_time))
+        if not os.path.exists(root_log_dir):
+            os.makedirs(root_log_dir)
+        logs_folder = os.path.join(root_log_dir, "merged_summary")
+        try:
+            os.mkdir(logs_folder)
+        except:
+            pass
+        output_filepath="{0}{2}mergedreport-{1}".format(logs_folder, str_time, os.sep).strip()
+
+        xunit.write(output_filepath)
+        xunit.print_summary()
+        log.info("Summary file is at " + output_filepath+"-"+tsname+".xml")
+    return testsuites
+
+
+
+def reruntests(rerun, names, options, arg_i, arg_p,runtime_test_params):
+    if "=" in rerun:
+        reruns = rerun.split("=")
+        rerun_type = reruns[0]
+        rerun_count = int(reruns[1])
+        all_results = {}
+        log.info("NOTE: Running " + rerun_type + " tests for " + str(rerun_count) + " times maximum.")
+
+        report_files = []
+        for testc in range(rerun_count+1):
+            if testc == 0:
+                log.info("\n*** FIRST run of the tests ***")
+            else:
+                log.info("\n*** "+rerun_type.upper()+" Tests Rerun#" + str(testc) + "/" + str(rerun_count) + " ***")
+            results, xunit, report_file = runtests(names, options, arg_i, arg_p, runtime_test_params)
+            all_results[(testc + 1)] = results
+            all_results[str(testc+1)+"_report"] = report_file+"*.xml"
+            report_files.append(report_file+"*.xml")
+            tobe_rerun = False
+            for result in results:
+                if result["result"] == rerun_type:
+                    tobe_rerun = True
+            if not tobe_rerun:
+                break
+            tp, tf = parse_junit_result_xml(report_file+"*.xml")
+            if "fail" == rerun_type:
+                names = tf
+            elif "pass" == rerun_type:
+                names = tp
+
+        log.info("\nSummary:\n" + str(all_results))
+        log.info("Final result: merging...")
+        merge_reports(report_files)
+        return all_results
+
+def main():
+    log.info("TestRunner: parsing args...")
+    names, runtime_test_params, arg_i, arg_p, options = parse_args(sys.argv)
+    log.info("TestRunner: start...")
+    # get params from command line
+    TestInputSingleton.input = TestInputParser.get_test_input(sys.argv)
+    # ensure command line params get higher priority
+    runtime_test_params.update(TestInputSingleton.input.test_params)
+    TestInputSingleton.input.test_params = runtime_test_params
+    log.info("Global Test input params:")
+    pprint(TestInputSingleton.input.test_params)
+    if names:
+        if options.merge:
+            merge_reports(options.merge)
+        elif options.rerun:
+            results = reruntests(options.rerun, names, options, arg_i, arg_p, runtime_test_params)
+        else:
+            results, _, _ = runtests(names, options, arg_i, arg_p,runtime_test_params)
+    else:
+        log.warning("Warning: No tests got selected. Please double check the .conf file and other "
+              "options!")
+
+    log.info("TestRunner: end...")
+
 
 def watcher():
     """This little code snippet is from
@@ -538,7 +969,7 @@ def watcher():
             if rc > 0:
                 sys.exit(rc)
         except KeyboardInterrupt:
-            print 'KeyBoardInterrupt'
+            log.error('KeyBoardInterrupt')
             p.terminate()
     else:
         child = os.fork()
@@ -549,7 +980,7 @@ def watcher():
             if rc > 0:
                 sys.exit( rc )
         except KeyboardInterrupt:
-            print 'KeyBoardInterrupt'
+            log.error('KeyBoardInterrupt')
             try:
                 os.kill(child, signal.SIGKILL)
             except OSError:
@@ -561,3 +992,4 @@ def watcher():
 
 if __name__ == "__main__":
     watcher()
+
