@@ -61,6 +61,9 @@ def main():
     parser.add_option('-j','--jenkins', dest='jenkins', default=None)
     parser.add_option('-b','--branch', dest='branch', default='master')
     parser.add_option('-g','--cherrypick', dest='cherrypick', default=None)
+    # whether to use production version of a test_suite_executor or test version
+    parser.add_option('-l','--launch_job', dest='launch_job', default='test_suite_executor')
+    parser.add_option('-f','--jenkins_url', dest='jenkins_url', default='http://qa.sc.couchbase.com')
 
 
     # dashboardReportedParameters is of the form param1=abc,param2=def
@@ -235,10 +238,7 @@ def main():
     for i in testsToLaunch: print i['component'], i['subcomponent']
     print '\n\n'
 
-
-
-
-    launchStringBase = 'http://qa.sc.couchbase.com/job/test_suite_executor'
+    launchStringBase = str(options.jenkins_url)+'/job/'+str(options.launch_job)
 
     # optional add [-docker] [-Jenkins extension]
     if options.serverType.lower() == 'docker':
