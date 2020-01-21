@@ -53,7 +53,7 @@ def start_load(argv):
 def loadrunner(queue, servers, load_info):
     interval = 2 * 60 * 60
     params = {"queue": queue, "servers": servers, "interval": interval, "load_info": load_info}
-    print params
+    print(params)
     runner = LoadRunnerProcess(params=params)
     runner.load()
     time.sleep(24 * 60 * 60)
@@ -122,7 +122,7 @@ class BackupProcess(object):
                         BackupHelper(map[node]).backup('default', "/tmp")
                         BackupHelper(map[node]).backup('default', "/tmp")
                     except Exception as ex:
-                        print ex
+                        print(ex)
                     self.log.info("backed up the data into ")
                 time.sleep(self.interval)
 

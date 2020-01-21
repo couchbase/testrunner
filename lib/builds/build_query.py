@@ -3,10 +3,10 @@
 # map a version # -> rpm url
 from datetime import datetime
 import time
-import urllib2
+import urllib.request, urllib.error, urllib.parse
 import re
 import socket
-import BeautifulSoup
+from . import BeautifulSoup
 import testconstants
 import logger
 import traceback
@@ -16,11 +16,12 @@ from testconstants import SHERLOCK_VERSION
 from testconstants import COUCHBASE_VERSION_2
 from testconstants import COUCHBASE_VERSION_3
 from testconstants import COUCHBASE_VERSION_2_WITH_REL
-from testconstants import COUCHBASE_RELEASE_FROM_VERSION_3
-from testconstants import COUCHBASE_FROM_VERSION_3, COUCHBASE_FROM_SPOCK
+from testconstants import COUCHBASE_RELEASE_FROM_VERSION_3,\
+                          COUCHBASE_RELEASE_FROM_SPOCK
+from testconstants import COUCHBASE_FROM_VERSION_3, COUCHBASE_FROM_SPOCK,\
+                          COUCHBASE_FROM_MAD_HATTER, COUCHBASE_FROM_601
 from testconstants import CB_RELEASE_REPO
 from testconstants import CB_LATESTBUILDS_REPO
-from testconstants import CE_EE_ON_SAME_FOLDER
 
 
 class MembaseBuild(object):
@@ -316,6 +317,32 @@ class BuildQuery(object):
             build.url_latest_build = "{4}{0}_{1}_{3}.setup.{2}"\
                              .format(product, os_architecture,
                              deliverable_type, build_details, CB_LATESTBUILDS_REPO)
+        elif deliverable_type == "msi":
+            if not re.match(r'[1-9].[0-9].[0-9]$', build_version):
+                if build_version[:5] in COUCHBASE_RELEASE_FROM_SPOCK:
+                    arch_type = "amd64"
+                    if "x86_64" not in os_architecture:
+                        arch_type = "x86"
+                    build.url = "{5}{0}/{1}_{4}-windows_{2}.{3}"\
+                            .format(build_version[:build_version.find('-')],
+                            product, arch_type, deliverable_type, build_details[:5],
+                            CB_RELEASE_REPO)
+            else:
+                if build_version[:5] in COUCHBASE_RELEASE_FROM_SPOCK:
+                    arch_type = "amd64"
+                    if "x86_64" not in os_architecture:
+                        arch_type = "x86"
+                    build.url = "{5}{0}/{1}_{4}-windows_{2}.{3}"\
+                        .format(build_version, product, arch_type,
+                         deliverable_type, build_details[:5], CB_RELEASE_REPO)
+        elif deliverable_type == "zip":
+            if not re.match(r'[1-9].[0-9].[0-9]$', build_version):
+                if build_version[:5] in COUCHBASE_RELEASE_FROM_VERSION_3:
+                    os_name = "macos"
+                    build.url = "{6}{0}/{1}_{4}-{5}_{2}.{3}"\
+                                .format(build_version[:build_version.find('-')],
+                                product, os_architecture, deliverable_type,
+                                build_details[:5], os_name, CB_RELEASE_REPO)
         else:
             """ check match full version x.x.x-xxxx """
             if not re.match(r'[1-9].[0-9].[0-9]$', build_version):
@@ -343,12 +370,22 @@ class BuildQuery(object):
                                 os_name = "suse12"
                         elif "oracle linux" in os_version.lower():
                             os_name = "oel6"
+                        elif "amazon linux 2" in os_version.lower():
+                            if build_version[:5] in COUCHBASE_FROM_MAD_HATTER or \
+                                            build_version[:5] in COUCHBASE_FROM_601:
+                                os_name = "amzn2"
+                            else:
+                                self.fail("Amazon Linux 2 doesn't support version %s "
+                                                                % build_version[:5])
+                        elif "red hat" in os_version.lower():
+                            if "8.0" in os_version.lower():
+                                os_name = "rhel8"
                         else:
                             os_name = "centos6"
                         build.url = "{6}{0}/{1}-{4}-{5}.{2}.{3}"\
                                 .format(build_version[:build_version.find('-')],
                                 product, os_architecture, deliverable_type,
-                                build_details[:5],os_name, CB_RELEASE_REPO)
+                                build_details[:5], os_name, CB_RELEASE_REPO)
                     elif "deb" in deliverable_type:
                         os_architecture = "amd64"
                         os_name = "ubuntu12.04"
@@ -356,6 +393,13 @@ class BuildQuery(object):
                             os_name = "ubuntu14.04"
                         elif "ubuntu 16.04" in os_version.lower():
                             os_name = "ubuntu16.04"
+                        elif "ubuntu 18.04" in os_version.lower():
+                            if build_version[:5] in COUCHBASE_FROM_MAD_HATTER or \
+                                build_version[:5] in COUCHBASE_FROM_601:
+                                os_name = "ubuntu18.04"
+                            else:
+                                self.fail("ubuntu 18.04 doesn't support version %s "
+                                                                % build_version[:5])
                         build.url = "{6}{0}/{1}_{4}-{5}_{2}.{3}"\
                                 .format(build_version[:build_version.find('-')],
                                  product, os_architecture, deliverable_type,
@@ -398,12 +442,19 @@ class BuildQuery(object):
                                 os_name = "suse12"
                         elif "oracle linux" in os_version.lower():
                             os_name = "oel6"
+                        elif "amazon linux 2" in os_version.lower():
+                            if build_version[:5] in COUCHBASE_FROM_MAD_HATTER or \
+                                            build_version[:5] in COUCHBASE_FROM_601:
+                                os_name = "amzn2"
+                            else:
+                                self.fail("Amazon Linux 2 doesn't support version %s "
+                                                                % build_version[:5])
                         else:
                             os_name = "centos6"
                         build.url = "{6}{0}/{1}-{4}-{5}.{2}.{3}"\
                                 .format(build_version[:build_version.find('-')],
                                 product, os_architecture, deliverable_type,
-                                build_details[:5],os_name, CB_RELEASE_REPO)
+                                build_details[:5], os_name, CB_RELEASE_REPO)
                     elif "deb" in deliverable_type:
                         os_architecture = "amd64"
                         os_name = "ubuntu12.04"
@@ -411,6 +462,13 @@ class BuildQuery(object):
                             os_name = "ubuntu14.04"
                         elif "ubuntu 16.04" in os_version.lower():
                             os_name = "ubuntu16.04"
+                        elif "ubuntu 18.04" in os_version.lower():
+                            if build_version[:5] in COUCHBASE_FROM_MAD_HATTER or \
+                                build_version[:5] in COUCHBASE_FROM_601:
+                                os_name = "ubuntu18.04"
+                            else:
+                                self.fail("ubuntu 18.04 doesn't support version %s "
+                                                                % build_version[:5])
                         build.url = "{6}{0}/{1}_{4}-{5}_{2}.{3}"\
                             .format(build_version, product, os_architecture,
                             deliverable_type, build_details[:5], os_name,
@@ -423,10 +481,6 @@ class BuildQuery(object):
                         os_architecture, deliverable_type, build_details,
                         CB_LATESTBUILDS_REPO)
         # This points to the Internal s3 account to look for release builds
-        """ add ce folder in community version from 3.0.2 release """
-        if "community" in product and build_version[:5] not in CE_EE_ON_SAME_FOLDER:
-            build.url = build.url.replace("couchbase-server-community", \
-                                          "ce/couchbase-server-community")
         if is_amazon:
             """
                 for centos only
@@ -475,7 +529,7 @@ class BuildQuery(object):
                 self._get_and_parse_builds('http://builds.hq.northscale.net/latestbuilds', version=version, \
                                            timeout=timeout, direct_build_url=direct_build_url, \
                                            deliverable_type=deliverable_type, architecture_type=architecture_type, \
-                                           edition_type=edition_type,repo=repo, toy=toy, \
+                                           edition_type=edition_type, repo=repo, toy=toy, \
                                            distribution_version=distribution_version, \
                                            distribution_type=distribution_type)
         except Exception as e:
@@ -502,6 +556,7 @@ class BuildQuery(object):
             build = query.create_build_url(version, deliverable_type, architecture_type, \
                                            edition_type, repo, toy, distribution_version, \
                                            distribution_type)
+
             return build, changes
         else:
             page = None
@@ -518,7 +573,7 @@ class BuildQuery(object):
                     self.log.info("Try collecting build information from url: %s" % (build_page + index_url))
                     if timeout:
                         socket.setdefaulttimeout(timeout)
-                    page = urllib2.urlopen(build_page + index_url)
+                    page = urllib.request.urlopen(build_page + index_url)
                     soup = BeautifulSoup.BeautifulSoup(page)
                     break
                 except:
@@ -545,8 +600,8 @@ class BuildQuery(object):
                         build.url = '%s/%s' % (build_page, build_id)
                         builds.append(build)
                 except Exception as e:
-                    print "ERROR in creating build/change info for: Build_id: %s , Build_Description: %s" % (build_id, build_description)
-                    print traceback.print_exc(file=sys.stderr)
+                    print("ERROR in creating build/change info for: Build_id: %s , Build_Description: %s" % (build_id, build_description))
+                    print(traceback.print_exc(file=sys.stderr))
                     #raise e : Skipping parsing for this build information,
                     #Eventually, It will fail with build not found error at install.py:240
             for build in builds:
@@ -580,8 +635,8 @@ class BuildQuery(object):
             """ Remove the code below when cb name is standardlized (MB-11372) """
             if "windows" in direct_build_url and build.deliverable_type == "exe" \
                 and build_info not in SHERLOCK_VERSION:
-                build_info = build_info.replace("-windows-amd64-","_x86_64_")
-                build_info = build_info.replace("couchbase_server","couchbase-server")
+                build_info = build_info.replace("-windows-amd64-", "_x86_64_")
+                build_info = build_info.replace("couchbase_server", "couchbase-server")
             """ End remove here """
 
             """ sherlock build name
@@ -598,7 +653,7 @@ class BuildQuery(object):
 
             if any( x + "-" in build_info for x in COUCHBASE_FROM_VERSION_3):
                 deb_words = ["debian7", "debian8", "ubuntu12.04", "ubuntu14.04",
-                             "ubuntu16.04", "windows", "macos"]
+                             "ubuntu16.04", "ubuntu18.04", "windows", "macos"]
                 if "centos" not in build_info and "suse" not in build_info:
                     tmp_str = build_info.split("_")
                     product_version = tmp_str[1].split("-")
@@ -610,9 +665,9 @@ class BuildQuery(object):
                 if product_version[:5] in testconstants.COUCHBASE_VERSIONS:
                     build.product_version = product_version
                     if "centos" not in build_info and "suse" not in build_info:
-                        build_info = build_info.replace("_" + product_version,"")
+                        build_info = build_info.replace("_" + product_version, "")
                     else:
-                        build_info = build_info.replace("-" + product_version,"")
+                        build_info = build_info.replace("-" + product_version, "")
                 if "x86_64" in build_info:
                     build.architecture_type = "x86_64"
                     if "centos" in build_info or "suse" in build_info:
@@ -629,8 +684,8 @@ class BuildQuery(object):
                     build.architecture_type = "x86_64"
                     build_info = build_info.replace("-amd64", "")
                 del_words = ["centos6", "debian7", "debian8", "debian9",
-                             "ubuntu12.04", "ubuntu14.04", "ubuntu16.04",
-                             "windows", "macos", "centos7", "suse11", "suse12"]
+                             "ubuntu12.04", "ubuntu14.04", "ubuntu16.04", "ubuntu18.04",
+                             "windows", "macos", "centos7", "suse11", "suse12", "amzn2"]
                 if build_info.startswith("couchbase-server"):
                     build.product = build_info.split("-")
                     build.product = "-".join([i for i in build.product \
@@ -640,7 +695,7 @@ class BuildQuery(object):
             product_version = product_version[len(product_version)-1]
             if product_version[:5] in testconstants.COUCHBASE_VERSIONS:
                 build.product_version = product_version
-                build_info = build_info.replace("_" + product_version,"")
+                build_info = build_info.replace("_" + product_version, "")
             else:
                 raise Exception("Check your url. Couchbase server does not have "
                                        "version %s yet " % (product_version[:5]))
@@ -770,20 +825,23 @@ class BuildQuery(object):
             /952/couchbase-server-enterprise_3.5.0-952-windows_amd64.exe
             /1390/couchbase-server-enterprise_3.5.0-1390-windows_x86.exe
             /1120/couchbase-server-enterprise_3.5.0-1120-macos_x86_64.zip"""
-            build_number = build.product_version.replace(version[:6],"")
+            build_number = build.product_version.replace(version[:6], "")
             """ distribution version:    centos linux release 7.0.1406 (core)
                 distribution version:    centos release 6.5 (final)  """
-            centos_version = "centos6"
+            rpm_version = "centos6"
 
-            if "centos" in distribution_version or "red hat" in distribution_version:
+            if "centos" in distribution_version or "red hat" in distribution_version or \
+               "rhel" in distribution_version:
                 if "centos 7" in distribution_version:
-                    centos_version = "centos7"
+                    rpm_version = "centos7"
                 elif "red hat enterprise linux server release 6" in distribution_version:
-                    centos_version = "centos6"
+                    rpm_version = "centos6"
                 elif "red hat enterprise linux server release 7" in distribution_version:
-                    centos_version = "centos7"
+                    rpm_version = "centos7"
+                elif "rhel8" in distribution_version:
+                    rpm_version = "rhel8"
                 build.name = edition_type + "-" + build.product_version + \
-                   "-" + centos_version + "." + build.architecture_type + \
+                   "-" + rpm_version + "." + build.architecture_type + \
                    "." + build.deliverable_type
             elif "suse" in distribution_version:
                 if "suse 12" in distribution_version:
@@ -805,6 +863,17 @@ class BuildQuery(object):
                 build.name = edition_type + "-" + build.product_version + \
                    "-" + os_name + "." + build.architecture_type + \
                    "." + build.deliverable_type
+            elif "amazon linux release 2" in distribution_version:
+                if version[:5] in COUCHBASE_FROM_MAD_HATTER or \
+                                version[:5] in COUCHBASE_FROM_601:
+                    build.distribution_version = "amazon linux 2"
+                    os_name = "amzn2"
+                    build.name = edition_type + "-" + build.product_version + \
+                     "-" + os_name + "." + build.architecture_type + \
+                        "." + build.deliverable_type
+                else:
+                    self.fail("Amazon Linux 2 doesn't support version %s "
+                              % version[:5])
             else:
                 os_name = ""
                 joint_char = "-"
@@ -817,6 +886,13 @@ class BuildQuery(object):
                     os_name = "ubuntu14.04"
                 elif "ubuntu 16.04" in distribution_version:
                     os_name = "ubuntu16.04"
+                elif "ubuntu 18.04" in distribution_version.lower():
+                    if version[:5] in COUCHBASE_FROM_MAD_HATTER or \
+                        version[:5] in COUCHBASE_FROM_601:
+                        os_name = "ubuntu18.04"
+                    else:
+                        self.fail("ubuntu 18.04 doesn't support version %s "
+                                                              % version[:5])
                 elif "debian gnu/linux 7" in distribution_version:
                     build.distribution_version = "debian7"
                     os_name = "debian7"

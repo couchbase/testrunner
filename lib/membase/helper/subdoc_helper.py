@@ -91,14 +91,14 @@ class SubdocHelper:
         dict['doc']['id'] = key
         dict['doc']['number'] = dict['levels']
 
-        for level in xrange(0, dict['levels']):
+        for level in range(0, dict['levels']):
             dict['doc']['array'].append(level)
         return self._createNestedJson(key, {'doc': dict['doc'], 'levels': dict['levels']-1})
 
     '''Recursive call to create a deep nested Array JSON document
     This should be changed to make it as recursive for array'''
     def _createNestedJsonArray(self, key, dict):
-        self.array = [[[1, 2, 3, True, True],200,300],20,30,[1000,2000,3000]]
+        self.array = [[[1, 2, 3, True, True], 200, 300], 20, 30, [1000, 2000, 3000]]
         if dict['levels'] == 0:
             return
         if dict['doc'] == {}:
@@ -111,7 +111,7 @@ class SubdocHelper:
         dict['doc']['id'] = key
         dict['doc']['number'] = dict['levels']
 
-        for level in xrange(0, dict['levels']):
+        for level in range(0, dict['levels']):
             dict['doc']['array'].append(level)
             dict['doc']['array'][level] = self.array
         return self._createNestedJson(key, {'doc': dict['doc'], 'levels': dict['levels']-1})
@@ -130,12 +130,12 @@ class SubdocHelper:
         dict['doc']['id'] = key
         dict['doc']['number'] = dict['levels']
 
-        for level in xrange(0, dict['levels']):
+        for level in range(0, dict['levels']):
             dict['doc']['array12345678901234567890123456789'].append(level)
         return self._createNestedJson(key, {'doc': dict['doc'], 'levels': dict['levels']-1})
 
 
-    def insert_nested_docs(self, num_of_docs, prefix='doc', levels=16, size=512, return_docs=False, long_path=False):
+    def insert_nested_docs(self, num_of_docs, prefix='doc', levels=16, size=512, return_docs=False, long_path=False,collection=None):
         rest = RestConnection(self.master)
         smart = VBucketAwareMemcached(rest, self.bucket)
         doc_names = []
@@ -157,7 +157,7 @@ class SubdocHelper:
             fail_count = 0
             while True:
                 try:
-                    smart.set(key, 0, 0, json.dumps(value))
+                    smart.set(key, 0, 0, json.dumps(value), collection=collection)
                     break
                 except MemcachedError as e:
                     fail_count += 1
@@ -181,7 +181,7 @@ class SubdocHelper:
     # If `return_docs` is true, it'll return the full docs and not
     # only the keys
     def insert_nested_specific_docs(self, num_of_docs, prefix='doc', extra_values={},
-                    return_docs=False):
+                    return_docs=False,collection=None):
         random.seed(12345)
         rest = RestConnection(self.master)
         smart = VBucketAwareMemcached(rest, self.bucket)
@@ -198,7 +198,7 @@ class SubdocHelper:
                     "d2" :{
                         "int_array" : [1, 2, 3, 4, 5, 6, 7, 8, 9, 10],
                         "str_array" :["john", "doe", "john", "block", "jim", "john"],
-                        "mix_array" : [1, 2, True, False, 'bird', 5.0, 6.0, `123`],
+                        "mix_array" : [1, 2, True, False, 'bird', 5.0, 6.0, repr(123)],
                         "d3" : {
                             "d4_01" : 1,
                             "d4_02" : [21, 22, 23, 24, 25 ],
@@ -210,19 +210,19 @@ class SubdocHelper:
                                 "d5_03" : "abcdefghi",
                                 "d5_04" : {
                                    "d6_01" : random.randrange(6, 13),
-                                   "d6_02" : [1, 2, True, False, 'bird', 5.0, 6.0, `123`]
+                                   "d6_02" : [1, 2, True, False, 'bird', 5.0, 6.0, repr(123)]
                                 }
                             }
                         },
                         "d2_02" : {"d2_02_01":"name"},
                         "d2_03" :geom
                     },
-                    "d1_02" :[1, 2, True, False, 'bird', 5.0, 6.0, `123`],
+                    "d1_02" :[1, 2, True, False, 'bird', 5.0, 6.0, repr(123)],
                     "d1_03" : False
                 },
                 "age": random.randrange(1, 1000),
                 "geometry": geom,
-                "array" :[0,1,2,3,4,5,6,7,8,9,20],
+                "array" :[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 20],
                 "isDict" : True,
                 "dict_value" : {"name":"abc", "age":1},
                 "height": random.randrange(1, 13000),
@@ -237,7 +237,7 @@ class SubdocHelper:
             fail_count = 0
             while True:
                 try:
-                    smart.set(key, 0, 0, json.dumps(value))
+                    smart.set(key, 0, 0, json.dumps(value), collection=collection)
                     break
                 except MemcachedError as e:
                     fail_count += 1
@@ -255,7 +255,7 @@ class SubdocHelper:
         return doc_names
 
     def insert_docs(self, num_of_docs, prefix='doc', extra_values={},
-                    return_docs=False):
+                    return_docs=False,collection=None):
         random.seed(12345)
         rest = RestConnection(self.master)
         smart = VBucketAwareMemcached(rest, self.bucket)
@@ -269,7 +269,7 @@ class SubdocHelper:
                 "name": doc_name,
                 "age": random.randrange(1, 1000),
                 "geometry": geom,
-                "array" :[0,1,2,3,4,5,6,7,8,9,20],
+                "array" :[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 20],
                 "isDict" : True,
                 "dict_value" : {"name":"abc", "age":1},
                 "height": random.randrange(1, 13000),
@@ -284,7 +284,7 @@ class SubdocHelper:
             fail_count = 0
             while True:
                 try:
-                    smart.set(key, 0, 0, json.dumps(value))
+                    smart.set(key, 0, 0, json.dumps(value), collection=collection)
                     break
                 except MemcachedError as e:
                     fail_count += 1

@@ -85,7 +85,7 @@ class RebalanceHelper():
         buckets = rest.get_buckets()
         for server in servers:
             for bucket in buckets:
-                for server_repl in list(set(servers) - set([server])):
+                for server_repl in list(set(servers) - {server}):
                     tasks.append(cluster.async_wait_for_stats([server], bucket, 'tap',
                                    'eq_tapq:replication_ns_1@' + server_repl.ip + ':idle', '==', 'true'))
                     tasks.append(cluster.async_wait_for_stats([server], bucket, 'tap',
@@ -502,8 +502,8 @@ class RebalanceHelper():
     @staticmethod
     def rebalance_out(servers, how_many, monitor=True):
         rest = RestConnection(servers[0])
-        cur_ips = map(lambda node: node.ip, rest.node_statuses())
-        servers = filter(lambda server: server.ip in cur_ips, servers) or servers
+        cur_ips = [node.ip for node in rest.node_statuses()]
+        servers = [server for server in servers if server.ip in cur_ips] or servers
         if len(cur_ips) <= how_many or how_many < 1:
             log.error("failed to rebalance %s servers out: not enough servers"
                       % how_many)
@@ -518,7 +518,7 @@ class RebalanceHelper():
             return True, ejections
         try:
             return rest.monitorRebalance(), ejections
-        except RebalanceFailedException, e:
+        except RebalanceFailedException as e:
             log.error("failed to rebalance %s servers out: %s" % (how_many, e))
             return False, ejections
 
@@ -531,9 +531,9 @@ class RebalanceHelper():
 
         rest = RestConnection(servers[0])
         cur_nodes = rest.node_statuses()
-        cur_ips = map(lambda node: node.ip, cur_nodes)
-        cur_ids = map(lambda node: node.id, cur_nodes)
-        free_servers = filter(lambda server: server.ip not in cur_ips, servers)
+        cur_ips = [node.ip for node in cur_nodes]
+        cur_ids = [node.id for node in cur_nodes]
+        free_servers = [server for server in servers if server.ip not in cur_ips]
 
         if len(cur_ids) <= how_many or len(free_servers) < how_many:
             log.error("failed to swap rebalance %s servers - not enough servers"
@@ -547,19 +547,19 @@ class RebalanceHelper():
                  % (cur_ids, ejections, additions))
 
         try:
-            map(lambda server: rest.add_node(servers[0].rest_username,
+            list(map(lambda server: rest.add_node(servers[0].rest_username,
                                              servers[0].rest_password,
-                                             server.ip, server.port), additions)
+                                             server.ip, server.port), additions))
         except (ServerAlreadyJoinedException,
-                ServerSelfJoinException, AddNodeException), e:
+                ServerSelfJoinException, AddNodeException) as e:
             log.error("failed to swap rebalance - addition failed %s: %s"
                       % (additions, e))
             return False, []
 
-        cur_ids = map(lambda node: node.id, rest.node_statuses())
+        cur_ids = [node.id for node in rest.node_statuses()]
         try:
             rest.rebalance(otpNodes=cur_ids, ejectedNodes=ejections)
-        except InvalidArgumentException, e:
+        except InvalidArgumentException as e:
             log.error("failed to swap rebalance - rebalance failed :%s" % e)
             return False, []
 
@@ -568,7 +568,7 @@ class RebalanceHelper():
 
         try:
             return rest.monitorRebalance(), ejections + additions
-        except RebalanceFailedException, e:
+        except RebalanceFailedException as e:
             log.error("failed to swap rebalance %s servers: %s" % (how_many, e))
             return False, ejections + additions
 
@@ -711,7 +711,7 @@ class RebalanceHelper():
                     _nodes_stats[node.ip + ":" + str(node.port)]
                 continue
             mc.close()
-            vb_names = [key[:key.index(":")] for key in stat_hash.keys()]
+            vb_names = [key[:key.index(":")] for key in list(stat_hash.keys())]
 
             for name in vb_names:
                 stat[name] = [stat_hash[name + ":state"], stat_hash[name + ":counted"]]

@@ -91,7 +91,7 @@ class SpatialHelper:
     # If `return_docs` is true, it'll return the full docs and not
     # only the keys
     def insert_docs(self, num_of_docs, prefix='doc', extra_values={},
-                    return_docs=False):
+                    return_docs=False,collection=None):
         random.seed(12345)
         rest = RestConnection(self.master)
         smart = VBucketAwareMemcached(rest, self.bucket)
@@ -117,7 +117,7 @@ class SpatialHelper:
             fail_count = 0
             while True:
                 try:
-                    smart.set(key, 0, 0, json.dumps(value))
+                    smart.set(key, 0, 0, json.dumps(value), collection=collection)
                     break
                 except MemcachedError as e:
                     fail_count += 1
@@ -155,7 +155,7 @@ class SpatialHelper:
             ddocs.append(DesignDocument(self.testcase.default_ddoc_name, [],
                                         spatial_views=views))
         else:
-            for i in xrange(5):
+            for i in range(5):
                 ddocs.append(DesignDocument(self.testcase.default_ddoc_name + str(i), [],
                                         spatial_views=[views[i]]))
         for ddoc in ddocs:
@@ -202,7 +202,7 @@ class SpatialHelper:
     def query_view(self, rest, ddoc, view, bucket='default', extra_params={}, num_expected=None,
                    verify_keys=[], num_tries=20):
         start = time.time()
-        for i in xrange(num_tries):
+        for i in range(num_tries):
             try:
                 #full_set=true&connection_timeout=60000
                 params = {"connection_timeout": 60000}
@@ -412,11 +412,11 @@ class SpatialHelper:
             for row in results['rows']:
                 # Delete all top level key-values that are not part of the
                 # inserted_expanded list
-                del_keys = set(row.keys()) - set(['id', 'geometry', 'value'])
+                del_keys = set(row.keys()) - {'id', 'geometry', 'value'}
                 for key in del_keys:
                     del row[key]
                 # Delete all special values inserted by CouchDB or Couchbase
-                for key in row['value'].keys():
+                for key in list(row['value'].keys()):
                     if key.startswith('_') or key.startswith('$'):
                         del row['value'][key]
                 results_collapsed.append(json.dumps(row, sort_keys=True))

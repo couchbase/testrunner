@@ -2,12 +2,12 @@ import threading
 import time
 import fractions
 import uuid
-import logger
+from . import logger
 from TestInput import TestInputServer
 
-import mc_bin_client
-from membase.api.rest_client import RestConnection
-from memcached.helper.data_helper import VBucketAwareMemcached
+from . import mc_bin_client
+from .membase.api.rest_client import RestConnection
+from .memcached.helper.data_helper import VBucketAwareMemcached
 
 
 class FakeMemcachedClient(object):
@@ -16,7 +16,7 @@ class FakeMemcachedClient(object):
     def set(self, key, exp, flags, val):
         self.db[key] = val
     def get(self, key):
-        return (0,0,self.db[key])
+        return (0, 0, self.db[key])
     def add(self, key, exp, flags, val):
         self.db[key] = val
     def delete(self, key):
@@ -59,8 +59,8 @@ class LoadThread(threading.Thread):
         self.bucket_password = load_info['memcached_info'].get('bucket_password', '')
 
         # operation info
-        self.create = load_info['operation_info']['create_percent'] / fractions.gcd(load_info['operation_info']['create_percent'], 100 - load_info['operation_info']['create_percent'])
-        self.nocreate = (100 - load_info['operation_info']['create_percent']) / fractions.gcd(load_info['operation_info']['create_percent'], 100 - load_info['operation_info']['create_percent'])
+        self.create = load_info['operation_info']['create_percent'] // fractions.gcd(load_info['operation_info']['create_percent'], 100 - load_info['operation_info']['create_percent'])
+        self.nocreate = (100 - load_info['operation_info']['create_percent']) // fractions.gcd(load_info['operation_info']['create_percent'], 100 - load_info['operation_info']['create_percent'])
         self.operation_sequence = []
         for op in load_info['operation_info']['operation_distribution']:
             for i in range(load_info['operation_info']['operation_distribution'][op]):
@@ -83,7 +83,7 @@ class LoadThread(threading.Thread):
         self.limit_time = int(load_info['limit_info'].get('time', 0))
         self.limit_size = int(load_info['limit_info'].get('size', 0) / threads)
         self.poxi = self._poxi()
-        print "now connected to {0} memcacheds".format(len(self.poxi.memcacheds))
+        print("now connected to {0} memcacheds".format(len(self.poxi.memcacheds)))
         # connect
         #self.server should be vbucketaware memcached
 #        self.server = mc_bin_client.MemcachedClient(self.server_ip, self.server_port)
@@ -133,7 +133,7 @@ class LoadThread(threading.Thread):
             # do the actual work
             operation = self.get_operation()
             if operation == 'set':
-                key = self.name + '_' + `self.get_mutation_key()`
+                key = self.name + '_' + repr(self.get_mutation_key())
                 try:
 #                    print `self.mutation_index` + " : " + `self.get_mutation_key()`
                     self.poxi.memcached(key).set(key, 0, 0, self.get_data())
@@ -160,7 +160,7 @@ class LoadThread(threading.Thread):
                 except mc_bin_client.MemcachedError as e:
                     self.poxi.done()
                     self.poxi = self._poxi()
-                    print "now connected to {0} memcacheds".format(len(self.poxi.memcacheds))
+                    print("now connected to {0} memcacheds".format(len(self.poxi.memcacheds)))
                     if self.backoff < 0:
                         self.backoff = 0
                     if self.backoff > 30:
@@ -174,7 +174,7 @@ class LoadThread(threading.Thread):
 #                        print e
 #                        time.sleep(self.backoff)
             elif operation == 'get':
-                key = self.name + '_' + `self.get_get_key()`
+                key = self.name + '_' + repr(self.get_get_key())
                 try:
                     vdata = self.poxi.memcached(key).get(key)
                     self.operations += 1
@@ -186,15 +186,15 @@ class LoadThread(threading.Thread):
                             self.value_failures += 1
                             raise
                     except Exception as e:
-                        print e
-                        print "create: " + `self.create`
-                        print "nocreate: " + `self.nocreate`
-                        print "get_index: " + `self.get_index`
-                        print "get_key: " + `self.get_get_key()`
-                        print "mutation_index_max: " + `self.mutation_index_max`
-                        print "mutation_indexes: " + `self.get_mutation_indexes(self.get_get_key())`
-                        print "getting data for mutation index: " + `max(self.get_mutation_indexes(self.get_get_key()))`
-                        print "got:      \'" + data + "\'"
+                        print(e)
+                        print("create: " + repr(self.create))
+                        print("nocreate: " + repr(self.nocreate))
+                        print("get_index: " + repr(self.get_index))
+                        print("get_key: " + repr(self.get_get_key()))
+                        print("mutation_index_max: " + repr(self.mutation_index_max))
+                        print("mutation_indexes: " + repr(self.get_mutation_indexes(self.get_get_key())))
+                        print("getting data for mutation index: " + repr(max(self.get_mutation_indexes(self.get_get_key()))))
+                        print("got:      \'" + data + "\'")
                         raise ValueError
                     self.get_index += 1
                 except mc_bin_client.MemcachedError as e:
@@ -203,8 +203,8 @@ class LoadThread(threading.Thread):
                     if self.backoff > 30:
                         self.backoff = 30
                     self.backoff += 1
-                    print `time.time()` + ' ' + self.name + ' get(' + `self.backoff` + ') ',
-                    print e
+                    print(repr(time.time()) + ' ' + self.name + ' get(' + repr(self.backoff) + ') ', end=' ')
+                    print(e)
                     time.sleep(self.backoff)
 
             end_time = time.time()
@@ -219,7 +219,7 @@ class LoadThread(threading.Thread):
     def get_mutation_key(self, index=None):
         if index == None:
             index = self.mutation_index
-        return index-self.nocreate*(index/(self.create+self.nocreate))
+        return index-self.nocreate*(index//(self.create+self.nocreate))
 
     # get_index -> get_key : based on get_index % mutation_index
     def get_get_key(self):
@@ -228,7 +228,7 @@ class LoadThread(threading.Thread):
     # key -> mutation_indexes
     def get_mutation_indexes(self, key):
         # starting point to find an index
-        s=key*(self.nocreate+self.create)/self.create
+        s=key*(self.nocreate+self.create)//self.create
 
         mutation_indexes=[]
 
@@ -256,10 +256,10 @@ class LoadThread(threading.Thread):
         valuesize = self.valuesize_sequence[index % len(self.valuesize_sequence)]
         if self.cache_data:
             if not valuesize in self.data_cache:
-                self.data_cache[valuesize] = (str(uuid.uuid3(self.uuid,`index`)) * (1+valuesize/36))[:valuesize]
-            return `index` + self.data_cache[valuesize]
+                self.data_cache[valuesize] = (str(uuid.uuid3(self.uuid, repr(index))) * (1+valuesize//36))[:valuesize]
+            return repr(index) + self.data_cache[valuesize]
         else:
-            return (str(uuid.uuid3(self.uuid,`index`)) * (1+valuesize/36))[:valuesize]
+            return (str(uuid.uuid3(self.uuid, repr(index))) * (1+valuesize//36))[:valuesize]
 
     # mutation_index -> mutation_data : based on create/nocreate
     # shortcut for getting the expected size of a mutation without generating the data
@@ -335,10 +335,10 @@ class LoadRunner(object):
             state = 'running'
 
         return {
-            'ops':0,
-            'time':0,
-            'keys':0,
-            'state':state,
+            'ops': 0,
+            'time': 0,
+            'keys': 0,
+            'state': state,
         }
 
     # block till condition

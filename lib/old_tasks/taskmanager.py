@@ -1,5 +1,5 @@
 import time
-import Queue
+import queue
 
 from threading import Thread
 from old_tasks.task import Task
@@ -7,8 +7,8 @@ from old_tasks.task import Task
 class TaskManager(Thread):
     def __init__(self):
         Thread.__init__(self)
-        self.readyq = Queue.Queue()
-        self.sleepq = Queue.Queue()
+        self.readyq = queue.Queue()
+        self.sleepq = queue.Queue()
         self.running = True
 
     def schedule(self, task, sleep_time=0):

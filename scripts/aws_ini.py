@@ -14,8 +14,8 @@ class AwsIni:
         try:
             self.connections = [region.connect() for region in regions()]
         except NoAuthHandlerFound:
-            print "ERROR: use environment variables to set credentials:\n" + \
-                  "AWS_ACCESS_KEY_ID\nAWS_SECRET_ACCESS_KEY"
+            print("ERROR: use environment variables to set credentials:\n" + \
+                  "AWS_ACCESS_KEY_ID\nAWS_SECRET_ACCESS_KEY")
             sys.exit()
 
     def parse_args(self):
@@ -51,7 +51,7 @@ class AwsIni:
 
         self.options, self.args = parser.parse_args()
 
-        if len(self.args) not in range(1, 3):
+        if len(self.args) not in list(range(1, 3)):
             parser.print_help()
             sys.exit()
 
@@ -75,47 +75,47 @@ class AwsIni:
                 yield instance
 
     def _print_header(self):
-        print "[global]"
-        print "username:{0}".format(self.options.username)
+        print("[global]")
+        print("username:{0}".format(self.options.username))
         if self.options.password:
-            print "password:{0}".format(self.options.password)
+            print("password:{0}".format(self.options.password))
         else:
-            print "ssh_key:{0}".format(self.options.ssh_key)
-        print "port:8091"
-        print "data_path:/data"
-        print "index_path:/data2"
+            print("ssh_key:{0}".format(self.options.ssh_key))
+        print("port:8091")
+        print("data_path:/data")
+        print("index_path:/data2")
 
     def _print_clusters(self):
         for cluster_id in range(self.options.clusters):
-            print "\n[cluster{0}]".format(cluster_id + 1)
+            print("\n[cluster{0}]".format(cluster_id + 1))
 
             servers = list(self._get_servers())
-            cluster_quota = len(servers) / self.options.clusters
+            cluster_quota = len(servers) // self.options.clusters
             left_index = cluster_quota * cluster_id
             right_index = cluster_quota * (cluster_id + 1)
 
             for (i, server) in enumerate(servers[left_index:right_index],
                                          start=1):
-                print "{0}:{1}".format(i, server.public_dns_name)
+                print("{0}:{1}".format(i, server.public_dns_name))
 
     def _print_servers(self):
-        print "\n[servers]"
+        print("\n[servers]")
         for (i, server) in enumerate(self._get_servers(kind='node'), start=1):
-            print "{0}:{1}".format(i, server.public_dns_name)
-            print "#{0}".format(server.private_ip_address)
+            print("{0}:{1}".format(i, server.public_dns_name))
+            print("#{0}".format(server.private_ip_address))
 
     def _print_clients(self):
-        print "\n[clients]"
+        print("\n[clients]")
         for (i, client) in enumerate(self._get_servers(kind='client'), start=1):
             if i > self.options.clients:
                 break
             else:
-                print "{0}:{1}".format(i, client.public_dns_name)
+                print("{0}:{1}".format(i, client.public_dns_name))
 
     def _print_footer(self):
-        print "\n[membase]\n" + \
+        print("\n[membase]\n" + \
               "rest_username:Administrator\n" + \
-              "rest_password:password"
+              "rest_password:password")
 
     def print_file(self):
         # [global] section

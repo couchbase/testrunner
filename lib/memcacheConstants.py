@@ -23,6 +23,8 @@ CMD_VERSION = 11
 CMD_STAT = 0x10
 CMD_APPEND = 0x0e
 CMD_PREPEND = 0x0f
+CMD_DELETEQ = 0x14
+CMD_VERBOSE = 0x1b
 CMD_TOUCH = 0x1c
 CMD_GAT = 0x1d
 CMD_HELLO = 0x1f
@@ -47,6 +49,25 @@ CMD_SET_VB_STATE     = 0x5b
 CMD_UPR_NOOP         = 0x5c
 CMD_UPR_ACK          = 0x5d
 CMD_FLOW_CONTROL     = 0x5e
+CMD_SYSTEM_EVENT     = 0x5f
+
+# DCP opcode dictionary
+DCP_Opcode_Dictionary = {CMD_OPEN: 'CMD_OPEN',
+                         CMD_ADD_STREAM: 'CMD_ADD_STREAM',
+                         CMD_CLOSE_STREAM: 'CMD_CLOSE_STREAM',
+                         CMD_STREAM_REQ: 'CMD_STREAM_REQ',
+                         CMD_GET_FAILOVER_LOG: 'CMD_GET_FAILOVER_LOG',
+                         CMD_STREAM_END: 'CMD_STREAM_END',
+                         CMD_SNAPSHOT_MARKER: 'CMD_SNAPSHOT_MARKER',
+                         CMD_MUTATION: 'CMD_MUTATION',
+                         CMD_DELETION: 'CMD_DELETION',
+                         CMD_EXPIRATION: 'CMD_EXPIRATION',
+                         CMD_FLUSH: 'CMD_FLUSH',
+                         CMD_SET_VB_STATE: 'CMD_SET_VB_STATE',
+                         CMD_UPR_ACK: 'CMD_ACK',
+                         CMD_FLOW_CONTROL: 'CMD_FLOW_CONTROL',
+                         CMD_UPR_NOOP: 'CMD_DCP_NOOP',
+                         CMD_SYSTEM_EVENT: 'CMD_SYSTEM_EVENT'}
 
 # SASL stuff
 CMD_SASL_LIST_MECHS = 0x20
@@ -63,6 +84,7 @@ CMD_SELECT_BUCKET = 0x89
 CMD_STOP_PERSISTENCE = 0x80
 CMD_START_PERSISTENCE = 0x81
 CMD_SET_FLUSH_PARAM = 0x82
+CMD_SET_PARAM = 0x82
 
 CMD_SET_TAP_PARAM = 0x92
 CMD_EVICT_KEY = 0x93
@@ -84,13 +106,23 @@ CMD_RESET_REPLICATION_CHAIN = 0x9f
 
 CMD_GET_META = 0xa0
 CMD_GETQ_META = 0xa1
+
 CMD_SET_WITH_META = 0xa2
-CMD_DEL_WITH_META = 0xa8
+CMD_SETQ_WITH_META = 0xa3
+
+CMD_ADD_WITH_META = 0xa4
+CMD_ADDQ_WITH_META = 0xa5
+
+CMD_DELETE_WITH_META = 0xa8
+CMD_DELETEQ_WITH_META = 0xa9
 
 
 
 CMD_SET_DRIFT_COUNTER_STATE = 0xc1
 CMD_GET_ADJUSTED_TIME = 0xc2
+
+META_ADJUSTED_TIME = 0x1
+META_CONFLICT_RESOLUTION_MODE = 0x2
 
 # Replication
 CMD_TAP_CONNECT = 0x40
@@ -110,6 +142,12 @@ CMD_DELETE_VBUCKET = 0x3f
 CMD_GET_LOCKED = 0x94
 CMD_COMPACT_DB = 0xb3
 CMD_GET_RANDOM_KEY = 0xb6
+
+# Collections
+CMD_COLLECTIONS_SET_MANIFEST = 0xb9
+CMD_COLLECTIONS_GET_MANIFEST = 0xba
+
+CMD_GET_ERROR_MAP = 0xfe
 
 CMD_SYNC = 0x96
 
@@ -133,7 +171,10 @@ VB_STATE_NAMES = {'active': VB_STATE_ACTIVE,
 # Parameter types of CMD_SET_PARAM command.
 ENGINE_PARAM_FLUSH = 1
 ENGINE_PARAM_TAP = 2
+ENGINE_PARAM_REPLICATION= 2
 ENGINE_PARAM_CHECKPOINT = 3
+ENGINE_PARAM_DCP        = 4
+ENGINE_PARAM_VBUCKET    = 5
 
 COMMAND_NAMES = dict(((globals()[k], k) for k in globals() if k.startswith("CMD_")))
 
@@ -164,6 +205,8 @@ TAP_FLAG_NO_VALUE = 0x02 # The value for the key is not included in the packet
 FLAG_OPEN_CONSUMER = 0x00
 FLAG_OPEN_PRODUCER = 0x01
 FLAG_OPEN_NOTIFIER = 0x02
+FLAG_OPEN_INCLUDE_XATTRS = 0x4
+FLAG_OPEN_INCLUDE_DELETE_TIMES = 0x20
 
 #CCCP
 CMD_SET_CLUSTER_CONFIG = 0xb4
@@ -252,6 +295,8 @@ TOUCH_PKT_FMT = ">I"
 GAT_PKT_FMT = ">I"
 GETL_PKT_FMT = ">I"
 
+# set param command
+SET_PARAM_FMT=">I"
 # 2 bit integer.  :/
 VB_SET_PKT_FMT = ">I"
 
@@ -259,6 +304,10 @@ MAGIC_BYTE = 0x80
 REQ_MAGIC_BYTE = 0x80
 MEMCACHED_REQUEST_MAGIC = '\x80'
 RES_MAGIC_BYTE = 0x81
+
+# ALternative encoding (frame info present)
+ALT_REQ_MAGIC_BYTE = 0x08
+ALT_RES_MAGIC_BYTE = 0x18
 
 COMPACT_DB_PKT_FMT=">QQBxxxxxxx"
 
@@ -271,8 +320,14 @@ VBUCKET = '\x00\x00'
 # subdoc extras format - path len
 REQ_PKT_SD_EXTRAS= ">HB"
 
+# subdoc extras format - path len, expiration
+REQ_PKT_SD_EXTRAS_EXPIRY= ">HBI"
+
 # magic, opcode, keylen, extralen, datatype, status, bodylen, opaque, cas
 RES_PKT_FMT = ">BBHBBHIIQ"
+
+# magic, opcode, frameextra, keylen, extralen, datatype, status, bodylen, opaque, cas
+ALT_RES_PKT_FMT = ">BBBBBBHIIQ"
 
 #opcode, flags, pathlen, vallen
 REQ_PKT_SD_MULTI_MUTATE = ">BBHI"
@@ -301,19 +356,24 @@ EXTRA_HDR_FMTS = {
 }
 
 EXTRA_HDR_SIZES = dict(
-    [(k, struct.calcsize(v)) for (k, v) in EXTRA_HDR_FMTS.items()])
+    [(k, struct.calcsize(v)) for (k, v) in list(EXTRA_HDR_FMTS.items())])
 
-ERR_NOT_FOUND = 0x01
+# Kept for backwards compatibility with existing mc_bin_client users.
+
+ERR_UNKNOWN_CMD = 0x81
+ERR_NOT_FOUND = 0x1
+ERR_EXISTS = 0x2
+ERR_AUTH = 0x20
 NotFoundError = 0xD
-ERR_EXISTS = 0x02
+ERR_SUCCESS = 0x00
+ERR_KEY_ENOENT = 0x01
 ERR_2BIG = 0x03
 ERR_EINVAL = 0x04
 ERR_NOT_STORED = 0x05
 ERR_BAD_DELTA = 0x06
 ERR_NOT_MY_VBUCKET = 0x07
-ERR_AUTH = 0x20
 ERR_AUTH_CONTINUE = 0x21
-ERR_UNKNOWN_CMD = 0x81
+ERR_ERANGE = 0x22
 ERR_ENOMEM = 0x82
 ERR_NOT_SUPPORTED = 0x83
 ERR_EINTERNAL = 0x84
@@ -341,9 +401,23 @@ PROTOCOL_BINARY_FEATURE_DATATYPE = 0x01,
 PROTOCOL_BINARY_FEATURE_TLS = 0x2,
 PROTOCOL_BINARY_FEATURE_TCPNODELAY = 0x03,
 PROTOCOL_BINARY_FEATURE_MUTATION_SEQNO = 0x04
+FEATURE_TCPDELAY = 0x05
+FEATURE_XATTR = 0x06
+FEATURE_XERROR = 0x07
+FEATURE_SELECT_BUCKET = 0x08
+FEATURE_COLLECTIONS = 0x09
+
+# Enableable features
+FEATURE_DATATYPE = 0x01
+FEATURE_TLS = 0x2
+FEATURE_TCPNODELAY = 0x03
+FEATURE_MUTATION_SEQNO = 0x04
 
 
 # LWW related - these are documented here https://github.com/couchbase/ep-engine/blob/master/docs/protocol/set_with_meta.md
 SKIP_CONFLICT_RESOLUTION_FLAG = 0x1
 FORCE_ACCEPT_WITH_META_OPS = 0x2
 REGENERATE_CAS = 0x4
+
+# Datatypes
+DATATYPE_XATTR = 0x4

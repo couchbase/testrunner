@@ -3,6 +3,7 @@ import string
 import uuid
 from datetime import datetime
 from random import randint
+from functools import reduce
 
 class RandomDataGenerator(object):
 
@@ -17,7 +18,7 @@ class RandomDataGenerator(object):
 
     def random_alphanumeric(self, limit = 10):
         #ascii alphabet of all alphanumerals
-        r = (range(48, 58) + range(65, 91) + range(97, 123))
+        r = (list(range(48, 58)) + list(range(65, 91)) + list(range(97, 123)))
         random.shuffle(r)
         return reduce(lambda i, s: i + chr(s), r[:random.randint(0, len(r))], "")
 
@@ -42,9 +43,9 @@ class RandomDataGenerator(object):
         return random.choice([True, False])
 
     def random_datetime(self, start = 1999, end = 2015):
-        year = random.choice(range(start, end))
-        month = random.choice(range(1, 13))
-        day = random.choice(range(1, 29))
+        year = random.choice(list(range(start, end)))
+        month = random.choice(list(range(1, 13)))
+        day = random.choice(list(range(1, 29)))
         return datetime(year, month, day)
 
     def random_alphabet_string(self, limit =10):
@@ -114,8 +115,8 @@ class RandomDataGenerator(object):
 
 if __name__=="__main__":
     helper = RandomDataGenerator()
-    print helper.isChoice()
-    print helper.isChoice()
+    print(helper.isChoice())
+    print(helper.isChoice())
     #print helper.random_single_dimension_array(max_array_size = 100)
-    print helper.random_array()
+    print(helper.random_array())
     #print helper.random_json()

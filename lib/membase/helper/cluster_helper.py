@@ -9,7 +9,7 @@ import memcacheConstants
 import logger
 import testconstants
 import time
-import Queue
+import queue
 from threading import Thread
 import traceback
 
@@ -78,6 +78,7 @@ class ClusterOperationHelper(object):
             log.info("waiting for ns_server @ {0}:{1}".format(server.ip, server.port))
             if RestHelper(rest).is_ns_server_running(wait_time):
                 log.info("ns_server @ {0}:{1} is running".format(server.ip, server.port))
+
             elif wait_if_warmup:
                 # wait when warmup completed
                 buckets = rest.get_buckets()
@@ -162,7 +163,7 @@ class ClusterOperationHelper(object):
     def persistence_verification(servers, bucket, timeout_in_seconds=1260):
         log = logger.Logger.get_logger()
         verification_threads = []
-        queue = Queue.Queue()
+        queue = queue.Queue()
         rest = RestConnection(servers[0])
         nodes = rest.get_nodes()
         nodes_ip = []
@@ -246,7 +247,7 @@ class ClusterOperationHelper(object):
         nodes = rest.node_statuses()
         master_id = rest.get_nodes_self().id
         for node in nodes:
-            if int(node.port) in xrange(9091, 9991):
+            if int(node.port) in range(9091, 9991):
                 rest.eject_node(node)
                 nodes.remove(node)
 
@@ -278,7 +279,7 @@ class ClusterOperationHelper(object):
                 if time.time() - start > 10:
                     log.error("'pools' on node {0}:{1} - {2}".format(
                            removed.ip, removed.port, rest.get_pools_info()["pools"]))
-            for node in set([node for node in nodes if (node.id != master_id)]) - set(success_cleaned):
+            for node in {node for node in nodes if (node.id != master_id)} - set(success_cleaned):
                 log.error("node {0}:{1} was not cleaned after removing from cluster".format(
                            removed.ip, removed.port))
                 try:
@@ -286,7 +287,7 @@ class ClusterOperationHelper(object):
                     rest.force_eject_node()
                 except Exception as ex:
                     log.error("force_eject_node {0}:{1} failed: {2}".format(removed.ip, removed.port, ex))
-            if len(set([node for node in nodes if (node.id != master_id)])\
+            if len({node for node in nodes if (node.id != master_id)}\
                     - set(success_cleaned)) != 0:
                 raise Exception("not all ejected nodes were cleaned successfully")
 

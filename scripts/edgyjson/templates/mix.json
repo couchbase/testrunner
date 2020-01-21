@@ -1,0 +1,26 @@
+{
+
+  "array-dates": "num_min=0,num_max=100",
+  "array_empty": "type=array",
+  "array-literals": "",
+  "array-mix": "",
+  "array-numbers": "num_min=0,num_max=100",
+  "array-strings": "len_min=0,len_max=100,num_min=0,num_max=100",
+  "bool": "",
+  "date": "",
+  "doc-empty": "type=doc",
+  "doc-sub": "max_nesting=10",
+  "float": "",
+  "float-negative": "negative=True",
+  "int": "",
+  "int-negative": "negative=True",
+  "null": "",
+  "string-empty": "type=string",
+  "string-long": "len_min=20,len_max=100",
+  "string-medium": "len_min=5,len_max=20",
+  "string-short": "len_min=1,len_max=5",
+  "string-number": "len_min=1,len_max=10",
+  "string-reserved": "",
+  "string-vlong": "len_min=100,len_max=1000"
+}
+

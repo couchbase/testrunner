@@ -174,6 +174,50 @@ class CouchbaseCLI:
         return stdout, stderr, self._was_success(stdout,
                                                  "Log collection stopped")
 
+    def create_scope(self, bucket="default", scope="scope0"):
+        remote_client = RemoteMachineShellConnection(self.server)
+        options = " --bucket " + str(bucket)
+        options += "--create-scope" + str(scope)
+        stdout, stderr = remote_client.execute_couchbase_cli("collection-manage", self.hostname,
+                                                             options)
+        remote_client.disconnect()
+        return self._was_success(stdout, "Scope {} created in bucket {}".format(scope, bucket))
+
+    def create_collection(self, bucket="default", scope="scope0", collection="mycollection0"):
+        remote_client = RemoteMachineShellConnection(self.server)
+        options = " --bucket " + str(bucket)
+        options += "--create-collection" + str(scope) + '.' + str(collection)
+        stdout, stderr = remote_client.execute_couchbase_cli("collection-manage", self.hostname,
+                                                             options)
+        remote_client.disconnect()
+        return self._was_success(stdout, "Scope {} created in bucket {}".format(scope, bucket))
+
+    def delete_collection(self, bucket="default", scope='_default', collection='_default'):
+        remote_client = RemoteMachineShellConnection(self.server)
+        options = " --bucket " + str(bucket)
+        options += "--drop-collection" + str(scope) + '.' + str(collection)
+        stdout, stderr = remote_client.execute_couchbase_cli("collection-manage", self.hostname,
+                                                             options)
+        remote_client.disconnect()
+        return self._was_success(stdout, "Collection {} dropped in bucket {}".format(scope, bucket))
+
+    def delete_scope(self, scope, bucket="default"):  # scope should be passed as default scope can not be deleted
+        remote_client = RemoteMachineShellConnection(self.server)
+        options = " --bucket " + str(bucket)
+        options += "--drop-scope" + str(scope)
+        stdout, stderr = remote_client.execute_couchbase_cli("collection-manage", self.hostname,
+                                                             options)
+        remote_client.disconnect()
+        return self._was_success(stdout, "Scope {} deleted in bucket {}".format(scope, bucket))
+
+    #Temporarily need to enable DP mode for collections
+    def enable_dp(self):
+        remote_client = RemoteMachineShellConnection(self.server)
+        stdout, stderr = remote_client.execute_couchbase_cli("enable-developer-preview", self.hostname,
+                                                     "--enable", additional_input="yes")
+        remote_client.disconnect()
+        return stdout, stderr, self._was_success(stdout, "Developer mode enabled")
+
     def failover(self, failover_servers, force):
         options = self._get_default_options()
         if failover_servers:
@@ -516,7 +560,7 @@ class CouchbaseCLI:
     def setting_notification(self, enable):
         options = self._get_default_options()
         if enable is not None:
-            options += " --enable-notification " + str(enable)
+            options += " --enable-notifications " + str(enable)
 
         remote_client = RemoteMachineShellConnection(self.server)
         stdout, stderr = remote_client.couchbase_cli("setting-notification",

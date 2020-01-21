@@ -12,49 +12,80 @@ COUCHBASE_VERSIONS = ["0.0.0",
                       "3.1.4", "3.1.5", "3.1.6", "3.5.0", "4.0.0", "4.0.1", "4.1.0",
                       "4.1.1", "4.1.2", "4.5.0", "4.5.1", "4.6.0", "4.6.1", "4.6.2",
                       "4.6.3", "4.6.4", "4.6.5", "4.7.0", "5.0.0", "5.0.1", "5.0.2",
-                      "5.1.0", "5.1.1", "5.1.2", "5.5.0", "5.5.1", "5.5.2", "6.0.0", "6.5.0"]
+                      "5.1.0", "5.1.1", "5.1.2", "5.1.3", "5.5.0", "5.5.1", "5.5.2",
+                      "5.5.3", "5.5.4", "5.5.5", "5.5.6", "6.0.0", "6.0.1", "6.0.2",
+                      "6.0.3", "6.0.4", "6.5.0", "6.5.1", "7.0.0"]
 CB_RELEASE_BUILDS = {"0.0.0":"0000",
                      "2.1.1":"764", "2.2.0":"821", "2.5.0":"1059", "2.5.1":"1083",
-                     "2.5.2":"1154","3.0.3":"1716", "3.1.5":"1859","3.1.6":"1904",
+                     "2.5.2":"1154", "3.0.3":"1716", "3.1.5":"1859", "3.1.6":"1904",
                      "4.0.0":"4051", "4.1.0":"5005", "4.1.1":"5914", "4.1.2":"6088",
                      "4.5.0":"2601", "4.5.1":"2844", "4.6.0":"3573", "4.6.1":"3652",
-                     "4.6.2":"3905", "4.6.3":"4136", "4.6.4":"4590",  "4.7.0":"0000",
-                     "4.6.5":"4742", "5.0.0":"3519", "5.0.1":"5003", "5.0.2":"0000",
-                     "5.1.0":"5552", "5.1.1":"5723", "5.1.2":"0000", "5.5.0":"2958",
-                     "5.5.1":"0000", "5.5.2":"0000", "6.0.0":"0000", "6.5.0":"0000"}
+                     "4.6.2":"3905", "4.6.3":"4136", "4.6.4":"4590", "4.7.0":"0000",
+                     "4.6.5":"4742", "5.0.0":"3519", "5.0.1":"5003", "5.0.2":"5509",
+                     "5.1.0":"5552", "5.1.1":"5723", "5.1.2":"6030", "5.1.3":"6212",
+                     "5.5.0":"2958", "5.5.1":"3511", "5.5.2":"3733", "5.5.3":"4041",
+                     "5.5.4":"4338", "5.5.5":"4523", "5.5.6":"0000", "6.0.0":"1693",
+                     "6.0.1":"2037", "6.0.2":"2601", "6.0.3":"2895", "6.0.4":"0000",
+                     "6.5.0":"0000", "6.5.1":"0000", "7.0.0":"0000"}
 COUCHBASE_FROM_VERSION_3 = ["3.0.0", "3.0.1", "3.0.2", "3.0.3", "3.1.0", "3.1.1",
                             "3.1.2", "3.1.3", "3.1.4", "3.1.5", "3.1.6", "3.5.0",
                             "4.0.0", "4.0.1", "4.1.0", "4.1.1", "4.1.2", "4.5.0",
                             "4.5.1", "4.6.0", "4.6.1", "4.6.2", "4.6.3", "4.6.4",
                             "4.6.5", "4.7.0", "5.0.0", "5.0.1", "5.0.2", "5.1.0",
-                            "5.1.1", "5.1.2", "5.5.0", "5.5.1", "5.5.2", "6.0.0", "6.5.0"]
+                            "5.1.1", "5.1.2", "5.1.3", "5.5.0", "5.5.1", "5.5.2",
+                            "5.5.3", "5.5.4", "5.5.5", "5.5.6", "6.0.0", "6.0.1",
+                            "6.0.2", "6.0.3", "6.0.4", "6.5.0", "6.5.1", "7.0.0"]
 COUCHBASE_RELEASE_FROM_VERSION_3 = ["3.0.0", "3.0.1", "3.0.2", "3.0.3", "3.1.0",
                                     "3.1.1", "3.1.2", "3.1.3", "3.1.5", "4.0.0",
                                     "4.1.0", "4.1.1", "4.1.2", "4.5.0", "4.5.1",
                                     "4.6.0", "4.6.1", "4.6.2", "4.6.3", "4.6.4",
                                     "4.6.5", "5.0.0", "5.0.1", "5.1.0", "5.1.1",
-                                    "5.5.0"]
+                                    "5.1.2", "5.1.3", "5.5.0", "5.5.1", "5.5.2",
+                                    "5.5.3", "5.5.4", "5.5.5", "5.5.6", "6.0.0",
+                                    "6.0.1", "6.0.2", "6.0.3", "6.0.4"]
+COUCHBASE_RELEASE_FROM_SPOCK = ["5.0.0", "5.0.1", "5.1.0", "5.1.1", "5.1.2", "5.1.3", "5.5.0",
+                                "5.5.1", "5.5.2", "5.5.3", "5.5.4", "5.5.5", "5.5.6", "6.0.0",
+                                "6.0.1", "6.0.2", "6.0.3", "6.0.4"]
 COUCHBASE_FROM_VERSION_4 = ["0.0.0",
                             "4.0.0", "4.0.1", "4.1.0", "4.1.1", "4.1.2", "4.5.0",
                             "4.5.1", "4.6.0", "4.6.1", "4.6.2", "4.6.3", "4.6.4",
                             "4.6.5", "4.7.0", "5.0.0", "5.0.1", "5.0.2", "5.1.0",
-                            "5.1.1", "5.1.2", "5.5.0", "5.5.1", "5.5.2", "6.0.0", "6.5.0"]
+                            "5.1.1", "5.1.2", "5.1.3", "5.5.0", "5.5.1", "5.5.2",
+                            "5.5.3", "5.5.4", "5.5.5", "5.5.6", "6.0.0", "6.0.1",
+                            "6.0.2", "6.0.3", "6.0.4", "6.5.0", "6.5.1", "7.0.0"]
 COUCHBASE_FROM_SHERLOCK = ["4.0.0", "4.0.1", "4.1.0", "4.1.1", "4.1.2", "4.5.0",
                            "4.5.1", "4.6.0", "4.6.1", "4.6.2", "4.6.3", "4.6.4",
                            "4.6.5", "4.7.0", "5.0.0", "5.0.1", "5.0.2", "5.1.0",
-                           "5.1.1", "5.1.2", "5.5.0", "5.5.1", "5.5.2", "6.0.0", "6.5.0"]
+                           "5.1.1", "5.1.2", "5.1.3", "5.5.0", "5.5.1", "5.5.2",
+                           "5.5.3", "5.5.4", "5.5.5", "5.5.6", "6.0.0", "6.0.1",
+                            "6.0.2", "6.0.3", "6.0.4", "6.5.0", "6.5.1", "7.0.0"]
 COUCHBASE_FROM_4DOT6 = ["4.6.0", "4.6.1", "4.6.2", "4.6.3", "4.6.4", "4.6.5", "4.7.0",
-                        "5.0.0", "5.0.1", "5.0.2", "5.1.0", "5.1.1", "5.1.2", "5.5.0",
-                        "5.5.1", "5.5.2", "6.0.0", "6.5.0"]
+                        "5.0.0", "5.0.1", "5.0.2", "5.1.0", "5.1.1", "5.1.2", "5.1.3",
+                        "5.5.0", "5.5.1", "5.5.2", "5.5.3", "5.5.4", "5.5.5", "5.5.6",
+                        "6.0.0", "6.0.1", "6.0.2", "6.0.3", "6.0.4", "6.5.0", "6.5.1",
+                        "7.0.0"]
 COUCHBASE_FROM_WATSON = ["0.0.0",
                          "4.5.0", "4.5.1", "4.6.0", "4.6.1", "4.6.2", "4.6.3", "4.6.4",
                          "4.6.5", "4.7.0", "5.0.0", "5.0.1", "5.0.2", "5.1.0", "5.1.1",
-                         "5.1.2", "5.5.0", "5.5.1", "5.5.2", "6.0.0", "6.5.0"]
+                         "5.1.2", "5.1.3", "5.5.0", "5.5.1", "5.5.2", "5.5.3", "5.5.4",
+                         "5.5.5", "5.5.6", "6.0.0", "6.0.1", "6.0.2", "6.0.3", "6.0.4",
+                         "6.5.0", "6.5.1", "7.0.0"]
+"""
+    If new version is greater than 5.0.0, we need to add new version to constant
+    COUCHBASE_FROM_SPOCK below so that windows will get correct build (msi) to un/install
+"""
 COUCHBASE_FROM_SPOCK = ["0.0.0", "4.7.0", "5.0.0", "5.0.1", "5.0.2", "5.1.0", "5.1.1",
-                        "5.1.2", "5.5.0", "5.5.1", "5.5.2", "6.0.0", "6.5.0"]
-COUCHBASE_FROM_VULCAN = ["0.0.0", "5.5.0", "5.5.1", "5.5.2", "6.0.0", "6.5.0"]
-COUCHBASE_FROM_ALICE = ["0.0.0", "6.0.0", "6.5.0"]
-COUCHBASE_FROM_MAD_HATTER = ["0.0.0", "6.5.0"]
+                        "5.1.2", "5.1.3", "5.5.0", "5.5.1", "5.5.2", "5.5.3", "5.5.4",
+                        "5.5.5", "5.5.6", "6.0.0", "6.0.1", "6.0.2", "6.0.3", "6.0.4",
+                        "6.5.0", "6.5.1", "7.0.0"]
+
+COUCHBASE_FROM_VULCAN = ["0.0.0", "5.5.0", "5.5.1", "5.5.2", "5.5.3", "5.5.4", "5.5.5",
+                         "5.5.6", "6.0.0", "6.0.1", "6.0.2", "6.0.3", "6.0.4", "6.5.0",
+			 "6.5.1", "7.0.0"]
+COUCHBASE_FROM_ALICE = ["0.0.0", "6.0.0", "6.0.1", "6.0.2", "6.0.3", "6.0.4", "6.5.0", "6.5.1", "7.0.0"]
+COUCHBASE_FROM_601 = ["0.0.0", "6.0.1", "6.0.2", "6.0.3", "6.0.4", "6.5.0", "6.5.1", "7.0.0"]
+COUCHBASE_FROM_MAD_HATTER = ["0.0.0", "6.5.0", "6.5.1", "7.0.0"]
+COUCHBASE_FROM_CHESHIRE_CAT = ["0.0.0", "7.0.0"]
 COUCHBASE_RELEASE_VERSIONS_3 = ["3.0.1", "3.0.1-1444", "3.0.2", "3.0.2-1603", "3.0.3",
                                 "3.0.3-1716", "3.1.0", "3.1.0-1797", "3.1.1", "3.1.1-1807",
                                 "3.1.2", "3.1.2-1815", "3.1.3", "3.1.3-1823", "3.1.5"]
@@ -70,10 +101,20 @@ WIN_CB_VERSION_3 = ["3.0.0", "3.0.1", "3.0.2", "3.0.3", "3.1.0", "3.1.1","3.1.2"
                     "3.1.3", "3.1.4", "3.1.5", "3.1.6"]
 SHERLOCK_VERSION = ["4.0.0", "4.0.1", "4.0", "4.1.0", "4.1", "4.1.1", "4.1.2"]
 WATSON_VERSION = ["4.5.0", "4.5.1", "4.6.0", "4.6.1", "4.6.2", "4.6.3", "4.6.4", "4.6.5"]
-CB_VERSION_NAME = {"0.0":"master", "4.0":"sherlock", "4.1":"sherlock", "4.5":"watson",
-                   "4.6":"watson", "4.7":"spock", "5.0":"spock", "5.1":"spock", "5.5":"vulcan",
-                   "6.0":"alice", "6.5": "mad-hatter"}
-SYSTEMD_SERVER = ["centos 7", "suse 12", "ubuntu 16.04", "debian gnu/linux 8", "debian gnu/linux 9"]
+
+CB_VERSION_NAME = {"0.0":"master", "4.0":"sherlock", "4.1":"sherlock",
+                   "4.5":"watson", "4.6":"watson",
+                   "4.7":"spock", "5.0":"spock", "5.1":"spock",
+                   "5.5":"vulcan",
+                   "6.0":"alice",
+                   "6.5":"mad-hatter",
+                   "7.0":"cheshire-cat"}
+
+MACOS_NAME = {"10.10":"Yosemite", "10.11":"El Capitan", "10.12":"Sierra", "10.13":"High Sierra",
+              "10.14":"Mojave", "10.15":"Catalina"}
+
+SYSTEMD_SERVER = ["centos 8", "centos 7", "suse 12", "suse 15", "ubuntu 16.04", "ubuntu 18.04",
+                  "debian gnu/linux 8", "debian gnu/linux 9", "rhel8"]
 WIN_MEMBASE_DATA_PATH = '/cygdrive/c/Program\ Files/Membase/Server/var/lib/membase/data/'
 WIN_COUCHBASE_DATA_PATH = '/cygdrive/c/Program\ Files/Couchbase/Server/var/lib/couchbase/data/'
 WIN_COUCHBASE_DATA_PATH_RAW = 'c:/Program\ Files/Couchbase/Server/var/lib/couchbase/data/'
@@ -136,6 +177,7 @@ WIN_REGISTER_ID = {"1654":"70668C6B-E469-4B72-8FAD-9420736AAF8F",
     old "211":"7EDC64EF-43AD-48BA-ADB3-3863627881B8"
     old one at 2014.12.03 "211":"6B91FC0F-D98E-469D-8281-345A08D65DAF"
     change one more time; current at 2015.11.10 "211":"4D92395A-BB95-4E46-9D95-B7BFB97F7446" """
+IPV4_REGEX = "^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])$"
 VERSION_FILE = "VERSION.txt"
 MIN_COMPACTION_THRESHOLD = 2
 MAX_COMPACTION_THRESHOLD = 100
@@ -146,8 +188,13 @@ NUM_ERLANG_THREADS = 16
 MIN_KV_QUOTA = 256
 INDEX_QUOTA = 256
 FTS_QUOTA = 512
-EVENTING_QUOTA = 256
+EVENTING_QUOTA = 512
 CBAS_QUOTA = 1024
+""" when we run with small server, it needs to increase cluster quota so that small
+    server could have many services in.
+    Default value is 0.67
+"""
+CLUSTER_QUOTA_RATIO = 0.67
 LINUX_COUCHBASE_BIN_PATH = "/opt/couchbase/bin/"
 LINUX_NONROOT_CB_BIN_PATH = "~/opt/couchbase/bin/"
 NR_INSTALL_LOCATION_FILE = "nonroot_install_location.txt"
@@ -179,6 +226,7 @@ WINDOWS_GOPATH = '/cygdrive/c/tuq/gocode'
 LINUX_GOROOT = '/root/tuq/go'
 WINDOWS_GOROOT = '/cygdrive/c/Go'
 LINUX_STATIC_CONFIG = '/opt/couchbase/etc/couchbase/static_config'
+LINUX_DIST_CONFIG='/opt/couchbase/var/lib/couchbase/config/dist_cfg'
 LINUX_LOG_PATH = '/opt'
 LINUX_CAPI_INI = '/opt/couchbase/etc/couchdb/default.d/capi.ini'
 LINUX_CONFIG_FILE = '/opt/couchbase/var/lib/couchbase/config/config.dat'
@@ -223,6 +271,7 @@ COUCHBASE_REPO = "http://{0}/builds/latestbuilds/couchbase-server/".format(CB_DO
 CB_LATESTBUILDS_REPO = "http://{0}/builds/latestbuilds/"
 #CB_LATESTBUILDS_REPO = "http://latestbuilds.hq.couchbase.com/latestbuilds/"
 CB_REPO = "http://{0}/builds/latestbuilds/couchbase-server/".format(CB_DOWNLOAD_SERVER)
+CB_FQDN_REPO = "http://{0}/builds/latestbuilds/couchbase-server/".format(CB_DOWNLOAD_SERVER_FQDN)
 #CB_REPO = "http://latestbuilds.hq.couchbase.com/couchbase-server/"
 CB_RELEASE_REPO = "http://{0}/builds/releases/".format(CB_DOWNLOAD_SERVER)
 #MV_RELEASE_REPO = "http://latestbuilds.hq.couchbase.com/release"
@@ -239,7 +288,7 @@ QUERY_5K_FIELDS = "https://s3-us-west-1.amazonaws.com/qebucket/testrunner/data/q
 QUERY_5K_NUM_DATE = "https://s3-us-west-1.amazonaws.com/qebucket/testrunner/data/query_50000_functions_numeric_string_datetime.txt"
 QUERY_JOIN = "https://s3-us-west-1.amazonaws.com/qebucket/testrunner/data/queries_joins_50000.txt"
 QUERY_SUBQUERY = "https://s3-us-west-1.amazonaws.com/qebucket/testrunner/data/queries_subqueries_1000.txt"
-ENT_BKRS = "https://s3-us-west-1.amazonaws.com/qebucket/testrunner/data/entbackup.tgz"
+ENT_BKRS = "https://s3-us-west-1.amazonaws.com/qebucket/testrunner/data/entbackup-mh.tgz"
 ENT_BKRS_FTS = "https://s3-us-west-1.amazonaws.com/qebucket/testrunner/data/entbackup-fts.tgz"
 WIN_UNZIP = "https://s3-us-west-1.amazonaws.com/qebucket/testrunner/win-cmd/unzip.exe"
 WIN_PSSUSPEND = "https://s3-us-west-1.amazonaws.com/qebucket/testrunner/win-cmd/pssuspend.exe"

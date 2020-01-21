@@ -10,22 +10,22 @@ def usage(err=None):
     err_code = 0
     if err:
         err_code = 1
-        print "Error:", err
-        print
-    print "./vbucketpop.py -i <server> -p <port> -b <bucket> -P <password> -f <file>"
-    print ""
-    print " server             Server IP"
-    print " port               moxi port"
-    print " bucket             bucket (default)"
-    print " password           saslbucket password ('')"
-    print " file               kvstore filename"
-    print ""
-    print "Default bucket"
-    print "./vbucketpop.py -i 127.0.0.1 -p 11211 -b default -f kvstore"
-    print "Bucket with no password"
-    print "./vbucketpop.py -i 127.0.0.1 -p 11211 -b temp -P '' -f kvstore"
-    print "Sasl bucket with password"
-    print "./vbucketpop.py -i 127.0.0.1 -p 11211 -b temp -P temp -f kvstore"
+        print("Error:", err)
+        print()
+    print("./vbucketpop.py -i <server> -p <port> -b <bucket> -P <password> -f <file>")
+    print("")
+    print(" server             Server IP")
+    print(" port               moxi port")
+    print(" bucket             bucket (default)")
+    print(" password           saslbucket password ('')")
+    print(" file               kvstore filename")
+    print("")
+    print("Default bucket")
+    print("./vbucketpop.py -i 127.0.0.1 -p 11211 -b default -f kvstore")
+    print("Bucket with no password")
+    print("./vbucketpop.py -i 127.0.0.1 -p 11211 -b temp -P '' -f kvstore")
+    print("Sasl bucket with password")
+    print("./vbucketpop.py -i 127.0.0.1 -p 11211 -b temp -P temp -f kvstore")
     sys.exit(err_code)
 
 class Config(object):
@@ -38,11 +38,11 @@ class Config(object):
         self.filename = ''
 
         try:
-            (opts, args) = getopt.getopt(argv, 'hi:p:b:P:f:', ['help', 'server=','port=',
+            (opts, args) = getopt.getopt(argv, 'hi:p:b:P:f:', ['help', 'server=', 'port=',
                                                               'bucket=', 'password=', 'filename='])
         except IndexError:
             usage()
-        except getopt.GetoptError, err:
+        except getopt.GetoptError as err:
             usage(err)
 
         for o, a in opts:
@@ -71,7 +71,7 @@ if __name__ == "__main__":
     try:
         f = open(config.filename, 'r')
     except IOError:
-        print "Error opening kvstore file %s " % config.filename
+        print("Error opening kvstore file %s " % config.filename)
     else:
         store = pickle.load(f)
         f.close()
@@ -82,10 +82,10 @@ if __name__ == "__main__":
             client.sasl_auth_plain(config.bucket,
                                    config.password)
 
-    for vbucketid, keys in store.items():
-        print "Loading %s vbucketId with %s keys" % (vbucketid, keys)
+    for vbucketid, keys in list(store.items()):
+        print("Loading %s vbucketId with %s keys" % (vbucketid, keys))
         for key in keys:
             try:
                 client.add(key, 0, 0, key)
-            except mc_bin_client.MemcachedError, e:
-                print e
+            except mc_bin_client.MemcachedError as e:
+                print(e)

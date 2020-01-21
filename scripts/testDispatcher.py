@@ -1,6 +1,6 @@
 import sys
-import urllib2
-import urllib
+import urllib.request, urllib.error, urllib.parse
+import urllib.request, urllib.parse, urllib.error
 import httplib2
 import json
 import string
@@ -46,41 +46,41 @@ def main():
 
     usage = '%prog -s suitefile -v version -o OS'
     parser = OptionParser(usage)
-    parser.add_option('-v','--version', dest='version')
-    parser.add_option('-r','--run', dest='run')   # run is ambiguous but it means 12 hour or weekly
-    parser.add_option('-o','--os', dest='os')
-    parser.add_option('-n','--noLaunch', action="store_true", dest='noLaunch', default=False)
-    parser.add_option('-c','--component', dest='component', default=None)
-    parser.add_option('-p','--poolId', dest='poolId', default='12hour')
-    parser.add_option('-a','--addPoolId', dest='addPoolId', default=None)
-    parser.add_option('-t','--test', dest='test', default=False, action='store_true') # use the test Jenkins
-    parser.add_option('-s','--subcomponent', dest='subcomponent', default=None)
-    parser.add_option('-e','--extraParameters', dest='extraParameters', default=None)
-    parser.add_option('-y','--serverType', dest='serverType', default='VM')   # or could be Docker
-    parser.add_option('-u','--url', dest='url', default=None)
-    parser.add_option('-j','--jenkins', dest='jenkins', default=None)
-    parser.add_option('-b','--branch', dest='branch', default='master')
+    parser.add_option('-v', '--version', dest='version')
+    parser.add_option('-r', '--run', dest='run')   # run is ambiguous but it means 12 hour or weekly
+    parser.add_option('-o', '--os', dest='os')
+    parser.add_option('-n', '--noLaunch', action="store_true", dest='noLaunch', default=False)
+    parser.add_option('-c', '--component', dest='component', default=None)
+    parser.add_option('-p', '--poolId', dest='poolId', default='12hour')
+    parser.add_option('-a', '--addPoolId', dest='addPoolId', default=None)
+    parser.add_option('-t', '--test', dest='test', default=False, action='store_true') # use the test Jenkins
+    parser.add_option('-s', '--subcomponent', dest='subcomponent', default=None)
+    parser.add_option('-e', '--extraParameters', dest='extraParameters', default=None)
+    parser.add_option('-y', '--serverType', dest='serverType', default='VM')   # or could be Docker
+    parser.add_option('-u', '--url', dest='url', default=None)
+    parser.add_option('-j', '--jenkins', dest='jenkins', default=None)
+    parser.add_option('-b', '--branch', dest='branch', default='master')
 
     # dashboardReportedParameters is of the form param1=abc,param2=def
-    parser.add_option('-d','--dashboardReportedParameters', dest='dashboardReportedParameters', default=None)
+    parser.add_option('-d', '--dashboardReportedParameters', dest='dashboardReportedParameters', default=None)
 
     options, args = parser.parse_args()
 
 
 
-    print 'the run is', options.run
-    print 'the  version is', options.version
+    print('the run is', options.run)
+    print('the  version is', options.version)
     releaseVersion = float( '.'.join( options.version.split('.')[:2]) )
-    print 'release version is', releaseVersion
+    print('release version is', releaseVersion)
 
-    print 'nolaunch', options.noLaunch
-    print 'os', options.os
+    print('nolaunch', options.noLaunch)
+    print('os', options.os)
     #print 'url', options.url
 
 
-    print 'url is', options.url
+    print('url is', options.url)
 
-    print 'the reportedParameters are', options.dashboardReportedParameters
+    print('the reportedParameters are', options.dashboardReportedParameters)
 
 
     # What do we do with any reported parameters?
@@ -134,7 +134,7 @@ def main():
             splitSubcomponents = options.subcomponent.split(',')
             subcomponentString = ''
             for i in range( len(splitSubcomponents) ):
-                print 'subcomponentString is', subcomponentString
+                print('subcomponentString is', subcomponentString)
                 subcomponentString = subcomponentString + "'" + splitSubcomponents[i] + "'"
                 if i < len(splitSubcomponents) - 1:
                     subcomponentString = subcomponentString + ','
@@ -142,7 +142,7 @@ def main():
                 format(options.run, options.component, subcomponentString)
 
 
-    print 'the query is', queryString #.format(options.run, componentString)
+    print('the query is', queryString) #.format(options.run, componentString)
     query = N1QLQuery(queryString )
     results = cb.n1ql_query( queryString )
 
@@ -151,18 +151,18 @@ def main():
         try:
             data = row['QE-Test-Suites']
             data['config'] = data['config'].rstrip()       # trailing spaces causes problems opening the files
-            print 'row', data
+            print('row', data)
 
             # check any os specific
             if 'os' not in data or (data['os'] == options.os) or \
-                (data['os'] == 'linux' and options.os in set(['centos','ubuntu']) ):
+                (data['os'] == 'linux' and options.os in {'centos', 'ubuntu'} ):
 
                 # and also check for which release it is implemented in
                 if 'implementedIn' not in data or releaseVersion >= float(data['implementedIn']):
                     if 'jenkins' in data:
                         # then this is sort of a special case, launch the old style Jenkins job
                         # not implemented yet
-                        print 'Old style Jenkins', data['jenkins']
+                        print('Old style Jenkins', data['jenkins'])
                     else:
                         if 'initNodes' in data:
                             initNodes = data['initNodes'].lower() == 'true'
@@ -215,18 +215,18 @@ def main():
                             'mode': mode
                             })
                 else:
-                    print data['component'], data['subcomponent'], ' is not supported in this release'
+                    print(data['component'], data['subcomponent'], ' is not supported in this release')
             else:
-                print 'OS does not apply to', data['component'], data['subcomponent']
+                print('OS does not apply to', data['component'], data['subcomponent'])
 
         except Exception as e:
-            print 'exception in querying tests, possible bad record'
-            print traceback.format_exc()
-            print data
+            print('exception in querying tests, possible bad record')
+            print(traceback.format_exc())
+            print(data)
 
-    print 'tests to launch:'
-    for i in testsToLaunch: print i['component'], i['subcomponent']
-    print '\n\n'
+    print('tests to launch:')
+    for i in testsToLaunch: print(i['component'], i['subcomponent'])
+    print('\n\n')
 
 
 
@@ -241,6 +241,8 @@ def main():
 #     if options.framework.lower() == "jython":
     if framework == "jython":
         launchStringBase = launchStringBase + '-jython'
+    if framework == "TAF":
+        launchStringBase = launchStringBase + '-TAF'
     elif options.jenkins is not None:
         launchStringBase = launchStringBase + '-' + options.jenkins
 
@@ -263,21 +265,21 @@ def main():
             getAvailUrl =  'http://' + SERVER_MANAGER + '/getavailablecount/'
             if options.serverType.lower() == 'docker':
                 # may want to add OS at some point
-                getAvailUrl = getAvailUrl +  'docker?os={0}&poolId={1}'.format(options.os,options.poolId)
+                getAvailUrl = getAvailUrl +  'docker?os={0}&poolId={1}'.format(options.os, options.poolId)
             else:
-                getAvailUrl = getAvailUrl + '{0}?poolId={1}'.format(options.os,options.poolId)
+                getAvailUrl = getAvailUrl + '{0}?poolId={1}'.format(options.os, options.poolId)
 
-            response, content = httplib2.Http(timeout=60).request(getAvailUrl , 'GET')
+            response, content = httplib2.Http(timeout=60).request(getAvailUrl, 'GET')
             if response.status != 200:
-               print time.asctime( time.localtime(time.time()) ), 'invalid server response', content
+               print(time.asctime( time.localtime(time.time()) ), 'invalid server response', content)
                time.sleep(POLL_INTERVAL)
             elif int(content) == 0:
-                print time.asctime( time.localtime(time.time()) ), 'no VMs'
+                print(time.asctime( time.localtime(time.time()) ), 'no VMs')
                 time.sleep(POLL_INTERVAL)
             else:
                 #see if we can match a test
                 serverCount = int(content)
-                print time.asctime( time.localtime(time.time()) ), 'there are', serverCount, ' servers available'
+                print(time.asctime( time.localtime(time.time()) ), 'there are', serverCount, ' servers available')
 
                 haveTestToLaunch = False
                 i = 0
@@ -296,17 +298,17 @@ def main():
                             response, content = httplib2.Http(
                                 timeout=60).request(getAddPoolUrl, 'GET')
                             if response.status != 200:
-                                print time.asctime(time.localtime(
-                                    time.time())), 'invalid server response', content
+                                print(time.asctime(time.localtime(
+                                    time.time())), 'invalid server response', content)
                                 time.sleep(POLL_INTERVAL)
                             elif int(content) == 0:
-                                print time.asctime(
+                                print(time.asctime(
                                     time.localtime(time.time())),\
-                                    'no {0} VMs at this time'.format(options.addPoolId)
+                                    'no {0} VMs at this time'.format(options.addPoolId))
                                 i = i + 1
                             else:
-                                print time.asctime( time.localtime(time.time()) ),\
-                                    "there are {0} {1} servers available".format(int(content), options.addPoolId)
+                                print(time.asctime( time.localtime(time.time()) ),\
+                                    "there are {0} {1} servers available".format(int(content), options.addPoolId))
                                 haveTestToLaunch = True
                         else:
                             haveTestToLaunch = True
@@ -316,13 +318,13 @@ def main():
 
                 if haveTestToLaunch:
                     # build the dashboard descriptor
-                    dashboardDescriptor = urllib.quote(testsToLaunch[i]['subcomponent'])
+                    dashboardDescriptor = urllib.parse.quote(testsToLaunch[i]['subcomponent'])
                     if options.dashboardReportedParameters is not None:
                         for o in options.dashboardReportedParameters.split(','):
                             dashboardDescriptor += '_' + o.split('=')[1]
 
                     # and this is the Jenkins descriptor
-                    descriptor = urllib.quote(testsToLaunch[i]['component'] + '-' + testsToLaunch[i]['subcomponent'] +
+                    descriptor = urllib.parse.quote(testsToLaunch[i]['component'] + '-' + testsToLaunch[i]['subcomponent'] +
                                         '-' + time.strftime('%b-%d-%X') + '-' + options.version )
 
 
@@ -337,12 +339,12 @@ def main():
                     else:
                         getServerURL = 'http://' + SERVER_MANAGER + \
                                 '/getservers/{0}?count={1}&expiresin={2}&os={3}&poolId={4}'. \
-                           format(descriptor, testsToLaunch[i]['serverCount'],testsToLaunch[i]['timeLimit'], \
+                           format(descriptor, testsToLaunch[i]['serverCount'], testsToLaunch[i]['timeLimit'], \
                                   options.os, options.poolId)
-                    print 'getServerURL', getServerURL
+                    print('getServerURL', getServerURL)
 
                     response, content = httplib2.Http(timeout=60).request(getServerURL, 'GET')
-                    print 'response.status', response, content
+                    print('response.status', response, content)
 
                     if options.serverType.lower() != 'docker':
                         # sometimes there could be a race, before a dispatcher process acquires vms,
@@ -369,10 +371,10 @@ def main():
                                       testsToLaunch[i]['timeLimit'], \
                                       options.os,
                                       options.addPoolId)
-                        print 'getServerURL', getServerURL
+                        print('getServerURL', getServerURL)
 
                         response2, content2 = httplib2.Http(timeout=60).request(getServerURL, 'GET')
-                        print 'response2.status', response2, content2
+                        print('response2.status', response2, content2)
 
 
 
@@ -401,14 +403,14 @@ def main():
                                                   testsToLaunch[i]['component'],
                                                   dashboardDescriptor,
                                                   testsToLaunch[i]['iniFile'],
-                                                  urllib.quote(parameters),
+                                                  urllib.parse.quote(parameters),
                                                   options.os,
                                                   testsToLaunch[i]['initNodes'],
                                                   testsToLaunch[i]['installParameters'],
                                                   options.branch,
                                                   testsToLaunch[i]['slave'],
-                                                  urllib.quote(testsToLaunch[i]['owner']),
-                                                  urllib.quote(
+                                                  urllib.parse.quote(testsToLaunch[i]['owner']),
+                                                  urllib.parse.quote(
                                                       testsToLaunch[i]['mailing_list']),
                                                   testsToLaunch[i]['mode'],
                                                   testsToLaunch[i]['timeLimit'])
@@ -416,22 +418,22 @@ def main():
 
                         if options.serverType.lower() != 'docker':
                             r2 = json.loads(content)
-                            servers = json.dumps(r2).replace(' ','').replace('[','', 1)
+                            servers = json.dumps(r2).replace(' ', '').replace('[', '', 1)
                             servers = rreplace(servers, ']', 1)
-                            url = url + '&servers=' + urllib.quote(servers)
+                            url = url + '&servers=' + urllib.parse.quote(servers)
 
                             if testsToLaunch[i]['addPoolServerCount']:
-                                addPoolServers = content2.replace(' ','')\
-                                                   .replace('[','', 1)
+                                addPoolServers = content2.replace(' ', '')\
+                                                   .replace('[', '', 1)
                                 addPoolServers = rreplace(addPoolServers, ']', 1)
                                 url = url + '&addPoolServerId=' +\
                                       options.addPoolId +\
                                       '&addPoolServers=' +\
-                                      urllib.quote(addPoolServers)
+                                      urllib.parse.quote(addPoolServers)
 
 
-                        print '\n', time.asctime( time.localtime(time.time()) ), 'launching ', url
-                        print url
+                        print('\n', time.asctime( time.localtime(time.time()) ), 'launching ', url)
+                        print(url)
 
                         if options.noLaunch:
                             # free the VMs
@@ -441,7 +443,7 @@ def main():
                             else:
                                 response, content = httplib2.Http(timeout=60).\
                                     request('http://' + SERVER_MANAGER + '/releaseservers/' + descriptor + '/available', 'GET')
-                                print 'the release response', response, content
+                                print('the release response', response, content)
                         else:
                             response, content = httplib2.Http(timeout=60).request(url, 'GET')
 
@@ -454,19 +456,19 @@ def main():
                         else:
                             time.sleep(30)
                 else:
-                    print 'not enough servers at this time'
+                    print('not enough servers at this time')
                     time.sleep(POLL_INTERVAL)
             #endif checking for servers
 
         except Exception as e:
-            print 'have an exception'
-            print traceback.format_exc()
+            print('have an exception')
+            print(traceback.format_exc())
             time.sleep(POLL_INTERVAL)
     #endwhile
 
-    print '\n\n\ndone, everything is launched'
+    print('\n\n\ndone, everything is launched')
     for i in summary:
-        print i['test'], 'was launched at', i['time']
+        print(i['test'], 'was launched at', i['time'])
     return
 
 

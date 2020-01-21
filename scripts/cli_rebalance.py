@@ -6,7 +6,7 @@ import sys
 from threading import Thread
 from datetime import datetime
 import socket
-import Queue
+import queue
 
 sys.path = [".", "lib"] + sys.path
 import testconstants
@@ -27,7 +27,7 @@ logging.config.fileConfig("scripts.logging.conf")
 log = logging.getLogger()
 
 def usage():
-    print "Please provide ini file"
+    print("Please provide ini file")
 
 def main():
     log_install_failed = "some nodes were not install successfully!"
@@ -45,9 +45,9 @@ def main():
             usage("ERROR: no servers specified. Please use the -i parameter.")
     except IndexError:
         usage()
-    except getopt.GetoptError, err:
+    except getopt.GetoptError as err:
         usage("ERROR: " + str(err))
-    print input
+    print(input)
 
 
     cli_command = "rebalance"
@@ -56,10 +56,10 @@ def main():
         # Assumption 4 nodes in ini file and add nodes from last node upwards
         remote_client = RemoteMachineShellConnection(input.servers[0])
         for server in input.servers[2:]:
-            print server.ip
+            print(server.ip)
             options = "--server-add={0}:8091".format(server.ip) + " --server-add-username=Administrator --server-add-password=password"
             output, error = remote_client.execute_couchbase_cli(cli_command, options=options, cluster_host=input.servers[0].ip, cluster_port=server.port, user=server.rest_username, password=server.rest_password)
-            print output, error
+            print(output, error)
             time.sleep(5)
 
     if "rebalance_out" in input.test_params:
@@ -68,10 +68,10 @@ def main():
         cli_command = "rebalance"
         remote_client = RemoteMachineShellConnection(input.servers[2])
         for server in input.servers[:2]:
-            print server.ip
+            print(server.ip)
             options = "--server-remove={0}:8091".format(server.ip) + " --server-add-username=Administrator --server-add-password=password"
             output, error = remote_client.execute_couchbase_cli(cli_command, options=options, cluster_host=input.servers[2].ip, cluster_port=server.port, user=server.rest_username, password=server.rest_password)
-            print output, error
+            print(output, error)
             time.sleep(5)
 
 

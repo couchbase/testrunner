@@ -1,0 +1,17 @@
+{
+  "bool": "",
+  "date": "",
+  "float": "",
+  "float-negative": "negative=True",
+  "int": "",
+  "int-negative": "negative=True",
+  "string-empty": "",
+  "string-short": "len_min=0,len_max=5",
+  "string-medium": "len_min=5,len_max=20",
+  "string-long": "len_min=20,len_max=100",
+  "string-vlong": "len_min=100,len_max=1000",
+  "string-number": "",
+  "string-reserved": "",
+  "doc-empty": "",
+  "tabs": "len_min=10,len_max=20"
+}

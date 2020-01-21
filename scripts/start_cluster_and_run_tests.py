@@ -2,7 +2,7 @@ import os
 import sys
 import time
 import subprocess
-import ConfigParser
+import configparser
 sys.path = ['.']+sys.path
 from lib.cluster_run_manager import CRManager
 
@@ -11,7 +11,7 @@ NS_SERVER_DIR = "../ns_server"
 
 
 def print_help():
-    print "Usage: <start_cluster_and_run_tests.py> <ini> <conf> [VERBOSE]"
+    print("Usage: <start_cluster_and_run_tests.py> <ini> <conf> [VERBOSE]")
 
 def exit_with_help():
     print_help()
@@ -19,16 +19,16 @@ def exit_with_help():
 
 def parse_ini_servers(ini):
     num_nodes = 0
-    Config = ConfigParser.ConfigParser()
+    Config = configparser.ConfigParser()
     try:
         Config.read(ini)
         opts = Config.options('servers')
         num_nodes = len(opts)
         assert num_nodes > 0
-    except ConfigParser.NoSectionError:
-        print "Error: unable parse server section {0}".format(ini)
+    except configparser.NoSectionError:
+        print("Error: unable parse server section {0}".format(ini))
     except AssertionError:
-        print "Error: no nodes specified in server section"
+        print("Error: no nodes specified in server section")
 
     num_nodes > 0 or sys.exit(-1)
 
@@ -48,9 +48,9 @@ def ns_clean(make, verbose = 1):
         subprocess.check_call(make.split() + ["ns_dataclean"], stdout = stdout)
         clean = True
     except subprocess.CalledProcessError as cpex:
-        print "Error: command {0} failed".format(cpex.cmd)
+        print("Error: command {0} failed".format(cpex.cmd))
     except OSError as ex:
-        print "Error: unable to write to stdout\n{0}".format(ex)
+        print("Error: unable to write to stdout\n{0}".format(ex))
     finally:
         os.chdir(TR_DIR)
 
@@ -76,15 +76,15 @@ def run_test(ini, conf, verbose, debug):
 
         r, w = os.pipe()
         proc = subprocess.Popen(args, stdout = subprocess.PIPE)
-        with open("make_test.log","w") as log:
+        with open("make_test.log", "w") as log:
             while proc.poll() is None:
                 line = proc.stdout.readline()
                 if line:
-                    print line[:-1]
-                    log.write(line)
+                    print(line[:-1])
+                    log.write(str(line))
         rc = proc.returncode
     except OSError as ex:
-        print "Error: unable to write to stdout\n{0}".format(ex)
+        print("Error: unable to write to stdout\n{0}".format(ex))
 
     return rc
 
@@ -95,7 +95,7 @@ def get_verbosity():
         try:
             return int(sys.argv[4])
         except TypeError:
-            print "Error: verbose must be a numerical value"
+            print("Error: verbose must be a numerical value")
             exit_with_help()
     return 1
 
@@ -106,7 +106,7 @@ def get_debug():
         try:
             return int(sys.argv[5])
         except TypeError:
-            print "Error: debug must be a numerical value"
+            print("Error: debug must be a numerical value")
             exit_with_help()
     return 1
 

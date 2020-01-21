@@ -19,16 +19,16 @@ class MySQLClient(object):
             self._set_mysql_client_without_database(self.host, self.user_id, self.password)
 
     def _reset_client_connection(self):
-        self._close_mysql_connection()
+        self._close_connection()
         self._set_mysql_client(self.database, self.host, self.user_id, self.password)
 
     def _set_mysql_client(self, database="flightstats", host="127.0.0.1", user_id="root", password=""):
-        self.mysql_connector_client = mysql.connector.connect(user=user_id, password=password, host=host, database=database)
+        self.mysql_connector_client = mysql.connector.connect(user=user_id, password=password, host=host, database=database, auth_plugin='mysql_native_password')
 
     def _set_mysql_client_without_database(self, host="127.0.0.1", user_id="root", password=""):
-        self.mysql_connector_client = mysql.connector.connect(user=user_id, password=password, host=host)
+        self.mysql_connector_client = mysql.connector.connect(user=user_id, password=password, host=host, auth_plugin='mysql_native_password')
 
-    def _close_mysql_connection(self):
+    def _close_connection(self):
         self.mysql_connector_client.close()
 
     def _insert_execute_query(self, query=""):
@@ -36,8 +36,8 @@ class MySQLClient(object):
         try:
             cur.execute(query)
             self.mysql_connector_client.commit()
-        except Exception, ex:
-            print ex
+        except Exception as ex:
+            print(ex)
             raise
 
     def _db_execute_query(self, query=""):
@@ -45,9 +45,9 @@ class MySQLClient(object):
         try:
             rows = cur.execute(query, multi=True)
             for row in rows:
-                print row
-        except Exception, ex:
-            print ex
+                print(row)
+        except Exception as ex:
+            print(ex)
             raise
         finally:
             cur.close()

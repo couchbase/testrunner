@@ -45,12 +45,12 @@ class ClientKeyValueStore(object):
         #dump all the keys
         keys = []
         self._rlock.acquire()
-        keys =  copy.deepcopy(self._cache.keys())
+        keys =  copy.deepcopy(list(self._cache.keys()))
         self._rlock.release()
         return keys
 
     def valid_items(self):
-        keys = self.keys()
+        keys = list(self.keys())
         valid_keys = []
         for k in keys:
             item = self.read(k)

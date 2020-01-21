@@ -13,7 +13,7 @@ import json
 
 
 def usage(error=None):
-    print """\
+    print("""\
 Options
  -i <file>        Path to .ini file containing cluster information.
  -p <key=val,...> Comma-separated key=value info.
@@ -24,7 +24,7 @@ Available keys:
 
 Example:
  doc_loader_from_file.py -i cluster.ini -p bucket_name=default,path=/tmp/items/
-"""
+""")
     sys.exit(error)
 
 
@@ -44,9 +44,9 @@ class DocLoader():
             key = str(file)
             try:
                 o, c, d = client.set(key, 0, 0, json.dumps(rq_json))
-            except Exception, ex:
-                print 'WARN======================='
-                print ex
+            except Exception as ex:
+                print('WARN=======================')
+                print(ex)
         self.log.info("LOAD IS FINISHED")
 
 def main():
@@ -61,7 +61,7 @@ def main():
             usage("ERROR: no servers specified. Please use the -i parameter.")
     except IndexError:
         usage()
-    except getopt.GetoptError, error:
+    except getopt.GetoptError as error:
         usage("ERROR: " + str(error))
 
     path = input.param("path", '')

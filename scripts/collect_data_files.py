@@ -13,7 +13,7 @@ import TestInput
 
 
 def usage(error=None):
-    print """\
+    print("""\
 Syntax: collect_data_files.py [options]
 
 Options
@@ -25,7 +25,7 @@ Available keys:
 
 Example:
  collect_data_files.py -i cluster.ini -p path=/tmp/nosql
-"""
+""")
     sys.exit(error)
 
 
@@ -57,14 +57,14 @@ class cbdatacollectRunner(object):
         file_name = "%s-%s%s%s-%s%s-couch.tar.gz" % (self.server.ip,
                                                      month, day, year, hour,
                                                      minute)
-        print "Collecting data files from %s\n" % self.server.ip
+        print("Collecting data files from %s\n" % self.server.ip)
 
         remote_client.extract_remote_info()
         data_path = self.__get_data_path(os_type=remote_client.info.type.lower())
         output, error = remote_client.execute_command("tar -zcvf {0} '{1}' >/dev/null 2>&1".
                                                       format(file_name, data_path))
-        print "\n".join(output)
-        print "\n".join(error)
+        print("\n".join(output))
+        print("\n".join(error))
 
         user_path = "/home/"
         if self.server.ssh_username == "root":
@@ -94,7 +94,7 @@ def main():
             usage("ERROR: no servers specified. Please use the -i parameter.")
     except IndexError:
         usage()
-    except getopt.GetoptError, error:
+    except getopt.GetoptError as error:
         usage("ERROR: " + str(error))
 
     file_path = _input.param("path", ".")
@@ -108,10 +108,10 @@ def main():
         while remote_thread.isAlive() and run_time < 1200:
             time.sleep(15)
             run_time += 15
-            print "Waiting for another 15 seconds (time-out after 20 min)"
+            print("Waiting for another 15 seconds (time-out after 20 min)")
         if run_time == 1200:
-            print "collect_data_files hung on this node. Jumping to next node"
-        print "collect data files done"
+            print("collect_data_files hung on this node. Jumping to next node")
+        print("collect data files done")
 
     for remote_thread in remote_threads:
         remote_thread.join(120)

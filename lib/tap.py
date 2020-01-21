@@ -11,14 +11,14 @@ import random
 import struct
 import asyncore
 
-import mc_bin_server
-import mc_bin_client
+from . import mc_bin_server
+from . import mc_bin_client
 
-from memcacheConstants import REQ_MAGIC_BYTE, RES_MAGIC_BYTE
-from memcacheConstants import REQ_PKT_FMT, RES_PKT_FMT, MIN_RECV_PACKET
-from memcacheConstants import SET_PKT_FMT, DEL_PKT_FMT, INCRDECR_RES_FMT
+from .memcacheConstants import REQ_MAGIC_BYTE, RES_MAGIC_BYTE
+from .memcacheConstants import REQ_PKT_FMT, RES_PKT_FMT, MIN_RECV_PACKET
+from .memcacheConstants import SET_PKT_FMT, DEL_PKT_FMT, INCRDECR_RES_FMT
 
-import memcacheConstants
+from . import memcacheConstants
 
 class TapConnection(mc_bin_server.MemcachedBinaryChannel):
 

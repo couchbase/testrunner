@@ -5,7 +5,7 @@ import time
 import copy
 
 class KVStore(object):
-    def __init__(self, num_locks=16):
+    def __init__(self, num_locks=1000):
         self.num_locks = num_locks
         self.reset()
         self.acquire_lock = threading.Lock()     # needed for deadlocks where different threads grab some of the partitions
@@ -17,19 +17,20 @@ class KVStore(object):
                                "partition": Partition(itr)}
 
 
-    def partition(self, key):
-        return self.cache[self._hash(key)]
+    def partition(self, key, collection=None, bucket="default"):
+        return self.cache[self._hash(key, bucket, collection)]
 
-    def acquire_partition(self, key):
-        partition = self.partition(key)
+
+    def acquire_partition(self, key, bucket="default", collection=None):
+        partition = self.partition(key, collection, bucket)
         partition["lock"].acquire()
         return partition["partition"]
 
-    def acquire_partitions(self, keys):
+    def acquire_partitions(self, keys, bucket="default", collection=None):
         self.acquire_lock.acquire()
         part_obj_keys = {}
         for key in keys:
-            partition = self.cache[self._hash(key)]
+            partition = self.cache[self._hash(key, bucket, collection)]
             partition_obj = partition["partition"]
             if partition_obj not in part_obj_keys:
                 partition["lock"].acquire()
@@ -43,16 +44,16 @@ class KVStore(object):
             partition = self.cache[partition_obj.part_id]
             partition["lock"].release()
 
-    def release_partition(self, key):
+    def release_partition(self, key, bucket="default", collection=None):
         if isinstance(key, str):
-            self.cache[self._hash(key)]["lock"].release()
+            self.cache[self._hash(key, bucket, collection)]["lock"].release()
         elif isinstance(key, int):
-            self.cache[key]["lock"].release()
+            self.cache[self._hash(key)]["lock"].release()
         else:
-            raise(Exception("Bad key"))
+            raise Exception
 
-    def acquire_random_partition(self, has_valid=True):
-        seed = random.choice(range(self.num_locks))
+    def acquire_random_partition(self, has_valid=True, collection=None):
+        seed = random.choice(list(range(self.num_locks)))
         for itr in range(self.num_locks):
             part_num = (seed + itr) % self.num_locks
             self.cache[part_num]["lock"].acquire()
@@ -63,16 +64,28 @@ class KVStore(object):
             self.cache[part_num]["lock"].release()
         return None, None
 
-    def key_set(self):
+    def key_set(self,bucket="default", collection=None):
         valid_keys = []
         deleted_keys = []
-        for itr in range(self.num_locks):
+        if collection:
+            key=None
+            itr=self._hash(key, bucket, collection)
+            print("For bucket {} and collection {} the itr is {}".format(bucket, collection, itr))
             self.cache[itr]["lock"].acquire()
             partition = self.cache[itr]["partition"]
             valid_keys.extend(partition.valid_key_set())
             deleted_keys.extend(partition.deleted_key_set())
             self.cache[itr]["lock"].release()
+        else:
+            for itr in range(self.num_locks):
+                self.cache[itr]["lock"].acquire()
+                partition = self.cache[itr]["partition"]
+                valid_keys.extend(partition.valid_key_set())
+                deleted_keys.extend(partition.deleted_key_set())
+                self.cache[itr]["lock"].release()
+
         return valid_keys, deleted_keys
+
 
     def get_partitions(self):
         partitions = []
@@ -104,8 +117,11 @@ class KVStore(object):
     def __len__(self):
         return sum([len(self.cache[itr]["partition"]) for itr in range(self.num_locks)])
 
-    def _hash(self, key):
-        return zlib.crc32(key) % self.num_locks
+    def _hash(self, key, bucket="default",collection=None):
+        if collection:
+            name= str(bucket) + "." + str(collection)
+            return zlib.crc32(name.encode()) % self.num_locks
+        return zlib.crc32(key.encode()) % self.num_locks
 
 class Partition(object):
     def __init__(self, part_id):
@@ -158,7 +174,7 @@ class Partition(object):
 
     def get_random_deleted_key(self):
         try:
-            return random.choice(self.__deleted.keys())
+            return random.choice(list(self.__deleted.keys()))
         except IndexError:
             return None
 
@@ -169,17 +185,17 @@ class Partition(object):
         return None
 
     def valid_key_set(self):
-        valid_keys = copy.copy(self.__valid.keys())
+        valid_keys = copy.copy(list(self.__valid.keys()))
         [self.__expire_key(key) for key in valid_keys]
-        return self.__valid.keys()
+        return list(self.__valid.keys())
 
     def deleted_key_set(self):
-        valid_keys = copy.copy(self.__valid.keys())
+        valid_keys = copy.copy(list(self.__valid.keys()))
         [self.__expire_key(key) for key in valid_keys]
-        return self.__deleted.keys()
+        return list(self.__deleted.keys())
 
     def expired_key_set(self):
-        valid_keys = copy.copy(self.__valid.keys())
+        valid_keys = copy.copy(list(self.__valid.keys()))
         [self.__expire_key(key) for key in valid_keys]
         return self.__expired_keys
 
@@ -228,8 +244,8 @@ class Partition(object):
         return key in self.__expired_keys
 
     def __len__(self):
-        [self.__expire_key(key) for key in self.__valid.keys()]
-        return len(self.__valid.keys())
+        [self.__expire_key(key) for key in list(self.__valid.keys())]
+        return len(list(self.__valid.keys()))
 
     def __eq__(self, other):
         if isinstance(other, Partition):

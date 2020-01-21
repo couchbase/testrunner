@@ -1,6 +1,6 @@
-from httplib import BadStatusLine
+from http.client import BadStatusLine
 import sys
-import urllib2
+import urllib.request, urllib.error, urllib.parse
 import base64
 
 sys.path.append('.')
@@ -18,20 +18,20 @@ def create_headers(username, password):
 if __name__ == "__main__":
     input = TestInputParser.get_test_input(sys.argv)
     master = input.servers[0]
-    print "Streaming events from {0}".format(master.ip)
+    print("Streaming events from {0}".format(master.ip))
     diag_url = "http://{0}:{1}/diag/masterEvents".format(master.ip, master.port)
-    print diag_url
+    print(diag_url)
     try:
-        req = urllib2.Request(diag_url)
+        req = urllib.request.Request(diag_url)
         req.headers = create_headers(input.membase_settings.rest_username,
                                      input.membase_settings.rest_password)
-        response = urllib2.urlopen(req)
+        response = urllib.request.urlopen(req)
         for line in response:
-            print line.rstrip()
+            print(line.rstrip())
 
-    except urllib2.URLError as error:
-        print "unable to stream masterEvents from {0}".format(diag_url)
+    except urllib.error.URLError as error:
+        print("unable to stream masterEvents from {0}".format(diag_url))
     except BadStatusLine:
-        print "unable to stream masterEvents from {0}".format(diag_url)
+        print("unable to stream masterEvents from {0}".format(diag_url))
     except Exception:
-        print "unable to stream masterEvents from {0}".format(diag_url)
+        print("unable to stream masterEvents from {0}".format(diag_url))

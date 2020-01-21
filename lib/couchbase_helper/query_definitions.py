@@ -661,9 +661,9 @@ class SQLDefinitionGenerator:
                     if group_name == group:
                         count += 1
             if count == len(groups) and query_definition.index_name \
-                    not in new_query_definitions.keys():
+                    not in list(new_query_definitions.keys()):
                 new_query_definitions[query_definition.index_name] = query_definition
-        return new_query_definitions.values()
+        return list(new_query_definitions.values())
 
     def _create_condition(self, fields = [], begin_range = [],
         begin_condition = None, end_range= [], end_condition = None):

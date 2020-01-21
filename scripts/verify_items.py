@@ -18,14 +18,14 @@ def usage(err=None):
     err_code = 0
     if err:
         err_code = 1
-        print "Error:", err
-        print
-    print "./verify_.py -m <master> -f <file>"
-    print ""
-    print " master             the master node rest interface"
-    print " file               file to write out the kvstore to"
-    print ""
-    print "./verify_items -m Administrator:password@10.1.2.99:8091 -f kvstore"
+        print("Error:", err)
+        print()
+    print("./verify_.py -m <master> -f <file>")
+    print("")
+    print(" master             the master node rest interface")
+    print(" file               file to write out the kvstore to")
+    print("")
+    print("./verify_items -m Administrator:password@10.1.2.99:8091 -f kvstore")
     sys.exit(err_code)
 
 class KVStore(object):
@@ -60,7 +60,7 @@ class KVStore(object):
         return self.data.__iter__()
 
     def iteritems(self):
-        return self.data.iteritems()
+        return iter(self.data.items())
 
 
 class Config(object):
@@ -74,7 +74,7 @@ class Config(object):
             (opts, args) = getopt.getopt(argv, 'hm:f:b:', ['help', 'master=', 'file=', 'bucket='])
         except IndexError:
             usage()
-        except getopt.GetoptError, err:
+        except getopt.GetoptError as err:
             usage(err)
 
         for o, a in opts:
@@ -132,7 +132,7 @@ if __name__ == "__main__":
     missing = 0
     badval = 0
 
-    for key, val_expected in kv.iteritems():
+    for key, val_expected in kv.items():
         if val_expected[3]:
             try:
                 val = get_aware(awareness, rest, key)
@@ -153,6 +153,6 @@ if __name__ == "__main__":
 
     awareness.done()
 
-    print "undeleted:", undeleted
-    print "missing:", missing
-    print "badval:", badval
+    print("undeleted:", undeleted)
+    print("missing:", missing)
+    print("badval:", badval)

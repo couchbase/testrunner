@@ -112,7 +112,7 @@ class AnalyticsHelper():
         new_n1ql_result = []
         for result in n1ql_result:
             if result != {}:
-                for key in result.keys():
+                for key in list(result.keys()):
                     if key.find('_shadow') != -1:
                         new_n1ql_result.append(result[key])
                     else:
@@ -211,20 +211,20 @@ class AnalyticsHelper():
         actual_map ={}
         for data in expected_result:
             primary=None
-            for key in data.keys():
+            for key in list(data.keys()):
                 keys = key
                 if keys.encode('ascii') == "primary_key_id":
                     primary = keys
             expected_map[data[primary]] = data
         for data in actual_result:
             primary=None
-            for key in data.keys():
+            for key in list(data.keys()):
                 keys = key
                 if keys.encode('ascii') == "primary_key_id":
                     primary = keys
             actual_map[data[primary]] = data
         check = True
-        for key in expected_map.keys():
+        for key in list(expected_map.keys()):
             if sorted(actual_map[key]) != sorted(expected_map[key]):
                 check= False
         return check
@@ -235,11 +235,11 @@ class AnalyticsHelper():
         if actual_result == None:
             actual_result = []
         if len(expected_result) == 1:
-            value = expected_result[0].values()[0]
+            value = list(expected_result[0].values())[0]
             if value == None or value == 0:
                 expected_result = []
         if len(actual_result) == 1:
-            value = actual_result[0].values()[0]
+            value = list(actual_result[0].values())[0]
             if value == None or value == 0:
                 actual_result = []
         return expected_result, actual_result
@@ -279,7 +279,7 @@ class AnalyticsHelper():
             if value == '':
                 return 0
             value = int(val.split("(")[1].split(")")[0])
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(ex)
         finally:
             return value
@@ -287,8 +287,8 @@ class AnalyticsHelper():
     def analyze_failure(self, actual, expected):
         missing_keys =[]
         different_values = []
-        for key in expected.keys():
-            if key not in actual.keys():
+        for key in list(expected.keys()):
+            if key not in list(actual.keys()):
                 missing_keys.append(key)
             if expected[key] != actual[key]:
                 different_values.append("for key {0}, expected {1} \n actual {2}".
@@ -352,7 +352,7 @@ class AnalyticsHelper():
                 couchbase_path = testconstants.WIN_COUCHBASE_BIN_PATH
             if self.input.tuq_client and "sherlock_path" in self.input.tuq_client:
                 couchbase_path = "%s/bin" % self.input.tuq_client["sherlock_path"]
-                print "PATH TO SHERLOCK: %s" % couchbase_path
+                print("PATH TO SHERLOCK: %s" % couchbase_path)
             if os == 'windows':
                 cmd = "cd %s; " % (couchbase_path) +\
                 "./cbq-engine.exe -datastore http://%s:%s/ >/dev/null 2>&1 &" %(
@@ -393,7 +393,7 @@ class AnalyticsHelper():
         actual_result = []
         for item in result:
             curr_item = {}
-            for key, value in item.iteritems():
+            for key, value in item.items():
                 if isinstance(value, list) or isinstance(value, set):
                     curr_item[key] = sorted(value)
                 else:
@@ -423,7 +423,7 @@ class AnalyticsHelper():
                 check = self._is_index_in_list(bucket.name, "#primary", server = server)
                 if check:
                     self.run_analytics_query(server = server)
-            except Exception, ex:
+            except Exception as ex:
                 self.log.error('ERROR during index creation %s' % str(ex))
 
     def create_primary_index(self, using_gsi = True, server = None):
@@ -446,7 +446,7 @@ class AnalyticsHelper():
                         raise Exception(" Timed-out Exception while building primary index for bucket {0} !!!".format(bucket.name))
                 else:
                     raise Exception(" Primary Index Already present, This looks like a bug !!!")
-            except Exception, ex:
+            except Exception as ex:
                 self.log.error('ERROR during index creation %s' % str(ex))
                 raise ex
 
@@ -472,11 +472,11 @@ class AnalyticsHelper():
                 actual_result = self.run_analytics_query(query = query, server = server,
                  scan_consistency = scan_consistency, scan_vector = scan_vector)
                 if verify_results:
-                    self._verify_results(sorted(actual_result['results']), sorted(expected_result))
+                    self._verify_results(actual_result['results'], expected_result)
                 else:
                     return "ran query with success and validated results" , True
                 check = True
-            except Exception, ex:
+            except Exception as ex:
                 if (next_time - init_time > timeout or try_count >= max_try):
                     return ex, False
             finally:
@@ -531,10 +531,10 @@ class AnalyticsHelper():
             #if os == "linux":
             cmd = "%s/cbq  -engine=http://%s:8093/" % (testconstants.LINUX_COUCHBASE_BIN_PATH,server.ip)
             output = shell.execute_commands_inside(cmd,query,"","","","","")
-            print "--------------------------------------------------------------------------------------------------------------------------------"
-            print output
+            print("--------------------------------------------------------------------------------------------------------------------------------")
+            print(output)
             result = json.loads(output)
-            print result
+            print(result)
             result = self._parse_query_output(output)
         if isinstance(result, str) or 'errors' in result:
             error_result = str(result)
@@ -662,12 +662,12 @@ class AnalyticsHelper():
         result_set = []
         if result != None and len(result) > 0:
                 for val in result:
-                    for key in val.keys():
+                    for key in list(val.keys()):
                         result_set.append(val[key])
         return result_set
 
     def _gen_dict_n1ql_func_result(self, result):
-        result_set = [val[key] for val in result for key in val.keys()]
+        result_set = [val[key] for val in result for key in list(val.keys())]
         new_result_set = []
         if len(result_set) > 0:
             for value in result_set:
@@ -686,7 +686,7 @@ class AnalyticsHelper():
             return False
         if result != None and len(result) > 0:
             sample=result[0]
-            for key in sample.keys():
+            for key in list(sample.keys()):
                 for sample in expected_in_key:
                     if key in sample:
                         return True
@@ -699,15 +699,15 @@ class AnalyticsHelper():
         try:
             if result != None and len(result) > 0:
                 for val in result:
-                    for key in val.keys():
+                    for key in list(val.keys()):
                         result_set.append(val[key])
             for val in result_set:
-                if val["_id"] in map.keys():
+                if val["_id"] in list(map.keys()):
                     duplicate_keys.append(val["_id"])
                 map[val["_id"]] = val
-            keys = map.keys()
+            keys = list(map.keys())
             keys.sort()
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(ex)
             raise
         if len(duplicate_keys) > 0:

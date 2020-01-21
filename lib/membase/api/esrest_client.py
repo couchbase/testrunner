@@ -62,7 +62,7 @@ class EsRestConnection(RestConnection):
         for index in indices:
             bucket = Bucket()
             q = query.MatchAllQuery()
-            docs = self.conn.search(q,index,doc_type)
+            docs = self.conn.search(q, index, doc_type)
             bucket.name = index
             bucket.type = "es"
             bucket.port = self.port
@@ -189,7 +189,7 @@ class EsRestConnection(RestConnection):
     def all_docs(self, keys_only = False, indices=["default"],size=10000):
         q = query.MatchAllQuery()
 
-        docs = self.conn.search(q,indices=indices,doc_types='couchbaseDocument')
+        docs = self.conn.search(q, indices=indices, doc_types='couchbaseDocument')
         res_docs = []
 
         for row in docs:
@@ -221,7 +221,7 @@ class EsRestConnection(RestConnection):
         return bucket.stats
 
     def start_replication(self, *args, **kwargs):
-        return "es",self.ip
+        return "es", self.ip
 
     def _rebalance_progress(self, *args, **kwargs):
         return 100
@@ -312,7 +312,7 @@ class EsRestConnection(RestConnection):
                     time.sleep(5)
                     tries = tries + 1
 
-        raise Exception("failed to add node to cluster: %s:%s" % (node.ip,node.port))
+        raise Exception("failed to add node to cluster: %s:%s" % (node.ip, node.port))
 
     def log_client_error(self, post):
         # cannot post req errors to 9091

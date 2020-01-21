@@ -9,7 +9,7 @@ import struct
 import random
 import threading
 import multiprocessing
-import Queue
+import queue
 import logging
 import logging.config
 from collections import deque
@@ -101,8 +101,8 @@ def dict_to_s_inner(d, level, res, suffix, ljust):
     scalars = []
     complex = []
 
-    for key in d.keys():
-        if type(d[key]) == dtype:
+    for key in list(d.keys()):
+        if isinstance(d[key], dtype):
             complex.append(key)
         else:
             scalars.append(key)
@@ -113,7 +113,7 @@ def dict_to_s_inner(d, level, res, suffix, ljust):
     histo_max = 0
     histo_sum = 0
     if scalars and not complex and \
-            type(scalars[0]) == FLOAT_TYPE and type(d[scalars[0]]) == INT_TYPE:
+            isinstance(scalars[0], FLOAT_TYPE) and isinstance(d[scalars[0]], INT_TYPE):
         for key in scalars:
             v = d[key]
             histo_max = max(v, histo_max)
@@ -121,7 +121,7 @@ def dict_to_s_inner(d, level, res, suffix, ljust):
 
     histo_cur = 0  # Running total for histogram output.
     for key in scalars:
-        if type(key) == FLOAT_TYPE:
+        if isinstance(key, FLOAT_TYPE):
             k = re.sub("0*$", "", "%.7f" % key)
         else:
             k = str(key)
@@ -153,8 +153,7 @@ def dict_to_s_inner(d, level, res, suffix, ljust):
 
 def histo_percentile(histo, percentiles):
     v_sum = 0
-    bins = histo.keys()
-    bins.sort()
+    bins = sorted(list(histo.keys()))
     for bin in bins:
         v_sum += histo[bin]
     v_sum = float(v_sum)
@@ -164,7 +163,7 @@ def histo_percentile(histo, percentiles):
         if not percentiles:
             return rv
         v_cur += histo[bin]
-        while percentiles and (v_cur / v_sum) >= percentiles[0]:
+        while percentiles and (v_cur // v_sum) >= percentiles[0]:
             rv.append((percentiles[0], bin))
             percentiles.pop(0)
     return rv
@@ -375,7 +374,7 @@ def run_worker(ctl, cfg, cur, store, prefix, heartbeat=0, why=""):
         if heartbeat != 0 and heartbeat_duration > heartbeat:
             heartbeat_last += heartbeat_duration
             if cfg.get('max-ops', 0):
-                progress = 100.0 * num_ops / cfg['max-ops']
+                progress = 100.0 * num_ops // cfg['max-ops']
                 log.info("%s num ops = %s out of %s (%.2f %%)",
                          why, num_ops, cfg['max-ops'], progress)
             else:
@@ -402,22 +401,22 @@ def run_worker(ctl, cfg, cur, store, prefix, heartbeat=0, why=""):
                         log.info("woq_stats: key: %s, cas: %s, "
                                  "obs_latency: %f, query_latency: %f, latency: %f"
                                  % (key, cas, obs_latency, query_latency, latency))
-                except Queue.Empty:
+                except queue.Empty:
                     pass
 
             # produce request
             if woq_req_queue.all_finished():
-                for key_num, cas in store.woq_key_cas.iteritems():
+                for key_num, cas in store.woq_key_cas.items():
                     key = prepare_key(key_num, cfg.get('prefix', ''))
                     try:
                         woq_req_queue.put([key, cas], block=False)
-                    except Queue.Full:
+                    except queue.Full:
                         break
 
         if flushed and cfg.get('observe', 0):
             if store.obs_key_cas and not observer.num_observables():
                 observables = []
-                for key_num, cas in store.obs_key_cas.iteritems():
+                for key_num, cas in store.obs_key_cas.items():
                     obs = Observable(key=prepare_key(key_num, cfg.get('prefix', '')),
                                      cas=cas,
                                      persist_count=cfg.get('obs-persist-count', 1),
@@ -436,7 +435,7 @@ def run_worker(ctl, cfg, cur, store, prefix, heartbeat=0, why=""):
                         store.save_stats(start_time)
                         log.info("cor_stats: key: %s, cas: %s, latency: %f"
                                  % (key, cas, latency))
-                except Queue.Empty:
+                except queue.Empty:
                     pass
 
         i += 1
@@ -453,9 +452,9 @@ def run_worker(ctl, cfg, cur, store, prefix, heartbeat=0, why=""):
             xfer_recv_delta = xfer_recv_curr - xfer_recv_last
 
             try:
-                ops_per_sec = o_delta / t_delta
-                xfer_sent_per_sec = xfer_sent_delta / t_delta
-                xfer_recv_per_sec = xfer_recv_delta / t_delta
+                ops_per_sec = o_delta // t_delta
+                xfer_sent_per_sec = xfer_sent_delta // t_delta
+                xfer_recv_per_sec = xfer_recv_delta // t_delta
             except ZeroDivisionError:
                 ops_per_sec = o_delta
                 xfer_sent_per_sec = xfer_sent_delta
@@ -499,12 +498,12 @@ def run_worker(ctl, cfg, cur, store, prefix, heartbeat=0, why=""):
                     concurrent_workers = cfg.get('active_fg_workers').value
                 else:
                     concurrent_workers = 1
-                local_max_ops_per_sec = max_ops_per_sec / concurrent_workers
+                local_max_ops_per_sec = max_ops_per_sec // concurrent_workers
                 # Actual throughput
-                ops_per_sec = ops_done / delta2
+                ops_per_sec = ops_done // delta2
                 # Sleep if too fast. It must be too fast.
                 if ops_per_sec > local_max_ops_per_sec:
-                    sleep_time = CORRECTION_FACTOR * ops_done / local_max_ops_per_sec - delta2
+                    sleep_time = CORRECTION_FACTOR * ops_done // local_max_ops_per_sec - delta2
                     time.sleep(max(sleep_time, 0))
 
             if hot_shift > 0:
@@ -792,7 +791,7 @@ class Store(object):
             try:
                 bucket = round(self.histo_bucket(delta), 6)
                 histo[bucket] = histo.get(bucket, 0) + 1
-            except TypeError, error:
+            except TypeError as error:
                 self.save_error(error)
                 log.error(error)
 
@@ -800,7 +799,7 @@ class Store(object):
         hp = self.cfg.get("histo-precision", 2)
         if samp > 0:
             p = 10 ** (math.floor(math.log10(samp)) - (hp - 1))
-            r = round(samp / p)
+            r = round(samp // p)
             return r * p
 
     def drange(self, start, stop, step):
@@ -818,6 +817,7 @@ class StoreMemcachedBinary(Store):
         self.target = target
         self.host_port = (target + ":11211").rsplit(':', 1)[0:2]
         self.host_port[1] = int(self.host_port[1])
+        self.host_port = self.host_port[0].rsplit(':')[0:3]
         self.connect_host_port(self.host_port[0], self.host_port[1], user, pswd, bucket=bucket)
         self.inflight_reinit()
         self.queue = []
@@ -876,7 +876,7 @@ class StoreMemcachedBinary(Store):
     def inflight_send(self, inflight_msg):
         try:
             self.conn.s.sendall(inflight_msg)
-        except socket.error, error:
+        except socket.error as error:
             self.retries += 1
             self.save_error(error)
             log.error("%s, retries = %s", error, self.retries)
@@ -895,7 +895,7 @@ class StoreMemcachedBinary(Store):
             try:
                 cmd, keylen, extralen, errcode, datalen, opaque, val, buf = \
                     self.recvMsg()
-            except Exception, error:
+            except Exception as error:
                 self.retries += 1
                 self.save_error(error)
                 log.error("%s, retries = %s", error, self.retries)
@@ -920,7 +920,7 @@ class StoreMemcachedBinary(Store):
         try:
             self.flush()
             return True
-        except ServerUnavailableException, error:
+        except ServerUnavailableException as error:
             self.save_error(error)
             log.error(error)
             self.queue = list()
@@ -1146,7 +1146,7 @@ class StoreMembaseBinary(StoreMemcachedBinary):
     def inflight_complete(self, inflight_grp):
         rv = []  # Array of tuples (server, buffer).
         s_bufs = inflight_grp['s_bufs']
-        for server in s_bufs.keys():
+        for server in list(s_bufs.keys()):
             buffers = s_bufs[server]
             rv.append((server, ''.join(buffers)))
         return rv
@@ -1182,7 +1182,7 @@ class StoreMembaseBinary(StoreMemcachedBinary):
                     self.save_error("socket timeout")
                     log.error("socket timeout")
                     break
-                except Exception, error:
+                except Exception as error:
                     self.save_error(error)
                     log.error(error)
                     break
@@ -1196,7 +1196,7 @@ class StoreMembaseBinary(StoreMemcachedBinary):
         reset_my_awareness = False
         backoff = False
 
-        for server in s_cmds.keys():
+        for server in list(s_cmds.keys()):
             try:
                 conn = self.awareness.memcacheds[server]
                 try:
@@ -1222,13 +1222,13 @@ class StoreMembaseBinary(StoreMemcachedBinary):
                             if errcode == ERR_ENOMEM:
                                 log.error("errorcode = ENOMEM")
                             # Don't log backoffs due to ETMPFAIL/EBUSY
-                    except Exception, error:
+                    except Exception as error:
                         self.save_error(error)
                         log.error(error)
                         reset_my_awareness = True
                         backoff = True
                 conn.recvBuf = recvBuf
-            except Exception, error:
+            except Exception as error:
                 self.save_error(error)
                 log.error(error)
                 reset_my_awareness = True
@@ -1247,7 +1247,7 @@ class StoreMembaseBinary(StoreMemcachedBinary):
         if reset_my_awareness:
             try:
                 self.awareness.reset()
-            except Exception, error:
+            except Exception as error:
                 self.save_error("awareness.reset: {0}".format(error))
                 log.error("awareness.reset: %s", error)
 
@@ -1475,7 +1475,7 @@ def final_report(cur, store, total_time):
 
 
 def run(cfg, cur, protocol, host_port, user, pswd, stats_collector=None,
-        stores=None, ctl=None, heartbeat=0, why="", bucket="default", backups=None):
+        stores=None, ctl=None, heartbeat=0, why="", bucket="default", backups=None, collection=None):
     if isinstance(cfg['min-value-size'], str):
         cfg['min-value-size'] = string.split(cfg['min-value-size'], ",")
     if not isinstance(cfg['min-value-size'], list):
@@ -1628,8 +1628,8 @@ def main(argv, cfg_defaults=None, cur_defaults=None, protocol=None, stores=None,
         "cur-base":     (0, "Base of numeric key range. 0 by default.")}
 
     if len(argv) < 2 or "-h" in argv or "--help" in argv:
-        print("usage: %s [memcached[-binary|-ascii]://][user[:pswd]@]host[:port] [key=val]*\n" %
-              (argv[0]))
+        print(("usage: %s [memcached[-binary|-ascii]://][user[:pswd]@]host[:port] [key=val]*\n" %
+              (argv[0])))
         print("  default protocol = memcached-binary://")
         print("  default port     = 11211\n")
         examples = ["examples:",
@@ -1647,15 +1647,15 @@ def main(argv, cfg_defaults=None, cur_defaults=None, protocol=None, stores=None,
             examples = examples + extra_examples
         for s in examples:
             if s.find("%s") > 0:
-                print(s % (argv[0]))
+                print((s % (argv[0])))
             else:
                 print(s)
         print("")
         print("optional key=val's and their defaults:")
         for d in [cfg_defaults, cur_defaults]:
-            for k in sorted(d.iterkeys()):
-                print("  %s = %s %s" %
-                      (string.ljust(k, 18), string.ljust(str(d[k][0]), 5), d[k][1]))
+            for k in sorted(d.keys()):
+                print(("  %s = %s %s" %
+                      (string.ljust(k, 18), string.ljust(str(d[k][0]), 5), d[k][1])))
         print("")
         print("  TIP: min-value-size can be comma-separated values: min-value-size=10,256,1024")
         print("")
@@ -1666,7 +1666,7 @@ def main(argv, cfg_defaults=None, cur_defaults=None, protocol=None, stores=None,
     err = {}
 
     for (o, d) in [(cfg, cfg_defaults), (cur, cur_defaults)]:  # Parse key=val pairs.
-        for (dk, dv) in d.iteritems():
+        for (dk, dv) in d.items():
             o[dk] = dv[0]
         for kv in argv[2:]:
             s = (kv + '=').split('=')[0:-1]
@@ -1700,7 +1700,7 @@ def main(argv, cfg_defaults=None, cur_defaults=None, protocol=None, stores=None,
         cfg['max-creates'] = cfg.get('max-items', 0)
 
     for o in [cfg, cur]:
-        for k in sorted(o.iterkeys()):
+        for k in sorted(o.keys()):
             log.info("    %s = %s" % (string.ljust(k, 20), o[k]))
 
     protocol = protocol or '-'.join(((["memcached"] +

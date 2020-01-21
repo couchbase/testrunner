@@ -1,4 +1,4 @@
-
+import traceback
 
 class MembaseHttpExceptionTypes(object):
 
@@ -53,6 +53,7 @@ class BucketCreationException(MembaseHttpException):
         self.type = MembaseHttpExceptionTypes.BUCKET_CREATION_ERROR
         self._message = 'unable to create bucket {0} on the host @ {1}'.\
             format(bucket_name, ip)
+        traceback.print_exc()
 
 class N1QLQueryException(MembaseHttpException):
     def __init__(self, query):
@@ -144,6 +145,10 @@ class AutoFailoverException(MembaseHttpException):
         self._message = message
 
 
+class InjectFailureException(MembaseHttpException):
+    def __init__(self, message):
+        self.message = message
+
 class DesignDocCreationException(MembaseHttpException):
     def __init__(self, design_doc_name, reason=''):
         self._message = 'Error occured design document %s: %s' % (design_doc_name, reason)
@@ -219,3 +224,6 @@ class XDCRCheckpointException(MembaseHttpException):
 class BucketCompactionException(MembaseHttpException):
     def __init__(self, bucket_name=''):
         self._message = 'Bucket compaction failed: {0}'.format(bucket_name)
+
+class InstallException(Exception):
+    pass

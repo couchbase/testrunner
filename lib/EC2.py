@@ -9,11 +9,11 @@
 
 import base64
 import hmac
-import httplib
+import http.client
 import re
 import sys
 import time
-import urllib
+import urllib.request, urllib.parse, urllib.error
 import hashlib
 # ElementTree is in stdlib from Python 2.5, so get it from there if we can:
 try:
@@ -50,9 +50,9 @@ class AWSAuthConnection(object):
         self.aws_access_key_id = aws_access_key_id
         self.aws_secret_access_key = aws_secret_access_key
         if (is_secure):
-            self.connection = httplib.HTTPSConnection("%s:%d" % (server, port))
+            self.connection = http.client.HTTPSConnection("%s:%d" % (server, port))
         else:
-            self.connection = httplib.HTTPConnection("%s:%d" % (server, port))
+            self.connection = http.client.HTTPConnection("%s:%d" % (server, port))
 
     def pathlist(self, key, arr):
         """Converts a key and an array of values into AWS query param format."""
@@ -261,7 +261,7 @@ class AWSAuthConnection(object):
         if instanceType is not None:
             params["InstanceType"] = instanceType
         if blockDeviceMapping is not None:
-            virtualNames, deviceNames = zip(*blockDeviceMapping)
+            virtualNames, deviceNames = list(zip(*blockDeviceMapping))
             i = 0
             for value in arr:
                 i += 1
@@ -469,24 +469,24 @@ class AWSAuthConnection(object):
     def make_request(self, action, params, data=''):
         params["Action"] = action
         if self.verbose:
-            print params
+            print(params)
 
         params["SignatureVersion"] = "1"
         params["AWSAccessKeyId"] = self.aws_access_key_id
         params["Version"] = API_VERSION
         params["Timestamp"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
 
-        params = zip(params.keys(), params.values())
+        params = list(zip(list(params.keys()), list(params.values())))
         params.sort(key=lambda x: str.lower(x[0]))
         
         sig = self.get_aws_auth_param(params, self.aws_secret_access_key)
 
         path = "?%s&Signature=%s" % (
-            "&".join(["=".join([param[0], urllib.quote_plus(param[1])]) for param in params]),
+            "&".join(["=".join([param[0], urllib.parse.quote_plus(param[1])]) for param in params]),
             sig)
 
         if self.verbose:
-            print path
+            print(path)
 
         headers = {
             'User-Agent': 'ec2-python-query 1.2-%s' % (RELEASE_VERSION)
@@ -505,7 +505,7 @@ class AWSAuthConnection(object):
     def encode(self, aws_secret_access_key, str, urlencode=True):
         b64_hmac = base64.encodestring(hmac.new(aws_secret_access_key, str, hashlib.sha1).digest()).strip()
         if urlencode:
-            return urllib.quote_plus(b64_hmac)
+            return urllib.parse.quote_plus(b64_hmac)
         else:
             return b64_hmac
 

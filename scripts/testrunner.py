@@ -2,9 +2,9 @@
 
 import base64
 import gzip
-from httplib import BadStatusLine
+from http.client import BadStatusLine
 import os
-import urllib2
+import urllib.request, urllib.error, urllib.parse
 import uuid
 import sys
 from os.path import basename, splitext
@@ -12,7 +12,7 @@ from pprint import pprint
 sys.path = ["lib", "pytests"] + sys.path
 
 if sys.hexversion < 0x02060000:
-    print "Testrunner requires version 2.6+ of python"
+    print("Testrunner requires version 2.6+ of python")
     sys.exit()
 
 import re
@@ -28,13 +28,13 @@ import signal
 
 
 def usage(err=None):
-    print """\
+    print("""\
 Syntax: testrunner [options]
 
 Examples:
   ./testrunner -i tmp/local.ini -t performance.perf.DiskDrainRate
   ./testrunner -i tmp/local.ini -t performance.perf.DiskDrainRate.test_9M
-"""
+""")
     sys.exit(0)
 
 
@@ -81,7 +81,7 @@ def parse_args(argv):
     if options.testcase:
         tests.append(options.testcase)
     if options.noop:
-        print("\n".join(tests))
+        print(("\n".join(tests)))
         sys.exit(0)
 
     return tests, test_params, options.ini, options.params, options
@@ -109,7 +109,7 @@ def append_test(tests, name):
 
 
 def locate_conf_file(filename):
-    print "filename: %s" % filename
+    print("filename: %s" % filename)
     if filename:
         if os.path.exists(filename):
             return file(filename)
@@ -150,7 +150,7 @@ def parse_conf_file(filename, tests, params):
             continue
         if stripped.endswith(":"):
             prefix = stripped.split(":")[0]
-            print "prefix: {0}".format(prefix)
+            print("prefix: {0}".format(prefix))
             continue
         name = stripped
         if prefix and prefix.lower() == "params":
@@ -182,16 +182,16 @@ def get_server_logs(input, path):
 
     diag_name = uuid.uuid4()
     for server in input.servers:
-        print "grabbing diags from ".format(server.ip)
+        print("grabbing diags from ".format(server.ip))
         diag_url = "http://{0}:{1}/diag".format(server.ip, server.port)
-        print diag_url
+        print(diag_url)
 
         try:
-            req = urllib2.Request(diag_url)
+            req = urllib.request.Request(diag_url)
             req.headers = create_headers(input.membase_settings.rest_username,
                                          input.membase_settings.rest_password)
             filename = "{0}/{1}-{2}-diag.txt".format(path, diag_name, server.ip)
-            page = urllib2.urlopen(req)
+            page = urllib.request.urlopen(req)
             with open(filename, 'wb') as output:
                 os.write(1, "downloading {0} ...".format(server.ip))
                 while True:
@@ -207,23 +207,23 @@ def get_server_logs(input, path):
             zipped.close()
 
             os.remove(filename)
-            print "downloaded and zipped diags @ : {0}".format("{0}.gz".format(filename))
-        except urllib2.URLError:
-            print "unable to obtain diags from %s" % diag_url
+            print("downloaded and zipped diags @ : {0}".format("{0}.gz".format(filename)))
+        except urllib.error.URLError:
+            print("unable to obtain diags from %s" % diag_url)
         except BadStatusLine:
-            print "unable to obtain diags from %s" % diag_url
+            print("unable to obtain diags from %s" % diag_url)
         except Exception as e:
-            print "unable to obtain diags from %s %s" % (diag_url, e)
+            print("unable to obtain diags from %s %s" % (diag_url, e))
 
 
 def get_cbcollect_info(input, path):
     for server in input.servers:
-        print "grabbing cbcollect from {0}".format(server.ip)
+        print("grabbing cbcollect from {0}".format(server.ip))
         path = path or "."
         try:
             cbcollectRunner(server, path).run()
         except:
-            print "IMPOSSIBLE TO GRAB CBCOLLECT FROM {0}".format(server.ip)
+            print("IMPOSSIBLE TO GRAB CBCOLLECT FROM {0}".format(server.ip))
 
 
 def watcher():
@@ -235,7 +235,7 @@ def watcher():
     try:
         os.wait()
     except KeyboardInterrupt:
-        print 'KeyBoardInterrupt'
+        print('KeyBoardInterrupt')
         try:
             os.kill(child, signal.SIGKILL)
         except OSError:
@@ -251,7 +251,7 @@ def main():
     # ensure command line params get higher priority
     test_params.update(TestInputSingleton.input.test_params)
     TestInputSingleton.input.test_params = test_params
-    print "Global Test input params:"
+    print("Global Test input params:")
     pprint(TestInputSingleton.input.test_params)
 
     xunit = XUnitTestResult()
@@ -270,20 +270,20 @@ def main():
     results = []
     case_number = 1
     if "GROUP" in test_params:
-        print "Only cases in GROUPs '{0}' will be executed".format(test_params["GROUP"])
+        print("Only cases in GROUPs '{0}' will be executed".format(test_params["GROUP"]))
     if "EXCLUDE_GROUP" in test_params:
-        print "Cases from GROUPs '{0}' will be excluded".format(test_params["EXCLUDE_GROUP"])
+        print("Cases from GROUPs '{0}' will be excluded".format(test_params["EXCLUDE_GROUP"]))
 
     for name in names:
         start_time = time.time()
         argument_split = [a.strip() for a in re.split("[,]?([^,=]+)=", name)[1:]]
-        params = dict(zip(argument_split[::2], argument_split[1::2]))
+        params = dict(list(zip(argument_split[::2], argument_split[1::2])))
 
         if ("GROUP" or "EXCLUDE_GROUP") in test_params:
             #determine if the test relates to the specified group(can be separated by ';')
             if not ("GROUP" in params and len(set(test_params["GROUP"].split(";")) & set(params["GROUP"].split(";")))) or \
                     "EXCLUDE_GROUP" in params and len(set(test_params["EXCLUDE_GROUP"].split(";")) & set(params["EXCLUDE_GROUP"].split(";"))):
-                print "test '{0}' was skipped".format(name)
+                print("test '{0}' was skipped".format(name))
                 continue
 
         log_config_filename = ""
@@ -299,15 +299,15 @@ def main():
             log_config_filename = os.path.join(logs_folder_abspath, dotnames[-1] + ".logging.conf")
         create_log_file(log_config_filename, log_name, options.loglevel)
         logging.config.fileConfig(log_config_filename)
-        print "\n./testrunner -i {0} {1} -t {2}\n"\
-              .format(arg_i or "", arg_p or "", name)
+        print("\n./testrunner -i {0} {1} -t {2}\n"\
+              .format(arg_i or "", arg_p or "", name))
         name = name.split(",")[0]
 
         # Update the test params for each test
         TestInputSingleton.input.test_params = params
         TestInputSingleton.input.test_params.update(test_params)
         TestInputSingleton.input.test_params["case_number"] = case_number
-        print "Test Input params:"
+        print("Test Input params:")
         pprint(TestInputSingleton.input.test_params)
         suite = unittest.TestLoader().loadTestsFromName(name)
         result = unittest.TextTestRunner(verbosity=2).run(suite)
@@ -317,7 +317,7 @@ def main():
         # To make tests more readable
         params = ''
         if TestInputSingleton.input.test_params:
-            for key, value in TestInputSingleton.input.test_params.items():
+            for key, value in list(TestInputSingleton.input.test_params.items()):
                 if key and value:
                     params += "," + str(key) + ":" + str(value)
 
@@ -349,11 +349,11 @@ def main():
             results.append({"result": "pass", "name": name, "time": time_taken})
         xunit.write("{0}/report-{1}".format(logs_folder, str_time))
         xunit.print_summary()
-        print "testrunner logs, diags and results are available under {0}".format(logs_folder)
+        print("testrunner logs, diags and results are available under {0}".format(logs_folder))
         case_number += 1
         if (result.failures or result.errors) and \
                 TestInputSingleton.input.param("stop-on-failure", False):
-            print "test fails, all of the following tests will be skipped!!!"
+            print("test fails, all of the following tests will be skipped!!!")
             break
 
     if "makefile" in TestInputSingleton.input.test_params:
@@ -361,10 +361,10 @@ def main():
         fail_count = 0
         for result in results:
             if result["result"] == "fail":
-                print result["name"], " fail "
+                print(result["name"], " fail ")
                 fail_count += 1
             else:
-                print result["name"], " pass"
+                print(result["name"], " pass")
         if fail_count > 0:
             sys.exit(1)
 

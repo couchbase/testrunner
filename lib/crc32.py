@@ -74,6 +74,12 @@ crc32tab = [
 
 def crc32_hash(key):
     crc = pow(2, 32) - 1
+    #print("-->key {},{}".format(type(key),key))
+    try:
+      key = key.decode()
+    except AttributeError:
+      pass
     for ch in key:
+        #print("-->ch {},{}".format(type(ch), ch))
         crc = (crc >> 8) ^ crc32tab[int((crc ^ ord(ch)) & 0xff)]
     return ((~crc) >> 16) & 0x7fff

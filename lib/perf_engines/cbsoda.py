@@ -4,7 +4,7 @@ import re
 import sys
 import socket
 import threading
-import mcsoda
+from . import mcsoda
 import errno
 
 sys.path.append("lib")
@@ -52,7 +52,7 @@ class Reader(threading.Thread):
                 found += int("P/1.1" in data[:7])
 
                 self.inflight -= found
-            except Exception, error:
+            except Exception as error:
                 self.store.save_error(error)
                 log.error(error)
                 self.inflight = 0
@@ -133,7 +133,7 @@ class StoreCouchbase(mcsoda.StoreMembaseBinary):
             try:
                 self.reader.inflight += num_capi
                 self.capi_skt.send(buf_capi)
-            except socket.error, error:
+            except socket.error as error:
                 self.save_error(error)
                 log.error(error)
                 if isinstance(error.args, tuple):
