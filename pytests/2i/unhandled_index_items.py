@@ -3,13 +3,14 @@ import logging
 import random
 import pdb
 
-from string import lowercase
-from base_2i import BaseSecondaryIndexingTests
+from string import ascii_lowercase
+from .base_2i import BaseSecondaryIndexingTests
 from couchbase.bucket import Bucket
 from couchbase_helper.documentgenerator import  DocumentGenerator
 from couchbase_helper.query_definitions import QueryDefinition
 from membase.api.rest_client import RestConnection
 from remote.remote_util import RemoteMachineShellConnection
+from deepdiff import DeepDiff
 
 log = logging.getLogger(__name__)
 
@@ -28,7 +29,7 @@ class GSIUnhandledIndexItems(BaseSecondaryIndexingTests):
         for bucket in self.buckets:
             testuser.append({'id': bucket.name, 'name': bucket.name, 'password': 'password'})
             rolelist.append({'id': bucket.name, 'name': bucket.name, 'roles': 'admin'})
-        self.add_built_in_server_user(testuser=testuser, rolelist=rolelist)
+            self.add_built_in_server_user(testuser=testuser, rolelist=rolelist)
 
     def tearDown(self):
         super(GSIUnhandledIndexItems, self).tearDown()
@@ -44,7 +45,7 @@ class GSIUnhandledIndexItems(BaseSecondaryIndexingTests):
             try:
                 self.change_max_item_size(val)
                 self.change_max_array_size(val)
-            except Exception, ex:
+            except Exception as ex:
                 msg = "Setting should be an integer greater than 0"
                 self.assertIn(msg, str(ex), "Exception {0} for value {1}".format(str(ex), val))
             else:
@@ -70,7 +71,7 @@ class GSIUnhandledIndexItems(BaseSecondaryIndexingTests):
             self._upload_documents(num_items=self.num_docs,
                                             item_size=self.max_item_size,
                                             array_size=self.max_array_size)
-        except Exception, ex:
+        except Exception as ex:
             msg_list = ["Too big", "Invalid"]
             for msg in msg_list:
                 if msg in str(ex):
@@ -88,9 +89,12 @@ class GSIUnhandledIndexItems(BaseSecondaryIndexingTests):
                         index_id, body={"stale": "false"})
                     expected_result = self._get_expected_results_for_scan(query_definition)
                     msg = "Results don't match for index {0}. Actual: {1}, Expected: {2}"
-                    self.assertEqual(sorted(actual_result), sorted(expected_result),
-                                     msg.format(query_definition.index_name,
-                                                actual_result, expected_result))
+                    #self.assertEqual(sorted(actual_result), sorted(expected_result),
+                    #                 msg.format(query_definition.index_name,
+                    #                            actual_result, expected_result))
+                    diffs = DeepDiff(actual_result, expected_result, ignore_order=True)
+                    if diffs:
+                        self.assertTrue(False, diffs)
 
     def test_increase_max_item_limits(self):
         self.set_allow_large_keys(self.allow_large_keys)
@@ -118,9 +122,12 @@ class GSIUnhandledIndexItems(BaseSecondaryIndexingTests):
                         index_id, body={"stale": "false"})
                     expected_result = self._get_expected_results_for_scan(query_definition)
                     msg = "Results don't match for index {0}. Actual: {1}, Expected: {2}"
-                    self.assertEqual(sorted(actual_result), sorted(expected_result),
-                                     msg.format(query_definition.index_name,
-                                                actual_result, expected_result))
+                    #self.assertEqual(sorted(actual_result), sorted(expected_result),
+                    #                 msg.format(query_definition.index_name,
+                    #                            actual_result, expected_result))
+                    diffs = DeepDiff(actual_result, expected_result, ignore_order=True)
+                    if diffs:
+                        self.assertTrue(False, diffs)
             if not self.repeat:
                 break
 
@@ -151,17 +158,20 @@ class GSIUnhandledIndexItems(BaseSecondaryIndexingTests):
                     expected_result = self._get_expected_results_for_scan(
                         query_definition)
                     msg = "Results don't match for index {0}. Actual: {1}, Expected: {2}"
-                    self.assertEqual(sorted(actual_result), sorted(expected_result),
-                                     msg.format(query_definition.index_name,
-                                                actual_result, expected_result))
+                    #self.assertEqual(sorted(actual_result), sorted(expected_result),
+                    #                 msg.format(query_definition.index_name,
+                    #                            actual_result, expected_result))
+                    diffs = DeepDiff(actual_result, expected_result, ignore_order=True)
+                    if diffs:
+                        self.assertTrue(False, diffs)
             if not self.repeat:
                 break
 
     def test_max_limits_increase_item_size(self):
         self.set_allow_large_keys(self.allow_large_keys)
-        self.change_max_item_size(self.max_item_size/4)
+        self.change_max_item_size(self.max_item_size//4)
         self.change_max_array_size(self.max_array_size)
-        self._upload_documents(num_items=self.num_docs, item_size=self.max_item_size/4,
+        self._upload_documents(num_items=self.num_docs, item_size=self.max_item_size//4,
                                             array_size=self.max_array_size)
         query_definitions = self._create_indexes()
         self.sleep(30)
@@ -176,9 +186,12 @@ class GSIUnhandledIndexItems(BaseSecondaryIndexingTests):
                 expected_result = self._get_expected_results_for_scan(
                     query_definition)
                 msg = "Results don't match for index {0}. Actual: {1}, Expected: {2}"
-                self.assertEqual(sorted(actual_result), sorted(expected_result),
-                                 msg.format(query_definition.index_name,
-                                            actual_result, expected_result))
+                #self.assertEqual(sorted(actual_result), sorted(expected_result),
+                #                 msg.format(query_definition.index_name,
+                #                            actual_result, expected_result))
+                diffs = DeepDiff(actual_result, expected_result, ignore_order=True)
+                if diffs:
+                    self.assertTrue(False, diffs)
         self._upload_documents(num_items=self.num_docs, item_size=self.max_item_size,
                                             array_size=self.max_array_size, update_docs=True)
         self.sleep(10)
@@ -190,9 +203,12 @@ class GSIUnhandledIndexItems(BaseSecondaryIndexingTests):
                 expected_result = self._get_expected_results_for_scan(
                     query_definition)
                 msg = "Results don't match for index {0}. Actual: {1}, Expected: {2}"
-                self.assertEqual(sorted(actual_result), sorted(expected_result),
-                                 msg.format(query_definition.index_name,
-                                            actual_result, expected_result))
+                #self.assertEqual(sorted(actual_result), sorted(expected_result),
+                #                 msg.format(query_definition.index_name,
+                #                            actual_result, expected_result))
+                diffs = DeepDiff(actual_result, expected_result, ignore_order=True)
+                if diffs:
+                    self.assertTrue(False, diffs)
 
     def test_max_limits_decrease_item_size(self):
         self.set_allow_large_keys(self.allow_large_keys)
@@ -213,10 +229,13 @@ class GSIUnhandledIndexItems(BaseSecondaryIndexingTests):
                 expected_result = self._get_expected_results_for_scan(
                     query_definition)
                 msg = "Results don't match for index {0}. Actual: {1}, Expected: {2}"
-                self.assertEqual(sorted(actual_result), sorted(expected_result),
-                                 msg.format(query_definition.index_name,
-                                            actual_result, expected_result))
-        self._upload_documents(num_items=self.num_docs, item_size=self.max_item_size/4,
+                #self.assertEqual(sorted(actual_result), sorted(expected_result),
+                #                 msg.format(query_definition.index_name,
+                #                            actual_result, expected_result))
+                diffs = DeepDiff(actual_result, expected_result, ignore_order=True)
+                if diffs:
+                    self.assertTrue(False, diffs)
+        self._upload_documents(num_items=self.num_docs, item_size=self.max_item_size//4,
                                             array_size=self.max_array_size, update_docs=True)
         self.sleep(10)
         for bucket in self.buckets:
@@ -227,9 +246,12 @@ class GSIUnhandledIndexItems(BaseSecondaryIndexingTests):
                 expected_result = self._get_expected_results_for_scan(
                     query_definition)
                 msg = "Results don't match for index {0}. Actual: {1}, Expected: {2}"
-                self.assertEqual(sorted(actual_result), sorted(expected_result),
-                                 msg.format(query_definition.index_name,
-                                            actual_result, expected_result))
+                #self.assertEqual(sorted(actual_result), sorted(expected_result),
+                #                 msg.format(query_definition.index_name,
+                #                            actual_result, expected_result))
+                diffs = DeepDiff(actual_result, expected_result, ignore_order=True)
+                if diffs:
+                    self.assertTrue(False, diffs)
 
     def test_increase_max_array_limits(self):
         self.set_allow_large_keys(self.allow_large_keys)
@@ -258,9 +280,12 @@ class GSIUnhandledIndexItems(BaseSecondaryIndexingTests):
                     expected_result = self._get_expected_results_for_scan(
                         query_definition)
                     msg = "Results don't match for index {0}. Actual: {1}, Expected: {2}"
-                    self.assertEqual(sorted(actual_result), sorted(expected_result),
-                                 msg.format(query_definition.index_name,
-                                            actual_result, expected_result))
+                    #self.assertEqual(sorted(actual_result), sorted(expected_result),
+                    #             msg.format(query_definition.index_name,
+                    #                        actual_result, expected_result))
+                    diffs = DeepDiff(actual_result, expected_result, ignore_order=True)
+                    if diffs:
+                        self.assertTrue(False, diffs)
 
     def test_decrease_max_array_limits(self):
         self.set_allow_large_keys(self.allow_large_keys)
@@ -289,18 +314,21 @@ class GSIUnhandledIndexItems(BaseSecondaryIndexingTests):
                     expected_result = self._get_expected_results_for_scan(
                         query_definition)
                     msg = "Results don't match for index {0}. Actual: {1}, Expected: {2}"
-                    self.assertEqual(sorted(actual_result), sorted(expected_result),
-                                 msg.format(query_definition.index_name,
-                                            actual_result, expected_result))
+                    #self.assertEqual(sorted(actual_result), sorted(expected_result),
+                    #             msg.format(query_definition.index_name,
+                    #                        actual_result, expected_result))
+                    diffs = DeepDiff(actual_result, expected_result, ignore_order=True)
+                    if diffs:
+                        self.assertTrue(False, diffs)
             if not self.repeat:
                 break
 
     def test_max_limits_increase_array_size(self):
         self.set_allow_large_keys(self.allow_large_keys)
         self.change_max_item_size(self.max_item_size)
-        self.change_max_array_size(self.max_array_size/4)
+        self.change_max_array_size(self.max_array_size//4)
         self._upload_documents(num_items=self.num_docs, item_size=self.max_item_size,
-                                            array_size=self.max_array_size/4)
+                                            array_size=self.max_array_size//4)
         query_definitions = self._create_indexes()
         self.sleep(30)
         rest = RestConnection(self.master)
@@ -314,9 +342,12 @@ class GSIUnhandledIndexItems(BaseSecondaryIndexingTests):
                 expected_result = self._get_expected_results_for_scan(
                     query_definition)
                 msg = "Results don't match for index {0}. Actual: {1}, Expected: {2}"
-                self.assertEqual(sorted(actual_result), sorted(expected_result),
-                                 msg.format(query_definition.index_name,
-                                            actual_result, expected_result))
+                #self.assertEqual(sorted(actual_result), sorted(expected_result),
+                #                 msg.format(query_definition.index_name,
+                #                            actual_result, expected_result))
+                diffs = DeepDiff(actual_result, expected_result, ignore_order=True)
+                if diffs:
+                    self.assertTrue(False, diffs)
         self._upload_documents(num_items=self.num_docs, item_size=self.max_item_size,
                                             array_size=self.max_array_size, update_docs=True)
         for bucket in self.buckets:
@@ -327,9 +358,12 @@ class GSIUnhandledIndexItems(BaseSecondaryIndexingTests):
                 expected_result = self._get_expected_results_for_scan(
                     query_definition)
                 msg = "Results don't match for index {0}. Actual: {1}, Expected: {2}"
-                self.assertEqual(sorted(actual_result), sorted(expected_result),
-                                 msg.format(query_definition.index_name,
-                                            actual_result, expected_result))
+                #self.assertEqual(sorted(actual_result), sorted(expected_result),
+                #                 msg.format(query_definition.index_name,
+                #                            actual_result, expected_result))
+                diffs = DeepDiff(actual_result, expected_result, ignore_order=True)
+                if diffs:
+                    self.assertTrue(False, diffs)
 
     def test_max_limits_decrease_array_size(self):
         self.set_allow_large_keys(self.allow_large_keys)
@@ -350,11 +384,14 @@ class GSIUnhandledIndexItems(BaseSecondaryIndexingTests):
                 expected_result = self._get_expected_results_for_scan(
                     query_definition)
                 msg = "Results don't match for index {0}. Actual: {1}, Expected: {2}"
-                self.assertEqual(sorted(actual_result), sorted(expected_result),
-                                 msg.format(query_definition.index_name,
-                                            actual_result, expected_result))
+                #self.assertEqual(sorted(actual_result), sorted(expected_result),
+                #                 msg.format(query_definition.index_name,
+                #                            actual_result, expected_result))
+                diffs = DeepDiff(actual_result, expected_result, ignore_order=True)
+                if diffs:
+                    self.assertTrue(False, diffs)
         self._upload_documents(num_items=self.num_docs, item_size=self.max_item_size,
-                                            array_size=self.max_array_size/4, update_docs=True)
+                                            array_size=self.max_array_size//4, update_docs=True)
         for bucket in self.buckets:
             for query_definition in query_definitions:
                 index_id = str(index_map[bucket.name][query_definition.index_name]["id"])
@@ -363,9 +400,12 @@ class GSIUnhandledIndexItems(BaseSecondaryIndexingTests):
                 expected_result = self._get_expected_results_for_scan(
                     query_definition)
                 msg = "Results don't match for index {0}. Actual: {1}, Expected: {2}"
-                self.assertEqual(sorted(actual_result), sorted(expected_result),
-                                 msg.format(query_definition.index_name,
-                                            actual_result, expected_result))
+                #self.assertEqual(sorted(actual_result), sorted(expected_result),
+                #                 msg.format(query_definition.index_name,
+                #                            actual_result, expected_result))
+                diffs = DeepDiff(actual_result, expected_result, ignore_order=True)
+                if diffs:
+                    self.assertTrue(False, diffs)
 
     def test_change_allow_large_key(self):
         self.set_allow_large_keys(self.allow_large_keys)
@@ -400,9 +440,12 @@ class GSIUnhandledIndexItems(BaseSecondaryIndexingTests):
                     expected_result = self._get_expected_results_for_scan(
                         query_definition)
                     msg = "Results don't match for index {0}. Actual: {1}, Expected: {2}"
-                    self.assertEqual(sorted(actual_result), sorted(expected_result),
-                                 msg.format(query_definition.index_name,
-                                            actual_result, expected_result))
+                    #self.assertEqual(sorted(actual_result), sorted(expected_result),
+                    #             msg.format(query_definition.index_name,
+                    #                        actual_result, expected_result))
+                    diffs = DeepDiff(actual_result, expected_result, ignore_order=True)
+                    if diffs:
+                        self.assertTrue(False, diffs)
             if not self.repeat:
                 break
 
@@ -433,9 +476,12 @@ class GSIUnhandledIndexItems(BaseSecondaryIndexingTests):
                 expected_result = self._get_expected_results_for_scan(
                     query_definition)
                 msg = "Results don't match for index {0}. Actual: {1}, Expected: {2}"
-                self.assertEqual(sorted(actual_result), sorted(expected_result),
-                                 msg.format(query_definition.index_name,
-                                            actual_result, expected_result))
+                #self.assertEqual(sorted(actual_result), sorted(expected_result),
+                #                 msg.format(query_definition.index_name,
+                #                            actual_result, expected_result))
+                diffs = DeepDiff(actual_result, expected_result, ignore_order=True)
+                if diffs:
+                    self.assertTrue(False, diffs)
 
     def test_random_increase_decrease_size_limit(self):
         self.set_allow_large_keys(self.allow_large_keys)
@@ -475,9 +521,12 @@ class GSIUnhandledIndexItems(BaseSecondaryIndexingTests):
                     expected_result = self._get_expected_results_for_scan(
                         query_definition)
                     msg = "Results don't match for index {0}. Actual: {1}, Expected: {2}"
-                    self.assertEqual(sorted(actual_result), sorted(expected_result),
-                                 msg.format(query_definition.index_name,
-                                            actual_result, expected_result))
+                    #self.assertEqual(sorted(actual_result), sorted(expected_result),
+                    #             msg.format(query_definition.index_name,
+                    #                        actual_result, expected_result))
+                    diffs = DeepDiff(actual_result, expected_result, ignore_order=True)
+                    if diffs:
+                        self.assertTrue(False, diffs)
 
     def test_various_docid_keysize_combinations(self):
         self.set_allow_large_keys(self.allow_large_keys)
@@ -492,26 +541,26 @@ class GSIUnhandledIndexItems(BaseSecondaryIndexingTests):
         generators = []
         template = '{{"name":"{0}", "age":{1}, "encoded_array": {2}, "encoded_big_value_array": {3}}}'
         max_item_length = self.max_item_size * 4
-        max_array_element_size = (self.max_array_size * 4)/ 10
+        max_array_element_size = (self.max_array_size * 4)// 10
         for i in range(self.num_docs):
-            index_id = "".join(random.choice(lowercase) for k in range(random.randint(1, 255)))
+            index_id = "".join(random.choice(ascii_lowercase) for k in range(random.randint(1, 255)))
             encoded_array = []
-            name = "".join(random.choice(lowercase) for k in range(random.randint(max_item_length)))
-            age = random.choice(range(4, 59))
+            name = "".join(random.choice(ascii_lowercase) for k in range(random.randint(max_item_length)))
+            age = random.choice(list(range(4, 59)))
             big_value_array = [name]
             for j in range(30):
-                element = "".join(random.choice(lowercase) for k in range(random.randint(max_array_element_size)))
+                element = "".join(random.choice(ascii_lowercase) for k in range(random.randint(max_array_element_size)))
                 encoded_array.append(element)
             generators.append(DocumentGenerator(
                 index_id, template, [name], [age], [encoded_array],
                 [big_value_array], start=0, end=1))
-        index_id = "".join(random.choice(lowercase) for k in range(250))
-        name = "".join(random.choice(lowercase) for k in range(random.randint(max_item_length)))
-        age = random.choice(range(4, 59))
+        index_id = "".join(random.choice(ascii_lowercase) for k in range(250))
+        name = "".join(random.choice(ascii_lowercase) for k in range(random.randint(max_item_length)))
+        age = random.choice(list(range(4, 59)))
         big_value_array = [name]
         encoded_array = []
         for j in range(30):
-            element = "".join(random.choice(lowercase) for k in range(random.randint(max_array_element_size)))
+            element = "".join(random.choice(ascii_lowercase) for k in range(random.randint(max_array_element_size)))
             encoded_array.append(element)
         generators.append(DocumentGenerator(
             index_id, template, [name], [age], [encoded_array],
@@ -527,9 +576,12 @@ class GSIUnhandledIndexItems(BaseSecondaryIndexingTests):
                 expected_result = self._get_expected_results_for_scan(
                     query_definition)
                 msg = "Results don't match for index {0}. Actual: {1}, Expected: {2}"
-                self.assertEqual(sorted(actual_result), sorted(expected_result),
-                                 msg.format(query_definition.index_name,
-                                            actual_result, expected_result))
+                #self.assertEqual(sorted(actual_result), sorted(expected_result),
+                #                 msg.format(query_definition.index_name,
+                #                            actual_result, expected_result))
+                diffs = DeepDiff(actual_result, expected_result, ignore_order=True)
+                if diffs:
+                    self.assertTrue(False, diffs)
 
     def _create_indexes(self):
         query_definitions = []
@@ -561,7 +613,7 @@ class GSIUnhandledIndexItems(BaseSecondaryIndexingTests):
         generators = []
         template = '{{"name":"{0}", "age":{1}, "encoded_array": {2}, "encoded_big_value_array": {3}}}'
         item_length = item_size * 4
-        array_element_size = (array_size * 4)/array_elements
+        array_element_size = (array_size * 4)//array_elements
         if update_docs:
             num_items = len(self.full_docs_list)
         for i in range(num_items):
@@ -570,11 +622,11 @@ class GSIUnhandledIndexItems(BaseSecondaryIndexingTests):
             else:
                 index_id = "unhandled_items_" + str(random.random()*100000)
             encoded_array = []
-            name = "".join(random.choice(lowercase) for k in range(item_length))
-            age = random.choice(range(4, 59))
+            name = "".join(random.choice(ascii_lowercase) for k in range(item_length))
+            age = random.choice(list(range(4, 59)))
             big_value_array = [name]
             for j in range(array_elements):
-                element = "".join(random.choice(lowercase) for k in range(array_element_size))
+                element = "".join(random.choice(ascii_lowercase) for k in range(array_element_size))
                 encoded_array.append(element)
             generators.append(DocumentGenerator(
                 index_id, template, [name], [age], [encoded_array],

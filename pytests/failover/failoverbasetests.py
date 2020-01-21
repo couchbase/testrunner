@@ -53,14 +53,25 @@ class FailoverBaseTest(BaseTestCase):
             self.recoveryType=self.recoveryType.split(":")
         if self.deltaRecoveryBuckets:
             self.deltaRecoveryBuckets=self.deltaRecoveryBuckets.split(":")
+
+        # To validate MB-34173
+        self.sleep_before_rebalance = \
+            self.input.param("sleep_before_rebalance", None)
+        self.flusher_batch_split_trigger = \
+            self.input.param("flusher_batch_split_trigger", None)
+
+        if self.flusher_batch_split_trigger:
+            self.set_flusher_batch_split_trigger(
+                self.flusher_batch_split_trigger, self.buckets)
+
         # Defintions of Blod Generator used in tests
         self.gen_initial_create = BlobGenerator('failover', 'failover', self.value_size, end=self.num_items)
-        self.gen_create = BlobGenerator('failover', 'failover', self.value_size, start=self.num_items + 1 , end=self.num_items * 1.5)
-        self.gen_update = BlobGenerator('failover', 'failover', self.value_size, start=self.num_items / 2, end=self.num_items)
-        self.gen_delete = BlobGenerator('failover', 'failover', self.value_size, start=self.num_items / 4, end=self.num_items / 2 - 1)
-        self.afterfailover_gen_create = BlobGenerator('failover', 'failover', self.value_size, start=self.num_items * 1.6 , end=self.num_items * 2)
-        self.afterfailover_gen_update = BlobGenerator('failover', 'failover', self.value_size, start=1 , end=self.num_items/4)
-        self.afterfailover_gen_delete = BlobGenerator('failover', 'failover', self.value_size, start=self.num_items * .5 , end=self.num_items* 0.75)
+        self.gen_create = BlobGenerator('failover', 'failover', self.value_size, start=self.num_items + 1, end=self.num_items * 1.5)
+        self.gen_update = BlobGenerator('failover', 'failover', self.value_size, start=self.num_items // 2, end=self.num_items)
+        self.gen_delete = BlobGenerator('failover', 'failover', self.value_size, start=self.num_items // 4, end=self.num_items // 2 - 1)
+        self.afterfailover_gen_create = BlobGenerator('failover', 'failover', self.value_size, start=self.num_items * 1.6, end=self.num_items * 2)
+        self.afterfailover_gen_update = BlobGenerator('failover', 'failover', self.value_size, start=1, end=self.num_items/4)
+        self.afterfailover_gen_delete = BlobGenerator('failover', 'failover', self.value_size, start=self.num_items * .5, end=self.num_items* 0.75)
         if self.vbuckets != None and self.vbuckets != self.total_vbuckets:
             self.total_vbuckets  = self.vbuckets
         self.log.info("==============  FailoverBaseTest setup was finished for test #{0} {1} =============="\

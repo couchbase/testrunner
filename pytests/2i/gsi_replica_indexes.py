@@ -1,6 +1,6 @@
 import json
 
-from base_2i import BaseSecondaryIndexingTests
+from .base_2i import BaseSecondaryIndexingTests
 from membase.api.rest_client import RestConnection, RestHelper
 import random
 from lib import testconstants
@@ -48,7 +48,8 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         self.rand = random.randint(1, 1000000000)
         self.expected_nodes = self.input.param("expected_nodes", None)
         self.failure_in_node = self.input.param("failure_in_node", None)
-        self.alter_index = self.input.param("alter_index",None)
+        self.alter_index = self.input.param("alter_index", None)
+        self.server_group_map = {}
 
     def tearDown(self):
         super(GSIReplicaIndexesTests, self).tearDown()
@@ -61,7 +62,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             if self.expected_err_msg not in str(ex):
                 self.fail(
@@ -93,7 +94,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             if self.expected_err_msg not in str(ex):
                 self.fail(
@@ -123,6 +124,8 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
                 self.servers[:self.nodes_init], [node_out], self.graceful))]
         for thread in threads:
             thread.start()
+            self.sleep(1)
+        for thread in threads:
             thread.join()
         self.sleep(30)
         index_map = self.get_index_map()
@@ -132,7 +135,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
             self.n1ql_helper.verify_replica_indexes([index_name_prefix],
                                                     index_map,
                                                     self.num_index_replicas)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             if self.expected_err_msg not in str(ex):
                 self.fail(
@@ -152,7 +155,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             if self.expected_err_msg not in str(ex):
                 self.fail(
@@ -187,7 +190,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             if self.expected_err_msg not in str(ex):
                 self.fail(
@@ -214,7 +217,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             if self.expected_err_msg not in str(ex):
                 self.fail(
@@ -245,7 +248,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             self.fail("Index creation Failed : %s", str(ex))
 
@@ -271,7 +274,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query_age,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             self.fail("Index creation Failed : %s", str(ex))
 
@@ -301,7 +304,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
             self.n1ql_helper.verify_replica_indexes([index_name_name],
                                                     index_map,
                                                     self.num_index_replicas)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             if self.expected_err_msg not in str(ex):
                 self.fail(
@@ -334,7 +337,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             if self.expected_err_msg not in str(ex):
                 self.fail(
@@ -365,7 +368,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             if self.expected_err_msg not in str(ex):
                 self.fail(
@@ -390,7 +393,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         try:
             self.n1ql_helper.run_cbq_query(query=build_index_query,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             if self.expected_err_msg not in str(ex):
                 self.fail(
@@ -416,7 +419,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             if self.expected_err_msg not in str(ex):
                 self.fail(
@@ -449,7 +452,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         try:
             self.n1ql_helper.run_cbq_query(query=build_index_query,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             if self.expected_err_msg not in str(ex):
                 self.fail(
@@ -464,7 +467,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
             self.n1ql_helper.verify_replica_indexes_build_status(index_map,
                                                                  len(nodes) - 1,
                                                                  defer_build=False)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             if self.expected_err_msg not in str(ex):
                 self.fail(
@@ -484,7 +487,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             if self.expected_err_msg not in str(ex):
                 self.fail(
@@ -515,7 +518,11 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
                 self.servers[:self.nodes_init], [node_out], self.graceful)))
         for thread in threads:
             thread.start()
+            self.sleep(1)
+
+        for thread in threads:
             thread.join()
+
         self.sleep(30)
 
         index_map = self.get_index_map()
@@ -523,7 +530,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
             self.n1ql_helper.verify_replica_indexes_build_status(index_map,
                                                                  len(nodes) - 1,
                                                                  defer_build=False)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             if self.expected_err_msg not in str(ex):
                 self.fail(
@@ -543,7 +550,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             if self.expected_err_msg not in str(ex):
                 self.fail(
@@ -576,7 +583,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         try:
             self.n1ql_helper.run_cbq_query(query=build_index_query,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             if self.expected_err_msg not in str(ex):
                 self.fail(
@@ -618,7 +625,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             if self.expected_err_msg not in str(ex):
                 self.fail(
@@ -646,7 +653,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
             self.sleep(10)
             self.n1ql_helper.run_cbq_query(query=build_index_query,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             if self.expected_err_msg not in str(ex):
                 self.fail(
@@ -694,7 +701,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
             self.n1ql_helper.verify_replica_indexes([index_name_name],
                                                     index_map,
                                                     self.num_index_replicas)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             if self.expected_err_msg not in str(ex):
                 self.fail(
@@ -728,7 +735,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
             self.n1ql_helper.verify_replica_indexes_build_status(index_map,
                                                                  self.num_index_replicas,
                                                                  defer_build=False)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             if self.expected_err_msg not in str(ex):
                 self.fail(
@@ -745,7 +752,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             if self.expected_err_msg not in str(ex):
                 self.fail(
@@ -766,7 +773,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         try:
             self.n1ql_helper.run_cbq_query(query=drop_index_query,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             if self.expected_err_msg not in str(ex):
                 self.fail(
@@ -789,7 +796,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             if self.expected_err_msg not in str(ex):
                 self.fail(
@@ -818,7 +825,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         try:
             self.n1ql_helper.run_cbq_query(query=drop_index_query,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             if self.expected_err_msg not in str(ex):
                 self.fail(
@@ -841,7 +848,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             if self.expected_err_msg not in str(ex):
                 self.fail(
@@ -888,7 +895,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             if self.expected_err_msg not in str(ex):
                 self.fail(
@@ -917,7 +924,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         try:
             self.n1ql_helper.run_cbq_query(query=drop_index_query,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             if self.expected_err_msg not in str(ex):
                 self.fail(
@@ -960,7 +967,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             if self.expected_err_msg not in str(ex):
                 self.fail(
@@ -984,7 +991,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
             self.sleep(10)
             self.n1ql_helper.run_cbq_query(query=drop_index_query,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             if self.expected_err_msg not in str(ex):
                 self.fail(
@@ -1015,7 +1022,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             self.fail("Index creation Failed : %s", str(ex))
 
@@ -1048,7 +1055,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
                 stats_map_after_rebalance,
                 [],
                 [node_out])
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             if self.expected_err_msg not in str(ex):
                 self.fail(
@@ -1068,7 +1075,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             self.fail("Index creation Failed : %s", str(ex))
 
@@ -1101,7 +1108,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
                 stats_map_after_rebalance1,
                 [],
                 [node_out])
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             if "some indexes are missing after rebalance" not in str(ex):
                 self.fail(
@@ -1130,7 +1137,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
                 stats_map_after_rebalance2,
                 [node_in],
                 [])
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             if self.expected_err_msg not in str(ex):
                 self.fail(
@@ -1151,7 +1158,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         try:
             self.n1ql_helper.run_cbq_query(query=create_non_deferred_index_query,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             self.fail("Index creation Failed : %s", str(ex))
 
@@ -1162,7 +1169,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
             self.n1ql_helper.run_cbq_query(
                 query=create_deferred_index_query,
                 server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             self.fail("Index creation Failed : %s", str(ex))
 
@@ -1195,7 +1202,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
                 stats_map_after_rebalance1,
                 [],
                 [node_out])
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             if "some indexes are missing after rebalance" not in str(ex):
                 self.fail(
@@ -1224,7 +1231,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
                 stats_map_after_rebalance2,
                 [node_in],
                 [])
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             if self.expected_err_msg not in str(ex):
                 self.fail(
@@ -1247,7 +1254,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             self.fail("Index creation Failed : %s", str(ex))
 
@@ -1280,7 +1287,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
                 stats_map_after_rebalance,
                 [],
                 [node_out])
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             if self.expected_err_msg not in str(ex):
                 self.fail(
@@ -1303,7 +1310,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         self.log.info(nodes)
 
         # Default source zone
-        zones = self.rest.get_zone_names().keys()
+        zones = list(self.rest.get_zone_names().keys())
         source_zone = zones[0]
         self._create_server_groups()
 
@@ -1315,7 +1322,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             self.fail("Index creation Failed : %s", str(ex))
 
@@ -1348,7 +1355,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
                 stats_map_after_rebalance1,
                 [],
                 [node_out])
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             if "some indexes are missing after rebalance" not in str(ex):
                 self.fail(
@@ -1396,7 +1403,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
                 stats_map_after_rebalance2,
                 [node_in],
                 [])
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             if self.expected_err_msg not in str(ex):
                 self.fail(
@@ -1419,7 +1426,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         try:
             self.n1ql_helper.run_cbq_query(query=equivalent_index_query,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             self.fail("Index creation Failed : %s", str(ex))
 
@@ -1431,7 +1438,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             self.fail("Index creation Failed : %s", str(ex))
 
@@ -1464,7 +1471,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
                 stats_map_after_rebalance,
                 [],
                 [node_out])
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             if self.expected_err_msg not in str(ex):
                 self.fail(
@@ -1485,7 +1492,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             self.fail("Index creation Failed : %s", str(ex))
 
@@ -1524,7 +1531,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
                 stats_map_after_failover,
                 [],
                 [node_out])
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             if self.expected_err_msg not in str(ex):
                 self.fail(
@@ -1545,7 +1552,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             self.fail("Index creation Failed : %s", str(ex))
 
@@ -1594,7 +1601,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
                 stats_map_after_failover,
                 [],
                 [])
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             if self.expected_err_msg not in str(ex):
                 self.fail(
@@ -1631,7 +1638,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
                 stats_map_after_rebalance,
                 [],
                 [index_server])
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             if "some indexes are missing after rebalance" not in str(ex):
                 self.fail(
@@ -1653,7 +1660,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             self.fail("Index creation Failed : %s", str(ex))
 
@@ -1680,7 +1687,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
             remote.start_server()
             rebalance.result()
 
-        except Exception, ex:
+        except Exception as ex:
             if "Rebalance failed. See logs for detailed reason. You can try again" not in str(
                     ex):
                 self.fail(
@@ -1716,7 +1723,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
                 stats_map_after_rebalance,
                 [],
                 [node_out])
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             if self.expected_err_msg not in str(ex):
                 self.fail(
@@ -1752,7 +1759,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
                 stats_map_after_rebalance,
                 [],
                 [index_server])
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             if "some indexes are missing after rebalance" not in str(ex):
                 self.fail(
@@ -1772,7 +1779,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             if self.expected_err_msg not in str(ex):
                 self.fail(
@@ -1824,7 +1831,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             if self.expected_err_msg not in str(ex):
                 self.fail(
@@ -1876,7 +1883,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             if self.expected_err_msg not in str(ex):
                 self.fail(
@@ -1935,7 +1942,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             if self.expected_err_msg not in str(ex):
                 self.fail(
@@ -1991,7 +1998,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             if self.expected_err_msg not in str(ex):
                 self.fail(
@@ -2041,7 +2048,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             if self.expected_err_msg not in str(ex):
                 self.fail(
@@ -2066,9 +2073,9 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         threads = []
         if self.alter_index:
             alter_index_query = 'ALTER INDEX default.' + index_name_prefix + ' WITH {{"action":"move","nodes": ["{0}","{1}"]}}'.format(
-            dest_nodes[0],dest_nodes[1])
+            dest_nodes[0], dest_nodes[1])
             threads.append(
-            Thread(target=self.n1ql_helper.run_cbq_query(query=alter_index_query,server=self.n1ql_node), name="alter_index",
+            Thread(target=self.n1ql_helper.run_cbq_query(query=alter_index_query, server=self.n1ql_node), name="alter_index",
                    args=(self.servers[0], dest_nodes, index_name_prefix,
                          expect_failure)))
         else:
@@ -2087,7 +2094,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
                 thread.join()
             self.sleep(30)
 
-        except Exception, ex:
+        except Exception as ex:
             self.log.info("***** Exception : %s", str(ex))
 
     def test_index_metadata_replicated(self):
@@ -2098,7 +2105,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             self.fail("index creation failed")
 
@@ -2141,7 +2148,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             if self.expected_err_msg not in str(ex):
                 self.fail(
@@ -2163,7 +2170,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             if self.expected_err_msg not in str(ex):
                 self.fail(
@@ -2187,7 +2194,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             if self.expected_err_msg not in str(ex):
                 self.fail(
@@ -2231,7 +2238,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             if self.expected_err_msg not in str(ex):
                 self.fail(
@@ -2342,7 +2349,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             if self.expected_err_msg not in str(ex):
                 self.fail(
@@ -2378,7 +2385,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             if self.expected_err_msg not in str(ex):
                 self.fail(
@@ -2422,7 +2429,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
                 stats_map_after_rebalance,
                 [],
                 [node_out])
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             if self.expected_err_msg not in str(ex):
                 self.fail(
@@ -2439,7 +2446,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             if self.expected_err_msg not in str(ex):
                 self.fail(
@@ -2495,7 +2502,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
                 stats_map_after_rebalance,
                 [node_out],
                 [])
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             if self.expected_err_msg not in str(ex):
                 self.fail(
@@ -2518,7 +2525,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             self.fail("Index creation Failed : %s", str(ex))
 
@@ -2558,7 +2565,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             self.fail("Index creation Failed : %s", str(ex))
 
@@ -2598,7 +2605,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
                 stats_map_after_rebalance,
                 [],
                 [node_out])
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             if self.expected_err_msg not in str(ex):
                 self.fail(
@@ -2622,7 +2629,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
             try:
                 self.n1ql_helper.run_cbq_query(query=equivalent_index_query,
                                                server=self.n1ql_node)
-            except Exception, ex:
+            except Exception as ex:
                 self.log.info(str(ex))
                 self.fail("Index creation Failed : %s", str(ex))
 
@@ -2650,7 +2657,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             if self.expected_err_msg not in str(ex):
                 self.fail(
@@ -2690,7 +2697,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
                 stats_map_after_rebalance,
                 [],
                 [index_server])
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             if "some indexes are missing after rebalance" not in str(ex):
                 self.fail(
@@ -2709,7 +2716,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             if self.expected_err_msg not in str(ex):
                 self.fail(
@@ -2753,7 +2760,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
                 stats_map_after_rebalance,
                 [],
                 [index_server])
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             if "some indexes are missing after rebalance" not in str(ex):
                 self.fail(
@@ -2775,7 +2782,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         try:
             self.n1ql_helper.run_cbq_query(query=equivalent_index_query,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             self.fail("Index creation Failed : %s", str(ex))
 
@@ -2793,7 +2800,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             if self.expected_err_msg not in str(ex):
                 self.fail(
@@ -2833,7 +2840,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
                 stats_map_after_rebalance,
                 [],
                 [self.servers[int(self.eq_index_node)]])
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             if "some indexes are missing after rebalance" not in str(ex):
                 self.fail(
@@ -2867,7 +2874,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             if self.expected_err_msg not in str(ex):
                 self.fail(
@@ -2998,7 +3005,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             if self.expected_err_msg not in str(ex):
                 self.fail(
@@ -3092,7 +3099,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             if self.expected_err_msg not in str(ex):
                 self.fail(
@@ -3177,22 +3184,23 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
 
     def _create_server_groups(self):
 
+
         if self.server_grouping:
             server_groups = self.server_grouping.split(":")
             self.log.info("server groups : %s", server_groups)
 
-            zones = self.rest.get_zone_names().keys()
+            zones = list(self.rest.get_zone_names().keys())
 
             # Delete Server groups
             for zone in zones:
                 if zone != "Group 1":
                     nodes_in_zone = self.rest.get_nodes_in_zone(zone)
                     if nodes_in_zone:
-                        self.rest.shuffle_nodes_in_zones(nodes_in_zone.keys(),
+                        self.rest.shuffle_nodes_in_zones(list(nodes_in_zone.keys()),
                                                          zone, "Group 1")
                     self.rest.delete_zone(zone)
 
-            zones = self.rest.get_zone_names().keys()
+            zones = list(self.rest.get_zone_names().keys())
             source_zone = zones[0]
 
             # Create Server groups
@@ -3204,6 +3212,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
             # Add nodes to Server groups
             i = 1
             for server_grp in server_groups:
+                server_list = []
                 server_grp_name = "ServerGroup_" + str(i)
                 i += 1
                 nodes_in_server_group = server_grp.split("-")
@@ -3211,6 +3220,8 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
                     self.rest.shuffle_nodes_in_zones(
                         [self.servers[int(node)].ip], source_zone,
                         server_grp_name)
+                    server_list.append(self.servers[int(node)].ip + ":" + self.servers[int(node)].port)
+                self.server_group_map[server_grp_name] = server_list
 
     def run_operation(self, phase="before"):
         if phase == "before":
@@ -3240,7 +3251,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
                 node_list)
             try:
                 self.n1ql_helper.run_cbq_query(query=alter_index_query, server=self.n1ql_node)
-            except Exception, ex:
+            except Exception as ex:
                 output=""
                 error.append(str(ex))
         else:
@@ -3329,7 +3340,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
                                      expected_node_list=None):
         if mode == "plan":
             # Validate if the placement recommendations is for all replicas
-            if "placement" in result.keys():
+            if "placement" in list(result.keys()):
                 num_recommended_nodes = 0
                 actual_node_list = []
                 for node in result["placement"]:
@@ -3385,19 +3396,16 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
             self.backup_path, self.rand)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        if error and not filter(
-                lambda x: 'created successfully in archive' in x, output):
+        if error and not [x for x in output if 'created successfully in archive' in x]:
             self.fail("cbbackupmgr config failed")
         cmd = "cbbackupmgr backup --archive {0} --repo example{1} --cluster couchbase://127.0.0.1 --username {2} --password {3}".format(
             self.backup_path, self.rand, username, password)
         command = "{0}{1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        if error and not filter(lambda x: 'Backup successfully completed' in x,
-                                output):
+        if error and not [x for x in output if 'Backup successfully completed' in x]:
             self.fail("cbbackupmgr backup failed")
-        elif not filter(lambda x: 'Backup successfully completed' in x,
-                            output):
+        elif not [x for x in output if 'Backup successfully completed' in x]:
             raise Exception("cbbackupmgr backup failed")
 
     def _create_restore(self, server, username="Administrator",
@@ -3409,11 +3417,9 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
 
-        if error and not filter(lambda x: 'Restore completed successfully' in x,
-                                output):
+        if error and not [x for x in output if 'Restore completed successfully' in x]:
             self.fail("cbbackupmgr restore failed")
-        elif not filter(lambda x: 'Restore completed successfully' in x,
-                                output):
+        elif not [x for x in output if 'Restore completed successfully' in x]:
             self.fail("cbbackupmgr restore failed")
         else:
             command = "rm -rf {0}".format(self.backup_path)
@@ -3426,7 +3432,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
             try:
                 self.n1ql_helper.run_cbq_query(query=select_query,
                                                server=self.n1ql_node)
-            except Exception, ex:
+            except Exception as ex:
                 self.log.info(str(ex))
                 raise Exception("query with USE INDEX failed")
             self.sleep(1)
@@ -3437,7 +3443,7 @@ class GSIReplicaIndexesTests(BaseSecondaryIndexingTests, QueryHelperTests):
             try:
                 self.n1ql_helper.run_cbq_query(query=prepared_query,
                                                server=self.n1ql_node)
-            except Exception, ex:
+            except Exception as ex:
                 self.log.info(str(ex))
                 raise Exception("query with prepared statement failed")
             self.sleep(1)

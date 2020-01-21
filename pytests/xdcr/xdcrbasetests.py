@@ -128,7 +128,7 @@ class XDCRBaseTest(unittest.TestCase):
                 [st_thread.start() for st_thread in self.__stats_threads]
                 self._log_start(self)
         except Exception as e:
-            self.log.error(e.message)
+            self.log.error(str(e))
             self.log.error("Error while setting up clusters: %s", sys.exc_info())
             self._cleanup_broken_setup()
             raise
@@ -146,7 +146,7 @@ class XDCRBaseTest(unittest.TestCase):
             if test_failed and TestInputSingleton.input.param("get-cbcollect-info", False):
                 self.__get_cbcollect_info()
 
-            cluster_run = len(set([server.ip for server in self._servers])) == 1
+            cluster_run = len({server.ip for server in self._servers}) == 1
             if test_failed and not cluster_run and self.collect_data_files:
                 self.__collect_data_files()
 
@@ -178,13 +178,13 @@ class XDCRBaseTest(unittest.TestCase):
         self._log_finish(self)
         path = self._input.param("logs_folder", "/tmp")
         for server in self.src_nodes + self.dest_nodes:
-            print "grabbing cbcollect from {0}".format(server.ip)
+            print("grabbing cbcollect from {0}".format(server.ip))
             path = path or "."
             try:
                 cbcollectRunner(server, path).run()
                 TestInputSingleton.input.test_params["get-cbcollect-info"] = False
             except:
-                print "IMPOSSIBLE TO GRAB CBCOLLECT FROM {0}".format(server.ip)
+                print("IMPOSSIBLE TO GRAB CBCOLLECT FROM {0}".format(server.ip))
 
     def __collect_data_files(self):
         self.cluster.shutdown(force=True)
@@ -218,10 +218,10 @@ class XDCRBaseTest(unittest.TestCase):
                         for _i in self._xdc_replication_ops[node1][the_bucket.name]:
                             _sum_ += _i
                         self._xdc_replication_ops[node1][the_bucket.name].sort()
-                        _mid = len(self._xdc_replication_ops[node1][the_bucket.name]) / 2
+                        _mid = len(self._xdc_replication_ops[node1][the_bucket.name]) // 2
                         if len(self._xdc_replication_ops[node1][the_bucket.name]) % 2 == 0:
                             _median_value_ = (float)(self._xdc_replication_ops[node1][the_bucket.name][_mid] +
-                                                     self._xdc_replication_ops[node1][the_bucket.name][_mid - 1]) / 2
+                                                     self._xdc_replication_ops[node1][the_bucket.name][_mid - 1]) // 2
                         else:
                             _median_value_ = self._xdc_replication_ops[node1][the_bucket.name][_mid]
                         self.log.info("\tMedian XDC replication ops for bucket '{0}': {1} K ops per second"\
@@ -244,8 +244,8 @@ class XDCRBaseTest(unittest.TestCase):
     def _init_parameters(self):
         self.log.info("Initializing input parameters started...")
         self._clusters_dic = self._input.clusters  # clusters is declared as dic in TestInput which is unordered.
-        self._clusters_keys_olst = range(
-            len(self._clusters_dic))  # clusters are populated in the dic in testrunner such that ordinal is the key.
+        self._clusters_keys_olst = list(range(
+            len(self._clusters_dic)))  # clusters are populated in the dic in testrunner such that ordinal is the key.
         # orderedDic cannot be used in order to maintain the compatibility with python 2.6
         self._cluster_counter_temp_int = 0
         self._cluster_names_dic = self._get_cluster_names()
@@ -343,7 +343,7 @@ class XDCRBaseTest(unittest.TestCase):
         self.dest_nodes = copy.copy(self._clusters_dic[1])
 
 
-        if int(self.src_nodes[0].port) in xrange(9091, 9991):
+        if int(self.src_nodes[0].port) in range(9091, 9991):
             temp = self.dest_nodes
             self.dest_nodes = self.src_nodes
             self.src_nodes = temp
@@ -437,7 +437,7 @@ class XDCRBaseTest(unittest.TestCase):
         cluster_nodes = []
         floating_servers = copy.copy(self._servers)
 
-        for key, node in self._clusters_dic.items():
+        for key, node in list(self._clusters_dic.items()):
             cluster_nodes.extend(node)
 
         for c_node in cluster_nodes:
@@ -483,7 +483,7 @@ class XDCRBaseTest(unittest.TestCase):
                             try:
                                 rest = RestConnection(node)
                                 rest.force_eject_node()
-                            except BaseException, e:
+                            except BaseException as e:
                                 self.log.error(e)
                 else:
                     ClusterOperationHelper.cleanup_cluster([node], self)
@@ -537,7 +537,7 @@ class XDCRBaseTest(unittest.TestCase):
                 hostnames[server] = hostname
             finally:
                 shell.disconnect()
-        for i in xrange(len(servers)):
+        for i in range(len(servers)):
             if servers[i] in hostnames:
                 if server and server.ip != servers[i].ip:
                     continue
@@ -562,12 +562,10 @@ class XDCRBaseTest(unittest.TestCase):
         self.log.info("**** add built-in '%s' user to node %s ****" % (testuser[0]["name"],
                                                                                   node.ip))
         RbacBase().create_user_source(testuser, 'builtin', node)
-        self.sleep(10)
         self.log.info("**** add '%s' role to '%s' user ****" % (rolelist[0]["roles"],
                                                                 testuser[0]["name"]))
         RbacBase().add_user_role(rolelist, RestConnection(node), 'builtin')
-        self.sleep(10)
-
+        
     def _create_bucket_params(self, server, replicas=1, size=0, port=11211, password=None,
                              bucket_type='membase', enable_replica_index=1, eviction_policy='valueOnly',
                              bucket_priority=None, flush_enabled=1, lww=False):
@@ -648,7 +646,7 @@ class XDCRBaseTest(unittest.TestCase):
         bucket_size = self._get_bucket_size(self._mem_quota_int, total_buckets)
         rest = RestConnection(master_node)
         master_id = rest.get_nodes_self().id
-        if len(set([server.ip for server in self._servers])) != 1:  # if not cluster run use ip addresses instead of lh
+        if len({server.ip for server in self._servers}) != 1:  # if not cluster run use ip addresses instead of lh
             master_id = master_id.replace("127.0.0.1", master_node.ip).replace("localhost", master_node.ip)
 
         self._create_sasl_buckets(master_node, self._sasl_buckets, master_id, bucket_size)
@@ -680,9 +678,9 @@ class XDCRBaseTest(unittest.TestCase):
                     bucket.master_id = bucket.master_id.replace("127.0.0.1", new_ip).\
                     replace("localhost", new_ip)
 
-        if len(set([server.ip for server in self._servers])) != 1:  # if not cluster run use ip addresses instead of lh
+        if len({server.ip for server in self._servers}) != 1:  # if not cluster run use ip addresses instead of lh
             master_id = master_id.replace("127.0.0.1", master_server.ip).replace("localhost", master_server.ip)
-        buckets = filter(lambda bucket: bucket.master_id == master_id, self.buckets)
+        buckets = [bucket for bucket in self.buckets if bucket.master_id == master_id]
         if not buckets:
             self.log.warn("No bucket(s) found on the server %s" % master_server)
         return buckets
@@ -704,7 +702,7 @@ class XDCRBaseTest(unittest.TestCase):
     def _get_active_replica_count_from_cluster(self, master):
         buckets = self._get_cluster_buckets(master)
         for bucket in buckets:
-            keys_loaded = sum([len(kv_store) for kv_store in bucket.kvs.values()])
+            keys_loaded = sum([len(kv_store) for kv_store in list(bucket.kvs.values())])
             self.log.info("Keys loaded into bucket {0}:{1}".format(bucket.name,
                                                                    keys_loaded))
             self.log.info("Stat: vb_active_curr_items = {0}".
@@ -764,7 +762,7 @@ class XDCRBaseTest(unittest.TestCase):
         remove_node_ips = [remove_node.ip for remove_node in remove_nodes]
         self.log.info(" Starting rebalance-out nodes:{0} at {1} cluster {2}".
                           format(remove_node_ips, cluster_type, master_node.ip))
-        map(cluster_nodes.remove, remove_nodes)
+        list(map(cluster_nodes.remove, remove_nodes))
         return tasks
 
     # Initiates a rebalance-in asynchronously on both clusters
@@ -779,12 +777,12 @@ class XDCRBaseTest(unittest.TestCase):
 
     def __async_rebalance_in_cluster(self, cluster_nodes, master_node, cluster_type="source"):
         add_nodes = self._floating_servers_set[0:self._num_rebalance]
-        map(self._floating_servers_set.remove, add_nodes)
+        list(map(self._floating_servers_set.remove, add_nodes))
         tasks = self._async_rebalance(cluster_nodes, add_nodes, [])
         add_nodes_ips = [node.ip for node in add_nodes]
         self.log.info(" Starting rebalance-in nodes:{0} at {1} cluster {2}".
                           format(add_nodes_ips, cluster_type, master_node.ip))
-        map(cluster_nodes.append, add_nodes)
+        list(map(cluster_nodes.append, add_nodes))
         return tasks
 
     # Initiates a swap-rebalance asynchronously on both clusters
@@ -821,7 +819,7 @@ class XDCRBaseTest(unittest.TestCase):
     def get_servers_in_cluster(self, member):
         nodes = [node for node in RestConnection(member).get_nodes()]
         servers = []
-        cluster_run = len(set([server.ip for server in self._servers])) == 1
+        cluster_run = len({server.ip for server in self._servers}) == 1
         for server in self._servers:
             for node in nodes:
                 if ((server.hostname if server.hostname else server.ip) == str(node.ip) or cluster_run)\
@@ -858,7 +856,7 @@ class XDCRBaseTest(unittest.TestCase):
             self.wait_service_started(server, wait_time)
             wait_time = now + wait_time - time.time()
         num = 0
-        while num < wait_time / 10:
+        while num < wait_time // 10:
             try:
                 ClusterOperationHelper.wait_for_ns_servers_or_assert(
                                             [server], self, wait_time=wait_time - num * 10, wait_if_warmup=wait_if_warmup)
@@ -930,7 +928,7 @@ class XDCRBaseTest(unittest.TestCase):
     def make_default_views(self, prefix, count, is_dev_ddoc=False,):
         ref_view = self._default_view
         ref_view.name = (prefix, ref_view.name)[prefix is None]
-        return [View(ref_view.name + str(i), ref_view.map_func, None, is_dev_ddoc) for i in xrange(count)]
+        return [View(ref_view.name + str(i), ref_view.map_func, None, is_dev_ddoc) for i in range(count)]
 
     def async_create_views(self, server, design_doc_name, views, bucket="default"):
         tasks = []
@@ -945,7 +943,7 @@ class XDCRBaseTest(unittest.TestCase):
 
     def _get_num_items_ratio(self, op_type):
         if op_type in ["update", "delete"]:
-            return self.num_items / 3
+            return self.num_items // 3
         else:
             return self.num_items
 
@@ -1055,13 +1053,13 @@ class XDCRBaseTest(unittest.TestCase):
                 tasks.extend(self._async_load_all_buckets(self.src_master, self.gen_update, "update", self._expires))
             if "delete" in self._doc_ops:
                 tasks.extend(self._async_load_all_buckets(self.src_master, self.gen_delete, "delete", 0))
-            self.sleep(self.wait_timeout / 6)
+            self.sleep(self.wait_timeout // 6)
         if self._doc_ops_dest is not None:
             if "update" in self._doc_ops_dest:
                 tasks.extend(self._async_load_all_buckets(self.dest_master, self.gen_update2, "update", self._expires))
             if "delete" in self._doc_ops_dest:
                 tasks.extend(self._async_load_all_buckets(self.dest_master, self.gen_delete2, "delete", 0))
-            self.sleep(self.wait_timeout / 6)
+            self.sleep(self.wait_timeout // 6)
         for task in tasks:
             task.result()
         if self._wait_for_expiration and self._expires:
@@ -1091,7 +1089,7 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
         self._load_data()
 
     def teardown_extended(self):
-        for _, clusters in self._clusters_dic.items():
+        for _, clusters in list(self._clusters_dic.items()):
             rest = RestConnection(clusters[0])
             rest.remove_all_replications()
             rest.remove_all_remote_clusters()
@@ -1128,7 +1126,7 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
         elif self._cluster_topology_str == XDCRConstants.CLUSTER_TOPOLOGY_TYPE_RING:
             self._set_topology_ring()
         else:
-            raise "Not supported cluster topology : %s", self._cluster_topology_str
+            raise Exception("Not supported cluster topology : %s", self._cluster_topology_str)
 
     def _load_data(self):
         if not self._seed_data:
@@ -1138,7 +1136,7 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
         elif self._cluster_topology_str == XDCRConstants.CLUSTER_TOPOLOGY_TYPE_STAR:
             self._load_data_star()
         else:
-            raise "Seed data not supported cluster topology : %s", self._cluster_topology_str
+            raise Exception("Seed data not supported cluster topology : %s", self._cluster_topology_str)
 
     def _setup_topology_chain(self):
         ord_keys = self._clusters_keys_olst
@@ -1214,7 +1212,7 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
 
     def _join_clusters(self, src_cluster_name, src_master, dest_cluster_name, dest_master):
         self._link_clusters(src_master, dest_cluster_name, dest_master)
-        if int(self.dest_master.port) in xrange(9091, 9991):
+        if int(self.dest_master.port) in range(9091, 9991):
             self.rep_type = 'capi'
         self._replicate_clusters(src_master, dest_cluster_name)
         if self._replication_direction_str == XDCRConstants.REPLICATION_DIRECTION_BIDIRECTION:
@@ -1228,7 +1226,7 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
         if self._demand_encryption:
             rest_conn_dest = RestConnection(dest_master)
             certificate = rest_conn_dest.get_cluster_ceritificate()
-        if int(dest_master.port) in xrange(9091, 9991):
+        if int(dest_master.port) in range(9091, 9991):
             rest_conn_src.add_remote_cluster(dest_master.ip, dest_master.port,
                 dest_master.es_username,
                 dest_master.es_password, remote_cluster_name,
@@ -1383,7 +1381,7 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
             task.result(timeout)
             error_count += task.err_count
             if task.err_count:
-                for ip, values in task.keys_not_found.iteritems():
+                for ip, values in task.keys_not_found.items():
                     if values:
                         self.log.error("%s keys not found on %s:%s" % (len(values), ip, values))
         return error_count
@@ -1420,7 +1418,7 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
         buckets = self._get_cluster_buckets(master)
         self.assertTrue(buckets, "No buckets received from the server {0} for verification".format(master.ip))
         for bucket in buckets:
-            items = sum([len(kv_store) for kv_store in bucket.kvs.values()])
+            items = sum([len(kv_store) for kv_store in list(bucket.kvs.values())])
             for stat in ['curr_items', 'vb_active_curr_items']:
                 stats_tasks.append(self.cluster.async_wait_for_stats(servers, bucket, '',
                     stat, '==', items))

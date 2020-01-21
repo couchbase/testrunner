@@ -2,7 +2,7 @@ import copy
 import logging
 import random
 
-from string import lowercase
+from string import ascii_lowercase
 from couchbase.bucket import Bucket
 from couchbase_helper.documentgenerator import  DocumentGenerator
 from couchbase_helper.data import FIRST_NAMES, COUNTRIES
@@ -10,7 +10,8 @@ from couchbase_helper.query_definitions import QueryDefinition
 from couchbase_helper.tuq_generators import TuqGenerators
 from membase.api.rest_client import RestConnection
 from membase.helper.bucket_helper import BucketOperationHelper
-from base_2i import BaseSecondaryIndexingTests
+from .base_2i import BaseSecondaryIndexingTests
+from deepdiff import DeepDiff
 
 log = logging.getLogger(__name__)
 
@@ -149,15 +150,15 @@ class SecondaryIndexDatasizeTests(BaseSecondaryIndexingTests):
             self.get_dgm_for_plasma(indexer_nodes=[self.dgmServer])
         query_definitions = self._create_indexes(buckets)
         self.sleep(20)
-        array_size = random.choice(range(10, 15))
-        item_size = random.choice(range(10, 15))
+        array_size = random.choice(list(range(10, 15)))
+        item_size = random.choice(list(range(10, 15)))
         self.upload_documents(num_items=1000, item_size=item_size, array_size=array_size, buckets=buckets)
         rest = RestConnection(self.master)
         index_map = rest.get_index_id_map()
         for j in range(self.iterations):
             log.info("Iteration: {0}".format(j))
-            array_size = random.choice(range(10, 15))
-            item_size = random.choice(range(10, 15))
+            array_size = random.choice(list(range(10, 15)))
+            item_size = random.choice(list(range(10, 15)))
             self.upload_documents(num_items=1000, item_size=item_size,
                                   array_size=array_size, buckets=buckets, update_docs=True)
             for bucket in buckets:
@@ -168,12 +169,16 @@ class SecondaryIndexDatasizeTests(BaseSecondaryIndexingTests):
                     expected_result = self._get_expected_results_for_scan(
                     query_definition)
                     msg = "Results don't match for index {0}. Actual: {1}, Expected: {2}"
-                    self.assertEqual(sorted(actual_result), sorted(expected_result),
-                             msg.format(query_definition.index_name,
-                                        actual_result, expected_result))
+                    #self.assertEqual(sorted(actual_result), sorted(expected_result),
+                    #         msg.format(query_definition.index_name,
+                    #                    actual_result, expected_result))
+                    diffs = DeepDiff(actual_result, expected_result, ignore_order=True)
+                    if diffs:
+                        self.assertTrue(False, diffs)
+
             self.sleep(20)
-            array_size = random.choice(range(1000, 5000))
-            item_size = random.choice(range(1000, 5000))
+            array_size = random.choice(list(range(1000, 5000)))
+            item_size = random.choice(list(range(1000, 5000)))
             self.upload_documents(num_items=1000, item_size=item_size,
                                   array_size=array_size, buckets=buckets, update_docs=True)
             for bucket in buckets:
@@ -184,9 +189,12 @@ class SecondaryIndexDatasizeTests(BaseSecondaryIndexingTests):
                     expected_result = self._get_expected_results_for_scan(
                     query_definition)
                     msg = "Results don't match for index {0}. Actual: {1}, Expected: {2}"
-                    self.assertEqual(sorted(actual_result), sorted(expected_result),
-                             msg.format(query_definition.index_name,
-                                        actual_result, expected_result))
+                    #self.assertEqual(sorted(actual_result), sorted(expected_result),
+                    #         msg.format(query_definition.index_name,
+                    #                    actual_result, expected_result))
+                    diffs = DeepDiff(actual_result, expected_result, ignore_order=True)
+                    if diffs:
+                        self.assertTrue(False, diffs)
 
     def test_change_key_size(self):
         self.iterations = self.input.param("num_iterations", 5)
@@ -204,12 +212,12 @@ class SecondaryIndexDatasizeTests(BaseSecondaryIndexingTests):
         generators = []
         for j in range(self.iterations):
             for i in range(10):
-                name = FIRST_NAMES[random.choice(range(len(FIRST_NAMES)))]
-                id_size = random.choice(range(5, 10))
-                short_str = "".join(random.choice(lowercase) for k in range(id_size))
+                name = FIRST_NAMES[random.choice(list(range(len(FIRST_NAMES))))]
+                id_size = random.choice(list(range(5, 10)))
+                short_str = "".join(random.choice(ascii_lowercase) for k in range(id_size))
                 id = "{0}-{1}".format(name, short_str)
-                age = random.choice(range(4, 19))
-                bigValues = "".join(random.choice(lowercase) for k in range(5))
+                age = random.choice(list(range(4, 19)))
+                bigValues = "".join(random.choice(ascii_lowercase) for k in range(5))
                 generators.append(DocumentGenerator(
                     id, template, [name], [age], [bigValues], start=0, end=10))
             self.load(generators, flag=self.item_flag, verify_data=False,
@@ -219,12 +227,12 @@ class SecondaryIndexDatasizeTests(BaseSecondaryIndexingTests):
             self.multi_query_using_index(buckets=buckets,
                                          query_definitions=[query_definition])
             for i in range(10):
-                name = FIRST_NAMES[random.choice(range(len(FIRST_NAMES)))]
-                id_size = random.choice(range(100, 200))
-                long_str = "".join(random.choice(lowercase) for k in range(id_size))
+                name = FIRST_NAMES[random.choice(list(range(len(FIRST_NAMES))))]
+                id_size = random.choice(list(range(100, 200)))
+                long_str = "".join(random.choice(ascii_lowercase) for k in range(id_size))
                 id = "{0}-{1}".format(name, long_str)
-                age = random.choice(range(4, 19))
-                bigValues = "".join(random.choice(lowercase) for k in range(5))
+                age = random.choice(list(range(4, 19)))
+                bigValues = "".join(random.choice(ascii_lowercase) for k in range(5))
                 generators.append(DocumentGenerator(
                     id, template, [name], [age], [bigValues], start=0, end=10))
             self.load(generators, flag=self.item_flag, verify_data=False,
@@ -253,13 +261,13 @@ class SecondaryIndexDatasizeTests(BaseSecondaryIndexingTests):
         generators = []
         for j in range(self.iterations):
             for i in range(10):
-                name = FIRST_NAMES[random.choice(range(len(FIRST_NAMES)))]
-                id_size = random.choice(range(5, 200))
-                short_str = "".join(random.choice(lowercase) for k in range(id_size))
+                name = FIRST_NAMES[random.choice(list(range(len(FIRST_NAMES))))]
+                id_size = random.choice(list(range(5, 200)))
+                short_str = "".join(random.choice(ascii_lowercase) for k in range(id_size))
                 id = "{0}-{1}".format(name, short_str)
-                age = random.choice(range(4, 19))
-                bigValue_size = random.choice(range(10, 5000))
-                bigValues = "".join(random.choice(lowercase) for k in range(bigValue_size))
+                age = random.choice(list(range(4, 19)))
+                bigValue_size = random.choice(list(range(10, 5000)))
+                bigValues = "".join(random.choice(ascii_lowercase) for k in range(bigValue_size))
                 generators.append(DocumentGenerator(
                     id, template, [name], [age], [bigValues], start=0, end=10))
             self.load(generators, flag=self.item_flag, verify_data=False,
@@ -304,7 +312,7 @@ class SecondaryIndexDatasizeTests(BaseSecondaryIndexingTests):
         rolelist = []
         for bucket in buckets:
             testuser.append({'id': bucket, 'name': bucket, 'password': 'password'})
-            rolelist.append({'id': bucket, 'name': bucket, 'roles': 'admin'})
+            rolelist.append({'id': bucket, 'name': bucket, 'roles': 'admin', 'password':'password'})
         self.add_built_in_server_user(testuser=testuser, rolelist=rolelist)
         buckets = []
         for bucket in self.buckets:
@@ -398,7 +406,7 @@ class SecondaryIndexDatasizeTests(BaseSecondaryIndexingTests):
         generators = []
         template = '{{"name":"{0}", "age":{1}, "encoded_array": {2}, "encoded_big_value_array": {3}}}'
         item_length = item_size * 4
-        array_element_size = (array_size * 4)/array_elements
+        array_element_size = (array_size * 4)//array_elements
         if update_docs:
             num_items = len(self.full_docs_list)
         for i in range(num_items):
@@ -407,11 +415,11 @@ class SecondaryIndexDatasizeTests(BaseSecondaryIndexingTests):
             else:
                 index_id = "unhandled_items_" + str(random.random()*100000)
             encoded_array = []
-            name = "".join(random.choice(lowercase) for k in range(item_length))
-            age = random.choice(range(4, 59))
+            name = "".join(random.choice(ascii_lowercase) for k in range(item_length))
+            age = random.choice(list(range(4, 59)))
             big_value_array = [name]
             for j in range(array_elements):
-                element = "".join(random.choice(lowercase) for k in range(array_element_size))
+                element = "".join(random.choice(ascii_lowercase) for k in range(array_element_size))
                 encoded_array.append(element)
             generators.append(DocumentGenerator(
                 index_id, template, [name], [age], [encoded_array],

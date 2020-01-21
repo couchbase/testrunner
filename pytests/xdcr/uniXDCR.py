@@ -5,9 +5,9 @@ from couchbase_helper.documentgenerator import BlobGenerator
 from remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection
 from memcached.helper.data_helper import LoadWithMcsoda
-from xdcrnewbasetests import XDCRNewBaseTest
-from xdcrnewbasetests import NodeHelper
-from xdcrnewbasetests import Utility, BUCKET_NAME, OPS
+from .xdcrnewbasetests import XDCRNewBaseTest
+from .xdcrnewbasetests import NodeHelper
+from .xdcrnewbasetests import Utility, BUCKET_NAME, OPS
 from scripts.install import InstallerJob
 from lib.memcached.helper.data_helper import MemcachedClientHelper
 
@@ -23,6 +23,12 @@ class unidirectional(XDCRNewBaseTest):
 
     def tearDown(self):
         super(unidirectional, self).tearDown()
+
+    def suite_setUp(self):
+        self.log.info("*** unidirectional: suite_setUp() ***")
+
+    def suite_tearDown(self):
+        self.log.info("*** unidirectional: suite_tearDown() ***")
 
     """Testing Unidirectional load( Loading only at source) Verifying whether XDCR replication is successful on
     subsequent destination clusters.Create/Update/Delete operations are performed based on doc-ops specified by the user. """
@@ -66,7 +72,7 @@ class unidirectional(XDCRNewBaseTest):
 
         self.sleep(self._wait_timeout)
         self.perform_update_delete()
-        self.sleep(self._wait_timeout / 2)
+        self.sleep(self._wait_timeout // 2)
 
         NodeHelper.wait_warmup_completed(warmupnodes)
 
@@ -82,7 +88,7 @@ class unidirectional(XDCRNewBaseTest):
 
         self.sleep(self._wait_timeout)
         self.perform_update_delete()
-        self.sleep(self._wait_timeout / 2)
+        self.sleep(self._wait_timeout // 2)
 
         NodeHelper.wait_warmup_completed(warmupnodes)
 
@@ -102,7 +108,7 @@ class unidirectional(XDCRNewBaseTest):
 
         self.sleep(self._wait_timeout)
         self.async_perform_update_delete()
-        self.sleep(self._wait_timeout / 2)
+        self.sleep(self._wait_timeout // 2)
 
         NodeHelper.wait_warmup_completed(warmupnodes)
 
@@ -122,7 +128,7 @@ class unidirectional(XDCRNewBaseTest):
 
         self.sleep(self._wait_timeout)
         self.async_perform_update_delete()
-        self.sleep(self._wait_timeout / 2)
+        self.sleep(self._wait_timeout // 2)
 
         NodeHelper.wait_warmup_completed(warmupnodes)
 
@@ -138,7 +144,7 @@ class unidirectional(XDCRNewBaseTest):
         if "C2" in self._failover:
             self.dest_cluster.failover_and_rebalance_nodes()
 
-        self.sleep(self._wait_timeout / 6)
+        self.sleep(self._wait_timeout // 6)
         self.perform_update_delete()
 
         self.verify_results()
@@ -170,7 +176,7 @@ class unidirectional(XDCRNewBaseTest):
         if "C2" in self._failover:
             self.dest_cluster.failover_and_rebalance_master()
 
-        self.sleep(self._wait_timeout / 6)
+        self.sleep(self._wait_timeout // 6)
         self.perform_update_delete()
 
         self.sleep(300)
@@ -191,7 +197,7 @@ class unidirectional(XDCRNewBaseTest):
             tasks.append(self.dest_cluster.async_failover())
 
         self.perform_update_delete()
-        self.sleep(self._wait_timeout / 4)
+        self.sleep(self._wait_timeout // 4)
 
         for task in tasks:
             task.result()
@@ -289,7 +295,7 @@ class unidirectional(XDCRNewBaseTest):
         self.setup_xdcr_and_load()
         self.src_cluster.set_xdcr_param("xdcrFailureRestartInterval", 1)
         self.perform_update_delete()
-        self.sleep(self._wait_timeout / 2)
+        self.sleep(self._wait_timeout // 2)
         rebooted_node = self.dest_cluster.reboot_one_node(self)
         NodeHelper.wait_node_restarted(rebooted_node, self, wait_time=self._wait_timeout * 4, wait_if_warmup=True)
 
@@ -312,7 +318,7 @@ class unidirectional(XDCRNewBaseTest):
         self.setup_xdcr_and_load()
         self.verify_results()
         loop_count = self._input.param("loop_count", 20)
-        for i in xrange(loop_count):
+        for i in range(loop_count):
             self.log.info("Append iteration # %s" % i)
             gen_append = BlobGenerator('loadOne', 'loadOne', self._value_size, end=self._num_items)
             self.src_cluster.load_all_buckets_from_generator(gen_append, ops=OPS.APPEND, batch_size=1)
@@ -440,7 +446,10 @@ class unidirectional(XDCRNewBaseTest):
     # Nodes Crashing Scenarios
     def __kill_processes(self, crashed_nodes=[]):
         for node in crashed_nodes:
-            NodeHelper.kill_erlang(node)
+            try:
+                NodeHelper.kill_erlang(node)
+            except:
+                self.log.info('Could not kill erlang process on node, continuing..')
 
     def __start_cb_server(self, node):
         shell = RemoteMachineShellConnection(node)
@@ -553,7 +562,7 @@ class unidirectional(XDCRNewBaseTest):
         """Tests with 2 buckets with customized optimisic replication thresholds
            one greater than value_size, other smaller
         """
-        from xdcrnewbasetests import REPL_PARAM
+        from .xdcrnewbasetests import REPL_PARAM
         self.setup_xdcr_and_load()
         self._wait_for_replication_to_catchup()
         for remote_cluster in self.src_cluster.get_remote_clusters():
@@ -614,7 +623,7 @@ class unidirectional(XDCRNewBaseTest):
                                                         self.src_master.rest_username,
                                                         self.src_master.rest_password)
                     output, _ = self.shell.execute_command(cmd)
-                self.assertNotEquals(len(output), 0, "Full disk warning not generated as expected in %s" % node.ip)
+                self.assertNotEqual(len(output), 0, "Full disk warning not generated as expected in %s" % node.ip)
                 self.log.info("Full disk warning generated as expected in %s" % node.ip)
 
                 self.shell.delete_files(zip_file)
@@ -877,7 +886,7 @@ class unidirectional(XDCRNewBaseTest):
         count = NodeHelper.check_goxdcr_log(
                         nodes[0],
                         "Received rollback from DCP stream",
-                        goxdcr_log)
+                        goxdcr_log, timeout=60)
         self.assertGreater(count, 0, "rollback did not happen as expected")
         self.log.info("rollback happened as expected")
 
@@ -916,14 +925,13 @@ class unidirectional(XDCRNewBaseTest):
             self.src_cluster.pause_all_replications()
             self.sleep(30)
             self.src_cluster.resume_all_replications()
-
             self.sleep(self._wait_timeout)
-
             output, error = conn.execute_command("netstat -an | grep " + self.src_cluster.get_master_node().ip
                                                  + ":11210 | wc -l")
             conn.log_command_output(output, error)
             self.log.info("No. of memcached connections in iteration {0}:  {1}".format(i+1, output[0]))
-            self.assertLessEqual(abs(int(output[0]) - int(before)), 5, "Number of memcached connections changed beyond allowed limit")
+            if int(output[0]) - int(before) > 5:
+                self.fail("Number of memcached connections changed beyond allowed limit")
 
         for task in load_tasks:
             task.result()

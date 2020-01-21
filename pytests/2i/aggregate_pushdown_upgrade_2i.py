@@ -2,7 +2,7 @@ import logging
 import random
 
 from membase.api.rest_client import RestConnection, RestHelper
-from int64_upgrade_2i import UpgradeSecondaryIndexInt64
+from .int64_upgrade_2i import UpgradeSecondaryIndexInt64
 
 log = logging.getLogger(__name__)
 INT64_VALUES = [-9223372036854775808, 9223372036854775807, 9223372036854770000, 9000000000000000000,
@@ -54,7 +54,7 @@ class UpgradeSecondaryIndexAggrPushdown(UpgradeSecondaryIndexInt64):
                                   "UNNEST d.`int_arr` AS t where t > {0} and t < {1}".format(random.randint(-100, 0), random.randint(0, 100)),
                                   "UNNEST d.`int_arr` AS t where t between {0} and {1}".format(random.randint(-100, 0), random.randint(0, 100))]
         where_clauses.extend(where_clause_name)
-        if phase not in self.query_results.keys():
+        if phase not in list(self.query_results.keys()):
             self.query_results[phase] = {}
         phase_results = []
         for aggr_fun in AGGREGATE_FUNCTIONS:
@@ -148,7 +148,7 @@ class UpgradeSecondaryIndexAggrPushdown(UpgradeSecondaryIndexInt64):
             result_set = []
             if res is not None and len(res) > 0:
                 for val in res:
-                    for key in val.keys():
+                    for key in list(val.keys()):
                         result_set.append(val[key])
             return result_set
 

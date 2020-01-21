@@ -1,4 +1,4 @@
-from xdcrnewbasetests import XDCRNewBaseTest, TOPOLOGY
+from .xdcrnewbasetests import XDCRNewBaseTest, TOPOLOGY
 from remote.remote_util import RemoteMachineShellConnection, RestConnection
 from couchbase_helper.documentgenerator import BlobGenerator
 from couchbase_helper.cluster import Cluster
@@ -27,7 +27,7 @@ class compression(XDCRNewBaseTest):
             if bucket_name in str(repl):
                 repl_id = repl.get_repl_id()
         shell = RemoteMachineShellConnection(cluster.get_master_node())
-        repl_id = str(repl_id).replace('/','%2F')
+        repl_id = str(repl_id).replace('/', '%2F')
         base_url = "http://" + cluster.get_master_node().ip + ":8091/settings/replications/" + repl_id
         command = "curl -X POST -u Administrator:password " + base_url + " -d compressionType=" + str(compression_type)
         output, error = shell.execute_command(command)

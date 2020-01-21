@@ -9,7 +9,7 @@ from sdk_client import SDKClient
 
 from lib.membase.api.exception import XDCRException
 from remote.remote_util import RemoteMachineShellConnection, RemoteUtilHelper
-from xdcrnewbasetests import XDCRNewBaseTest, REPLICATION_DIRECTION, TOPOLOGY
+from .xdcrnewbasetests import XDCRNewBaseTest, REPLICATION_DIRECTION, TOPOLOGY
 
 
 # Assumption that at least 2 nodes on every cluster
@@ -49,9 +49,9 @@ class XDCRXattr(XDCRNewBaseTest):
                 for bucket in cluster.get_buckets():
                     client = SDKClient(scheme="couchbase", hosts=[cluster.get_master_node().ip],
                                             bucket=bucket.name).cb
-                    for i in xrange(start_num, start_num + self._num_items):
-                        key = 'k_%s_%s' % (i, str(cluster).replace(' ','_').
-                                           replace('.','_').replace(',','_').replace(':','_'))
+                    for i in range(start_num, start_num + self._num_items):
+                        key = 'k_%s_%s' % (i, str(cluster).replace(' ', '_').
+                                           replace('.', '_').replace(',', '_').replace(':', '_'))
                         value = {'xattr_%s' % i:'value%s' % i}
                         client.upsert(key, value)
                         client.mutate_in(key, SD.upsert('xattr_%s' % i, 'value%s' % i,
@@ -101,10 +101,7 @@ class XDCRXattr(XDCRNewBaseTest):
                       % (len(valid_keys_dest), len(deleted_keys_dest)))
 
         if filter_exp:
-            filtered_src_keys = filter(
-                lambda key: re.search(str(filter_exp), key) is not None,
-                valid_keys_src
-            )
+            filtered_src_keys = [key for key in valid_keys_src if re.search(str(filter_exp), key) is not None]
             valid_keys_src = filtered_src_keys
             self.log.info(
                 "{0} keys matched the filter expression {1}".format(
@@ -226,11 +223,11 @@ class XDCRXattr(XDCRNewBaseTest):
                                 self.assertEqual(json.loads(content)['total_rows'], self._num_items)
                                 client = SDKClient(scheme="couchbase", hosts=[cluster.get_master_node().ip],
                                                         bucket=bucket.name).cb
-                                for i in xrange(self._num_items):
+                                for i in range(self._num_items):
                                     key = 'k_%s_%s' % (i, str(cluster).replace(' ', '_').
                                                       replace('.', '_').replace(',', '_').replace(':', '_'))
                                     res = client.get(key)
-                                    for xk, xv in res.value.iteritems():
+                                    for xk, xv in res.value.items():
                                         rv = client.mutate_in(key, SD.get(xk, xattr=True))
                                         self.assertTrue(rv.exists(xk))
                                         self.assertEqual(xv, rv[xk])

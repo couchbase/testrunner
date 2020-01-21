@@ -4,9 +4,9 @@ import logging
 
 from couchbase_helper.query_definitions import QueryDefinition
 from membase.api.rest_client import RestConnection
-from base_2i import BaseSecondaryIndexingTests
+from .base_2i import BaseSecondaryIndexingTests
 
-DATATYPES = [unicode, "scalar", int, dict, "missing", "empty", "null"]
+DATATYPES = [str, "scalar", int, dict, "missing", "empty", "null"]
 RANGE_SCAN_TEMPLATE = "SELECT {0} FROM %s WHERE {1}"
 NULL_STRING = "~[]{}UnboundedTruenilNA~"
 
@@ -46,7 +46,7 @@ class SecondaryIndexingAscendingDescendingCollations(BaseSecondaryIndexingTests)
         dict = {query_definition1: scan_content1, query_definition2: scan_content2, query_definition3: scan_content3}
         desc_values = [[True], [False]]
         for bucket in self.buckets:
-            for query_definition, scan_content in dict.iteritems():
+            for query_definition, scan_content in dict.items():
                 for desc_value in desc_values:
                     id_map = self.create_index_using_rest(bucket, query_definition, desc=desc_value)
                     multiscan_content = self._update_multiscan_content(index_fields=1)
@@ -59,7 +59,7 @@ class SecondaryIndexingAscendingDescendingCollations(BaseSecondaryIndexingTests)
                                 id_map["id"], json.dumps(multiscan_content))
                         multiscan_count_result = self.rest.multiscan_count_for_gsi_index_with_rest(
                             id_map["id"], json.dumps(multiscan_content))
-                        print multiscan_result
+                        print(multiscan_result)
                         check = self._verify_items_indexed_for_two_field_index(
                             bucket, id_map["id"],
                             ["name"], scan_content, multiscan_result, desc_value, multiscan_count_result, )
@@ -86,7 +86,7 @@ class SecondaryIndexingAscendingDescendingCollations(BaseSecondaryIndexingTests)
         dict = {query_definition1: scan_content1, query_definition2: scan_content2}
         desc_values = [[True], [False]]
         for bucket in self.buckets:
-            for query_definition, scan_content in dict.iteritems():
+            for query_definition, scan_content in dict.items():
                 for desc_value in desc_values:
                     id_map = self.create_index_using_rest(bucket, query_definition, desc=desc_value)
                     multiscan_content = self._update_multiscan_content(index_fields=1)
@@ -99,7 +99,7 @@ class SecondaryIndexingAscendingDescendingCollations(BaseSecondaryIndexingTests)
                                 id_map["id"], json.dumps(multiscan_content))
                         multiscan_count_result = self.rest.multiscan_count_for_gsi_index_with_rest(
                             id_map["id"], json.dumps(multiscan_content))
-                        print multiscan_result
+                        print(multiscan_result)
                         check = self._verify_items_indexed_for_two_field_index(
                             bucket, id_map["id"],
                             ["name"], scan_content, multiscan_result, desc_value, multiscan_count_result, )
@@ -155,7 +155,7 @@ class SecondaryIndexingAscendingDescendingCollations(BaseSecondaryIndexingTests)
                                                   scan_content, multiscan_result, desc, multiscan_count_result=None):
         err_message = "There are more ranges than number"
         if isinstance(multiscan_result, dict):
-            if err_message in multiscan_result.values():
+            if err_message in list(multiscan_result.values()):
                 multiscan_result = ''
         expected_results = []
         body = {"stale": "False"}
@@ -203,10 +203,10 @@ class SecondaryIndexingAscendingDescendingCollations(BaseSecondaryIndexingTests)
             else:
                 expected_results = doc_list
         if len(expected_results) != len(multiscan_result):
-            print multiscan_count_result
-            print len(expected_results)
-            print expected_results
-            print len(multiscan_result)
+            print(multiscan_count_result)
+            print(len(expected_results))
+            print(expected_results)
+            print(len(multiscan_result))
             log.info("No. of items mismatch :- expected = {0} and actual = {1}".format(
                 len(expected_results), len(multiscan_result)))
             return False
@@ -238,7 +238,7 @@ class SecondaryIndexingAscendingDescendingCollations(BaseSecondaryIndexingTests)
 
     def _update_multiscan_content(self, index_fields=2):
         multiscan_content = {}
-        projection = {"EntryKeys": range(index_fields), "PrimaryKey": True}
+        projection = {"EntryKeys": list(range(index_fields)), "PrimaryKey": True}
         multiscan_content["projection"] = json.dumps(projection)
         multiscan_content["distinct"] = False
         multiscan_content["reverse"] = False

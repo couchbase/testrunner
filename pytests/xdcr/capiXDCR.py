@@ -1,18 +1,18 @@
 import json
-import Queue
 
-from xdcrnewbasetests import XDCRNewBaseTest, XDCRRemoteClusterRef
-from xdcrnewbasetests import REPL_PARAM, Utility, NodeHelper
-from couchbase_helper.documentgenerator import DocumentGenerator
-from membase.api.rest_client import RestConnection
-from membase.api.esrest_client import EsRestConnection
 from couchbase_helper.cluster import Cluster
-from memcached.helper.data_helper import VBucketAwareMemcached
+from couchbase_helper.documentgenerator import DocumentGenerator
+from membase.api.esrest_client import EsRestConnection
 from membase.api.exception import XDCRCheckpointException
-from remote.remote_util import RemoteMachineShellConnection
+from membase.api.rest_client import RestConnection
 from membase.helper.cluster_helper import ClusterOperationHelper
+from memcached.helper.data_helper import VBucketAwareMemcached
 from newupgradebasetest import NewUpgradeBaseTest
-from testconstants import STANDARD_BUCKET_PORT
+from remote.remote_util import RemoteMachineShellConnection
+
+from .xdcrnewbasetests import REPL_PARAM, NodeHelper
+from .xdcrnewbasetests import XDCRNewBaseTest
+
 
 
 class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):
@@ -35,61 +35,15 @@ class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):
         self.upgrade_build_type = self._input.param('upgrade_build_type', self.initial_build_type)
         self.master = self.src_master
         self.rest = RestConnection(self.src_master)
+        self.esrest_conn = EsRestConnection(self.dest_master)
 
     def tearDown(self):
         super(Capi, self).tearDown()
 
-    def _start_es_replication(self, bucket='default', xdcr_params={}):
-        rest_conn = RestConnection(self.src_cluster.get_master_node())
-        if bucket == 'default':
-            self.log.info("Creating default bucket")
-            rest_conn.create_bucket(bucket='default', ramQuotaMB=100, authType='none', saslPassword='', replicaNumber=1,
-                                proxyPort=11211, bucketType='membase', replica_index=1, threadsNumber=3,
-                                flushEnabled=1, lww=False)
-            self.src_cluster.add_bucket(ramQuotaMB=100, bucket='default', authType='none',
-                                   saslPassword='', replicaNumber=1, proxyPort=11211, bucketType='membase',
-                                   evictionPolicy='valueOnly')
-        elif bucket == 'sasl':
-            self.log.info("Creating sasl bucket")
-            rest_conn.create_bucket(bucket='sasl', ramQuotaMB=100, authType='sasl', saslPassword='password', replicaNumber=1,
-                                proxyPort=11211, bucketType='membase', replica_index=1, threadsNumber=3,
-                                flushEnabled=1, lww=False)
-            self.src_cluster.add_bucket(ramQuotaMB=100, bucket='sasl', authType='sasl',
-                                   saslPassword='password', replicaNumber=1, proxyPort=11211, bucketType='membase',
-                                   evictionPolicy='valueOnly')
-        elif bucket == 'standard':
-            self.log.info("Creating standard bucket")
-            rest_conn.create_bucket(bucket='standard', ramQuotaMB=100, authType='none', saslPassword='', replicaNumber=1,
-                                proxyPort=STANDARD_BUCKET_PORT, bucketType='membase', replica_index=1, threadsNumber=3,
-                                flushEnabled=1, lww=False)
-            self.src_cluster.add_bucket(ramQuotaMB=100, bucket='standard', authType='none',
-                                   saslPassword='', replicaNumber=1, proxyPort=STANDARD_BUCKET_PORT, bucketType='membase',
-                                   evictionPolicy='valueOnly')
-        elif bucket== 'lww':
-            self.log.info("Creating lww bucket")
-            rest_conn.create_bucket(bucket='lww', ramQuotaMB=100, authType='none', saslPassword='', replicaNumber=1,
-                                proxyPort=11211, bucketType='membase', replica_index=1, threadsNumber=3,
-                                flushEnabled=1, lww=True)
-            self.src_cluster.add_bucket(ramQuotaMB=100, bucket='lww', authType='none',
-                                   saslPassword='', replicaNumber=1, proxyPort=11211, bucketType='membase',
-                                   evictionPolicy='valueOnly')
-        esrest_conn = EsRestConnection(self.dest_cluster.get_master_node())
-        esrest_conn.create_index(bucket)
-        rest_conn.add_remote_cluster(remoteIp=self.dest_master.ip, remotePort=9091, username='Administrator',
-                                     password='password', name='es')
-        self.src_cluster.get_remote_clusters().append(XDCRRemoteClusterRef(self.src_cluster, self.dest_cluster,
-                                                                       Utility.get_rc_name(self.src_cluster.get_name(),
-                                                                                        self.dest_cluster.get_name())))
-        repl_id = rest_conn.start_replication(replicationType='continuous', fromBucket=bucket, toCluster='es',
-                                              rep_type='capi', toBucket=bucket, xdcr_params=xdcr_params)
-        return repl_id
-
     def _verify_es_results(self, bucket='default'):
-        esrest_conn = EsRestConnection(self.dest_master)
-        es_docs = esrest_conn.all_docs()
+        es_docs = self.esrest_conn.all_docs()
         self.log.info("Retrieved ES Docs")
-        rest_conn = RestConnection(self.src_master)
-        memcached_conn = VBucketAwareMemcached(rest_conn, bucket)
+        memcached_conn = VBucketAwareMemcached(self.rest, bucket)
         self.log.info("Comparing CB and ES data")
         for doc in es_docs:
             es_data = doc['doc']
@@ -100,74 +54,67 @@ class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):
         self.log.info("Data verified")
 
     def test_crud_ops_from_cb_to_es(self):
-        bucket = self._input.param("bucket", 'default')
-        repl_id = self._start_es_replication(bucket=bucket)
+        self.setup_xdcr()
 
-        rest_conn = RestConnection(self.src_master)
-        rest_conn.pause_resume_repl_by_id(repl_id, REPL_PARAM.PAUSE_REQUESTED, 'true')
+        self.src_cluster.pause_all_replications()
 
-        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}',  xrange(100), start=0, end=self._num_items)
+        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}', range(100), start=0, end=self._num_items)
         self.src_cluster.load_all_buckets_from_generator(gen)
 
         self.perform_update_delete()
 
-        rest_conn.pause_resume_repl_by_id(repl_id, REPL_PARAM.PAUSE_REQUESTED, 'false')
+        self.src_cluster.resume_all_replications()
 
-        self._wait_for_es_replication_to_catchup()
+        self._wait_for_replication_to_catchup()
 
-        self._verify_es_results(bucket=bucket)
+        self._verify_es_results()
 
     def test_incr_crud_ops_from_cb_to_es(self):
-        repl_id = self._start_es_replication()
+        self.setup_xdcr()
 
-        rest_conn = RestConnection(self.src_master)
-        rest_conn.pause_resume_repl_by_id(repl_id, REPL_PARAM.PAUSE_REQUESTED, 'true')
+        self.src_cluster.pause_all_replications()
 
-        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}',  xrange(100), start=0, end=self._num_items)
+        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}', range(100), start=0, end=self._num_items)
         self.src_cluster.load_all_buckets_from_generator(gen)
 
         self.async_perform_update_delete()
 
-        rest_conn.pause_resume_repl_by_id(repl_id, REPL_PARAM.PAUSE_REQUESTED, 'false')
+        self.src_cluster.resume_all_replications()
 
-        self._wait_for_es_replication_to_catchup()
+        self._wait_for_replication_to_catchup()
 
         self._verify_es_results()
 
     def test_capi_with_pause_resume(self):
-        repl_id = self._start_es_replication()
+        self.setup_xdcr()
 
-        rest_conn = RestConnection(self.src_master)
-
-        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}',  xrange(100), start=0, end=self._num_items)
+        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}', range(100), start=0, end=self._num_items)
         self.src_cluster.async_load_all_buckets_from_generator(gen)
 
-        rest_conn.pause_resume_repl_by_id(repl_id, REPL_PARAM.PAUSE_REQUESTED, 'true')
+        self.src_cluster.pause_all_replications()
 
         self.sleep(30)
 
-        rest_conn.pause_resume_repl_by_id(repl_id, REPL_PARAM.PAUSE_REQUESTED, 'false')
+        self.src_cluster.resume_all_replications()
 
-        self._wait_for_es_replication_to_catchup()
-
+        self._wait_for_replication_to_catchup()
         self._verify_es_results()
 
     def test_capi_with_checkpointing(self):
-        repl_id = self._start_es_replication(xdcr_params={"checkpointInterval":"60"})
+        self.setup_xdcr()
 
-        rest_conn = RestConnection(self.src_master)
-        rest_conn.pause_resume_repl_by_id(repl_id, REPL_PARAM.PAUSE_REQUESTED, 'true')
+        self.src_cluster.pause_all_replications()
 
-        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}',  xrange(100), start=0, end=self._num_items)
+        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}', range(100), start=0, end=self._num_items)
         self.src_cluster.load_all_buckets_from_generator(gen)
 
-        rest_conn.pause_resume_repl_by_id(repl_id, REPL_PARAM.PAUSE_REQUESTED, 'false')
-
+        self.src_cluster.resume_all_replications()
+        self._wait_for_replication_to_catchup()
         self.sleep(120)
 
         vb0_node = None
         nodes = self.src_cluster.get_nodes()
-        ip = VBucketAwareMemcached(rest_conn,'default').vBucketMap[0].split(':')[0]
+        ip = VBucketAwareMemcached(self.rest, 'default').vBucketMap[0].split(':')[0]
         for node in nodes:
             if ip == node.ip:
                 vb0_node = node
@@ -175,7 +122,8 @@ class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):
             raise XDCRCheckpointException("Error determining the node containing active vb0")
         vb0_conn = RestConnection(vb0_node)
         try:
-            checkpoint_record = vb0_conn.get_recent_xdcr_vb_ckpt(repl_id)
+            repl = vb0_conn.get_replication_for_buckets('default', 'default')
+            checkpoint_record = vb0_conn.get_recent_xdcr_vb_ckpt(repl['id'])
             self.log.info("Checkpoint record : {0}".format(checkpoint_record))
         except Exception as e:
             raise XDCRCheckpointException("Error retrieving last checkpoint document - {0}".format(e))
@@ -183,38 +131,31 @@ class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):
         self._verify_es_results()
 
     def test_capi_with_optimistic_replication(self):
-        repl_id = self._start_es_replication()
+        self.setup_xdcr()
 
-        rest_conn = RestConnection(self.src_master)
+        self.src_cluster.pause_all_replications()
 
-        rest_conn.set_xdcr_param('default', 'default', 'optimisticReplicationThreshold', self._optimistic_threshold)
-
-        rest_conn.pause_resume_repl_by_id(repl_id, REPL_PARAM.PAUSE_REQUESTED, 'true')
-
-        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}',  xrange(100), start=0, end=self._num_items)
+        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}', range(100), start=0, end=self._num_items)
         self.src_cluster.load_all_buckets_from_generator(gen)
 
         self.perform_update_delete()
 
-        rest_conn.pause_resume_repl_by_id(repl_id, REPL_PARAM.PAUSE_REQUESTED, 'false')
+        self.src_cluster.resume_all_replications()
 
-        self._wait_for_es_replication_to_catchup()
+        self._wait_for_replication_to_catchup()
 
         self._verify_es_results()
 
     def test_capi_with_filter(self):
-        repl_id = self._start_es_replication(xdcr_params={'filterExpression':'es-5*'})
 
-        rest_conn = RestConnection(self.src_master)
+        self.setup_xdcr()
 
-        rest_conn.pause_resume_repl_by_id(repl_id, REPL_PARAM.PAUSE_REQUESTED, 'true')
+        self.src_cluster.pause_all_replications()
 
-        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}',  xrange(100), start=0, end=self._num_items)
+        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}', range(100), start=0, end=self._num_items)
         self.src_cluster.load_all_buckets_from_generator(gen)
 
-        rest_conn.pause_resume_repl_by_id(repl_id, REPL_PARAM.PAUSE_REQUESTED, 'false')
-
-        self._wait_for_es_replication_to_catchup()
+        self.src_cluster.resume_all_replications()
 
         self._verify_es_results()
 
@@ -233,7 +174,7 @@ class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):
             output, error = shell.execute_command(command)
             shell.log_command_output(output, error)
 
-        repl_id = self._start_es_replication()
+        self.setup_xdcr()
 
         rest_conn = RestConnection(self.src_master)
 
@@ -242,12 +183,12 @@ class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):
         rest_conn.set_xdcr_param('default', 'default', 'sourceNozzlePerNode', source_nozzle)
         rest_conn.set_xdcr_param('default', 'default', 'targetNozzlePerNode', target_nozzle)
 
-        rest_conn.pause_resume_repl_by_id(repl_id, REPL_PARAM.PAUSE_REQUESTED, 'true')
+        self.src_cluster.pause_all_replications()
 
-        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}',  xrange(100), start=0, end=self._num_items)
+        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}', range(100), start=0, end=self._num_items)
         self.src_cluster.load_all_buckets_from_generator(gen)
 
-        rest_conn.pause_resume_repl_by_id(repl_id, REPL_PARAM.PAUSE_REQUESTED, 'false')
+        self.src_cluster.resume_all_replications()
 
         if enable_firewall:
             NodeHelper.enable_firewall(self.dest_cluster.get_master_node())
@@ -257,73 +198,68 @@ class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):
         self._verify_es_results()
 
     def test_capi_with_rebalance_in(self):
-        repl_id = self._start_es_replication()
+        self.setup_xdcr()
 
-        rest_conn = RestConnection(self.src_master)
-        rest_conn.pause_resume_repl_by_id(repl_id, REPL_PARAM.PAUSE_REQUESTED, 'true')
+        self.src_cluster.pause_all_replications()
 
-        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}',  xrange(100), start=0, end=self._num_items)
+        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}', range(100), start=0, end=self._num_items)
         self.src_cluster.load_all_buckets_from_generator(gen)
 
-        rest_conn.pause_resume_repl_by_id(repl_id, REPL_PARAM.PAUSE_REQUESTED, 'false')
+        self.src_cluster.resume_all_replications()
 
         self.src_cluster.rebalance_in()
 
-        self._wait_for_es_replication_to_catchup(timeout=900)
+        self._wait_for_replication_to_catchup(timeout=900)
 
         self._verify_es_results()
 
     def test_capi_with_rebalance_out(self):
-        repl_id = self._start_es_replication()
+        self.setup_xdcr()
 
-        rest_conn = RestConnection(self.src_master)
-        rest_conn.pause_resume_repl_by_id(repl_id, REPL_PARAM.PAUSE_REQUESTED, 'true')
+        self.src_cluster.pause_all_replications()
 
-        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}',  xrange(100), start=0, end=self._num_items)
+        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}', range(100), start=0, end=self._num_items)
         self.src_cluster.load_all_buckets_from_generator(gen)
 
-        rest_conn.pause_resume_repl_by_id(repl_id, REPL_PARAM.PAUSE_REQUESTED, 'false')
+        self.src_cluster.resume_all_replications()
 
         self.src_cluster.rebalance_out()
 
-        self._wait_for_es_replication_to_catchup(timeout=900)
+        self._wait_for_replication_to_catchup(timeout=900)
 
         self._verify_es_results()
 
     def test_capi_with_swap_rebalance(self):
-        repl_id = self._start_es_replication()
+        self.setup_xdcr()
 
-        rest_conn = RestConnection(self.src_master)
-        rest_conn.pause_resume_repl_by_id(repl_id, REPL_PARAM.PAUSE_REQUESTED, 'true')
+        self.src_cluster.pause_all_replications()
 
-        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}',  xrange(100), start=0, end=self._num_items)
+        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}', range(100), start=0, end=self._num_items)
         self.src_cluster.load_all_buckets_from_generator(gen)
 
-        rest_conn.pause_resume_repl_by_id(repl_id, REPL_PARAM.PAUSE_REQUESTED, 'false')
+        self.src_cluster.resume_all_replications()
 
         self.src_cluster.swap_rebalance()
 
-        self._wait_for_es_replication_to_catchup(timeout=600)
+        self._wait_for_replication_to_catchup(timeout=900)
 
         self._verify_es_results()
 
     def test_capi_with_failover(self):
-        repl_id = self._start_es_replication()
+        self.setup_xdcr()
 
-        rest_conn = RestConnection(self.src_master)
-        rest_conn.pause_resume_repl_by_id(repl_id, REPL_PARAM.PAUSE_REQUESTED, 'true')
-
-        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}',  xrange(100), start=0, end=self._num_items)
+        self.src_cluster.pause_all_replications()
+        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}', range(100), start=0, end=self._num_items)
         self.src_cluster.load_all_buckets_from_generator(gen)
 
-        rest_conn.pause_resume_repl_by_id(repl_id, REPL_PARAM.PAUSE_REQUESTED, 'false')
+        self.src_cluster.resume_all_replications()
 
         graceful = self._input.param("graceful", False)
         self.recoveryType = self._input.param("recoveryType", None)
         self.src_cluster.failover(graceful=graceful)
 
         self.sleep(30)
-
+        rest_conn = RestConnection(self.src_master)
         if self.recoveryType:
             server_nodes = rest_conn.node_statuses()
             for node in server_nodes:
@@ -337,28 +273,30 @@ class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):
         self._verify_es_results()
 
     def test_capi_with_malformed_http_resp(self):
-        repl_id = self._start_es_replication(xdcr_params={'workerBatchSize':'2000',
-                                                          'docBatchSizeKb':'8096',
-                                                          'targetNozzlePerNode':'64'})
+        self.setup_xdcr()
 
         rest_conn = RestConnection(self.src_master)
 
-        rest_conn.pause_resume_repl_by_id(repl_id, REPL_PARAM.PAUSE_REQUESTED, 'true')
+        rest_conn.set_xdcr_param('default', 'default', 'workerBatchSize', 2000)
+        rest_conn.set_xdcr_param('default', 'default', 'docBatchSizeKb', 8096)
+        rest_conn.set_xdcr_param('default', 'default', 'targetNozzlePerNode', 64)
 
-        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}',  xrange(100), start=0, end=self._num_items)
+        self.src_cluster.pause_all_replications()
+
+        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}', range(100), start=0, end=self._num_items)
         self.src_cluster.load_all_buckets_from_generator(gen)
 
-        rest_conn.pause_resume_repl_by_id(repl_id, REPL_PARAM.PAUSE_REQUESTED, 'false')
+        self.src_cluster.resume_all_replications()
 
-        self._wait_for_es_replication_to_catchup()
+        self._wait_for_replication_to_catchup()
 
-        goxdcr_log = NodeHelper.get_goxdcr_log_dir(self.src_master)\
+        goxdcr_log = NodeHelper.get_goxdcr_log_dir(self.src_master) \
                      + '/goxdcr.log*'
         for node in self.src_cluster.get_nodes():
             count = NodeHelper.check_goxdcr_log(
-                            node,
-                            "malformed HTTP response",
-                            goxdcr_log)
+                node,
+                "malformed HTTP response",
+                goxdcr_log)
             self.assertEqual(count, 0, "malformed HTTP response error message found in " + str(node.ip))
             self.log.info("malformed HTTP response error message not found in " + str(node.ip))
 
@@ -369,39 +307,36 @@ class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):
         upgrade_nodes = self.src_cluster.get_nodes()
         upgrade_version = self._input.param("upgrade_version", "5.0.0-1797")
 
-        repl_id = self._start_es_replication()
+        self.setup_xdcr()
+        self.src_cluster.pause_all_replications()
 
-        rest_conn = RestConnection(self.src_master)
-        rest_conn.pause_resume_repl_by_id(repl_id, REPL_PARAM.PAUSE_REQUESTED, 'true')
-
-        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}',  xrange(100), start=0, end=self._num_items)
+        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}', range(100), start=0, end=self._num_items)
         self.src_cluster.load_all_buckets_from_generator(gen)
 
         self.perform_update_delete()
 
-        rest_conn.pause_resume_repl_by_id(repl_id, REPL_PARAM.PAUSE_REQUESTED, 'false')
+        self.src_cluster.resume_all_replications()
 
-        self._wait_for_es_replication_to_catchup()
+        self._wait_for_replication_to_catchup()
 
-        rest_conn.pause_resume_repl_by_id(repl_id, REPL_PARAM.PAUSE_REQUESTED, 'true')
+        self.src_cluster.pause_all_replications()
 
         self._install(servers=upgrade_nodes, version=upgrade_version)
 
         self.log.info("######### Upgrade of CB cluster completed ##########")
 
-        repl_id = self._start_es_replication()
+        self.create_buckets()
+        self._join_all_clusters()
+        self.src_cluster.pause_all_replications()
 
-        rest_conn = RestConnection(self.src_master)
-        rest_conn.pause_resume_repl_by_id(repl_id, REPL_PARAM.PAUSE_REQUESTED, 'true')
-
-        gen = DocumentGenerator('es', '{{"key":"value"}}',  xrange(100), start=0, end=self._num_items)
+        gen = DocumentGenerator('es', '{{"key":"value"}}', range(100), start=0, end=self._num_items)
         self.src_cluster.load_all_buckets_from_generator(gen)
 
         self.perform_update_delete()
 
-        rest_conn.pause_resume_repl_by_id(repl_id, REPL_PARAM.PAUSE_REQUESTED, 'false')
+        self.src_cluster.resume_all_replications()
 
-        self._wait_for_es_replication_to_catchup()
+        self._wait_for_replication_to_catchup()
 
         self._verify_es_results()
 
@@ -416,7 +351,7 @@ class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):
         rest_conn = RestConnection(self.src_master)
         rest_conn.pause_resume_repl_by_id(repl_id, REPL_PARAM.PAUSE_REQUESTED, 'true')
 
-        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}',  xrange(100), start=0, end=self._num_items)
+        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}', range(100), start=0, end=self._num_items)
         self.src_cluster.load_all_buckets_from_generator(gen)
 
         self.perform_update_delete()
@@ -434,7 +369,7 @@ class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):
         RestConnection(upgrade_nodes[0]).get_nodes_versions()
         self.sleep(15)
         status, content = ClusterOperationHelper.find_orchestrator(upgrade_nodes[0])
-        self.assertTrue(status, msg="Unable to find orchestrator: {0}:{1}".\
+        self.assertTrue(status, msg="Unable to find orchestrator: {0}:{1}". \
                         format(status, content))
         self.log.info("after rebalance in the master is {0}".format(content))
         find_master = False
@@ -461,7 +396,7 @@ class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):
         RestConnection(upgrade_nodes[0]).get_nodes_versions()
         self.sleep(15)
         status, content = ClusterOperationHelper.find_orchestrator(upgrade_nodes[0])
-        self.assertTrue(status, msg="Unable to find orchestrator: {0}:{1}".\
+        self.assertTrue(status, msg="Unable to find orchestrator: {0}:{1}". \
                         format(status, content))
         self.log.info("after rebalance in the master is {0}".format(content))
         self.log.info("Rebalancing out all old version nodes")
@@ -473,7 +408,7 @@ class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):
         rest_conn = RestConnection(self.src_master)
         rest_conn.pause_resume_repl_by_id(repl_id, REPL_PARAM.PAUSE_REQUESTED, 'true')
 
-        gen = DocumentGenerator('es', '{{"key":"value"}}',  xrange(100), start=0, end=self._num_items)
+        gen = DocumentGenerator('es', '{{"key":"value"}}', range(100), start=0, end=self._num_items)
         self.src_cluster.load_all_buckets_from_generator(gen)
 
         self.perform_update_delete()
@@ -485,16 +420,14 @@ class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):
         self._verify_es_results()
 
     def test_capi_with_cb_stop_and_start(self):
-        bucket = self._input.param("bucket", 'default')
-        repl_id = self._start_es_replication(bucket=bucket)
+        self.setup_xdcr()
 
-        rest_conn = RestConnection(self.src_master)
-        rest_conn.pause_resume_repl_by_id(repl_id, REPL_PARAM.PAUSE_REQUESTED, 'true')
+        self.src_cluster.pause_all_replications()
 
-        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}',  xrange(100), start=0, end=self._num_items)
+        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}', range(100), start=0, end=self._num_items)
         self.src_cluster.load_all_buckets_from_generator(gen)
 
-        rest_conn.pause_resume_repl_by_id(repl_id, REPL_PARAM.PAUSE_REQUESTED, 'false')
+        self.src_cluster.resume_all_replications()
 
         self.async_perform_update_delete()
 
@@ -504,21 +437,19 @@ class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):
 
         self.sleep(30)
 
-        self._wait_for_es_replication_to_catchup()
+        self._wait_for_replication_to_catchup()
 
-        self._verify_es_results(bucket=bucket)
+        self._verify_es_results()
 
     def test_capi_with_erlang_crash(self):
-        bucket = self._input.param("bucket", 'default')
-        repl_id = self._start_es_replication(bucket=bucket)
+        self.setup_xdcr()
 
-        rest_conn = RestConnection(self.src_master)
-        rest_conn.pause_resume_repl_by_id(repl_id, REPL_PARAM.PAUSE_REQUESTED, 'true')
+        self.src_cluster.pause_all_replications()
 
-        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}',  xrange(100), start=0, end=self._num_items)
+        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}', range(100), start=0, end=self._num_items)
         self.src_cluster.load_all_buckets_from_generator(gen)
 
-        rest_conn.pause_resume_repl_by_id(repl_id, REPL_PARAM.PAUSE_REQUESTED, 'false')
+        self.src_cluster.resume_all_replications()
 
         self.async_perform_update_delete()
 
@@ -528,21 +459,19 @@ class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):
 
         self.sleep(30)
 
-        self._wait_for_es_replication_to_catchup()
+        self._wait_for_replication_to_catchup()
 
-        self._verify_es_results(bucket=bucket)
+        self._verify_es_results()
 
     def test_capi_with_memcached_crash(self):
-        bucket = self._input.param("bucket", 'default')
-        repl_id = self._start_es_replication(bucket=bucket)
+        self.setup_xdcr()
 
-        rest_conn = RestConnection(self.src_master)
-        rest_conn.pause_resume_repl_by_id(repl_id, REPL_PARAM.PAUSE_REQUESTED, 'true')
+        self.src_cluster.pause_all_replications()
 
-        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}',  xrange(100), start=0, end=self._num_items)
+        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}', range(100), start=0, end=self._num_items)
         self.src_cluster.load_all_buckets_from_generator(gen)
 
-        rest_conn.pause_resume_repl_by_id(repl_id, REPL_PARAM.PAUSE_REQUESTED, 'false')
+        self.src_cluster.resume_all_replications()
 
         self.async_perform_update_delete()
 
@@ -552,6 +481,6 @@ class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):
 
         self.sleep(30)
 
-        self._wait_for_es_replication_to_catchup()
+        self._wait_for_replication_to_catchup()
 
-        self._verify_es_results(bucket=bucket)
+        self._verify_es_results()
