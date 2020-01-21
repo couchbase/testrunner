@@ -61,7 +61,10 @@ agg:
     MAX |
     SUM |
     COUNT |
-    AVG ;
+    aggregate_function ;
+
+aggregate_function:
+    AVG | MEAN ;
 
 num_func:
     ABS |

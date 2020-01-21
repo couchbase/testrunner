@@ -2,8 +2,11 @@ query:
  	select ;
 
 select:
-	SELECT select_from FROM from_bucket joins WHERE complex_condition ORDER BY field_list |
+	SELECT select_from FROM from_bucket joins WHERE complex_condition ORDER BY field_list nulls_first_last |
 	SELECT select_from FROM from_bucket joins WHERE complex_condition;
+
+nulls_first_last:
+    | ASC NULLS FIRST | DESC NULLS LAST ;
 
 direction:
 	ASC | DESC;

@@ -2,9 +2,11 @@ query:
  	select ;
 
 select:
-	SELECT select_from FROM BUCKET_NAME WHERE complex_condition ORDER BY field_list |
+	SELECT select_from FROM BUCKET_NAME WHERE complex_condition ORDER BY field_list nulls_first_last |
 	SELECT select_from FROM BUCKET_NAME WHERE complex_condition GROUP BY field_list |
 	SELECT select_from FROM BUCKET_NAME WHERE complex_condition GROUP BY field_list ORDER BY field_list direction ;
+nulls_first_last:
+    | ASC NULLS FIRST | DESC NULLS LAST ;
 
 create_index:
 	CREATE INDEX INDEX_NAME ON BUCKET_NAME(FIELD_LIST) WHERE complex_condition |
@@ -12,7 +14,7 @@ create_index:
 	CREATE INDEX INDEX_NAME ON BUCKET_NAME(USER_FIELD_LIST);
 
 direction:
-	ASC | DESC;
+	ASC | DESC | ASC NULLS FIRST | DESC NULLS LAST ;
 
 select_from:
 	*  | field_list | DISTINCT( field );

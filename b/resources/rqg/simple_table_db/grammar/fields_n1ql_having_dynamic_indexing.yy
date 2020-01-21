@@ -11,7 +11,10 @@ select:
 	SELECT generic_aggregate_method  FROM BUCKET_NAME WHERE complex_condition GROUP BY STRING_FIELD_LIST HAVING string_condition ;
 
 numeric_aggregate_method:
-	COUNT(*) AS AGGREGATE_FIELD | COUNT(FIELD) AS AGGREGATE_FIELD | AVG(FIELD) AS AGGREGATE_FIELD | SUM(FIELD) AS AGGREGATE_FIELD | numeric_aggregate_method, numeric_aggregate_method ;
+	COUNT(*) AS AGGREGATE_FIELD | COUNT(FIELD) AS AGGREGATE_FIELD | aggregate_function(FIELD) AS AGGREGATE_FIELD | SUM(FIELD) AS AGGREGATE_FIELD | numeric_aggregate_method, numeric_aggregate_method ;
+
+aggregate_function:
+    AVG | STDDEV | VARIANCE | STDDEV_SAMP | STDDEV_POP | VARIANCE_POP | VARIANCE_SAMP | MEAN ;
 
 generic_aggregate_method:
 	MAX(FIELD) AS AGGREGATE_FIELD | MIN(FIELD) AS AGGREGATE_FIELD | generic_aggregate_method, generic_aggregate_method ;

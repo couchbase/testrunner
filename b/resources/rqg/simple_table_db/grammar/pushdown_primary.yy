@@ -44,11 +44,11 @@ string_func_1:
     LOWER( PRIMARY_KEY_VAL ) ;
 
 string_func_2:
-    REPEAT( PRIMARY_KEY_VAL, n ) ;
+    REPEAT( PRIMARY_KEY_VAL COMMA n ) ;
 
 string_func_3:
-    REPLACE( PRIMARY_KEY_VAL, sample_string, sample_string ) ;
-    SUBSTR( PRIMARY_KEY_VAL, lower_n, upper_n) ;
+    REPLACE( PRIMARY_KEY_VAL COMMA sample_string COMMA sample_string ) ;
+    SUBSTR( PRIMARY_KEY_VAL COMMA lower_n COMMA upper_n) ;
 
 numerical_agg_exp:
     numerical_agg( extra_expression_a numerical_func_1 extra_expression_b ) |
@@ -94,9 +94,13 @@ func:
 numerical_agg:
     MIN |
     MAX |
-    SUM |
-    AVG |
+    SUM |;
+    aggregate_function |
     COUNT ;
+
+aggregate_function:
+    AVG | MEAN ;
+
 
 n:
     0 |

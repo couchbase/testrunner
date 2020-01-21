@@ -2,15 +2,18 @@ query:
  	select ;
 
 select:
-	SELECT select_from FROM BUCKET_NAME WHERE complex_condition ORDER BY ORDER_BY_SEL_VAL limit NUMERIC_VALUE1 offset NUMERIC_VALUE2 |
-	SELECT select_from FROM BUCKET_NAME WHERE complex_condition  ORDER BY ORDER_BY_SEL_VAL limit 10 offset 4 |
-	SELECT * FROM BUCKET_NAME WHERE complex_condition ORDER BY field limit NUMERIC_VALUE1 offset NUMERIC_VALUE2 |
-    SELECT * FROM BUCKET_NAME WHERE complex_condition  ORDER BY field limit 10 offset 4 ;
+	SELECT select_from FROM BUCKET_NAME WHERE complex_condition ORDER BY ORDER_BY_SEL_VAL nulls_first_last limit NUMERIC_VALUE1 offset NUMERIC_VALUE2 |
+	SELECT select_from FROM BUCKET_NAME WHERE complex_condition  ORDER BY ORDER_BY_SEL_VAL nulls_first_last limit 10 offset 4 |
+	SELECT * FROM BUCKET_NAME WHERE complex_condition ORDER BY field nulls_first_last limit NUMERIC_VALUE1 offset NUMERIC_VALUE2 |
+    SELECT * FROM BUCKET_NAME WHERE complex_condition  ORDER BY field nulls_first_last limit 10 offset 4 ;
 
 create_index:
 	CREATE INDEX INDEX_NAME ON BUCKET_NAME(FIELD_LIST) WHERE complex_condition |
 	CREATE INDEX INDEX_NAME ON BUCKET_NAME(complex_condition) |
 	CREATE INDEX INDEX_NAME ON BUCKET_NAME(USER_FIELD_LIST);
+
+nulls_first_last:
+    | ASC NULLS FIRST | DESC NULLS LAST ;
 
 direction:
 	ASC | DESC;

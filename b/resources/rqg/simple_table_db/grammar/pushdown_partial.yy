@@ -37,13 +37,16 @@ sel_from:
     sel_non_agg AS A, sel_agg_a, sel_non_agg AS B ;
 
 sel_agg_a:
-    COUNT( any_field ) | MIN( any_field ) | MAX( any_field ) | SUM( non_string_field ) | AVG( non_string_field ) ;
+    COUNT( any_field ) | MIN( any_field ) | MAX( any_field ) | SUM( non_string_field ) | aggregate_function( non_string_field ) ;
 
 sel_agg_b:
-    COUNT( any_field ) | MIN( any_field ) | MAX( any_field ) | SUM( non_string_field ) | AVG( non_string_field ) ;
+    COUNT( any_field ) | MIN( any_field ) | MAX( any_field ) | SUM( non_string_field ) | aggregate_function( non_string_field ) ;
 
 sel_agg_c:
-    COUNT( any_field ) | MIN( any_field ) | MAX( any_field ) | SUM( non_string_field ) | AVG( non_string_field ) ;
+    COUNT( any_field ) | MIN( any_field ) | MAX( any_field ) | SUM( non_string_field ) | aggregate_function( non_string_field ) ;
+
+aggregate_function:
+    AVG | MEAN ;
 
 sel_non_agg:
     GROUPBY_FIELD;
