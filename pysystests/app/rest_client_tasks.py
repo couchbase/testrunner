@@ -4,7 +4,7 @@
 rest tasks
 
 """
-from __future__ import absolute_import
+
 import base64
 import sys
 sys.path=["../lib"] + sys.path
@@ -47,7 +47,7 @@ def multi_query(count, design_doc_name, view_name, params = None, bucket = "defa
     qtime = data = url = None
 
     args = dict(api=api, hosts=hosts)
-    for qtime, data, url in pool.imap(send_query, [args for i in xrange(count)]):
+    for qtime, data, url in pool.imap(send_query, [args for i in range(count)]):
         pass
 
     if cfg.SERIESLY_IP != '' and qtime is not None:
@@ -83,7 +83,7 @@ def send_query(args):
     hosts = args['hosts']
 
     if hosts and len(hosts) > 0:
-        host = hosts[random.randint(0,len(hosts) - 1)]
+        host = hosts[random.randint(0, len(hosts) - 1)]
         capiUrl = "http://%s/couchBase/" % (host)
     else:
         capiUrl = "http://%s:%s/couchBase/" % (cfg.COUCHBASE_IP, cfg.COUCHBASE_PORT)
@@ -94,7 +94,7 @@ def send_query(args):
     try:
         qtime, data = timed_url_request(url)
 
-    except urllib2.URLError as ex:
+    except urllib.error.URLError as ex:
         logger.error("Request error: %s" % ex)
 
     return qtime, data, url
@@ -119,8 +119,8 @@ def url_request(url, headers = None):
     if headers is None:
         headers = default_url_headers()
 
-    req = urllib2.Request(url, headers = headers)
-    data = urllib2.urlopen(req)
+    req = urllib.request.Request(url, headers = headers)
+    data = urllib.request.urlopen(req)
     return data
 
 
@@ -187,7 +187,7 @@ def create_tpcc_buckets(rest, bucketMsg):
     bucketMsgParsed = parseBucketMsg(bucketMsg)
     #tpcc_list = ["ITEM", "ORDERS", "ORDER_LINE", "NEW_ORDER", "STOCK", "CUSTOMER", "DISTRICT", "WAREHOUSE", "HISTORY"]
     tpcc_dict = {"ITEM":"2000", "ORDERS":"3000", "ORDER_LINE":"3000", "NEW_ORDER":"1000", "STOCK":"2000", "CUSTOMER":"2000", "DISTRICT":"1000", "WAREHOUSE":"500", "HISTORY":"1000"}
-    for key,value in tpcc_dict.iteritems():
+    for key, value in tpcc_dict.items():
     #for b_name in tpcc_list:
         rest.create_bucket(bucket=key,
                        ramQuotaMB =value,
@@ -241,13 +241,13 @@ def create_standard_buckets(rest, bucketMsg):
 def perform_view_tasks(viewMsgList):
     rest = create_rest()
 
-    if isinstance(viewMsgList,dict):
+    if isinstance(viewMsgList, dict):
         viewMsgList = [viewMsgList]
 
     for viewMsg in viewMsgList:
         if "create" in viewMsg:
             ddocMsg = parseDdocMsg(viewMsg['create'])
-            for ddoc_name, views in ddocMsg.iteritems():
+            for ddoc_name, views in ddocMsg.items():
                 view_list = []
                 bucket_name = ''
                 for view in views:
@@ -412,7 +412,7 @@ def perform_xdcr_tasks(xdcrMsg):
 
     for bucket in buckets:
         xdcr_params={}
-        if replication_filters and bucket in replication_filters.keys():
+        if replication_filters and bucket in list(replication_filters.keys()):
             xdcr_params["filterExpression"] = replication_filters[bucket]
         xdcr_start_replication(src_master, dest_cluster_name, bucket, xdcr_params)
 
@@ -471,7 +471,7 @@ def pick_nodesToRemove(servers='', involve_orchestrator=False, cluster_id=cfg.CB
 
         if len(clusterStatus.nodes) > count:
             non_orchestrator_servers = list(set(clusterStatus.get_all_hosts()) -
-                               set(["%s:%s" % (clusterStatus.orchestrator.ip, clusterStatus.orchestrator.port)]))
+                               {"%s:%s" % (clusterStatus.orchestrator.ip, clusterStatus.orchestrator.port)})
             servers.extend(non_orchestrator_servers[:temp_count])
         else:
             logger.error("Remove nodes request invalid. # of nodes in cluster is not enough")
@@ -632,7 +632,7 @@ def create_server_obj(server_ip=cfg.COUCHBASE_IP, port=cfg.COUCHBASE_PORT,
     return node
 
 def http_ping(ip, port, timeout=5):
-    url = "http://%s:%s/pools" % (ip,port)
+    url = "http://%s:%s/pools" % (ip, port)
     try:
         data = url_request(url)
         pools_info = json.loads(data.read())
@@ -653,7 +653,7 @@ def create_rest(server_ip=cfg.COUCHBASE_IP, port=cfg.COUCHBASE_PORT,
 def create_ssh_conn(server_ip='', port=22, username=cfg.COUCHBASE_SSH_USER,
                password=cfg.COUCHBASE_SSH_PASSWORD, os=cfg.COUCHBASE_OS):
 
-    if isinstance(server_ip, unicode):
+    if isinstance(server_ip, str):
         server_ip = str(server_ip)
 
     serverInfo = {"ip" : server_ip,
@@ -687,7 +687,7 @@ def teardown_ddocs(ddocList, rest = None):
     rest = rest or create_rest()
     for ddoc in ddocList:
         try:
-            bucket_name, ddoc = filter(None, ddoc.split('/'))
+            bucket_name, ddoc = [_f for _f in ddoc.split('/') if _f]
             bucket = rest.get_bucket(bucket_name)
             rest._delete_design_doc(bucket, ddoc)
         except ValueError:

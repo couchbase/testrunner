@@ -27,7 +27,7 @@ def sortDBData(data):
   sorted_data = []
   keys = []
   if(data):
-    keys = sorted(data.iterkeys())
+    keys = sorted(data.keys())
 
   for ts in keys:
     sorted_data.append(data[ts])
@@ -41,7 +41,7 @@ def getSortedDBData(db):
 " create datetime index array by converting ts strings
 """
 def indexFromKeys(keys):
-  return [datetime.datetime.strptime(ts[:ts.index('.')],"%Y-%m-%dT%H:%M:%S") for ts in keys]
+  return [datetime.datetime.strptime(ts[:ts.index('.')], "%Y-%m-%dT%H:%M:%S") for ts in keys]
 
 """
 " make a timeseries dataframe
@@ -57,7 +57,7 @@ def _createDataframe(index, data):
       df.index = index
 
   except ValueError as ex:
-    print "unable to create dataframe: has incorrect format"
+    print("unable to create dataframe: has incorrect format")
     raise Exception(ex)
 
   return df
@@ -73,7 +73,7 @@ def createDataframe(db):
     index, data = getSortedDBData(db)
     df = _createDataframe(index, data)
   else:
-    print "WARNING: stat db %s is empty!" % db
+    print("WARNING: stat db %s is empty!" % db)
 
   return df
 
@@ -88,7 +88,7 @@ def plot_phases(ns_dataframe, test_id = "simple"):
   event_idx, _ = getSortedDBData('event')
 
   # plot each phase
-  for i in xrange(len(event_idx)):
+  for i in range(len(event_idx)):
     if i == 0:
       phase_dataframe = ns_dataframe[ns_dataframe.index < event_idx[i+1]]
     elif i == len(event_idx) - 1:
@@ -99,8 +99,8 @@ def plot_phases(ns_dataframe, test_id = "simple"):
 
     ph_html = "%s/%s_phase%s.html" % (test_id, test_id, i)
     ph_cvs = "%s/%s_phase%s.cvs" % (test_id, test_id, i)
-    f = open(ph_html,"w")
-    print ph_html
+    f = open(ph_html, "w")
+    print(ph_html)
 
 
     for column in columns:
@@ -111,7 +111,7 @@ def plot_phases(ns_dataframe, test_id = "simple"):
 
       # plot phase data and filter 0's values
       chart=pygal.Line(stroke=False, print_values=False, human_readable=True)
-      chart.add(column, filter(lambda x: x > 0, (phase_dataframe[column].values)))
+      chart.add(column, [x for x in (phase_dataframe[column].values) if x > 0])
 
       # write out chart html
       res = chart.render_response()
@@ -129,9 +129,9 @@ def get_testid():
   if not evdata:
     return
 
-  evkeys = evdata.keys()
+  evkeys = list(evdata.keys())
   if(len(evkeys) > 0):
-    onephase = evdata[evkeys[0]].values()[0]
+    onephase = list(evdata[evkeys[0]].values())[0]
     if 'name' in onephase:
       test_id = str(onephase['name'])
 

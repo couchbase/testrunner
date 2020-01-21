@@ -309,8 +309,8 @@ BUILD_INDEX_REPLICA = {
 
 def runQueryOnce(query, param, query_ip, server_ip, build=False):
     url = "http://" + query_ip + ":8093/query"
-    print build
-    print param
+    print(build)
+    print(param)
 
     stmt = '{"statement" : "' + str(query)
     if "DROP" in query:
@@ -328,7 +328,7 @@ def runQueryOnce(query, param, query_ip, server_ip, build=False):
 
     stmt = stmt + '}'
     query = json.loads(stmt)
-    print query
+    print(query)
 
     if build:
         time.sleep(20)
@@ -361,7 +361,7 @@ if drop_index == "true":
     d = DROP_INDEX[bucket_type]
     len_query = len(d)
     for j in range(len_query):
-        print list(d)[j]
+        print(list(d)[j])
         k_qry = list(d)[j]
         r = runQueryOnce(d[k_qry], index_type, query_node, index_node)
 
@@ -369,23 +369,23 @@ if drop_index == "true" and replica_index_node:
     d_r = DROP_INDEX[bucket_type]
     len_query = len(d_r)
     for j in range(len_query):
-        print list(d_r)[j]
+        print(list(d_r)[j])
         k_qry = list(d_r)[j]
         r = runQueryOnce(d_r[k_qry], index_type, query_node, index_node)
 
-print " Create ACTIVE index"
+print(" Create ACTIVE index")
 q = CREATE_INDEX[bucket_type]
 len_query = len(q)
 for j in range(len_query):
-    print list(q)[j]
+    print(list(q)[j])
     k_qry = list(q)[j]
     r = runQueryOnce(q[k_qry], index_type, query_node, index_node)
 
-print " Create REPLICA index  "
+print(" Create REPLICA index  ")
 q_r = CREATE_INDEX_REPLICA[bucket_type]
 len_query = len(q_r)
 for j in range(len_query):
-    print list(q_r)[j]
+    print(list(q_r)[j])
     k_qry = list(q_r)[j]
     r = runQueryOnce(q_r[k_qry], index_type, query_node, replica_index_node)
 
@@ -393,16 +393,16 @@ if index_type == "gsi":
     b = BUILD_INDEX[bucket_type]
     len_query = len(b)
     for j in range(len_query):
-        print list(b)[j]
+        print(list(b)[j])
         k_qry = list(b)[j]
         r = runQueryOnce(b[k_qry], index_type, query_node, index_node, build=True)
 
-print " BUILD REPLICA index  "
+print(" BUILD REPLICA index  ")
 if index_type == "gsi":
     b_r = BUILD_INDEX_REPLICA[bucket_type]
     len_query = len(b_r)
     for j in range(len_query):
-        print list(b_r)[j]
+        print(list(b_r)[j])
         k_qry = list(b_r)[j]
         r = runQueryOnce(b_r[k_qry], index_type, query_node, index_node, build=True)
 

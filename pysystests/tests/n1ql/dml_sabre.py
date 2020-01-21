@@ -197,7 +197,7 @@ def runNQueryParam(query, param1, scan_consistency, max_parallelism, server_ip):
     for p in param:
         if isinstance(p, bool):
             myarg = myarg + str.lower(str(p))
-        elif isinstance(p, (int, float, long)) and not isinstance(p, (bool)):
+        elif isinstance(p, (int, float)) and not isinstance(p, (bool)):
             myarg = myarg + str(p)
         else:
             myarg = myarg + '\\"' + str(p) + '\\"'
@@ -221,7 +221,7 @@ def runNQueryParam(query, param1, scan_consistency, max_parallelism, server_ip):
 
 
 def calcSeqNumber():
-    seq_num = [random.randint(1000, 10000) for r in xrange(50)]
+    seq_num = [random.randint(1000, 10000) for r in range(50)]
     lgr.info("SequenceNumbers: %s" % seq_num)
     return seq_num
 
@@ -312,7 +312,7 @@ while (time.time() - start) <= duration:
     for j in range(total_clients):
         for j in range(len_query):
             k_qry = list(q)[j]
-            print k_qry
+            print(k_qry)
             lgr.info("Query_Type: %s" % list(q)[j])
             if "Key" in k_qry:
                 update_amt = random.randint(10, 100)

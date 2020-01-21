@@ -52,8 +52,8 @@ WORKER_PYSYSTESTS_PATH = "/root/systest-worker/testrunner/pysystests"
 
 # CHANGE THIS! to match all clusters will be managed by this worker
 # ex. CLUSTER_IPS = ["127.0.0.1:9000","127.0.0.1:9001","127.0.0.1:9002","127.0.0.1:9003"]
-CLUSTER_IPS = ["172.23.105.44","172.23.105.45","172.23.105.47","172.23.105.48",
-               "172.23.105.49","172.23.105.50","172.23.105.51","172.23.105.52"]
+CLUSTER_IPS = ["172.23.105.44", "172.23.105.45", "172.23.105.47", "172.23.105.48",
+               "172.23.105.49", "172.23.105.50", "172.23.105.51", "172.23.105.52"]
 # xdcr config
 """
 " pointer information to remote sites

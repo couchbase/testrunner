@@ -48,7 +48,7 @@ class Cache(object):
             pass # non json
         except Exception as ex:
             if retry_count > 0:
-                self.logger.info("error occured in mc protocol fetching %s: %s" % (key,ex))
+                self.logger.info("error occured in mc protocol fetching %s: %s" % (key, ex))
                 self.logger.info("retry attempt: %s" % retry_count)
                 time.sleep(2)
                 cnt = retry_count - 1

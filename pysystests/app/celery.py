@@ -1,4 +1,4 @@
-from __future__ import absolute_import
+
 import sys
 from celery import Celery
 from app.config import BaseConfig
@@ -8,7 +8,7 @@ import logging
 import testcfg as cfg
 
 
-celery = Celery(include=['app.sdk_client_tasks','app.rest_client_tasks','app.workload_manager','app.admin_manager','app.query','app.systest_manager'])
+celery = Celery(include=['app.sdk_client_tasks', 'app.rest_client_tasks', 'app.workload_manager', 'app.admin_manager', 'app.query', 'app.systest_manager'])
 config = None
 
 

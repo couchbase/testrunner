@@ -34,7 +34,7 @@ class RabbitHelper(object):
         res = None
         channel = self.connection.channel()
         if queue:
-            if not isinstance(queue,str): queue = str(queue)
+            if not isinstance(queue, str): queue = str(queue)
             res = channel.queue_declare(queue = queue, durable = durable, auto_delete = True)
         else:
             # tmp queue
@@ -57,13 +57,13 @@ class RabbitHelper(object):
 
     def delete(self, queue):
         channel = self.connection.channel()
-        if not isinstance(queue,str): queue = str(queue)
+        if not isinstance(queue, str): queue = str(queue)
         channel.queue_delete(queue=queue)
         channel.close()
 
     def purge(self, queue):
         channel = self.connection.channel()
-        if not isinstance(queue,str): queue = str(queue)
+        if not isinstance(queue, str): queue = str(queue)
         channel.queue_purge(queue=queue)
         channel.close()
 
@@ -75,7 +75,7 @@ class RabbitHelper(object):
         size = 0
         if queue != None:
 
-            if not isinstance(queue,str): queue = str(queue)
+            if not isinstance(queue, str): queue = str(queue)
 
             response = self.declare(queue = queue)
             size = response[1]
