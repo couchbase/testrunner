@@ -1,5 +1,5 @@
 import threading
-from tuq import QueryTests
+from .tuq import QueryTests
 from upgrade.newupgradebasetest import NewUpgradeBaseTest
 from remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection
@@ -10,7 +10,7 @@ from membase.api.rest_client import RestHelper
 from security.audittest import auditTest
 from security.auditmain import audit
 import socket
-import urllib
+import urllib.request, urllib.parse, urllib.error
 
 
 class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
@@ -71,6 +71,19 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
     def tearDown(self):
         self.log.info("==============  QueriesUpgradeTests tearDown has started ==============")
         self.upgrade_servers = self.servers
+        if hasattr(self, 'upgrade_versions'):
+            self.log.info("checking upgrade version")
+            upgrade_major = self.upgrade_versions[0][0]
+            self.log.info("upgrade major version: " + str(upgrade_major))
+            if int(upgrade_major) == 5:
+                self.log.info("setting intial_version to: 4.6.5-4742")
+                self.initial_version = "4.6.5-4742"
+            elif int(upgrade_major) == 6:
+                self.log.info("setting intial_version to: 5.5.2-3733")
+                self.initial_version = "5.5.2-3733"
+            else:
+                self.log.info("upgrade version invalid: " + str(self.upgrade_versions[0]))
+                self.fail()
         self.log.info("==============  QueriesUpgradeTests tearDown has completed ==============")
         super(QueriesUpgradeTests, self).tearDown()
 
@@ -78,47 +91,6 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
         self.log.info("==============  QueriesUpgradeTests suite_tearDown has started ==============")
         self.log.info("==============  QueriesUpgradeTests suite_tearDown has completed ==============")
         super(QueriesUpgradeTests, self).suite_tearDown()
-
-    # old test
-    def test_mixed_cluster(self):
-        self._kill_all_processes_cbq()
-        self.assertTrue(len(self.servers) > 1, 'Test needs more than 1 server')
-        method_name = self.input.param('to_run', 'test_all_negative')
-        self._install(self.servers[:2])
-        self.bucket_size = 100
-        self._bucket_creation()
-        self.load(self.gens_load, flag=self.item_flag)
-        upgrade_threads = self._async_update(self.upgrade_versions[0], [self.servers[1]], None, True)
-        for upgrade_thread in upgrade_threads:
-            upgrade_thread.join()
-        self.cluster.rebalance(self.servers[:1], self.servers[1:2], [])
-        self.shell = RemoteMachineShellConnection(self.servers[1])
-        self._kill_all_processes_cbq()
-        self._start_command_line_query(self.servers[1])
-        self.shell.execute_command("ps -aef| grep cbq-engine")
-        self.master = self.servers[1]
-        getattr(self, method_name)()
-        for th in threading.enumerate():
-            th._Thread__stop() if th != threading.current_thread() else None
-
-    # old test
-    def test_upgrade_old(self):
-        self._kill_all_processes_cbq()
-        method_name = self.input.param('to_run', 'test_any')
-        self._install(self.servers[:2])
-        self.bucket_size = 100
-        self._bucket_creation()
-        self.load(self.gens_load, flag=self.item_flag)
-        self.cluster.rebalance(self.servers[:1], self.servers[1:2], [])
-        upgrade_threads = self._async_update(self.upgrade_versions[0], self.servers[:2])
-        for upgrade_thread in upgrade_threads:
-            upgrade_thread.join()
-        self._kill_all_processes_cbq()
-        self._start_command_line_query(self.master)
-        self.create_primary_index_for_3_0_and_greater()
-        getattr(self, method_name)()
-        for th in threading.enumerate():
-            th._Thread__stop() if th != threading.current_thread() else None
 
     def test_upgrade(self):
         """
@@ -427,11 +399,11 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
 
         url = "'https://jira.atlassian.com/rest/api/latest/issue/JRA-9'"
         query="select curl("+ url +")"
-        curl = self.shell.execute_commands_inside(self.cbqpath,query,'', '', '', '', '')
+        curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
         self.assertTrue(self.jira_error_msg in actual_curl['errors'][0]['msg'],
                         "Error message is %s this is incorrect it should be %s"
-                        % (actual_curl['errors'][0]['msg'],self.jira_error_msg))
+                        % (actual_curl['errors'][0]['msg'], self.jira_error_msg))
 
         curl_output = self.shell.execute_command("%s --get https://maps.googleapis.com/maps/api/geocode/json "
                                                  "-d 'address=santa+cruz&components=country:ES&key=AIzaSyCT6niGCMsgegJkQSYSqpoLZ4_rSO59XQQ'"
@@ -440,7 +412,7 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
         url = "'https://maps.googleapis.com/maps/api/geocode/json'"
         options= "{'get':True,'data': 'address=santa+cruz&components=country:ES&key=AIzaSyCT6niGCMsgegJkQSYSqpoLZ4_rSO59XQQ'}"
         query="select curl("+ url +", %s" % options + ")"
-        curl = self.shell.execute_commands_inside(self.cbqpath,query,'', '', '', '', '')
+        curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
         self.assertEqual(actual_curl['results'][0]['$1'], expected_curl)
 
@@ -450,7 +422,7 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
 
         url = "'https://jira.atlassian.com/rest/api/latest/issue/JRA-9'"
         query="select curl("+ url +")"
-        curl = self.shell.execute_commands_inside(self.cbqpath,query,'', '', '', '', '')
+        curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
         self.assertTrue(self.jira_error_msg in actual_curl['errors'][0]['msg'],
                         "Error message is %s this is incorrect it should be %s"
@@ -459,7 +431,7 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
         url = "'https://maps.googleapis.com/maps/api/geocode/json'"
         options= "{'get':True,'data': 'address=santa+cruz&components=country:ES&key=AIzaSyCT6niGCMsgegJkQSYSqpoLZ4_rSO59XQQ'}"
         query="select curl("+ url +", %s" % options + ")"
-        curl = self.shell.execute_commands_inside(self.cbqpath,query,'', '', '', '', '')
+        curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
         self.assertTrue(self.google_error_msg in actual_curl['errors'][0]['msg'],
                         "Error message is %s this is incorrect it should be %s"
@@ -595,7 +567,7 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
 
     def setupLDAPSettings (self, rest):
         api = rest.baseUrl + 'settings/saslauthdAuth'
-        params = urllib.urlencode({"enabled":'true',"admins":[],"roAdmins":[]})
+        params = urllib.parse.urlencode({"enabled":'true',"admins":[],"roAdmins":[]})
         status, content, header = rest._http_request(api, 'POST', params)
         return status, content, header
 

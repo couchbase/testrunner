@@ -82,4 +82,19 @@ class StatsTests(QueryTests):
         self.assertTrue(new_stats['deletes.count'] == stats['deletes.count']+len(self.buckets), 'Deletes count were not increased')
         self.log.info('delete count is checked')
 
-    
+    def test_audit_requests_total(self):
+        stats = self.rest.query_tool_stats()
+        self.assertTrue(stats['audit_requests_total.count'] >=0, 'Audit requests total is unavailable')
+
+    def test_audit_requests_filtered(self):
+        stats = self.rest.query_tool_stats()
+        self.assertTrue(stats['audit_requests_filtered.count'] >=0, 'Audit requests filtered is unavailable')
+
+    def test_audit_actions(self):
+        stats = self.rest.query_tool_stats()
+        self.assertTrue(stats['audit_actions.count'] >=0, 'Audit actions is unavailable')
+
+    def test_audit_actions_failed(self):
+        stats = self.rest.query_tool_stats()
+        self.assertTrue(stats['audit_actions_failed.count'] >=0, 'Audit actions failed is unavailable')
+

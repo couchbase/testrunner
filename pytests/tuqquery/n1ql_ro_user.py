@@ -1,6 +1,6 @@
 import math
-from tuq import QueryTests
-from tuq_sanity import QuerySanityTests
+from .tuq import QueryTests
+from .tuq_sanity import QuerySanityTests
 
 class ReadOnlyUserTests(QuerySanityTests, QueryTests):
     def setUp(self):
@@ -10,7 +10,7 @@ class ReadOnlyUserTests(QuerySanityTests, QueryTests):
         cli_cmd = "user-manage"
         output, error = self.shell.execute_couchbase_cli(cli_command=cli_cmd,
                                                          options=' --set --ro-username=%s --ro-password=%s ' % (self.username, self.password),
-                                                         cluster_host=self.master.ip,user=self.master.rest_username, password=self.master.rest_password)
+                                                         cluster_host=self.master.ip, user=self.master.rest_username, password=self.master.rest_password)
         self.log.info(output)
         self.log.error(error)
 
