@@ -5,7 +5,7 @@ import uuid
 import time
 import os
 
-from tuq import QueryTests
+from .tuq import QueryTests
 from membase.api.rest_client import RestConnection
 from membase.api.exception import CBQError, ReadDocumentException
 from remote.remote_util import RemoteMachineShellConnection
@@ -36,7 +36,7 @@ class QueryWhitelistTests(QueryTests):
         self.google_error_msg = "Errorevaluatingprojection.-cause:URLendpointisn'twhitelisted" \
                                 "https://maps.googleapis.com/maps/api/geocode/json."
         #End of whitelist error messages
-        self.query_service_url = "'http://%s:%s/query/service'" % (self.master.ip,self.n1ql_port)
+        self.query_service_url = "'http://%s:%s/query/service'" % (self.master.ip, self.n1ql_port)
         self.api_port = self.input.param("api_port", 8094)
         self.load_sample = self.input.param("load_sample", False)
         self.create_users = self.input.param("create_users", False)
@@ -142,14 +142,14 @@ class QueryWhitelistTests(QueryTests):
         curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         json_curl = self.convert_to_json(curl)
         expected_result = self.run_cbq_query('select * from default limit 5')
-        self.assertEqual(json_curl['results'][0]['$1']['results'],expected_result['results'])
+        self.assertEqual(json_curl['results'][0]['$1']['results'], expected_result['results'])
 
         curl_output = self.shell.execute_command("%s https://jira.atlassian.com/rest/api/latest/issue/JRA-9"
                                                  % self.curl_path)
         expected_curl = self.convert_list_to_json(curl_output[0])
         url = "'https://jira.atlassian.com/rest/api/latest/issue/JRA-9'"
         query="select curl("+ url +")"
-        curl = self.shell.execute_commands_inside(self.cbqpath,query,'', '', '', '', '')
+        curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
         self.assertEqual(actual_curl['results'][0]['$1'], expected_curl)
 
@@ -157,15 +157,15 @@ class QueryWhitelistTests(QueryTests):
                                                            "fake_field":"blahahahahaha",
                                                            "fake_url": "fake"})
 
-        curl = self.shell.execute_commands_inside(self.cbqpath,query,'', '', '', '', '')
+        curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
-        self.assertEqual(actual_curl['results'][0]['$1'],expected_curl)
+        self.assertEqual(actual_curl['results'][0]['$1'], expected_curl)
 
         self.rest.create_whitelist(self.master, {"fake_field":"blahahahahaha",
                                                            "all_access": True,
                                                            "fake_url": "fake"})
 
-        curl = self.shell.execute_commands_inside(self.cbqpath,query,'', '', '', '', '')
+        curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
         self.assertEqual(actual_curl['results'][0]['$1'], expected_curl)
 
@@ -179,14 +179,14 @@ class QueryWhitelistTests(QueryTests):
         expected_curl = self.convert_list_to_json(curl_output[0])
         url = "'https://jira.atlassian.com/rest/api/latest/issue/JRA-9'"
         query="select curl("+ url +")"
-        curl = self.shell.execute_commands_inside(self.cbqpath,query,'', '', '', '', '')
+        curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
         self.assertEqual(actual_curl['results'][0]['$1'], expected_curl)
 
         self.rest.create_whitelist(self.master, {"all_access": True,
                                                            "allowed_urls": None,
                                                            "disallowed_urls": None})
-        curl = self.shell.execute_commands_inside(self.cbqpath,query,'', '', '', '', '')
+        curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
         self.assertEqual(actual_curl['results'][0]['$1'], expected_curl)
 
@@ -201,7 +201,7 @@ class QueryWhitelistTests(QueryTests):
         url = "'https://maps.googleapis.com/maps/api/geocode/json'"
         options= "{'get':True,'data': 'address=santa+cruz&components=country:ES&key=AIzaSyCT6niGCMsgegJkQSYSqpoLZ4_rSO59XQQ'}"
         query="select curl("+ url +", %s" % options + ")"
-        curl = self.shell.execute_commands_inside(self.cbqpath,query,'', '', '', '', '')
+        curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
         self.assertEqual(actual_curl['results'][0]['$1'], expected_curl)
 
@@ -214,7 +214,7 @@ class QueryWhitelistTests(QueryTests):
         expected_curl = self.convert_list_to_json(curl_output[0])
         url = "'https://jira.atlassian.com/rest/api/latest/issue/JRA-9'"
         query="select curl("+ url +")"
-        curl = self.shell.execute_commands_inside(self.cbqpath,query,'', '', '', '', '')
+        curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
         self.assertEqual(actual_curl['results'][0]['$1'], expected_curl)
 
@@ -228,19 +228,19 @@ class QueryWhitelistTests(QueryTests):
         expected_curl = self.convert_list_to_json(curl_output[0])
         url = "'https://jira.atlassian.com/rest/api/latest/issue/JRA-9'"
         query="select curl(" + url + ")"
-        curl = self.shell.execute_commands_inside(self.cbqpath,query,'', '', '', '', '')
+        curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
         self.assertTrue(self.jira_error_msg in actual_curl['errors'][0]['msg'],
                         "Error message is %s this is incorrect it should be %s"
                         % (actual_curl['errors'][0]['msg'], self.jira_error_msg))
 
         self.rest.create_whitelist(self.master, {"all_access": False, "all_access": True})
-        curl = self.shell.execute_commands_inside(self.cbqpath,query,'', '', '', '', '')
+        curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
         self.assertEqual(actual_curl['results'][0]['$1'], expected_curl)
 
         self.rest.create_whitelist(self.master, {"all_access": [True, False]})
-        curl = self.shell.execute_commands_inside(self.cbqpath,query,'', '', '', '', '')
+        curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
         self.assertEqual(actual_curl['results'][0]['$1'], expected_curl)
 
@@ -269,11 +269,11 @@ class QueryWhitelistTests(QueryTests):
 
         url = "'https://jira.atlassian.com/rest/api/latest/issue/JRA-9'"
         query="select curl("+ url +")"
-        curl = self.shell.execute_commands_inside(self.cbqpath,query,'', '', '', '', '')
+        curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
         self.assertTrue(self.jira_error_msg in actual_curl['errors'][0]['msg'],
                         "Error message is %s this is incorrect it should be %s"
-                        % (actual_curl['errors'][0]['msg'],self.jira_error_msg))
+                        % (actual_curl['errors'][0]['msg'], self.jira_error_msg))
 
         curl_output = self.shell.execute_command("%s --get https://maps.googleapis.com/maps/api/geocode/json "
                                                  "-d 'address=santa+cruz&components=country:ES&key=AIzaSyCT6niGCMsgegJkQSYSqpoLZ4_rSO59XQQ'"
@@ -282,7 +282,7 @@ class QueryWhitelistTests(QueryTests):
         url = "'https://maps.googleapis.com/maps/api/geocode/json'"
         options= "{'get':True,'data': 'address=santa+cruz&components=country:ES&key=AIzaSyCT6niGCMsgegJkQSYSqpoLZ4_rSO59XQQ'}"
         query="select curl("+ url +", %s" % options + ")"
-        curl = self.shell.execute_commands_inside(self.cbqpath,query,'', '', '', '', '')
+        curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
         self.assertEqual(actual_curl['results'][0]['$1'], expected_curl)
 
@@ -293,7 +293,7 @@ class QueryWhitelistTests(QueryTests):
 
         url = "'https://jira.atlassian.com/rest/api/latest/issue/JRA-9'"
         query="select curl("+ url +")"
-        curl = self.shell.execute_commands_inside(self.cbqpath,query,'', '', '', '', '')
+        curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
         self.assertTrue(self.jira_error_msg in actual_curl['errors'][0]['msg'],
                         "Error message is %s this is incorrect it should be %s"
@@ -302,7 +302,7 @@ class QueryWhitelistTests(QueryTests):
         url = "'https://maps.googleapis.com/maps/api/geocode/json'"
         options= "{'get':True,'data': 'address=santa+cruz&components=country:ES&key=AIzaSyCT6niGCMsgegJkQSYSqpoLZ4_rSO59XQQ'}"
         query="select curl("+ url +", %s" % options + ")"
-        curl = self.shell.execute_commands_inside(self.cbqpath,query,'', '', '', '', '')
+        curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
         self.assertTrue(self.google_error_msg in actual_curl['errors'][0]['msg'],
                         "Error message is %s this is incorrect it should be %s"
@@ -317,7 +317,7 @@ class QueryWhitelistTests(QueryTests):
         url = "'https://maps.googleapis.com/maps/api/geocode/json'"
         options= "{'get':True,'data': 'address=santa+cruz&components=country:ES&key=AIzaSyCT6niGCMsgegJkQSYSqpoLZ4_rSO59XQQ'}"
         query="select curl("+ url +", %s" % options + ")"
-        curl = self.shell.execute_commands_inside(self.cbqpath,query,'', '', '', '', '')
+        curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
         self.assertTrue(self.google_error_msg in actual_curl['errors'][0]['msg'],
                         "Error message is %s this is incorrect it should be %s"
@@ -328,7 +328,7 @@ class QueryWhitelistTests(QueryTests):
                                                                ["https://maps.googleapis.com/maps/api/geocode/json"],
                                                            "disallowed_urls":
                                                                ["https://maps.googleapis.com/maps/api/geocode/json"]})
-        curl = self.shell.execute_commands_inside(self.cbqpath,query,'', '', '', '', '')
+        curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
         self.assertTrue(self.google_error_msg in actual_curl['errors'][0]['msg'],
                         "Error message is %s this is incorrect it should be %s"
@@ -345,7 +345,7 @@ class QueryWhitelistTests(QueryTests):
         expected_curl = self.convert_list_to_json(curl_output[0])
         url = "'https://jira.atlassian.com/rest/api/latest/issue/JRA-9'"
         query="select curl("+ url +")"
-        curl = self.shell.execute_commands_inside(self.cbqpath,query,'', '', '', '', '')
+        curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
         self.assertTrue(self.jira_error_msg in actual_curl['errors'][0]['msg'],
                         "Error message is %s this is incorrect it should be %s"
@@ -358,7 +358,7 @@ class QueryWhitelistTests(QueryTests):
         url = "'https://maps.googleapis.com/maps/api/geocode/json'"
         options= "{'get':True,'data': 'address=santa+cruz&components=country:ES&key=AIzaSyCT6niGCMsgegJkQSYSqpoLZ4_rSO59XQQ'}"
         query="select curl("+ url +", %s" % options + ")"
-        curl = self.shell.execute_commands_inside(self.cbqpath,query,'', '', '', '', '')
+        curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
         self.assertEqual(actual_curl['results'][0]['$1'], expected_curl)
 
@@ -371,7 +371,7 @@ class QueryWhitelistTests(QueryTests):
         url = "'https://maps.googleapis.com/maps/api/geocode/json'"
         options= "{'get':True,'data': 'address=santa+cruz&components=country:ES&key=AIzaSyCT6niGCMsgegJkQSYSqpoLZ4_rSO59XQQ'}"
         query="select curl(" + url + ", %s" % options + ")"
-        curl = self.shell.execute_commands_inside(self.cbqpath,query,'', '', '', '', '')
+        curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
         self.assertTrue(self.google_error_msg in actual_curl['errors'][0]['msg'],
                         "Error message is %s this is incorrect it should be %s"
@@ -382,7 +382,7 @@ class QueryWhitelistTests(QueryTests):
                                                            "disallowed_urls":["https://maps.googleapis.com"]})
         result = json.loads(content)
         self.assertEqual(result['errors']['allowed_urls'], "Invalid type: Must be a list of non-empty strings")
-        curl = self.shell.execute_commands_inside(self.cbqpath,query,'', '', '', '', '')
+        curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
         self.assertTrue(self.google_error_msg in actual_curl['errors'][0]['msg'],
                         "Error message is %s this is incorrect it should be %s"
@@ -407,4 +407,4 @@ class QueryWhitelistTests(QueryTests):
         json_curl = self.convert_to_json(curl)
         self.assertTrue(error_msg in json_curl['errors'][0]['msg'],
                         "Error message is %s this is incorrect it should be %s"
-                        % (json_curl['errors'][0]['msg'],error_msg))
+                        % (json_curl['errors'][0]['msg'], error_msg))

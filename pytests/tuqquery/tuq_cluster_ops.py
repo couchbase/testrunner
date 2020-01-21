@@ -8,7 +8,7 @@ from remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection
 from membase.helper.cluster_helper import ClusterOperationHelper
 from backuptests import BackupHelper
-from tuq_sanity import QuerySanityTests
+from .tuq_sanity import QuerySanityTests
 
 class QueriesOpsTests(QuerySanityTests, QueryTests):
     def setUp(self):
@@ -36,12 +36,12 @@ class QueriesOpsTests(QuerySanityTests, QueryTests):
             ClusterOperationHelper.cleanup_cluster(self.servers, master=self.master)
             self.sleep(1)
         except:
-            for server in set(self.servers) - set([self.master]):
+            for server in set(self.servers) - {self.master}:
                 try:
                     rest = RestConnection(server)
                     rest.force_eject_node()
                     time.sleep(1)
-                except BaseException, e:
+                except BaseException as e:
                     self.fail(e)
 
     def suite_tearDown(self):
@@ -54,7 +54,7 @@ class QueriesOpsTests(QuerySanityTests, QueryTests):
         try:
             indexes = self._create_multiple_indexes(index_field)
             self.test_min()
-            for i in xrange(1, self.nodes_in + 1):
+            for i in range(1, self.nodes_in + 1):
                 rebalance = self.cluster.async_rebalance(self.servers[:i],
                                                          self.servers[i:i + 1], [])
                 self.test_min()
@@ -71,7 +71,7 @@ class QueriesOpsTests(QuerySanityTests, QueryTests):
         try:
             indexes = self._create_multiple_indexes(index_field)
             self.test_min()
-            for i in xrange(1, self.nodes_out + 1):
+            for i in range(1, self.nodes_out + 1):
                 rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init - (i - 1)],
                                         [],
                                         self.servers[self.nodes_init - i:self.nodes_init - (i - 1)])
@@ -102,7 +102,7 @@ class QueriesOpsTests(QuerySanityTests, QueryTests):
         servr_in = self.servers[self.nodes_init:self.nodes_init + self.nodes_in]
         servr_out = self.servers[self.nodes_init - self.nodes_out:self.nodes_init]
         self.test_case()
-        for i in xrange(3):
+        for i in range(3):
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
                                                      servr_in, servr_out)
             self.sleep(5, "Wait some time for rebalance process and then kill memcached")
@@ -193,7 +193,7 @@ class QueriesOpsTests(QuerySanityTests, QueryTests):
         servr_out = self.servers[self.nodes_init - self.nodes_out:self.nodes_init]
         self.test_union()
         self.cluster.failover(self.servers[:self.nodes_init], servr_out)
-        for i in xrange(3):
+        for i in range(3):
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
                                [], servr_out)
             self.sleep(5, "Wait some time for rebalance process and then kill memcached")
@@ -377,9 +377,9 @@ class QueriesOpsTests(QuerySanityTests, QueryTests):
     def test_prepared_with_incr_rebalance_in(self):
         self.assertTrue(len(self.servers) >= self.nodes_in + 1, "Servers are not enough")
         try:
-            for i in xrange(1, self.nodes_in + 1):
+            for i in range(1, self.nodes_in + 1):
                 rebalance = self.cluster.async_rebalance(self.servers[:i],
-                    self.servers[i:i + 1],[],services=['n1ql'])
+                    self.servers[i:i + 1], [], services=['n1ql'])
                 rebalance.result()
                 self.log.info("-"*100)
                 self.log.info("Querying alternate query node to test the encoded_prepare ....")
@@ -392,7 +392,7 @@ class QueriesOpsTests(QuerySanityTests, QueryTests):
         self.assertTrue(len(self.servers[:self.nodes_init]) > self.nodes_out,
             "Servers are not enough")
         try:
-            for i in xrange(1, self.nodes_out + 1):
+            for i in range(1, self.nodes_out + 1):
                 rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init - (i - 1)],
                     [],
                     self.servers[1])
@@ -423,7 +423,7 @@ class QueriesOpsTests(QuerySanityTests, QueryTests):
         servr_in = self.servers[self.nodes_init:self.nodes_init + self.nodes_in]
         servr_out = self.servers[self.nodes_init - self.nodes_out:self.nodes_init]
         self.test_case()
-        for i in xrange(3):
+        for i in range(3):
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
                 servr_in, servr_out)
             self.sleep(5, "Wait some time for rebalance process and then kill memcached")
@@ -557,7 +557,7 @@ class QueriesOpsJoinsTests(JoinTests):
         self.assertTrue(len(self.servers) >= self.nodes_in + 1, "Servers are not enough")
         fn = getattr(self, self.test_to_run)
         fn()
-        for i in xrange(1, self.nodes_in + 1):
+        for i in range(1, self.nodes_in + 1):
             rebalance = self.cluster.async_rebalance(self.servers[:i],
                                                      self.servers[i:i + 1], [])
             fn()
@@ -583,7 +583,7 @@ class QueriesOpsJoinsTests(JoinTests):
                         "Servers are not enough")
         fn = getattr(self, self.test_to_run)
         fn()
-        for i in xrange(1, self.nodes_out + 1):
+        for i in range(1, self.nodes_out + 1):
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init - (i - 1)],
                                     [],
                                     self.servers[self.nodes_init - i:self.nodes_init - (i - 1)])
