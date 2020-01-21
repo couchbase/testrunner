@@ -14,9 +14,9 @@ from testconstants import WIN_COUCHBASE_BIN_PATH
 from testconstants import MAC_COUCHBASE_BIN_PATH
 from security.auditmain import audit
 import socket
-import commands
+import subprocess
 
-import urllib2
+import urllib.request, urllib.error, urllib.parse
 import stat
 import os
 import traceback
@@ -52,15 +52,15 @@ class portscan(BaseTestCase):
 
         while attempts < 1:
             try:
-                response = urllib2.urlopen("http://testssl.sh/testssl.sh", timeout = 5)
+                response = urllib.request.urlopen("http://testssl.sh/testssl.sh", timeout = 5)
                 content = response.read()
                 f = open(testssl_file_name, 'w' )
                 f.write( content )
                 f.close()
                 break
-            except urllib2.URLError as e:
+            except urllib.error.URLError as e:
                 attempts += 1
-                print 'have an exception getting testssl', e
+                print('have an exception getting testssl', e)
 
 
         st = os.stat(testssl_file_name)
@@ -69,7 +69,7 @@ class portscan(BaseTestCase):
 
 
     TEST_SSL_FILENAME = '/tmp/testssl.sh'
-    ports_to_check = [18091, 18092, 18093, 18094, 18095,18096]
+    ports_to_check = [11207, 18091, 18092, 18093, 18094, 18095, 18096]
 
 
 
@@ -83,7 +83,7 @@ class portscan(BaseTestCase):
 
         for s in self.servers:
             for i in self.ports_to_check:
-                self.log.info('{0} Testing port {1}'.format(s,i))
+                self.log.info('{0} Testing port {1}'.format(s, i))
                 cmd  = self.TEST_SSL_FILENAME + ' -p --warnings off --color 0 {0}:{1}'.format( s.ip, i)
                 self.log.info('The command is {0}'.format( cmd ) )
                 res = os.popen(cmd).read().split('\n')
@@ -145,7 +145,7 @@ class portscan(BaseTestCase):
             check_count = 0
             self.log.info('Testing port {0}'.format(i))
             cmd  = self.TEST_SSL_FILENAME + ' --warnings off --color 0 {0}:{1}'.format( self.master.ip, i)
-            print 'cmd is', cmd
+            print('cmd is', cmd)
             res = os.popen(cmd).read().split('\n')
             for r in res:
                 # check vulnerabilities
@@ -196,4 +196,7 @@ class portscan(BaseTestCase):
             self.log.info('Testing port {0}'.format(i))
 
             # make sure all the tests were seen
-            self.assertTrue( check_count==9, msg='Port {0}. Not all checks present - saw {1} checks'.format(i, check_count))
+            if str(i) in ('18095', '18096'):
+                self.assertTrue( check_count==8, msg='Port {0}. Not all checks present - saw {1} checks'.format(i, check_count))
+            else:
+                self.assertTrue( check_count==9, msg='Port {0}. Not all checks present - saw {1} checks'.format(i, check_count))

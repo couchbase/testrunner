@@ -17,6 +17,6 @@ class RegressionTests(BaseTestCase):
         try:
             ret = mc.replace("hello", 0, 0, "hello")
             self.fail("The document should be locked")
-        except MemcachedError, e:
+        except MemcachedError as e:
             if e.status != memcacheConstants.ERR_EXISTS:
                 self.fail("Expected replace to return EEXISTS, returned: {0}".format(e.status))

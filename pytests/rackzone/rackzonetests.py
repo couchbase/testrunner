@@ -48,8 +48,8 @@ class RackzoneTests(RackzoneBaseTest):
         try:
             self.log.info("create additional default zone")
             rest.add_zone(zone_name)
-        except Exception,e :
-            print e
+        except Exception as e :
+            print(e)
 
     def test_create_zone_with_upper_case_name(self):
         zone_name = "ALLWITHUPTERCASE"
@@ -58,8 +58,8 @@ class RackzoneTests(RackzoneBaseTest):
         try:
             self.log.info("create zone {0}".format(zone_name))
             rest.add_zone(zone_name)
-        except Exception,e :
-            print e
+        except Exception as e :
+            print(e)
         self._verify_zone(zone_name)
 
     def test_create_zone_with_lower_case_name(self):
@@ -69,8 +69,8 @@ class RackzoneTests(RackzoneBaseTest):
         try:
             self.log.info("create zone {0}".format(zone_name))
             rest.add_zone(zone_name)
-        except Exception,e :
-            print e
+        except Exception as e :
+            print(e)
         self._verify_zone(zone_name)
 
     def test_create_zone_with_all_number_name(self):
@@ -80,8 +80,8 @@ class RackzoneTests(RackzoneBaseTest):
         try:
             self.log.info("create zone {0}".format(zone_name))
             rest.add_zone(zone_name)
-        except Exception,e :
-            print e
+        except Exception as e :
+            print(e)
         self._verify_zone(zone_name)
 
     def test_create_zone_with_upper_lower_number_name(self):
@@ -91,8 +91,8 @@ class RackzoneTests(RackzoneBaseTest):
         try:
             self.log.info("create zone {0}".format(zone_name))
             rest.add_zone(zone_name)
-        except Exception,e :
-            print e
+        except Exception as e :
+            print(e)
         self._verify_zone(zone_name)
 
     def test_create_zone_with_upper_lower_number_and_space_name(self):
@@ -102,8 +102,8 @@ class RackzoneTests(RackzoneBaseTest):
         try:
             self.log.info("create zone {0}".format(zone_name))
             rest.add_zone(zone_name)
-        except Exception,e :
-            print e
+        except Exception as e :
+            print(e)
         self._verify_zone(zone_name)
 
     def test_create_zone_with_none_ascii_name(self):
@@ -114,8 +114,8 @@ class RackzoneTests(RackzoneBaseTest):
         try:
             self.log.info("create zone {0}".format(zone_name))
             rest.add_zone(zone_name)
-        except Exception,e :
-            print e
+        except Exception as e :
+            print(e)
         self._verify_zone(zone_name)
 
     def test_delete_empty_defautl_zone(self):
@@ -142,8 +142,8 @@ class RackzoneTests(RackzoneBaseTest):
                 else:
                     raise Exception("Failed to delete default zone")
             rest.rename_zone(zone_name, default_zone)
-        except Exception,e :
-            print e
+        except Exception as e :
+            print(e)
 
     """ test params:
          -p shutdown_zone=1,items=100000,shutdown_zone=1,zone=2,replicas=1 """
@@ -165,7 +165,7 @@ class RackzoneTests(RackzoneBaseTest):
         """ Create zone base on params zone in test"""
         try:
             if int(self.zone) > 1:
-                for i in range(1,int(self.zone)):
+                for i in range(1, int(self.zone)):
                     a = "Group "
                     zone_name = a + str(i + 1)
                     zones.append(zone_name)
@@ -180,11 +180,11 @@ class RackzoneTests(RackzoneBaseTest):
             k = 1
             for i in range(0, self.zone):
                 if "Group 1" in zones[i]:
-                    total_node_per_zone = int(len(self.servers))/int(self.zone) - 1
+                    total_node_per_zone = int(len(self.servers))//int(self.zone) - 1
                 else:
                     nodes_in_zone[zones[i]] = []
-                    total_node_per_zone = int(len(self.servers))/int(self.zone)
-                for n in range(0,total_node_per_zone):
+                    total_node_per_zone = int(len(self.servers))//int(self.zone)
+                for n in range(0, total_node_per_zone):
                     nodes_in_zone[zones[i]].append(self.servers[k].ip)
                     rest.add_node(user=self.user, password=self.password, \
                         remoteIp=self.servers[k].ip, port='8091', zone_name=zones[i])
@@ -296,7 +296,7 @@ class RackzoneTests(RackzoneBaseTest):
             result = rest.add_zone(zone_name)
             if result:
                 raise Exception("Zone feature should not be available in CE version")
-        except Exception,e :
+        except Exception as e :
             if "Failed" in e:
                 pass
 
@@ -318,7 +318,7 @@ class RackzoneTests(RackzoneBaseTest):
                     if result:
                         raise Exception(\
                             "Zone feature should not be available in CE version")
-                except Exception,e :
+                except Exception as e :
                     if "Failed" in e:
                         pass
             else:
@@ -337,7 +337,7 @@ class RackzoneTests(RackzoneBaseTest):
                         if result:
                             raise Exception(\
                              "Zone feature should not be available in CE version")
-                    except Exception,e :
+                    except Exception as e :
                         if "Failed" in e:
                             pass
         serverInfo = self.servers[1]
@@ -397,7 +397,7 @@ class RackzoneTests(RackzoneBaseTest):
                     output, error = shell.execute_command(cmd)
                 elif versions[0][:5] in COUCHBASE_FROM_VERSION_3:
                     command = "dcp"
-                    if 5 <= versions[0]:
+                    if 5 <= int(versions[0]):
                         saslPassword = self.master.rest_password
                     cmd  = "%s %s:11210 %s -b %s -u Administrator -p '%s' "\
                             % (self.cbstat_command, node, command, buckets[0].name, saslPassword)

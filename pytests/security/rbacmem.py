@@ -1,20 +1,20 @@
 from security.ldaptest import ldaptest
 from membase.api.rest_client import RestConnection
-import urllib
+import urllib.request, urllib.parse, urllib.error
 from security.rbacmain import rbacmain
 import json
 from remote.remote_util import RemoteMachineShellConnection
 from newupgradebasetest import NewUpgradeBaseTest
 from security.auditmain import audit
-import commands
+import subprocess
 import socket
 import fileinput
 import sys
 from subprocess import Popen, PIPE
 from security.rbac_base import RbacBase
 from basetestcase import BaseTestCase
-from testmemcached import TestMemcachedClient
-from testmemcached import TestSDK
+from .testmemcached import TestMemcachedClient
+from .testmemcached import TestSDK
 from membase.api.rest_client import RestConnection, RestHelper
 from couchbase_helper.documentgenerator import BlobGenerator
 
@@ -166,44 +166,44 @@ class RbacTestMemcached(BaseTestCase):
     def setUp(self):
         super(RbacTestMemcached, self).setUp()
         rest = RestConnection(self.master)
-        self.auth_type = self.input.param('auth_type','builtin')
-        self.user_id = self.input.param("user_id",None)
-        self.user_role = self.input.param("user_role",None)
-        self.bucket_name = self.input.param("bucket_name",None)
-        rest.create_bucket(bucket=self.bucket_name, ramQuotaMB=100,lww=True)
-        self.role_map = self.input.param("role_map",None)
-        self.incorrect_bucket = self.input.param("incorrect_bucket",False)
-        self.new_role = self.input.param("new_role",None)
-        self.new_role_map = self.input.param("new_role_map",None)
-        self.no_bucket_access = self.input.param("no_bucket_access",False)
-        self.no_access_bucket_name = self.input.param("no_access_bucket_name","noaccess")
-        self.all_buckets = self.input.param("all_buckets",None)
+        self.auth_type = self.input.param('auth_type', 'builtin')
+        self.user_id = self.input.param("user_id", None)
+        self.user_role = self.input.param("user_role", None)
+        self.bucket_name = self.input.param("bucket_name", None)
+        rest.create_bucket(bucket=self.bucket_name, ramQuotaMB=100, lww=True)
+        self.role_map = self.input.param("role_map", None)
+        self.incorrect_bucket = self.input.param("incorrect_bucket", False)
+        self.new_role = self.input.param("new_role", None)
+        self.new_role_map = self.input.param("new_role_map", None)
+        self.no_bucket_access = self.input.param("no_bucket_access", False)
+        self.no_access_bucket_name = self.input.param("no_access_bucket_name", "noaccess")
+        self.all_buckets = self.input.param("all_buckets", None)
         self.ldap_users = rbacmain().returnUserList(self.user_id)
         if self.no_bucket_access:
             rest.create_bucket(bucket=self.no_access_bucket_name, ramQuotaMB=100, lww=True)
         if self.auth_type == 'ldap':
             rbacmain(self.master, 'builtin')._delete_user('cbadminbucket')
         if self.auth_type == 'ldap':
-            rbacmain().setup_auth_mechanism(self.servers,'ldap',rest)
+            rbacmain().setup_auth_mechanism(self.servers, 'ldap', rest)
             for user in self.ldap_users:
                 testuser = [{'id': user[0], 'name': user[0], 'password': user[1]}]
                 RbacBase().create_user_source(testuser, 'ldap', self.master)
                 self.sleep(10)
         elif self.auth_type == "pam":
-            rbacmain().setup_auth_mechanism(self.servers,'pam', rest)
+            rbacmain().setup_auth_mechanism(self.servers, 'pam', rest)
             rbacmain().add_remove_local_user(self.servers, self.ldap_users, 'deluser')
-            rbacmain().add_remove_local_user(self.servers, self.ldap_users,'adduser')
+            rbacmain().add_remove_local_user(self.servers, self.ldap_users, 'adduser')
         elif self.auth_type == "builtin":
             for user in self.ldap_users:
                 testuser = [{'id': user[0], 'name': user[0], 'password': user[1]}]
                 RbacBase().create_user_source(testuser, 'builtin', self.master)
                 self.sleep(10)
 
-    def _return_roles(self,user_role):
+    def _return_roles(self, user_role):
         final_roles = ''
         user_role_param = user_role.split(":")
         if len(user_role_param) == 1:
-            if user_role_param[0] in ('data_reader', 'data_writer', 'bucket_admin', 'views_admin','data_dcp_reader', 'data_monitoring', 'data_backup') and (bool(self.all_buckets)):
+            if user_role_param[0] in ('data_reader', 'data_writer', 'bucket_admin', 'views_admin', 'data_dcp_reader', 'data_monitoring', 'data_backup') and (bool(self.all_buckets)):
                 final_roles = user_role_param[0] + "[*]"
             else:
                 final_roles = user_role_param[0]

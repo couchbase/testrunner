@@ -1,15 +1,15 @@
-import Queue
+import queue
 import copy, json
-from newupgradebasetest import NewUpgradeBaseTest
+from .newupgradebasetest import NewUpgradeBaseTest
 from remote.remote_util import RemoteMachineShellConnection, RemoteUtilHelper
 from couchbase_helper.documentgenerator import BlobGenerator
 from membase.api.rest_client import RestConnection, RestHelper
 from membase.api.exception import RebalanceFailedException
 from membase.helper.cluster_helper import ClusterOperationHelper
 from memcached.helper.kvstore import KVStore
-from fts.stable_topology_fts import StableTopFTS
+from .fts.stable_topology_fts import StableTopFTS
 from pytests.fts.fts_callable import FTSCallable
-from cbas.cbas_functional_tests import CBASFunctionalTests
+from .cbas.cbas_functional_tests import CBASFunctionalTests
 # from 2i.indexscans_2i import SecondaryIndexingScanTests
 from testconstants import COUCHBASE_VERSION_2
 from testconstants import COUCHBASE_VERSION_3, COUCHBASE_FROM_VERSION_3
@@ -17,13 +17,15 @@ from testconstants import SHERLOCK_VERSION, COUCHBASE_FROM_SHERLOCK,\
                           COUCHBASE_FROM_SPOCK, COUCHBASE_FROM_WATSON,\
                           COUCHBASE_FROM_VULCAN
 from couchbase.cluster import Cluster, PasswordAuthenticator
-from couchbase.exceptions import CouchbaseError,CouchbaseNetworkError,CouchbaseTransientError
+from couchbase.exceptions import CouchbaseError, CouchbaseNetworkError, CouchbaseTransientError
 from security.rbac_base import RbacBase
+from threading import Thread
+
 
 class SingleNodeUpgradeTests(NewUpgradeBaseTest):
     def setUp(self):
         super(SingleNodeUpgradeTests, self).setUp()
-        self.queue = Queue.Queue()
+        self.queue = queue.Queue()
 
     def tearDown(self):
         super(SingleNodeUpgradeTests, self).tearDown()
@@ -82,7 +84,7 @@ class SingleNodeUpgradeTests(NewUpgradeBaseTest):
                 output, error = self._upgrade(upgrade_version, self.master, info=info)
                 if str(output).find(error) != -1 or str(error).find(error) != -1:
                     raise Exception(error)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info("Exception %s appeared as expected" % ex)
             self.log.info("Check that old version is working fine")
             self.verification([self.master])
@@ -95,10 +97,10 @@ class Upgrade_Utils(NewUpgradeBaseTest):
     def setUp(self):
         super(Upgrade_Utils, self).setUp()
         self.nodes_init = self.input.param('nodes_init', 2)
-        self.queue = Queue.Queue()
+        self.queue = queue.Queue()
 
     def tearDown(self):
-        print "teardown done"
+        print("teardown done")
 
     def add_and_rebalance(self):
         self._install(self.servers[:self.nodes_init])
@@ -114,14 +116,14 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
     def setUp(self):
         super(MultiNodesUpgradeTests, self).setUp()
         self.nodes_init = self.input.param('nodes_init', 2)
-        self.queue = Queue.Queue()
+        self.queue = queue.Queue()
         self.rate_limit = self.input.param("rate_limit", 100000)
         self.batch_size = self.input.param("batch_size", 1000)
         self.doc_size = self.input.param("doc_size", 100)
         self.loader = self.input.param("loader", "high_doc_ops")
         self.instances = self.input.param("instances", 4)
         self.threads = self.input.param("threads", 5)
-        self.use_replica_to = self.input.param("use_replica_to",False)
+        self.use_replica_to = self.input.param("use_replica_to", False)
         self.index_name_prefix = None
 
     def tearDown(self):
@@ -288,7 +290,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                 server.index_path = index_path
                 shell = RemoteMachineShellConnection(server)
                 # shell.remove_folders([data_path, index_path])
-                for path in set([data_path, index_path]):
+                for path in {data_path, index_path}:
                     shell.create_directory(path)
                 shell.disconnect()
             self._install(self.servers[:self.nodes_init])
@@ -323,7 +325,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                 for server in servers_with_not_default:
                     rest = RestConnection(server)
                     node = rest.get_nodes_self()
-                    print node.storage[0]
+                    print(node.storage[0])
                     self.assertEqual(node.storage[0].path.lower(), data_path.lower(),
                                      "Server %s. Data path expected:%s, actual %s." % (
                                          server.ip, data_path, node.storage[0].path))
@@ -491,7 +493,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         self.verification(self.servers[1:])
 
     def online_consequentially_upgrade(self):
-        half_node = len(self.servers) / 2
+        half_node = len(self.servers) // 2
         self._install(self.servers[:half_node])
         self.operations(self.servers[:half_node])
         if self.ddocs_num:
@@ -611,7 +613,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         new_vb_nums = RestHelper(RestConnection(self.master))._get_vbuckets(old_servers,
                                                                             bucket_name=self.buckets[0].name)
         new_servers = []
-        for i in range(self.nodes_init / self.swap_num_servers):
+        for i in range(self.nodes_init // self.swap_num_servers):
             old_vb_nums = copy.deepcopy(new_vb_nums)
             servers_in = self.servers[(self.nodes_init + i * self.swap_num_servers):
             (self.nodes_init + (i + 1) * self.swap_num_servers)]
@@ -627,6 +629,10 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
             new_vb_nums = RestHelper(RestConnection(self.master))._get_vbuckets(servers,
                                                                                 bucket_name=self.buckets[0].name)
             self._verify_vbucket_nums_for_swap(old_vb_nums, new_vb_nums)
+            self.log.info("Enable remote eval if its version is 5.5+")
+            shell = RemoteMachineShellConnection(self.master)
+            shell.enable_diag_eval_on_non_local_hosts()
+            shell.disconnect()
             status, content = ClusterOperationHelper.find_orchestrator(servers[0])
             self.assertTrue(status, msg="Unable to find orchestrator: {0}:{1}". \
                             format(status, content))
@@ -653,7 +659,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         self.verification(new_servers)
 
     def online_upgrade_add_services(self):
-        half_node = len(self.servers) / 2
+        half_node = len(self.servers) // 2
         self._install(self.servers[:2])
         self.operations(self.servers[:2])
         if self.ddocs_num:
@@ -810,9 +816,9 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
             self.create_ddocs_and_views()
         # set the upgrade version
         self.initial_version = self.upgrade_versions[0]
-        self.sleep(self.sleep_time, "Pre-setup of old version is done. "\
+        self.sleep(self.sleep_time, "Pre-setup of old version is done. " \
                                     "Wait for online upgrade to {0} version". \
-                                    format(self.initial_version))
+                   format(self.initial_version))
         upgrade_servers = self.servers[self.swap_num_servers:self.nodes_init]
         upgrade_services = ["kv", "kv", "index", "n1ql"]
         # swap out half of the servers out and rebalance
@@ -1076,7 +1082,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         try:
             self.operations(self.servers[self.nodes_init:self.num_servers], services="kv,kv,index,n1ql")
             self.sleep(timeout=300)
-        except Exception, ex:
+        except Exception as ex:
             # do nothing, the bucket is created
             self.log.info("bucket is created")
 
@@ -2268,7 +2274,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                 self.servers[:self.nodes_init + 1], [], to_remove_nodes)
             index_server = self.get_nodes_from_services_map(
                 service_type="index", get_all_nodes=False)
-            for i in xrange(20):
+            for i in range(20):
                 output = self.rest.list_indexer_rebalance_tokens(
                     server=index_server)
                 if "rebalancetoken" in output:
@@ -2498,14 +2504,10 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         self.run_with_views = self.input.param('run_with_views', True)
         self.run_view_query_iterations = self.input.param("run_view_query_iterations", 1)
         self.skip_fresh_install = self.input.param("skip_fresh_install", False)
-        from threading import Thread
         self.num_items = self.input.param("num_items", 3000000)
         self.total_items = self.num_items
         # install initial version on the nodes
         self._install(self.servers[:self.nodes_init])
-        for i in range(1, self.nodes_init):
-            self.cluster.rebalance([self.servers[0]], [self.servers[i]], [])
-            self.sleep(30)
         self.quota = self._initialize_nodes(self.cluster, self.servers,
                                             self.disabled_consistent_view,
                                             self.rebalanceIndexWaitingDisabled,
@@ -2514,13 +2516,37 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                                             self.maxParallelReplicaIndexers, self.port)
         self.bucket_size = self._get_bucket_size(self.quota, 1)
         self._bucket_creation()
+        rest = RestConnection(self.master)
+        bucket = rest.get_buckets()[0]
+        rest.update_autofailover_settings(False, 60)
+        if self.flusher_batch_split_trigger:
+            self.set_flusher_batch_split_trigger(self.flusher_batch_split_trigger, [bucket])
+        load_thread = Thread(target=self.load_buckets_with_high_ops,
+                             name="high_ops_load",
+                             args=(self.master, self.buckets[0], self.num_items // 2,
+                                   self.batch_size,
+                                   1, 0,
+                                   1, 0))
+        load_thread.start()
+        self.sleep(30)
+        for i in range(1, self.nodes_init):
+            self.cluster.rebalance([self.servers[0]], [self.servers[i]], [])
+            self.sleep(30)
+        load_thread.join()
+        if self.flusher_batch_split_trigger:
+            try:
+                self.check_snap_start_corruption(servers_to_check=self.servers[:self.nodes_init])
+            except AssertionError as error:
+                self.log.info("Corruption Expected: {0}".format(str(error)))
+                if "snap_start and snap_end corruption found" not in str(error):
+                    self.fail("Corruption not found as expected")
+            else:
+                self.fail("Exception did not happen")
         if self.run_with_views:
             self.ddocs_num = self.input.param("ddocs-num", 1)
             self.view_num = self.input.param("view-per-ddoc", 2)
             self.is_dev_ddoc = self.input.param("is-dev-ddoc", False)
             self.create_ddocs_and_views()
-        rest = RestConnection(self.master)
-        bucket = rest.get_buckets()[0]
         self.initial_version = self.upgrade_versions[0]
         self.product = 'couchbase-server'
         self.sleep(self.sleep_time, "Pre-setup of old version is done. Wait for online upgrade to {0} version". \
@@ -2544,7 +2570,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                 rest.diag_eval("ns_config:set(extra_rebalance_quirks, [disable_old_master]).")
         new_servers = []
         # do online upgrade using swap rebalance for all nodes except the master node
-        for i in range(1, self.nodes_init / self.swap_num_servers):
+        for i in range(1, self.nodes_init // self.swap_num_servers):
             servers_in = self.servers[(self.nodes_init + i * self.swap_num_servers):
                                       (self.nodes_init + (i + 1) * self.swap_num_servers)]
             servers_out = self.servers[(i * self.swap_num_servers):((i + 1) * self.swap_num_servers)]
@@ -2563,10 +2589,14 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         self.total_items += self.num_items
         #         self.add_built_in_server_user()
         self.create_user(self.master)
+        # Check after the upgrades complete
+        self.check_snap_start_corruption(servers_to_check=self.servers[self.nodes_init:self.nodes_init * 2])
         # After all the upgrades are completed, do a rebalance in of node in new version
         self.data_load_and_rebalance(self.master, self.total_items, servers,
                                      [self.servers[self.nodes_init * 2]], [], bucket)
         self.total_items += self.num_items
+        # Check after the rebalance in
+        self.check_snap_start_corruption(servers_to_check=self.servers[self.nodes_init:self.nodes_init * 2 + 1])
         # do a rebalance out of node in new version
         self.data_load_and_rebalance(self.master, self.total_items, servers,
                                      [], [self.servers[self.nodes_init * 2]], bucket)
@@ -2581,14 +2611,10 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         self.run_with_views = self.input.param('run_with_views', True)
         self.run_view_query_iterations = self.input.param("run_view_query_iterations", 1)
         self.skip_fresh_install = self.input.param("skip_fresh_install", False)
-        from threading import Thread
         self.num_items = self.input.param("num_items", 3000000)
         self.total_items = self.num_items
         # install initial version on the nodes
         self._install(self.servers[:self.nodes_init])
-        for i in range(1, self.nodes_init):
-            self.cluster.rebalance([self.servers[0]], [self.servers[i]], [])
-            self.sleep(30)
         self.quota = self._initialize_nodes(self.cluster, self.servers,
                                             self.disabled_consistent_view,
                                             self.rebalanceIndexWaitingDisabled,
@@ -2597,6 +2623,32 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                                             self.maxParallelReplicaIndexers, self.port)
         self.bucket_size = self._get_bucket_size(self.quota, 1)
         self._bucket_creation()
+        rest = RestConnection(self.master)
+        bucket = rest.get_buckets()[0]
+        rest.update_autofailover_settings(False, 60)
+        if self.flusher_batch_split_trigger:
+            self.set_flusher_batch_split_trigger(self.flusher_batch_split_trigger, [bucket])
+        load_thread = Thread(target=self.load_buckets_with_high_ops,
+                             name="high_ops_load",
+                             args=(self.master, self.buckets[0], self.num_items // 2,
+                                   self.batch_size,
+                                   1, 0,
+                                   1, 0))
+        load_thread.start()
+        self.sleep(30)
+        for i in range(1, self.nodes_init):
+            self.cluster.rebalance([self.servers[0]], [self.servers[i]], [])
+            self.sleep(30)
+        load_thread.join()
+        if self.flusher_batch_split_trigger:
+            try:
+                self.check_snap_start_corruption(servers_to_check=self.servers[:self.nodes_init])
+            except AssertionError as error:
+                self.log.info("Corruption Expected: {0}".format(str(error)))
+                if "snap_start and snap_end corruption found" not in str(error):
+                    self.fail("Corruption not found as expected")
+            else:
+                self.fail("Exception did not happen")
         if self.run_with_views:
             self.ddocs_num = self.input.param("ddocs-num", 1)
             self.view_num = self.input.param("view-per-ddoc", 2)
@@ -2627,7 +2679,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                 rest.diag_eval("ns_config:set(extra_rebalance_quirks, [disable_old_master]).")
         new_servers = []
         # do online upgrade using swap rebalance for all nodes except the master node
-        for i in range(1, self.nodes_init / self.swap_num_servers):
+        for i in range(1, self.nodes_init // self.swap_num_servers):
             servers_in = self.servers[(self.nodes_init + i * self.swap_num_servers):
                                       (self.nodes_init + (i + 1) * self.swap_num_servers)]
             servers_out = self.servers[(i * self.swap_num_servers):((i + 1) * self.swap_num_servers)]
@@ -2646,12 +2698,16 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                                      [self.servers[self.nodes_init]], [self.servers[0]], bucket, swap=False)
         self.total_items += self.num_items
         self._new_master(self.servers[self.nodes_init + 1])
+        # Check after the upgrades complete
+        self.check_snap_start_corruption(servers_to_check=self.servers[self.nodes_init:self.nodes_init * 2])
         #         self.add_built_in_server_user()
         self.create_user(self.master)
         # After all the upgrades are completed, do a rebalance in of node in new version
         self.data_load_and_rebalance(self.master, self.total_items, servers,
                                      [self.servers[self.nodes_init * 2]], [], bucket)
         self.total_items += self.num_items
+        # Check after the rebalance in
+        self.check_snap_start_corruption(servers_to_check=self.servers[self.nodes_init:self.nodes_init * 2 + 1])
         # do a rebalance out of node in new version
         self.data_load_and_rebalance(self.master, self.total_items, servers,
                                      [], [self.servers[self.nodes_init * 2]], bucket)
@@ -2661,20 +2717,17 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                                      [self.servers[self.nodes_init * 2]], [self.servers[self.nodes_init]],
                                      bucket)
 
-    def offline_upgrade_with_high_doc_ops(self):
+    def online_upgrade_with_graceful_failover_with_high_doc_ops(self):
         self.rebalance_quirks = self.input.param('rebalance_quirks', False)
         self.upgrade_version = self.input.param('upgrade_version', '4.6.4-4590')
         self.run_with_views = self.input.param('run_with_views', True)
         self.run_view_query_iterations = self.input.param("run_view_query_iterations", 1)
         self.skip_fresh_install = self.input.param("skip_fresh_install", False)
-        from threading import Thread
+        self.recovery_type = self.input.param("recovery_type", "delta")
         self.num_items = self.input.param("num_items", 3000000)
         self.total_items = self.num_items
         # install initial version on the nodes
         self._install(self.servers[:self.nodes_init])
-        for i in range(1, self.nodes_init):
-            self.cluster.rebalance([self.servers[0]], [self.servers[i]], [])
-            self.sleep(30)
         self.quota = self._initialize_nodes(self.cluster, self.servers,
                                             self.disabled_consistent_view,
                                             self.rebalanceIndexWaitingDisabled,
@@ -2683,6 +2736,32 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                                             self.maxParallelReplicaIndexers, self.port)
         self.bucket_size = self._get_bucket_size(self.quota, 1)
         self._bucket_creation()
+        rest = RestConnection(self.master)
+        bucket = rest.get_buckets()[0]
+        rest.update_autofailover_settings(False, 60)
+        if self.flusher_batch_split_trigger:
+            self.set_flusher_batch_split_trigger(self.flusher_batch_split_trigger, [bucket])
+        load_thread = Thread(target=self.load_buckets_with_high_ops,
+                             name="high_ops_load",
+                             args=(self.master, self.buckets[0], self.num_items // 2,
+                                   self.batch_size,
+                                   1, 0,
+                                   1, 0))
+        load_thread.start()
+        self.sleep(30)
+        for i in range(1, self.nodes_init):
+            self.cluster.rebalance([self.servers[0]], [self.servers[i]], [])
+            self.sleep(30)
+        load_thread.join()
+        if self.flusher_batch_split_trigger:
+            try:
+                self.check_snap_start_corruption(servers_to_check=self.servers[:self.nodes_init])
+            except AssertionError as error:
+                self.log.info("Corruption Expected: {0}".format(str(error)))
+                if "snap_start and snap_end corruption found" not in str(error):
+                    self.fail("Corruption not found as expected")
+            else:
+                self.fail("Exception did not happen")
         if self.run_with_views:
             self.ddocs_num = self.input.param("ddocs-num", 1)
             self.view_num = self.input.param("view-per-ddoc", 2)
@@ -2690,9 +2769,108 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
             self.create_ddocs_and_views()
         rest = RestConnection(self.master)
         bucket = rest.get_buckets()[0]
-        # load initial docs
-        self.load_using_cbc_pillowfight(self.master, self.total_items)
+        self.initial_version = self.upgrade_versions[0]
+        self.product = 'couchbase-server'
+        self.sleep(self.sleep_time, "Pre-setup of old version is done. Wait for online upgrade to {0} version". \
+                   format(self.initial_version))
+        if not self.skip_fresh_install:
+            # install upgraded versions on the remaning node to be used for swap rebalance
+            if self.initial_build_type == "community" and self.upgrade_build_type == "enterprise":
+                self._install(self.servers[self.nodes_init:self.num_servers], community_to_enterprise=True)
+            else:
+                self._install(self.servers[self.nodes_init:self.num_servers])
+        self.sleep(self.sleep_time, "Installation of new version is done. Wait for rebalance")
+        self.swap_num_servers = self.input.param('swap_num_servers', 1)
+        old_servers = self.servers[:self.nodes_init]
+        new_vb_nums = RestHelper(RestConnection(self.master))._get_vbuckets(old_servers,
+                                                                            bucket_name=self.buckets[0].name)
+        if self.rebalance_quirks:
+            for server in self.servers:
+                rest = RestConnection(server)
+                # rest.diag_eval("[ns_config:set({node, N, extra_rebalance_quirks}, [reset_replicas, trivial_moves]) || N <- ns_node_disco:nodes_wanted()].")
+                # rest.diag_eval("ns_config:set(disable_rebalance_quirks, [disable_old_master]).")
+                rest.diag_eval("ns_config:set(extra_rebalance_quirks, [disable_old_master]).")
+
+        new_servers = []
+        upgrade_nodes = self.servers[:self.nodes_init]
+        # do upgrade using graceful failover/ recovery/ rebalance
+        for i in range(1, self.nodes_init // self.swap_num_servers):
+            self.failover_upgrade_recovery_with_data_load(self.master, self.total_items, upgrade_nodes,
+                                                          [self.servers[i]], self.recovery_type, bucket)
+            self.total_items += self.num_items
+            self.data_load_and_rebalance(self.master, self.total_items, upgrade_nodes,
+                                         [], [], bucket)
+            self.total_items += self.num_items
+        self.failover_upgrade_recovery_with_data_load(self.master, self.total_items, upgrade_nodes,
+                                                      [self.servers[0]], self.recovery_type, bucket)
         self.total_items += self.num_items
+        self.data_load_and_rebalance(self.master, self.total_items, upgrade_nodes,
+                                     [], [], bucket)
+        self.total_items += self.num_items
+        # Check after the upgrades complete
+        self.check_snap_start_corruption(servers_to_check=self.servers[:self.nodes_init])
+        #         self.add_built_in_server_user()
+        self.create_user(self.master)
+        # After all the upgrades are completed, do a rebalance in of node in new version
+        self.data_load_and_rebalance(self.master, self.total_items, upgrade_nodes,
+                                     [self.servers[self.nodes_init]], [], bucket)
+        self.total_items += self.num_items
+        # Check after the rebalance in
+        self.check_snap_start_corruption(servers_to_check=self.servers[:self.nodes_init + 1])
+        # do a rebalance out of node in new version
+        self.data_load_and_rebalance(self.master, self.total_items, upgrade_nodes,
+                                     [], [self.servers[self.nodes_init]], bucket)
+        self.total_items += self.num_items
+        # do a swap rebalance of nodes in new version
+        self.data_load_and_rebalance(self.master, self.total_items, upgrade_nodes,
+                                     [self.servers[self.nodes_init]], [self.servers[self.nodes_init - 1]],
+                                     bucket)
+
+    def offline_upgrade_with_high_doc_ops(self):
+        self.rebalance_quirks = self.input.param('rebalance_quirks', False)
+        self.upgrade_version = self.input.param('upgrade_version', '4.6.4-4590')
+        self.run_with_views = self.input.param('run_with_views', True)
+        self.run_view_query_iterations = self.input.param("run_view_query_iterations", 1)
+        self.skip_fresh_install = self.input.param("skip_fresh_install", False)
+        self.upgrade_order = self.input.param("upgrade_order", "parallel")
+        self.num_items = self.input.param("num_items", 3000000)
+        self.total_items = self.num_items
+        # install initial version on the nodes
+        self._install(self.servers[:self.nodes_init])
+        self.quota = self._initialize_nodes(self.cluster, self.servers,
+                                            self.disabled_consistent_view,
+                                            self.rebalanceIndexWaitingDisabled,
+                                            self.rebalanceIndexPausingDisabled,
+                                            self.maxParallelIndexers,
+                                            self.maxParallelReplicaIndexers, self.port)
+        self.bucket_size = self._get_bucket_size(self.quota, 1)
+        self._bucket_creation()
+        rest = RestConnection(self.master)
+        bucket = rest.get_buckets()[0]
+        rest.update_autofailover_settings(False, 60)
+        if self.flusher_batch_split_trigger:
+            self.set_flusher_batch_split_trigger(self.flusher_batch_split_trigger, [bucket])
+        load_thread = Thread(target=self.load_buckets_with_high_ops,
+                             name="high_ops_load",
+                             args=(self.master, self.buckets[0], self.num_items // 2,
+                                   self.batch_size,
+                                   1, 0,
+                                   1, 0))
+        load_thread.start()
+        self.sleep(30)
+        for i in range(1, self.nodes_init):
+            self.cluster.rebalance([self.servers[0]], [self.servers[i]], [])
+            self.sleep(30)
+        load_thread.join()
+        if self.flusher_batch_split_trigger:
+            try:
+                self.check_snap_start_corruption(servers_to_check=self.servers[:self.nodes_init])
+            except AssertionError as error:
+                self.log.info("Corruption Expected: {0}".format(str(error)))
+                if "snap_start and snap_end corruption found" not in str(error):
+                    self.fail("Corruption not found as expected")
+            else:
+                self.fail("Exception did not happen")
         self.initial_version = self.upgrade_versions[0]
         self.product = 'couchbase-server'
         self.sleep(self.sleep_time, "Pre-setup of old version is done. Wait for online upgrade to {0} version". \
@@ -2727,11 +2905,17 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                     remote.log_command_output(output, error)
                 self.buckets = []
             remote.disconnect()
+        upgrade_threads = []
         if self.initial_build_type == "community" and self.upgrade_build_type == "enterprise":
             upgrade_threads = self._async_update(self.upgrade_version, upgrade_nodes, save_upgrade_config=True)
         else:
-            upgrade_threads = self._async_update(self.upgrade_version, upgrade_nodes)
-            # wait upgrade statuses
+            if self.upgrade_order == "parallel":
+                upgrade_threads = self._async_update(self.upgrade_version, upgrade_nodes)
+            else:
+                for upgrade_node in upgrade_nodes:
+                    upgrade_thread = self._async_update(self.upgrade_version, [upgrade_node])
+                    upgrade_thread[0].join()
+        # wait upgrade statuses
         for upgrade_thread in upgrade_threads:
             upgrade_thread.join()
         success_upgrade = True
@@ -2740,17 +2924,21 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         if not success_upgrade:
             self.fail("Upgrade failed. See logs above!")
         self.create_user(self.master)
+        # Check after the upgrades complete
+        self.check_snap_start_corruption(servers_to_check=self.servers[:self.nodes_init])
         # After all the upgrades are completed, do a rebalance in of node in new version
         self.data_load_and_rebalance(self.master, self.total_items, upgrade_nodes,
-                                     [self.servers[self.nodes_init + 1]], [], bucket)
+                                     [self.servers[self.nodes_init]], [], bucket)
         self.total_items += self.num_items
+        # Check after the rebalance in
+        self.check_snap_start_corruption(servers_to_check=self.servers[:self.nodes_init + 1])
         # do a rebalance out of node in new version
         self.data_load_and_rebalance(self.master, self.total_items, upgrade_nodes,
-                                     [], [self.servers[self.nodes_init + 1]], bucket)
+                                     [], [self.servers[self.nodes_init]], bucket)
         self.total_items += self.num_items
         # do a swap rebalance of nodes in new version
         self.data_load_and_rebalance(self.master, self.total_items, upgrade_nodes,
-                                     [self.servers[self.nodes_init + 1]], [self.servers[self.nodes_init - 1]],
+                                     [self.servers[self.nodes_init]], [self.servers[self.nodes_init - 1]],
                                      bucket)
 
     def test_print_ops_rate(self):
@@ -2775,18 +2963,18 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                              args=(self.master, self.num_items))
         self.log.info('starting the load thread...')
         load_thread.start()
-        for i in xrange(2):
+        for i in range(2):
             status, json_parsed1 = rest.get_bucket_stats_json()
             array1.extend(json_parsed1["op"]["samples"]["ep_ops_create"])
             array2.extend(json_parsed1["op"]["samples"]["ep_ops_update"])
             self.sleep(60)
         import numpy as np
-        filter(lambda a: a != 0, array1)
-        filter(lambda a: a != 0, array2)
+        [a for a in array1 if a != 0]
+        [a for a in array2 if a != 0]
         self.log.info("array")
         self.log.info(array1)
         self.log.info(array2)
-        for i in xrange(80, 100, 1):
+        for i in range(80, 100, 1):
             percentile_ep_ops_create = np.percentile(array1, i)
             percentile_ep_ops_update = np.percentile(array2, i)
             self.log.info(
@@ -2803,7 +2991,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         import multiprocessing
         num_cores = multiprocessing.cpu_count()
         cmd = "cbc-pillowfight -U couchbase://{0}/default -I {1} -m {4} -M {4} -B {2} --json  " \
-              "-t {4} --rate-limit={5} --populate-only".format(server.ip, items, batch, docsize, num_cores / 2,
+              "-t {4} --rate-limit={5} --populate-only".format(server.ip, items, batch, docsize, num_cores // 2,
                                                                self.rate_limit)
         if rest.get_nodes_version()[:5] in COUCHBASE_FROM_SPOCK:
             cmd += " -u Administrator -P password"
@@ -2811,7 +2999,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         rc = subprocess.call(cmd, shell=True)
         if rc != 0:
             cmd = "cbc-pillowfight -U couchbase://{0}/default -I {1} -m {4} -M {4} -B {2} --json  " \
-                  "-t {4} --rate-limit={5} --populate-only".format(server.ip, items, batch, docsize, num_cores / 2,
+                  "-t {4} --rate-limit={5} --populate-only".format(server.ip, items, batch, docsize, num_cores // 2,
                                                                    self.rate_limit)
             rc = subprocess.call(cmd, shell=True)
             if rc != 0:
@@ -2842,7 +3030,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         while num_items > batch_end:
             batch_end = batch_start + batch_size
             keys = []
-            for i in xrange(batch_start, batch_end, 1):
+            for i in range(batch_start, batch_end, 1):
                 keys.append(str(i).rjust(20, '0'))
             try:
                 bkt.get_multi(keys)
@@ -2878,12 +3066,32 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
             batch_start += batch_size
         return errors, missing_keys, errors_replica, missing_keys_replica
 
+    def failover_upgrade_recovery_with_data_load(self, master, items, cluster_nodes, failed_over_node, recovery_type,
+                                                 bucket):
+        load_thread = Thread(target=self.load_buckets_with_high_ops,
+                             name="high_ops_load",
+                             args=(master, bucket, items,
+                                   self.batch_size,
+                                   1, 0,
+                                   1, 0))
+        load_thread.start()
+        # do final graceful failover, upgrade and do a recovery to complete upgrade
+        self.cluster.failover(cluster_nodes, failed_over_node, graceful=True)
+        self.sleep(300)
+        upgrade_thread = self._async_update(self.upgrade_version, failed_over_node)
+        upgrade_thread[0].join()
+        success_upgrade = True
+        while not self.queue.empty():
+            success_upgrade &= self.queue.get()
+        if not success_upgrade:
+            self.fail("Upgrade failed. See logs above!")
+        self.rest.set_recovery_type('ns_1@' + failed_over_node[0].ip, recovery_type)
+
     def data_load_and_rebalance(self, load_host, num_items, servers, servers_in, servers_out, bucket, swap=True):
         self.add_built_in_user = self.input.param('add_built_in_user', True)
         rebalance_fail = False
         self.log.info("inside data_load_and_rebalance")
         rest = RestConnection(load_host)
-        from threading import Thread
         self.log.info('starting the view query thread...')
         if self.run_with_views:
             view_query_thread = Thread(target=self.view_queries, name="run_queries",
@@ -2904,11 +3112,11 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         load_thread.start()
         try:
             if swap:
-                self.cluster.rebalance(servers, servers_in, servers_out)
+                self.cluster.rebalance(servers, servers_in, servers_out, timeout=10800)
             else:
-                self.cluster.rebalance(servers, servers_in, [])
-                self.cluster.rebalance(servers, [], servers_out)
-        except Exception, ex:
+                self.cluster.rebalance(servers, servers_in, [], timeout=2400)
+                self.cluster.rebalance(servers, [], servers_out, timeout=2400)
+        except Exception as ex:
             rebalance_fail = True
         finally:
             self.sleep(self.sleep_time)
@@ -2931,14 +3139,14 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
             if errors:
                 self.log.info("Printing missing keys : ")
             for error in errors:
-                print error
+                print(error)
             if errors:
                 self.check_dataloss_with_cbc_hash(load_host, bucket, missing_keys)
             if self.loader == "pillowfight":
                 if errors_replica:
                     self.log.info("Printing missing keys in replica : ")
                 for error in errors_replica:
-                    print error
+                    print(error)
                 if errors_replica:
                     self.check_dataloss_with_cbc_hash(load_host, bucket, missing_keys_replica)
             if num_items != rest.get_active_key_count(bucket):
@@ -2965,8 +3173,8 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
 
     def view_queries(self, iterations):
         query = {"connectionTimeout": 60000}
-        for count in xrange(iterations):
-            for i in xrange(self.view_num):
+        for count in range(iterations):
+            for i in range(self.view_num):
                 self.cluster.query_view(self.master, self.ddocs[0].name,
                                         self.default_view_name + str(i), query,
                                         expected_rows=None, bucket="default", retry_time=2)
@@ -2979,10 +3187,8 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                      'roles': 'admin'}]
         self.log.info("before create_user_source")
         RbacBase().create_user_source(testuser, 'builtin', node)
-        self.sleep(10)
         self.log.info("before add_user_role")
         status = RbacBase().add_user_role(rolelist, RestConnection(node), 'builtin')
-        self.sleep(10)
 
     def load_buckets_with_high_ops(self, server, bucket, items, batch=2000,
                                    threads=5, start_document=0, instances=1, ttl=0):

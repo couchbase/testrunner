@@ -7,7 +7,7 @@ from couchbase_helper.documentgenerator import DocumentGenerator
 from membase.helper.cluster_helper import ClusterOperationHelper
 from remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection
-from memcached.helper.data_helper import VBucketAwareMemcached,MemcachedClientHelper
+from memcached.helper.data_helper import VBucketAwareMemcached, MemcachedClientHelper
 
 
 import traceback
@@ -49,17 +49,17 @@ class GetrTests(BaseTestCase):
             result.skipped=[('getr_test', "There is not enough VMs!!!")]
             return result
 
-        gen_1 = DocumentGenerator('test_docs', '{{"age": {0}}}', xrange(5),
-                                      start=0, end=self.num_items/2)
-        gen_2 = DocumentGenerator('test_docs', '{{"age": {0}}}', xrange(5),
-                                      start=self.num_items/2, end=self.num_items)
+        gen_1 = DocumentGenerator('test_docs', '{{"age": {0}}}', range(5),
+                                      start=0, end=self.num_items//2)
+        gen_2 = DocumentGenerator('test_docs', '{{"age": {0}}}', range(5),
+                                      start=self.num_items//2, end=self.num_items)
         if self.value_size:
             gen_1 = DocumentGenerator('test_docs', '{{"name": "{0}"}}',
                                       [self.value_size * 'a'],
-                                      start=0, end=self.num_items/2)
+                                      start=0, end=self.num_items//2)
             gen_2 = DocumentGenerator('test_docs', '{{"name": "{0}"}}',
                                       [self.value_size * 'a'],
-                                      start=self.num_items/2, end=self.num_items)
+                                      start=self.num_items//2, end=self.num_items)
         self.log.info("LOAD PHASE")
         if not self.skipload:
             self.perform_docs_ops(self.master, [gen_1, gen_2], self.data_ops)
@@ -105,20 +105,20 @@ class GetrTests(BaseTestCase):
                 self.verify_cluster_stats(servrs, only_store_hash=False,
                                           replica_to_read=self.replica_to_read, batch_size=1,
                                           timeout=(self.wait_timeout * 10))
-        except Exception, ex:
+        except Exception as ex:
             if self.error and str(ex).find(self.error) != -1:
                 self.log.info("Expected error %s appeared as expected" % self.error)
             else:
-                print traceback.format_exc()
+                print(traceback.format_exc())
                 raise ex
         if self.rebalance == GetrTests.DURING_REBALANCE:
             rebalance.result()
 
     def getr_negative_test(self):
-        gen_1 = DocumentGenerator('test_docs', '{{"age": {0}}}', xrange(5),
-                                      start=0, end=self.num_items/2)
-        gen_2 = DocumentGenerator('test_docs', '{{"age": {0}}}', xrange(5),
-                                      start=self.num_items/2, end=self.num_items)
+        gen_1 = DocumentGenerator('test_docs', '{{"age": {0}}}', range(5),
+                                      start=0, end=self.num_items//2)
+        gen_2 = DocumentGenerator('test_docs', '{{"age": {0}}}', range(5),
+                                      start=self.num_items//2, end=self.num_items)
         self.log.info("LOAD PHASE")
         if not self.skipload:
             self.perform_docs_ops(self.master, [gen_1, gen_2], self.data_ops)
@@ -131,7 +131,7 @@ class GetrTests(BaseTestCase):
         self.expire_pager([self.master])
         try:
             self._load_all_buckets(self.master, gen_1, 'read_replica', self.expiration, batch_size=1)
-        except Exception, ex:
+        except Exception as ex:
             if self.error and str(ex).find(self.error) != -1:
                 self.log.info("Expected error %s appeared as expected" % self.error)
             else:
@@ -142,14 +142,14 @@ class GetrTests(BaseTestCase):
 
     def getr_negative_corrupted_keys_test(self):
         key = self.input.param("key", '')
-        gen = DocumentGenerator('test_docs', '{{"age": {0}}}', xrange(5),
+        gen = DocumentGenerator('test_docs', '{{"age": {0}}}', range(5),
                                       start=0, end=self.num_items)
         self.perform_docs_ops(self.master, [gen], 'create')
         self.log.info("Checking replica read")
         client = VBucketAwareMemcached(RestConnection(self.master), self.default_bucket_name)
         try:
             o, c, d = client.getr(key)
-        except Exception, ex:
+        except Exception as ex:
             if self.error and str(ex).find(self.error) != -1:
                 self.log.info("Expected error %s appeared as expected" % self.error)
             else:
@@ -160,7 +160,7 @@ class GetrTests(BaseTestCase):
 
     def test_getr_bucket_ops(self):
         bucket_to_delete_same_read = self.input.param("bucket_to_delete_same_read", True)
-        gen_1 = DocumentGenerator('test_docs', '{{"age": {0}}}', xrange(5),
+        gen_1 = DocumentGenerator('test_docs', '{{"age": {0}}}', range(5),
                                       start=0, end=self.num_items)
         self.log.info("LOAD PHASE")
         self.perform_docs_ops(self.master, [gen_1], self.data_ops)
@@ -179,7 +179,7 @@ class GetrTests(BaseTestCase):
             task_delete_bucket = self.cluster.async_bucket_delete(self.master, bucket_delete.name)
             task_verify.result()
             task_delete_bucket.result()
-        except Exception, ex:
+        except Exception as ex:
             task_delete_bucket.result()
             if self.error and str(ex).find(self.error) != -1:
                 self.log.info("Expected error %s appeared as expected" % self.error)
@@ -190,7 +190,7 @@ class GetrTests(BaseTestCase):
                 self.fail("Expected error %s didn't appear as expected" % self.error)
 
     def getr_rebalance_test(self):
-        gen = DocumentGenerator('test_docs', '{{"age": {0}}}', xrange(5),
+        gen = DocumentGenerator('test_docs', '{{"age": {0}}}', range(5),
                                       start=0, end=self.num_items)
         self.perform_docs_ops(self.master, [gen], 'create')
         self.log.info("Checking replica read")
@@ -200,14 +200,14 @@ class GetrTests(BaseTestCase):
                             [])
         try:
             while gen.has_next():
-                key, _ = gen.next()
+                key, _ = next(gen)
                 o, c, d = client.getr(key)
         finally:
             rebalance.result()
 
     def getr_negative_corrupted_vbucket_test(self):
         vbucket_state = self.input.param("vbucket_state", '')
-        gen = DocumentGenerator('test_docs', '{{"age": {0}}}', xrange(5),
+        gen = DocumentGenerator('test_docs', '{{"age": {0}}}', range(5),
                                 start=0, end=self.num_items)
         self.perform_docs_ops(self.master, [gen], 'create')
         self.log.info("Checking replica read")
@@ -215,7 +215,7 @@ class GetrTests(BaseTestCase):
         vbuckets_num = RestConnection(self.master).get_vbuckets(self.buckets[0])
         while gen.has_next():
             try:
-                key, _ = gen.next()
+                key, _ = next(gen)
                 vBucketId = client._get_vBucket_id(key)
                 mem = client.memcached_for_replica_vbucket(vBucketId)
                 if vbucket_state:
@@ -232,7 +232,7 @@ class GetrTests(BaseTestCase):
                     msg += "Correct vbucket %s, wrong vbucket %s" % (vBucketId, wrong_vbucket)
                 self.log.info(msg)
                 client._send_op(mem_to_read.getr, key)
-            except Exception, ex:
+            except Exception as ex:
                 if self.error and str(ex).find(self.error) != -1:
                     self.log.info("Expected error %s appeared as expected" % self.error)
                 else:
@@ -254,7 +254,7 @@ class GetrTests(BaseTestCase):
                int(mc.stats()["vb_active_perc_mem_resident"]) > resident_ratio) and\
               time.time() < end_time:
             self.log.info("Resident ratio is %s" % mc.stats()["vb_active_perc_mem_resident"])
-            gen = DocumentGenerator('test_docs', '{{"age": {0}}}', xrange(5),
+            gen = DocumentGenerator('test_docs', '{{"age": {0}}}', range(5),
                                     start=self.num_items, end=(self.num_items + delta_items))
             gens.append(copy.deepcopy(gen))
             self._load_all_buckets(self.master, gen, 'create', self.expiration, kv_store=1,

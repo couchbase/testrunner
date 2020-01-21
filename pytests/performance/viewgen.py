@@ -8,7 +8,7 @@ class RepeatableGenerator(object):
         self.reset()
         self.iterable = iterable
 
-    def next(self):
+    def __next__(self):
         self.counter += 1
         if self.counter == len(self.iterable):
             self.counter = 0
@@ -148,17 +148,17 @@ class ViewGen(object):
             [8] -- 1 ddoc (8 views)
             [1, 1, 1, 1] -- 4 ddocs (1 view per ddoc)
         """
-        if filter(lambda v: v > 10, pattern):
+        if [v for v in pattern if v > 10]:
             raise Exception("Maximum 10 views per ddoc allowed")
         if len(pattern) > 10:
             raise Exception("Maximum 10 design documents allowed")
 
         ddocs = dict()
         for number_of_views in pattern:
-            ddoc_name = self.ddocs.next()
+            ddoc_name = next(self.ddocs)
             ddocs[ddoc_name] = {'views': {}}
-            for index_of_view in xrange(number_of_views):
-                view_name = self.views.next()
+            for index_of_view in range(number_of_views):
+                view_name = next(self.views)
                 map = self.maps[view_name]
                 ddocs[ddoc_name]['views'][view_name] = {'map': map}
             if options:
@@ -181,7 +181,7 @@ class ViewGen(object):
         """Generate string from permuted queries"""
         # Generate list of queries
         queries = (self._get_query(bucket, ddoc, view, stale)
-                   for ddoc, ddoc_definition in ddocs.iteritems()
+                   for ddoc, ddoc_definition in ddocs.items()
                    for view in ddoc_definition["views"])
         queries = [query for query_group in queries for query in query_group]
 

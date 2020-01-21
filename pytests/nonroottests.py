@@ -16,7 +16,7 @@ class NonRootTests(unittest.TestCase):
     def setUp(self):
         self.log = logger.Logger.get_logger()
         self.input = TestInputSingleton.input
-        self._os = self.input.param("os","null");     #To allow centos, ubuntu, windows
+        self._os = self.input.param("os", "null");     #To allow centos, ubuntu, windows
         self.build = self.input.param("build", "couchbase-server-enterprise_2.2.0-817-rel_x86_64.rpm")
         self.num_items = self.input.param("items", 100000)
         self.servers = self.input.servers

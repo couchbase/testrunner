@@ -15,6 +15,12 @@ class RecreateMembaseBuckets(unittest.TestCase):
     servers = None
     log = None
     input = TestInput.TestInput
+    
+    def suite_setUp(self):
+       pass
+
+    def suite_tearDown(self):
+       pass
 
     #as part of the setup let's delete all the existing buckets
     def setUp(self):
@@ -26,13 +32,11 @@ class RecreateMembaseBuckets(unittest.TestCase):
         # Add built-in user
         testuser = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'password': 'password'}]
         RbacBase().create_user_source(testuser, 'builtin', self.servers[0])
-        time.sleep(10)
-
+        
         # Assign user to role
         role_list = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'roles': 'admin'}]
         RbacBase().add_user_role(role_list, RestConnection(self.servers[0]), 'builtin')
-        time.sleep(10)
-
+        
         self._log_start()
 
     def tearDown(self):

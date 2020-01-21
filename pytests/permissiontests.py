@@ -29,7 +29,7 @@ class PermissionTests(BaseTestCase):
             rest = RestConnection(self.master)
             self.assertTrue(RestHelper(rest).is_ns_server_running(timeout_in_seconds=60),
                                             'NS server is not up')
-        except Exception, ex:
+        except Exception as ex:
             self.log.error('Couchbase is not running')
             shell.execute_command('reboot')
             self.sleep(60, 'wait for reboot of VM')

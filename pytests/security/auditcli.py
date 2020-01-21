@@ -16,8 +16,8 @@ from security.auditmain import audit
 import socket
 import random
 import zlib
-import commands
-import urllib
+import subprocess
+import urllib.request, urllib.parse, urllib.error
 
 class auditcli(BaseTestCase):
     def setUp(self):
@@ -58,7 +58,7 @@ class auditcli(BaseTestCase):
                 rest = RestConnection(self.master)
                 self.setupLDAPSettings(rest)
                 #rest.ldapUserRestOperation(True, [[self.ldapUser]], exclude=None)
-                self.set_user_role(rest,self.ldapUser)
+                self.set_user_role(rest, self.ldapUser)
 
 
     def tearDown(self):
@@ -73,9 +73,9 @@ class auditcli(BaseTestCase):
         return ipAddress
         '''
 
-    def setupLDAPSettings (self,rest):
+    def setupLDAPSettings (self, rest):
         api = rest.baseUrl + 'settings/saslauthdAuth'
-        params = urllib.urlencode({"enabled":'true',"admins":[],"roAdmins":[]})
+        params = urllib.parse.urlencode({"enabled":'true',"admins":[],"roAdmins":[]})
         status, content, header = rest._http_request(api, 'POST', params)
         return status, content, header
 
@@ -86,7 +86,7 @@ class auditcli(BaseTestCase):
 
     def set_user_role(self,rest,username,user_role='admin'):
         payload = "name=" + username + "&roles=" + user_role
-        content =  rest.set_user_roles(user_id=username,payload=payload)
+        content =  rest.set_user_roles(user_id=username, payload=payload)
 
 
     #Wrapper around auditmain
@@ -122,7 +122,7 @@ class auditcli(BaseTestCase):
         cli_command = self.input.param("cli_command", None)
         source = self.source
         remote_client = RemoteMachineShellConnection(self.master)
-        for num in xrange(nodes_add):
+        for num in range(nodes_add):
             options = "--server-add={0}:8091 --server-add-username=Administrator --server-add-password=password".format(self.servers[num + 1].ip)
             output, error = remote_client.execute_couchbase_cli(cli_command='server-add', options=options, cluster_host="localhost", user=self.ldapUser, password=self.ldapPass)
         output, error = remote_client.execute_couchbase_cli(cli_command='rebalance', cluster_host="localhost", user=self.ldapUser, password=self.ldapPass)
@@ -138,7 +138,7 @@ class auditcli(BaseTestCase):
             self.checkConfig(8200, self.master, expectedResults)
 
         if (cli_command == 'server-remove'):
-            for num in xrange(nodes_rem):
+            for num in range(nodes_rem):
                 cli_command = "rebalance"
                 options = "--server-remove={0}:8091".format(self.servers[nodes_add - num].ip)
                 output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user=self.ldapUser, password=self.ldapPass)
@@ -152,7 +152,7 @@ class auditcli(BaseTestCase):
 
         if (cli_command in ["failover"]):
             cli_command = 'failover'
-            for num in xrange(nodes_failover):
+            for num in range(nodes_failover):
                 self.log.info("failover node {0}".format(self.servers[nodes_add - nodes_rem - num].ip))
                 options = "--server-failover={0}:8091".format(self.servers[nodes_add - nodes_rem - num].ip)
                 options += " --force"
@@ -161,7 +161,7 @@ class auditcli(BaseTestCase):
                 self.checkConfig(self.eventID, self.master, expectedResults)
 
         if (cli_command == "server-readd"):
-            for num in xrange(nodes_readd):
+            for num in range(nodes_readd):
                 cli_command = 'failover'
                 self.log.info("failover node {0}".format(self.servers[nodes_add - nodes_rem - num].ip))
                 options = "--server-failover={0}:8091".format(self.servers[nodes_add - nodes_rem - num].ip)
@@ -470,7 +470,7 @@ class XdcrCLITest(CliBaseTest):
                 rest = RestConnection(self.master)
                 self.setupLDAPSettings(rest)
                 #rest.ldapUserRestOperation(True, [[self.ldapUser]], exclude=None)
-                self.set_user_role(rest,self.ldapUser)
+                self.set_user_role(rest, self.ldapUser)
 
     def tearDown(self):
         for server in self.servers:
@@ -484,9 +484,9 @@ class XdcrCLITest(CliBaseTest):
         payload = "name=" + username + "&roles=" + user_role
         content = rest.set_user_roles(user_id=username, payload=payload)
 
-    def setupLDAPSettings (self,rest):
+    def setupLDAPSettings (self, rest):
         api = rest.baseUrl + 'settings/saslauthdAuth'
-        params = urllib.urlencode({"enabled":'true',"admins":[],"roAdmins":[]})
+        params = urllib.parse.urlencode({"enabled":'true',"admins":[],"roAdmins":[]})
         status, content, header = rest._http_request(api, 'POST', params)
         return status, content, header
 
@@ -521,7 +521,7 @@ class XdcrCLITest(CliBaseTest):
         cli_command = "xdcr-setup"
         options = "--create"
         options += (" --xdcr-cluster-name=\'{0}\'".format(xdcr_cluster_name), "")[xdcr_cluster_name is None]
-        print ("Value of xdcr_home is {0}".format(xdcr_hostname))
+        print(("Value of xdcr_home is {0}".format(xdcr_hostname)))
         if xdcr_hostname is not None:
             options += " --xdcr-hostname={0}".format(self.servers[xdcr_hostname].ip)
         options += (" --xdcr-username={0}".format(xdcr_username), "")[xdcr_username is None]

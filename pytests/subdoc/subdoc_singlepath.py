@@ -1,4 +1,4 @@
-from subdoc_base import SubdocBaseTest
+from .subdoc_base import SubdocBaseTest
 from lib.mc_bin_client import MemcachedClient, MemcachedError
 from lib.memcacheConstants import *
 import copy, json
@@ -38,7 +38,7 @@ class SubdocSinglePathTests(SubdocBaseTest):
         dict['doc']['id'] = key
         dict['doc']['number'] = dict['levels']
 
-        for level in xrange(0, dict['levels']):
+        for level in range(0, dict['levels']):
             dict['doc']['array'].append(level)
         return self._createNestedJson(key, {'doc': dict['doc'], 'levels': dict['levels']-1})
 
@@ -55,9 +55,9 @@ class SubdocSinglePathTests(SubdocBaseTest):
         dict = {'doc' : {}, 'levels' : levels }
         self._createNestedJson(key, dict)
         template = dict['doc']
-        gen_load = SubdocDocumentGenerator(key, template,start=0, end=num_items)
+        gen_load = SubdocDocumentGenerator(key, template, start=0, end=num_items)
 
-        print "Inserting json data into bucket"
+        print("Inserting json data into bucket")
         self._load_all_buckets(self.server, gen_load, "create", 0)
         self._wait_for_stats_all_buckets([self.server])
 
@@ -89,9 +89,9 @@ class SanityTests(SubdocSinglePathTests):
         super(SanityTests, self).setUp()
 
         '''change this to configurable, currently set as 10000 documents'''
-        self._load_all_docs(self.basicDocKey,16,10000)
-        self._load_all_docs(self.deepNestedDocKey,30,1000)
-        self._load_all_docs(self.deepNestedGreaterThanAllowedDocKey,64,100)
+        self._load_all_docs(self.basicDocKey, 16, 10000)
+        self._load_all_docs(self.deepNestedDocKey, 30, 1000)
+        self._load_all_docs(self.deepNestedGreaterThanAllowedDocKey, 64, 100)
 
         ''' Issue w/ gets, retain below until fixed '''
         self.insertJsonDocument(self.basicDocKey, 16, 0)
@@ -179,7 +179,7 @@ class SanityTests(SubdocSinglePathTests):
     ''' Does not work - Need to add type '''
     def counterInNestedDoc(self):
         try:
-            opaque, cas, data = self.client.counter_in(self.basicDocKey, 'child.child.child.child.child.array[0]','-5',0)
+            opaque, cas, data = self.client.counter_in(self.basicDocKey, 'child.child.child.child.child.array[0]', '-5', 0)
         except Exception as exception:
             raise exception
         finally:
@@ -188,7 +188,7 @@ class SanityTests(SubdocSinglePathTests):
     def insert_inInArrayValue(self):
         try:
             random_string = '"123"'
-            opaque, cas, data = self.client.insert_in(self.basicDocKey, 'child.child.child.child.child.array[0]',random_string)
+            opaque, cas, data = self.client.insert_in(self.basicDocKey, 'child.child.child.child.child.array[0]', random_string)
         except Exception as exception:
             raise exception
 
@@ -196,7 +196,7 @@ class SanityTests(SubdocSinglePathTests):
         try:
             long_string = ''.join(chr(97 + randint(0, 25)) for i in range(10000))
             long_string = "'" + long_string + "'"
-            opaque, cas, data = self.client.insert_in(self.basicDocKey, 'child.child.child.child.child.array[0]',long_string)
+            opaque, cas, data = self.client.insert_in(self.basicDocKey, 'child.child.child.child.child.array[0]', long_string)
         except Exception as exception:
             raise exception
 
@@ -204,14 +204,14 @@ class SanityTests(SubdocSinglePathTests):
         try:
             long_string = ''.join(chr(97 + randint(0, 25)) for i in range(10000))
             long_string = "'" + long_string + "'"
-            opaque, cas, data = self.client.insert_in(self.deepNestedDocKey, 'child.isDict',long_string)
+            opaque, cas, data = self.client.insert_in(self.deepNestedDocKey, 'child.isDict', long_string)
         except Exception as exception:
             raise exception
 
     def replace_inInArrayValue(self):
         try:
             random_string = '"hello"'
-            opaque, cas, data = self.client.replace_in(self.basicDocKey, 'child.child.child.child.child.array[0]',random_string)
+            opaque, cas, data = self.client.replace_in(self.basicDocKey, 'child.child.child.child.child.array[0]', random_string)
         except Exception as exception:
             raise exception
 
@@ -219,32 +219,32 @@ class SanityTests(SubdocSinglePathTests):
         try:
             long_string = ''.join(chr(97 + randint(0, 25)) for i in range(10000))
             long_string = "'" + long_string + "'"
-            opaque, cas, data = self.client.replace_in(self.basicDocKey, 'child.child.child.child.child.child.child.child.array[0]',long_string)
+            opaque, cas, data = self.client.replace_in(self.basicDocKey, 'child.child.child.child.child.child.child.child.array[0]', long_string)
         except Exception as exception:
             raise exception
 
     def replace_inNullValue(self):
         try:
             empty_string = "'   '"
-            opaque, cas, data = self.client.replace_in(self.basicDocKey, 'child.child.child.child.child.child.child.child.array[0]',empty_string)
+            opaque, cas, data = self.client.replace_in(self.basicDocKey, 'child.child.child.child.child.child.child.child.array[0]', empty_string)
         except Exception as exception:
             raise exception
 
     def exists_inInArrayValue(self):
         try:
-            opaque, cas, data = self.client.exists_in(self.deepNestedDocKey,'child.child.child.child.child.array[0]')
+            opaque, cas, data = self.client.exists_in(self.deepNestedDocKey, 'child.child.child.child.child.array[0]')
         except Exception as exception:
             raise exception
 
     def exists_inInArrayNegativeIndex(self):
         try:
-            opaque, cas, data = self.client.exists_in(self.deepNestedDocKey,'child.child.child.child.child.array[-1]')
+            opaque, cas, data = self.client.exists_in(self.deepNestedDocKey, 'child.child.child.child.child.array[-1]')
         except Exception as exception:
             raise exception
 
     def exists_Missing(self):
         try:
-            opaque, cas, data = self.client.exists_in(self.deepNestedDocKey,'child.child.child.child.child.array.child')
+            opaque, cas, data = self.client.exists_in(self.deepNestedDocKey, 'child.child.child.child.child.array.child')
         except MemcachedError as error:
             assert error.status == ERR_SUBDOC_PATH_MISMATCH
 
@@ -253,7 +253,7 @@ class SanityTests(SubdocSinglePathTests):
         try:
             random_string = '"hello"'
             blank_string = '" "'
-            opaque, cas, data = self.client.append_in(self.basicDocKey, 'child.child.child.child.child.array[0]',1)
+            opaque, cas, data = self.client.append_in(self.basicDocKey, 'child.child.child.child.child.array[0]', 1)
         except Exception as exception:
             raise exception
 
@@ -262,7 +262,7 @@ class SanityTests(SubdocSinglePathTests):
         try:
             random_string = '"hello"'
             blank_string = '" "'
-            opaque, cas, data = self.client.prepend_in(self.basicDocKey, 'child.child.child.child.child.array[0]',random_string)
+            opaque, cas, data = self.client.prepend_in(self.basicDocKey, 'child.child.child.child.child.array[0]', random_string)
         except Exception as exception:
             raise exception
 

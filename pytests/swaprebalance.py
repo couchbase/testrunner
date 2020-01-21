@@ -27,7 +27,7 @@ class SwapRebalanceBase(unittest.TestCase):
         self.servers = self.input.servers
         serverInfo = self.servers[0]
         rest = RestConnection(serverInfo)
-        if len(set([server.ip for server in self.servers])) == 1:
+        if len({server.ip for server in self.servers}) == 1:
             ip = rest.get_nodes_self().ip
             for server in self.servers:
                 server.ip = ip
@@ -65,23 +65,21 @@ class SwapRebalanceBase(unittest.TestCase):
             info = rest.get_nodes_self()
             rest.init_cluster(username=serverInfo.rest_username, password=serverInfo.rest_password)
             rest.init_cluster_memoryQuota(memoryQuota=int(info.mcdMemoryReserved * node_ram_ratio))
-
+            SwapRebalanceBase.enable_diag_eval_on_non_local_hosts(self, serverInfo)
             # Add built-in user
             testuser = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'password': 'password'}]
             RbacBase().create_user_source(testuser, 'builtin', self.servers[0])
-            time.sleep(10)
 
             # Assign user to role
             role_list = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'roles': 'admin'}]
             RbacBase().add_user_role(role_list, RestConnection(self.servers[0]), 'builtin')
-            time.sleep(10)
 
             if self.num_buckets > 10:
                 BaseTestCase.change_max_buckets(self, self.num_buckets)
             self.log.info("==============  SwapRebalanceBase setup was finished for test #{0} {1} =============="
                       .format(self.case_number, self._testMethodName))
             SwapRebalanceBase._log_start(self)
-        except Exception, e:
+        except Exception as e:
             self.cluster_helper.shutdown()
             self.fail(e)
 
@@ -127,6 +125,21 @@ class SwapRebalanceBase(unittest.TestCase):
         ClusterOperationHelper.wait_for_ns_servers_or_assert(self.servers, self)
         self.log.info("==============  SwapRebalanceBase cleanup was finished for test #{0} {1} =============="\
                           .format(self.case_number, self._testMethodName))
+
+    @staticmethod
+    def enable_diag_eval_on_non_local_hosts(self, master):
+        """
+        Enable diag/eval to be run on non-local hosts.
+        :param master: Node information of the master node of the cluster
+        :return: Nothing
+        """
+        remote = RemoteMachineShellConnection(master)
+        output, error = remote.enable_diag_eval_on_non_local_hosts()
+        if "ok" not in output:
+            self.log.error("Error in enabling diag/eval on non-local hosts on {}. {}".format(master.ip, output))
+            raise Exception("Error in enabling diag/eval on non-local hosts on {}".format(master.ip))
+        else:
+            self.log.info("Enabled diag/eval for non-local hosts from {}".format(master.ip))
 
     @staticmethod
     def _log_start(self):
@@ -210,7 +223,7 @@ class SwapRebalanceBase(unittest.TestCase):
         rest = RestConnection(master)
         for bucket in rest.get_buckets():
             loader = dict()
-            loader["mcsoda"] = LoadWithMcsoda(master, self.keys_count / 2, bucket=bucket.name,
+            loader["mcsoda"] = LoadWithMcsoda(master, self.keys_count // 2, bucket=bucket.name,
                     rest_password=master.rest_password, prefix=str(bucket.name), port=8091)
             loader["mcsoda"].cfg["ratio-sets"] = 0.8
             loader["mcsoda"].cfg["ratio-hot"] = 0.2
@@ -257,7 +270,7 @@ class SwapRebalanceBase(unittest.TestCase):
             for node in nodes:
                 if node.ip == server.ip and node.port == server.port:
                     servers_in_cluster.append(server)
-        RebalanceHelper.wait_for_replication(servers_in_cluster, test.cluster_helper)
+        time.sleep(60)
         SwapRebalanceBase.items_verification(test, master)
 
     @staticmethod
@@ -317,7 +330,7 @@ class SwapRebalanceBase(unittest.TestCase):
 
         self.log.info("SWAP REBALANCE PHASE")
         rest.rebalance(otpNodes=[node.id for node in rest.node_statuses()],
-            ejectedNodes=optNodesIds)
+                       ejectedNodes=optNodesIds)
 
         if do_stop_start:
             # Rebalance is stopped at 20%, 40% and 60% completion
@@ -426,16 +439,21 @@ class SwapRebalanceBase(unittest.TestCase):
             times = 2
             if self.cluster_run:
                 times = 20
-            for i in xrange(times):
+            for i in range(times):
                 try:
                     _mc = MemcachedClientHelper.direct_client(master, bucket)
                     pid = _mc.stats()["pid"]
                     break
-                except EOFError as e:
+                except (EOFError, KeyError) as e:
                     self.log.error("{0}.Retry in 2 sec".format(e))
                     SwapRebalanceBase.sleep(self, 2)
         if pid is None:
-            self.fail("impossible to get a PID")
+            # sometimes pid is not returned by mc.stats()
+            shell = RemoteMachineShellConnection(master)
+            pid = shell.get_memcache_pid()
+            shell.disconnect()
+            if pid is None:
+                self.fail("impossible to get a PID")
         command = "os:cmd(\"kill -9 {0} \")".format(pid)
         self.log.info(command)
         killed = rest.diag_eval(command)
@@ -456,7 +474,7 @@ class SwapRebalanceBase(unittest.TestCase):
             self.assertFalse(RestHelper(rest).is_cluster_rebalanced(), msg="cluster need rebalance")
             knownNodes = rest.node_statuses();
             self.log.info("nodes are still in cluster: {0}".format([(node.ip, node.port) for node in knownNodes]))
-            ejectedNodes = list(set(optNodesIds) & set([node.id for node in knownNodes]))
+            ejectedNodes = list(set(optNodesIds) & {node.id for node in knownNodes})
             rest.rebalance(otpNodes=[node.id for node in knownNodes], ejectedNodes=ejectedNodes)
             self.assertTrue(rest.monitorRebalance(),
                             msg="rebalance operation failed after adding node {0}".format(toBeEjectedNodes))
@@ -542,7 +560,7 @@ class SwapRebalanceBase(unittest.TestCase):
         add_back_servers = []
         nodes = rest.get_nodes()
         for server in nodes:
-            if isinstance(server.ip, unicode):
+            if isinstance(server.ip, str):
                 add_back_servers.append(server)
         final_add_back_servers = []
         for server in self.servers:

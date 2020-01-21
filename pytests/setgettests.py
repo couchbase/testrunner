@@ -40,13 +40,11 @@ class SimpleSetGetTestBase(object):
         # Add built-in user
         testuser = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'password': 'password'}]
         RbacBase().create_user_source(testuser, 'builtin', self.master)
-        time.sleep(10)
 
         # Assign user to role
         role_list = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'roles': 'admin'}]
         RbacBase().add_user_role(role_list, RestConnection(self.master), 'builtin')
-        time.sleep(10)
-
+        
     def set_get_test(self, value_size, number_of_items):
         fixed_value = MemcachedClientHelper.create_value("S", value_size)
         specs = [("default", 0),
@@ -55,7 +53,7 @@ class SimpleSetGetTestBase(object):
                 ("set-get-bucket-replica-3", 3)]
         serverInfo = self.master
         rest = RestConnection(serverInfo)
-        bucket_ram = int(rest.get_nodes_self().memoryQuota / 4)
+        bucket_ram = int(rest.get_nodes_self().memoryQuota // 4)
 
         mcport = rest.get_nodes_self().memcached
         for name, replica in specs:
@@ -88,8 +86,12 @@ class SimpleSetGetTestBase(object):
                 for key in remaining_items:
                     try:
                         flag, keyx, value = client.get(key=key)
+                        try:
+                          value = value.decode()
+                        except AttributeError:
+                          pass
                         if not value == fixed_value:
-                            self.test.fail("value mismatch for key {0}".format(key))
+                            self.test.fail("value {0},{1} mismatch for key {2}".format(value,fixed_value,key))
                         verified_keys.append(key)
                     except mc_bin_client.MemcachedError as error:
                         self.log.error(msg.format(error.status, key))
@@ -118,6 +120,12 @@ class SimpleSetGetTestBase(object):
 class MembaseBucket(unittest.TestCase):
 
     simpleSetGetTestBase = None
+    def suite_setUp(self):
+        print("suite_setUp...")
+     
+    def suite_tearDown(self):
+        print("suite_tearDown...")
+
     def setUp(self):
         self.simpleSetGetTestBase = SimpleSetGetTestBase()
         self.simpleSetGetTestBase.setUp_bucket(self)

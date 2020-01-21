@@ -1,9 +1,9 @@
-from user_base_abc import UserBase
+from .user_base_abc import UserBase
 from remote.remote_util import RemoteMachineShellConnection
 
 class LdapUser(UserBase):
 
-    LDAP_HOST = "172.23.108.166"
+    LDAP_HOST = "172.23.120.205"
     LDAP_PORT = "389"
     LDAP_DN = "ou=Users,dc=couchbase,dc=com"
     LDAP_OBJECT_CLASS = "inetOrgPerson"
@@ -64,4 +64,4 @@ class LdapUser(UserBase):
             host = self.host
 
         self.delete_user()
-        return self.create_user()
+        self.create_user()

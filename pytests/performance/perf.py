@@ -81,7 +81,7 @@ class PerfBase(unittest.TestCase):
         self.num_items_loaded = 0
 
         if self.input.clusters:
-            for cluster in self.input.clusters.values():
+            for cluster in list(self.input.clusters.values()):
                 master = cluster[0]
                 self.set_up_rest(master)
                 self.set_up_cluster(master)
@@ -91,7 +91,7 @@ class PerfBase(unittest.TestCase):
 
         # Rebalance
         if self.input.clusters:
-            for cluster in self.input.clusters.values():
+            for cluster in list(self.input.clusters.values()):
                 num_nodes = self.parami("num_nodes_before", len(cluster))
                 self.rebalance_nodes(num_nodes, cluster)
         else:
@@ -99,7 +99,7 @@ class PerfBase(unittest.TestCase):
             self.rebalance_nodes(num_nodes)
 
         if self.input.clusters:
-            for cluster in self.input.clusters.values():
+            for cluster in list(self.input.clusters.values()):
                 master = cluster[0]
                 self.set_up_rest(master)
                 self.set_up_buckets()
@@ -109,7 +109,7 @@ class PerfBase(unittest.TestCase):
         self.set_up_proxy()
 
         if self.input.clusters:
-            for cluster in self.input.clusters.values():
+            for cluster in list(self.input.clusters.values()):
                 master = cluster[0]
                 self.set_up_rest(master)
                 self.reconfigure()
@@ -123,7 +123,7 @@ class PerfBase(unittest.TestCase):
         self.setUpBase1()
 
         if self.input.clusters:
-            for cluster in self.input.clusters.values():
+            for cluster in list(self.input.clusters.values()):
                 self.wait_until_warmed_up(cluster[0])
         else:
             self.wait_until_warmed_up()
@@ -246,7 +246,7 @@ class PerfBase(unittest.TestCase):
 
         self.log.info("changing {0} to {1}".format(param, value))
 
-        for servers in self.input.clusters.values():
+        for servers in list(self.input.clusters.values()):
             rest_conn = RestConnection(servers[0])
             replications = rest_conn.get_replications()
             for repl in replications:
@@ -412,8 +412,7 @@ class PerfBase(unittest.TestCase):
     def get_backups(self, protocol):
         """ Get backup server lists for memcached-binary """
         port = protocol.split(":")[-1]
-        return map(lambda server: "%s:%s" % (server.ip, port),
-                   self.input.servers[1:])
+        return ["%s:%s" % (server.ip, port) for server in self.input.servers[1:]]
 
     def restartProxy(self, bucket=None):
         self.tear_down_proxy()
