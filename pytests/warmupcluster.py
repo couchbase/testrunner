@@ -89,7 +89,7 @@ class WarmUpClusterTest(unittest.TestCase):
             self.log.info("inserted {0} items".format(howmany))
             self.onenodemc.close()
         except Exception as e:
-            print e
+            print(e)
             self.fail("could not set item to bucket")
 
     def do_warmup(self):

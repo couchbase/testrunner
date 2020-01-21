@@ -29,14 +29,14 @@ class TapListener(Thread):
     #            print cmd
         command_names = memcacheConstants.COMMAND_NAMES[cmd]
         if command_names != "CMD_TAP_MUTATION":
-            print "%s: ``%s'' (vb:%d) -> (%d bytes from %s)" % (
+            print("%s: ``%s'' (vb:%d) -> (%d bytes from %s)" % (
             memcacheConstants.COMMAND_NAMES[cmd],
-            key, vb, len(val), identifier)
-            print extra, cas
+            key, vb, len(val), identifier))
+            print(extra, cas)
 
 
     def tap(self):
-        print "starting tap process"
+        print("starting tap process")
         t = TapConnection(self.server, 11210, callback=self.callback, clientId=str(uuid.uuid4()),
 #        opts={})
                           opts={memcacheConstants.TAP_FLAG_BACKFILL: 0xffffffff})
@@ -85,7 +85,7 @@ while i < 4000:
     #    vam.memcached(key).get(key)
 #        mc.set(key, 1, 0, payload, vbucket=0)
         try:
-            a,b,c = mc.get(key, vbucket=0)
+            a, b, c = mc.get(key, vbucket=0)
 #            print c
         except:
             pass
@@ -110,7 +110,7 @@ time.sleep(10)
 new_thread.aborted = True
 time.sleep(30)
 new_thread.join()
-print "total_size", total_size
+print("total_size", total_size)
 #reader = Process(target=tap, args=(server, queue))
 #reader.start()
 #time.sleep(10)

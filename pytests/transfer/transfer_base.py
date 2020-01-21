@@ -27,9 +27,9 @@ class TransferBaseTest(BaseTestCase):
 
     def load_data(self):
         gen_load = BlobGenerator('nosql', 'nosql-', self.value_size, end=self.num_items)
-        gen_update = BlobGenerator('nosql', 'nosql-', self.value_size, end=(self.num_items / 2 - 1))
-        gen_expire = BlobGenerator('nosql', 'nosql-', self.value_size, start=self.num_items / 2, end=(self.num_items * 3 / 4 - 1))
-        gen_delete = BlobGenerator('nosql', 'nosql-', self.value_size, start=self.num_items * 3 / 4, end=self.num_items)
+        gen_update = BlobGenerator('nosql', 'nosql-', self.value_size, end=(self.num_items // 2 - 1))
+        gen_expire = BlobGenerator('nosql', 'nosql-', self.value_size, start=self.num_items // 2, end=(self.num_items * 3 // 4 - 1))
+        gen_delete = BlobGenerator('nosql', 'nosql-', self.value_size, start=self.num_items * 3 // 4, end=self.num_items)
         self._load_all_buckets(self.server_origin, gen_load, "create", 0, 1, self.item_flag, True, batch_size=20000, pause_secs=5, timeout_secs=180)
 
         if(self.doc_ops is not None):

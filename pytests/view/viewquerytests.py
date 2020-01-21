@@ -34,18 +34,17 @@ class StoppableThread(Thread):
     def __init__(self, group=None, target=None, name=None,
                  args=(), kwargs=None, verbose=None):
         super(StoppableThread, self).__init__(group=group, target=target,
-                        name=name, args=args, kwargs=kwargs, verbose=verbose)
-        self._stop = Event()
+                        name=name, args=args, kwargs=kwargs)
+        self._stopper = Event()
         self.tasks = []
 
-    def stop(self):
+    def stopit(self):
         for task in self.tasks:
             task.cancel();
-        self._stop.set()
-        self._Thread__stop()
+        self._stopper.set()
 
     def stopped(self):
-        return self._stop.isSet()
+        return self._stopper.isSet()
 
 class ViewQueryTests(BaseTestCase):
     def setUp(self):
@@ -107,9 +106,9 @@ class ViewQueryTests(BaseTestCase):
         data_set.add_stale_queries(stale_param="false", limit=self.limit)
         #  generate items
         generator_load = data_set.generate_docs(data_set.views[0], start=0,
-                                                end=self.num_docs / 2)
+                                                end=self.num_docs // 2)
         generator_delete = data_set.generate_docs(data_set.views[0],
-                                                  start=self.num_docs / 2,
+                                                  start=self.num_docs // 2,
                                                   end=self.num_docs)
 
         self.load(data_set, generator_load)
@@ -215,8 +214,8 @@ class ViewQueryTests(BaseTestCase):
             2. Simultaneously start querying(different combinations of
                stratkey. endkey, descending, inclusive_end, parameters with non-json char)
         '''
-        symbols = [u"\xf1", u"\xe1", u"\xfc", u"\xbf", u"\xf1", u"\xe1", u"\xfc",
-                   u"\xbf"]
+        symbols = ["\xf1", "\xe1", "\xfc", "\xbf", "\xf1", "\xe1", "\xfc",
+                   "\xbf"]
         data_set = SimpleDataSet(self.master, self.cluster, self.num_docs,
                                  json_case=True)
         generator_load = data_set.generate_docs(data_set.views[0])
@@ -687,7 +686,7 @@ class ViewQueryTests(BaseTestCase):
         servers = self.servers
         try:
             # incrementaly failover nodes and verify loaded data
-            for i in xrange(failover_factor):
+            for i in range(failover_factor):
                 failover_node = self.servers[i]
                 self.cluster.failover(self.servers, [failover_node])
                 failover_nodes.append(failover_node)
@@ -868,7 +867,9 @@ class ViewQueryTests(BaseTestCase):
             gen_load = data_set.generate_docs(data_set.views[0])
             self.load(data_set, gen_load)
             for server in self.servers:
+                self.log.info("-->RebalanceHelper.wait_for_persistence({},{}".format(server, data_set.bucket))
                 RebalanceHelper.wait_for_persistence(server, data_set.bucket)
+            self.log.info("-->_query_all_views...")
             self._query_all_views(data_set.views, gen_load)
         else:
             self._query_test_init(data_set)
@@ -978,7 +979,7 @@ class ViewQueryTests(BaseTestCase):
         self.load(data_set, gen_load)
 
         query_nodes_threads = []
-        for i in xrange(len(self.servers)):
+        for i in range(len(self.servers)):
             t = StoppableThread(target=self._query_all_views,
                name="query-node-{0}".format(i),
                args=(data_set.views, gen_load,
@@ -992,7 +993,7 @@ class ViewQueryTests(BaseTestCase):
             self.thread_stopped.wait(60)
             if self.thread_crashed.is_set():
                 for t in query_nodes_threads:
-                    t.stop()
+                    t.stopit()
                 break
             else:
                 query_nodes_threads = [d for d in query_nodes_threads if d.is_alive()]
@@ -1096,7 +1097,7 @@ class ViewQueryTests(BaseTestCase):
         self._query_all_views(data_set.views, gen_load)
 
         # rebalance_in and verify loaded data
-        for i in xrange(1, len(self.servers)):
+        for i in range(1, len(self.servers)):
                 rebalance = self.cluster.async_rebalance(self.servers[:i + 1], [self.servers[i]], [])
                 self.server = self.servers[i]
                 self.log.info("Queries started!")
@@ -1120,7 +1121,7 @@ class ViewQueryTests(BaseTestCase):
         self.load(data_set, gen_load)
 
         view_map_func = "function (doc) {\n  emit(doc._id, doc);\n}"
-        views = [View("view_name_" + str(i), view_map_func, None, True)for i in xrange(views_num)]
+        views = [View("view_name_" + str(i), view_map_func, None, True)for i in range(views_num)]
 
         tasks = []
         for view in views:
@@ -1133,7 +1134,7 @@ class ViewQueryTests(BaseTestCase):
             #update/delete
             if action == 'update':
                 view_map_func_new = "function (doc) {if(doc.age !== undefined) { emit(doc.age, doc.name);}}"
-                views = [View("view_name_" + str(i), view_map_func_new, None, True)for i in xrange(views_num)]
+                views = [View("view_name_" + str(i), view_map_func_new, None, True)for i in range(views_num)]
                 for view in views:
                     tasks.append(self.cluster.async_create_view(self.servers[0], ddoc_name, view))
             if action == 'delete':
@@ -1248,7 +1249,7 @@ class ViewQueryTests(BaseTestCase):
         self.load(data_set, gen_load)
 
         query_nodes_threads = []
-        for i in xrange(num_threads):
+        for i in range(num_threads):
             t = StoppableThread(target=self._query_all_views,
                    name="query-node-%s" % i,
                    args=(data_set.views, gen_load))
@@ -1261,7 +1262,7 @@ class ViewQueryTests(BaseTestCase):
             self.thread_stopped.wait(60)
             if self.thread_crashed.is_set():
                 for t in query_nodes_threads:
-                    t.stop()
+                    t.stopit()
                 break
             else:
                 query_nodes_threads = [d for d in query_nodes_threads if d.is_alive()]
@@ -1323,9 +1324,9 @@ class ViewQueryTests(BaseTestCase):
 
         data_set.add_skip_queries(skip, limit=self.limit)
         generator_load = data_set.generate_docs(data_set.views[0], start=0,
-                                                  end=self.num_docs / 2)
+                                                  end=self.num_docs // 2)
         generator_update_delete = data_set.generate_docs(data_set.views[0],
-                                                  start=self.num_docs / 2,
+                                                  start=self.num_docs // 2,
                                                   end=self.num_docs)
         self.load(data_set, generator_load)
         self.load(data_set, generator_update_delete)
@@ -1469,7 +1470,7 @@ class ViewQueryTests(BaseTestCase):
             self.thread_stopped.wait(60)
             if self.thread_crashed.is_set():
                 for t in query_bucket_threads:
-                    t.stop()
+                    t.stopit()
                 break
             else:
                 query_bucket_threads = [d for d in query_bucket_threads if d.is_alive()]
@@ -1496,7 +1497,7 @@ class ViewQueryTests(BaseTestCase):
         view = View(ddoc_name, view_map_func, None, False)
 
         tasks = []
-        for i in xrange(ddoc_num):
+        for i in range(ddoc_num):
             tasks.append(self.cluster.async_create_view(self.servers[0], ddoc_name + str(i), view))
 
         #update/delete
@@ -1508,10 +1509,10 @@ class ViewQueryTests(BaseTestCase):
             if action == 'update':
                 view_map_func_new = "function (doc) {if(doc.age !== undefined) { emit(doc.age, doc.name);}}"
                 view = View(ddoc_name, view_map_func_new, None, True)
-                for i in xrange(ddoc_num):
+                for i in range(ddoc_num):
                     tasks.append(self.cluster.async_create_view(self.servers[0], ddoc_name + str(i), view))
             if action == 'delete':
-                for i in xrange(ddoc_num):
+                for i in range(ddoc_num):
                     prefix = ("", "dev_")[view.dev_view]
                     tasks.append(self.cluster.async_delete_view(self.servers[0], prefix + ddoc_name + str(i), None))
 
@@ -1721,7 +1722,7 @@ class ViewQueryTests(BaseTestCase):
         data_set = FlagsDataSet(self.master, self.cluster, self.num_docs)
         generator_load = data_set.generate_docs(data_set.views[0])
         self.load(data_set, generator_load, flag=data_set.item_flag)
-        print data_set.item_flag
+        print(data_set.item_flag)
         for server in self.servers:
             RebalanceHelper.wait_for_persistence(server, data_set.bucket)
         data_set.query_verify_value(self)
@@ -1877,14 +1878,14 @@ class ViewQueryTests(BaseTestCase):
         data_set = SimpleDataSet(self.master, self.cluster, self.num_docs)
         generator_load = data_set.generate_docs(data_set.views[0], start=0,
                                                 end=self.num_docs)
-        for ddoc_index in xrange(num_ddocs):
+        for ddoc_index in range(num_ddocs):
             view_fn = 'function (doc) {if(doc.age !== undefined) { emit(doc.age, "value_%s");}}' % ddoc_index
             data_set.views.append(QueryView(self.master, self.cluster, fn_str=view_fn))
         data_set.add_stale_queries(stale_param="false", limit=self.limit)
         self.load(data_set, generator_load)
 
         query_threads = []
-        for t_index in xrange(num_threads):
+        for t_index in range(num_threads):
             t = StoppableThread(target=self._query_all_views,
                                 name="query-{0}".format(t_index),
                                 args=(data_set.views, generator_load, None,
@@ -1898,7 +1899,7 @@ class ViewQueryTests(BaseTestCase):
             self.thread_stopped.wait(60)
             if self.thread_crashed.is_set():
                 for t in query_threads:
-                    t.stop()
+                    t.stopit()
                 break
             else:
                 query_threads = [d for d in query_threads if d.is_alive()]
@@ -1997,7 +1998,7 @@ class ViewQueryTests(BaseTestCase):
                 if 'stop' in dir(threading.currentThread()) and\
                    isinstance(threading.currentThread(), StoppableThread):
                     threading.currentThread().tasks.append(task)
-                    threading.currentThread().stop()
+                    threading.currentThread().stopit()
                 else:
                     task.cancel()
             raise ex
@@ -2035,10 +2036,10 @@ class ViewQueryTests(BaseTestCase):
             if self.thread_crashed.is_set():
                 self.log.error("Will stop all threads!")
                 for t in threads:
-                    t.stop()
+                    t.stopit()
                     self.log.error("Thread %s stopped" % str(t))
                 for t in query_threads:
-                    t.stop()
+                    t.stopit()
                     self.log.error("Thread %s stopped" % str(t))
                 self._check_view_intergrity(views)
                 return
@@ -2069,7 +2070,7 @@ class ViewQueryTests(BaseTestCase):
             view_struct = 'Views : %s' % views_str
             msg = "\n****************** Error report *********************\n"
             msg += "Failure message is: %s\nTest case info:\n%s\nViews structure are:\n%s\n\n" % (
-                                ex[1], getattr(self, self._testMethodName).func_doc, view_struct)
+                                ex[1], getattr(self, self._testMethodName).__doc__, view_struct)
             report += msg
         return report
 
@@ -2147,7 +2148,7 @@ class QueryView:
                     params_gen_results = copy.deepcopy(query.params)
                     if query.non_json:
                         params_gen_results = {}
-                        for key, value in query.params.iteritems():
+                        for key, value in query.params.items():
                             params_gen_results[key] = value.replace('"', '')
                     task = tc.cluster.async_generate_expected_view_results(
                         doc_gens, self.view, params_gen_results)
@@ -2192,7 +2193,7 @@ class QueryView:
                         msg += "DEBUG INFO: %s" % debug_info["errors"]
                     self.results.addFailure(tc, (Exception, msg, sys.exc_info()[2]))
                     tc.thread_crashed.set()
-        except Exception, ex:
+        except Exception as ex:
             self.log.error("Error {0} appeared during query run".format(ex))
             self.results.addError(tc, (Exception, str(ex), sys.exc_info()[2]))
             tc.thread_crashed.set()
@@ -2264,7 +2265,7 @@ class EmployeeDataSet:
         views = views or self.views
         extra_params_dict = {}
         import types
-        if extra_params and type(extra_params) != types.DictType:
+        if extra_params and not isinstance(extra_params, dict):
             extra_params_dict = ViewQueryTests.parse_string_to_dict(extra_params)
 
         for view in views:
@@ -2509,11 +2510,11 @@ class EmployeeDataSet:
         generators = []
         if end is None:
             end = self.docs_per_day
-        join_yr = range(2008, 2008 + self.years)
-        join_mo = range(1, self.months + 1)
-        join_day = range(1, self.days + 1)
-        name = ["employee-%s-%s" % (view.prefix, str(i)) for i in xrange(start, end)]
-        email = ["%s-mail@couchbase.com" % str(i) for i in xrange(start, end)]
+        join_yr = list(range(2008, 2008 + self.years))
+        join_mo = list(range(1, self.months + 1))
+        join_day = list(range(1, self.days + 1))
+        name = ["employee-%s-%s" % (view.prefix, str(i)) for i in range(start, end)]
+        email = ["%s-mail@couchbase.com" % str(i) for i in range(start, end)]
         template = '{{ "name":"{0}", "join_yr":{1}, "join_mo":{2}, "join_day":{3},'
         template += ' "email":"{4}", "job_title":"{5}", "type":"{6}", "desc":"{7}"}}'
         for info in self.get_data_sets():
@@ -2554,8 +2555,8 @@ class SimpleDataSet:
     def generate_docs(self, view, start=0, end=None):
         if end is None:
             end = self.num_docs
-        age = range(start, end)
-        name = [view.prefix + '-' + str(i) for i in xrange(start, end)]
+        age = list(range(start, end))
+        name = [view.prefix + '-' + str(i) for i in range(start, end)]
         template = '{{ "age": {0}, "name": "{1}" }}'
 
         gen_load = DocumentGenerator(view.prefix, template, age, name, start=start,
@@ -2583,7 +2584,7 @@ class SimpleDataSet:
         rest = RestConnection(self.server)
         _, stat = rest.set_view_info(view.bucket, view.name)
         partition_seq = 0
-        for value in stat['partition_seqs'].itervalues():
+        for value in stat['partition_seqs'].values():
                     partition_seq += value
         return partition_seq
     
@@ -2591,7 +2592,7 @@ class SimpleDataSet:
         rest = RestConnection(self.server)
         _, stat = rest.set_view_info(view.bucket, view.name)
         replica_partition_seq = 0
-        for value in stat['replica_group_info']['partition_seqs'].itervalues():
+        for value in stat['replica_group_info']['partition_seqs'].values():
                     replica_partition_seq += value
         return replica_partition_seq
 
@@ -2619,7 +2620,7 @@ class SimpleDataSet:
         for view in views:
             if view.reduce_fn:
                 continue
-            start_key = self.num_docs / 2
+            start_key = self.num_docs // 2
             end_key = self.num_docs - 2
 
             view.queries += [QueryHelper({"startkey" : end_key,
@@ -2643,7 +2644,7 @@ class SimpleDataSet:
 
         for view in views:
             view.queries = list()
-            start_key = '"%s-%s"' % (views[0].prefix, str(self.num_docs / 2))
+            start_key = '"%s-%s"' % (views[0].prefix, str(self.num_docs // 2))
             end_key = '"%s-%s%s"' % (views[0].prefix, str(self.num_docs - 2), symbol)
 
             view.queries += [QueryHelper({"startkey" : end_key,
@@ -2756,9 +2757,9 @@ class SalesDataSet:
         generators = []
         if end is None:
             end = self.docs_per_day
-        join_yr = range(2008, 2008 + self.years)
-        join_mo = range(1, self.months + 1)
-        join_day = range(1, self.days + 1)
+        join_yr = list(range(2008, 2008 + self.years))
+        join_mo = list(range(1, self.months + 1))
+        join_day = list(range(1, self.days + 1))
 
         if self.test_datatype:
             template = '{{ "join_yr" : {0}, "join_mo" : {1}, "join_day" : {2},'
@@ -2787,7 +2788,7 @@ class SalesDataSet:
         else:
             template = '{{ "join_yr" : {0}, "join_mo" : {1}, "join_day" : {2},'
             if self.template_items_num:
-                for num in xrange(self.template_items_num - 2):
+                for num in range(self.template_items_num - 2):
                     template += '"item_%s" : "value_%s",' % (num, num)
             template += ' "sales" : {3} }}'
             sales = [200000, 400000, 600000, 800000]
@@ -2805,7 +2806,7 @@ class SalesDataSet:
     def add_reduce_queries(self, params, views=None, limit=None):
         views = views or self.views
         for view in views:
-            if type(params) == types.DictType:
+            if isinstance(params, dict):
                 params_dict = params
             else:
                 params_dict = ViewQueryTests.parse_string_to_dict(params)
@@ -2989,8 +2990,8 @@ class ExpirationDataSet:
     def generate_docs(self, view, start=0, end=None):
         if end is None:
             end = self.num_docs
-        age = range(start, end)
-        name = [view.prefix + '-' + str(i) for i in xrange(start, end)]
+        age = list(range(start, end))
+        name = [view.prefix + '-' + str(i) for i in range(start, end)]
         template = '{{ "age": {0}, "name": "{1}" }}'
 
         gen_load = DocumentGenerator(view.prefix, template, age, name, start=start,
@@ -3008,11 +3009,11 @@ class ExpirationDataSet:
                 self.query["full_set"] = "true"
             results = tc._rconn().query_view(view.name, view.name,
                                              self.bucket, query, timeout=600)
-            tc.assertTrue(len(results.get(u'rows', 0)) == self.num_docs,
+            tc.assertTrue(len(results.get('rows', 0)) == self.num_docs,
                           "Actual results %s, expected %s" % (
-                                    len(results.get(u'rows', 0)), self.num_docs))
-            for row in results.get(u'rows', 0):
-                tc.assertTrue(row['value'] in xrange(self.expire_millis - 200, self.expire_millis + 600),
+                                    len(results.get('rows', 0)), self.num_docs))
+            for row in results.get('rows', 0):
+                tc.assertTrue(row['value'] in range(self.expire_millis - 200, self.expire_millis + 600),
                                   "Expiration should be %s, but actual is %s" % \
                                    (self.expire_millis, row['value']))
             tc.log.info("Expiration emmited correctly")
@@ -3036,8 +3037,8 @@ class FlagsDataSet:
     def generate_docs(self, view, start=0, end=None):
         if end is None:
             end = self.num_docs
-        age = range(start, end)
-        name = [view.prefix + '-' + str(i) for i in xrange(start, end)]
+        age = list(range(start, end))
+        name = [view.prefix + '-' + str(i) for i in range(start, end)]
         template = '{{ "age": {0}, "name": "{1}" }}'
 
         gen_load = DocumentGenerator(view.prefix, template, age, name, start=start,
@@ -3052,11 +3053,11 @@ class FlagsDataSet:
                 self.query["full_set"] = "true"
             results = tc._rconn().query_view(view.name, view.name,
                                              self.bucket, query, timeout=600)
-            tc.assertEquals(len(results.get(u'rows', 0)), self.num_docs,
+            tc.assertEqual(len(results.get('rows', 0)), self.num_docs,
                               "Returned number of items is incorrect"\
                               "Actual:%s, expected:%s" % (
-                                            len(results.get(u'rows', 0)), self.num_docs))
-            for row in results.get(u'rows', 0):
+                                            len(results.get('rows', 0)), self.num_docs))
+            for row in results.get('rows', 0):
                 tc.assertTrue(row['value'] == self.item_flag,
                                   "Flag should be %s, but actual is %s" % \
                                    (self.item_flag, row['value']))
@@ -3083,7 +3084,7 @@ class BigDataSet:
     def generate_docs(self, view, start=0, end=None):
         if end is None:
             end = self.num_docs
-        age = range(start, end)
+        age = list(range(start, end))
         name = ['a' * self.value_size, ]
         template = '{{ "age": {0}, "name": "{1}" }}'
 

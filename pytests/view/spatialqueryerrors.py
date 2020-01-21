@@ -62,7 +62,7 @@ class SpatialQueryErrorsTests(BaseTestCase):
         try:
             self.spatial_query(query_params)
         except QueryViewException as ex:
-            self.assertEquals(self.input.test_params['error'],
+            self.assertEqual(self.input.test_params['error'],
                               json.loads(ex.reason)['error'])
         else:
             self.fail("Query did not fail, but should have. "

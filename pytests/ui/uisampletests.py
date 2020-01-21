@@ -5,7 +5,7 @@ import unittest
 from selenium.common.exceptions import StaleElementReferenceException, ElementNotVisibleException
 from lib.testconstants import STANDARD_BUCKET_PORT
 
-from uibasetest import * 
+from .uibasetest import * 
 from selenium import webdriver
 from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
 from selenium.webdriver.support.ui import WebDriverWait
@@ -57,7 +57,7 @@ class BucketTests(BaseUITestCase):
         NavigationHelper(self).navigate('Buckets')
         try:
             BucketHelper(self).create(bucket)
-        except Exception, ex:
+        except Exception as ex:
             if error and str(ex).find('create new bucket pop up is not closed') != -1:
                 actual_err = BucketHelper(self).get_error()
                 self.assertTrue(actual_err.find(error) != -1, 'Expected error %s. Actual %s' % (error, actual_err))
@@ -83,7 +83,7 @@ class BucketTests(BaseUITestCase):
         BucketHelper(self).open_stats(self.bucket)
         total_views_st = BucketHelper(self).get_stat("views total disk size").replace(' views total', '')
         view_st = BucketHelper(self).get_stat("disk size", block="view")
-        self.assertEquals(total_views_st, view_st,
+        self.assertEqual(total_views_st, view_st,
                           "Stats should be equal, but views total disk size is %s"
                           " and disk size from view section is %s" % (
                             total_views_st, view_st))
@@ -105,7 +105,7 @@ class BucketTests(BaseUITestCase):
         self.add_built_in_server_user(testuser=testuser, rolelist=rolelist)
         client = MemcachedClientHelper.direct_client(self.servers[0], self.bucket.name)
         conn_stat = int(client.stats()["curr_connections"])
-        self.assertEquals(int(conn_st), conn_stat - 1,
+        self.assertEqual(int(conn_st), conn_stat - 1,
                           "Stats should be equal, but connections on UI is %s"
                           " and curr_connections is %s" % (
                             conn_st, conn_stat))
@@ -149,7 +149,7 @@ class InitializeTest(BaseUITestCase):
                 rest.force_eject_node()
                 time.sleep(10)
                 self.driver.refresh()
-            except BaseException, e:
+            except BaseException as e:
                 self.fail(e)
 
 class DocumentsTest(BaseUITestCase):
@@ -257,20 +257,20 @@ class DocumentsTest(BaseUITestCase):
         num_pages = int(num_docs / items_per_page)
 
         DocsHelper(self).select_docs_per_page('100')
-        for i in xrange(num_docs):
+        for i in range(num_docs):
             doc = Document(doc_name + str(i), doc_content)
             DocsHelper(self).create_doc(doc)
             self.assertTrue(DocsHelper(self).get_error() is None, "error appears: %s" \
                             % DocsHelper(self).get_error())
 
         DocsHelper(self).select_docs_per_page(str(items_per_page))
-        self.assertEquals(num_pages, DocsHelper(self).get_total_pages_num(),
+        self.assertEqual(num_pages, DocsHelper(self).get_total_pages_num(),
                           "Total number of pages should be %s, actual is %s" % \
                           (num_pages, DocsHelper(self).get_total_pages_num()))
 
         self.log.info("total number of pages is %s as expected" % num_pages)
 
-        for page in xrange(1, num_pages + 1):
+        for page in range(1, num_pages + 1):
             self.assertTrue(items_per_page >= DocsHelper(self).get_rows_count(),
                             "Items number per page is incorrect %s, expected %s" % \
                             (DocsHelper(self).get_rows_count(), items_per_page))
@@ -382,7 +382,7 @@ class ROuserTests(BaseUITestCase):
         # SettingsHelper(self).click_ro_tab()
         try:
             SettingsHelper(self).create_user(username, password, verify_password)
-        except Exception, ex:
+        except Exception as ex:
             self.assertTrue(str(ex).find(error) != -1, "Error message is incorrect. Expected %s, actual %s" % (error, str(ex)))
         else:
             self.fail("Error %s expected but not appeared" % error)
@@ -458,7 +458,7 @@ class RebalanceProgressTests(BaseUITestCase):
         num_buckets = self.input.param("num_buckets", 1)
         self.buckets = []
         NavigationHelper(self).navigate('Buckets')
-        for i in xrange(num_buckets):
+        for i in range(num_buckets):
             bucket = Bucket(name='bucket%s' % i, ram_quota=200, sasl_pwd='password')
             RestConnection(self.servers[0]).create_bucket(bucket=bucket.name, ramQuotaMB=bucket.ram_quota or 100,
                                                           saslPassword=bucket.sasl_password,
@@ -501,7 +501,7 @@ class GracefullFailoverTests(BaseUITestCase):
             self.num_replica = self.input.param("replica", 1)
             self.buckets = []
             NavigationHelper(self).navigate('Buckets')
-            for i in xrange(num_buckets):
+            for i in range(num_buckets):
                 bucket = Bucket(name='bucket%s' % i, ram_quota=200, sasl_pwd='password',
                                 replica=self.num_replica)
                 RestConnection(self.servers[0]).create_bucket(bucket=bucket.name, ramQuotaMB=bucket.ram_quota or 100,
@@ -546,7 +546,7 @@ class GracefullFailoverTests(BaseUITestCase):
             self.fail("There is no enough VMs. Need at least %s" % len(is_graceful))
         NavigationHelper(self).navigate('Server Nodes')
         confirm_failover_check = True
-        for iter in xrange(len(is_graceful)):
+        for iter in range(len(is_graceful)):
             if self.num_replica < self.nodes_init - 1 and self.rebalance:
                 confirm_failover_check = False
             ServerHelper(self).failover(self.servers[iter + 1], confirm=True, graceful=is_graceful[iter], confirm_failover=confirm_failover_check)
@@ -597,7 +597,7 @@ class ViewsTests(BaseUITestCase):
         helper = BaseHelper(self)
         helper.login()
         NavigationHelper(self).navigate('Buckets')
-        for i in xrange(num_buckets):
+        for i in range(num_buckets):
             bucket = Bucket(name='bucket%s' % i, ram_quota=200, sasl_pwd='password')
             RestConnection(self.servers[0]).create_bucket(bucket=bucket.name, ramQuotaMB=bucket.ram_quota or 100,
                                                           saslPassword=bucket.sasl_password,
@@ -617,7 +617,7 @@ class ViewsTests(BaseUITestCase):
             NavigationHelper(self).navigate('Indexes')
             DdocViewHelper(self).click_view_tab(text='Views')
             DdocViewHelper(self).create_view(self.ddoc_name, self.view_name)
-        except Exception, ex:
+        except Exception as ex:
             self.log.error(str(ex))
             raise ex
 
@@ -626,7 +626,7 @@ class ViewsTests(BaseUITestCase):
             NavigationHelper(self).navigate('Indexes')
             DdocViewHelper(self).click_view_tab(text='Views')
             DdocViewHelper(self).create_view(self.ddoc_name, self.view_name, dev_view=False)
-        except Exception, ex:
+        except Exception as ex:
             self.log.error(str(ex))
             raise ex
 
@@ -636,7 +636,7 @@ class ViewsTests(BaseUITestCase):
             DdocViewHelper(self).click_view_tab(text='Views')
             DdocViewHelper(self).create_view(self.ddoc_name, self.view_name)
             DdocViewHelper(self).delete_view(self.view_name)
-        except Exception, ex:
+        except Exception as ex:
             self.log.error(str(ex))
             raise ex
 
@@ -648,7 +648,7 @@ class ViewsTests(BaseUITestCase):
             DdocViewHelper(self).create_view(self.ddoc_name, self.view_name)
             DdocViewHelper(self).edit_view(self.view_name)
             DdocViewHelper(self).fill_edit_view_screen(self.view_name, action)
-        except Exception, ex:
+        except Exception as ex:
             self.log.error(str(ex))
             raise ex
 
@@ -659,7 +659,7 @@ class ViewsTests(BaseUITestCase):
         view_set = self.input.param('view_set', 'dev')
         doc_name = self.input.param('doc_name', 'test')
         doc_content = self.input.param('content', '{"test" : "test"}')
-        for i in xrange(num_docs):
+        for i in range(num_docs):
             doc = Document(doc_name + str(i), doc_content)
             DocsHelper(self).create_doc(doc)
             self.assertTrue(DocsHelper(self).get_error() is None, "error appears: %s" \
@@ -680,7 +680,7 @@ class ViewsTests(BaseUITestCase):
         doc_name = self.input.param('doc_name', 'test')
         doc_content = self.input.param('content', '{{ "age": {0}, "first_name": "{1}" }}')
         age_sum = 0
-        for i in xrange(num_docs):
+        for i in range(num_docs):
             doc = Document(doc_name + str(i), doc_content.format(i, doc_name + str(i)))
             DocsHelper(self).create_doc(doc)
             self.assertTrue(DocsHelper(self).get_error() is None, "error appears: %s" \
@@ -1320,7 +1320,7 @@ class ServerHelper():
         ind = row_num = 0
         for row in rows:
             row_num += 1
-            for i in xrange(5):
+            for i in range(5):
                 try:
                     rows = self.controls.server_rows()
                     if row.get_text().find(str(ip)) != -1:
@@ -1401,7 +1401,7 @@ class ServerHelper():
 
     def close_server_stats(self, server):
         self.tc.log.info("Close stats for server % s" % server.ip)
-        for i in xrange(3):
+        for i in range(3):
             try:
                 self.controls.server_info(server.ip).server_arrow_opened.click()
                 break
@@ -1452,7 +1452,7 @@ class ServerHelper():
             try:
                 self.controls.server_row_btns(server.ip).failover_btn.click()
                 break
-            except Exception, ex:
+            except Exception as ex:
                 i += 1
                 if i == 4:
                     raise ex
@@ -1509,7 +1509,7 @@ class ServerHelper():
         return self.controls.failover_warning().get_text()
 
     def is_node_failed_over(self, server):
-        for i in xrange(3):
+        for i in range(3):
             try:
                 return self.controls.failed_over_msg(server.ip).is_displayed()
             except:
@@ -1530,7 +1530,7 @@ class ServerHelper():
             try:
                 self.controls.recovery_btn(server.ip).click()
                 break
-            except Exception, ex:
+            except Exception as ex:
                 i += 1
                 if i == 4:
                     raise ex
@@ -1718,7 +1718,7 @@ class BucketHelper():
             return False
 
     def open_documents(self, bucket):
-        for i in xrange(3):
+        for i in range(3):
             try:
                 self.controls.bucket_info(bucket.name).documents.click()
                 break
@@ -1937,19 +1937,19 @@ class DdocViewHelper():
         try:
             return self.controls.view_row(view_name).row.is_displayed()
         except Exception as ex:
-            print ex
+            print(ex)
             return False
 
     def is_new_view_present(self, view_name):
         try:
             return self.controls.view_screen(view_name).view_name_set.is_displayed()
         except Exception as ex:
-            print ex
+            print(ex)
             return self.controls.view_screen(view_name).view_name_set.is_displayed()
 
     def open_view(self, view_name):
         self.tc.log.info('trying open view %s' % view_name)
-        for i in xrange(3):
+        for i in range(3):
             try:
                 self.controls.view_row(view_name).name.click()
                 break
@@ -1978,7 +1978,7 @@ class DdocViewHelper():
 
     def edit_view(self, view_name):
         self.tc.log.info('trying edit view %s' % view_name)
-        for i in xrange(3):
+        for i in range(3):
             try:
                 self.controls.view_row(view_name).edit_btn.click()
             except:
@@ -2391,7 +2391,7 @@ class SettingsHelper:
         self.controls.external_user_create_info().name_inp.type_native(user)
         self.controls.external_user_create_info().name_full_inp.type_native(fullname)
         if roles:
-            for i in xrange(len(roles)):
+            for i in range(len(roles)):
                 # self.controls.external_user_create_info().roles_selector.click()
                 self.controls.external_user_create_info(roles[i:]).roles_items[0].click()
         self.controls.external_user_create_info().save_button.click()

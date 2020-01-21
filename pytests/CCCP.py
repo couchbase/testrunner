@@ -64,7 +64,7 @@ class CCCP(BaseTestCase):
                 if econfig_expected == config:
                     self.fail("It should not allow to set this format config ")
             except Exception as e:
-                if e and not "Got empty data" in str(e):
+                if e and not "Memcached error #4 'Invalid'" in str(e):
                     self.fail("ns server should not allow to set this config format")
 
     def test_not_my_vbucket_config(self):
@@ -76,15 +76,22 @@ class CCCP(BaseTestCase):
         not_my_vbucket = False
         for bucket in self.buckets:
             while self.gen_load.has_next() and not not_my_vbucket:
-                key, _ = self.gen_load.next()
+                key, _ = next(self.gen_load)
                 try:
                     self.clients[bucket.name].get(key)
-                except Exception, ex:
+                except Exception as ex:
                     self.log.info("Config in exception is correct. Bucket %s, key %s"\
                                                                  % (bucket.name, key))
                     config = str(ex)[str(ex).find("Not my vbucket':") \
                                                  + 16 : str(ex).find("for vbucket")]
-                    config = json.loads(config)
+                    if not config.endswith("}"):
+                        config += "}"
+                    try:
+                        config = json.loads(config)
+                    except Exception as e:
+                        if "Expecting object" in str(e):
+                            config += "}"
+                            config = json.loads(config)
                     self.verify_config(config, bucket)
                     """ from watson, only the first error contains bucket details """
                     not_my_vbucket = True

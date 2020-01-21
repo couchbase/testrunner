@@ -20,8 +20,8 @@ class WarmUpTests(BaseTestCase):
             self.doc_ops = self.doc_ops.split(";")
         generate_load = BlobGenerator('nosqlini', 'nosqlini-', self.value_size, end=self.num_items)
         self._load_all_buckets(self.servers[0], generate_load, "create", 0, batch_size=2000)
-        #reinitialize active_resident_threshold
-        self.active_resident_threshold = 0
+        # reinitialize active_resident_threshold to avoid further data loading as dgm
+        self.active_resident_threshold = 100
 
     def tearDown(self):
         super(WarmUpTests, self).tearDown()
@@ -133,7 +133,7 @@ class WarmUpTests(BaseTestCase):
 
     def _stats_report(self, server, bucket, after_warmup_stats):
         self.log.info("******** Stats before Warmup **********")
-        for key, value in self.pre_warmup_stats[bucket.name]["%s:%s" % (server.ip, server.port)].iteritems():
+        for key, value in self.pre_warmup_stats[bucket.name]["%s:%s" % (server.ip, server.port)].items():
             self.log.info("%s on %s:%s is %s for bucket %s" % (key, server.ip, server.port, value, bucket.name))
 
         self.log.info("******** Stats after Warmup **********")
@@ -193,7 +193,7 @@ class WarmUpTests(BaseTestCase):
                 scanner_runs = stats_all_buckets[bucket.name].get_stats([server], bucket, '', 'ep_num_access_scanner_runs')[server]
                 self.log.info("current access scanner run for %s in bucket %s is %s times" % (server.ip, bucket.name, scanner_runs))
                 self.log.info("setting access scanner time %s minutes for %s in bucket %s" % (self.access_log_time, server.ip, bucket.name))
-                ClusterOperationHelper.flushctl_set(server, "alog_sleep_time", self.access_log_time , bucket.name)
+                ClusterOperationHelper.flushctl_set(server, "alog_sleep_time", self.access_log_time, bucket.name)
                 if not self._wait_for_access_run(self.access_log_time, scanner_runs, server, bucket, stats_all_buckets[bucket.name]):
                     self.fail("Not able to create access log within %s minutes" % self.access_log_time)
 
