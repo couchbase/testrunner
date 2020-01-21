@@ -39,7 +39,7 @@ class OpsChangeCasTests(BucketConfig):
         for i in range(10):
             # set a key
             value = 'value' + str(i)
-            client.memcached(KEY_NAME).set(KEY_NAME, 0, 0,json.dumps({'value':value}))
+            client.memcached(KEY_NAME).set(KEY_NAME, 0, 0, json.dumps({'value':value}))
             vbucket_id = client._get_vBucket_id(KEY_NAME)
             #print 'vbucket_id is {0}'.format(vbucket_id)
             mc_active = client.memcached(KEY_NAME)
@@ -56,11 +56,11 @@ class OpsChangeCasTests(BucketConfig):
         # remove that node
         self.log.info('Remove the node with active data')
 
-        rebalance = self.cluster.async_rebalance(self.servers[-1:], [] ,[self.master])
+        rebalance = self.cluster.async_rebalance(self.servers[-1:], [], [self.master])
 
         rebalance.result()
         replica_CAS = mc_replica.getMeta(KEY_NAME)[4]
-        get_meta_resp = mc_replica.getMeta(KEY_NAME,request_extended_meta_data=False)
+        get_meta_resp = mc_replica.getMeta(KEY_NAME, request_extended_meta_data=False)
         #print 'replica CAS {0}'.format(replica_CAS)
         #print 'replica ext meta {0}'.format(get_meta_resp)
 
@@ -76,7 +76,7 @@ class OpsChangeCasTests(BucketConfig):
         active_CAS = mc_active.getMeta(KEY_NAME)[4]
         #print 'active cas {0}'.format(active_CAS)
 
-        self.assertTrue(replica_CAS == active_CAS, 'cas mismatch active: {0} replica {1}'.format(active_CAS,replica_CAS))
+        self.assertTrue(replica_CAS == active_CAS, 'cas mismatch active: {0} replica {1}'.format(active_CAS, replica_CAS))
         # not supported in 4.6 self.assertTrue( get_meta_resp[5] == 1, msg='Metadata indicate conflict resolution is not set')
 
     def test_meta_failover(self):
@@ -88,7 +88,7 @@ class OpsChangeCasTests(BucketConfig):
         for i in range(10):
             # set a key
             value = 'value' + str(i)
-            client.memcached(KEY_NAME).set(KEY_NAME, 0, 0,json.dumps({'value':value}))
+            client.memcached(KEY_NAME).set(KEY_NAME, 0, 0, json.dumps({'value':value}))
             vbucket_id = client._get_vBucket_id(KEY_NAME)
             #print 'vbucket_id is {0}'.format(vbucket_id)
             mc_active = client.memcached(KEY_NAME)
@@ -108,7 +108,7 @@ class OpsChangeCasTests(BucketConfig):
 
         self.log.info('Remove the node with active data {0}'.format(self.master))
 
-        rebalance = self.cluster.async_rebalance(self.servers[:], [] ,[self.master])
+        rebalance = self.cluster.async_rebalance(self.servers[:], [], [self.master])
 
         rebalance.result()
         time.sleep(60)
@@ -128,11 +128,11 @@ class OpsChangeCasTests(BucketConfig):
         active_CAS = mc_active.getMeta(KEY_NAME)[4]
         #print 'active cas {0}'.format(active_CAS)
 
-        get_meta_resp = mc_active.getMeta(KEY_NAME,request_extended_meta_data=False)
+        get_meta_resp = mc_active.getMeta(KEY_NAME, request_extended_meta_data=False)
         #print 'replica CAS {0}'.format(replica_CAS)
         #print 'replica ext meta {0}'.format(get_meta_resp)
 
-        self.assertTrue(replica_CAS == active_CAS, 'cas mismatch active: {0} replica {1}'.format(active_CAS,replica_CAS))
+        self.assertTrue(replica_CAS == active_CAS, 'cas mismatch active: {0} replica {1}'.format(active_CAS, replica_CAS))
         self.assertTrue( get_meta_resp[5] == 1, msg='Metadata indicate conflict resolution is not set')
 
     def test_meta_soft_restart(self):
@@ -144,7 +144,7 @@ class OpsChangeCasTests(BucketConfig):
         for i in range(10):
             # set a key
             value = 'value' + str(i)
-            client.memcached(KEY_NAME).set(KEY_NAME, 0, 0,json.dumps({'value':value}))
+            client.memcached(KEY_NAME).set(KEY_NAME, 0, 0, json.dumps({'value':value}))
             vbucket_id = client._get_vBucket_id(KEY_NAME)
             #print 'vbucket_id is {0}'.format(vbucket_id)
             mc_active = client.memcached(KEY_NAME)
@@ -167,7 +167,7 @@ class OpsChangeCasTests(BucketConfig):
         cas_post = mc_active.getMeta(KEY_NAME)[4]
         #print 'post cas {0}'.format(cas_post)
 
-        get_meta_resp = mc_active.getMeta(KEY_NAME,request_extended_meta_data=False)
+        get_meta_resp = mc_active.getMeta(KEY_NAME, request_extended_meta_data=False)
         #print 'post CAS {0}'.format(cas_post)
         #print 'post ext meta {0}'.format(get_meta_resp)
 
@@ -183,7 +183,7 @@ class OpsChangeCasTests(BucketConfig):
         for i in range(10):
             # set a key
             value = 'value' + str(i)
-            client.memcached(KEY_NAME).set(KEY_NAME, 0, 0,json.dumps({'value':value}))
+            client.memcached(KEY_NAME).set(KEY_NAME, 0, 0, json.dumps({'value':value}))
             vbucket_id = client._get_vBucket_id(KEY_NAME)
             #print 'vbucket_id is {0}'.format(vbucket_id)
             mc_active = client.memcached(KEY_NAME)
@@ -207,7 +207,7 @@ class OpsChangeCasTests(BucketConfig):
         cas_post = mc_active.getMeta(KEY_NAME)[4]
         #print 'post cas {0}'.format(cas_post)
 
-        get_meta_resp = mc_active.getMeta(KEY_NAME,request_extended_meta_data=False)
+        get_meta_resp = mc_active.getMeta(KEY_NAME, request_extended_meta_data=False)
         #print 'post CAS {0}'.format(cas_post)
         #print 'post ext meta {0}'.format(get_meta_resp)
 
@@ -228,7 +228,7 @@ class OpsChangeCasTests(BucketConfig):
         self.log.info(' Starting test-updates')
         self._load_ops(ops='set', mutations=20)
         #self._load_ops(ops='add')
-        self._load_ops(ops='replace',mutations=20)
+        self._load_ops(ops='replace', mutations=20)
         #self._load_ops(ops='delete')
         self._check_cas(check_conflict_resolution=False)
 
@@ -238,7 +238,7 @@ class OpsChangeCasTests(BucketConfig):
         self.log.info(' Starting test-deletes')
         self._load_ops(ops='set', mutations=20)
         #self._load_ops(ops='add')
-        self._load_ops(ops='replace',mutations=20)
+        self._load_ops(ops='replace', mutations=20)
         self._load_ops(ops='delete')
         self._check_cas(check_conflict_resolution=False)
 
@@ -270,7 +270,7 @@ class OpsChangeCasTests(BucketConfig):
         self._load_ops(ops='set', mutations=20)
         self._check_cas(check_conflict_resolution=False)
         #self._load_ops(ops='add')
-        self._load_ops(ops='replace',mutations=20)
+        self._load_ops(ops='replace', mutations=20)
         self._check_cas(check_conflict_resolution=False)
 
         self._load_ops(ops='delete')
@@ -294,7 +294,7 @@ class OpsChangeCasTests(BucketConfig):
             k += 1
 
             vbucket_id = self.client._get_vBucket_id(key)
-            self.log.info('For key {0} the vbucket is {1}'.format( key,vbucket_id ))
+            self.log.info('For key {0} the vbucket is {1}'.format( key, vbucket_id ))
             #print 'vbucket_id is {0}'.format(vbucket_id)
             mc_active = self.client.memcached(key)
             mc_master = self.client.memcached_for_vbucket( vbucket_id )
@@ -329,7 +329,7 @@ class OpsChangeCasTests(BucketConfig):
 
 
             # do another mutation and compare
-            mc_active.set(key, 0, 0,json.dumps({'value':'value3'}))
+            mc_active.set(key, 0, 0, json.dumps({'value':'value3'}))
             cas = mc_active.getMeta(key)[4]
             max_cas = int( mc_active.stats('vbucket-details')['vb_' + str(self.client._get_vBucket_id(key)) + ':max_cas'] )
             self.assertTrue(max_cas == cas, '[ERROR]Max cas  is not equal to cas {0}'.format(cas))
@@ -344,7 +344,7 @@ class OpsChangeCasTests(BucketConfig):
 
 
             # and one more mutation for good measure
-            mc_active.set(key, 0, 0,json.dumps({'value':'value3'}))
+            mc_active.set(key, 0, 0, json.dumps({'value':'value3'}))
             cas = mc_active.getMeta(key)[4]
             max_cas = int( mc_active.stats('vbucket-details')['vb_' + str(self.client._get_vBucket_id(key)) + ':max_cas'] )
             self.assertTrue(max_cas == cas, '[ERROR]Max cas  is not equal to cas {0}'.format(cas))
@@ -367,7 +367,7 @@ class OpsChangeCasTests(BucketConfig):
             mc_active = self.client.memcached(key)
             mc_master = self.client.memcached_for_vbucket( vbucket_id )
             #mc_replica = self.client.memcached_for_replica_vbucket(vbucket_id)
-            get_meta_1 = mc_active.getMeta(key,request_extended_meta_data=False)
+            get_meta_1 = mc_active.getMeta(key, request_extended_meta_data=False)
             #print 'cr {0}'.format(get_meta_1)
             #print '-'*100
             TEST_SEQNO = 123
@@ -379,14 +379,14 @@ class OpsChangeCasTests(BucketConfig):
             set_with_meta_resp = mc_active.setWithMeta(key, '123456789', 0, 0, TEST_SEQNO, TEST_CAS)
 
             cas_post_meta = mc_active.getMeta(key)[4]
-            get_meta_2 = mc_active.getMeta(key,request_extended_meta_data=False)
+            get_meta_2 = mc_active.getMeta(key, request_extended_meta_data=False)
             #print 'cr2 {0}'.format(get_meta_2)
 
             max_cas = int( mc_active.stats('vbucket-details')['vb_' + str(self.client._get_vBucket_id(key)) + ':max_cas'] )
             self.assertTrue(cas_post_meta == max_cas, '[ERROR]Max cas  is not equal it is {0}'.format(cas_post_meta))
             self.assertTrue(max_cas > cas, '[ERROR]Max cas  is not higher than original cas {0}'.format(cas))
 
-            mc_active.set(key, 0, 0,json.dumps({'value':'value3'}))
+            mc_active.set(key, 0, 0, json.dumps({'value':'value3'}))
             cas = mc_active.getMeta(key)[4]
             max_cas = int( mc_active.stats('vbucket-details')['vb_' + str(self.client._get_vBucket_id(key)) + ':max_cas'] )
             self.assertTrue(max_cas == cas, '[ERROR]Max cas  is not equal to cas {0}'.format(cas))
@@ -396,7 +396,7 @@ class OpsChangeCasTests(BucketConfig):
             #set_with_meta_resp = mc_active.set_with_meta(key, 0, 0, 125, TEST_CAS+1, '223456789',vbucket_id,
             #    add_extended_meta_data=True, conflict_resolution_mode=1)
             cas_post_meta = mc_active.getMeta(key)[4]
-            get_meta_3 = mc_active.getMeta(key,request_extended_meta_data=False)
+            get_meta_3 = mc_active.getMeta(key, request_extended_meta_data=False)
             #print 'cr3 {0}'.format(get_meta_3)
 
             max_cas = int( mc_active.stats('vbucket-details')['vb_' + str(self.client._get_vBucket_id(key)) + ':max_cas'] )
@@ -404,7 +404,7 @@ class OpsChangeCasTests(BucketConfig):
             self.assertTrue(cas_post_meta == max_cas, '[ERROR]Max cas  is not lower it is higher than {0}'.format(cas_post_meta))
             #self.assertTrue(max_cas == cas, '[ERROR]Max cas  is not equal to original cas {0}'.format(cas))
 
-            mc_active.set(key, 0, 0,json.dumps({'value':'value3'}))
+            mc_active.set(key, 0, 0, json.dumps({'value':'value3'}))
             cas = mc_active.getMeta(key)[4]
             max_cas = int( mc_active.stats('vbucket-details')['vb_' + str(self.client._get_vBucket_id(key)) + ':max_cas'] )
             self.assertTrue(max_cas == cas, '[ERROR]Max cas  is not equal to cas {0}'.format(cas))
@@ -455,7 +455,7 @@ class OpsChangeCasTests(BucketConfig):
             self.assertTrue(max_cas == cas, '[ERROR]Max cas {0} is not equal to original cas {1}'.format(max_cas, cas))
 
 
-            mc_active.set(key, 0, 0,json.dumps({'value':'value3'}))
+            mc_active.set(key, 0, 0, json.dumps({'value':'value3'}))
             cas = mc_active.getMeta(key)[4]
             max_cas = int( mc_active.stats('vbucket-details')['vb_' + str(self.client._get_vBucket_id(key)) + ':max_cas'] )
             self.assertTrue(max_cas == cas, '[ERROR]Max cas  is not equal to cas {0}'.format(cas))
@@ -472,7 +472,7 @@ class OpsChangeCasTests(BucketConfig):
 
             # test the delete
 
-            mc_active.set(key, 0, 0,json.dumps({'value':'value3'}))
+            mc_active.set(key, 0, 0, json.dumps({'value':'value3'}))
             cas = mc_active.getMeta(key)[4]
             max_cas = int( mc_active.stats('vbucket-details')['vb_' + str(self.client._get_vBucket_id(key)) + ':max_cas'] )
             self.assertTrue(max_cas == cas, '[ERROR]Max cas  is not equal to cas {0}'.format(cas))
@@ -564,12 +564,12 @@ class OpsChangeCasTests(BucketConfig):
             self.log.info('all meta data before set_meta_force {0}'.format(all))
 
             self.log.info('Forcing conflict_resolution to rev-id by matching inserting cas ')
-            set_with_meta_resp = mc_active.set_with_meta(key, 0, 0, new_seq, cas, '123456789',vbucket_id,
+            set_with_meta_resp = mc_active.set_with_meta(key, 0, 0, new_seq, cas, '123456789', vbucket_id,
                                 add_extended_meta_data=True, conflict_resolution_mode=1)
             cas_post_meta = mc_active.getMeta(key)[4]
             all_post_meta = mc_active.getMeta(key)
             post_seq = mc_active.getMeta(key)[3]
-            get_meta_2 = mc_active.getMeta(key,request_extended_meta_data=False)
+            get_meta_2 = mc_active.getMeta(key, request_extended_meta_data=False)
             #print 'cr2 {0}'.format(get_meta_2)
             max_cas = int( mc_active.stats('vbucket-details')['vb_' + str(self.client._get_vBucket_id(key)) + ':max_cas'] )
             self.log.info('Expect No conflict_resolution to occur, and the last updated mutation to be the winner..')
@@ -649,7 +649,7 @@ class OpsChangeCasTests(BucketConfig):
 
         # set a key
         value = 'value0'
-        client.memcached(key).set(key, 0, 0,json.dumps({'value':value}))
+        client.memcached(key).set(key, 0, 0, json.dumps({'value':value}))
         vbucket_id = client._get_vBucket_id(key)
         #print 'vbucket_id is {0}'.format(vbucket_id)
         mc_active = client.memcached(key)
@@ -662,21 +662,21 @@ class OpsChangeCasTests(BucketConfig):
         pre_seq = mc_active.getMeta(key)[3]
         pre_max_cas = int( mc_active.stats('vbucket-details')['vb_' + str(self.client._get_vBucket_id(key)) + ':max_cas'] )
         all = mc_active.getMeta(key)
-        get_meta_1 = mc_active.getMeta(key,request_extended_meta_data=False)
+        get_meta_1 = mc_active.getMeta(key, request_extended_meta_data=False)
         #print 'cr {0}'.format(get_meta_1)
         self.log.info('all meta data before set_meta_force {0}'.format(all))
         self.log.info('max_cas before set_meta_force {0}'.format(pre_max_cas))
 
         self.log.info('Forcing conflict_resolution to rev-id by matching inserting cas ')
         try:
-            set_with_meta_resp = mc_active.set_with_meta(key, 0, 0, new_seq, pre_cas, '123456789',vbucket_id)
+            set_with_meta_resp = mc_active.set_with_meta(key, 0, 0, new_seq, pre_cas, '123456789', vbucket_id)
         except mc_bin_client.MemcachedError as e:
             # this is expected
             pass
         cas_post = mc_active.getMeta(key)[4]
         all_post_meta = mc_active.getMeta(key)
         post_seq = mc_active.getMeta(key)[3]
-        get_meta_2 = mc_active.getMeta(key,request_extended_meta_data=False)
+        get_meta_2 = mc_active.getMeta(key, request_extended_meta_data=False)
         #print 'cr {0}'.format(get_meta_2)
         max_cas_post = int( mc_active.stats('vbucket-details')['vb_' + str(self.client._get_vBucket_id(key)) + ':max_cas'] )
         self.log.info('Expect RevId conflict_resolution to occur, and the last updated mutation to be the winner..')
@@ -695,7 +695,7 @@ class OpsChangeCasTests(BucketConfig):
         cas_restart = mc_active.getMeta(key)[4]
         #print 'post cas {0}'.format(cas_post)
 
-        get_meta_resp = mc_active.getMeta(key,request_extended_meta_data=False)
+        get_meta_resp = mc_active.getMeta(key, request_extended_meta_data=False)
         #print 'post CAS {0}'.format(cas_post)
         #print 'post ext meta {0}'.format(get_meta_resp)
 
@@ -714,7 +714,7 @@ class OpsChangeCasTests(BucketConfig):
         client = VBucketAwareMemcached(rest, self.bucket)
 
         value = 'value'
-        client.memcached(key).set(key, 0, 0,json.dumps({'value':value}))
+        client.memcached(key).set(key, 0, 0, json.dumps({'value':value}))
         vbucket_id = client._get_vBucket_id(key)
         #print 'vbucket_id is {0}'.format(vbucket_id)
         mc_active = client.memcached(key)
@@ -727,7 +727,7 @@ class OpsChangeCasTests(BucketConfig):
         pre_seq = mc_active.getMeta(key)[3]
         pre_max_cas = int( mc_active.stats('vbucket-details')['vb_' + str(self.client._get_vBucket_id(key)) + ':max_cas'] )
         all = mc_active.getMeta(key)
-        get_meta_1 = mc_active.getMeta(key,request_extended_meta_data=False)
+        get_meta_1 = mc_active.getMeta(key, request_extended_meta_data=False)
         #print 'cr {0}'.format(get_meta_1)
         self.log.info('all meta data before set_meta_force {0}'.format(all))
         self.log.info('max_cas before set_meta_force {0}'.format(pre_max_cas))
@@ -739,7 +739,7 @@ class OpsChangeCasTests(BucketConfig):
         cas_post = mc_active.getMeta(key)[4]
         all_post_meta = mc_active.getMeta(key)
         post_seq = mc_active.getMeta(key)[3]
-        get_meta_2 = mc_active.getMeta(key,request_extended_meta_data=False)
+        get_meta_2 = mc_active.getMeta(key, request_extended_meta_data=False)
         #print 'cr {0}'.format(get_meta_2)
         max_cas_post = int( mc_active.stats('vbucket-details')['vb_' + str(self.client._get_vBucket_id(key)) + ':max_cas'] )
         self.log.info('Expect RevId conflict_resolution to occur, and the last updated mutation to be the winner..')
@@ -751,11 +751,11 @@ class OpsChangeCasTests(BucketConfig):
         # remove that node
         self.log.info('Remove the node with active data')
 
-        rebalance = self.cluster.async_rebalance(self.servers[-1:], [] ,[self.master])
+        rebalance = self.cluster.async_rebalance(self.servers[-1:], [], [self.master])
         rebalance.result()
         time.sleep(120)
         replica_CAS = mc_replica.getMeta(key)[4]
-        get_meta_resp = mc_replica.getMeta(key,request_extended_meta_data=False)
+        get_meta_resp = mc_replica.getMeta(key, request_extended_meta_data=False)
         #print 'replica CAS {0}'.format(replica_CAS)
         #print 'replica ext meta {0}'.format(get_meta_resp)
 
@@ -769,9 +769,9 @@ class OpsChangeCasTests(BucketConfig):
         client = VBucketAwareMemcached(rest, self.bucket)
         mc_active = client.memcached(key)
         active_CAS = mc_active.getMeta(key)[4]
-        print 'active cas {0}'.format(active_CAS)
+        print('active cas {0}'.format(active_CAS))
 
-        self.assertTrue(replica_CAS == active_CAS, 'cas mismatch active: {0} replica {1}'.format(active_CAS,replica_CAS))
+        self.assertTrue(replica_CAS == active_CAS, 'cas mismatch active: {0} replica {1}'.format(active_CAS, replica_CAS))
         #self.assertTrue( get_meta_resp[5] == 1, msg='Metadata indicate conflict resolution is not set')
 
     ''' Testing revid based conflict resolution with timeSync enabled, where cas on either mutations match and it does rev id CR
@@ -786,7 +786,7 @@ class OpsChangeCasTests(BucketConfig):
         client = VBucketAwareMemcached(rest, self.bucket)
 
         value = 'value'
-        client.memcached(key).set(key, 0, 0,json.dumps({'value':value}))
+        client.memcached(key).set(key, 0, 0, json.dumps({'value':value}))
         vbucket_id = client._get_vBucket_id(key)
         #print 'vbucket_id is {0}'.format(vbucket_id)
         mc_active = client.memcached(key)
@@ -799,7 +799,7 @@ class OpsChangeCasTests(BucketConfig):
         pre_seq = mc_active.getMeta(key)[3]
         pre_max_cas = int( mc_active.stats('vbucket-details')['vb_' + str(self.client._get_vBucket_id(key)) + ':max_cas'] )
         all = mc_active.getMeta(key)
-        get_meta_1 = mc_active.getMeta(key,request_extended_meta_data=False)
+        get_meta_1 = mc_active.getMeta(key, request_extended_meta_data=False)
         #print 'cr {0}'.format(get_meta_1)
         self.log.info('all meta data before set_meta_force {0}'.format(all))
         self.log.info('max_cas before set_meta_force {0}'.format(pre_max_cas))
@@ -810,7 +810,7 @@ class OpsChangeCasTests(BucketConfig):
         cas_post = mc_active.getMeta(key)[4]
         all_post_meta = mc_active.getMeta(key)
         post_seq = mc_active.getMeta(key)[3]
-        get_meta_2 = mc_active.getMeta(key,request_extended_meta_data=False)
+        get_meta_2 = mc_active.getMeta(key, request_extended_meta_data=False)
         #print 'cr {0}'.format(get_meta_2)
         max_cas_post = int( mc_active.stats('vbucket-details')['vb_' + str(self.client._get_vBucket_id(key)) + ':max_cas'] )
         self.log.info('Expect RevId conflict_resolution to occur, and the last updated mutation to be the winner..')
@@ -825,12 +825,12 @@ class OpsChangeCasTests(BucketConfig):
 
         self.log.info('Remove the node with active data {0}'.format(self.master))
 
-        rebalance = self.cluster.async_rebalance(self.servers[:], [] ,[self.master])
+        rebalance = self.cluster.async_rebalance(self.servers[:], [], [self.master])
 
         rebalance.result()
         time.sleep(120)
         replica_CAS = mc_replica.getMeta(key)[4]
-        get_meta_resp = mc_replica.getMeta(key,request_extended_meta_data=False)
+        get_meta_resp = mc_replica.getMeta(key, request_extended_meta_data=False)
         #print 'replica CAS {0}'.format(replica_CAS)
         #print 'replica ext meta {0}'.format(get_meta_resp)
 
@@ -846,7 +846,7 @@ class OpsChangeCasTests(BucketConfig):
         active_CAS = mc_active.getMeta(key)[4]
         #print 'active cas {0}'.format(active_CAS)
 
-        self.assertTrue(replica_CAS == active_CAS, 'cas mismatch active: {0} replica {1}'.format(active_CAS,replica_CAS))
+        self.assertTrue(replica_CAS == active_CAS, 'cas mismatch active: {0} replica {1}'.format(active_CAS, replica_CAS))
         #self.assertTrue( get_meta_resp[5] == 1, msg='Metadata indicate conflict resolution is not set')
 
     ''' Test getMeta on cas and max cas values for empty vbucket
@@ -864,11 +864,11 @@ class OpsChangeCasTests(BucketConfig):
 
         vbucket_ids = self.client._get_vBucket_ids(all_keys)
 
-        print 'bucket_ids'
+        print('bucket_ids')
         for v in vbucket_ids:
-            print v
+            print(v)
 
-        print 'done'
+        print('done')
 
         i=1111
         if i not in vbucket_ids and i <= 1023:
@@ -879,7 +879,7 @@ class OpsChangeCasTests(BucketConfig):
             self.log.info('ERROR generating empty vbucket id')
 
         vb_non_existing=vbucket_ids.pop()
-        print 'nominated vb_nonexisting is {0}'.format(vb_non_existing)
+        print('nominated vb_nonexisting is {0}'.format(vb_non_existing))
         mc_active = self.client.memcached(all_keys[0]) #Taking a temp connection to the mc.
         #max_cas = int( mc_active.stats('vbucket-details')['vb_' + str(vb_non_existing) + ':max_cas'] )
         max_cas = int( mc_active.stats('vbucket-details')['vb_' + str(self.client._get_vBucket_id(all_keys[0])) + ':max_cas'] )
@@ -905,7 +905,7 @@ class OpsChangeCasTests(BucketConfig):
 
             time.sleep(5)
             shell.restore_backupFile(self.couchbase_login_info, self.backup_location, [bucket.name for bucket in self.buckets])
-            print 'Done with restore'
+            print('Done with restore')
         finally:
             self._check_cas(check_conflict_resolution=False)
 
@@ -931,7 +931,7 @@ class OpsChangeCasTests(BucketConfig):
             self.assertTrue(cas == max_cas, '[ERROR]Max cas  is not 0 it is {0}'.format(cas))
 
             if check_conflict_resolution:
-                get_meta_resp = mc_active.getMeta(key,request_extended_meta_data=False)
+                get_meta_resp = mc_active.getMeta(key, request_extended_meta_data=False)
                 if time_sync == 'enabledWithoutDrift':
                     self.assertTrue( get_meta_resp[5] == 1, msg='[ERROR] Metadata indicate conflict resolution is not set')
                 elif time_sync == 'disabled':
@@ -955,19 +955,19 @@ class OpsChangeCasTests(BucketConfig):
             for i in range(mutations):
                 if ops=='set':
                     #print 'set'
-                    self.client.memcached(key).set(key, 0, 0,payload)
+                    self.client.memcached(key).set(key, 0, 0, payload)
                 elif ops=='add':
                     #print 'add'
-                    self.client.memcached(key).add(key, 0, 0,payload)
+                    self.client.memcached(key).add(key, 0, 0, payload)
                 elif ops=='replace':
-                    self.client.memcached(key).replace(key, 0, 0,payload)
+                    self.client.memcached(key).replace(key, 0, 0, payload)
                     #print 'Replace'
                 elif ops=='delete':
                     #print 'delete'
                     self.client.memcached(key).delete(key)
                 elif ops=='expiry':
                     #print 'expiry'
-                    self.client.memcached(key).set(key, self.expire_time ,0, payload)
+                    self.client.memcached(key).set(key, self.expire_time, 0, payload)
                 elif ops=='touch':
                     #print 'touch'
                     self.client.memcached(key).touch(key, 10)

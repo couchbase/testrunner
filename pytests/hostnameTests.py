@@ -6,7 +6,7 @@ from lib.memcached.helper.data_helper import MemcachedClientHelper
 from scripts.install import InstallerJob
 from membase.api.rest_client import RestConnection
 from couchbase_helper.documentgenerator import BlobGenerator
-from newupgradebasetest import NewUpgradeBaseTest
+from .newupgradebasetest import NewUpgradeBaseTest
 from builds.build_query import BuildQuery
 import re
 
@@ -110,7 +110,7 @@ class HostnameTests(BaseTestCase):
                 domain = ''.join(info.domain[0])
                 if not domain:
                     output = shell.execute_command_raw('nslookup %s' % info.hostname[0])
-                    print output
+                    print(output)
                     self.fail("Domain is not defined, couchbase cannot be configured correctly. NOT A BUG. CONFIGURATION ISSUE")
                 hostname.append(info.hostname[0] + "." + domain)
                 master_rest = RestConnection(server)

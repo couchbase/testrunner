@@ -111,6 +111,23 @@ class EventingNegative(EventingBaseTest):
         self.deploy_function(body)
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
+        if self.pause_resume:
+            self.pause_function(body)
+        # flush source, metadata and destination buckets when eventing is processing_mutations
+        for bucket in self.buckets:
+            self.rest.flush_bucket(bucket.name)
+        # Undeploy and delete the function. In case of flush functions are not undeployed automatically
+        self.undeploy_and_delete_function(body)
+        # check if all the eventing-consumers are cleaned up
+        # Validation of any issues like panic will be taken care by teardown method
+        self.assertTrue(self.check_if_eventing_consumers_are_cleaned_up(),
+                        msg="eventing-consumer processes are not cleaned up even after undeploying the function")
+
+    def test_src_metadata_and_dst_bucket_flush_for_source_bucket_mutation(self):
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OP_WITH_SOURCE_BUCKET_MUTATION)
+        self.deploy_function(body)
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
         # flush source, metadata and destination buckets when eventing is processing_mutations
         for bucket in self.buckets:
             self.rest.flush_bucket(bucket.name)
@@ -127,11 +144,78 @@ class EventingNegative(EventingBaseTest):
         self.deploy_function(body)
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
+        if self.pause_resume:
+            self.pause_function(body)
         # delete source, metadata and destination buckets when eventing is processing_mutations
         for bucket in self.buckets:
+                self.log.info("deleting bucket: %s", bucket.name)
                 self.rest.delete_bucket(bucket.name)
         # Wait for function to get undeployed automatically
-        self.wait_for_undeployment(body['appname'])
+        self.wait_for_handler_state(body['appname'], "undeployed")
+        # Delete the function
+        self.delete_function(body)
+        self.sleep(60)
+        # check if all the eventing-consumers are cleaned up
+        # Validation of any issues like panic will be taken care by teardown method
+        self.assertTrue(self.check_if_eventing_consumers_are_cleaned_up(),
+                        msg="eventing-consumer processes are not cleaned up even after undeploying the function")
+
+    # See MB-30377
+    def test_src_metadata_and_dst_bucket_delete_for_source_bucket_mutation(self):
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OP_WITH_SOURCE_BUCKET_MUTATION)
+        self.deploy_function(body)
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        if self.pause_resume:
+            self.pause_function(body)
+        # delete source, metadata and destination buckets when eventing is processing_mutations
+        for bucket in self.buckets:
+            self.log.info("deleting bucket: %s", bucket.name)
+            self.rest.delete_bucket(bucket.name)
+        # Wait for function to get undeployed automatically
+        self.wait_for_handler_state(body['appname'], "undeployed")
+        # Delete the function
+        self.delete_function(body)
+        self.sleep(60)
+        # check if all the eventing-consumers are cleaned up
+        # Validation of any issues like panic will be taken care by teardown method
+        self.assertTrue(self.check_if_eventing_consumers_are_cleaned_up(),
+                        msg="eventing-consumer processes are not cleaned up even after undeploying the function")
+
+    # MB-30377
+    def test_src_bucket_delete_when_eventing_is_processing_mutations(self):
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_WITH_DOC_TIMER)
+        self.deploy_function(body)
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        # delete source, metadata and destination buckets when eventing is processing_mutations
+        for bucket in self.buckets:
+            if bucket.name == "src_bucket":
+                self.log.info("deleting bucket: %s", bucket.name)
+                self.rest.delete_bucket(bucket.name)
+        # Wait for function to get undeployed automatically
+        self.wait_for_handler_state(body['appname'], "undeployed")
+        # Delete the function
+        self.delete_function(body)
+        self.sleep(60)
+        # check if all the eventing-consumers are cleaned up
+        # Validation of any issues like panic will be taken care by teardown method
+        self.assertTrue(self.check_if_eventing_consumers_are_cleaned_up(),
+                        msg="eventing-consumer processes are not cleaned up even after undeploying the function")
+
+    # MB-29533 and MB-31545
+    def test_metadata_bucket_delete_when_eventing_is_processing_mutations(self):
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_WITH_DOC_TIMER)
+        self.deploy_function(body)
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        # delete source, metadata and destination buckets when eventing is processing_mutations
+        for bucket in self.buckets:
+            if bucket.name == "metadata":
+                self.log.info("deleting bucket: %s", bucket.name)
+                self.rest.delete_bucket(bucket.name)
+        # Wait for function to get undeployed automatically
+        self.wait_for_handler_state(body['appname'], "undeployed")
         # Delete the function
         self.delete_function(body)
         self.sleep(60)
@@ -167,7 +251,7 @@ class EventingNegative(EventingBaseTest):
                                    'create', compression=self.sdk_compression)
         # create a function which sleeps for 5 secs and set execution_timeout to 1s
         body = self.create_save_function_body(self.function_name, HANDLER_CODE_ERROR.EXECUTION_TIME_MORE_THAN_TIMEOUT,
-                                              execution_timeout=1)
+                                              execution_timeout=30)
         # deploy the function
         self.deploy_function(body)
         # This is intentionally added so that we wait for some mutations to process and we decide none are processed
@@ -183,7 +267,7 @@ class EventingNegative(EventingBaseTest):
             exec_timeout_count += out[0]["failure_stats"]["timeout_count"]
         # check whether all the function executions timed out and is equal to number of docs created
         if exec_timeout_count != num_docs:
-            self.fail("Not all event executions timed out : Expected : {0} Actual : {1}".format(len(keys),
+            self.fail("Not all event executions timed out : Expected : {0} Actual : {1}".format(num_docs,
                                                                                                 exec_timeout_count))
         self.undeploy_and_delete_function(body)
 
@@ -259,3 +343,58 @@ class EventingNegative(EventingBaseTest):
             if "ERR_INVALID_CONFIG" not in str(e):
                 log.info(str(e))
                 self.fail("Deployment is expected to be failed but succeeded with user_prefix greater than 16 chars")
+
+    def test_pause_when_function_not_deployed(self):
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_ON_UPDATE)
+        body['settings']['deployment_status'] = False
+        body['settings']['processing_status'] = False
+        self.rest.create_function(body['appname'], body)
+        try:
+            self.pause_function(body)
+            self.fail("application is paused even before deployment")
+        except Exception as e:
+            if "ERR_APP_NOT_BOOTSTRAPPED" not in str(e):
+                log.info(str(e))
+                self.fail("Not correct exception thrown")
+
+    def test_pause_when_function_is_deploying(self):
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_ON_UPDATE)
+        self.rest.create_function(body['appname'], body)
+        try:
+            self.pause_function(body)
+            self.fail("application is paused even before deployment")
+        except Exception as e:
+            if "ERR_APP_NOT_BOOTSTRAPPED" not in str(e):
+                log.info(str(e))
+                self.fail("Not correct exception thrown")
+
+    def test_delete_when_resume_in_progress(self):
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_ON_UPDATE)
+        self.deploy_function(body)
+        self.pause_function(body)
+        self.resume_function(body, wait_for_resume=False)
+        try:
+            self.delete_function(body)
+            self.fail("application is paused even before deployment")
+        except Exception as e:
+            if "ERR_APP_NOT_UNDEPLOYED" not in str(e):
+                log.info(str(e))
+                self.fail("Not correct exception thrown")
+
+    def test_n1ql_DML_with_source_bucket(self):
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.N1QL_SOURCE_INSERT)
+        try:
+            self.deploy_function(body)
+            self.fail("application is deployed for insert on source bucket")
+        except Exception as e:
+            if "Can not execute DML query on bucket" not in str(e):
+                log.info(str(e))
+                self.fail("Not correct exception thrown")

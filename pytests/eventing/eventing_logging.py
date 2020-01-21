@@ -92,7 +92,10 @@ class EventingLogging(EventingBaseTest, LogRedactionBase):
         self.set_redaction_level()
         self.start_logs_collection()
         result = self.monitor_logs_collection()
+        self.log.info("cb collect result: {}".format(result))
         node = "ns_1@"+eventing_node.ip
+        if result["perNode"][node]["path"] == "failed":
+            raise Exception("log collection failed")
         logs_path = result["perNode"][node]["path"]
         redactFileName = logs_path.split('/')[-1]
         nonredactFileName = logs_path.split('/')[-1].replace('-redacted', '')

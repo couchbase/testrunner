@@ -19,12 +19,12 @@ class HelloWorldFailTest(unittest.TestCase):
     def test_hello_fail_1(self):
         self.log.info('running test_hello_fail_1')
         i = 1
-        self.assertEquals(i,2)
+        self.assertEqual(i, 2)
 
     def test_hello_fail_2(self):
         self.log.info('running test_hello_fail_2')
         i = 2
-        self.assertEquals(i,3)
+        self.assertEqual(i, 3)
 
     def tearDown(self):
         self.log.info('tearDown invoked')

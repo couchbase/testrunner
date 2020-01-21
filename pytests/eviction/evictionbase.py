@@ -29,7 +29,7 @@ class EvictionBase(BaseTestCase):
 
     def stat(self, key):
         stats =  StatsCommon.get_stats([self.master], 'default', "", key)
-        val = stats.values()[0]
+        val = list(stats.values())[0]
         if val.isdigit():
             val = int(val)
         return val
@@ -47,8 +47,8 @@ class EvictionBase(BaseTestCase):
         # go into heavy dgm
         while curr_active > active:
             curr_items = self.stat('curr_items')
-            gen_create = BlobGenerator('dgmkv', 'dgmkv-', doc_size , start=curr_items + 1, end=curr_items+50000)
-            gen_create = BlobGenerator(prefix, prefix+'-', doc_size , start=curr_items + 1, end=curr_items+batch_items)
+            gen_create = BlobGenerator('dgmkv', 'dgmkv-', doc_size, start=curr_items + 1, end=curr_items+50000)
+            gen_create = BlobGenerator(prefix, prefix+'-', doc_size, start=curr_items + 1, end=curr_items+batch_items)
             total_items += batch_items
             try:
                 self._load_all_buckets(self.master, gen_create, "create", ttl)
@@ -82,12 +82,12 @@ class EvictionBase(BaseTestCase):
         client = VBucketAwareMemcached(
                     RestConnection(self.servers[0]),
                     self.buckets[0])
-        for i in xrange(count):
+        for i in range(count):
             key = "{0}{1}".format(prefix, i)
             try:
                 client.get(key)
             except MemcachedError as error:
-                self.assertEquals(
+                self.assertEqual(
                     error.status,
                     constants.ERR_NOT_FOUND,
                     "expected error NOT_FOUND, got {0}".format(error.status))

@@ -1,5 +1,5 @@
 import copy
-from hostnamemgmt_base import HostnameBaseTests
+from .hostnamemgmt_base import HostnameBaseTests
 from membase.api.rest_client import RestConnection
 from remote.remote_util import RemoteMachineShellConnection
 from membase.api.exception import ServerAlreadyJoinedException
@@ -8,13 +8,13 @@ class HostnameMgmtMultiTests(HostnameBaseTests):
 
     def setUp(self):
         super(HostnameMgmtMultiTests, self).setUp()
-        self.name_prefix = self.input.param('name_prefix','hstmgmt_')
-        self.domain = self.input.param('domain','hq.couchbase.com')
+        self.name_prefix = self.input.param('name_prefix', 'hstmgmt_')
+        self.domain = self.input.param('domain', 'hq.couchbase.com')
         self.use_names = self.input.param('use_names', 1)
         self.old_files = {}
         try:
             self.__add_hosts()
-        except Exception, ex:
+        except Exception as ex:
             self.log.error(str(ex))
             self.tearDown()
             raise ex
@@ -27,35 +27,35 @@ class HostnameMgmtMultiTests(HostnameBaseTests):
         if len(self.servers) < 2:
             self.fail("test require more than 1 node")
 
-        print '\n\nrenaming nodes'
+        print('\n\nrenaming nodes')
         hostnames = self.rename_nodes(self.servers[:self.nodes_in + self.nodes_init])
         self._set_hostames_to_servers_objs(hostnames)
-        print '\n\nrebalancing...'
+        print('\n\nrebalancing...')
         self.cluster.rebalance(self.servers[:self.nodes_init],
                                self.servers[self.nodes_init:self.nodes_in + self.nodes_init], [], use_hostnames=True)
         self.verify_referenced_by_names(self.servers[:self.nodes_init], hostnames)
         remove_node = self.servers[:self.nodes_in + self.nodes_init][-1]
 
-        print '\n\nremoving', remove_node, ' and rebalancing...;'
+        print('\n\nremoving', remove_node, ' and rebalancing...;')
         self.cluster.rebalance(self.servers[:self.nodes_in + self.nodes_init],
                                [], [remove_node], use_hostnames=True)
 
-        print '\n\nrenaming'
+        print('\n\nrenaming')
         new_name = self.rename_nodes([remove_node],
                                      {remove_node : self.name_prefix +\
                                        str(remove_node.ip.split('.')[-1]) + '_0' + '.' + self.domain})
 
-        print  '\n\nsetting hostnames to server objs'
+        print('\n\nsetting hostnames to server objs')
         self._set_hostames_to_servers_objs(new_name, server=remove_node)
-        print '\n\nrebalance again'
+        print('\n\nrebalance again')
 
         self.cluster.rebalance(self.servers[:self.nodes_in + self.nodes_init - 1],
                                [remove_node], [], use_hostnames=True)
         for srv in self.servers:
-            if srv.hostname in new_name.itervalues():
+            if srv.hostname in iter(new_name.values()):
                 srv.hostname = ''
 
-        print '\n\nupdating with a new name', new_name
+        print('\n\nupdating with a new name', new_name)
         hostnames.update(new_name)
         self.verify_referenced_by_names(self.servers[:self.nodes_in + self.nodes_init-1], hostnames)
 
@@ -82,7 +82,7 @@ class HostnameMgmtMultiTests(HostnameBaseTests):
         for server in self.servers:
             names[server] = ' '.join([self.name_prefix + str(server.ip.split('.')[-1]) +\
                                        '_' + str(i) + '.' + self.domain
-                                      for i in xrange(self.use_names)])
+                                      for i in range(self.use_names)])
         for server in self.servers:
             shell = RemoteMachineShellConnection(server)
             try:
@@ -90,7 +90,7 @@ class HostnameMgmtMultiTests(HostnameBaseTests):
                 old_lines = shell.read_remote_file(etc_file_dir, 'hosts')
                 self.old_files[server] = copy.deepcopy(old_lines)
                 new_lines = ['%s %s\n' % (srv.ip, names[srv])
-                             for srv in set(self.servers) - set([server])]
+                             for srv in set(self.servers) - {server}]
                 new_lines.append('127.0.0.1 %s' % names[server])
                 if old_lines is not None:
                     old_lines.extend(new_lines)

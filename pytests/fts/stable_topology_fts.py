@@ -1,12 +1,16 @@
+# coding=utf-8
+
 import copy
 import json
+import random
 from threading import Thread
 
+import Geohash
 from membase.helper.cluster_helper import ClusterOperationHelper
 from remote.remote_util import RemoteMachineShellConnection
 
 from TestInput import TestInputSingleton
-from fts_base import FTSBaseTest
+from .fts_base import FTSBaseTest
 from lib.membase.api.exception import FTSException, ServerUnavailableException
 from lib.membase.api.rest_client import RestConnection
 
@@ -19,6 +23,12 @@ class StableTopFTS(FTSBaseTest):
     def tearDown(self):
         super(StableTopFTS, self).tearDown()
 
+    def suite_setUp(self):
+        self.log.info("*** StableTopFTS: suite_setUp() ***")
+
+    def suite_tearDown(self):
+        self.log.info("*** StableTopFTS: suite_tearDown() ***")
+
     def check_fts_service_started(self):
         try:
             rest = RestConnection(self._cb_cluster.get_random_fts_node())
@@ -29,7 +39,7 @@ class StableTopFTS(FTSBaseTest):
     def create_simple_default_index(self):
         plan_params = self.construct_plan_params()
         self.load_data()
-        self.wait_till_items_in_bucket_equal(self._num_items/2)
+        self.wait_till_items_in_bucket_equal(self._num_items//2)
         self.create_fts_indexes_all_buckets(plan_params=plan_params)
         if self._update or self._delete:
             self.wait_for_indexing_complete()
@@ -62,7 +72,7 @@ class StableTopFTS(FTSBaseTest):
             self.generate_random_queries(index, self.num_queries, self.query_types)
             self.run_query_and_compare(index)
 
-    def run_default_index_query(self, query=None, expected_hits=None):
+    def run_default_index_query(self, query=None, expected_hits=None, expected_no_of_results=None):
         self.create_simple_default_index()
         zero_results_ok = True
         if not expected_hits:
@@ -74,11 +84,16 @@ class StableTopFTS(FTSBaseTest):
             if isinstance(query, str):
                 query = json.loads(query)
             zero_results_ok = True
+        if expected_no_of_results is None:
+            expected_no_of_results = self._input.param("expected_no_of_results", None)
+
         for index in self._cb_cluster.get_indexes():
-            hits, _, _, _ = index.execute_query(query,
-                                             zero_results_ok=zero_results_ok,
-                                             expected_hits=expected_hits)
+            hits, matches, _, _ = index.execute_query(query,
+                                                      zero_results_ok=zero_results_ok,
+                                                      expected_hits=expected_hits,
+                                                      expected_no_of_results=expected_no_of_results)
             self.log.info("Hits: %s" % hits)
+            self.log.info("Matches: %s" % matches)
 
     def test_query_type(self):
         """
@@ -95,7 +110,11 @@ class StableTopFTS(FTSBaseTest):
                 self.sleep(60, "Waiting for updates to get indexed...")
             self.wait_for_indexing_complete()
         self.generate_random_queries(index, self.num_queries, self.query_types)
-        self.run_query_and_compare(index)
+        if self.run_via_n1ql:
+            n1ql_executor = self._cb_cluster
+        else:
+            n1ql_executor = None
+        self.run_query_and_compare(index, n1ql_executor=n1ql_executor)
 
     def test_query_type_on_alias(self):
         """
@@ -135,7 +154,7 @@ class StableTopFTS(FTSBaseTest):
                                              consistency_vectors=self.consistency_vectors
                                             )
             self.log.info("Hits: %s" % hits)
-            for i in xrange(self.consistency_vectors.values()[0].values()[0]):
+            for i in range(list(self.consistency_vectors.values())[0].values()[0]):
                 self.async_perform_update_delete(self.upd_del_fields)
             hits, _, _, _ = index.execute_query(query,
                                                 zero_results_ok=zero_results_ok,
@@ -149,7 +168,7 @@ class StableTopFTS(FTSBaseTest):
         fts_node = self._cb_cluster.get_random_fts_node()
         service_map = RestConnection(self._cb_cluster.get_master_node()).get_nodes_services()
         # select FTS node to shutdown
-        for node_ip, services in service_map.iteritems():
+        for node_ip, services in service_map.items():
             ip = node_ip.split(':')[0]
             node = self._cb_cluster.get_node(ip, node_ip.split(':')[1])
             if node and 'fts' in services and 'kv' not in services:
@@ -165,9 +184,9 @@ class StableTopFTS(FTSBaseTest):
                                                 consistency_vectors=self.consistency_vectors)
             self.log.info("Hits: %s" % hits)
             try:
-                from fts_base import NodeHelper
+                from .fts_base import NodeHelper
                 NodeHelper.stop_couchbase(fts_node)
-                for i in xrange(self.consistency_vectors.values()[0].values()[0]):
+                for i in range(list(self.consistency_vectors.values())[0].values()[0]):
                     self.async_perform_update_delete(self.upd_del_fields)
             finally:
                 NodeHelper.start_couchbase(fts_node)
@@ -202,7 +221,7 @@ class StableTopFTS(FTSBaseTest):
                                                 consistency_vectors=self.consistency_vectors)
             self.log.info("Hits: %s" % hits)
             tasks = []
-            for i in xrange(self.consistency_vectors.values()[0].values()[0]):
+            for i in range(list(self.consistency_vectors.values())[0].values()[0]):
                 tasks.append(Thread(target=self.async_perform_update_delete, args=(self.upd_del_fields,)))
             for task in tasks:
                 task.start()
@@ -384,7 +403,7 @@ class StableTopFTS(FTSBaseTest):
         bucket = self._cb_cluster.get_bucket_by_name('default')
         index = self.create_index(bucket, "default_index")
         self.wait_for_indexing_complete()
-        from fts_base import INDEX_DEFAULTS
+        from .fts_base import INDEX_DEFAULTS
         alias_def = INDEX_DEFAULTS.ALIAS_DEFINITION
         alias_def['targets'][index.name] = {}
         alias_def['targets'][index.name]['indexUUID'] = index.get_uuid()
@@ -431,7 +450,7 @@ class StableTopFTS(FTSBaseTest):
         bucket = self._cb_cluster.get_bucket_by_name('default')
         index = self.create_index(bucket, 'sample_index')
         # wait till half the keys are indexed
-        self.wait_for_indexing_complete(self._num_items/2)
+        self.wait_for_indexing_complete(self._num_items//2)
         status, stat_value = rest.get_fts_stats(index_name=index.name,
                                                 bucket_name=bucket.name,
                                                 stat_name='num_recs_to_persist')
@@ -461,7 +480,7 @@ class StableTopFTS(FTSBaseTest):
         bucket = self._cb_cluster.get_bucket_by_name('default')
         index = self.create_index(bucket, 'sample_index')
         # wait till half the keys are indexed
-        self.wait_for_indexing_complete(self._num_items/2)
+        self.wait_for_indexing_complete(self._num_items//2)
         index.delete()
         self.sleep(5)
         try:
@@ -525,7 +544,12 @@ class StableTopFTS(FTSBaseTest):
                 self.sleep(60, "Waiting for updates to get indexed...")
             self.wait_for_indexing_complete()
         self.generate_random_queries(index, self.num_queries, self.query_types)
-        self.run_query_and_compare(index)
+        if self.run_via_n1ql:
+            n1ql_executor = self._cb_cluster
+        else:
+            n1ql_executor = None
+
+        self.run_query_and_compare(index, n1ql_executor=n1ql_executor)
 
     def test_query_string_combinations(self):
         """
@@ -592,7 +616,7 @@ class StableTopFTS(FTSBaseTest):
                 for nterm in nterms:
                     clause  = (' '.join(mterm) + ' ' + ' '.join(sterm) + ' ' + ' '.join(nterm)).strip()
                     query = {"query": clause}
-                    index.fts_queries.append(json.loads(json.dumps(query,ensure_ascii=False)))
+                    index.fts_queries.append(json.loads(json.dumps(query, ensure_ascii=False)))
                     if self.compare_es:
                         self.es.es_queries.append(json.loads(json.dumps({"query": {"query_string": query}},
                                                                      ensure_ascii=False)))
@@ -604,10 +628,11 @@ class StableTopFTS(FTSBaseTest):
         Index and query index, update map, query again, uses RQG
         """
         fail = False
+        error = None
         index = self.create_index(
             bucket=self._cb_cluster.get_bucket_by_name('default'),
             index_name="custom_index")
-        self.create_es_index_mapping(index.es_custom_map,index.index_definition)
+        self.create_es_index_mapping(index.es_custom_map, index.index_definition)
         self.load_data()
         self.wait_for_indexing_complete()
         self.generate_random_queries(index, self.num_queries, self.query_types)
@@ -616,6 +641,7 @@ class StableTopFTS(FTSBaseTest):
         except AssertionError as err:
             self.log.error(err)
             fail = True
+            error = err
         self.log.info("Editing custom index with new map...")
         index.generate_new_custom_map(seed=index.cm_id+10)
         index.index_definition['uuid'] = index.get_uuid()
@@ -627,7 +653,7 @@ class StableTopFTS(FTSBaseTest):
         self.wait_for_indexing_complete()
         self.run_query_and_compare(index)
         if fail:
-            raise err
+            raise error
 
     def index_query_in_parallel(self):
         """
@@ -689,7 +715,7 @@ class StableTopFTS(FTSBaseTest):
         index.update()
         # updating mapping on ES is not easy, often leading to merge issues
         # drop and recreate the index, load again
-        self.create_es_index_mapping(index.es_custom_map,index.index_definition)
+        self.create_es_index_mapping(index.es_custom_map, index.index_definition)
         self.wait_for_indexing_complete()
         try:
             self.run_query_and_compare(index)
@@ -719,7 +745,7 @@ class StableTopFTS(FTSBaseTest):
             index.update()
         except Exception as err:
             self.log.error(err)
-            if err.message.count(error_msg,0,len(err.message)):
+            if err.message.count(error_msg, 0, len(err.message)):
                 self.log.info("Error is expected")
             else:
                 self.log.info("Error is not expected")
@@ -818,7 +844,7 @@ class StableTopFTS(FTSBaseTest):
             self.log.info("Hits: %s" % hits)
 
     def test_facets(self):
-        field_indexed = self._input.param("field_indexed",True)
+        field_indexed = self._input.param("field_indexed", True)
         self.load_data()
         index = self.create_index(
             self._cb_cluster.get_bucket_by_name('default'),
@@ -863,6 +889,47 @@ class StableTopFTS(FTSBaseTest):
         except Exception as err:
             self.log.error(err)
             self.fail("Testcase failed: "+ err.message)
+
+    def test_facets_during_index(self):
+        field_indexed = self._input.param("field_indexed", True)
+        self.load_data()
+        index = self.create_index(
+            self._cb_cluster.get_bucket_by_name('default'),
+            "default_index")
+        self.sleep(5)
+        index.add_child_field_to_default_mapping(field_name="type",
+                                                 field_type="text",
+                                                 field_alias="type",
+                                                 analyzer="keyword")
+        if field_indexed:
+            index.add_child_field_to_default_mapping(field_name="dept",
+                                                     field_type="text",
+                                                     field_alias="dept",
+                                                     analyzer="keyword")
+            index.add_child_field_to_default_mapping(field_name="salary",
+                                                     field_type="number",
+                                                     field_alias="salary")
+            index.add_child_field_to_default_mapping(field_name="join_date",
+                                                     field_type="datetime",
+                                                     field_alias="join_date")
+        index.index_definition['uuid'] = index.get_uuid()
+        index.update()
+
+        self.sleep(5)
+        query = eval(self._input.param("query", str(self.sample_query)))
+        if isinstance(query, str):
+            query = json.loads(query)
+
+        while not self.is_index_complete(index.name):
+            zero_results_ok = True
+            try:
+                hits, _, _, _, facets = index.execute_query_with_facets(query,
+                                                                            zero_results_ok=zero_results_ok)
+                self.log.info("Hits: %s" % hits)
+                self.log.info("Facets: %s" % facets)
+            except Exception as err:
+                self.log.error(err)
+                self.fail("Testcase failed: "+ err.message)
 
     def test_doc_config(self):
         # delete default bucket
@@ -911,7 +978,7 @@ class StableTopFTS(FTSBaseTest):
     def test_boost_query_type(self):
         # Create bucket, create index
         self.load_data()
-        self.wait_till_items_in_bucket_equal(items=self._num_items/2)
+        self.wait_till_items_in_bucket_equal(items=self._num_items//2)
         index = self.create_index(
             self._cb_cluster.get_bucket_by_name('default'),
             "default_index")
@@ -940,9 +1007,9 @@ class StableTopFTS(FTSBaseTest):
                 self.log.info("Hits: %s" % hits)
                 self.log.info("Contents: %s" % contents)
                 score_before_boosting_doc1 = index.get_score_from_query_result_content(
-                    contents=contents, doc_id=u'emp10000021')
+                    contents=contents, doc_id='emp10000021')
                 score_before_boosting_doc2 = index.get_score_from_query_result_content(
-                    contents=contents, doc_id=u'emp10000086')
+                    contents=contents, doc_id='emp10000086')
 
                 self.log.info("Scores before boosting:")
                 self.log.info("")
@@ -971,9 +1038,9 @@ class StableTopFTS(FTSBaseTest):
             self.log.info("Hits: %s" % hits)
             self.log.info("Contents: %s" % contents)
             score_after_boosting_doc1 = index.get_score_from_query_result_content(
-                contents=contents, doc_id=u'emp10000021')
+                contents=contents, doc_id='emp10000021')
             score_after_boosting_doc2 = index.get_score_from_query_result_content(
-                contents=contents, doc_id=u'emp10000086')
+                contents=contents, doc_id='emp10000086')
 
             self.log.info("Scores after boosting:")
             self.log.info("")
@@ -1007,7 +1074,7 @@ class StableTopFTS(FTSBaseTest):
         doc_ids = copy.deepcopy(query['ids'])
 
         # If invalid_doc_id param is passed, add this to the query['ids']
-        invalid_doc_id = self._input.param("invalid_doc_id",0)
+        invalid_doc_id = self._input.param("invalid_doc_id", 0)
         if invalid_doc_id:
             query['ids'].append(invalid_doc_id)
 
@@ -1027,6 +1094,7 @@ class StableTopFTS(FTSBaseTest):
         zero_results_ok = False
         try:
             for index in self._cb_cluster.get_indexes():
+                n1ql_query = "select d, meta().id from default d where search(d, "+json.dumps(query)+") and type='emp'"
                 hits, contents, _, _ = index.execute_query(query,
                                             zero_results_ok=zero_results_ok,
                                             expected_hits=expected_hits,
@@ -1037,13 +1105,19 @@ class StableTopFTS(FTSBaseTest):
                 # presence in the search results
                 for doc_id in doc_ids:
                     self.assertTrue(index.is_doc_present_in_query_result_content
-                                    (contents=contents, doc_id=doc_id),"Doc ID "
+                                    (contents=contents, doc_id=doc_id), "Doc ID "
                                     "%s is not present in Search results"
+                                    % doc_id)
+                    if self.run_via_n1ql:
+                        n1ql_results = self._cb_cluster.run_n1ql_query(query=n1ql_query)
+                        self.assertTrue(index.is_doc_present_in_query_result_content
+                                    (contents=n1ql_results['results'], doc_id=doc_id), "Doc ID "
+                                    "%s is not present in N1QL Search results"
                                     % doc_id)
                     score = index.get_score_from_query_result_content\
                         (contents=contents, doc_id=doc_id)
                     self.log.info ("Score for Doc ID {0} is {1}".
-                                   format(doc_id,score))
+                                   format(doc_id, score))
                 if invalid_doc_id:
                     # Validate if invalid doc id was passed, it should
                     # not be present in the search results
@@ -1058,7 +1132,7 @@ class StableTopFTS(FTSBaseTest):
 
     def test_sorting_of_results(self):
         self.load_data()
-        self.wait_till_items_in_bucket_equal(self._num_items/2)
+        self.wait_till_items_in_bucket_equal(self._num_items//2)
         index = self.create_index(
             self._cb_cluster.get_bucket_by_name('default'),
             "default_index")
@@ -1091,6 +1165,40 @@ class StableTopFTS(FTSBaseTest):
                     if not result:
                         self.fail(
                             "Testcase failed. Actual results do not match expected.")
+        except Exception as err:
+            self.log.error(err)
+            self.fail("Testcase failed: " + err.message)
+
+    def test_sorting_of_results_during_indexing(self):
+        self.load_data()
+        self.wait_till_items_in_bucket_equal(self._num_items//2)
+        index = self.create_index(
+            self._cb_cluster.get_bucket_by_name('default'),
+            "default_index")
+        #self.wait_for_indexing_complete()
+
+        self.sleep(5)
+
+        zero_results_ok = True
+        #expected_hits = int(self._input.param("expected_hits", 0))
+        default_query = {"disjuncts": [{"match": "Safiya", "field": "name"},
+                                       {"match": "Palmer", "field": "name"}]}
+        query = eval(self._input.param("query", str(default_query)))
+        if isinstance(query, str):
+            query = json.loads(query)
+
+        try:
+            for index in self._cb_cluster.get_indexes():
+                while not self.is_index_complete(index.name):
+                    sort_params = self.build_sort_params()
+                    hits, raw_hits, _, _ = index.execute_query(query = query,
+                                                               zero_results_ok=zero_results_ok,
+                                                               sort_fields=sort_params,
+                                                               return_raw_hits=True)
+
+                    self.log.info("Hits: %s" % hits)
+                    self.log.info("Doc IDs: %s" % raw_hits)
+                    #self.sleep(5)
         except Exception as err:
             self.log.error(err)
             self.fail("Testcase failed: " + err.message)
@@ -1166,6 +1274,7 @@ class StableTopFTS(FTSBaseTest):
         if isinstance(query, str):
             query = json.loads(query)
         zero_results_ok = True
+        n1ql_query = "select search_score(d) as score, d.text, meta().id from default d where search(d," + json.dumps(query) + ")"
         for index in self._cb_cluster.get_indexes():
             hits, raw_hits, _, _ = index.execute_query(query=query,
                                                        zero_results_ok=zero_results_ok,
@@ -1193,6 +1302,20 @@ class StableTopFTS(FTSBaseTest):
 
             self.assertTrue(tf_score1 > tf_score2 > tf_score3,
                             "Testcase failed. TF score for Doc1 not > Doc2 not > Doc3")
+
+            if self.run_via_n1ql:
+                self.compare_n1ql_fts_scoring(n1ql_query=n1ql_query, raw_hits=raw_hits)
+
+    def compare_n1ql_fts_scoring(self, n1ql_query='', raw_hits=[]):
+        n1ql_results = self._cb_cluster.run_n1ql_query(query=n1ql_query)
+
+        self.assertEqual(len(n1ql_results['results']), len(raw_hits),
+                          "Return values are not the same for n1ql query and fts request.")
+        for res in n1ql_results['results']:
+            for hit in raw_hits:
+                if res['id'] == hit['id']:
+                    self.assertEqual(res['score'], hit['score'],
+                                     "Scoring is not the same for n1ql result and fts request hit")
 
     def test_scoring_idf_score(self):
         """
@@ -1223,6 +1346,7 @@ class StableTopFTS(FTSBaseTest):
         if isinstance(query, str):
             query = json.loads(query)
         zero_results_ok = True
+        n1ql_query = "select search_score(d) as score, d.text, meta().id from default d where search(d," + json.dumps(query) + ")"
         for index in self._cb_cluster.get_indexes():
             hits, raw_hits, _, _ = index.execute_query(query=query,
                                                        zero_results_ok=zero_results_ok,
@@ -1243,6 +1367,9 @@ class StableTopFTS(FTSBaseTest):
 
             self.assertTrue(idf1 > idf2, "Testcase failed. IDF score for Doc1 "
                     "for search term 'cat' not > that of search term 'lazy'")
+
+            if self.run_via_n1ql:
+                self.compare_n1ql_fts_scoring(n1ql_query=n1ql_query, raw_hits=raw_hits)
 
     def test_scoring_field_norm_score(self):
         """
@@ -1269,6 +1396,7 @@ class StableTopFTS(FTSBaseTest):
         if isinstance(query, str):
             query = json.loads(query)
         zero_results_ok = True
+        n1ql_query = "select search_score(d) as score, d.text, meta().id from default d where search(d," + json.dumps(query) + ")"
         for index in self._cb_cluster.get_indexes():
             hits, raw_hits, _, _ = index.execute_query(query=query,
                                                        zero_results_ok=zero_results_ok,
@@ -1301,6 +1429,9 @@ class StableTopFTS(FTSBaseTest):
                             "Testcase failed. Field Normalization score for "
                             "Doc1 not > Doc2 not > Doc3")
 
+            if self.run_via_n1ql:
+                self.compare_n1ql_fts_scoring(n1ql_query=n1ql_query, raw_hits=raw_hits)
+
     def test_scoring_query_norm_score(self):
         """
         Test if the Query Normalization score in the Scoring functionality works fine
@@ -1326,6 +1457,7 @@ class StableTopFTS(FTSBaseTest):
         if isinstance(query, str):
             query = json.loads(query)
         zero_results_ok = True
+        n1ql_query = "select search_score(d) as score, d.text, meta().id from default d where search(d," + json.dumps(query) + ")"
         for index in self._cb_cluster.get_indexes():
             hits, raw_hits, _, _ = index.execute_query(query=query,
                                                        zero_results_ok=zero_results_ok,
@@ -1358,6 +1490,9 @@ class StableTopFTS(FTSBaseTest):
                             "Testcase failed. Query Normalization score for "
                             "Doc1 != Doc2 != Doc3")
 
+            if self.run_via_n1ql:
+                self.compare_n1ql_fts_scoring(n1ql_query=n1ql_query, raw_hits=raw_hits)
+
     def test_scoring_coord_score(self):
         """
         Test if the Coord score in the Scoring functionality works fine
@@ -1382,6 +1517,7 @@ class StableTopFTS(FTSBaseTest):
         if isinstance(query, str):
             query = json.loads(query)
         zero_results_ok = True
+        n1ql_query = "select search_score(d) as score, d.text, meta().id from default d where search(d," + json.dumps(query) + ")"
         for index in self._cb_cluster.get_indexes():
             hits, raw_hits, _, _ = index.execute_query(query=query,
                                                        zero_results_ok=zero_results_ok,
@@ -1405,6 +1541,9 @@ class StableTopFTS(FTSBaseTest):
 
             self.assertTrue(coord1 < coord2,
                             "Testcase failed. Coord score for Doc1 not < Doc2")
+
+            if self.run_via_n1ql:
+                self.compare_n1ql_fts_scoring(n1ql_query=n1ql_query, raw_hits=raw_hits)
 
     def test_fuzzy_query(self):
         """
@@ -1452,10 +1591,10 @@ class StableTopFTS(FTSBaseTest):
                 self.assertTrue(all_expected_docs_present, "All expected docs not in search results")
 
     def test_pagination_of_search_results(self):
-        max_matches = self._input.param("query_max_matches",10000000)
-        show_results_from_item = self._input.param("show_results_from_item",0)
+        max_matches = self._input.param("query_max_matches", 10000000)
+        show_results_from_item = self._input.param("show_results_from_item", 0)
         self.load_data()
-        self.wait_till_items_in_bucket_equal(items = self._num_items/2)
+        self.wait_till_items_in_bucket_equal(items = self._num_items//2)
         index = self.create_index(
             self._cb_cluster.get_bucket_by_name('default'),
             "default_index")
@@ -1491,9 +1630,9 @@ class StableTopFTS(FTSBaseTest):
                     else:
                         items_on_page = 0
 
-                    expected_items_on_page = min(items_on_page,max_matches)
+                    expected_items_on_page = min(items_on_page, max_matches)
 
-                    self.assertEqual(len(doc_ids),expected_items_on_page,"Items per page are not correct")
+                    self.assertEqual(len(doc_ids), expected_items_on_page, "Items per page are not correct")
 
                     doc_id_prefix='emp'
                     first_doc_id = 10000001
@@ -1537,6 +1676,13 @@ class StableTopFTS(FTSBaseTest):
 
         try:
             for index in self._cb_cluster.get_indexes():
+                n1ql_results = None
+                if self.run_via_n1ql:
+                    n1ql_query = "select b, search_meta(b.oouutt) as meta from default b where " \
+                                 "search(b, {\"query\": " + json.dumps(
+                        query) + ", \"explain\": true, \"highlight\": {}},{\"out\": \"oouutt\"})"
+                    n1ql_results = self._cb_cluster.run_n1ql_query(query=n1ql_query)
+
                 hits, contents, _, _ = index.execute_query(query=query,
                                                            zero_results_ok=zero_results_ok,
                                                            expected_hits=expected_hits,
@@ -1555,6 +1701,11 @@ class StableTopFTS(FTSBaseTest):
                             contents, expected_doc['doc_id'],
                             expected_doc['field_name'], expected_doc['term'],
                             highlight_style=self.highlight_style)
+                        if self.run_via_n1ql:
+                            result &= index.validate_snippet_highlighting_in_result_content_n1ql(
+                                n1ql_results['results'], expected_doc['doc_id'],
+                                expected_doc['field_name'], expected_doc['term'],
+                                highlight_style=self.highlight_style)
                     if not result:
                         self.fail(
                             "Testcase failed. Actual results do not match expected.")
@@ -1570,7 +1721,11 @@ class StableTopFTS(FTSBaseTest):
         """
         geo_index = self.create_geo_index_and_load()
         self.generate_random_geo_queries(geo_index, self.num_queries)
-        self.run_query_and_compare(geo_index)
+        if self.run_via_n1ql:
+            n1ql_executor = self._cb_cluster
+        else:
+            n1ql_executor = None
+        self.run_query_and_compare(geo_index, n1ql_executor=n1ql_executor)
 
 
     def test_sort_geo_query(self):
@@ -1580,27 +1735,58 @@ class StableTopFTS(FTSBaseTest):
         :return: Nothing
         """
         geo_index = self.create_geo_index_and_load()
-        from random_query_generator.rand_query_gen import FTSESQueryGenerator
-
+        from .random_query_generator.rand_query_gen import FTSESQueryGenerator
+        testcase_failed = False
         for i in range(self.num_queries):
+            self.log.info("Running Query no --> " + str(i))
             fts_query, es_query = FTSESQueryGenerator.construct_geo_location_query()
-            print fts_query
+            print(fts_query)
+            print("fts_query location ---> " + str(fts_query["location"]))
+            # If query has geo co-ordinates in form of an object
             if "lon" in fts_query["location"]:
                 lon = fts_query["location"]["lon"]
                 lat = fts_query["location"]["lat"]
-            else:
+            # If query has geo co-ordinates in form of a list
+            elif isinstance(fts_query["location"], list):
                 lon = fts_query["location"][0]
                 lat = fts_query["location"][1]
+            # If query has geo co-ordinates in form of a string or geohash
+            elif isinstance(fts_query["location"], str):
+                # If the location is in string format
+                if "," in fts_query["location"]:
+                    lat = float(fts_query["location"].split(",")[0])
+                    lon = float(fts_query["location"].split(",")[1])
+                else:
+                    lat = float(Geohash.decode(fts_query["location"])[0])
+                    lon = float (Geohash.decode(fts_query["location"])[1])
             unit = fts_query["distance"][-2:]
+
+            location = None
+            case = random.randint(0, 3)
+
+            # Geo location as an object
+            if case == 0:
+                location = {"lon": lon,
+                        "lat": lat}
+            # Geo Location as array
+            if case == 1:
+                location = [lon, lat]
+
+            # Geo Location as string
+            if case == 2:
+                location = "{0},{1}".format(lat, lon)
+
+            # Geo Location as Geohash
+            if case == 3:
+                geohash = Geohash.encode(lat, lon, precision=random.randint(3, 8))
+                location = geohash
+            print("sort_fields_location ----> " + str(location))
             sort_fields = [
                 {
                     "by": "geo_distance",
                     "field": "geo",
                     "unit": unit,
-                    "location": {
-                        "lon": lon,
-                        "lat": lat
-                    }
+                    "location": location
                 }
             ]
 
@@ -1614,7 +1800,7 @@ class StableTopFTS(FTSBaseTest):
             sort_fields_es = [
                 {
                     "_geo_distance": {
-                        "geo": [lon, lat],
+                        "geo": location,
                         "order": "asc",
                         "unit": unit
                     }
@@ -1633,9 +1819,12 @@ class StableTopFTS(FTSBaseTest):
             else:
                 msg = "FAIL: Sort order mismatch!"
                 self.log.error(msg)
-                self.fail(msg)
+                testcase_failed = True
+
             self.log.info("--------------------------------------------------"
                           "--------------------------------------------------")
+        if testcase_failed:
+            self.fail(msg)
 
     def test_xattr_support(self):
         """
@@ -1723,7 +1912,7 @@ class StableTopFTS(FTSBaseTest):
             authenticator = PasswordAuthenticator('Administrator', 'password')
             cluster.authenticate(authenticator)
             cb = cluster.open_bucket('default')
-            for key, value in dic.iteritems():
+            for key, value in dic.items():
                 cb.upsert(key, value)
         except Exception as e:
             self.fail(e)
@@ -1732,3 +1921,251 @@ class StableTopFTS(FTSBaseTest):
         for index in self._cb_cluster.get_indexes():
             self.generate_random_queries(index, 5, self.query_types)
             self.run_query_and_compare(index)
+
+    # This test is to validate if the value for score is 0 for all docs when score=none is specified in the search query.
+    def test_score_none(self):
+        # Create bucket, create index
+        self.load_data()
+        self.wait_till_items_in_bucket_equal(items=self._num_items // 2)
+        index = self.create_index(
+            self._cb_cluster.get_bucket_by_name('default'),
+            "default_index")
+        self.wait_for_indexing_complete()
+        zero_results_ok = True
+        expected_hits = int(self._input.param("expected_hits", 0))
+        default_query = {"match": "Safiya", "field": "name"}
+        query = eval(self._input.param("query", str(default_query)))
+        if expected_hits:
+            zero_results_ok = False
+        if isinstance(query, str):
+            query = json.loads(query)
+
+        try:
+            for index in self._cb_cluster.get_indexes():
+                hits, contents, _, _ = index.execute_query(query=query,
+                                                           zero_results_ok=zero_results_ok,
+                                                           expected_hits=expected_hits,
+                                                           return_raw_hits=True,
+                                                           score="none")
+
+                self.log.info("Hits: %s" % hits)
+                self.log.info("Content: %s" % contents)
+                result = True
+                if hits == expected_hits:
+                    for doc in contents:
+                        # Check if the score of the doc is 0.
+                        if "score" in doc:
+                            self.assertEqual(doc["score"], 0, "Score is not 0 for doc {0}".format(doc["id"]))
+                        else:
+                            self.fail("Score key not present in search results for doc {0}".format(doc["id"]))
+                    if not result:
+                        self.fail(
+                            "Testcase failed. Actual results do not match expected.")
+                else:
+                    self.fail("No. of hits not matching expected hits. Hits = {0}, Expected Hits = {1}".format(hits,
+                                                                                                               expected_hits))
+        except Exception as err:
+            self.log.error(err)
+            self.fail("Testcase failed: " + err.message)
+
+    # This test checks the correctness of search results from queries with score=none and without score=none.
+    def test_result_correctness_score_none(self):
+        # Create bucket, create index
+        self.load_data()
+        self.wait_till_items_in_bucket_equal(items=self._num_items // 2)
+        index = self.create_index(
+            self._cb_cluster.get_bucket_by_name('default'),
+            "default_index")
+        self.wait_for_indexing_complete()
+        zero_results_ok = True
+        expected_hits = int(self._input.param("expected_hits", 0))
+        default_query = {"match": "Safiya", "field": "name"}
+        query = eval(self._input.param("query", str(default_query)))
+        if expected_hits:
+            zero_results_ok = False
+        if isinstance(query, str):
+            query = json.loads(query)
+
+        try:
+            for index in self._cb_cluster.get_indexes():
+                hits, doc_ids_with_score_none, _, _ = index.execute_query(query=query,
+                                                           zero_results_ok=zero_results_ok,
+                                                           return_raw_hits=False,
+                                                           score="none")
+
+                self.log.info("Hits: %s" % hits)
+                self.log.info("Docs: %s" % doc_ids_with_score_none)
+                doc_ids_with_score_none.sort()
+                hits, doc_ids_without_score_none, _, _ = index.execute_query(query=query,
+                                                                          zero_results_ok=zero_results_ok,
+                                                                          return_raw_hits=False)
+
+                self.log.info("Hits: %s" % hits)
+                self.log.info("Docs: %s" % doc_ids_without_score_none)
+                doc_ids_without_score_none.sort()
+                self.assertListEqual(doc_ids_with_score_none, doc_ids_without_score_none, "Doc Ids not equal")
+
+        except Exception as err:
+            self.log.error(err)
+            self.fail("Testcase failed: " + err.message)
+
+    # Tests the ASCII folding filter with different types of accented characters
+    def test_ascii_folding_filter(self):
+        # Reference for test data : http://www.jarte.com/help_new/accent_marks_diacriticals_and_special_characters.html
+        test_data = [
+            {"text": "Ápple"},
+            {"text": "Àpple"},
+            {"text": "Äpple"},
+            {"text": "Âpple"},
+            {"text": "Ãpple"},
+            {"text": "Åpple"},
+            {"text": "ápple"},
+            {"text": "àpple"},
+            {"text": "äpple"},
+            {"text": "âpple"},
+            {"text": "ãpple"},
+            {"text": "åpple"},
+            {"text": "Ðodge"},
+            {"text": "ðodge"},
+            {"text": "Élephant"},
+            {"text": "élephant"},
+            {"text": "Èlephant"},
+            {"text": "èlephant"},
+            {"text": "Ëlephant"},
+            {"text": "ëlephant"},
+            {"text": "Êlephant"},
+            {"text": "êlephant"},
+            {"text": "Íceland"},
+            {"text": "íceland"},
+            {"text": "Ìceland"},
+            {"text": "ìceland"},
+            {"text": "Ïceland"},
+            {"text": "ïceland"},
+            {"text": "Îceland"},
+            {"text": "îceland"},
+            {"text": "Órange"},
+            {"text": "órange"},
+            {"text": "Òrange"},
+            {"text": "òrange"},
+            {"text": "Örange"},
+            {"text": "örange"},
+            {"text": "Ôrange"},
+            {"text": "ôrange"},
+            {"text": "Õrange"},
+            {"text": "õrange"},
+            {"text": "Ørange"},
+            {"text": "ørange"},
+            {"text": "Únicorn"},
+            {"text": "únicorn"},
+            {"text": "Ùnicorn"},
+            {"text": "ùnicorn"},
+            {"text": "Ünicorn"},
+            {"text": "ünicorn"},
+            {"text": "Ûnicorn"},
+            {"text": "ûnicorn"},
+            {"text": "Ýellowstone"},
+            {"text": "ýellowstone"},
+            {"text": "Ÿellowstone"},
+            {"text": "ÿellowstone"},
+            {"text": "Ñocturnal"},
+            {"text": "ñocturnal"},
+            {"text": "Çelcius"},
+            {"text": "çelcius"},
+            {"text": "Œlcius"},
+            {"text": "œlcius"},
+            {"text": "Šmall"},
+            {"text": "šmall"},
+            {"text": "Žebra"},
+            {"text": "žebra"},
+            {"text": "Æsthetic"},
+            {"text": "æsthetic"},
+            {"text": "Þhonetic"},
+            {"text": "þhonetic"},
+            {"text": "Discuß"},
+            {"text": "ÆꜴ"}
+
+        ]
+
+        search_terms = [
+            {"term": "apple", "expected_hits": 6},
+            {"term": "Apple", "expected_hits": 6},
+            {"term": "dodge", "expected_hits": 1},
+            {"term": "Dodge", "expected_hits": 1},
+            {"term": "Elephant", "expected_hits": 4},
+            {"term": "elephant", "expected_hits": 4},
+            {"term": "iceland", "expected_hits": 4},
+            {"term": "Iceland", "expected_hits": 4},
+            {"term": "orange", "expected_hits": 6},
+            {"term": "Orange", "expected_hits": 6},
+            {"term": "unicorn", "expected_hits": 4},
+            {"term": "Unicorn", "expected_hits": 4},
+            {"term": "yellowstone", "expected_hits": 2},
+            {"term": "Yellowstone", "expected_hits": 2},
+            {"term": "nocturnal", "expected_hits": 1},
+            {"term": "Nocturnal", "expected_hits": 1},
+            {"term": "celcius", "expected_hits": 1},
+            {"term": "Celcius", "expected_hits": 1},
+            {"term": "oelcius", "expected_hits": 1},
+            {"term": "OElcius", "expected_hits": 1},
+            {"term": "small", "expected_hits": 1},
+            {"term": "Small", "expected_hits": 1},
+            {"term": "zebra", "expected_hits": 1},
+            {"term": "Zebra", "expected_hits": 1},
+            {"term": "aesthetic", "expected_hits": 1},
+            {"term": "AEsthetic", "expected_hits": 1},
+            {"term": "thhonetic", "expected_hits": 1},
+            {"term": "THhonetic", "expected_hits": 1},
+            {"term": "Discuss", "expected_hits": 1},
+            {"term": "AEAO", "expected_hits": 1}
+        ]
+
+        self.create_test_dataset(self._master, test_data)
+        self.wait_till_items_in_bucket_equal(items=len(test_data))
+
+        index = self.create_index(
+            self._cb_cluster.get_bucket_by_name('default'),
+            "default_index")
+        self.wait_for_indexing_complete()
+
+        # Update index to have the child field "text"
+        index.add_child_field_to_default_mapping("text", "text")
+        index.index_definition['uuid'] = index.get_uuid()
+        index.update()
+
+        # Update index to have a custom analyzer which uses the ascii folding filter as a char filter
+        index.index_definition["params"]["mapping"]["analysis"] = {}
+        index.index_definition["params"]["mapping"]["analysis"] = json.loads(
+            "{\"analyzers\": {\"asciiff\": {\"char_filters\": [\"asciifolding\"],\"tokenizer\": \"letter\",\"type\": \"custom\" }}}")
+
+        index.index_definition["params"]["mapping"]["default_analyzer"] = "asciiff"
+
+        index.index_definition['uuid'] = index.get_uuid()
+        index.update()
+        self.wait_for_indexing_complete()
+
+        # Run queries
+        try:
+            for index in self._cb_cluster.get_indexes():
+                all_queries_passed = True
+                failed_search_terms = []
+                for search_term in search_terms:
+                    self.log.info("=============== Querying for term {0} ===============".format(search_term["term"]))
+                    query = {'match': search_term["term"], 'field': 'text'}
+                    expected_hits = search_term["expected_hits"]
+                    hits, contents, _, _ = index.execute_query(query=query,
+                                                               zero_results_ok=True,
+                                                               return_raw_hits=True)
+
+                    self.log.info("Hits: %s" % hits)
+                    self.log.info("Content: %s" % contents)
+
+                    if hits != expected_hits:
+                        all_queries_passed = False
+                        failed_search_terms.append(search_term["term"])
+
+                self.assertTrue(all_queries_passed,
+                                "All search terms did not return expected results. Terms for which queries failed : {0}".format(
+                                    str(failed_search_terms)))
+        except Exception as err:
+            self.log.error(err)
+            self.fail("Testcase failed: " + err.message)

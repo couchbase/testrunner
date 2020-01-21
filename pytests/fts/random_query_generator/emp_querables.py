@@ -22,7 +22,7 @@ class EmployeeQuerables:
 
     def return_unicode(self, text):
         try:
-            text = unicode(text, 'utf-8')
+            text = str(text, 'utf-8')
             return text
         except TypeError:
             return text

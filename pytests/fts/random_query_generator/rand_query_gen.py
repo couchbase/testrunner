@@ -2,8 +2,9 @@ import random
 import json
 #import sys
 #sys.path.append("/Users/apiravi/testrunner")
-from emp_querables import EmployeeQuerables
-from wiki_queryables import WikiQuerables
+from .emp_querables import EmployeeQuerables
+from .wiki_queryables import WikiQuerables
+import Geohash
 
 class DATASET:
     FIELDS = {'emp': {'str': ["name", "dept", "manages_reports",
@@ -70,8 +71,8 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
         if self.query_types:
             self.construct_queries()
         else:
-            print "No string/number/date fields indexed for smart" \
-                  " query generation "
+            print("No string/number/date fields indexed for smart" \
+                  " query generation ")
 
 
     def construct_fields(self):
@@ -82,11 +83,11 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
             all_fields = DATASET.FIELDS['wiki']
         elif self.dataset == "all":
             fields_set = set()
-            for _, fields in DATASET.FIELDS.iteritems():
+            for _, fields in DATASET.FIELDS.items():
                 fields_set |= set(fields.keys())
             for v in fields_set:
                 all_fields[v] = []
-            for _, fields in DATASET.FIELDS.iteritems():
+            for _, fields in DATASET.FIELDS.items():
                 all_fields['str'] += fields['str']
                 all_fields['date'] += fields['date']
                 all_fields['num'] += fields['num']
@@ -99,7 +100,7 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
         Passed field types could be specified as  "num"/"number"/"integer".
         Standardize it to work with RQG
         """
-        for field_type, field_list in fields.iteritems():
+        for field_type, field_list in fields.items():
             if field_type == "str" or field_type == "text":
                 self.fields["str"] = field_list
                 self.fields["text"] = field_list
@@ -107,11 +108,11 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
                 self.fields["num"] = field_list
             if field_type == "datetime":
                 self.fields["date"] = field_list
-        print "Smart queries will be generated on fields: %s" % self.fields
+        print("Smart queries will be generated on fields: %s" % self.fields)
 
     def get_custom_query_types(self):
         query_types = []
-        for field_type in self.fields.keys():
+        for field_type in list(self.fields.keys()):
             query_types += QUERY_TYPE.CUSTOM_QUERY_TYPES[field_type]
         return list(set(query_types))
 
@@ -124,7 +125,7 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
             "revision_date": "revision.date"
         }
         query_str = json.dumps(query, ensure_ascii=False)
-        for key, val in replace_dict.iteritems():
+        for key, val in replace_dict.items():
             query_str = query_str.replace(key, val)
         return json.loads(query_str, encoding='utf-8')
 
@@ -562,10 +563,25 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
             }
         }
 
-        if bool(random.getrandbits(1)):
+        case = random.randint(0, 3)
+
+        # Geo Location as array
+        if case == 1:
             fts_query['location'] = [lon, lat]
             es_query['filter']['geo_distance']['geo'] = [lon, lat]
 
+        # Geo Location as string
+        if case == 2:
+            fts_query['location'] = "{0},{1}".format(lat, lon)
+            es_query['filter']['geo_distance']['geo'] = "{0},{1}".format(lat, lon)
+
+        # Geo Location as Geohash
+        if case == 3:
+            geohash = Geohash.encode(lat, lon, precision=random.randint(3, 8))
+            fts_query['location'] = geohash
+            es_query['filter']['geo_distance']['geo'] = geohash
+
+        # Geo Location as an object of lat and lon if case == 0
         return fts_query, es_query
 
     @staticmethod
@@ -656,7 +672,7 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
         return fts_compound_query, es_compound_query
 
     def get_queryable_type(self):
-        doc_types = DATASET.FIELDS.keys()
+        doc_types = list(DATASET.FIELDS.keys())
         return self.get_random_value(doc_types)
 
 if __name__ == "__main__":
@@ -665,6 +681,6 @@ if __name__ == "__main__":
     query_type = ['term_range']
     query_gen = FTSESQueryGenerator(100, query_type=query_type, dataset='all')
     for index, query in enumerate(query_gen.fts_queries):
-        print json.dumps(query, ensure_ascii=False, indent=3)
-        print json.dumps(query_gen.es_queries[index], ensure_ascii=False, indent=3)
-        print "------------"
+        print(json.dumps(query, ensure_ascii=False, indent=3))
+        print(json.dumps(query_gen.es_queries[index], ensure_ascii=False, indent=3))
+        print("------------")

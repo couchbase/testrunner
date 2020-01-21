@@ -1,9 +1,9 @@
 from lib.couchbase_helper.tuq_helper import N1QLHelper
 from lib.membase.api.rest_client import RestConnection, RestHelper
 from lib.testconstants import STANDARD_BUCKET_PORT
-from pytests.eventing.eventing_constants import HANDLER_CODE
+from pytests.eventing.eventing_constants import HANDLER_CODE, HANDLER_CODE_CURL
 from pytests.eventing.eventing_base import EventingBaseTest
-import logging
+import logging, json, os
 
 log = logging.getLogger()
 
@@ -48,6 +48,14 @@ class EventingSettings(EventingBaseTest):
                                           )
             self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
             self.handler_code = HANDLER_CODE.N1QL_OPS_WITH_TIMERS
+        elif handler_code == 'source_bucket_mutation':
+            self.handler_code = HANDLER_CODE.BUCKET_OP_WITH_SOURCE_BUCKET_MUTATION
+        elif handler_code == 'source_bucket_mutation_with_timers':
+            self.handler_code = HANDLER_CODE.BUCKET_OP_SOURCE_BUCKET_MUTATION_WITH_TIMERS
+        elif handler_code == 'bucket_op_curl_get':
+            self.handler_code = HANDLER_CODE_CURL.BUCKET_OP_WITH_CURL_GET
+        elif handler_code == 'timer_op_curl_post':
+            self.handler_code = HANDLER_CODE_CURL.TIMER_OP_WITH_CURL_POST
         else:
             self.handler_code = HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE
 
@@ -70,12 +78,18 @@ class EventingSettings(EventingBaseTest):
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
         # Wait for eventing to catch up with all the update mutations and verify results after rebalance
-        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        if self.is_sbm:
+            self.verify_eventing_results(self.function_name, 2*self.docs_per_day * 2016, skip_stats_validation=True)
+        else:
+            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         # delete json documents
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size, op_type='delete')
         # Wait for eventing to catch up with all the delete mutations and verify results
-        self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+        if self.is_sbm:
+            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        else:
+            self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
         # This sleep is intentionally added, undeploy takes some time to cleanup the eventing-consumer's
         self.sleep(60)
@@ -92,19 +106,25 @@ class EventingSettings(EventingBaseTest):
                   batch_size=self.batch_size)
         # dynamically change the log level
         # currently this is the only setting that can be dynamically modified when a function is deployed
-        for i in xrange(5):
+        for i in range(5):
             for log_level in ['TRACE', 'INFO', 'ERROR', 'WARNING', 'DEBUG']:
                 body['settings']['log_level'] = log_level
                 log.info("Changing log level to {0}".format(log_level))
                 self.rest.set_settings_for_function(body['appname'], body['settings'])
                 self.sleep(5)
         # Wait for eventing to catch up with all the update mutations and verify results after rebalance
-        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        if self.is_sbm:
+            self.verify_eventing_results(self.function_name, 2*self.docs_per_day * 2016, skip_stats_validation=True)
+        else:
+            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         # delete json documents
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size, op_type='delete')
         # Wait for eventing to catch up with all the delete mutations and verify results
-        self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+        if self.is_sbm:
+            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        else:
+            self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
         # This sleep is intentionally added, undeploy takes some time to cleanup the eventing-consumer's
         self.sleep(60)
@@ -133,10 +153,103 @@ class EventingSettings(EventingBaseTest):
         # For new alias values to propagate we need to deploy the function again.
         self.deploy_function(body)
         # Wait for eventing to catch up with all the delete mutations and verify results
+        if self.is_sbm:
+            self.verify_eventing_results(self.function_name, 2*self.docs_per_day * 2016, skip_stats_validation=True)
+        else:
+            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        # delete json documents
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size, op_type='delete')
+        # Wait for eventing to catch up with all the delete mutations and verify results
+        if self.is_sbm:
+            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        else:
+            self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+        self.undeploy_and_delete_function(body)
+
+    def test_bindings_and_description_change_propagate_after_function_is_resumed(self):
+        # load documents
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        body = self.create_save_function_body(self.function_name, self.handler_code)
+        # remove alias before deploying
+        del body['depcfg']['buckets']
+        # deploy a function without any alias
+        self.deploy_function(body)
+        # make sure no doc in destination bucket
+        self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+        # pause the function
+        self.pause_function(body)
+        #update bucket settings
+        body1=self.rest.get_function_details(body['appname'])
+        body1=json.loads(body1)
+        del body1['settings']['dcp_stream_boundary']
+        body1['settings']['description'] = "Adding a new description"
+        body1['depcfg']['buckets'] = []
+        body1['depcfg']['buckets'].append({"alias": self.dst_bucket_name, "bucket_name": self.dst_bucket_name})
+        self.rest.update_function(body['appname'], body1)
+        # update all documents
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size, op_type='update')
+        # For new alias values to propagate we need to deploy the function again.
+        self.resume_function(body)
+        # Wait for eventing to catch up with all the delete mutations and verify results
         self.verify_eventing_results(self.function_name,  self.docs_per_day * 2016, skip_stats_validation=True)
         # delete json documents
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size, op_type='delete')
         # Wait for eventing to catch up with all the delete mutations and verify results
         self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+        self.undeploy_and_delete_function(body)
+
+    def test_handler_change_then_function_is_resumed(self):
+        # load data
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        body = self.create_save_function_body(self.function_name, self.handler_code)
+        # deploy a function without any alias
+        self.deploy_function(body)
+        #verify the documents
+        self.verify_eventing_results(self.function_name,  self.docs_per_day * 2016, skip_stats_validation=True)
+        # pause the function
+        self.pause_function(body)
+        # This is an important sleep, without this undeploy doesn't finish properly and subsequent deploy hangs
+        self.sleep(30)
+        # update bucket settings
+        body1 = self.rest.get_function_details(body['appname'])
+        body1 = json.loads(body1)
+        del body1['settings']['dcp_stream_boundary']
+        body1['settings']['description'] = "Adding a new description"
+        body1['depcfg']['buckets'] = []
+        body1['depcfg']['buckets'].append({"alias": self.src_bucket_name, "bucket_name": self.src_bucket_name,"access": "rw"})
+        script_dir = os.path.dirname(__file__)
+        abs_file_path = os.path.join(script_dir, HANDLER_CODE.BUCKET_OP_WITH_SOURCE_BUCKET_MUTATION)
+        fh = open(abs_file_path, "r")
+        body1['appcode'] = fh.read()
+        self.rest.update_function(body['appname'], body1)
+        # update all documents
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size, op_type='update')
+        # For new alias values to propagate we need to deploy the function again.
+        self.resume_function(body)
+        self.is_sbm=True
+        # Wait for eventing to catch up with all the delete mutations and verify results
+        self.verify_eventing_results(self.function_name,  self.docs_per_day * 2016 * 2, skip_stats_validation=True)
+        self.undeploy_and_delete_function(body)
+
+    #MB-31146
+    def test_default_log_level(self):
+        # load data
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        body = self.create_save_function_body(self.function_name, self.handler_code)
+        #remove log level
+        del body['settings']['log_level']
+        # deploy a function without any alias
+        self.deploy_function(body)
+        # Wait for eventing to catch up with all the delete mutations and verify results
+        if self.is_sbm:
+            self.verify_eventing_results(self.function_name, 2*self.docs_per_day * 2016, skip_stats_validation=True)
+        else:
+            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)

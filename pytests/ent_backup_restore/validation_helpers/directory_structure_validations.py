@@ -19,7 +19,8 @@ class DirectoryStructureValidations(BackupRestoreValidationBase):
         backup_directory = "{0}/{1}".format(self.backupset.directory, self.backupset.name)
         command = "ls -lR {0}".format(backup_directory)
         output, error = remote_client.execute_command(command)
-        remote_client.log_command_output(output, error)
+        if error:
+            self.log.error("Error in check backup directory {0}".format(error))
         remote_client.disconnect()
         current_path = self.backupset.directory
         parent_path = self.backupset.name
@@ -83,7 +84,7 @@ class DirectoryStructureValidations(BackupRestoreValidationBase):
                 else:
                     buck['data'] = {}
                     for i in range(0, int(self.backupset.threads)):
-                        shard = 'shard_{0}.fdb'.format(i)
+                        shard = 'shard_{0}.sqlite.0'.format(i)
                         buck['data'][shard] = shard
         return json_helper.object
 

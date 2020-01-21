@@ -17,7 +17,7 @@ class DocumentKeysTests(BaseTestCase):
 
     """Helper function to initialize data generator"""
     def _init_data_gen(self, key="dockey"):
-        age = range(5)
+        age = list(range(5))
         first = ['james', 'sharon']
         template = '{{ "mutated" : 0, "age": {0}, "first_name": "{1}" }}'
         gen_load = DocumentGenerator(key, template, age, first, start=0, end=self.num_items)
@@ -92,7 +92,7 @@ class DocumentKeysTests(BaseTestCase):
                 self.log.exception("unable to create memcached client due to {0}..".format(ex))
 
             try:
-                for itr in xrange(self.num_items):
+                for itr in range(self.num_items):
                     key = dockey + str(itr)
                     value = str(itr)
                     if data_op in ["create", "update"]:
@@ -115,7 +115,7 @@ class DocumentKeysTests(BaseTestCase):
         self._dockey_data_ops("d\ro\nckey")
 
     def test_dockey_unicode_data_ops(self):
-        self._dockey_data_ops("\u00CA")
+        self._dockey_data_ops("\\u00CA")
 
     def test_dockey_whitespace_views(self):
         self._dockey_views("doc    key  ")

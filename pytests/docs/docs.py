@@ -48,8 +48,8 @@ class DocsTests(BaseTestCase):
     10) See if we can run into "Hard out of Memory" error (UI)
     """
     def test_load_memory(self):
-        num_items = self.quota * 1024 * 0.6 / self.value_size
-        num_items = num_items / len(self.buckets)
+        num_items = self.quota * 1024 * 0.6 // self.value_size
+        num_items = num_items // len(self.buckets)
 
         self.log.info("Load initial data on all buckets upto 60% of each memory quota")
         gen_load = BlobGenerator('mike', 'mike-', self.value_size, start=0,
@@ -60,7 +60,7 @@ class DocsTests(BaseTestCase):
             if bucket.type != 'memcached':
                 bucket_to_load = bucket
                 break
-        new_num_items = self.quota * 1024 * 0.15 / self.value_size
+        new_num_items = self.quota * 1024 * 0.15 // self.value_size
         gen_load = BlobGenerator('mike', 'mike-', self.value_size, start=num_items,
                                  end=new_num_items + num_items)
         load = self.cluster.async_load_gen_docs(self.master, bucket_to_load.name, gen_load,

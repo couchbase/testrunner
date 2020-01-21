@@ -59,7 +59,7 @@ class BucketConfig(BaseTestCase):
                 rebalanced = ClusterOperationHelper.add_and_rebalance(
                     self.servers)
 
-            except Exception, e:
+            except Exception as e:
                 self.fail(e, 'cluster is not rebalanced')
 
         self._create_bucket(self.lww, self.drift)
@@ -78,7 +78,7 @@ class BucketConfig(BaseTestCase):
         try:
             self.log.info("Modifying timeSynchronization value after bucket creation .....")
             self._modify_bucket()
-        except Exception, e:
+        except Exception as e:
             traceback.print_exc()
             self.fail('[ERROR] Modify testcase failed .., {0}'.format(e))
 
@@ -88,7 +88,7 @@ class BucketConfig(BaseTestCase):
             self._restart_server(self.servers[:])
             self.log.info("Verifying bucket settings after restart ..")
             self._check_config()
-        except Exception, e:
+        except Exception as e:
             traceback.print_exc()
             self.fail("[ERROR] Check data after restart failed with exception {0}".format(e))
 
@@ -100,7 +100,7 @@ class BucketConfig(BaseTestCase):
             self.cluster.rebalance(self.servers, [], self.servers[1:num_nodes])
             self.log.info("Verifying bucket settings after failover ..")
             self._check_config()
-        except Exception, e:
+        except Exception as e:
             traceback.print_exc()
             self.fail('[ERROR]Failed to failover .. , {0}'.format(e))
 
@@ -111,7 +111,7 @@ class BucketConfig(BaseTestCase):
                 self.servers)
             self.log.info("Verifying bucket settings after rebalance ..")
             self._check_config()
-        except Exception, e:
+        except Exception as e:
             self.fail('[ERROR]Rebalance failed .. , {0}'.format(e))
 
     def test_backup_same_cluster(self):
@@ -143,7 +143,7 @@ class BucketConfig(BaseTestCase):
             self.shell.execute_cluster_backup(self.couchbase_login_info, self.backup_location, self.command_options)
 
             time.sleep(5)
-            self._create_bucket(lww=False,name="new_bucket")
+            self._create_bucket(lww=False, name="new_bucket")
             self.buckets = RestConnection(self.master).get_buckets()
             shell.restore_backupFile(self.couchbase_login_info, self.backup_location, ["new_bucket"])
 
@@ -167,11 +167,11 @@ class BucketConfig(BaseTestCase):
                 self.servers)
             info = self.rest.get_nodes_self()
             self.rest.create_bucket(bucket=self.bucket,
-                ramQuotaMB=512,authType='sasl',lww=self.lww)
+                ramQuotaMB=512, authType='sasl', lww=self.lww)
             try:
                 ready = BucketOperationHelper.wait_for_memcached(self.master,
                     self.bucket)
-            except Exception, e:
+            except Exception as e:
                 self.fail('unable to create bucket')
 
     # KETAKI tochange this
@@ -182,7 +182,7 @@ class BucketConfig(BaseTestCase):
         info = self.rest.get_nodes_self()
 
         status, content = self.rest.change_bucket_props(bucket=self.bucket,
-            ramQuotaMB=512,authType='sasl',timeSynchronization='enabledWithOutDrift')
+            ramQuotaMB=512, authType='sasl', timeSynchronization='enabledWithOutDrift')
         if re.search('TimeSyncronization not allowed in update bucket', content):
             self.log.info('[PASS]Expected modify bucket to disallow Time Synchronization.')
         else:
@@ -230,7 +230,7 @@ class BucketConfig(BaseTestCase):
         rc = self.rest.get_bucket_json(self.bucket)
         if 'conflictResolution' in rc:
             conflictResolution  = self.rest.get_bucket_json(self.bucket)['conflictResolutionType']
-            self.assertTrue(conflictResolution == 'lww','Expected conflict resolution of lww but got {0}'.format(conflictResolution))
+            self.assertTrue(conflictResolution == 'lww', 'Expected conflict resolution of lww but got {0}'.format(conflictResolution))
 
 
         """ drift is disabled in 4.6, commenting out for now as it may come back later

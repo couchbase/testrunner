@@ -11,12 +11,18 @@ log = logging.getLogger()
 class EventingConcurrency(EventingBaseTest):
     def setUp(self):
         super(EventingConcurrency, self).setUp()
-        self.rest.set_service_memoryQuota(service='memoryQuota', memoryQuota=500)
+        self.rest.set_service_memoryQuota(service='memoryQuota', memoryQuota=700)
         if self.create_functions_buckets:
+            self.replicas = self.input.param("replicas", 0)
             self.bucket_size = 100
+            # This is needed as we have increased the context size to 93KB. If this is not increased the metadata
+            # bucket goes into heavy DGM
+            self.metadata_bucket_size = 300
             log.info(self.bucket_size)
             bucket_params = self._create_bucket_params(server=self.server, size=self.bucket_size,
-                                                       replicas=self.num_replicas)
+                                                       replicas=self.replicas)
+            bucket_params_meta = self._create_bucket_params(server=self.server, size=self.metadata_bucket_size,
+                                                            replicas=self.replicas)
             self.cluster.create_standard_bucket(name=self.src_bucket_name, port=STANDARD_BUCKET_PORT + 1,
                                                 bucket_params=bucket_params)
             self.src_bucket = RestConnection(self.master).get_buckets()
@@ -25,7 +31,7 @@ class EventingConcurrency(EventingBaseTest):
             self.cluster.create_standard_bucket(name=self.dst_bucket_name1, port=STANDARD_BUCKET_PORT + 1,
                                                 bucket_params=bucket_params)
             self.cluster.create_standard_bucket(name=self.metadata_bucket_name, port=STANDARD_BUCKET_PORT + 1,
-                                                bucket_params=bucket_params)
+                                                bucket_params=bucket_params_meta)
             self.buckets = RestConnection(self.master).get_buckets()
         self.gens_load = self.generate_docs(self.docs_per_day)
         self.expiry = 3
@@ -40,9 +46,10 @@ class EventingConcurrency(EventingBaseTest):
                                               worker_count=3, multi_dst_bucket=True)
         self.deploy_function(body)
         # Wait for eventing to catch up with all the create mutations and verify results
-        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016)
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, timeout=1200)
         self.dst_bucket_name = self.dst_bucket_name1
-        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, bucket=self.dst_bucket_name1)
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, bucket=self.dst_bucket_name1,
+                                     timeout=1200)
         self.undeploy_and_delete_function(body)
 
     def test_function_with_handler_code_with_multiple_timer_operations_with_bucket_operations_to_multiple_buckets(self):
@@ -53,10 +60,10 @@ class EventingConcurrency(EventingBaseTest):
                                               worker_count=3, multi_dst_bucket=True)
         self.deploy_function(body)
         # Wait for eventing to catch up with all the create mutations and verify results
-        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, doc_timer_events=True)
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, doc_timer_events=True, timeout=1200)
         self.dst_bucket_name = self.dst_bucket_name1
         self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, doc_timer_events=True,
-                                     bucket=self.dst_bucket_name1)
+                                     bucket=self.dst_bucket_name1, timeout=1200)
         self.undeploy_and_delete_function(body)
 
     def test_function_with_handler_code_with_multiple_timer_operations_of_the_same_type(self):
@@ -67,10 +74,10 @@ class EventingConcurrency(EventingBaseTest):
                                               worker_count=3, multi_dst_bucket=True)
         self.deploy_function(body)
         # Wait for eventing to catch up with all the create mutations and verify results
-        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, doc_timer_events=True)
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, doc_timer_events=True, timeout=1200)
         self.dst_bucket_name = self.dst_bucket_name1
         self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, doc_timer_events=True,
-                                     bucket=self.dst_bucket_name1)
+                                     bucket=self.dst_bucket_name1, timeout=1200)
         self.undeploy_and_delete_function(body)
 
     def test_multiple_functions_at_the_same_time(self):
@@ -90,10 +97,10 @@ class EventingConcurrency(EventingBaseTest):
         body1['depcfg']['buckets'].append({"alias": self.dst_bucket_name1, "bucket_name": self.dst_bucket_name1})
         self.deploy_function(body1)
         # Wait for eventing to catch up with all the create mutations and verify results
-        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, doc_timer_events=True)
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, doc_timer_events=True, timeout=1200)
         self.dst_bucket_name = self.dst_bucket_name1
         self.verify_eventing_results(self.function_name + "_1", self.docs_per_day * 2016, doc_timer_events=True,
-                                     bucket=self.dst_bucket_name1)
+                                     bucket=self.dst_bucket_name1, timeout=1200)
         self.undeploy_and_delete_function(body)
         self.undeploy_and_delete_function(body1)
 

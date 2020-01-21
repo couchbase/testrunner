@@ -19,18 +19,25 @@ log = logging.getLogger()
 class EventingDataset(EventingBaseTest):
     def setUp(self):
         super(EventingDataset, self).setUp()
+        self.rest.set_service_memoryQuota(service='memoryQuota', memoryQuota=700)
         if self.create_functions_buckets:
+            self.replicas = self.input.param("replicas", 0)
             self.bucket_size = 100
+            # This is needed as we have increased the context size to 93KB. If this is not increased the metadata
+            # bucket goes into heavy DGM
+            self.metadata_bucket_size = 400
             log.info(self.bucket_size)
             bucket_params = self._create_bucket_params(server=self.server, size=self.bucket_size,
-                                                       replicas=self.num_replicas)
+                                                       replicas=self.replicas)
+            bucket_params_meta = self._create_bucket_params(server=self.server, size=self.metadata_bucket_size,
+                                                            replicas=self.replicas)
             self.cluster.create_standard_bucket(name=self.src_bucket_name, port=STANDARD_BUCKET_PORT + 1,
                                                 bucket_params=bucket_params)
             self.src_bucket = RestConnection(self.master).get_buckets()
             self.cluster.create_standard_bucket(name=self.dst_bucket_name, port=STANDARD_BUCKET_PORT + 1,
                                                 bucket_params=bucket_params)
             self.cluster.create_standard_bucket(name=self.metadata_bucket_name, port=STANDARD_BUCKET_PORT + 1,
-                                                bucket_params=bucket_params)
+                                                bucket_params=bucket_params_meta)
             self.buckets = RestConnection(self.master).get_buckets()
         self.gens_load = self.generate_docs(self.docs_per_day)
         self.expiry = 3
@@ -306,3 +313,60 @@ class EventingDataset(EventingBaseTest):
             if "Could not execute one or more multi lookups or mutations" not in str(r):
                 self.fail("eventing is still using xattrs for timers")
         self.undeploy_and_delete_function(body)
+
+
+    def test_eventing_crc_and_fiid(self):
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OP_SOURCE_DOC_MUTATION,
+                                              dcp_stream_boundary="from_now")
+        # deploy eventing function
+        self.deploy_function(body)
+        url = 'couchbase://{ip}/{name}'.format(ip=self.master.ip, name=self.src_bucket_name)
+        bucket = Bucket(url, username="cbadminbucket", password="password")
+        for docid in ['customer123', 'customer1234', 'customer12345']:
+            bucket.upsert(docid, {'a': 1})
+        self.verify_eventing_results(self.function_name, 3, skip_stats_validation=True)
+        # check for fiid and crc
+        for docid in ['customer123', 'customer1234', 'customer12345']:
+            fiid = bucket.lookup_in(docid, SD.exists('_eventing.fiid', xattr=True))
+            self.log.info(fiid.exists('_eventing.fiid'))
+            crc = bucket.lookup_in(docid, SD.exists('_eventing.crc', xattr=True))
+            self.log.info(crc.exists('_eventing.crc'))
+            if not fiid.exists('_eventing.fiid') and not crc.exists('_eventing.crc'):
+                self.fail("No fiid : {} or crc : {} found:".format(fiid, crc))
+        self.undeploy_function(body)
+        for docid in ['customer123', 'customer1234', 'customer12345']:
+            fiid = bucket.lookup_in(docid, SD.exists('_eventing.fiid', xattr=True))
+            crc = bucket.lookup_in(docid, SD.exists('_eventing.crc', xattr=True))
+            if not fiid.exists('_eventing.fiid') and not crc.exists('_eventing.crc'):
+                self.fail("No fiid : {} or crc : {} found after undeployment:".format(fiid, crc))
+
+    def test_fiid_crc_with_pause_resume(self):
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OP_SOURCE_DOC_MUTATION,
+                                              dcp_stream_boundary="from_now")
+        # deploy eventing function
+        self.deploy_function(body)
+        url = 'couchbase://{ip}/{name}'.format(ip=self.master.ip, name=self.src_bucket_name)
+        bucket = Bucket(url, username="cbadminbucket", password="password")
+        for docid in ['customer123', 'customer1234', 'customer12345']:
+            bucket.upsert(docid, {'a': 1})
+        self.verify_eventing_results(self.function_name, 3, skip_stats_validation=True)
+        #get fiid and crc
+        fiid_value = bucket.lookup_in('customer123', SD.exists('_eventing.fiid', xattr=True))['_eventing.fiid']
+        crc_value = bucket.lookup_in('customer123', SD.exists('_eventing.crc', xattr=True))['_eventing.crc']
+        self.log.info("Fiid: {} and CRC: {}".format(fiid_value, crc_value))
+        # check for fiid and crc
+        for docid in ['customer1234', 'customer12345']:
+            fiid = bucket.lookup_in(docid, SD.exists('_eventing.fiid', xattr=True))
+            crc = bucket.lookup_in(docid, SD.exists('_eventing.crc', xattr=True))
+            if fiid_value != fiid['_eventing.fiid'] or crc_value !=crc['_eventing.crc']:
+                self.fail("fiid {} or crc {} values are not same:".format(fiid, crc))
+        self.pause_function(body)
+        for docid in ['customer12553', 'customer1253', 'customer12531']:
+            bucket.upsert(docid, {'a': 1})
+        self.resume_function(body)
+        self.verify_eventing_results(self.function_name, 6, skip_stats_validation=True)
+        for docid in ['customer12553', 'customer1253', 'customer12531', 'customer123', 'customer1234', 'customer12345']:
+            fiid = bucket.lookup_in(docid, SD.exists('_eventing.fiid', xattr=True))
+            crc = bucket.lookup_in(docid, SD.exists('_eventing.crc', xattr=True))
+            if fiid_value != fiid['_eventing.fiid'] or crc_value !=crc['_eventing.crc']:
+                self.fail("fiid {} or crc {} values are not same:".format(fiid, crc))

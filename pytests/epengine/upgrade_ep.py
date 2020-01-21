@@ -22,12 +22,12 @@ class Upgrade_EpTests(UpgradeTests):
 
     def setUp(self):
         super(Upgrade_EpTests, self).setUp()
-        print self.master
+        print(self.master)
         self.rest = RestConnection(self.master)
         self.bucket = 'default' # temp fix
         self.client = VBucketAwareMemcached(self.rest, self.bucket)
         self.time_synchronization ='disabled'
-        print 'checking for self.servers '.format(self.servers[1])
+        print('checking for self.servers '.format(self.servers[1]))
         self.prefix = "test_"
         self.expire_time = 5
         self.item_flag = 0
@@ -63,8 +63,8 @@ class Upgrade_EpTests(UpgradeTests):
 
     def _check_config(self):
         result = self.rest.get_bucket_json(self.bucket)["timeSynchronization"]
-        print result
-        self.assertEqual(result,self.time_synchronization, msg='ERROR, Mismatch on expected time synchronization values')
+        print(result)
+        self.assertEqual(result, self.time_synchronization, msg='ERROR, Mismatch on expected time synchronization values')
         self.log.info("Verified results")
 
     def _load_ops(self, ops=None, mutations=1, master=None, bucket=None):
@@ -83,19 +83,19 @@ class Upgrade_EpTests(UpgradeTests):
             for i in range(mutations):
                 if ops=='set':
                     #print 'set'
-                    self.client.memcached(key).set(key, 0, 0,payload)
+                    self.client.memcached(key).set(key, 0, 0, payload)
                 elif ops=='add':
                     #print 'add'
-                    self.client.memcached(key).add(key, 0, 0,payload)
+                    self.client.memcached(key).add(key, 0, 0, payload)
                 elif ops=='replace':
-                    self.client.memcached(key).replace(key, 0, 0,payload)
+                    self.client.memcached(key).replace(key, 0, 0, payload)
                     #print 'Replace'
                 elif ops=='delete':
                     #print 'delete'
                     self.client.memcached(key).delete(key)
                 elif ops=='expiry':
                     #print 'expiry'
-                    self.client.memcached(key).set(key, self.expire_time ,0, payload)
+                    self.client.memcached(key).set(key, self.expire_time, 0, payload)
                 elif ops=='touch':
                     #print 'touch'
                     self.client.memcached(key).touch(key, 10)
@@ -123,7 +123,7 @@ class Upgrade_EpTests(UpgradeTests):
             self.assertTrue(cas == max_cas, '[ERROR]Max cas  is not 0 it is {0}'.format(cas))
 
             if check_conflict_resolution:
-                get_meta_resp = mc_active.getMeta(key,request_extended_meta_data=True)
+                get_meta_resp = mc_active.getMeta(key, request_extended_meta_data=True)
                 if time_sync == 'enabledWithoutDrift':
                     self.assertTrue( get_meta_resp[5] == 1, msg='[ERROR] Metadata indicate conflict resolution is not set')
                 elif time_sync == 'disabled':
