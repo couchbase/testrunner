@@ -1,4 +1,4 @@
-from cbas_base import *
+from .cbas_base import *
 
 
 class QueryDetails:
@@ -154,8 +154,8 @@ class CBASDemoQueries(CBASBaseTest):
             cbas_bucket_name=dataset_record['cbas_bucket_name'],
             cb_bucket_password=self.cb_bucket_password)
         
-        num_items = self.get_item_count(self.master,dataset_record['cb_bucket_name'])
-        self.assertTrue(self.wait_for_ingestion_complete(["beers","breweries"], num_items),"Data ingestion couldn't complete in 300 secs")
+        num_items = self.get_item_count(self.master, dataset_record['cb_bucket_name'])
+        self.assertTrue(self.wait_for_ingestion_complete(["beers", "breweries"], num_items), "Data ingestion couldn't complete in 300 secs")
 
         # Execute Query
         status, metrics, errors, results, _ = self.execute_statement_on_cbas(

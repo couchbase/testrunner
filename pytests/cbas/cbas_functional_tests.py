@@ -1,4 +1,4 @@
-from cbas_base import *
+from .cbas_base import *
 from membase.api.rest_client import RestHelper
 
 class CBASFunctionalTests(CBASBaseTest):
@@ -24,7 +24,7 @@ class CBASFunctionalTests(CBASBaseTest):
                                               bucketName="travel-sample",
                                               total_items=self.travel_sample_docs_count)
         else:
-            result = self.load_sample_buckets(servers=list(set([self.master,self.cbas_node])),
+            result = self.load_sample_buckets(servers=list({self.master, self.cbas_node}),
                                               bucketName="travel-sample",
                                               total_items=self.travel_sample_docs_count)
 
@@ -254,7 +254,7 @@ class CBASFunctionalTests(CBASBaseTest):
 
     def test_or_predicate_evaluation(self):
         ds_name = "filtered_travel_ds"
-        predicates = self.input.param("predicates", None).replace("&eq","=").replace("&qt", "\"")
+        predicates = self.input.param("predicates", None).replace("&eq", "=").replace("&qt", "\"")
         self.log.info("predicates = %s", predicates)
 
         # Create bucket on CBAS
