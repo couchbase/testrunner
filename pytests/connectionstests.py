@@ -65,7 +65,7 @@ class ConnectionTests(BaseTestCase):
             rebalance = self.cluster.async_rebalance([self.master], servs_in, [])
         try:
             self.log.info("**** Start opening sasl streaming connection ***")
-            for i in xrange(num_connections):
+            for i in range(num_connections):
                 rest = RestConnection(self.master)
                 t = rest.open_sasl_streaming_connection(self.buckets[0])
                 if t is None:
@@ -157,7 +157,7 @@ class ConnectionTests(BaseTestCase):
         shell = RemoteMachineShellConnection(node_to_kill_mem)
         timeout = 10
         try:
-            for i in xrange(iterations):
+            for i in range(iterations):
                 shell.kill_memcached()
                 self.sleep(timeout, "wait for memcached recovery...")
                 self.assertTrue(RemoteMachineHelper(shell).is_process_running('memcached'),

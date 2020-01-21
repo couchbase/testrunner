@@ -8,22 +8,22 @@ import time
 
 class CBRbaseclass(XDCRReplicationBaseTest):
     def _autofail_enable(self, _rest_):
-        status = _rest_.update_autofailover_settings(True, self.wait_timeout / 2)
+        status = _rest_.update_autofailover_settings(True, self.wait_timeout // 2)
         if not status:
             self.log.info('failed to change autofailover_settings!')
             return
         # read settings and verify
         settings = _rest_.get_autofailover_settings()
-        self.assertEquals(settings.enabled, True)
+        self.assertEqual(settings.enabled, True)
 
     def _autofail_disable(self, _rest_):
-        status = _rest_.update_autofailover_settings(False, self.wait_timeout / 2)
+        status = _rest_.update_autofailover_settings(False, self.wait_timeout // 2)
         if not status:
             self.log.info('failed to change autofailover_settings!')
             return
         # read settings and verify
         settings = _rest_.get_autofailover_settings()
-        self.assertEquals(settings.enabled, False)
+        self.assertEqual(settings.enabled, False)
 
     def wait_for_failover_or_assert(self, master, autofailover_count, timeout):
         time_start = time.time()
@@ -156,8 +156,8 @@ class CBRbaseclass(XDCRReplicationBaseTest):
         Dictionaries that are to contain information about
         number of vbuckets on each node in cluster
         """
-        pre_dict = dict((i, 0) for i in xrange(initial_set))
-        post_dict = dict((i, 0) for i in xrange(final_set))
+        pre_dict = dict((i, 0) for i in range(initial_set))
+        post_dict = dict((i, 0) for i in range(final_set))
 
         for i in map_before:
             for j in range(initial_set):
@@ -215,6 +215,12 @@ class cbrecovery(CBRbaseclass, XDCRReplicationBaseTest):
             self.sleep(20)
         super(cbrecovery, self).tearDown()
 
+    def suite_setUp(self):
+        self.log.info("*** cbrecovery: suite_setUp() ***")
+
+    def suite_tearDown(self):
+        self.log.info("*** cbrecovery: suite_tearDown() ***")
+
     def common_preSetup(self):
         self._load_all_buckets(self.src_master, self.gen_create, "create", 0, flag=self.flag_val)
         tasks = []
@@ -246,7 +252,7 @@ class cbrecovery(CBRbaseclass, XDCRReplicationBaseTest):
                     else:
                         self.log.info("vbucket_map differs from earlier")
 
-        self.sleep(self.wait_timeout / 2)
+        self.sleep(self.wait_timeout // 2)
         self.merge_buckets(self.src_master, self.dest_master, bidirection=False)
         self.verify_results()
 
@@ -273,7 +279,7 @@ class cbrecovery(CBRbaseclass, XDCRReplicationBaseTest):
                 for node in add_nodes:
                     rest.add_node(user=node.rest_username, password=node.rest_password, remoteIp=node.ip, port=node.port)
                 self.src_nodes.extend(add_nodes)
-                self.sleep(self.wait_timeout / 4)
+                self.sleep(self.wait_timeout // 4)
                 # CALL THE CBRECOVERY ROUTINE WITHOUT WAIT FOR COMPLETED
                 self.cbr_routine(self.dest_master, self.src_master, False)
 
@@ -283,7 +289,7 @@ class cbrecovery(CBRbaseclass, XDCRReplicationBaseTest):
                          standard_params=self._create_bucket_params(server=self.src_master, size=100, replicas=1)
                          self._create_standard_bucket(name=name, port=STANDARD_BUCKET_PORT+10,
                                                              bucket_params=standard_params)
-                     except BucketCreationException, e:
+                     except BucketCreationException as e:
                          self.log.info("bucket creation failed during cbrecovery as expected")
                      # but still able to create bucket on destination
                      standard_params = self._create_bucket_params(server=self.dest_master, size=100, replicas=1)
@@ -298,7 +304,7 @@ class cbrecovery(CBRbaseclass, XDCRReplicationBaseTest):
                     try:
                         self.cbr_routine(self.dest_master, self.src_master)
                         self.log.exception("cbrecovery should be failed when rebalance is in progress")
-                    except CBRecoveryFailedException, e:
+                    except CBRecoveryFailedException as e:
                         self.log.info("cbrecovery failed  as expected when there are no failovered nodes")
                     reached = RestHelper(rest).rebalance_reached()
                     self.assertTrue(reached, "rebalance failed or did not completed")
@@ -313,14 +319,14 @@ class cbrecovery(CBRbaseclass, XDCRReplicationBaseTest):
                     try:
                         self.cbr_routine(self.dest_master, self.src_master)
                         self.log.exception("cbrecovery should be failed when rebalance has been stopped")
-                    except CBRecoveryFailedException, e:
+                    except CBRecoveryFailedException as e:
                         self.log.info("cbrecovery failed  as expected when there are no failovered nodes")
                 elif "rebalance_when_recovering" in when_step:
                     # try to call  rebalance during cbrecovery
                     try:
                         self.trigger_rebalance(rest)
                         self.log.exception("rebalance is not permitted during cbrecovery")
-                    except InvalidArgumentException, e:
+                    except InvalidArgumentException as e:
                         self.log.info("can't call rebalance during cbrecovery as expected")
                     # here we try to re-call cbrecovery(seems it's supported even it's still running)
                     self.cbr_routine(self.dest_master, self.src_master)
@@ -346,7 +352,7 @@ class cbrecovery(CBRbaseclass, XDCRReplicationBaseTest):
                 for node in add_nodes:
                     rest.add_node(user=node.rest_username, password=node.rest_password, remoteIp=node.ip, port=node.port)
                 self.dest_nodes.extend(add_nodes)
-                self.sleep(self.wait_timeout / 4)
+                self.sleep(self.wait_timeout // 4)
                 # CALL THE CBRECOVERY ROUTINE
                 self.cbr_routine(self.src_master, self.dest_master, False)
 
@@ -356,7 +362,7 @@ class cbrecovery(CBRbaseclass, XDCRReplicationBaseTest):
                          standard_params=self._create_bucket_params(server=self.dest_master, size=100, replicas=1)
                          self.cluster.create_standard_bucket(name=name, port=STANDARD_BUCKET_PORT + 10,
                                                              bucket_params=standard_params)
-                     except BucketCreationException, e:
+                     except BucketCreationException as e:
                          self.log.info("bucket creation failed during cbrecovery as expected")
                      standard_params = self._create_bucket_params(server=self.src_master, size=100, replicas=1)
                      self.cluster.create_standard_bucket(name=name, port=STANDARD_BUCKET_PORT + 10,
@@ -368,7 +374,7 @@ class cbrecovery(CBRbaseclass, XDCRReplicationBaseTest):
                     try:
                         self.cbr_routine(self.src_master, self.dest_master)
                         self.log.exception("cbrecovery should be failed when rebalance is in progress")
-                    except CBRecoveryFailedException, e:
+                    except CBRecoveryFailedException as e:
                         self.log.info("cbrecovery failed  as expected when there are no failovered nodes")
                     reached = RestHelper(rest).rebalance_reached()
                     self.assertTrue(reached, "rebalance failed or did not completed")
@@ -379,14 +385,14 @@ class cbrecovery(CBRbaseclass, XDCRReplicationBaseTest):
                     try:
                         self.cbr_routine(self.src_master, self.dest_master)
                         self.log.exception("cbrecovery should be failed when rebalance has been stopped")
-                    except CBRecoveryFailedException, e:
+                    except CBRecoveryFailedException as e:
                         self.log.info("cbrecovery failed  as expected when there are no failovered nodes")
                 elif "rebalance_when_recovering" in when_step:
                     # try to call  rebalance during cbrecovery
                     try:
                         self.trigger_rebalance(rest)
                         self.log.exception("rebalance is not permitted during cbrecovery")
-                    except InvalidArgumentException, e:
+                    except InvalidArgumentException as e:
                         self.log.info("can't call rebalance during cbrecovery as expected")
                     # here we try to re-call cbrecovery(seems it's supported even it's still running)
                     self.cbr_routine(self.src_master, self.dest_master)
@@ -420,7 +426,7 @@ class cbrecovery(CBRbaseclass, XDCRReplicationBaseTest):
                 for node in add_nodes:
                     rest.add_node(user=node.rest_username, password=node.rest_password, remoteIp=node.ip, port=node.port)
                 self.src_nodes.extend(add_nodes)
-                self.sleep(self.wait_timeout / 4)
+                self.sleep(self.wait_timeout // 4)
                 # CALL THE CBRECOVERY ROUTINE
                 self.cbr_routine(self.dest_master, self.src_master)
 
@@ -447,7 +453,7 @@ class cbrecovery(CBRbaseclass, XDCRReplicationBaseTest):
                 for node in add_nodes:
                     rest.add_node(user=node.rest_username, password=node.rest_password, remoteIp=node.ip, port=node.port)
                 self.dest_nodes.extend(add_nodes)
-                self.sleep(self.wait_timeout / 4)
+                self.sleep(self.wait_timeout // 4)
                 # CALL THE CBRECOVERY ROUTINE
                 self.cbr_routine(self.src_master, self.dest_master)
 
@@ -483,7 +489,7 @@ class cbrecovery(CBRbaseclass, XDCRReplicationBaseTest):
                 for node in add_nodes:
                     rest.add_node(user=node.rest_username, password=node.rest_password, remoteIp=node.ip, port=node.port)
                 self.src_nodes.extend(add_nodes)
-                self.sleep(self.wait_timeout / 4)
+                self.sleep(self.wait_timeout // 4)
                 # CALL THE CBRECOVERY ROUTINE
                 self.cbr_routine(self.dest_master, self.src_master)
 
@@ -514,7 +520,7 @@ class cbrecovery(CBRbaseclass, XDCRReplicationBaseTest):
                 for node in add_nodes:
                     rest.add_node(user=node.rest_username, password=node.rest_password, remoteIp=node.ip, port=node.port)
                 self.dest_nodes.extend(add_nodes)
-                self.sleep(self.wait_timeout / 4)
+                self.sleep(self.wait_timeout // 4)
                 # CALL THE CBRECOVERY ROUTINE
                 self.cbr_routine(self.src_master, self.dest_master)
 
@@ -542,12 +548,12 @@ class cbrecovery(CBRbaseclass, XDCRReplicationBaseTest):
                 self.log.info("Failing over {0} nodes on source ..".format(self._failover_count))
                 self.failed_nodes = self.src_nodes[(len(self.src_nodes) - self._failover_count):len(self.src_nodes)]
                 self.cluster.failover(self.src_nodes, self.failed_nodes)
-                self.sleep(self.wait_timeout / 4)
+                self.sleep(self.wait_timeout // 4)
                 self.log.info("Adding back the {0} nodes that were failed over ..".format(self._failover_count))
                 for node in self.failed_nodes:
                     self.adding_back_a_node(self.src_master, node)
                 add_nodes = self._floating_servers_set[0:self._add_count]
-                self.sleep(self.wait_timeout / 4)
+                self.sleep(self.wait_timeout // 4)
                 for node in add_nodes:
                     rest.add_node(user=node.rest_username, password=node.rest_password, remoteIp=node.ip, port=node.port)
                 self.src_nodes.extend(add_nodes)
@@ -572,12 +578,12 @@ class cbrecovery(CBRbaseclass, XDCRReplicationBaseTest):
                 self.log.info("Failing over {0} nodes on destination ..".format(self._failover_count))
                 self.failed_nodes = self.dest_nodes[(len(self.dest_nodes) - self._failover_count):len(self.dest_nodes)]
                 self.cluster.failover(self.dest_nodes, self.failed_nodes)
-                self.sleep(self.wait_timeout / 4)
+                self.sleep(self.wait_timeout // 4)
                 self.log.info("Adding back the {0} nodes that were failed over ..".format(self._failover_count))
                 for node in self.failed_nodes:
                     self.adding_back_a_node(self.dest_master, node)
                 add_nodes = self._floating_servers_set[0:self._add_count]
-                self.sleep(self.wait_timeout / 4)
+                self.sleep(self.wait_timeout // 4)
                 for node in add_nodes:
                     rest.add_node(user=node.rest_username, password=node.rest_password, remoteIp=node.ip, port=node.port)
                 self.dest_nodes.extend(add_nodes)

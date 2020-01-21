@@ -94,7 +94,7 @@ class CheckpointTests(BaseTestCase):
         self._stop_replication(self.replica2, self.bucket)
 
         m_stats = StatsCommon.get_stats([self.master], self.bucket, param, stat_key)
-        chk_pnt = int(m_stats[m_stats.keys()[0]]) + 2
+        chk_pnt = int(m_stats[list(m_stats.keys())[0]]) + 2
         tasks = []
         tasks.append(self.cluster.async_wait_for_stats([self.master], self.bucket, param, stat_key,
                                                        '>=', chk_pnt))
@@ -135,7 +135,7 @@ class CheckpointTests(BaseTestCase):
         m_stats = StatsCommon.get_stats([self.master], self.bucket, param, stat_key)
 
         tasks = []
-        chk_pnt = int(m_stats[m_stats.keys()[0]]) + 2
+        chk_pnt = int(m_stats[list(m_stats.keys())[0]]) + 2
         tasks.append(self.cluster.async_wait_for_stats([self.master], self.bucket, param, stat_key,
                                                        '>=', chk_pnt))
         tasks.append(self.cluster.async_wait_for_stats([self.replica1], self.bucket, param, stat_key,
@@ -186,7 +186,7 @@ class CheckpointTests(BaseTestCase):
         self._start_replication(self.replica1, self.bucket)
         data_load_thread.join()
 
-        chk_pnt = int(m_stats[m_stats.keys()[0]])
+        chk_pnt = int(m_stats[list(m_stats.keys())[0]])
         timeout = 60 if (self.num_items * .001) < 60 else self.num_items * .001
         time.sleep(timeout)
         tasks = []
@@ -324,7 +324,7 @@ class CheckpointTests(BaseTestCase):
         timeout = 60 if (self.num_items * .001) < 60 else self.num_items * .001
 
         #verify checkpiont id increases on master node
-        chk_pnt = int(m_stats[m_stats.keys()[0]])
+        chk_pnt = int(m_stats[list(m_stats.keys())[0]])
         tasks = []
         tasks.append(self.cluster.async_wait_for_stats([self.master], self.bucket, param, stat_key, '>', chk_pnt))
         for task in tasks:
@@ -336,7 +336,7 @@ class CheckpointTests(BaseTestCase):
         time.sleep(timeout / 10)
         # verify Master and all replicas are in sync with checkpoint ids
         m_stats = StatsCommon.get_stats([self.master], self.bucket, param, stat_key)
-        chk_pnt = int(m_stats[m_stats.keys()[0]])
+        chk_pnt = int(m_stats[list(m_stats.keys())[0]])
         tasks = []
         for server in self.servers:
             tasks.append(self.cluster.async_wait_for_stats([server], self.bucket, param, stat_key, '==', chk_pnt))
@@ -350,8 +350,8 @@ class CheckpointTests(BaseTestCase):
         param = 'tap'
         stat_key = 'eq_tapq:replication_ns_1@%s:backfill_start_timestamp' % (replica_server.ip)
         m_stats = StatsCommon.get_stats([server], self.bucket, param, stat_key)
-        self.log.info("eq_tapq:replication_ns_1@%s:backfill_start_timestamp: %s" % (replica_server.ip, m_stats[m_stats.keys()[0]]))
-        return int(m_stats[m_stats.keys()[0]])
+        self.log.info("eq_tapq:replication_ns_1@%s:backfill_start_timestamp: %s" % (replica_server.ip, m_stats[list(m_stats.keys())[0]]))
+        return int(m_stats[list(m_stats.keys())[0]])
 
     def _verify_backfill_happen(self, server, replica_server, previous_timestamp, backfill_happen=False):
         current_timestamp = self._get_backfill_timestamp(server, replica_server)

@@ -73,10 +73,10 @@ class IBRTests(BackupBaseTest):
             cmd = 'cmd.exe /C "dir /s /b C:\\tmp\\backup"'
 
         output, error = self.shell.execute_command(cmd)
-        self.log.info("output = {0} error = {1}".format(output,error))
+        self.log.info("output = {0} error = {1}".format(output, error))
 
         if error:
-            raise Exception('Got error {0}',format(error))
+            raise Exception('Got error {0}', format(error))
 
         expected_design_json = total_backups * buckets
         expected_data_cbb = total_backups * buckets * nodes
@@ -442,7 +442,7 @@ class IBRJsonTests(BackupBaseTest):
         super(IBRJsonTests, self).setUp()
         self.num_mutate_items = self.input.param("mutate_items", 1000)
         template = '{{ "mutated" : 0, "age": {0}, "first_name": "{1}" }}'
-        gen_load = DocumentGenerator('load_by_id_test', template, range(5),\
+        gen_load = DocumentGenerator('load_by_id_test', template, list(range(5)),\
                              ['james', 'john'], start=0, end=self.num_items)
         self._load_all_buckets(self.master, gen_load, "create", 0, 1,\
                               self.item_flag, True, batch_size=20000,\
@@ -456,7 +456,7 @@ class IBRJsonTests(BackupBaseTest):
             else:
                 prefix_ddoc="ddoc"
             ddoc_view_map = self.bucket_ddoc_map.pop(bucket, {})
-            for ddoc_count in xrange(self.num_ddocs):
+            for ddoc_count in range(self.num_ddocs):
                 design_doc_name = prefix_ddoc + str(ddoc_count)
                 view_list = self.make_default_views("views", self.num_views_per_ddoc)
                 self.create_views(self.master, design_doc_name, view_list,\
@@ -489,7 +489,7 @@ class IBRJsonTests(BackupBaseTest):
         self.restoreAndVerify(bucket_names, kvs_before)
 
 
-    def restoreAndVerify(self,bucket_names,kvs_before):
+    def restoreAndVerify(self, bucket_names, kvs_before):
         for bucket in self.buckets:
             bucket.kvs[1] = kvs_before[bucket.name]
         del kvs_before
@@ -506,8 +506,8 @@ class IBRJsonTests(BackupBaseTest):
             result = False
             query = {"stale" : "false", "full_set" : "true", \
                                         "connection_timeout" : 60000}
-            for bucket, ddoc_view_map in self.bucket_ddoc_map.items():
-                for ddoc_name, view_list in ddoc_view_map.items():
+            for bucket, ddoc_view_map in list(self.bucket_ddoc_map.items()):
+                for ddoc_name, view_list in list(ddoc_view_map.items()):
                     for view in view_list:
                         try:
                             result = self.cluster.query_view(self.master,\
@@ -552,7 +552,7 @@ class IBRJsonTests(BackupBaseTest):
 
             # Update data
             template = '{{ "mutated" : {0}, "age": {0}, "first_name": "{1}" }}'
-            gen_update = DocumentGenerator('load_by_id_test', template, range(5),\
+            gen_update = DocumentGenerator('load_by_id_test', template, list(range(5)),\
                                    ['james', 'john'], start=0, end=self.num_items)
             self._load_all_buckets(self.master, gen_update, "update", 0, 1,\
                                     self.item_flag, True, batch_size=20000,\

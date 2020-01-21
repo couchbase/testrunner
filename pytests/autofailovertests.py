@@ -36,13 +36,11 @@ class AutoFailoverBaseTest(unittest.TestCase):
         # Add built-in user
         testuser = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'password': 'password'}]
         RbacBase().create_user_source(testuser, 'builtin', servers[0])
-        time.sleep(10)
-
+        
         # Assign user to role
         role_list = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'roles': 'admin'}]
         RbacBase().add_user_role(role_list, RestConnection(servers[0]), 'builtin')
-        time.sleep(10)
-
+        
         log.info("==============  common_setup was finished for test #{0} {1} =============="\
                       .format(testcase.case_number, testcase._testMethodName))
 
@@ -141,12 +139,12 @@ class AutoFailoverTests(unittest.TestCase):
         time.sleep(timeout)
 
     def test_enable(self):
-        status = self.rest.update_autofailover_settings(True, self.timeout / 2)
+        status = self.rest.update_autofailover_settings(True, self.timeout // 2)
         if not status:
             self.fail('failed to change autofailover_settings! See MB-7282')
         #read settings and verify
         settings = self.rest.get_autofailover_settings()
-        self.assertEquals(settings.enabled, True)
+        self.assertEqual(settings.enabled, True)
 
     def test_disable(self):
         status = self.rest.update_autofailover_settings(False, self.timeout)
@@ -154,7 +152,7 @@ class AutoFailoverTests(unittest.TestCase):
             self.fail('failed to change autofailover_settings! See MB-7282')
         #read settings and verify
         settings = self.rest.get_autofailover_settings()
-        self.assertEquals(settings.enabled, False)
+        self.assertEqual(settings.enabled, False)
 
     def test_valid_timeouts(self):
         timeouts = [30, 31, 300, 3600]
@@ -167,7 +165,7 @@ class AutoFailoverTests(unittest.TestCase):
             self.assertTrue(settings.timeout == timeout)
 
     def test_30s_timeout_firewall(self):
-        timeout = self.timeout / 2
+        timeout = self.timeout // 2
         server_fail = self.servers[1]
         status = self.rest.update_autofailover_settings(True, timeout)
         if not status:
@@ -207,7 +205,7 @@ class AutoFailoverTests(unittest.TestCase):
         AutoFailoverBaseTest.wait_for_failover_or_assert(self.master, 1, timeout + AutoFailoverBaseTest.MAX_FAIL_DETECT_TIME, self)
 
     def test_reset_count(self):
-        timeout = self.timeout / 2
+        timeout = self.timeout // 2
         server_fail1 = self.servers[1]
         server_fail2 = self.servers[2]
         status = self.rest.update_autofailover_settings(True, timeout)
@@ -231,7 +229,7 @@ class AutoFailoverTests(unittest.TestCase):
             self.fail('failed to reset autofailover count!')
 
     def test_30s_timeout_pause(self):
-        timeout = self.timeout / 2
+        timeout = self.timeout // 2
         server_fail = self.servers[1]
         shell = RemoteMachineShellConnection(server_fail)
         type = shell.extract_remote_info().distribution_type
@@ -263,17 +261,17 @@ class AutoFailoverTests(unittest.TestCase):
         AutoFailoverBaseTest.wait_for_failover_or_assert(self.master, 1, timeout + AutoFailoverBaseTest.MAX_FAIL_DETECT_TIME, self)
 
     def test_invalid_timeouts(self):
-        timeouts = [-360, -60, 0, 15, 29, 300000]
+        # The value of "timeout" must be a positive integer in a range from 5 to 3600
+        timeouts = [-360, -60, 0, 4, 300000]
         for timeout in timeouts:
-            status = self.rest.update_autofailover_settings(True, timeout)
-            if status:
-                self.fail('autofailover_settings have been changed incorrectly!')
-            #read settings and verify
+            self.rest.update_autofailover_settings(True, timeout)
+            # read settings and verify
             settings = self.rest.get_autofailover_settings()
-            self.assertTrue(settings.timeout >= 30)
+            self.log.info("Value returned by autofailover settings : {0}".format(settings.timeout))
+            self.assertNotEqual(settings.timeout, timeout)
 
     def test_two_failed_nodes(self):
-        timeout = self.timeout / 2
+        timeout = self.timeout // 2
         server_fail1 = self.servers[1]
         server_fail2 = self.servers[2]
         status = self.rest.update_autofailover_settings(True, timeout)
@@ -351,7 +349,7 @@ class AutoFailoverTests(unittest.TestCase):
         ClusterOperationHelper.add_and_rebalance(self.servers, True)
 
         if num_buckets == 1:
-            bucket_ram = info.memoryQuota * 2 / 3
+            bucket_ram = info.memoryQuota * 2 // 3
             rest.create_bucket(bucket=bucket_name,
                                ramQuotaMB=bucket_ram,
                                replicaNumber=replicas,

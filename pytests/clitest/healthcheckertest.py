@@ -22,9 +22,9 @@ class HealthcheckerTests(CliBaseTest):
     def healthchecker_test(self):
 
         gen_load = BlobGenerator('nosql', 'nosql-', self.value_size, end=self.num_items)
-        gen_update = BlobGenerator('nosql', 'nosql-', self.value_size, end=(self.num_items / 2 - 1))
-        gen_expire = BlobGenerator('nosql', 'nosql-', self.value_size, start=self.num_items / 2, end=(self.num_items * 3 / 4 - 1))
-        gen_delete = BlobGenerator('nosql', 'nosql-', self.value_size, start=self.num_items * 3 / 4, end=self.num_items)
+        gen_update = BlobGenerator('nosql', 'nosql-', self.value_size, end=(self.num_items // 2 - 1))
+        gen_expire = BlobGenerator('nosql', 'nosql-', self.value_size, start=self.num_items // 2, end=(self.num_items * 3 // 4 - 1))
+        gen_delete = BlobGenerator('nosql', 'nosql-', self.value_size, start=self.num_items * 3 // 4, end=self.num_items)
         self._load_all_buckets(self.master, gen_load, "create", 0)
 
         if(self.doc_ops is not None):
@@ -126,7 +126,7 @@ class HealthcheckerTests(CliBaseTest):
                         if len(row.findAll('td')[0].findAll('a')) and \
                                row.findAll('td')[0].a.string == bucket.name:
                             if bucket.type:
-                                self.assertEquals(row.findAll('td')[1].string, bucket.type,
+                                self.assertEqual(row.findAll('td')[1].string, bucket.type,
                                                   "Bucket %s expected type is %s, actual is %s" % (
                                                         bucket.name, bucket.type,
                                                         row.findAll('td')[1].string))
@@ -140,7 +140,7 @@ class HealthcheckerTests(CliBaseTest):
             for section in soup.findAll('section'):
                 if section.get('id') == 'cluster-overview':
                     rows = section.findAll('table')[1].findAll('tr')
-                    for i in xrange(len(rows)):
+                    for i in range(len(rows)):
                         row = rows[i]
                         if len(row.findAll('td')) and \
                            row.findAll('td')[0].string == node.ip:
@@ -179,8 +179,8 @@ class HealthcheckerTests(CliBaseTest):
                                 if len(emb_row.findAll('td')) and \
                                    emb_row.findAll('td')[1].string == 'Current number of active items':
                                     self.assertTrue(emb_row.findAll('td')[2].li.string.\
-                                                    find(str(unicode(node_info.curr_items/len(self.buckets)))) != -1,
+                                                    find(str(str(node_info.curr_items/len(self.buckets)))) != -1,
                                                     "Node %s expected active items is %s, actual is %s" % (
-                                                    node.ip, str(node_info.curr_items),emb_row.findAll('td')[2].li.string))
+                                                    node.ip, str(node_info.curr_items), emb_row.findAll('td')[2].li.string))
                             is_checked = True
                     self.assertTrue(is_checked, "there was no node %s found" % node.ip)

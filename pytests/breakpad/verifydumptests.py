@@ -3,9 +3,9 @@ import re
 import time
 import logger
 import threading
-from breakpadbase import BreakpadBase
+from .breakpadbase import BreakpadBase
 from membase.api.rest_client import RestConnection
-from logpoll import NSLogPoller
+from .logpoll import NSLogPoller
 
 log = logger.Logger.get_logger()
 
@@ -102,7 +102,7 @@ class BreakpadVerifyDumpTests(BreakpadBase):
 
         self.load_docs(nodeA, 10000)
 
-        node_range = range(len(self.servers))
+        node_range = list(range(len(self.servers)))
 
         # start log pollers
         for i in node_range:
@@ -155,7 +155,7 @@ class BreakpadVerifyDumpTests(BreakpadBase):
         # did start rebalance
         assert reb_poller.getEventQItem()
 
-        node_range = range(len(self.servers))
+        node_range = list(range(len(self.servers)))
         # start log pollers
         for i in node_range:
             logp = NSLogPoller(i)

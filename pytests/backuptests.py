@@ -33,7 +33,7 @@ class BackupRestoreTests(BaseTestCase):
         self.master = self.servers[0]
         self.shell = RemoteMachineShellConnection(self.master)
 
-        # When using custom data_paths, (smaller / sizes), creates
+        # When using custom data_paths, (smaller // sizes), creates
         # backup in those custom paths ( helpful when running on ec2)
         info = RestConnection(self.master).get_nodes_self()
         data_path = info.storage[0].get_data_path()
@@ -209,7 +209,7 @@ class BackupRestoreTests(BaseTestCase):
                 msg = "expiry was set to {0} but key: {1} did not expire after waiting for {2}+ seconds"
                 self.fail(msg.format(expiry, key, expiry))
             except mc_bin_client.MemcachedError as error:
-                self.assertEquals(error.status, 1,
+                self.assertEqual(error.status, 1,
                                   msg="expected error code {0} but saw error code {1}".format(1, error.status))
         client.close()
         self.log.info("verified that those keys inserted with expiry set to {0} have expired".format(expiry))
