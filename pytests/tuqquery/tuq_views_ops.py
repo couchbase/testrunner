@@ -1,7 +1,7 @@
 from tuqquery.tuq import QueryTests
 from membase.api.rest_client import RestConnection
 from couchbase_helper.document import View
-from tuq_sanity import QuerySanityTests
+from .tuq_sanity import QuerySanityTests
 
 class QueriesViewsTests(QuerySanityTests, QueryTests):
     def setUp(self):

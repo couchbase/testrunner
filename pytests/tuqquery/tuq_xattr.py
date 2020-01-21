@@ -1,9 +1,9 @@
-from tuq import QueryTests
+from .tuq import QueryTests
 from membase.api.rest_client import RestHelper
 from couchbase.cluster import Cluster
 from couchbase.cluster import PasswordAuthenticator
 import couchbase.subdocument as SD
-
+from deepdiff import DeepDiff
 
 class QueryXattrTests(QueryTests):
     def setUp(self):
@@ -60,7 +60,7 @@ class QueryXattrTests(QueryTests):
         compare_2 = self.run_xattrs_query("SELECT meta().xattrs._system3.field1 FROM default", "", "_system3", "", "default", compare_fields=["field1"], xattr_data=self.system_xattr_data, primary_compare=False)
 
         # nested partial path query
-        compare_3 = self.run_xattrs_query("SELECT meta().xattrs._system3.field1.sub_field1a FROM default", "", "_system3", "", "default", compare_fields=["field1", "sub_field1a"], xattr_data=self.system_xattr_data,primary_compare=False)
+        compare_3 = self.run_xattrs_query("SELECT meta().xattrs._system3.field1.sub_field1a FROM default", "", "_system3", "", "default", compare_fields=["field1", "sub_field1a"], xattr_data=self.system_xattr_data, primary_compare=False)
 
         # multiple paths single xattr query
         query_response = self.run_cbq_query("SELECT meta().xattrs._system3, meta().xattrs._system3.field1, meta().xattrs._system3.field1.sub_field1a FROM default")
@@ -70,7 +70,9 @@ class QueryXattrTests(QueryTests):
         for i in range(0, len(docs)):
             compare.append({'_system3': compare_1[i]['_system3'], 'field1': compare_2[i]['field1'], 'sub_field1a': compare_3[i]['sub_field1a']})
         self.log.info("Compare: " + str(compare[0:5]))
-        self.assertTrue(sorted(docs) == sorted(compare))
+        diffs = DeepDiff(docs, compare, ignore_order=True)
+        if diffs:
+            self.assertTrue(False, diffs)
 
         # multiple paths single xattr and data query
         query_response = self.run_cbq_query("SELECT meta().xattrs._system3, meta().xattrs._system3.field1, meta().xattrs._system3.field1.sub_field1a, join_day FROM default")
@@ -81,8 +83,12 @@ class QueryXattrTests(QueryTests):
         self.log.info("Join Data: " + str(join_data[0:5]))
         xattr_data = [{'_system3': item['_system3'], 'field1': item['field1'], 'sub_field1a': item['sub_field1a']} for item in docs]
         self.log.info("XAttr Data: " + str(xattr_data[0:5]))
-        self.assertTrue(sorted(xattr_data) == sorted(compare))
-        self.assertTrue(sorted(join_data) == sorted(compare_4))
+        diffs = DeepDiff(xattr_data, compare, ignore_order=True)
+        if diffs:
+            self.assertTrue(False, diffs)
+        diffs = DeepDiff(join_data, compare_4, ignore_order=True)
+        if diffs:
+            self.assertTrue(False, diffs)
 
         # deleted doc xattr query
         meta_ids = self.get_meta_ids()
@@ -457,7 +463,9 @@ class QueryXattrTests(QueryTests):
             doc = query_response['results']
             docs.append(doc)
 
-        self.assertTrue(sorted(docs) == sorted(compare))
+        diffs = DeepDiff(docs, compare, ignore_order=True)
+        if diffs:
+            self.assertTrue(False, diffs)
 
     """
     Tests if system xattrs can be used in subqueries
@@ -531,7 +539,7 @@ class QueryXattrTests(QueryTests):
         index_statement = "CREATE INDEX idx1 ON default(meta().xattrs._system1, meta().xattrs._system2, meta().xattrs._system3) USING " + self.index_type
         try:
             query_response = self.run_cbq_query(index_statement)
-        except Exception, ex:
+        except Exception as ex:
             pass
         else:
             self.fail()
@@ -541,7 +549,7 @@ class QueryXattrTests(QueryTests):
         query = "SELECT meta().xattrs._system1, meta().xattrs._system2, meta().xattrs._system3 FROM default"
         try:
             query_response = self.run_cbq_query(query)
-        except Exception, ex:
+        except Exception as ex:
             pass
         else:
             self.fail()
@@ -838,7 +846,9 @@ class QueryXattrTests(QueryTests):
         for i in range(0, len(docs)):
             compare.append({'user3': compare_1[i]['user3'], 'field1': compare_2[i]['field1'], 'sub_field1a': compare_3[i]['sub_field1a']})
         self.log.info("Compare: " + str(compare[0:5]))
-        self.assertTrue(sorted(docs) == sorted(compare))
+        diffs = DeepDiff(docs, compare, ignore_order=True)
+        if diffs:
+            self.assertTrue(False, diffs)
 
         # multiple paths single xattr and data query
         query_response = self.run_cbq_query("SELECT meta().xattrs.user3, meta().xattrs.user3.field1, meta().xattrs.user3.field1.sub_field1a, join_day FROM default")
@@ -849,8 +859,12 @@ class QueryXattrTests(QueryTests):
         self.log.info("Join Data: " + str(join_data[0:5]))
         xattr_data = [{'user3': item['user3'], 'field1': item['field1'], 'sub_field1a': item['sub_field1a']} for item in docs]
         self.log.info("XAttr Data: " + str(xattr_data[0:5]))
-        self.assertTrue(sorted(xattr_data) == sorted(compare))
-        self.assertTrue(sorted(join_data) == sorted(compare_4))
+        diffs = DeepDiff(xattr_data, compare, ignore_order=True)
+        if diffs:
+            self.assertTrue(False, diffs)
+        diffs = DeepDiff(join_data, compare_4, ignore_order=True)
+        if diffs:
+            self.assertTrue(False, diffs)
 
         # deleted doc xattr query
         meta_ids = self.get_meta_ids()
@@ -1214,7 +1228,9 @@ class QueryXattrTests(QueryTests):
             doc = query_response['results']
             docs.append(doc)
 
-        self.assertTrue(sorted(docs) == sorted(compare))
+        diffs = DeepDiff(docs, compare, ignore_order=True)
+        if diffs:
+            self.assertTrue(False, diffs)
 
     """
     Tests if user xattrs can be used in subqueries
@@ -1291,7 +1307,7 @@ class QueryXattrTests(QueryTests):
         index_statement = "CREATE INDEX idx1 ON default(meta().xattrs.user1, meta().xattrs.user2, meta().xattrs.user3) USING " + self.index_type
         try:
             query_response = self.run_cbq_query(index_statement)
-        except Exception, ex:
+        except Exception as ex:
             pass
         else:
             self.fail()
@@ -1300,7 +1316,7 @@ class QueryXattrTests(QueryTests):
         query = "SELECT meta().xattrs.user1, meta().xattrs.user2, meta().xattrs.user3 FROM default"
         try:
             query_response = self.run_cbq_query(query)
-        except Exception, ex:
+        except Exception as ex:
             pass
         else:
             self.fail()
@@ -1346,7 +1362,9 @@ class QueryXattrTests(QueryTests):
         for i in range(0, len(docs)):
             compare.append({'$document': compare_1[i]['$document'], 'deleted': compare_2[i]['deleted']})
         self.log.info("Compare: " + str(compare[0:5]))
-        self.assertTrue(sorted(docs) == sorted(compare))
+        diffs = DeepDiff(docs, compare, ignore_order=True)
+        if diffs:
+            self.assertTrue(False, diffs)
 
         # multiple paths single xattr and data query
         query_response = self.run_cbq_query("SELECT meta().xattrs.`$document`, meta().xattrs.`$document`.deleted, join_day FROM default")
@@ -1357,8 +1375,12 @@ class QueryXattrTests(QueryTests):
         self.log.info("Join Data: " + str(join_data[0:5]))
         xattr_data = [{'$document': item['$document'], 'deleted': item['deleted']} for item in docs]
         self.log.info("XAttr Data: " + str(xattr_data[0:5]))
-        self.assertTrue(sorted(xattr_data) == sorted(compare))
-        self.assertTrue(sorted(join_data) == sorted(compare_4))
+        diffs = DeepDiff(xattr_data, compare, ignore_order=True)
+        if diffs:
+            self.assertTrue(False, diffs)
+        diffs = DeepDiff(join_data, compare_4, ignore_order=True)
+        if diffs:
+            self.assertTrue(False, diffs)
 
         # deleted doc xattr query
         meta_ids = self.get_meta_ids()
@@ -1389,7 +1411,7 @@ class QueryXattrTests(QueryTests):
         try:
             index = "create index sdqidxs21112 on default(meta().xattrs.`$document`)"
             self.run_cbq_query(query=index)
-        except Exception, ex:
+        except Exception as ex:
             self.assertTrue('GSI CreateIndex() - cause: Fails to create index.  Cannot index on Virtual Extended Attributes.'
                             in str(ex), "Error message is not what was expected, here is the error outputed %s" % ex)
 
@@ -1421,7 +1443,9 @@ class QueryXattrTests(QueryTests):
             doc = query_response['results']
             docs.append(doc)
 
-        self.assertTrue(sorted(docs) == sorted(compare))
+        diffs = DeepDiff(docs, compare, ignore_order=True)
+        if diffs:
+            self.assertTrue(False, diffs)
 
     """
     Tests if virtual xattrs can be used in subqueries
@@ -1478,7 +1502,9 @@ class QueryXattrTests(QueryTests):
         for i in range(0, len(docs)):
             compare.append({'_system3': compare_1[i]['_system3'], 'field1': compare_2[i]['field1'], 'sub_field1a': compare_3[i]['sub_field1a'], 'deleted': False})
         self.log.info("Compare: " + str(compare[0:5]))
-        self.assertTrue(sorted(docs) == sorted(compare))
+        diffs = DeepDiff(docs, compare, ignore_order=True)
+        if diffs:
+            self.assertTrue(False, diffs)
 
         # multiple paths single xattr and data query
         query_response = self.run_cbq_query("SELECT meta().xattrs._system3, meta().xattrs._system3.field1, meta().xattrs._system3.field1.sub_field1a, meta().xattrs.`$document`.deleted, join_day FROM default")
@@ -1489,8 +1515,12 @@ class QueryXattrTests(QueryTests):
         self.log.info("Join Data: " + str(join_data[0:5]))
         xattr_data = [{'_system3': item['_system3'], 'field1': item['field1'], 'sub_field1a': item['sub_field1a'], 'deleted': False} for item in docs]
         self.log.info("XAttr Data: " + str(xattr_data[0:5]))
-        self.assertTrue(sorted(xattr_data) == sorted(compare))
-        self.assertTrue(sorted(join_data) == sorted(compare_4))
+        diffs = DeepDiff(xattr_data, compare, ignore_order=True)
+        if diffs:
+            self.assertTrue(False, diffs)
+        diffs = DeepDiff(join_data, compare_4, ignore_order=True)
+        if diffs:
+            self.assertTrue(False, diffs)
 
         meta_ids = self.get_meta_ids()
         delete_ids = meta_ids[0:10]
@@ -1540,7 +1570,9 @@ class QueryXattrTests(QueryTests):
             doc = query_response['results']
             docs.append(doc)
 
-        self.assertTrue(sorted(docs) == sorted(compare))
+        diffs = DeepDiff(docs, compare, ignore_order=True)
+        if diffs:
+            self.assertTrue(False, diffs)
 
     """
     Test will ensure all fields of virtual xattrs and user xattrs can be simultaneously queried
@@ -1575,7 +1607,9 @@ class QueryXattrTests(QueryTests):
         for i in range(0, len(docs)):
             compare.append({'user3': compare_1[i]['user3'], 'field1': compare_2[i]['field1'], 'sub_field1a': compare_3[i]['sub_field1a'], 'deleted': False})
         self.log.info("Compare: " + str(compare[0:5]))
-        self.assertTrue(sorted(docs) == sorted(compare))
+        diffs = DeepDiff(docs, compare, ignore_order=True)
+        if diffs:
+            self.assertTrue(False, diffs)
 
         # multiple paths single xattr and data query
         query_response = self.run_cbq_query("SELECT meta().xattrs.user3, meta().xattrs.user3.field1, meta().xattrs.user3.field1.sub_field1a, meta().xattrs.`$document`.deleted, join_day FROM default")
@@ -1586,8 +1620,12 @@ class QueryXattrTests(QueryTests):
         self.log.info("Join Data: " + str(join_data[0:5]))
         xattr_data = [{'user3': item['user3'], 'field1': item['field1'], 'sub_field1a': item['sub_field1a'], 'deleted': False} for item in docs]
         self.log.info("XAttr Data: " + str(xattr_data[0:5]))
-        self.assertTrue(sorted(xattr_data) == sorted(compare))
-        self.assertTrue(sorted(join_data) == sorted(compare_4))
+        diffs = DeepDiff(xattr_data, compare, ignore_order=True)
+        if diffs:
+            self.assertTrue(False, diffs)
+        diffs = DeepDiff(join_data, compare_4, ignore_order=True)
+        if diffs:
+            self.assertTrue(False, diffs)
 
         meta_ids = self.get_meta_ids()
         delete_ids = meta_ids[0:10]
@@ -1636,7 +1674,9 @@ class QueryXattrTests(QueryTests):
             doc = query_response['results']
             docs.append(doc)
 
-        self.assertTrue(sorted(docs) == sorted(compare))
+        diffs = DeepDiff(docs, compare, ignore_order=True)
+        if diffs:
+            self.assertTrue(False, diffs)
 
     """
     Test mixed xattr negative cases:
@@ -1653,21 +1693,21 @@ class QueryXattrTests(QueryTests):
         try:
             query = "SELECT meta().id, meta().xattrs.user1, meta().xattrs._system1 from default"
             self.run_cbq_query(query=query)
-        except Exception, ex:
+        except Exception as ex:
             self.assertTrue('Plan error: Can only retrieve virtual xattr and user xattr or virtual xattr and system xattr'
                             in str(ex), "Error message is not what was expected, here is the error outputed %s" % ex)
 
         try:
             index = "create index idx on default(meta().xattrs.`_system1`, meta().xattrs.user1)"
             self.run_cbq_query(query=index)
-        except Exception, ex:
+        except Exception as ex:
             self.assertTrue('Plan error: Only a single user or system xattribute can be indexed.'
                             in str(ex), "Error message is not what was expected, here is the error outputed %s" % ex)
 
         try:
             index = " create index qidxs21112 on default(meta().xattrs.`_system1`) where meta().xattrs.`$document` > 5"
             self.run_cbq_query(query=index)
-        except Exception, ex:
+        except Exception as ex:
             self.assertTrue('GSI CreateIndex() - cause: Fails to create index.  Cannot index on Virtual Extended Attributes.'
                             in str(ex), "Error message is not what was expected, here is the error outputed %s" % ex)
 
@@ -1717,7 +1757,9 @@ class QueryXattrTests(QueryTests):
                     self.assertTrue(docs == {"deleted": False})
         else:
             self.log.info("Compare: " + str(compare[0:5]))
-            self.assertTrue(sorted(docs_1) == sorted(compare))
+            diffs = DeepDiff(docs_1, compare, ignore_order=True)
+            if diffs:
+                self.assertTrue(False, diffs)
 
         if deleted_compare:
             meta_ids = self.get_meta_ids()
@@ -1750,12 +1792,18 @@ class QueryXattrTests(QueryTests):
                 self.assertTrue(len(docs_1)-10 == len(compare_docs))
                 if delete_leading:
                     self.assertTrue(len(docs_2) == len(compare_docs))
-                    self.assertTrue(sorted(docs_2) == sorted(compare_docs))
+                    diffs = DeepDiff(docs_2, compare_docs, ignore_order=True)
+                    if diffs:
+                        self.assertTrue(False, diffs)
                 else:
                     self.assertTrue(len(docs_2)-10 == len(compare_docs))
-                    self.assertTrue(sorted(docs_1) == sorted(docs_2))
+                    diffs = DeepDiff(docs_1, docs_2, ignore_order=True)
+                    if diffs:
+                        self.assertTrue(False, diffs)
             else:
-                self.assertTrue(sorted(docs_2) == sorted(compare_docs))
+                diffs = DeepDiff(docs_2, compare_docs, ignore_order=True)
+                if diffs:
+                    self.assertTrue(False, diffs)
                 if not with_aggs:
                     self.assertTrue(len(docs_1)-10 == len(docs_2))
 
@@ -1774,10 +1822,14 @@ class QueryXattrTests(QueryTests):
 
             if delete_leading or xattr_type == 'user':
                 self.assertTrue(len(docs_3) == len(compare_docs))
-                self.assertTrue(sorted(docs_3) == sorted(compare_docs))
+                diffs = DeepDiff(docs_3, compare_docs, ignore_order=True)
+                if diffs:
+                    self.assertTrue(False, diffs)
             else:
                 self.assertTrue(len(docs_3)-10 == len(compare_docs))
-                self.assertTrue(sorted(docs_2) == sorted(docs_3))
+                diffs = DeepDiff(docs_2, docs_3, ignore_order=True)
+                if diffs:
+                    self.assertTrue(False, diffs)
 
             self.run_cbq_query("DROP INDEX default." + index_name)
 
@@ -1798,7 +1850,10 @@ class QueryXattrTests(QueryTests):
         docs = query_response['results']
         query_response = self.run_cbq_query(check_query)
         compare = query_response['results']
-        self.assertTrue(sorted(docs) == sorted(compare))
+        #self.assertTrue(sorted(docs) == sorted(compare))
+        diffs = DeepDiff(docs, compare, ignore_order=True)
+        if diffs:
+            self.assertTrue(False, diffs)
 
     def run_xattrs_mixed_query(self, query, xattr_name, compare_fields=[], xattr_data=[]):
 
@@ -1847,7 +1902,7 @@ class QueryXattrTests(QueryTests):
     """
     def get_values_for_compare(self, field):
         query_response = self.run_cbq_query("SELECT " + field + " FROM default")
-        docs = sorted(query_response['results'])
+        docs = query_response['results']
         return docs
 
     """

@@ -57,11 +57,11 @@ class JoinQueryTests(QueryTests):
         generators = []
         start, end = 0, 0
         join_keys = self.gen_results.type_args['list_str'][0]
-        key_prefixes = list(set([doc[join_keys] for doc in self.gen_results.full_list]))[:-1]
+        key_prefixes = list({doc[join_keys] for doc in self.gen_results.full_list})[:-1]
         template = '{{ "add_name":"{0}", "project": "{1}"}}'
         for key_prefix in key_prefixes:
             generators.append(DocumentGenerator(key_prefix, template,
-                                                ["test-%s" % i for i in xrange(0, 10)],
+                                                ["test-%s" % i for i in range(0, 10)],
                                                 ["Project%s" % start],
                                                 start=start, end=start+10))
             start, end = end, end+10

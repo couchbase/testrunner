@@ -24,8 +24,9 @@ from couchbase_helper.documentgenerator import JSONNonDocGenerator
 from couchbase.cluster import Cluster
 from couchbase.cluster import PasswordAuthenticator
 import couchbase.subdocument as SD
-from couchbase.n1ql import N1QLQuery, STATEMENT_PLUS,CONSISTENCY_REQUEST, MutationState
+from couchbase.n1ql import N1QLQuery, STATEMENT_PLUS, CONSISTENCY_REQUEST, MutationState
 import ast
+from deepdiff import DeepDiff
 
 
 JOIN_INNER = "INNER"
@@ -38,6 +39,9 @@ class QueryTests(BaseTestCase):
         if not self._testMethodName == 'suite_setUp' \
                 and str(self.__class__).find('upgrade_n1qlrbac') == -1 \
                 and str(self.__class__).find('n1ql_upgrade') == -1 \
+                and str(self.__class__).find('N1qlFTSIntegrationTest') == -1 \
+                and str(self.__class__).find('N1qlFTSIntegrationPhase2Test') == -1 \
+                and str(self.__class__).find('N1qlFTSIntegrationPhase2ClusteropsTest') == -1 \
                 and str(self.__class__).find('AggregatePushdownRecoveryClass') == -1:
             self.skip_buckets_handle = True
         else:
@@ -83,13 +87,15 @@ class QueryTests(BaseTestCase):
         self.array_indexing = self.input.param("array_indexing", False)
         self.load_sample = self.input.param("load_sample", False)
         self.gens_load = self.gen_docs(self.docs_per_day)
+        self.log.info("--->gens_load is done...")
         self.skip_load = self.input.param("skip_load", False)
         self.skip_index = self.input.param("skip_index", False)
         self.plasma_dgm = self.input.param("plasma_dgm", False)
         self.DGM = self.input.param("DGM", False)
         self.covering_index = self.input.param("covering_index", False)
-        self.cluster_ops = self.input.param("cluster_ops",False)
+        self.cluster_ops = self.input.param("cluster_ops", False)
         self.server = self.master
+        self.log.info("-->starting rest connection...")
         self.rest = RestConnection(self.server)
         self.username = self.rest.username
         self.password = self.rest.password
@@ -105,6 +111,7 @@ class QueryTests(BaseTestCase):
         if self.primary_indx_type.lower() == "gsi":
             self.gsi_type = self.input.param("gsi_type", 'plasma')
         if self.input.param("reload_data", False):
+            self.log.info("--> reload_data: false")
             if self.analytics:
                 self.cluster.rebalance([self.master, self.cbas_node], [], [self.cbas_node], services=['cbas'])
             for bucket in self.buckets:
@@ -117,10 +124,20 @@ class QueryTests(BaseTestCase):
             self.full_list = self.generate_full_docs_list(self.gens_load)
         if self.input.param("gomaxprocs", None):
             self.configure_gomaxprocs()
-        self.gen_results = TuqGenerators(self.log, self.generate_full_docs_list(self.gens_load))
-        if str(self.__class__).find('QueriesUpgradeTests') == -1 and self.primary_index_created == False:
-            if self.analytics == False:
+        try:
+            self.docs_per_day = int(self.docs_per_day)
+        except ValueError:
+            self.docs_per_day = 0
+            pass
+        if self.docs_per_day > 0:
+            self.log.info("--> docs_per_day>0..generating TuqGenerators...")
+            self.gen_results = TuqGenerators(self.log, self.generate_full_docs_list(self.gens_load))
+            self.log.info("--> End: docs_per_day>0..generating TuqGenerators...")
+        if str(self.__class__).find('QueriesUpgradeTests') == -1:
+            if not self.analytics:
+                self.log.info("--> start: create_primary_index_for_3_0_and_greater...")
                 self.create_primary_index_for_3_0_and_greater()
+                self.log.info("--> End: create_primary_index_for_3_0_and_greater...")
         self.log.info('-'*100)
         self.log.info('Temp fix for MB-16888')
         if self.cluster_ops == False:
@@ -150,8 +167,10 @@ class QueryTests(BaseTestCase):
                 self.sleep(10, 'sleep before load')
             if not self.skip_load:
                 if self.flat_json:
+                    self.log.info("-->gens_load flat_json")
                     self.load_directory(self.gens_load)
                 else:
+                    self.log.info("-->gens_load flat_json, batch_size=1000")
                     self.load(self.gens_load, batch_size=1000, flag=self.item_flag)
             if not self.input.param("skip_build_tuq", True):
                 self._build_tuq(self.master)
@@ -163,7 +182,7 @@ class QueryTests(BaseTestCase):
             if self.testrunner_client == 'python_sdk':
                 from couchbase.cluster import Cluster
                 from couchbase.cluster import PasswordAuthenticator
-        except Exception, ex:
+        except Exception as ex:
             self.log.error('SUITE SETUP FAILED')
             self.log.info(ex)
             traceback.print_exc()
@@ -238,7 +257,7 @@ class QueryTests(BaseTestCase):
             self.fail('FAIL: This test requires buckets')
 
     def write_file(self, filename, data):
-        f = open(filename,'w')
+        f = open(filename, 'w')
         f.write(data)
         f.close()
 
@@ -248,8 +267,8 @@ class QueryTests(BaseTestCase):
         bucket_username = "cbadminbucket"
         bucket_password = "password"
         for bucket in self.buckets:
-            data += 'create bucket {0} with {{"bucket":"{0}","nodes":"{1}"}} ;'.format(bucket.name,self.cbas_node.ip)
-            data += 'create shadow dataset {1} on {0}; '.format(bucket.name,bucket.name+"_shadow")
+            data += 'create bucket {0} with {{"bucket":"{0}","nodes":"{1}"}} ;'.format(bucket.name, self.cbas_node.ip)
+            data += 'create shadow dataset {1} on {0}; '.format(bucket.name, bucket.name+"_shadow")
             data += 'connect bucket {0} with {{"username":"{1}","password":"{2}"}};'.format(bucket.name, bucket_username, bucket_password)
         self.write_file("file.txt", data)
         url = 'http://{0}:8095/analytics/service'.format(self.cbas_node.ip)
@@ -267,7 +286,7 @@ class QueryTests(BaseTestCase):
         for index_stats in json_parsed:
             bucket = index_stats["Index"].split(":")[0]
             index_name = index_stats["Index"].split(":")[1]
-            if not bucket in index_storage_stats.keys():
+            if not bucket in list(index_storage_stats.keys()):
                 index_storage_stats[bucket] = {}
             index_storage_stats[bucket][index_name] = index_stats["Stats"]
         return index_storage_stats
@@ -283,8 +302,8 @@ class QueryTests(BaseTestCase):
             for node in indexer_nodes:
                 indexer_rest = RestConnection(node)
                 content = self.get_index_storage_stats()
-                for index in content.values():
-                    for stats in index.values():
+                for index in list(content.values()):
+                    for stats in list(index.values()):
                         if stats["MainStore"]["resident_ratio"] >= 1.00:
                             return False
             return True
@@ -330,8 +349,8 @@ class QueryTests(BaseTestCase):
 
     #This method is only used by the function right above it, which is not being used
     def print_dict(self, dict_to_print):
-        for k, v in dict_to_print.iteritems():
-            print(k, v)
+        for k, v in dict_to_print.items():
+            print((k, v))
         print('\n')
 
         def get_user_list(self):
@@ -366,7 +385,7 @@ class QueryTests(BaseTestCase):
         """
         if not users:
             users = self.users
-        RbacBase().create_user_source(users,'builtin',self.master)
+        RbacBase().create_user_source(users, 'builtin', self.master)
         self.log.info("SUCCESS: User(s) %s created"
                       % ','.join([user['name'] for user in users]))
 
@@ -376,10 +395,26 @@ class QueryTests(BaseTestCase):
         #Assign roles to users
         if not roles:
             roles = self.roles
-        RbacBase().add_user_role(roles, rest,'builtin')
+        RbacBase().add_user_role(roles, rest, 'builtin')
         for user_role in roles:
             self.log.info("SUCCESS: Role(s) %s assigned to %s"
                           %(user_role['roles'], user_role['id']))
+
+    def does_test_meet_server_version(self, required_major_version = -1, required_minor_version1 = -1, required_minor_version2 = -1):
+        rest = RestConnection(self.master)
+        versions = rest.get_nodes_versions()
+        server_version = versions[0].split('-')[0]
+        server_version_major = int(server_version.split(".")[0])
+        server_version_minor1 = int(server_version.split(".")[1])
+        server_version_minor2 = int(server_version.split(".")[2])
+
+        if server_version_major >= required_major_version:
+            if server_version_minor1 >= required_minor_version1:
+                if server_version_minor2 >= required_minor_version2:
+                    return True
+
+        return False
+
 
 ##############################################################################################
 #
@@ -392,23 +427,37 @@ class QueryTests(BaseTestCase):
         res_dict['errors'] = []
         for test_name in sorted(test_dict.keys()):
             try:
-                index_list = test_dict[test_name]['indexes']
-                pre_queries = test_dict[test_name]['pre_queries']
-                queries = test_dict[test_name]['queries']
-                post_queries = test_dict[test_name]['post_queries']
-                asserts = test_dict[test_name]['asserts']
-                cleanups = test_dict[test_name]['cleanups']
+                res_dict = dict()
+                res_dict['errors'] = []
+                index_list = test_dict[test_name].get('indexes', [
+                    {'name': '#primary',
+                     'bucket': 'default',
+                     'fields': [],
+                     'state': 'online',
+                     'using': self.index_type.lower(),
+                     'is_primary': True}])
+                pre_queries = test_dict[test_name].get('pre_queries', [])
+                queries = test_dict[test_name].get('queries', [])
+                post_queries = test_dict[test_name].get('post_queries', [])
+                asserts = test_dict[test_name].get('asserts', [])
+                cleanups = test_dict[test_name].get('cleanups', [])
 
                 # INDEX STAGE
+                
+                self.log.info("--> index stage")
                 current_indexes = self.get_parsed_indexes()
                 desired_indexes = self.parse_desired_indexes(index_list)
                 desired_index_set = self.make_hashable_index_set(desired_indexes)
                 current_index_set = self.make_hashable_index_set(current_indexes)
 
                 # drop all undesired indexes
+
+                self.log.info("--> drop all undesired indexes...")
                 self.drop_undesired_indexes(desired_index_set, current_index_set, current_indexes)
 
                 # create desired indexes
+
+                self.log.info("--> create desired indexes...")
                 current_indexes = self.get_parsed_indexes()
                 current_index_set = self.make_hashable_index_set(current_indexes)
                 self.create_desired_indexes(desired_index_set, current_index_set, desired_indexes)
@@ -420,26 +469,35 @@ class QueryTests(BaseTestCase):
                 res_dict['cleanup_res'] = []
 
                 # PRE_QUERIES STAGE
+
                 self.log.info('Running Pre-query Stage')
                 for func in pre_queries:
                     res = func(res_dict)
                     res_dict['pre_q_res'].append(res)
+
                 # QUERIES STAGE
+
                 self.log.info('Running Query Stage')
                 for query in queries:
                     res = self.run_cbq_query(query)
                     res_dict['q_res'].append(res)
+
                 # POST_QUERIES STAGE
+
                 self.log.info('Running Post-query Stage')
                 for func in post_queries:
                     res = func(res_dict)
                     res_dict['post_q_res'].append(res)
+
                 # ASSERT STAGE
+
                 self.log.info('Running Assert Stage')
                 for func in asserts:
                     res = func(res_dict)
                     self.log.info('Pass: ' + test_name)
+
                 # CLEANUP STAGE
+
                 self.log.info('Running Cleanup Stage')
                 for func in cleanups:
                     res = func(res_dict)
@@ -450,7 +508,8 @@ class QueryTests(BaseTestCase):
 
             test_results[test_name] = res_dict
 
-        ## reset indexes
+        # reset indexes
+
         self.log.info('Queries completed, restoring previous indexes')
         current_indexes = self.get_parsed_indexes()
         restore_index_set = self.make_hashable_index_set(restore_indexes)
@@ -460,8 +519,9 @@ class QueryTests(BaseTestCase):
         current_index_set = self.make_hashable_index_set(current_indexes)
         self.create_desired_indexes(restore_index_set, current_index_set, restore_indexes)
 
-        ## print errors
-        errors = [error for key in test_results.keys() for error in test_results[key]['errors']]
+        # print errors
+
+        errors = [error for key in list(test_results.keys()) for error in test_results[key]['errors']]
         has_errors = False
         if errors != []:
             has_errors = True
@@ -473,22 +533,65 @@ class QueryTests(BaseTestCase):
             self.log.error(error_string)
 
         # trigger failure
+
         self.assertEqual(has_errors, False)
 
-    def is_index_present(self, bucket_name, index_name, fields_set, using):
-        desired_index = (index_name, bucket_name,
-                         frozenset([field.split()[0].replace('`', '').replace('(', '').replace(')', '') for field in fields_set]),
-                         "online", using)
+    def wait_for_all_indexers_ready(self, indexer_port=9102, retries=60, delay=1):
+        self.log.info("waiting for all indexers to be in active state...")
+        indexer_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+        i=0
+        for node in indexer_nodes:
+            self.log.info("waiting for indexer on node: " + str(node.ip))
+            node_rest = RestConnection(node)
+            indexer_url = "http://" + str(node.ip) + ":" + str(indexer_port) + "/"
+            node_ready = False
+
+            while not node_ready:
+                if i >= retries:
+                    raise Exception('indexer was not found in Active state within ' + str(retries) + ' retries for node: ' + str(node.ip))
+                indexer_stats = node_rest.get_indexer_stats(baseUrl=indexer_url)
+                self.log.info("iteration " + str(i) + " of " + str(retries))
+                self.log.info("indexer state: " + str(indexer_stats['indexer_state']))
+                if indexer_stats['indexer_state'] == "Active":
+                    node_ready = True
+                i+=1
+                self.sleep(delay)
+        self.log.info("indexers ready")
+
+    def is_index_present(self, bucket_name, index_name, fields_set=None, using=None, status="online"):
         query_response = self.run_cbq_query("SELECT * FROM system:indexes")
-        current_indexes = [(i['indexes']['name'],
-                            i['indexes']['keyspace_id'],
-                            frozenset([key.replace('`', '').replace('(', '').replace(')', '')
-                                       for key in i['indexes']['index_key']]),
-                            i['indexes']['state'],
-                            i['indexes']['using']) for i in query_response['results']]
+        if fields_set is None and using is None:
+            if status is "any":
+                desired_index = (index_name, bucket_name)
+                current_indexes = [(i['indexes']['name'],
+                                    i['indexes']['keyspace_id']) for i in query_response['results']]
+            else:
+                desired_index = (index_name, bucket_name, status)
+                current_indexes = [(i['indexes']['name'],
+                                i['indexes']['keyspace_id'],
+                                i['indexes']['state']) for i in query_response['results']]
+        else:
+            if status is "any":
+                desired_index = (index_name, bucket_name, frozenset([field for field in fields_set]), using)
+                current_indexes = [(i['indexes']['name'],
+                                    i['indexes']['keyspace_id'],
+                                    frozenset([(key.replace('`', '').replace('(', '').replace(')', '').replace('meta.id', 'meta().id'), j)
+                                               for j, key in enumerate(i['indexes']['index_key'], 0)]),
+                                    i['indexes']['using']) for i in query_response['results']]
+            else:
+                desired_index = (index_name, bucket_name, frozenset([field for field in fields_set]), status, using)
+                current_indexes = [(i['indexes']['name'],
+                                i['indexes']['keyspace_id'],
+                                frozenset([(key.replace('`', '').replace('(', '').replace(')', '').replace('meta.id', 'meta().id'), j)
+                                           for j, key in enumerate(i['indexes']['index_key'], 0)]),
+                                i['indexes']['state'],
+                                i['indexes']['using']) for i in query_response['results']]
+
         if desired_index in current_indexes:
             return True
         else:
+            self.log.info("waiting for: \n" + str(desired_index) + "\n")
+            self.log.info("current indexes: \n" + str(current_indexes) + "\n")
             return False
 
     def wait_for_all_indexes_online(self):
@@ -496,18 +599,64 @@ class QueryTests(BaseTestCase):
         for index in cur_indexes:
             self._wait_for_index_online(index['bucket'], index['name'])
 
+    def wait_for_index_status_bulk(self, bucket_index_status_list):
+        for item in bucket_index_status_list:
+            bucket = item[0]
+            index_name = item[1]
+            index_status = item[2]
+            self.wait_for_index_status(bucket, index_name, index_status)
+
+    def drop_index(self, bucket, index):
+        self.run_cbq_query("drop index `%s`.`%s`" % (bucket, index))
+        self.wait_for_index_drop(bucket, index)
+
+    def drop_primary_index(self, bucket, index):
+        self.run_cbq_query("drop primary index on `%s`" % (bucket))
+        self.wait_for_index_drop(bucket, index)
+
+    def drop_index_safe(self, bucket_name, index_name, is_primary=False):
+        if self.is_index_present(bucket_name=bucket_name, index_name=index_name):
+            if is_primary:
+                self.drop_primary_index(bucket_name, index_name)
+            else:
+                self.drop_index(bucket_name, index_name)
+            self.wait_for_index_drop(bucket_name, index_name)
+
+    def drop_all_indexes(self, bucket=None, leave_primary=True):
+        current_indexes = self.get_parsed_indexes()
+        if bucket is not None:
+            current_indexes = [index for index in current_indexes if index['bucket'] == bucket]
+        if leave_primary:
+            current_indexes = [index for index in current_indexes if index['is_primary'] is False]
+        for index in current_indexes:
+            bucket = index['bucket']
+            index_name = index['name']
+            self.run_cbq_query("drop index %s.%s" % (bucket, index_name))
+        for index in current_indexes:
+            bucket = index['bucket']
+            index_name = index['name']
+            self.wait_for_index_drop(bucket, index_name)
+
+    def wait_for_index_status(self, bucket_name, index_name, status):
+        self.with_retry(lambda: self.is_index_present(bucket_name, index_name, status=status), eval=True, delay=1, tries=30)
+
     def wait_for_index_present(self, bucket_name, index_name, fields_set, using):
         self.with_retry(lambda: self.is_index_present(bucket_name, index_name, fields_set, using), eval=True, delay=1, tries=30)
 
-    def wait_for_index_drop(self, bucket_name, index_name, fields_set, using):
-        self.with_retry(lambda: self.is_index_present(bucket_name, index_name, fields_set, using), eval=False, delay=1, tries=30)
+    def wait_for_index_drop(self, bucket_name, index_name, fields_set=None, using=None):
+        self.with_retry(lambda: self.is_index_present(bucket_name, index_name, fields_set=fields_set, using=using, status="any"), eval=False, delay=1, tries=30)
+
+    def get_index_count(self, bucket, state):
+        results = self.run_cbq_query("SELECT  count(*) as num_indexes FROM system:indexes WHERE keyspace_id = '%s' and state = '%s'" % (bucket, state))
+        num_indexes = results['results'][0]['num_indexes']
+        return num_indexes
 
     def get_parsed_indexes(self):
         query_response = self.run_cbq_query("SELECT * FROM system:indexes")
         current_indexes = [{'name': i['indexes']['name'],
                             'bucket': i['indexes']['keyspace_id'],
-                            'fields': frozenset([key.replace('`', '').replace('(', '').replace(')', '')
-                                                 for key in i['indexes']['index_key']]),
+                            'fields': frozenset([(key.replace('`', '').replace('(', '').replace(')', '').replace('meta.id', 'meta().id'), j)
+                                                 for j, key in enumerate(i['indexes']['index_key'], 0)]),
                             'state': i['indexes']['state'],
                             'using': i['indexes']['using'],
                             'where': i['indexes'].get('condition', ''),
@@ -517,7 +666,7 @@ class QueryTests(BaseTestCase):
     def parse_desired_indexes(self, index_list):
         desired_indexes = [{'name': index['name'],
                             'bucket': index['bucket'],
-                            'fields': frozenset([field.split()[0] for field in index['fields']]),
+                            'fields': frozenset([field for field in index['fields']]),
                             'state': index['state'],
                             'using': index['using'],
                             'where': index.get('where', ''),
@@ -525,13 +674,14 @@ class QueryTests(BaseTestCase):
         return desired_indexes
 
     def make_hashable_index_set(self, parsed_indexes):
-        return frozenset([frozenset(index_dict.items()) for index_dict in parsed_indexes])
+        return frozenset([frozenset(list(index_dict.items())) for index_dict in parsed_indexes])
 
     def get_index_vars(self, index):
         name = index['name']
         keyspace = index['bucket']
         fields = index['fields']
-        joined_fields = ', '.join(fields)
+        sorted_fields = [item[0] for item in tuple(sorted(fields, key=lambda item: item[1]))]
+        joined_fields = ', '.join(sorted_fields)
         using = index['using']
         is_primary = index['is_primary']
         where = index['where']
@@ -540,7 +690,7 @@ class QueryTests(BaseTestCase):
     def drop_undesired_indexes(self, desired_index_set, current_index_set, current_indexes):
         if desired_index_set != current_index_set:
             for current_index in current_indexes:
-                if frozenset(current_index.items()) not in desired_index_set:
+                if frozenset(list(current_index.items())) not in desired_index_set:
                     # drop index
                     name, keyspace, fields, joined_fields, using, is_primary, where = self.get_index_vars(current_index)
                     self.log.info("dropping index: %s %s %s" % (keyspace, name, using))
@@ -551,9 +701,10 @@ class QueryTests(BaseTestCase):
                     self.wait_for_index_drop(keyspace, name, fields, using)
 
     def create_desired_indexes(self, desired_index_set, current_index_set, desired_indexes):
+        self.log.info("-->Create desired indexes..desiredset={},currentset={},desiredindexes={}".format(desired_index_set,current_index_set,desired_indexes))
         if desired_index_set != current_index_set:
             for desired_index in desired_indexes:
-                if frozenset(desired_index.items()) not in current_index_set:
+                if frozenset(list(desired_index.items())) not in current_index_set:
                     name, keyspace, fields, joined_fields, using, is_primary, where = self.get_index_vars(desired_index)
                     self.log.info("creating index: %s %s %s" % (keyspace, name, using))
                     if is_primary:
@@ -569,11 +720,13 @@ class QueryTests(BaseTestCase):
 #
 #   COMMON FUNCTIONS
 ##############################################################################################
-    def ExplainPlanHelper(self, res):
+    def ExplainPlanHelper(self, res, debug=False):
         try:
             rv = res["results"][0]["plan"]
         except:
             rv = res["results"][0]
+        if debug:
+            print(rv)
         return rv
 
     def PreparePlanHelper(self, res):
@@ -592,7 +745,9 @@ class QueryTests(BaseTestCase):
                 generators = json_generator.generate_docs_employee_array(docs_per_day, start)
             elif self.dataset == 'default':
                 #not working
+                self.log.info("-->start:generate_docs_employee for default...")
                 generators = json_generator.generate_docs_employee(docs_per_day, start)
+                self.log.info("-->end:generate_docs_employee for default...")
             elif self.dataset == 'sabre':
                 #works
                 generators = json_generator.generate_docs_sabre(docs_per_day, start)
@@ -615,8 +770,8 @@ class QueryTests(BaseTestCase):
             elif self.dataset == 'join':
                 types = ['Engineer', 'Sales', 'Support']
                 join_yr = [2010, 2011]
-                join_mo = xrange(1, 12 + 1)
-                join_day = xrange(1, 28 + 1)
+                join_mo = range(1, 12 + 1)
+                join_day = range(1, 28 + 1)
                 template = '{{ "name":"{0}", "join_yr":{1}, "join_mo":{2}, "join_day":{3},'
                 template += ' "job_title":"{4}", "tasks_ids":{5}}}'
                 for info in types:
@@ -639,11 +794,11 @@ class QueryTests(BaseTestCase):
         elif type == 'tasks':
             start, end = 0, (28 + 1)
             template = '{{ "task_name":"{0}", "project": "{1}"}}'
-            generators.append(DocumentGenerator("test_task", template, ["test_task-%s" % i for i in xrange(0,10)],
+            generators.append(DocumentGenerator("test_task", template, ["test_task-%s" % i for i in range(0, 10)],
                                                 ["CB"], start=start, end=10))
-            generators.append(DocumentGenerator("test_task", template, ["test_task-%s" % i for i in xrange(10,20)],
+            generators.append(DocumentGenerator("test_task", template, ["test_task-%s" % i for i in range(10, 20)],
                                                 ["MB"], start=10, end=20))
-            generators.append(DocumentGenerator("test_task", template, ["test_task-%s" % i for i in xrange(20,end)],
+            generators.append(DocumentGenerator("test_task", template, ["test_task-%s" % i for i in range(20, end)],
                                                 ["IT"], start=20, end=end))
 
         elif type == 'json_non_docs':
@@ -663,11 +818,11 @@ class QueryTests(BaseTestCase):
             if not end:
                 end = self.num_items
             generators = []
-            index = end/3
+            index = end//3
             template = '{{ "feature_name":"{0}", "coverage_tests" : {{"P0":{1}, "P1":{2}, "P2":{3}}},'
             template += '"story_point" : {4},"jira_tickets": {5}}}'
-            names = [str(i) for i in xrange(0, index)]
-            rates = xrange(0, index)
+            names = [str(i) for i in range(0, index)]
+            rates = range(0, index)
             points = [[1, 2, 3], ]
             jira_tickets = ['[{"Number": 1, "project": "cb", "description": "test"},' + \
                             '{"Number": 2, "project": "mb", "description": "test"}]',]
@@ -677,21 +832,22 @@ class QueryTests(BaseTestCase):
             template += '"story_point" : [1,2,null],"jira_tickets": {1}}}'
             jira_tickets = ['[{"Number": 1, "project": "cb", "description": "test"},' + \
                             '{"Number": 2, "project": "mb", "description": null}]',]
-            names = [str(i) for i in xrange(index, index + index)]
+            names = [str(i) for i in range(index, index + index)]
             generators.append(DocumentGenerator(name, template, names, jira_tickets, start=index, end=index + index))
             template = '{{ "feature_name":"{0}", "coverage_tests" : {{"P4": 2}},'
             template += '"story_point" : [null,null],"jira_tickets": {1}}}'
-            names = [str(i) for i in xrange(index + index, end)]
+            names = [str(i) for i in range(index + index, end)]
             jira_tickets = ['[{"Number": 1, "project": "cb", "description": "test"},' + \
                             '{"Number": 2, "project": "mb"}]',]
             generators.append(DocumentGenerator(name, template, names, jira_tickets, start=index + index, end=end))
+        self.log.info('Completed Generating %s:%s data...' % (type, self.dataset))
         return generators
 
     def buckets_docs_ready(self, bucket_docs_map):
         ready = True
         rest_conn = RestConnection(self.master)
         bucket_docs_rest = rest_conn.get_buckets_itemCount()
-        for bucket in bucket_docs_map.keys():
+        for bucket in list(bucket_docs_map.keys()):
             query_response = self.run_cbq_query("SELECT COUNT(*) FROM `"+bucket+"`")
             docs = query_response['results'][0]['$1']
             if docs != bucket_docs_map[bucket] or bucket_docs_rest[bucket] != bucket_docs_map[bucket]:
@@ -702,12 +858,21 @@ class QueryTests(BaseTestCase):
     def buckets_status_ready(self, bucket_status_map):
         ready = True
         rest_conn = RestConnection(self.master)
-        for bucket in bucket_status_map.keys():
+        for bucket in list(bucket_status_map.keys()):
             status = rest_conn.get_bucket_status(bucket)
             if status != bucket_status_map[bucket]:
                 self.log.info("still waiting for bucket: " + bucket + " with status: " + str(status) + " to have " + str(bucket_status_map[bucket]) + " status")
                 ready = False
         return ready
+
+    def bucket_deleted(self, bucket_name):
+        query_response = self.run_cbq_query("select COUNT(*) from system:keyspaces where name == " + bucket_name)
+        count = query_response['results'][0]['$1']
+        if count != 0:
+            self.log.info("Buckets still exists: " + bucket_name)
+            return False
+        if count == 0:
+            return True
 
     def wait_for_buckets_status(self, bucket_status_map, delay, retries):
         self.with_retry(lambda: self.buckets_status_ready(bucket_status_map), delay=delay, tries=retries)
@@ -715,15 +880,24 @@ class QueryTests(BaseTestCase):
     def wait_for_bucket_docs(self, bucket_doc_map, delay, retries):
         self.with_retry(lambda: self.buckets_docs_ready(bucket_doc_map), delay=delay, tries=retries)
 
-    def with_retry(self, func, eval=True, delay=5, tries=10, func_params=None):
+    def wait_for_bucket_delete(self, bucket_name, delay, retries):
+        self.with_retry(lambda: self.bucket_deleted(bucket_name), delay=delay, tries=retries)
+
+    def with_retry(self, func, eval=None, delay=5, tries=10, func_params=None):
         attempts = 0
+        res = None
         while attempts < tries:
             attempts = attempts + 1
-            res = func()
-            if res == eval:
-                return res
-            else:
-                self.sleep(delay, 'incorrect results, sleeping for %s' % delay)
+            try:
+                res = func()
+                if eval is None:
+                    return res
+                elif res == eval:
+                    return res
+                else:
+                    self.sleep(delay, 'incorrect results, sleeping for %s' % delay)
+            except Exception as ex:
+                self.sleep(delay, 'exception returned: %s \n sleeping for %s' % (ex, delay))
         raise Exception('timeout, invalid results: %s' % res)
 
     def negative_common_body(self, queries_errors={}):
@@ -732,8 +906,8 @@ class QueryTests(BaseTestCase):
         check_code = False
         self.fail_if_no_buckets()
         for bucket in self.buckets:
-            for query_template, error_arg in queries_errors.iteritems():
-                if isinstance(error_arg,str):
+            for query_template, error_arg in queries_errors.items():
+                if isinstance(error_arg, str):
                     error = error_arg
                 else:
                     error, code = error_arg
@@ -752,6 +926,25 @@ class QueryTests(BaseTestCase):
                                         "Error code is incorrect.Actual %s.\n Expected: %s.\n" % (str(ex), code))
                 else:
                     self.fail("There were no errors. Error expected: %s" % error)
+
+    def get_bucket_from_name(self, bucket_name):
+        for bucket in self.buckets:
+            if bucket.name == bucket_name:
+                return bucket
+        return None
+
+    def delete_bucket(self, bucket):
+        self.cluster.bucket_delete(self.master, bucket=bucket, timeout=180000)
+
+    def ensure_bucket_does_not_exist(self, bucket_name, using_rest=False):
+        bucket = self.get_bucket_from_name(bucket_name)
+        if bucket:
+            if using_rest:
+                rest = RestConnection(self.master)
+                rest.delete_bucket(bucket_name)
+            else:
+                self.delete_bucket(bucket)
+        self.wait_for_bucket_delete(bucket_name, 5, 10)
 
     def prepared_common_body(self, server=None):
         self.isprepared = True
@@ -775,9 +968,28 @@ class QueryTests(BaseTestCase):
             self.assertFalse('ERROR' in (str(word).upper() for word in result_with_prepare))
         msg = "Query result with prepare and without doesn't match.\nNo prepare: %s ... %s\nWith prepare: %s ... %s" \
               % (result_no_prepare[:100], result_no_prepare[-100:], result_with_prepare[:100], result_with_prepare[-100:])
-        self.assertTrue(sorted(result_no_prepare) == sorted(result_with_prepare), msg)
+        diffs = DeepDiff(result_no_prepare, result_with_prepare, ignore_order=True)
+        if diffs:
+            self.assertTrue(False, diffs)
+        #self.assertTrue(sorted(result_no_prepare) == sorted(result_with_prepare), msg)
 
-    def run_cbq_query(self, query=None, min_output_size=10, server=None, query_params={}, is_prepared=False, encoded_plan=None):
+    def run_cbq_query_curl(self, query=None, server=None):
+        if query is None:
+            query = self.query
+        if server is None:
+            server = self.master
+
+        shell = RemoteMachineShellConnection(server)
+        cmd = (self.curl_path+" -u "+self.master.rest_username+":"+self.master.rest_password+" http://"+server.ip+":"+server.n1ql_port+"/query/service -d " \
+                  "statement="+query)
+
+        output, error = shell.execute_command(cmd)
+        json_output_str = ''
+        for s in output:
+            json_output_str += s
+        return json.loads(json_output_str)
+
+    def run_cbq_query(self, query=None, min_output_size=10, server=None, query_params={}, is_prepared=False, encoded_plan=None, username=None, password=None):
         if query is None:
             query = self.query
         if server is None:
@@ -786,8 +998,9 @@ class QueryTests(BaseTestCase):
                 server = self.tuq_client
         cred_params = {'creds': []}
         rest = RestConnection(server)
-        username = rest.username
-        password = rest.password
+        if username is None and password is None:
+            username = rest.username
+            password = rest.password
         cred_params['creds'].append({'user': username, 'pass': password})
         for bucket in self.buckets:
             if bucket.saslPassword:
@@ -820,7 +1033,7 @@ class QueryTests(BaseTestCase):
                     content.append(row)
                 row_iterator.meta['results'] = content
                 result = row_iterator.meta
-            except Exception, e:
+            except Exception as e:
                 #This will parse the resulting HTTP error and return only the dictionary containing the query results
                 result = ast.literal_eval(str(e).split("value=")[1].split(", http_status")[0])
 
@@ -849,9 +1062,13 @@ class QueryTests(BaseTestCase):
                 query = query + ";"
                 for bucket in self.buckets:
                     query = query.replace(bucket.name, bucket.name + "_shadow")
-                result = RestConnection(self.cbas_node).execute_statement_on_cbas(query,
+                result1 = RestConnection(self.cbas_node).execute_statement_on_cbas(query,
                                                                                   "immediate")
-                result = json.loads(result)
+                try:
+                    result = json.loads(result1)
+                except Exception as ex:
+                    self.log.error("CANNOT LOAD QUERY RESULT IN JSON: %s" % ex.message)
+                    self.log.error("INCORRECT DOCUMENT IS: " + str(result1))
             else:
                 result = rest.query_tool(query, self.n1ql_port, query_params=query_params,
                                          is_prepared=is_prepared, named_prepare=self.named_prepare,
@@ -877,7 +1094,11 @@ class QueryTests(BaseTestCase):
                         output1 = '{%s' % output
                     else:
                         output1 = output
-                    result = json.loads(output1)
+                    try:
+                        result = json.loads(output1)
+                    except Exception as ex:
+                        self.log.error("CANNOT LOAD QUERY RESULT IN JSON: %s" % ex.message)
+                        self.log.error("INCORRECT DOCUMENT IS: "+str(output1))
         if isinstance(result, str) or 'errors' in result:
             raise CBQError(result, server.ip)
         if 'metrics' in result:
@@ -980,11 +1201,11 @@ class QueryTests(BaseTestCase):
 
     #This method has no usages anywhere
     def _set_env_variable(self, server):
-        self.shell.execute_command("export NS_SERVER_CBAUTH_URL=\"http://{0}:{1}/_cbauth\"".format(server.ip,server.port))
+        self.shell.execute_command("export NS_SERVER_CBAUTH_URL=\"http://{0}:{1}/_cbauth\"".format(server.ip, server.port))
         self.shell.execute_command("export NS_SERVER_CBAUTH_USER=\"{0}\"".format(server.rest_username))
         self.shell.execute_command("export NS_SERVER_CBAUTH_PWD=\"{0}\"".format(server.rest_password))
-        self.shell.execute_command("export NS_SERVER_CBAUTH_RPC_URL=\"http://{0}:{1}/cbauth-demo\"".format(server.ip,server.port))
-        self.shell.execute_command("export CBAUTH_REVRPC_URL=\"http://{0}:{1}@{2}:{3}/query\"".format(server.rest_username,server.rest_password,server.ip,server.port))
+        self.shell.execute_command("export NS_SERVER_CBAUTH_RPC_URL=\"http://{0}:{1}/cbauth-demo\"".format(server.ip, server.port))
+        self.shell.execute_command("export CBAUTH_REVRPC_URL=\"http://{0}:{1}@{2}:{3}/query\"".format(server.rest_username, server.rest_password, server.ip, server.port))
 
     #This method has no usages anywhere
     def _parse_query_output(self, output):
@@ -1002,6 +1223,14 @@ class QueryTests(BaseTestCase):
         if self.max_verify is not None:
             actual_result = actual_result[:self.max_verify]
             expected_result = expected_result[:self.max_verify]
+        diffs = DeepDiff(actual_result, expected_result, ignore_order=True)
+        if diffs:
+            self.assertTrue(False, diffs)
+
+    def _verify_results_old(self, actual_result, expected_result):
+        if self.max_verify is not None:
+            actual_result = actual_result[:self.max_verify]
+            expected_result = expected_result[:self.max_verify]
             self.assertTrue(actual_result == expected_result, "Results are incorrect")
             return
         if len(actual_result) != len(expected_result):
@@ -1012,12 +1241,13 @@ class QueryTests(BaseTestCase):
               % (actual_result[:100], actual_result[-100:], expected_result[:100], expected_result[-100:])
         self.assertTrue(actual_result == expected_result, msg)
 
+
     def _verify_aggregate_query_results(self, result, query, bucket):
         def _gen_dict(res):
             result_set = []
             if res is not None and len(res) > 0:
                 for val in res:
-                    for key in val.keys():
+                    for key in list(val.keys()):
                         result_set.append(val[key])
             return result_set
 
@@ -1038,7 +1268,6 @@ class QueryTests(BaseTestCase):
             return False
         return True
 
-
     def check_missing_and_extra(self, actual, expected):
         missing, extra = [], []
         for item in actual:
@@ -1053,7 +1282,7 @@ class QueryTests(BaseTestCase):
         actual_result = []
         for item in result:
             curr_item = {}
-            for key, value in item.iteritems():
+            for key, value in item.items():
                 if isinstance(value, list) or isinstance(value, set):
                     if not isinstance(value, set) and key and isinstance(value[0], dict) and key in value:
                         curr_item[key] = sorted(value, key=lambda doc: (doc['task_name']))
@@ -1090,12 +1319,12 @@ class QueryTests(BaseTestCase):
                 self.log.info("Load %s documents to %sdata/default/%s..." % (items, self.directory_flat_json, bucket.name))
                 for gen_load in gens_load:
                     gen_load.reset()
-                    for i in xrange(gen_load.end):
-                        key, value = gen_load.next()
+                    for i in range(gen_load.end):
+                        key, value = next(gen_load)
                         out = shell.execute_command("echo '%s' > %sdata/default/%s/%s.json" % (value, self.directory_flat_json,
                                                                                                 bucket.name, key))
                 self.log.info("LOAD IS FINISHED")
-            except Exception, ex:
+            except Exception as ex:
                 self.log.info(ex)
                 traceback.print_exc()
             finally:
@@ -1109,44 +1338,19 @@ class QueryTests(BaseTestCase):
             return
         if self.flat_json:
             return
-        self.sleep(30, 'Sleep for some time prior to index creation')
-        rest = RestConnection(self.master)
-        versions = rest.get_nodes_versions()
-        if int(versions[0].split('.')[0]) > 2:
-            for bucket in self.buckets:
-                if self.primary_indx_drop:
-                    self.log.info("Dropping primary index for %s ..." % bucket.name)
-                    try:
-                        self.query = "DROP PRIMARY INDEX ON %s using %s" % (
-                            bucket.name, self.primary_indx_type)
-                        self.run_cbq_query(self.query)
-                        self.query = "select * from system:indexes where name='#primary' and keyspace_id = %s" % bucket.name
-                        attempts = 0
-                        while attempts<6:
-                            res = self.run_cbq_query(self.query)
-                            if res['metrics']['resultCount'] == 0:
-                                break
-                            else:
-                                self.sleep(1)
-                                attempts+=1
-                    except Exception, ex:
-                        self.log.info(str(ex))
-
-                self.query = "select * from system:indexes where name='#primary' and keyspace_id = %s" % bucket.name
-                res = self.run_cbq_query(self.query)
-                if res['metrics']['resultCount'] == 0:
-                    self.query = "CREATE PRIMARY INDEX ON %s USING %s" % (bucket.name, self.primary_indx_type)
-                    self.log.info("Creating primary index for %s ..." % bucket.name)
-                    try:
-                        self.run_cbq_query()
-                        self.primary_index_created = True
-                        if self.primary_indx_type.lower() == 'gsi':
-                            self._wait_for_index_online(bucket.name, '#primary')
-                    except Exception, ex:
-                        self.log.info(str(ex))
+        for bucket in self.buckets:
+            try:
+                self.with_retry(lambda: self.ensure_primary_indexes_exist(), eval=None, delay=1, tries=10)
+                self.primary_index_created = True
+                self.log.info("-->waiting for indexes online, bucket:{}".format(bucket.name))
+                self._wait_for_index_online(bucket.name, '#primary')
+            except Exception as ex:
+                self.log.info(str(ex))
 
     def ensure_primary_indexes_exist(self):
+        self.log.info("--> start: ensure_primary_indexes_exist..")
         query_response = self.run_cbq_query("SELECT * FROM system:keyspaces")
+        self.log.info("-->query_response:{}".format(query_response))
         buckets = [i['keyspaces']['name'] for i in query_response['results']]
         current_indexes = self.get_parsed_indexes()
         index_list = [{'name': '#primary',
@@ -1158,9 +1362,11 @@ class QueryTests(BaseTestCase):
         desired_indexes = self.parse_desired_indexes(index_list)
         desired_index_set = self.make_hashable_index_set(desired_indexes)
         current_index_set = self.make_hashable_index_set(current_indexes)
+        self.log.info("-->before create indexes: {},{},{}".format(index_list,desired_indexes,current_indexes))
         self.create_desired_indexes(desired_index_set, current_index_set, desired_indexes)
+        self.log.info("--> end: ensure_primary_indexes_exist..")
 
-    def _wait_for_index_online(self, bucket, index_name, timeout=12000):
+    def _wait_for_index_online(self, bucket, index_name, timeout=60):
         end_time = time.time() + timeout
         while time.time() < end_time:
             query = "SELECT * FROM system:indexes where name='%s'" % index_name
@@ -1170,16 +1376,29 @@ class QueryTests(BaseTestCase):
                     self.log.error(item)
                     continue
                 bucket_name = ""
-                if isinstance(bucket, str) or isinstance(bucket, unicode):
+                if isinstance(bucket, str) or isinstance(bucket, str):
                     bucket_name = bucket
                 else:
                     bucket_name = bucket.name
                 if item['indexes']['keyspace_id'] == bucket_name:
                     if item['indexes']['state'] == "online":
                         return
-            self.sleep(5, 'index is pending or not in the list. sleeping... (%s)' % [item['indexes'] for item in res['results']])
+            self.sleep(1, 'index is pending or not in the list. sleeping... (%s)' % [item['indexes'] for item in res['results']])
         raise Exception('index %s is not online. last response is %s' % (index_name, res))
 
+    def _debug_fts_request(self, request=""):
+        cmd = "curl -XPOST -H \"Content-Type: application/json\" -u "+self.username+":"+self.password+" " \
+                            "http://"+self.master.ip+":8094/api/index/idx_beer_sample_fts/query -d " + request
+
+
+        shell = RemoteMachineShellConnection(self.master)
+
+        output, error = shell.execute_command(cmd)
+        json_output_str = ''
+        for s in output:
+            json_output_str += s
+        result =  json.loads(json_output_str)
+        return result
 
 ##############################################################################################
 #
@@ -1196,13 +1415,13 @@ class QueryTests(BaseTestCase):
         subquery_template = re.sub(r'.*\$subquery\(', '', query_template)
         subquery_template = subquery_template[:subquery_template.rfind(')')]
         keys_num = int(re.sub(r'.*KEYS \$', '', subquery_template).replace('KEYS $', ''))
-        subquery_full_list = self.generate_full_docs_list(gens_load=self.gens_load,keys=self._get_keys(keys_num))
+        subquery_full_list = self.generate_full_docs_list(gens_load=self.gens_load, keys=self._get_keys(keys_num))
         subquery_template = re.sub(r'USE KEYS.*', '', subquery_template)
         sub_results = TuqGenerators(self.log, subquery_full_list)
         self.query = sub_results.generate_query(subquery_template)
         expected_sub = sub_results.generate_expected_result()
         alias = re.sub(r',.*', '', re.sub(r'.*\$subquery\(.*\)', '', query_template))
-        alias = re.sub(r'.*as','', re.sub(r'FROM.*', '', alias)).strip()
+        alias = re.sub(r'.*as', '', re.sub(r'FROM.*', '', alias)).strip()
         if not alias:
             alias = '$1'
         for item in self.gen_results.full_set:
@@ -1233,8 +1452,8 @@ class QueryTests(BaseTestCase):
         keys = []
         for gen in self.gens_load:
             gen_copy = copy.deepcopy(gen)
-            for i in xrange(gen_copy.end):
-                key, _ = gen_copy.next()
+            for i in range(gen_copy.end):
+                key, _ = next(gen_copy)
                 keys.append(key)
                 if len(keys) == key_num:
                     return keys
@@ -1264,6 +1483,20 @@ class QueryTests(BaseTestCase):
                     'select * from system:completed_requests where requestId  =  "%s"' % requestId)
                 self.assertTrue(result['metrics']['resultCount'] == 0)
 
+    def debug_query(self, query, expected_result, result, function_name):
+        print(("### "+function_name+" #### QUERY ::" + str(query) + "::"))
+        print(("### "+function_name+" #### EXPECTED RESULT ::" + str(expected_result) + "::"))
+        print(("### "+function_name+" #### FULL RESULT ::"+str(result)+"::"))
+
+    def normalize_result(self, result):
+        if len(result['results'][0]) == 0:
+            return 'missing'
+        return result['results'][0]['$1']
+
+    def null_to_none(self, s):
+        if s.lower() == 'null':
+            return None
+        return s
 
 ##############################################################################################
 #
@@ -1298,7 +1531,7 @@ class QueryTests(BaseTestCase):
         results = self.run_cbq_query()
         return results['results'][0]['$1']
 
-    def check_explain_covering_index(self,index):
+    def check_explain_covering_index(self, index):
         for bucket in self.buckets:
             res = self.run_cbq_query()
             s = pprint.pformat( res, indent=4 )
@@ -1331,14 +1564,14 @@ class QueryTests(BaseTestCase):
         self.create_users(users=[{'id': 'john_select2', 'name': 'johnSelect2', 'password':'password'}])
         self.create_users(users=[{'id': 'john_rep', 'name': 'johnRep', 'password':'password'}])
         self.create_users(users=[{'id': 'john_bucket_admin', 'name': 'johnBucketAdmin', 'password':'password'}])
-        items = [("query_insert",'john_insert'), ("query_update",'john_update'), ("query_delete",'john_delete'),
-                         ("query_select",'john_select'), ("bucket_admin",'john_bucket_admin'), ("query_select",'john_select2')]
+        items = [("query_insert", 'john_insert'), ("query_update", 'john_update'), ("query_delete", 'john_delete'),
+                         ("query_select", 'john_select'), ("bucket_admin", 'john_bucket_admin'), ("query_select", 'john_select2')]
         for bucket in self.buckets:
             for item in items:
-                self.query = "GRANT {0} on {2} to {1}".format(item[0],item[1],bucket.name)
+                self.query = "GRANT {0} on {2} to {1}".format(item[0], item[1], bucket.name)
                 self.n1ql_helper.run_cbq_query(query = self.query, server = self.n1ql_node)
 
-            self.query = "GRANT {0} to {1}".format("replication_admin",'john_rep')
+            self.query = "GRANT {0} to {1}".format("replication_admin", 'john_rep')
             self.n1ql_helper.run_cbq_query(query = self.query, server = self.n1ql_node)
 
     def query_select_insert_update_delete_helper_default(self):
@@ -1349,7 +1582,7 @@ class QueryTests(BaseTestCase):
         self.create_users(users=[{'id': 'john_select2', 'name': 'johnSelect2', 'password':'password'}])
         self.create_users(users=[{'id': 'john_rep', 'name': 'johnRep', 'password':'password'}])
         self.create_users(users=[{'id': 'john_bucket_admin', 'name': 'johnBucketAdmin', 'password':'password'}])
-        self.query = "GRANT {0} to {1}".format("replication_admin",'john_rep')
+        self.query = "GRANT {0} to {1}".format("replication_admin", 'john_rep')
         self.n1ql_helper.run_cbq_query(query = self.query, server = self.n1ql_node)
 
     def change_and_update_permission(self, query_type, permission, user, bucket, cmd, error_msg):
@@ -1368,47 +1601,47 @@ class QueryTests(BaseTestCase):
         for bucket in self.buckets:
             cmd = "%s -u %s:%s http://%s:8093/query/service -d " \
                   "'statement=INSERT INTO %s (KEY, VALUE) VALUES(\"test\", { \"value1\": \"one1\" })'"% \
-                  (self.curl_path,'john_insert', 'password', self.master.ip, bucket.name)
+                  (self.curl_path, 'john_insert', 'password', self.master.ip, bucket.name)
             self.change_and_update_permission(None, None, 'johnInsert', bucket.name, cmd, "Unable to insert into {0} as user {1}")
 
             old_name = "employee-14"
             new_name = "employee-14-2"
             cmd = "{6} -u {0}:{1} http://{2}:8093/query/service -d " \
                   "'statement=UPDATE {3} a set name = '{4}' where name = '{5}' limit 1'". \
-                format('john_update', 'password', self.master.ip, bucket.name, new_name, old_name,self.curl_path)
+                format('john_update', 'password', self.master.ip, bucket.name, new_name, old_name, self.curl_path)
             self.change_and_update_permission(None, None, 'johnUpdate', bucket.name, cmd, "Unable to update into {0} as user {1}")
 
             del_name = "employee-14"
             cmd = "{5} -u {0}:{1} http://{2}:8093/query/service -d " \
                   "'statement=DELETE FROM {3} a WHERE name = '{4}''". \
-                format('john_delete', 'password', self.master.ip, bucket.name, del_name,self.curl_path)
+                format('john_delete', 'password', self.master.ip, bucket.name, del_name, self.curl_path)
             self.change_and_update_permission(None, None, 'john_delete', bucket.name, cmd, "Unable to delete from {0} as user {1}")
 
             cmd = "{4} -u {0}:{1} http://{2}:8093/query/service -d 'statement=SELECT * from {3} LIMIT 10'". \
-                format('john_select2', 'password', self.master.ip,bucket.name,self.curl_path)
+                format('john_select2', 'password', self.master.ip, bucket.name, self.curl_path)
             self.change_and_update_permission(None, None, 'john_select2', bucket.name, cmd, "Unable to select from {0} as user {1}")
 
     def create_and_verify_system_catalog_users_helper(self):
         self.create_users(users=[{'id': 'john_system', 'name': 'john', 'password':'password'}])
-        self.query = "GRANT {0} to {1}".format("query_system_catalog",'john_system')
+        self.query = "GRANT {0} to {1}".format("query_system_catalog", 'john_system')
         self.n1ql_helper.run_cbq_query(query = self.query, server = self.n1ql_node)
         for bucket in self.buckets:
             cmds = ["{4} -u {0}:{1} http://{2}:8093/query/service -d 'statement=SELECT * from system:keyspaces'". \
-                        format('john_system','password', self.master.ip, bucket.name,self.curl_path),
+                        format('john_system', 'password', self.master.ip, bucket.name, self.curl_path),
                     "{4} -u {0}:{1} http://{2}:8093/query/service -d 'statement=SELECT * from system:namespaces'". \
-                        format('john_system','password', self.master.ip, bucket.name,self.curl_path),
+                        format('john_system', 'password', self.master.ip, bucket.name, self.curl_path),
                     "{4} -u {0}:{1} http://{2}:8093/query/service -d 'statement=SELECT * from system:datastores'". \
-                        format('john_system','password', self.master.ip, bucket.name,self.curl_path),
+                        format('john_system', 'password', self.master.ip, bucket.name, self.curl_path),
                     "{4} -u {0}:{1} http://{2}:8093/query/service -d 'statement=SELECT * from system:indexes'". \
-                        format('john_system','password', self.master.ip, bucket.name,self.curl_path),
+                        format('john_system', 'password', self.master.ip, bucket.name, self.curl_path),
                     "{4} -u {0}:{1} http://{2}:8093/query/service -d 'statement=SELECT * from system:completed_requests'". \
-                        format('john_system','password', self.master.ip, bucket.name,self.curl_path),
+                        format('john_system', 'password', self.master.ip, bucket.name, self.curl_path),
                     "{4} -u {0}:{1} http://{2}:8093/query/service -d 'statement=SELECT * from system:active_requests'". \
-                        format('john_system','password', self.master.ip, bucket.name,self.curl_path),
+                        format('john_system', 'password', self.master.ip, bucket.name, self.curl_path),
                     "{4} -u {0}:{1} http://{2}:8093/query/service -d 'statement=SELECT * from system:prepareds'". \
-                        format('john_system','password', self.master.ip, bucket.name,self.curl_path),
+                        format('john_system', 'password', self.master.ip, bucket.name, self.curl_path),
                     "{4} -u {0}:{1} http://{2}:8093/query/service -d 'statement=SELECT * from system:my_user_info'". \
-                        format('john_system','password', self.master.ip, bucket.name,self.curl_path)]
+                        format('john_system', 'password', self.master.ip, bucket.name, self.curl_path)]
             for cmd in cmds:
                 self.change_and_update_permission(None, None, 'john_system', bucket.name, cmd, "Unable to select from {0} as user {1}")
 
@@ -1445,13 +1678,13 @@ class QueryTests(BaseTestCase):
         for query in self.queries:
             try:
                 self.run_cbq_query(query=query)
-            except Exception, ex:
+            except Exception as ex:
                 self.log.error(ex)
                 self.assertNotEqual(str(ex).find("'code': 11003"), -1)
         try:
             query = 'delete from system:dual'
             self.run_cbq_query(query=query)
-        except Exception,ex:
+        except Exception as ex:
             self.log.error(ex)
             self.assertNotEqual(str(ex).find("'code': 11000"), -1)
 
@@ -1471,13 +1704,13 @@ class QueryTests(BaseTestCase):
         for bucket in self.buckets:
             # change permission of john_bucketadmin1 and verify its able to execute the correct query.
             cmd = "{4} -u {0}:{1} http://{2}:8093/query/service -d 'statement=SELECT * from {3} limit 1'". \
-                format('bucket0', 'password', self.master.ip,bucket.name,self.curl_path)
+                format('bucket0', 'password', self.master.ip, bucket.name, self.curl_path)
             self.change_and_update_permission('with_bucket', "query_select", 'bucket0', bucket.name, cmd,
                                               "Unable to select from {0} as user {1}")
 
             # change permission of john_bucketadminAll and verify its able to execute the correct query.
             cmd = "%s -u %s:%s http://%s:8093/query/service -d 'statement=INSERT INTO %s (KEY, VALUE) VALUES(\"1\", { \"value1\": \"one1\" })'" \
-                  % (self.curl_path,'bucket0', 'password',self.master.ip,bucket.name)
+                  % (self.curl_path, 'bucket0', 'password', self.master.ip, bucket.name)
             self.change_and_update_permission('with_bucket', "query_insert", 'bucket0', bucket.name, cmd,
                                               "Unable to insert into {0} as user {1}")
 
@@ -1485,21 +1718,21 @@ class QueryTests(BaseTestCase):
             old_name = "employee-14"
             new_name = "employee-14-2"
             cmd = "{6} -u {0}:{1} http://{2}:8093/query/service -d 'statement=UPDATE {3} a set name = '{4}' where " \
-                  "name = '{5}' limit 1'".format('bucket0', 'password',self.master.ip,bucket.name,new_name,
-                                                 old_name,self.curl_path)
+                  "name = '{5}' limit 1'".format('bucket0', 'password', self.master.ip, bucket.name, new_name,
+                                                 old_name, self.curl_path)
             self.change_and_update_permission('with_bucket', "query_update", 'bucket0', bucket.name, cmd,
                                               "Unable to update  {0} as user {1}")
 
             #change permission of bucket0 and verify its able to execute the correct query.
             del_name = "employee-14"
             cmd = "{5} -u {0}:{1} http://{2}:8093/query/service -d 'statement=DELETE FROM {3} a WHERE name = '{4}''". \
-                format('bucket0', 'password', self.master.ip, bucket.name, del_name,self.curl_path)
+                format('bucket0', 'password', self.master.ip, bucket.name, del_name, self.curl_path)
             self.change_and_update_permission('with_bucket', "query_delete", 'bucket0', bucket.name, cmd,
                                               "Unable to delete from {0} as user {1}")
 
             # change permission of cbadminbucket user and verify its able to execute the correct query.
             cmd = "{4} -u {0}:{1} http://{2}:8093/query/service -d 'statement=SELECT * from system:keyspaces'". \
-                format('cbadminbucket','password', self.master.ip, bucket.name,self.curl_path)
+                format('cbadminbucket', 'password', self.master.ip, bucket.name, self.curl_path)
             self.change_and_update_permission('without_bucket', "query_system_catalog", 'cbadminbucket',
                                               'cbadminbucket', cmd, "Unable to select from system:keyspaces as user {0}")
 
@@ -1524,26 +1757,26 @@ class QueryTests(BaseTestCase):
     def verify_pre_upgrade_users_permissions_helper(self,test = ''):
 
         cmd = "{4} -u {0}:{1} http://{2}:8093/query/service -d 'statement=SELECT * from {3} LIMIT 10'". \
-            format('bucket0', 'password', self.master.ip,'bucket0',self.curl_path)
+            format('bucket0', 'password', self.master.ip, 'bucket0', self.curl_path)
         self.change_and_update_permission(None, None, 'bucket0', 'bucket0', cmd, "Unable to select from {0} as user {1}")
 
         if test == 'online_upgrade':
             cmd = "{4} -u {0}:{1} http://{2}:8093/query/service -d 'statement=SELECT * from {3} LIMIT 10'". \
-                format('cbadminbucket', 'password', self.master.ip,'default',self.curl_path)
+                format('cbadminbucket', 'password', self.master.ip, 'default', self.curl_path)
         else:
             cmd = "{4} -u {0}:{1} http://{2}:8093/query/service -d 'statement=SELECT * from {3} LIMIT 10'". \
-                format('cbadminbucket', 'password', self.master.ip,'bucket0',self.curl_path)
+                format('cbadminbucket', 'password', self.master.ip, 'bucket0', self.curl_path)
 
         self.change_and_update_permission(None, None, 'cbadminbucket', 'bucket0', cmd, "Unable to select from {0} as user {1}")
 
         cmd = "{3} -u {0}:{1} http://{2}:8093/query/service -d 'statement=SELECT * from system:keyspaces'". \
-            format('cbadminbucket', 'password', self.master.ip,self.curl_path)
+            format('cbadminbucket', 'password', self.master.ip, self.curl_path)
         self.change_and_update_permission(None, None, 'cbadminbucket', 'system:keyspaces', cmd, "Unable to select from {0} as user {1}")
 
         for bucket in self.buckets:
             cmd = "%s -u %s:%s http://%s:8093/query/service -d " \
                   "'statement=INSERT INTO %s (KEY, VALUE) VALUES(\"5\", { \"value1\": \"one1\" })'"% \
-                  (self.curl_path,'bucket0', 'password', self.master.ip, bucket.name)
+                  (self.curl_path, 'bucket0', 'password', self.master.ip, bucket.name)
 
             self.change_and_update_permission(None, None, 'bucket0', bucket.name, cmd, "Unable to insert into {0} as user {1}")
 
@@ -1551,30 +1784,30 @@ class QueryTests(BaseTestCase):
             new_name = "employee-14-2"
             cmd = "{6} -u {0}:{1} http://{2}:8093/query/service -d " \
                   "'statement=UPDATE {3} a set name = '{4}' where name = '{5}' limit 1'". \
-                format('bucket0', 'password', self.master.ip, bucket.name, new_name, old_name,self.curl_path)
+                format('bucket0', 'password', self.master.ip, bucket.name, new_name, old_name, self.curl_path)
             self.change_and_update_permission(None, None, 'bucket0', bucket.name, cmd, "Unable to update into {0} as user {1}")
 
             del_name = "employee-14"
             cmd = "{5} -u {0}:{1} http://{2}:8093/query/service -d 'statement=DELETE FROM {3} a WHERE name = '{4}''". \
-                format('bucket0', 'password', self.master.ip, bucket.name, del_name,self.curl_path)
+                format('bucket0', 'password', self.master.ip, bucket.name, del_name, self.curl_path)
             self.change_and_update_permission(None, None, 'bucket0', bucket.name, cmd, "Unable to delete from {0} as user {1}")
 
     def use_pre_upgrade_users_post_upgrade(self):
         for bucket in self.buckets:
             cmd = "%s -u %s:%s http://%s:8093/query/service -d " \
                   "'statement=INSERT INTO %s (KEY, VALUE) VALUES(\"test2\", { \"value1\": \"one1\" })'"% \
-                  (self.curl_path,'cbadminbucket', 'password', self.master.ip, bucket.name)
+                  (self.curl_path, 'cbadminbucket', 'password', self.master.ip, bucket.name)
             self.change_and_update_permission(None, None, 'johnInsert', bucket.name, cmd, "Unable to insert into {0} as user {1}")
 
             old_name = "employee-14"
             new_name = "employee-14-2"
             cmd = "{6} -u {0}:{1} http://{2}:8093/query/service -d " \
                   "'statement=UPDATE {3} a set name = '{4}' where name = '{5}' limit 1'". \
-                format('cbadminbucket', 'password', self.master.ip, bucket.name, new_name, old_name,self.curl_path)
+                format('cbadminbucket', 'password', self.master.ip, bucket.name, new_name, old_name, self.curl_path)
             self.change_and_update_permission(None, None, 'johnUpdate', bucket.name, cmd, "Unable to update into {0} as user {1}")
 
             cmd = "{4} -u {0}:{1} http://{2}:8093/query/service -d 'statement=SELECT * from {3} LIMIT 10'". \
-                format(bucket.name, 'password', self.master.ip,bucket.name,self.curl_path)
+                format(bucket.name, 'password', self.master.ip, bucket.name, self.curl_path)
             self.change_and_update_permission(None, None, bucket.name, bucket.name, cmd, "Unable to select from {0} as user {1}")
 
     def change_permissions_and_verify_pre_upgrade_users(self):
@@ -1589,7 +1822,7 @@ class QueryTests(BaseTestCase):
             old_name = "employee-14"
             new_name = "employee-14-2"
             cmd = "{6} -u {0}:{1} http://{2}:8093/query/service -d 'statement=UPDATE {3} a set name = '{4}' where " \
-                  "name = '{5}' limit 1'".format('cbadminbucket', 'readonlypassword',self.master.ip,bucket.name,new_name, old_name,self.curl_path)
+                  "name = '{5}' limit 1'".format('cbadminbucket', 'readonlypassword', self.master.ip, bucket.name, new_name, old_name, self.curl_path)
             self.change_and_update_permission('with_bucket', "query_update", 'cbadminbucket',
                                               bucket.name, cmd, "Unable to update  {0} as user {1}")
 
@@ -1597,7 +1830,7 @@ class QueryTests(BaseTestCase):
             del_name = "employee-14"
             cmd = "{5} -u {0}:{1} http://{2}:8093/query/service -d " \
                   "'statement=DELETE FROM {3} a WHERE name = '{4}''". \
-                format('cbadminbucket', 'password', self.master.ip, bucket.name, del_name,self.curl_path)
+                format('cbadminbucket', 'password', self.master.ip, bucket.name, del_name, self.curl_path)
             self.change_and_update_permission('with_bucket', "query_delete", 'cbadminbucket',
                                               bucket.name, cmd, "Unable to update  {0} as user {1}")
 
@@ -1616,7 +1849,7 @@ class QueryTests(BaseTestCase):
 
             # change permission of john_update and verify its able to execute the correct query.
             cmd = "{4} -u {0}:{1} http://{2}:8093/query/service -d 'statement=INSERT INTO {3} values(\"k055\", 123  )' " \
-                .format('john_update', 'password',self.master.ip,bucket.name,self.curl_path)
+                .format('john_update', 'password', self.master.ip, bucket.name, self.curl_path)
             self.change_and_update_permission('with_bucket', "query_insert", 'john_update',
                                               bucket.name, cmd, "Unable to insert into {0} as user {1}")
 
@@ -1629,7 +1862,7 @@ class QueryTests(BaseTestCase):
             self.change_and_update_permission('without_bucket', "cluster_admin", 'john_select',
                                               bucket.name, cmd, "Unable to update  {0} as user {1}")
             cmd = "{4} -u {0}:{1} http://{2}:8093/query/service -d 'statement=SELECT * from {3} limit 1'". \
-                format('john_select', 'password', self.master.ip,bucket.name,self.curl_path)
+                format('john_select', 'password', self.master.ip, bucket.name, self.curl_path)
             output, error = self.shell.execute_command(cmd)
             self.assertTrue(any("success" in line for line in output), "Unable to select from {0} as user {1}".
                             format(bucket.name, 'john_select'))
@@ -1637,13 +1870,13 @@ class QueryTests(BaseTestCase):
             # change permission of john_select2 and verify its able to execute the correct query.
             del_name = "employee-14"
             cmd = "{5} -u {0}:{1} http://{2}:8093/query/service -d 'statement=DELETE FROM {3} a WHERE name = '{4}''". \
-                format('john_select2', 'password', self.master.ip, bucket.name, del_name,self.curl_path)
+                format('john_select2', 'password', self.master.ip, bucket.name, del_name, self.curl_path)
             self.change_and_update_permission('with_bucket', "query_delete", 'john_select2',
                                               bucket.name, cmd, "Unable to delete from {0} as user {1}")
 
             # change permission of john_delete and verify its able to execute the correct query.
             cmd = "{4} -u {0}:{1} http://{2}:8093/query/service -d 'statement=SELECT * from {3} limit 1'". \
-                format('john_delete', 'password', self.master.ip,bucket.name,self.curl_path)
+                format('john_delete', 'password', self.master.ip, bucket.name, self.curl_path)
             self.change_and_update_permission('with_bucket', "query_select", 'john_delete',
                                               bucket.name, cmd, "Unable to select from {0} as user {1}")
 
@@ -1716,7 +1949,7 @@ class QueryTests(BaseTestCase):
                                 break
 
                 self.log.info("Rebalancing the node out...")
-                rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],[], [node])
+                rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [node])
                 rebalance.result()
                 active_nodes = []
                 for active_node in self.servers:
@@ -1792,7 +2025,7 @@ class QueryTests(BaseTestCase):
         """
         if not users:
             users = self.users
-        RbacBase().create_user_source(users,'builtin',self.master)
+        RbacBase().create_user_source(users, 'builtin', self.master)
         self.log.info("SUCCESS: User(s) %s created" % ','.join([user['name'] for user in users]))
 
     def assign_role(self, rest=None, roles=None):
@@ -1801,7 +2034,7 @@ class QueryTests(BaseTestCase):
         #Assign roles to users
         if not roles:
             roles = self.roles
-        RbacBase().add_user_role(roles, rest,'builtin')
+        RbacBase().add_user_role(roles, rest, 'builtin')
         for user_role in roles:
             self.log.info("SUCCESS: Role(s) %s assigned to %s"
                           %(user_role['roles'], user_role['id']))
@@ -1862,19 +2095,19 @@ class QueryTests(BaseTestCase):
             for bucket in self.buckets:
                 list.append(bucket.name)
             names = ','.join(list)
-            self.query = "GRANT {0} on {1} to {2}".format(role,names, self.users[0]['id'])
+            self.query = "GRANT {0} on {1} to {2}".format(role, names, self.users[0]['id'])
             actual_result = self.run_cbq_query()
         elif "," in role:
             roles = role.split(",")
             for role in roles:
                 role1 = role.split("(")[0]
                 name = role.split("(")[1][:-1]
-                self.query = "GRANT {0} on {1} to {2}".format(role1,name, self.users[0]['id'])
+                self.query = "GRANT {0} on {1} to {2}".format(role1, name, self.users[0]['id'])
                 actual_result =self.run_cbq_query()
         elif "(" in role:
             role1 = role.split("(")[0]
             name = role.split("(")[1][:-1]
-            self.query = "GRANT {0} on {1} to {2}".format(role1,name, self.users[0]['id'])
+            self.query = "GRANT {0} on {1} to {2}".format(role1, name, self.users[0]['id'])
             actual_result = self.run_cbq_query()
         else:
             self.query = "GRANT {0} to {1}".format(role, self.users[0]['id'])
@@ -1923,14 +2156,14 @@ class QueryTests(BaseTestCase):
         self.query = 'create primary index on {0}'.format(self.buckets[0].name)
         try:
             self.curl_with_roles(self.query)
-        except Exception, ex:
+        except Exception as ex:
             self.log.error(ex)
 
         if role not in ["query_insert(default)", "query_update(default)", "query_delete(default)"]:
             self.query = 'create primary index on {0}'.format(self.buckets[1].name)
             try:
                 self.curl_with_roles(self.query)
-            except Exception, ex:
+            except Exception as ex:
                 self.log.error(ex)
 
         if role not in ["views_admin(standard_bucket0)", "views_admin(default)", "query_insert(default)",
@@ -2161,7 +2394,7 @@ class QueryTests(BaseTestCase):
         self.query = 'delete from system:completed_requests'
         res = self.curl_with_roles(self.query)
         role_list = ["query_delete(default)", "query_delete(standard_bucket0)", "delete(default)", "bucket_full_access(default)"]
-        self.assertNotEquals(res['status'], 'success') if role in role_list else self.assertTrue(res['status'] == 'success')
+        self.assertNotEqual(res['status'], 'success') if role in role_list else self.assertTrue(res['status'] == 'success')
         self.query = 'delete from system:active_requests'
         res = self.curl_with_roles(self.query)
         self.assertTrue(res['status'] == 'stopped')
@@ -2196,7 +2429,7 @@ class QueryTests(BaseTestCase):
         return json_output
 
     '''Convert output of remote_util.execute_command to json to match the output of run_cbq_query'''
-    def convert_list_to_json_with_spacing(self,output_of_curl):
+    def convert_list_to_json_with_spacing(self, output_of_curl):
         new_list = [string.strip() for string in output_of_curl]
         concat_string = ''.join(new_list)
         json_output = json.loads(concat_string)
@@ -2210,7 +2443,7 @@ class QueryTests(BaseTestCase):
     def compare(self, test, query, expected_result_list):
         actual_result_list = []
         actual_result = self.run_cbq_query(query)
-        for i in xrange(0, 5):
+        for i in range(0, 5):
             if test in ["test_asc_desc_composite_index", "test_meta", "test_asc_desc_array_index"]:
                 actual_result_list.append(actual_result['results'][i]['default']['_id'])
             elif test in ["test_desc_isReverse_ascOrder"]:
@@ -2259,7 +2492,12 @@ class QueryTests(BaseTestCase):
             filedata = fileout.read()
             fileout.close()
 
-        newdata = filedata.replace("bucketname", bucket2)
+        #newdata = filedata.replace("bucketname", bucket2)
+        newdata = filedata
+        try:
+            newdata = newdata.decode().replace("bucketname", bucket2)
+        except AttributeError:
+            pass
         newdata = newdata.replace("user", bucket1)
         newdata = newdata.replace("pass", password)
         newdata = newdata.replace("bucket1", bucket1)
@@ -2314,7 +2552,7 @@ class QueryTests(BaseTestCase):
             p = Popen(main_command, shell=True, stdout=PIPE, stderr=PIPE)
             stdout, stderro = p.communicate()
             output = stdout
-            print output
+            print(output)
             time.sleep(1)
         if (shell.remote and not (queries == "")):
             sftp.remove(filename)
@@ -2420,7 +2658,7 @@ class QueryTests(BaseTestCase):
         msg = "Query results are not equal. Tool %s, view %s" %(len(formated_tool_res), len(formated_view_res))
         self.assertEqual(len(formated_tool_res), len(formated_view_res), msg)
         self.log.info("Length is equal")
-        msg =  "Query results sorting are not equal./n Actual %s, Expected %s" %(formated_tool_res[:100],formated_view_res[:100])
+        msg =  "Query results sorting are not equal./n Actual %s, Expected %s" %(formated_tool_res[:100], formated_view_res[:100])
         self.assertEqual([row["key"] for row in formated_tool_res], [row["key"] for row in formated_view_res], msg)
         self.log.info("Sorting is equal")
         if check_values:
@@ -2604,7 +2842,10 @@ class QueryTests(BaseTestCase):
                     actual_indexes = [x.encode('UTF8') for x in actual_indexes]
                     self.log.info('actual indexes "{0}"'.format(actual_indexes))
                     self.log.info('compared against "{0}"'.format(indexes_names))
-                    self.assertTrue(set(actual_indexes) == set(indexes_names), "Indexes should be %s, but are: %s" % (indexes_names, actual_indexes))
+                    #self.assertTrue(set(actual_indexes) == set(indexes_names), "Indexes should be %s, but are: %s" % (indexes_names, actual_indexes))
+                    diffs = DeepDiff(set(actual_indexes), set(indexes_names), ignore_order=True, ignore_string_type_changes=True)
+                    if diffs:
+                        self.assertTrue(False, diffs)
             else:
                 result = ""
             self.log.info('-'*100)
@@ -2643,12 +2884,12 @@ class QueryTests(BaseTestCase):
 
     def _insert_gen_keys(self, num_docs, prefix='a1_'):
         def convert(data):
-            if isinstance(data, basestring):
+            if isinstance(data, str):
                 return str(data)
             elif isinstance(data, collections.Mapping):
-                return dict(map(convert, data.iteritems()))
+                return dict(list(map(convert, iter(data.items()))))
             elif isinstance(data, collections.Iterable):
-                return type(data)(map(convert, data))
+                return type(data)(list(map(convert, data)))
             else:
                 return data
         keys = []
@@ -2657,10 +2898,10 @@ class QueryTests(BaseTestCase):
             gen = copy.deepcopy(gen_load)
             if len(keys) == num_docs:
                 break
-            for i in xrange(gen.end):
+            for i in range(gen.end):
                 if len(keys) == num_docs:
                     break
-                key, value = gen.next()
+                key, value = next(gen)
                 key = prefix + key
                 value = convert(json.loads(value))
                 for bucket in self.buckets:
@@ -2691,7 +2932,7 @@ class QueryTests(BaseTestCase):
 
     def _common_insert(self, keys, values):
         for bucket in self.buckets:
-            for i in xrange(len(keys)):
+            for i in range(len(keys)):
                 v = '"%s"' % values[i] if isinstance(values[i], str) else values[i]
                 self.query = 'INSERT into %s (key , value) VALUES ("%s", "%s")' % (bucket.name, keys[i], values[i])
                 actual_result = self.run_cbq_query()
@@ -2766,8 +3007,8 @@ class QueryTests(BaseTestCase):
                 shell.execute_command('mkdir -p %s/data/default/%s' % (self.directory, bucket.name))
                 self.log.info("Load %s documents to %s/data/default/%s..." % (items, self.directory, bucket.name))
                 for gen_load in gens_load:
-                    for i in xrange(gen_load.end):
-                        key, value = gen_load.next()
+                    for i in range(gen_load.end):
+                        key, value = next(gen_load)
                         out = shell.execute_command("echo '%s' > %s/data/default/%s/%s.json" % (value, self.directory,
                                                                                                 bucket.name, key))
                 self.log.info("LOAD IS FINISHED")
@@ -2839,16 +3080,18 @@ class QueryTests(BaseTestCase):
         for gen_load in gens_load:
             doc_gen = copy.deepcopy(gen_load)
             while doc_gen.has_next():
-                _, val = doc_gen.next()
+                _, val = next(doc_gen)
                 all_docs_list.append(val)
         return all_docs_list
 
     def _verify_results_base64(self, actual_result, expected_result):
         msg = "Results are incorrect. Actual num %s. Expected num: %s.\n" % (len(actual_result), len(expected_result))
-        self.assertEquals(len(actual_result), len(expected_result), msg)
+        self.assertEqual(len(actual_result), len(expected_result), msg)
         msg = "Results are incorrect.\n Actual first and last 100:  %s.\n ... \n %s Expected first and last 100: %s." \
-              "\n  ... \n %s" % (actual_result[:100],actual_result[-100:],expected_result[:100],expected_result[-100:])
-        self.assertTrue(sorted(actual_result) == sorted(expected_result), msg)
+              "\n  ... \n %s" % (actual_result[:100], actual_result[-100:], expected_result[:100], expected_result[-100:])
+        diffs = DeepDiff(actual_result, expected_result, ignore_order=True, ignore_string_type_changes=True)
+        if diffs:
+            self.assertTrue(False, diffs)
 
 ##############################################################################################
 #
@@ -2867,9 +3110,9 @@ class QueryTests(BaseTestCase):
                 doc['period']))
 
             expected_result = [{"name" : doc['name'],
-                                "period" : ((('autumn','summer')[doc['join_mo'] in [6,7,8]],
-                                             'spring')[doc['join_mo'] in [3,4,5]],'winter')
-                                [doc['join_mo'] in [12,1,2]]}
+                                "period" : ((('autumn', 'summer')[doc['join_mo'] in [6, 7, 8]],
+                                             'spring')[doc['join_mo'] in [3, 4, 5]], 'winter')
+                                [doc['join_mo'] in [12, 1, 2]]}
                                for doc in self.full_list]
             expected_result = sorted(expected_result, key=lambda doc: (doc['name'],
                                                                        doc['period']))
@@ -2891,7 +3134,7 @@ class QueryTests(BaseTestCase):
                              "(MIN(d.join_day)=1 OR MAX(d.join_yr=2011)) " + \
                              "ORDER BY d.tasks_points.task1"
 
-            tmp_groups = set([doc['tasks_points']["task1"] for doc in self.full_list])
+            tmp_groups = {doc['tasks_points']["task1"] for doc in self.full_list}
             expected_result = [{"task" : group} for group in tmp_groups
                                if [doc['tasks_points']["task1"]
                                    for doc in self.full_list].count(group) >0 and \

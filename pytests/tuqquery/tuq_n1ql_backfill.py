@@ -1,4 +1,4 @@
-from tuq import QueryTests
+from .tuq import QueryTests
 import os
 from membase.api.rest_client import RestHelper
 from membase.api.exception import CBQError
@@ -84,7 +84,7 @@ class QueryN1QLBackfillTests(QueryTests):
                 if bucket.name == 'standard_bucket0':
                     self._wait_for_index_online(bucket, 'join_day')
             self.run_cbq_query(query="select * from default d JOIN standard_bucket0 s on (d.join_day == s.join_day)")
-        except CBQError, error:
+        except CBQError as error:
             self.assertTrue("Thevaluemustbeinrangefrom-1toinfinity" in str(error),
                             "The error message is incorrect. It should have been %s" % error)
         finally:

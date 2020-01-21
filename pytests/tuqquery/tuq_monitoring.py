@@ -3,7 +3,7 @@ import threading
 import json
 import uuid
 import time
-from tuq import QueryTests
+from .tuq import QueryTests
 from membase.api.rest_client import RestConnection
 from membase.api.exception import CBQError, ReadDocumentException
 from remote.remote_util import RemoteMachineShellConnection
@@ -69,7 +69,7 @@ class QueryMonitoringTests(QueryTests):
         result = self.run_cbq_query('select * from system:completed_requests')
         self.assertEqual(result['metrics']['resultCount'], 2)
         result = self.run_cbq_query('select * from system:completed_requests where node = "%s:%s"'
-                                    %(self.servers[1].ip,self.servers[1].port))
+                                    %(self.servers[1].ip, self.servers[1].port))
         self.assertEqual(result['metrics']['resultCount'], 0)
 
         #The info from the down node should not have been restored by the node coming back online
@@ -78,7 +78,7 @@ class QueryMonitoringTests(QueryTests):
         result = self.run_cbq_query('select * from system:completed_requests')
         self.assertEqual(result['metrics']['resultCount'], 2)
         result = self.run_cbq_query('select * from system:completed_requests where node = "%s:%s"'
-                                    % (self.servers[1].ip,self.servers[1].port))
+                                    % (self.servers[1].ip, self.servers[1].port))
         self.assertEqual(result['metrics']['resultCount'], 0)
 
 ##############################################################################################
@@ -158,19 +158,19 @@ class QueryMonitoringTests(QueryTests):
                 # check if the queries' node fields accurately reflect the node they were started from
                 logging.info("VERIFYING THAT ACTIVE_REQUESTS HAVE THE QUERIES MARKED WITH THE CORRECT NODES")
                 node1 = self.run_cbq_query('select * from system:active_requests where node  =  "%s:%s"'
-                                           % (self.servers[1].ip,self.servers[1].port))
+                                           % (self.servers[1].ip, self.servers[1].port))
                 if not node1['metrics']['resultCount'] == 1:
                     self.threadFailure = True
                     logging.error('THE QUERY ON THE REQUESTED NODE: "%s:%s" IS NOT IN SYSTEM:ACTIVE_REQUESTS'
-                                  % (self.servers[1].ip,self.servers[1].port))
+                                  % (self.servers[1].ip, self.servers[1].port))
                     self.log.error(node1)
                     return
                 node2 = self.run_cbq_query('select * from system:active_requests where node  =  "%s:%s"'
-                                           % (self.servers[2].ip,self.servers[2].port))
+                                           % (self.servers[2].ip, self.servers[2].port))
                 if not node2['metrics']['resultCount'] == 1:
                     self.threadFailure = True
                     logging.error('THE QUERY ON THE REQUESTED NODE: "%s:%s" IS NOT IN SYSTEM:ACTIVE_REQUESTS'
-                                  % (self.servers[2].ip,self.servers[2].port))
+                                  % (self.servers[2].ip, self.servers[2].port))
                     self.log.error(node2)
                     return
 
@@ -264,13 +264,13 @@ class QueryMonitoringTests(QueryTests):
                 # check if the queries can be purged selectively
                 logging.info('CHECKING IF SYSTEM:COMPLETED_REQUESTS CAN BE PURGED BY NODE')
                 self.run_cbq_query('delete from system:completed_requests where node = "%s:%s"'
-                                   % (self.servers[2].ip,self.servers[2].port))
+                                   % (self.servers[2].ip, self.servers[2].port))
                 result = self.run_cbq_query('select * from system:completed_requests')
                 if not result['metrics']['resultCount'] == 2:
                     self.threadFailure = True
                     logging.error('DELETE FAILED, THERE ARE STILL ITEMS FROM NODE: "%s:%s"'
                                   'INSIDE SYSTEM:COMPLETED_REQUESTS'
-                                  % (self.servers[2].ip,self.servers[2].port))
+                                  % (self.servers[2].ip, self.servers[2].port))
                     self.log.error(json.dumps(result, sort_keys=True, indent=3))
                     return
 
@@ -295,7 +295,7 @@ class QueryMonitoringTests(QueryTests):
                 logging.info('CHECKING IF SYSTEM:ACTIVE_REQUESTS RESULTS CAN BE FILTERED BY NODE')
                 result = self.run_cbq_query('select * from system:active_requests')
                 node1 = self.run_cbq_query('select * from system:active_requests where node = "%s:%s"'
-                                           % (self.servers[2].ip,self.servers[2].port))
+                                           % (self.servers[2].ip, self.servers[2].port))
                 if not node1['metrics']['resultCount'] == 1:
                     self.threadFailure = True
                     logging.error('THE RESULTS OF THE QUERY ARE INCORRECT')
@@ -304,7 +304,7 @@ class QueryMonitoringTests(QueryTests):
                     return
 
                 node2 = self.run_cbq_query('select * from system:active_requests where node = "%s:%s"'
-                                           % (self.servers[1].ip,self.servers[1].port))
+                                           % (self.servers[1].ip, self.servers[1].port))
                 if not node2['metrics']['resultCount'] == 3:
                     self.threadFailure = True
                     logging.error('THE RESULTS OF THE QUERY ARE INCORRECT')
@@ -317,7 +317,7 @@ class QueryMonitoringTests(QueryTests):
                 logging.info('CHECKING IF SYSTEM:COMPLETED_REQUESTS RESULTS CAN BE FILTERED BY NODE')
                 result = self.run_cbq_query('select * from system:completed_requests')
                 node1 = self.run_cbq_query('select * from system:completed_requests where node = "%s:%s"'
-                                           % (self.servers[2].ip,self.servers[1].port))
+                                           % (self.servers[2].ip, self.servers[1].port))
                 if not node1['metrics']['resultCount'] == 1:
                     self.threadFailure = True
                     logging.error('THE RESULTS OF THE QUERY ARE INACCURATE')
@@ -326,7 +326,7 @@ class QueryMonitoringTests(QueryTests):
                     return
 
                 node2 = self.run_cbq_query('select * from system:completed_requests where node = "%s:%s"'
-                                           % (self.servers[1].ip,self.servers[1].port))
+                                           % (self.servers[1].ip, self.servers[1].port))
                 if not node2['metrics']['resultCount'] == 3:
                     self.threadFailure = True
                     logging.error('THE RESULTS OF THE QUERY ARE INACCURATE')
@@ -394,13 +394,13 @@ class QueryMonitoringTests(QueryTests):
 
         #Check if you can delete from system:prepareds by node
         self.query = "delete from system:prepareds where node = '%s:%s'" \
-                     % (self.servers[0].ip,self.servers[0].port)
+                     % (self.servers[0].ip, self.servers[0].port)
         self.run_cbq_query()
         result = self.run_cbq_query("select * from system:prepareds")
         self.assertEqual(result['metrics']['resultCount'], 4)
 
         self.query = "delete from system:prepareds where node = '%s:%s'" \
-                     % (self.servers[1].ip,self.servers[1].port)
+                     % (self.servers[1].ip, self.servers[1].port)
         self.run_cbq_query()
         result = self.run_cbq_query("select * from system:prepareds")
         self.assertEqual(result['metrics']['resultCount'], 2)
@@ -455,19 +455,19 @@ class QueryMonitoringTests(QueryTests):
 
         # Check to see if system:prepareds can be filtered by node
         self.query = "select * from system:prepareds where node = '%s:%s'" % \
-                     (self.servers[0].ip,self.servers[0].port)
+                     (self.servers[0].ip, self.servers[0].port)
         node1 = self.run_cbq_query()
         self.assertEqual(node1['metrics']['resultCount'], 2)
 
         # Check to see if system:prepareds can be filtered by node
         self.query = "select * from system:prepareds where node = '%s:%s'" \
-                             % (self.servers[1].ip,self.servers[1].port)
+                             % (self.servers[1].ip, self.servers[1].port)
         node2 = self.run_cbq_query()
         self.assertEqual(node2['metrics']['resultCount'], 2)
 
         # Check to see if system:prepareds can be filtered by node
         self.query = "select * from system:prepareds where node = '%s:%s'" \
-                     % (self.servers[2].ip,self.servers[2].port)
+                     % (self.servers[2].ip, self.servers[2].port)
         node3 = self.run_cbq_query()
         self.assertEqual(node3['metrics']['resultCount'], 2)
 
@@ -546,7 +546,7 @@ class QueryMonitoringTests(QueryTests):
             -Check if the request can be killed by its requestId
             -Check if the request can be killed by its name.
             -Check if requests can be killed by node.'''
-    def test_prepared_kill(self,test_to_run):
+    def test_prepared_kill(self, test_to_run):
         self.test_prepared_common_body("kill")
         # Check that both prepareds are in system:prepareds
         self.query = "select * from system:prepareds"
@@ -643,7 +643,7 @@ class QueryMonitoringTests(QueryTests):
                     return
 
     '''Helper to check if a prepared statement/multiple prepared statements can be killed by node'''
-    def run_kill_prepared_by_node(self,e,t):
+    def run_kill_prepared_by_node(self, e, t):
         while not e.isSet():
             logging.debug('wait_for_event_timeout starting')
             event_is_set = e.wait(t)
@@ -704,20 +704,20 @@ class QueryMonitoringTests(QueryTests):
     '''Check that the configuration settings for system:completed_requests can be changed'''
     def test_set_completed_config(self):
         # Change the collection setting
-        response,content = self.rest.set_completed_requests_collection_duration(self.master, 10000)
+        response, content = self.rest.set_completed_requests_collection_duration(self.master, 10000)
         result = json.loads(content)
         self.assertEqual(result['completed-threshold'], 10000)
 
-        response,content = self.rest.set_completed_requests_collection_duration(self.master, 1000)
+        response, content = self.rest.set_completed_requests_collection_duration(self.master, 1000)
         result = json.loads(content)
         self.assertEqual(result['completed-threshold'], 1000)
 
         # Change the retention setting
-        response,content = self.rest.set_completed_requests_max_entries(self.master, 10)
+        response, content = self.rest.set_completed_requests_max_entries(self.master, 10)
         result = json.loads(content)
         self.assertEqual(result['completed-limit'], 10)
 
-        response,content = self.rest.set_completed_requests_max_entries(self.master, 4000)
+        response, content = self.rest.set_completed_requests_max_entries(self.master, 4000)
         result = json.loads(content)
         self.assertEqual(result['completed-limit'], 4000)
 
@@ -726,7 +726,7 @@ class QueryMonitoringTests(QueryTests):
         self.rest.set_completed_requests_max_entries(self.master, 4000)
         num_entries = 10
         # Change the retention setting to only hold the amount of queries specified by num_entries
-        response,content = self.rest.set_completed_requests_max_entries(self.master, num_entries)
+        response, content = self.rest.set_completed_requests_max_entries(self.master, num_entries)
         result = json.loads(content)
         self.assertEqual(result['completed-limit'], num_entries)
 
@@ -777,7 +777,7 @@ class QueryMonitoringTests(QueryTests):
         # Change the minimum number of milliseconds a query needs to run for to be collected, in this case 8 seconds
         min_duration = 5000
         # Change the collection setting
-        response,content = self.rest.set_completed_requests_collection_duration(self.master, min_duration)
+        response, content = self.rest.set_completed_requests_collection_duration(self.master, min_duration)
         result = json.loads(content)
         self.assertEqual(result['completed-threshold'], min_duration)
         # Construct nonsense queries that run for 5 seconds
@@ -795,7 +795,7 @@ class QueryMonitoringTests(QueryTests):
 
         # Check 1 millisecond, basically any query should show up here
         min_duration = 1
-        response,content = self.rest.set_completed_requests_collection_duration(self.master, min_duration)
+        response, content = self.rest.set_completed_requests_collection_duration(self.master, min_duration)
         result = json.loads(content)
         self.assertEqual(result['completed-threshold'], min_duration)
 

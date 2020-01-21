@@ -7,9 +7,9 @@ from datetime import date
 from remote.remote_util import RemoteMachineShellConnection
 from membase.api.exception import CBQError, ReadDocumentException
 from membase.api.rest_client import RestConnection
-from tuq import QueryTests
+from .tuq import QueryTests
 import random
-
+from deepdiff import DeepDiff
 
 class QuerySanityTests(QueryTests):
 
@@ -51,31 +51,36 @@ class QuerySanityTests(QueryTests):
             expected_list_sorted = sorted(expected_list, key=lambda doc: (doc['name']))
             self._verify_results(actual_result['results'], expected_list_sorted)
 
-    '''MB-22273'''
     def test_prepared_encoded_rest(self):
         result_count = 1412
         self.rest.load_sample("beer-sample")
+        self.wait_for_buckets_status({"beer-sample": "healthy"}, 5, 120)
+        self.wait_for_bucket_docs({"beer-sample": 7303}, 5, 120)
+        self._wait_for_index_online('beer-sample', 'beer_primary')
         try:
             query = 'create index myidx on `beer-sample`(name,country,code) where (type="brewery")'
             self.run_cbq_query(query)
-            time.sleep(10)
-            result = self.run_cbq_query('prepare s1 from SELECT name, IFMISSINGORNULL(country,999), '
-                                        'IFMISSINGORNULL(code,999) FROM `beer-sample` WHERE type = "brewery" AND name IS NOT MISSING')
+            self._wait_for_index_online('beer-sample', 'myidx')
+            query = 'prepare s1 from SELECT name, IFMISSINGORNULL(country,999), IFMISSINGORNULL(code,999) FROM `beer-sample` ' \
+                    'WHERE type = "brewery" AND name IS NOT MISSING'
+            result = self.run_cbq_query(query)
             encoded_plan = '"' + result['results'][0]['encoded_plan'] + '"'
             for server in self.servers:
                 remote = RemoteMachineShellConnection(server)
                 remote.stop_server()
+
             time.sleep(20)
             for server in self.servers:
                 remote = RemoteMachineShellConnection(server)
                 remote.start_server()
-            time.sleep(30)
+            self.wait_for_buckets_status({"beer-sample": "healthy"}, 5, 120)
+            self.wait_for_bucket_docs({"beer-sample": 7303}, 5, 120)
+            self._wait_for_index_online('beer-sample', 'beer_primary')
+            cmd = "%s http://%s:%s/query/service -u %s:%s -H 'Content-Type: application/json' " \
+                  "-d '{ \"prepared\": \"s1\", \"encoded_plan\": %s }'" % (self.curl_path, server.ip, self.n1ql_port, self.username, self.password, encoded_plan)
             for server in self.servers:
                 remote = RemoteMachineShellConnection(server)
-                result = remote.execute_command(
-                    "%s http://%s:%s/query/service -u %s:%s -H 'Content-Type: application/json' "
-                    "-d '{ \"prepared\": \"s1\", \"encoded_plan\": %s }'"
-                    % (self.curl_path,server.ip, self.n1ql_port, self.username, self.password, encoded_plan))
+                result = remote.execute_command(cmd)
                 new_list = [string.strip() for string in result[0]]
                 concat_string = ''.join(new_list)
                 json_output = json.loads(concat_string)
@@ -83,6 +88,7 @@ class QuerySanityTests(QueryTests):
                 self.assertEqual(json_output['metrics']['resultCount'], result_count)
         finally:
             self.rest.delete_bucket("beer-sample")
+            self.wait_for_bucket_delete("beer-sample", 5, 120)
 
     #These bugs are not planned to be fixed therefore this test isnt in any confs
     '''MB-19887 and MB-24303: These queries were returning incorrect results with views.'''
@@ -106,7 +112,7 @@ class QuerySanityTests(QueryTests):
             self.query = "CREATE INDEX %s ON default(x,y,z) USING VIEW" % idx2
             self.run_cbq_query()
             created_indexes.append(idx2)
-            expected_result = [{'x':10},{'x':20,'y':20},{'x':30,'z':30},{'x':40,'y':40,'z':40}]
+            expected_result = [{'x':10}, {'x':20,'y':20}, {'x':30,'z':30}, {'x':40,'y':40,'z':40}]
             result = self.run_cbq_query('select x,y,z from default use index (iv1 using view) '
                                         'where x is not missing')
             self.assertTrue(result['results'] == expected_result)
@@ -229,8 +235,7 @@ class QuerySanityTests(QueryTests):
                                for doc in self.full_list
                                if len([vm for vm in doc["VMs"]
                                        if vm["RAM"] == 5]) > 0]
-            expected_result = sorted(expected_result)
-            self._verify_results(sorted(actual_result['results']), expected_result)
+            self._verify_results(actual_result['results'], expected_result)
 
     def test_any_no_in_clause(self):
         self.fail_if_no_buckets()
@@ -336,10 +341,9 @@ class QuerySanityTests(QueryTests):
         for bucket in self.buckets:
             self.query = "SELECT VMs[*].os from %s" % (bucket.name)
             actual_result = self.run_cbq_query()
-            actual_result = sorted(actual_result['results'])
+            actual_result = actual_result['results']
             expected_result = [{"os" : [vm["os"] for vm in doc['VMs']]}
                                for doc in self.full_list]
-            expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
 
@@ -366,7 +370,7 @@ class QuerySanityTests(QueryTests):
             " FROM %s GROUP BY job_title" % (bucket.name)
             actual_result = self.run_cbq_query()
 
-            tmp_groups = set([doc['job_title'] for doc in self.full_list])
+            tmp_groups = {doc['job_title'] for doc in self.full_list}
             expected_list = [{"job_title" : group,
                                 "names" : [x["name"] for x in self.full_list
                                                if x["job_title"] == group]}
@@ -397,7 +401,7 @@ class QuerySanityTests(QueryTests):
 
     def test_leak_goroutine(self):
      shell = RemoteMachineShellConnection(self.master)
-     for i in xrange(20):
+     for i in range(20):
          cmd = 'curl http://%s:6060/debug/pprof/goroutine?debug=2 | grep NewLexer' %(self.master.ip)
          o =shell.execute_command(cmd)
          new_curl = json.dumps(o)
@@ -456,7 +460,7 @@ class QuerySanityTests(QueryTests):
                                                                             bucket.name)
             actual_result1 = self.run_cbq_query()
 
-            self.assertEqual(actual_result1['results'],actual_result['results'] )
+            self.assertEqual(actual_result1['results'], actual_result['results'] )
             expected_result = sorted(expected_result, key=lambda doc: (doc['name']))
             self._verify_results(actual_result['results'], expected_result)
 
@@ -516,7 +520,7 @@ class QuerySanityTests(QueryTests):
             self.query = "select name AS NAME from %s " % (bucket.name) +\
             "AS EMPLOYEE where reverse(EMPLOYEE.name) LIKE '%lpm_' ORDER BY name"
             actual_result1 = self.run_cbq_query()
-            self.assertEqual(actual_result['results'],actual_result1['results'])
+            self.assertEqual(actual_result['results'], actual_result1['results'])
             expected_result = [{"NAME" : doc['name']} for doc in self.full_list
                                if doc["name"].find('mpl') == 1]
             expected_result = sorted(expected_result, key=lambda doc: (doc['NAME']))
@@ -531,7 +535,7 @@ class QuerySanityTests(QueryTests):
             self.query = "SELECT email FROM %s WHERE reverse(email) " % (bucket.name) +\
                          "LIKE '%.%@%' ORDER BY email"
             actual_result1 = self.run_cbq_query()
-            self.assertEqual(actual_result['results'],actual_result1['results'])
+            self.assertEqual(actual_result['results'], actual_result1['results'])
 
             expected_result = [{"email" : doc['email']} for doc in self.full_list
                                if re.match(r'.*@.*\..*', doc['email'])]
@@ -643,7 +647,7 @@ class QuerySanityTests(QueryTests):
                          "(MIN(d.join_day)=1 OR MAX(d.join_yr=2011)) " +\
                          "ORDER BY d.tasks_points.task1"
 
-            tmp_groups = set([doc['tasks_points']["task1"] for doc in self.full_list])
+            tmp_groups = {doc['tasks_points']["task1"] for doc in self.full_list}
             expected_result = [{"task" : group} for group in tmp_groups
                                if [doc['tasks_points']["task1"]
                                    for doc in self.full_list].count(group) >0 and\
@@ -695,7 +699,7 @@ class QuerySanityTests(QueryTests):
 
             actual_result = self.run_cbq_query()
 
-            tmp_groups = set([doc["job_title"] for doc in self.full_list])
+            tmp_groups = {doc["job_title"] for doc in self.full_list}
             expected_result = [{"job_title" : doc['job_title'],
                                 "test_rate" : doc["test_rate"]}
                                for doc in self.full_list
@@ -726,7 +730,7 @@ class QuerySanityTests(QueryTests):
         for bucket in self.buckets:
             self.query = "select job_title, (FIRST p FOR p IN ARRAY_AGG(name) END) as names from {0} group by job_title order by job_title ".format(bucket.name)
             actual_result = self.run_cbq_query()
-            tmp_groups = set([doc['job_title'] for doc in self.full_list])
+            tmp_groups = {doc['job_title'] for doc in self.full_list}
             expected_list = [{"job_title" : group,
                                 "names" : ([x["name"] for x in self.full_list
                                                if x["job_title"] == group][0])}
@@ -847,7 +851,7 @@ class QuerySanityTests(QueryTests):
         self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = 'SELECT name FROM %s WHERE META(%s).id LIKE "%s"'  % (
-                                                                            bucket.name, bucket.name,"query%")
+                                                                            bucket.name, bucket.name, "query%")
             actual_result = self.run_cbq_query()
 
             actual_result = sorted(actual_result['results'],
@@ -898,26 +902,26 @@ class QuerySanityTests(QueryTests):
             host=self.master.ip
             if self.master.ip == "127.0.0.1":
                 scheme = "http"
-                host="{0}:{1}".format(self.master.ip,self.master.port)
+                host="{0}:{1}".format(self.master.ip, self.master.port)
             self.query = 'select * from '+bucket.name+' where meta().id = "{0}"'.format("k051")
             actual_result = self.run_cbq_query()
-            print "k051 results is {0}".format(actual_result['results'][0][bucket.name])
+            print("k051 results is {0}".format(actual_result['results'][0][bucket.name]))
             #self.assertEquals(actual_result['results'][0]["default"],{'id': -9223372036854775808})
             self.query = 'select * from '+bucket.name+' where meta().id = "{0}"'.format("k031")
             actual_result = self.run_cbq_query()
-            print "k031 results is {0}".format(actual_result['results'][0][bucket.name])
+            print("k031 results is {0}".format(actual_result['results'][0][bucket.name]))
             #self.assertEquals(actual_result['results'][0]["default"],{'id': -9223372036854775807})
             self.query = 'select * from '+bucket.name+' where meta().id = "{0}"'.format("k021")
             actual_result = self.run_cbq_query()
-            print "k021 results is {0}".format(actual_result['results'][0][bucket.name])
+            print("k021 results is {0}".format(actual_result['results'][0][bucket.name]))
             #self.assertEquals(actual_result['results'][0]["default"],{'id': 1470691191458562048})
             self.query = 'select * from '+bucket.name+' where meta().id = "{0}"'.format("k011")
             actual_result = self.run_cbq_query()
-            print "k011 results is {0}".format(actual_result['results'][0][bucket.name])
+            print("k011 results is {0}".format(actual_result['results'][0][bucket.name]))
             #self.assertEquals(actual_result['results'][0]["default"],{'id': 9223372036854775807})
             self.query = 'select * from '+bucket.name+' where meta().id = "{0}"'.format("k041")
             actual_result = self.run_cbq_query()
-            print "k041 results is {0}".format(actual_result['results'][0][bucket.name])
+            print("k041 results is {0}".format(actual_result['results'][0][bucket.name]))
             #self.assertEquals(actual_result['results'][0]["default"],{'id':  9223372036854776000L})
             self.query = 'delete from '+bucket.name+' where meta().id in ["k051","k021","k011","k041","k031"]'
             self.run_cbq_query()
@@ -927,7 +931,7 @@ class QuerySanityTests(QueryTests):
         for bucket in self.buckets:
             self.query = 'select meta().cas from {0} order by meta().id limit 10'.format(bucket.name)
             actual_result = self.run_cbq_query()
-            print actual_result
+            print(actual_result)
 
     def test_meta_negative(self):
         queries_errors = {'SELECT distinct name FROM %s WHERE META().type = "json"' : ('syntax error', 3000)}
@@ -1133,15 +1137,14 @@ class QuerySanityTests(QueryTests):
                         "ORDER BY d.join_mo"
             actual_result = self.run_cbq_query()
 
-            tmp_groups = set([doc['join_mo'] for doc in self.full_list
-                              if doc['join_mo'] < 5])
+            tmp_groups = {doc['join_mo'] for doc in self.full_list
+                              if doc['join_mo'] < 5}
             expected_result = [{"join_mo" : group,
-                                "points_sum" : math.fsum([doc['tasks_points']['task1']
+                                "points_sum" : int(math.fsum([doc['tasks_points']['task1']
                                                           for doc in self.full_list
-                                                          if doc['join_mo'] == group])}
+                                                          if doc['join_mo'] == group]))}
                                for group in tmp_groups]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['join_mo']))
-            self._verify_results(sorted(actual_result['results']), expected_result)
+            self._verify_results(actual_result['results'], expected_result)
 
             self.query = "SELECT join_mo, SUM(test_rate) as rate FROM %s " % (bucket.name) +\
                          "as employees WHERE job_title='Sales' GROUP BY join_mo " +\
@@ -1155,7 +1158,7 @@ class QuerySanityTests(QueryTests):
             actual_result = self.run_cbq_query()
             actual_result = [{"join_mo" : doc["join_mo"], "rate" : round(doc["rate"])} for doc in actual_result['results']]
             actual_result = sorted(actual_result, key=lambda doc: (doc['join_mo']))
-            tmp_groups = set([doc['join_mo'] for doc in self.full_list])
+            tmp_groups = {doc['join_mo'] for doc in self.full_list}
             expected_result = [{"join_mo" : group,
                                 "rate" : round(math.fsum([doc['test_rate']
                                                           for doc in self.full_list
@@ -1200,8 +1203,8 @@ class QuerySanityTests(QueryTests):
                         " FROM %s d WHERE d.join_mo < 5 GROUP BY d.join_mo " % (bucket.name) +\
                         "ORDER BY d.join_mo"
             actual_result = self.run_cbq_query()
-            tmp_groups = set([doc['join_mo'] for doc in self.full_list
-                              if doc['join_mo'] < 5])
+            tmp_groups = {doc['join_mo'] for doc in self.full_list
+                              if doc['join_mo'] < 5}
             expected_result = [{"join_mo" : group,
                                 "points_avg" : math.fsum([doc['tasks_points']['task1']
                                                           for doc in self.full_list
@@ -1230,7 +1233,7 @@ class QuerySanityTests(QueryTests):
                               'rate' : round(doc['rate'], 2)}
                              for doc in actual_result['results']]
             actual_result = sorted(actual_result, key=lambda doc: (doc['join_mo']))
-            tmp_groups = set([doc['join_mo'] for doc in self.full_list])
+            tmp_groups = {doc['join_mo'] for doc in self.full_list}
             expected_result = [{"join_mo" : group,
                                 "rate" : math.fsum([doc['test_rate']
                                                           for doc in self.full_list
@@ -1269,7 +1272,7 @@ class QuerySanityTests(QueryTests):
 
             actual_result = self.run_cbq_query()
             actual_result = sorted(actual_result['results'], key=lambda doc: (doc['join_mo']))
-            tmp_groups = set([doc['join_mo'] for doc in self.full_list])
+            tmp_groups = {doc['join_mo'] for doc in self.full_list}
             expected_result = [{"join_mo" : group,
                                 "rate" : min([doc['test_rate']
                                               for doc in self.full_list
@@ -1297,7 +1300,7 @@ class QuerySanityTests(QueryTests):
 
             actual_result = self.run_cbq_query()
             actual_result = sorted(actual_result['results'], key=lambda doc: (doc['join_mo']))
-            tmp_groups = set([doc['join_mo'] for doc in self.full_list])
+            tmp_groups = {doc['join_mo'] for doc in self.full_list}
             expected_result = [{"join_mo" : group,
                                 "rate" : max([doc['test_rate']
                                               for doc in self.full_list
@@ -1325,9 +1328,9 @@ class QuerySanityTests(QueryTests):
             actual_result = self.sort_nested_list(actual_list['results'])
             actual_result = sorted(actual_result, key=lambda doc: (doc['job_title']))
 
-            tmp_groups = set([doc['job_title'] for doc in self.full_list])
-            expected_list = [{"job_title": group, "names": set([x["name"] for x in self.full_list
-                                                                if x["job_title"] == group])} for group in tmp_groups]
+            tmp_groups = {doc['job_title'] for doc in self.full_list}
+            expected_list = [{"job_title": group, "names": {x["name"] for x in self.full_list
+                                                                if x["job_title"] == group}} for group in tmp_groups]
             expected_result = self.sort_nested_list(expected_list)
             expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
             self._verify_results(actual_result, expected_result)
@@ -1341,10 +1344,10 @@ class QuerySanityTests(QueryTests):
             actual_result = self.run_cbq_query()
             actual_result = sorted(actual_result['results'], key=lambda doc: (doc['job_title']))
 
-            tmp_groups = set([doc['job_title'] for doc in self.full_list])
+            tmp_groups = {doc['job_title'] for doc in self.full_list}
             expected_result = [{"job_title" : group,
-                                "num_names" : len(set([x["name"] for x in self.full_list
-                                               if x["job_title"] == group]))}
+                                "num_names" : len({x["name"] for x in self.full_list
+                                               if x["job_title"] == group})}
                                for group in tmp_groups]
 
             expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
@@ -1355,8 +1358,8 @@ class QuerySanityTests(QueryTests):
             actual_result = self.run_cbq_query()
             actual_result = sorted(actual_result['results'], key=lambda doc: (doc['job_title']))
             expected_result = [{"job_title" : group,
-                                "rates" : len(set([x["test_rate"] for x in self.full_list
-                                               if x["job_title"] == group]))}
+                                "rates" : len({x["test_rate"] for x in self.full_list
+                                               if x["job_title"] == group})}
                                for group in tmp_groups]
 
             expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
@@ -1373,7 +1376,7 @@ class QuerySanityTests(QueryTests):
             actual_result = self.sort_nested_list(actual_list['results'])
             actual_result = sorted(actual_result, key=lambda doc: (doc['job_title']))
 
-            tmp_groups = set([doc['job_title'] for doc in self.full_list])
+            tmp_groups = {doc['job_title'] for doc in self.full_list}
             expected_result = [{"job_title" : group,
                                 "names" : sorted(set([x["name"] for x in self.full_list
                                                if x["job_title"] == group] + ['new_name']))}
@@ -1388,7 +1391,7 @@ class QuerySanityTests(QueryTests):
             actual_list = self.run_cbq_query()
             actual_result = self.sort_nested_list(actual_list['results'])
             actual_result = sorted(actual_result, key=lambda doc: (doc['job_title']))
-            tmp_groups = set([doc['job_title'] for doc in self.full_list])
+            tmp_groups = {doc['job_title'] for doc in self.full_list}
             expected_result = [{"job_title" : group,
                                 "names" : sorted(set([x["name"] for x in self.full_list
                                                if x["job_title"] == group] + ['new_name'] + ['123']))}
@@ -1412,29 +1415,30 @@ class QuerySanityTests(QueryTests):
         for bucket in self.buckets:
             self.query = 'select ARRAY_SORT(ARRAY_UNION(["skill1","skill2","skill2010","skill2011"],skills)) as skills_union from {0} order by meta().id limit 5'.format(bucket.name)
             actual_result = self.run_cbq_query()
-            self.assertTrue(actual_result['results']==([{u'skills_union': [u'skill1', u'skill2', u'skill2010', u'skill2011']}, {u'skills_union': [u'skill1', u'skill2', u'skill2010', u'skill2011']},
-                            {u'skills_union': [u'skill1', u'skill2', u'skill2010', u'skill2011']}, {u'skills_union': [u'skill1', u'skill2', u'skill2010', u'skill2011']},
-                            {u'skills_union': [u'skill1', u'skill2', u'skill2010', u'skill2011']}]))
+            self.assertTrue(actual_result['results']==([{'skills_union': ['skill1', 'skill2', 'skill2010', 'skill2011']}, {'skills_union': ['skill1', 'skill2', 'skill2010', 'skill2011']},
+                            {'skills_union': ['skill1', 'skill2', 'skill2010', 'skill2011']}, {'skills_union': ['skill1', 'skill2', 'skill2010', 'skill2011']},
+                            {'skills_union': ['skill1', 'skill2', 'skill2010', 'skill2011']}]))
 
             self.query = 'select ARRAY_SORT(ARRAY_SYMDIFF(["skill1","skill2","skill2010","skill2011"],skills)) as skills_diff1 from {0} order by meta().id limit 5'.format(bucket.name)
             actual_result = self.run_cbq_query()
-            self.assertTrue(actual_result['results']==[{u'skills_diff1': [u'skill1', u'skill2']}, {u'skills_diff1': [u'skill1', u'skill2']}, {u'skills_diff1': [u'skill1', u'skill2']}, {u'skills_diff1': [u'skill1', u'skill2']}, {u'skills_diff1': [u'skill1', u'skill2']}])
+            self.assertTrue(actual_result['results']==[{'skills_diff1': ['skill1', 'skill2']}, {'skills_diff1': ['skill1', 'skill2']}, {'skills_diff1': ['skill1', 'skill2']}, {'skills_diff1': ['skill1', 'skill2']}, {'skills_diff1': ['skill1', 'skill2']}])
 
             self.query = 'select ARRAY_SORT(ARRAY_SYMDIFF1(skills,["skill2010","skill2011","skill2012"],["skills2010","skill2017"])) as skills_diff2 from {0} order by meta().id limit 5'.format(bucket.name)
             actual_result1 = self.run_cbq_query()
-            self.assertTrue(actual_result1['results'] == [{u'skills_diff2': [u'skill2012', u'skill2017', u'skills2010']}, {u'skills_diff2': [u'skill2012', u'skill2017', u'skills2010']}, {u'skills_diff2': [u'skill2012', u'skill2017', u'skills2010']}, {u'skills_diff2': [u'skill2012', u'skill2017', u'skills2010']}, {u'skills_diff2': [u'skill2012', u'skill2017', u'skills2010']}])
+            self.assertTrue(actual_result1['results'] == [{'skills_diff2': ['skill2012', 'skill2017', 'skills2010']}, {'skills_diff2': ['skill2012', 'skill2017', 'skills2010']}, {'skills_diff2': ['skill2012', 'skill2017', 'skills2010']}, {'skills_diff2': ['skill2012', 'skill2017', 'skills2010']}, {'skills_diff2': ['skill2012', 'skill2017', 'skills2010']}])
 
             self.query = 'select ARRAY_SORT(ARRAY_SYMDIFFN(skills,["skill2010","skill2011","skill2012"],["skills2010","skill2017"])) as skills_diff3 from {0} order by meta().id limit 5'.format(bucket.name)
             actual_result = self.run_cbq_query()
-            self.assertTrue(actual_result['results'] == [{u'skills_diff3': [u'skill2012', u'skill2017', u'skills2010']}, {u'skills_diff3': [u'skill2012', u'skill2017', u'skills2010']}, {u'skills_diff3': [u'skill2012', u'skill2017', u'skills2010']}, {u'skills_diff3': [u'skill2012', u'skill2017', u'skills2010']}, {u'skills_diff3': [u'skill2012', u'skill2017', u'skills2010']}])
+            self.assertTrue(actual_result['results'] == [{'skills_diff3': ['skill2012', 'skill2017', 'skills2010']}, {'skills_diff3': ['skill2012', 'skill2017', 'skills2010']}, {'skills_diff3': ['skill2012', 'skill2017', 'skills2010']}, {'skills_diff3': ['skill2012', 'skill2017', 'skills2010']}, {'skills_diff3': ['skill2012', 'skill2017', 'skills2010']}])
 
     def test_let(self):
         self.fail_if_no_buckets()
         for bucket in self.buckets:
             self.query = 'select * from %s let x1 = {"name":1} order by meta().id limit 1'%(bucket.name)
             actual_result = self.run_cbq_query()
-            self.assertTrue("query-testemployee10153.1877827-0" in str(actual_result['results']))
-            self.assertTrue( "u'x1': {u'name': 1}" in str(actual_result['results']))
+            if not "query-testemployee10153.1877827" in str(actual_result['results']):
+                self.assertTrue(False, str(actual_result['results']))
+            self.assertTrue( "'x1': {'name': 1}" in str(actual_result['results']))
 
     def test_let_missing(self):
         self.fail_if_no_buckets()
@@ -1467,20 +1471,20 @@ class QuerySanityTests(QueryTests):
         self.query = 'explain select name1 from default let name1 = substr(name[0].FirstName,0,10) WHERE name1 = "employeefi"'
         res =self.run_cbq_query()
         plan = self.ExplainPlanHelper(res)
-        self.assertTrue(plan['~children'][2]['~child']['~children']==[{u'#operator': u'Let', u'bindings': [{u'var': u'name1', u'expr':
-            u'substr0((((`default`.`name`)[0]).`FirstName`), 0, 10)'}]}, {u'#operator': u'Filter', u'condition': u'(`name1` = "employeefi")'},
-            {u'#operator': u'InitialProject', u'result_terms': [{u'expr': u'`name1`'}]}, {u'#operator': u'FinalProject'}])
+        self.assertTrue(plan['~children'][2]['~child']['~children']==[{'#operator': 'Let', 'bindings': [{'var': 'name1', 'expr':
+            'substr0((((`default`.`name`)[0]).`FirstName`), 0, 10)'}]}, {'#operator': 'Filter', 'condition': '(`name1` = "employeefi")'},
+            {'#operator': 'InitialProject', 'result_terms': [{'expr': '`name1`'}]}, {'#operator': 'FinalProject'}])
 
         self.query = 'select name1 from default let name1 = substr(name[0].FirstName,0,10) WHERE name1 = "employeefi" limit 2'
         res =self.run_cbq_query()
-        self.assertEqual(res['results'], [{u'name1': u'employeefi'}, {u'name1': u'employeefi'}])
+        self.assertEqual(res['results'], [{'name1': 'employeefi'}, {'name1': 'employeefi'}])
         self.query = 'explain select name1 from default let name1 = substr(name[0].FirstName,0,10) WHERE name[0].MiddleName = "employeefirstname-4"'
         res =self.run_cbq_query()
         plan = self.ExplainPlanHelper(res)
         self.assertTrue(plan['~children'][2]['~child']['~children']==
-                    [{u'#operator': u'Filter', u'condition': u'((((`default`.`name`)[0]).`MiddleName`) = "employeefirstname-4")'},
-                     {u'#operator': u'Let', u'bindings': [{u'var': u'name1', u'expr': u'substr0((((`default`.`name`)[0]).`FirstName`), 0, 10)'}]},
-                     {u'#operator': u'InitialProject', u'result_terms': [{u'expr': u'`name1`'}]}, {u'#operator': u'FinalProject'}])
+                    [{'#operator': 'Filter', 'condition': '((((`default`.`name`)[0]).`MiddleName`) = "employeefirstname-4")'},
+                     {'#operator': 'Let', 'bindings': [{'var': 'name1', 'expr': 'substr0((((`default`.`name`)[0]).`FirstName`), 0, 10)'}]},
+                     {'#operator': 'InitialProject', 'result_terms': [{'expr': '`name1`'}]}, {'#operator': 'FinalProject'}])
         self.query = 'select name1 from default let name1 = substr(name[0].FirstName,0,10) WHERE name[0].MiddleName = "employeefirstname-4" limit 10'
         res =self.run_cbq_query()
         self.assertTrue(res['results']==[])
@@ -1501,7 +1505,7 @@ class QuerySanityTests(QueryTests):
             self.assertTrue(plan['~children'][0]['index']=='ix1')
             self.query = 'select d.x from {0} d where x in (select raw d.x from {0} b use keys ["kk02"])'.format(bucket.name)
             actual_result = self.run_cbq_query()
-            self.assertTrue( actual_result['results'] == [{u'x': 100}])
+            self.assertTrue( actual_result['results'] == [{'x': 100}])
             self.query = 'explain select d.x from {0} d where x IN (select raw d.x from {0} b use keys[d.id])'.format(bucket.name)
             actual_result =self.run_cbq_query()
             plan = self.ExplainPlanHelper(actual_result)
@@ -1509,7 +1513,7 @@ class QuerySanityTests(QueryTests):
             self.assertTrue(plan['~children'][0]['index']=='ix1')
             self.query = 'select d.x from {0} d where x IN (select raw d.x from {0} b use keys[d.id])'.format(bucket.name)
             actual_result =self.run_cbq_query()
-            self.assertTrue( actual_result['results'] == [{u'x': 100}])
+            self.assertTrue( actual_result['results'] == [{'x': 100}])
             self.query = 'explain select d.x from {0} d where x IN (select raw b.x from {0} b  where b.x IN (select raw d.x from {0} c  use keys["kk02"]))'.format(bucket.name)
             actual_result =self.run_cbq_query()
             plan = self.ExplainPlanHelper(actual_result)
@@ -1517,7 +1521,7 @@ class QuerySanityTests(QueryTests):
             self.assertTrue(plan['~children'][0]['index']=='ix1')
             self.query = 'select d.x from {0} d where x IN (select raw b.x from {0} b  where b.x IN (select raw d.x from {0} c  use keys["kk02"]))'.format(bucket.name)
             actual_result =self.run_cbq_query()
-            self.assertTrue( actual_result['results'] == [{u'x': 100}])
+            self.assertTrue( actual_result['results'] == [{'x': 100}])
             self.query = 'explain select d.x from {0} d where x IN (select raw b.x from {0} b  where b.x IN (select raw d.x from {0} c  use keys["kk02"] where d.x = b.x))'.format(bucket.name)
             actual_result=self.run_cbq_query()
             plan = self.ExplainPlanHelper(actual_result)
@@ -1525,7 +1529,7 @@ class QuerySanityTests(QueryTests):
             self.assertTrue(plan['~children'][0]['index']=='ix1')
             self.query = 'select d.x from {0} d where x IN (select raw b.x from {0} b  where b.x IN (select raw d.x from {0} c  use keys["kk02"] where d.x = b.x))'.format(bucket.name)
             actual_result=self.run_cbq_query()
-            self.assertTrue( actual_result['results'] == [{u'x': 100}])
+            self.assertTrue( actual_result['results'] == [{'x': 100}])
             self.query = 'explain select d.x from {0} d where x IN (select raw b.x from {0} b  where b.x IN (select raw d.x from {0} c  use keys["kk02"] where d.x = b.x))'.format(bucket.name)
             actual_result=self.run_cbq_query()
             plan = self.ExplainPlanHelper(actual_result)
@@ -1534,7 +1538,7 @@ class QuerySanityTests(QueryTests):
 
             self.query = 'select d.x from {0} d where x IN (select raw b.x from {0} b  where b.x IN (select raw d.x from {0} c  use keys["kk02"] where d.x = b.x))'.format(bucket.name)
             actual_result=self.run_cbq_query()
-            self.assertTrue( actual_result['results'] == [{u'x': 100}])
+            self.assertTrue( actual_result['results'] == [{'x': 100}])
 
             self.query = 'explain select d.x from {0} d where x IN (select raw b.x from {0} b use keys["kk02"] where b.x IN (select raw d.x from {0} c  use keys["kk02"]))'.format(bucket.name)
             actual_result=self.run_cbq_query()
@@ -1544,7 +1548,7 @@ class QuerySanityTests(QueryTests):
 
             self.query = 'select d.x from {0} d where x IN (select raw b.x from {0} b use keys["kk02"] where b.x IN (select raw d.x from {0} c  use keys["kk02"]))'.format(bucket.name)
             actual_result=self.run_cbq_query()
-            self.assertTrue( actual_result['results'] == [{u'x': 100}])
+            self.assertTrue( actual_result['results'] == [{'x': 100}])
 
             self.query = 'explain select d.x,d.id from {0} d where x IN (select raw b.x from {0} b  where b.x IN (select raw d.x from {0} c  use keys["kk02"]))'.format(bucket.name)
             actual_result=self.run_cbq_query()
@@ -1554,7 +1558,9 @@ class QuerySanityTests(QueryTests):
 
             self.query = 'select d.x,d.y from {0} d where x IN (select raw b.x from {0} b  where b.x IN (select raw d.x from {0} c  use keys["kk02"]))'.format(bucket.name)
             actual_result=self.run_cbq_query()
-            self.assertTrue( sorted(actual_result['results']) ==sorted([{u'y': 101, u'x': 100}]))
+            diffs = DeepDiff(actual_result['results'],[{'y': 101, 'x': 100}], ignore_order=True)
+            if diffs:
+                self.assertTrue(False, diffs)
             self.query = 'explain select d.x from {0} d where x IN (select raw (select raw d.x from {0} c  use keys[d.id] where d.x = b.x)[0] from {0} b  where b.x is not null)'.format(bucket.name)
             actual_result=self.run_cbq_query()
             self.assertTrue("covers" in str(plan))
@@ -1562,7 +1568,7 @@ class QuerySanityTests(QueryTests):
 
             self.query = 'select d.x from {0} d where x IN (select raw (select raw d.x from {0} c  use keys[d.id] where d.x = b.x)[0] from {0} b  where b.x is not null)'.format(bucket.name)
             actual_result=self.run_cbq_query()
-            self.assertTrue( actual_result['results'] == [{u'x': 100}])
+            self.assertTrue( actual_result['results'] == [{'x': 100}])
 
             self.query = 'explain select (select raw d.x from default c  use keys[d.id]) as s, d.x from default d where x is not null'.format(bucket.name)
             actual_result=self.run_cbq_query()
@@ -1572,7 +1578,10 @@ class QuerySanityTests(QueryTests):
             self.assertTrue(plan['~children'][0]['index']=='ix1')
             self.query = 'select (select raw d.x from default c  use keys[d.id]) as s, d.x from default d where x is not null'.format(bucket.name)
             actual_result=self.run_cbq_query()
-            self.assertTrue( sorted(actual_result['results']) ==sorted([{u'x': 100, u's': [100]}]))
+            diffs = DeepDiff(actual_result['results'], [{'x': 100, 's': [100]}], ignore_order=True)
+            if diffs:
+                self.assertTrue(False, diffs)
+
             self.query = 'delete from %s use keys["kk02"]'%(bucket.name)
             self.run_cbq_query()
             self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, "ix1", self.index_type)
@@ -1584,10 +1593,10 @@ class QuerySanityTests(QueryTests):
         for bucket in self.buckets:
             self.query = 'select object_concat({"name":"test"},{"test":123},tasks_points) as obj from %s order by meta().id limit 10;' % bucket.name
             actual_result=self.run_cbq_query()
-            self.assertTrue(actual_result['results']==([{u'obj': {u'test': 123, u'task1': 1, u'task2': 1, u'name': u'test'}}, {u'obj': {u'test': 123, u'task1': 1, u'task2': 1, u'name': u'test'}}, {u'obj': {u'test': 123, u'task1': 1, u'task2': 1, u'name': u'test'}}, {u'obj': {u'test': 123, u'task1': 1, u'task2': 1, u'name': u'test'}}, {u'obj': {u'test': 123, u'task1': 1, u'task2': 1, u'name': u'test'}}, {u'obj': {u'test': 123, u'task1': 1, u'task2': 1, u'name': u'test'}}, {u'obj': {u'test': 123, u'task1': 1, u'task2': 1, u'name': u'test'}}, {u'obj': {u'test': 123, u'task1': 1, u'task2': 1, u'name': u'test'}}, {u'obj': {u'test': 123, u'task1': 1, u'task2': 1, u'name': u'test'}}, {u'obj': {u'test': 123, u'task1': 1, u'task2': 1, u'name': u'test'}}]))
+            self.assertTrue(actual_result['results']==([{'obj': {'test': 123, 'task1': 1, 'task2': 1, 'name': 'test'}}, {'obj': {'test': 123, 'task1': 1, 'task2': 1, 'name': 'test'}}, {'obj': {'test': 123, 'task1': 1, 'task2': 1, 'name': 'test'}}, {'obj': {'test': 123, 'task1': 1, 'task2': 1, 'name': 'test'}}, {'obj': {'test': 123, 'task1': 1, 'task2': 1, 'name': 'test'}}, {'obj': {'test': 123, 'task1': 1, 'task2': 1, 'name': 'test'}}, {'obj': {'test': 123, 'task1': 1, 'task2': 1, 'name': 'test'}}, {'obj': {'test': 123, 'task1': 1, 'task2': 1, 'name': 'test'}}, {'obj': {'test': 123, 'task1': 1, 'task2': 1, 'name': 'test'}}, {'obj': {'test': 123, 'task1': 1, 'task2': 1, 'name': 'test'}}]))
             self.query = 'select OBJECT_REMOVE({"abc":1,"def":2,"fgh":3},"def")'
             actual_result=self.run_cbq_query()
-            self.assertTrue(actual_result['results'],([{u'$1': {u'abc': 1, u'fgh': 3}}]))
+            self.assertTrue(actual_result['results'], ([{'$1': {'abc': 1, 'fgh': 3}}]))
 
     def test_array_concat(self):
         self.fail_if_no_buckets()
@@ -1599,12 +1608,12 @@ class QuerySanityTests(QueryTests):
             actual_list = self.run_cbq_query()
             actual_result = self.sort_nested_list(actual_list['results'])
             actual_result1 = sorted(actual_result, key=lambda doc: (doc['job_title']))
-            tmp_groups = set([doc['job_title'] for doc in self.full_list])
+            tmp_groups = {doc['job_title'] for doc in self.full_list}
             expected_result = [{"job_title" : group,
-                                "names" : sorted([x["name"] for x in self.full_list
+                                "names" : [x["name"] for x in self.full_list
                                                   if x["job_title"] == group] + \
                                                  [x["email"] for x in self.full_list
-                                                  if x["job_title"] == group])}
+                                                  if x["job_title"] == group]}
                                for group in tmp_groups]
             expected_result1 = sorted(expected_result, key=lambda doc: (doc['job_title']))
 
@@ -1615,20 +1624,19 @@ class QuerySanityTests(QueryTests):
                          " FROM %s GROUP BY job_title  limit 10" % (bucket.name)
 
             actual_list = self.run_cbq_query()
-            actual_result = self.sort_nested_list(actual_list['results'])
-            actual_result2 = sorted(actual_result, key=lambda doc: (doc['job_title']))
-
-
+            actual_result = actual_list['results']
             expected_result = [{"job_title" : group,
-                                "names" : sorted([x["name"] for x in self.full_list
+                                "names" : [x["name"] for x in self.full_list
                                                   if x["job_title"] == group] + \
                                                  [x["email"] for x in self.full_list
                                                   if x["job_title"] == group] + \
                                                  [x["join_day"] for x in self.full_list
-                                                  if x["job_title"] == group])}
+                                                  if x["job_title"] == group]}
                                for group in tmp_groups][0:10]
-            expected_result2 = sorted(expected_result, key=lambda doc: (doc['job_title']))
-            self.assertTrue(actual_result2==expected_result2)
+            diffs = DeepDiff(actual_result, expected_result, ignore_order=True)
+            if diffs:
+                self.assertTrue(False,diffs)
+
 
     def test_array_prepend(self):
         self.fail_if_no_buckets()
@@ -1640,10 +1648,10 @@ class QuerySanityTests(QueryTests):
             actual_list = self.run_cbq_query()
             actual_result = self.sort_nested_list(actual_list['results'])
             actual_result = sorted(actual_result, key=lambda doc: (doc['job_title']))
-            tmp_groups = set([doc['job_title'] for doc in self.full_list])
+            tmp_groups = {doc['job_title'] for doc in self.full_list}
             expected_result = [{"job_title" : group,
-                                "rates" : sorted([x["test_rate"] for x in self.full_list
-                                                  if x["job_title"] == group] + [1.2])}
+                                "rates" : [x["test_rate"] for x in self.full_list
+                                                  if x["job_title"] == group] + [1.2]}
 
                                for group in tmp_groups]
             expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
@@ -1656,10 +1664,10 @@ class QuerySanityTests(QueryTests):
             actual_result = self.sort_nested_list(actual_list['results'])
             actual_result = sorted(actual_result, key=lambda doc: (doc['job_title']))
 
-            tmp_groups = set([doc['job_title'] for doc in self.full_list])
+            tmp_groups = {doc['job_title'] for doc in self.full_list}
             expected_result = [{"job_title" : group,
-                                "rates" : sorted([x["test_rate"] for x in self.full_list
-                                                  if x["job_title"] == group] + [1.2]+[2.4])}
+                                "rates" : [x["test_rate"] for x in self.full_list
+                                                  if x["job_title"] == group] + [1.2]+[2.4]}
                                for group in tmp_groups]
             expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
             self._verify_results(actual_result, expected_result)
@@ -1672,11 +1680,11 @@ class QuerySanityTests(QueryTests):
             actual_result = self.sort_nested_list(actual_list['results'])
             actual_result = sorted(actual_result, key=lambda doc: (doc['job_title']))
 
-            tmp_groups = set([doc['job_title'] for doc in self.full_list])
+            tmp_groups = {doc['job_title'] for doc in self.full_list}
             expected_result = [{"job_title" : group,
-                                "skills_new" : sorted([x["skills"] for x in self.full_list
+                                "skills_new" : [x["skills"] for x in self.full_list
                                                   if x["job_title"] == group] + \
-                                                  [['skill5', 'skill8']])}
+                                                  [['skill5', 'skill8']]}
                                for group in tmp_groups]
             expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
             self._verify_results(actual_result, expected_result)
@@ -1689,11 +1697,11 @@ class QuerySanityTests(QueryTests):
             actual_result = self.sort_nested_list(actual_list['results'])
             actual_result = sorted(actual_result, key=lambda doc: (doc['job_title']))
 
-            tmp_groups = set([doc['job_title'] for doc in self.full_list])
+            tmp_groups = {doc['job_title'] for doc in self.full_list}
             expected_result = [{"job_title" : group,
-                                "skills_new" : sorted([x["skills"] for x in self.full_list
+                                "skills_new" : [x["skills"] for x in self.full_list
                                                   if x["job_title"] == group] + \
-                                                  [['skill5', 'skill8']]+ [['skill9','skill10']])}
+                                                  [['skill5', 'skill8']]+ [['skill9', 'skill10']]}
                                for group in tmp_groups]
             expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
 
@@ -1712,10 +1720,10 @@ class QuerySanityTests(QueryTests):
             actual_result = self.sort_nested_list(actual_list['results'])
             actual_result = sorted(actual_result, key=lambda doc: (doc['job_title']))
 
-            tmp_groups = set([doc['job_title'] for doc in self.full_list])
+            tmp_groups = {doc['job_title'] for doc in self.full_list}
             expected_result = [{"job_title" : group,
-                                "names" : sorted(set([x["name"] for x in self.full_list
-                                               if x["job_title"] == group and x["name"]!= value]))}
+                                "names" : {x["name"] for x in self.full_list
+                                               if x["job_title"] == group and x["name"]!= value}}
                                for group in tmp_groups]
             expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
             self._verify_results(actual_result, expected_result)
@@ -1724,18 +1732,16 @@ class QuerySanityTests(QueryTests):
             value2 = 'emp-2'
             value3 = 'employee-1'
             self.query = "SELECT job_title," +\
-                         " array_remove(array_agg(DISTINCT name), '%s','%s','%s') as names" % (value1,value2,value3) +\
+                         " array_remove(array_agg(DISTINCT name), '%s','%s','%s') as names" % (value1, value2, value3) +\
                          " FROM %s GROUP BY job_title" % (bucket.name)
 
             actual_list = self.run_cbq_query()
-            actual_result = self.sort_nested_list(actual_list['results'])
-            actual_result = sorted(actual_result, key=lambda doc: (doc['job_title']))
-            tmp_groups = set([doc['job_title'] for doc in self.full_list])
+            actual_result = actual_list['results']
+            tmp_groups = {doc['job_title'] for doc in self.full_list}
             expected_result = [{"job_title" : group,
-                                "names" : sorted(set([x["name"] for x in self.full_list
-                                               if x["job_title"] == group and x["name"]!= value1 and x["name"]!=value3]))}
+                                "names" : {x["name"] for x in self.full_list
+                                               if x["job_title"] == group and x["name"]!= value1 and x["name"]!=value3}}
                                for group in tmp_groups]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
             self._verify_results(actual_result, expected_result)
 
     def test_array_insert(self):
@@ -1743,11 +1749,11 @@ class QuerySanityTests(QueryTests):
         value2 = 'skill-21'
         self.fail_if_no_buckets()
         for bucket in self.buckets:
-            self.query = "SELECT array_insert(skills, 1, '%s','%s') " % (value1,value2) +\
+            self.query = "SELECT array_insert(skills, 1, '%s','%s') " % (value1, value2) +\
                          " FROM %s limit 1" % (bucket.name)
 
             actual_list = self.run_cbq_query()
-            expected_result = [{u'$1': [u'skill2010', u'skill-20', u'skill-21', u'skill2011']}]
+            expected_result = [{'$1': ['skill2010', 'skill-20', 'skill-21', 'skill2011']}]
             self.assertTrue( actual_list['results'] == expected_result )
 
     def test_array_avg(self):
@@ -1761,7 +1767,7 @@ class QuerySanityTests(QueryTests):
                                    key=lambda doc: (doc['job_title']))
             for doc in actual_result:
                 doc['rates'] = round(doc['rates'])
-            tmp_groups = set([doc['job_title'] for doc in self.full_list])
+            tmp_groups = {doc['job_title'] for doc in self.full_list}
             expected_result = [{"job_title" : group,
                                 "rates" : round(sum([x["test_rate"] for x in self.full_list
                                            if x["job_title"] == group]) / float(len([x["test_rate"]
@@ -1778,14 +1784,13 @@ class QuerySanityTests(QueryTests):
             " as emp_job FROM %s GROUP BY job_title" % (bucket.name)
 
             actual_result = self.run_cbq_query()
-            actual_result = sorted(actual_result['results'])
+            actual_result = actual_result['results']
 
-            tmp_groups = set([doc['job_title'] for doc in self.full_list])
+            tmp_groups = {doc['job_title'] for doc in self.full_list}
             expected_result = [{"job_title" : group,
                                 "emp_job" : 'employee-1' in [x["name"] for x in self.full_list
                                                            if x["job_title"] == group] }
                                for group in tmp_groups]
-            expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
     def test_array_count(self):
@@ -1798,7 +1803,7 @@ class QuerySanityTests(QueryTests):
             actual_result = sorted(actual_result['results'],
                                    key=lambda doc: (doc['job_title']))
 
-            tmp_groups = set([doc['job_title'] for doc in self.full_list])
+            tmp_groups = {doc['job_title'] for doc in self.full_list}
             expected_result = [{"job_title" : group,
                                 "names" : len([x["name"] for x in self.full_list
                                            if x["job_title"] == group])}
@@ -1813,15 +1818,12 @@ class QuerySanityTests(QueryTests):
             " FROM %s GROUP BY job_title" % (bucket.name)
 
             actual_list = self.run_cbq_query()
-            actual_result = self.sort_nested_list(actual_list['results'])
-            actual_result = sorted(actual_result, key=lambda doc: (doc['job_title']))
-
-            tmp_groups = set([doc['job_title'] for doc in self.full_list])
+            actual_result = actual_list['results']
+            tmp_groups = {doc['job_title'] for doc in self.full_list}
             expected_result = [{"job_title" : group,
-                                "names" : sorted(set([x["name"] for x in self.full_list
-                                               if x["job_title"] == group]))}
+                                "names" : {x["name"] for x in self.full_list
+                                               if x["job_title"] == group}}
                                for group in tmp_groups]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
             self._verify_results(actual_result, expected_result)
 
     def test_array_max(self):
@@ -1834,7 +1836,7 @@ class QuerySanityTests(QueryTests):
             actual_result = sorted(actual_result['results'],
                                    key=lambda doc: (doc['job_title']))
 
-            tmp_groups = set([doc['job_title'] for doc in self.full_list])
+            tmp_groups = {doc['job_title'] for doc in self.full_list}
             expected_result = [{"job_title" : group,
                                 "rates" : max([x["test_rate"] for x in self.full_list
                                            if x["job_title"] == group])}
@@ -1852,7 +1854,7 @@ class QuerySanityTests(QueryTests):
             actual_result = sorted(actual_result['results'],
                                    key=lambda doc: (doc['job_title']))
 
-            tmp_groups = set([doc['job_title'] for doc in self.full_list])
+            tmp_groups = {doc['job_title'] for doc in self.full_list}
             expected_result = [{"job_title" : group,
                                 "rates" : round(sum([x["test_rate"] for x in self.full_list
                                            if x["job_title"] == group]))}
@@ -1870,7 +1872,7 @@ class QuerySanityTests(QueryTests):
             actual_result = sorted(actual_result['results'],
                                    key=lambda doc: (doc['job_title']))
 
-            tmp_groups = set([doc['job_title'] for doc in self.full_list])
+            tmp_groups = {doc['job_title'] for doc in self.full_list}
             expected_result = [{"job_title" : group,
                                 "rates" : min([x["test_rate"] for x in self.full_list
                                            if x["job_title"] == group])}
@@ -1896,53 +1898,41 @@ class QuerySanityTests(QueryTests):
             " FROM %s GROUP BY job_title" % (bucket.name)
 
             actual_list = self.run_cbq_query()
-            actual_result = self.sort_nested_list(actual_list['results'])
-            actual_result = sorted(actual_result,
-                                   key=lambda doc: (doc['job_title']))
-
-            tmp_groups = set([doc['job_title'] for doc in self.full_list])
+            actual_result = actual_list['results']
+            tmp_groups = {doc['job_title'] for doc in self.full_list}
             expected_result = [{"job_title" : group,
-                                "emp_job" : sorted(set([x["name"] for x in self.full_list
-                                           if x["job_title"] == group]))}
+                                "emp_job" : {x["name"] for x in self.full_list
+                                           if x["job_title"] == group}}
                                for group in tmp_groups]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
             self._verify_results(actual_result, expected_result)
 
             self.query = "SELECT job_title, array_put(array_agg(distinct name), 'employee-50','employee-51') as emp_job" +\
             " FROM %s GROUP BY job_title" % (bucket.name)
 
             actual_list = self.run_cbq_query()
-            actual_result = self.sort_nested_list(actual_list['results'])
-            actual_result = sorted(actual_result,
-                                   key=lambda doc: (doc['job_title']))
-
-            tmp_groups = set([doc['job_title'] for doc in self.full_list])
+            actual_result = actual_list['results']
+            tmp_groups = {doc['job_title'] for doc in self.full_list}
             expected_result = [{"job_title" : group,
-                                "emp_job" : sorted(set([x["name"] for x in self.full_list
-                                           if x["job_title"] == group]  + ['employee-50'] + ['employee-51']))}
+                                "emp_job" : set([x["name"] for x in self.full_list
+                                           if x["job_title"] == group]  + ['employee-50'] + ['employee-51'])}
                                for group in tmp_groups]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
             self._verify_results(actual_result, expected_result)
 
             self.query = "SELECT job_title, array_put(array_agg(distinct name), 'employee-47') as emp_job" +\
             " FROM %s GROUP BY job_title" % (bucket.name)
 
             actual_list = self.run_cbq_query()
-            actual_result = self.sort_nested_list(actual_list['results'])
-            actual_result = sorted(actual_result,
-                                   key=lambda doc: (doc['job_title']))
-
+            actual_result = actual_list['results']
             expected_result = [{"job_title" : group,
-                                "emp_job" : sorted(set([x["name"] for x in self.full_list
-                                           if x["job_title"] == group] + ['employee-47']))}
+                                "emp_job" : set([x["name"] for x in self.full_list
+                                           if x["job_title"] == group] + ['employee-47'])}
                                for group in tmp_groups]
-            expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
             self._verify_results(actual_result, expected_result)
 
     def test_array_range(self):
         self.query = "select array_range(0,10) as num"
         actual_result = self.run_cbq_query()
-        expected_result = [{"num" : list(xrange(10))}]
+        expected_result = [{"num" : list(range(10))}]
         self._verify_results(actual_result['results'], expected_result)
 
     def test_array_replace(self):
@@ -1955,11 +1945,11 @@ class QuerySanityTests(QueryTests):
             actual_result = self.sort_nested_list(actual_list['results'])
             actual_result = sorted(actual_result,
                                    key=lambda doc: (doc['job_title']))
-            tmp_groups = set([doc['job_title'] for doc in self.full_list])
+            tmp_groups = {doc['job_title'] for doc in self.full_list}
             expected_result = [{"job_title" : group,
-                                "emp_job" : sorted(["employee-47" if x["name"] == 'employee-1' else x["name"]
+                                "emp_job" : ["employee-47" if x["name"] == 'employee-1' else x["name"]
                                              for x in self.full_list
-                                             if x["job_title"] == group])}
+                                             if x["job_title"] == group]}
                                for group in tmp_groups]
             expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
             self._verify_results(actual_result, expected_result)
@@ -1973,7 +1963,7 @@ class QuerySanityTests(QueryTests):
     def test_array_reverse(self):
         self.query = "select array_reverse([1,2,3]) as num"
         actual_result = self.run_cbq_query()
-        expected_result = [{"num" : [3,2,1]}]
+        expected_result = [{"num" : [3, 2, 1]}]
         self._verify_results(actual_result['results'], expected_result)
 
     def test_array_sort(self):
@@ -1985,10 +1975,10 @@ class QuerySanityTests(QueryTests):
             actual_result = self.run_cbq_query()
             actual_result = sorted(actual_result['results'],
                                    key=lambda doc: (doc['job_title']))
-            tmp_groups = set([doc['job_title'] for doc in self.full_list])
+            tmp_groups = {doc['job_title'] for doc in self.full_list}
             expected_result = [{"job_title" : group,
-                                "emp_job" : sorted(set([x["test_rate"] for x in self.full_list
-                                             if x["job_title"] == group]))}
+                                "emp_job" : {x["test_rate"] for x in self.full_list
+                                             if x["job_title"] == group}}
                                for group in tmp_groups]
             expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
             self._verify_results(actual_result, expected_result)
@@ -2021,7 +2011,7 @@ class QuerySanityTests(QueryTests):
             actual_result = self.sort_nested_list(actual_list['results'])
             actual_result = sorted(actual_result, key=lambda doc: (doc['job_title']))
 
-            tmp_groups = set([doc['job_title'] for doc in self.full_list])
+            tmp_groups = {doc['job_title'] for doc in self.full_list}
             expected_list = [{"job_title" : group,
                                 "names" : [x["name"] for x in self.full_list
                                                if x["job_title"] == group]}
@@ -2048,9 +2038,9 @@ class QuerySanityTests(QueryTests):
                                                                        doc['period']))
 
             expected_result = [{"name" : doc['name'],
-                                "period" : ((('autumn','summer')[doc['join_mo'] in [6,7,8]],
-                                             'spring')[doc['join_mo'] in [3,4,5]],'winter')
-                                             [doc['join_mo'] in [12,1,2]]}
+                                "period" : ((('autumn', 'summer')[doc['join_mo'] in [6, 7, 8]],
+                                             'spring')[doc['join_mo'] in [3, 4, 5]], 'winter')
+                                             [doc['join_mo'] in [12, 1, 2]]}
                                for doc in self.full_list]
             expected_result = sorted(expected_result, key=lambda doc: (doc['name'],
                                                                        doc['period']))
@@ -2089,7 +2079,7 @@ class QuerySanityTests(QueryTests):
 
             expected_result = [{"name" : doc['name']}
                                for doc in self.full_list
-                               if doc['join_mo'] in [1,6]]
+                               if doc['join_mo'] in [1, 6]]
             expected_result = sorted(expected_result, key=lambda doc: (doc['name']))
             self._verify_results(actual_result, expected_result)
 
@@ -2099,7 +2089,7 @@ class QuerySanityTests(QueryTests):
                                                                        doc['name']))
             expected_result = [{"name" : doc['name']}
                                for doc in self.full_list
-                               if not(doc['join_mo'] in [1,6])]
+                               if not(doc['join_mo'] in [1, 6])]
             expected_result = sorted(expected_result, key=lambda doc: (doc['name']))
             self._verify_results(actual_result, expected_result)
 
@@ -2110,7 +2100,7 @@ class QuerySanityTests(QueryTests):
             actual_result = self.run_cbq_query()
             self.query = "select name from %s where REVERSE(job_title) in ['selaS', 'troppuS']" % (bucket.name)
             actual_result1 = self.run_cbq_query()
-            self.assertEqual(actual_result['results'],actual_result1['results'])
+            self.assertEqual(actual_result['results'], actual_result1['results'])
             actual_result = sorted(actual_result['results'], key=lambda doc: (
                                                                        doc['name']))
 
@@ -2294,7 +2284,7 @@ class QuerySanityTests(QueryTests):
                                if len([skill for skill in doc["skills"]
                                        if skill == 'skill2010']) > 0 and\
                                   len([vm for vm in doc["VMs"]
-                                       if vm["RAM"] in [1,2,3,4,5]]) > 0 and\
+                                       if vm["RAM"] in [1, 2, 3, 4, 5]]) > 0 and\
                                   doc["job_title"] != 'Sales']
             expected_result = sorted(expected_result, key=lambda doc: (doc['name']))
             self._verify_results(actual_result['results'], expected_result)
@@ -2436,10 +2426,9 @@ class QuerySanityTests(QueryTests):
             self.query = "select compare from %s let compare = (test_rate != 2)" % (bucket.name)
 
             actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
+            actual_result = actual_list['results']
             expected_result = [{"compare" : doc["test_rate"] != 2}
                                for doc in self.full_list]
-            expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
     def test_let_between(self):
@@ -2448,10 +2437,9 @@ class QuerySanityTests(QueryTests):
             self.query = "select compare from %s let compare = (test_rate between 1 and 3)" % (bucket.name)
 
             actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
+            actual_result = actual_list['results']
             expected_result = [{"compare": doc["test_rate"] >= 1 and doc["test_rate"] <= 3}
                                for doc in self.full_list]
-            expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
     def test_let_not_equal_less_more(self):
@@ -2460,10 +2448,9 @@ class QuerySanityTests(QueryTests):
             self.query = "select compare from %s let compare = (test_rate <> 2)" % (bucket.name)
 
             actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
+            actual_result = actual_list['results']
             expected_result = [{"compare" : doc["test_rate"] != 2}
                                for doc in self.full_list]
-            expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
     def test_let_more_equal(self):
@@ -2472,10 +2459,9 @@ class QuerySanityTests(QueryTests):
             self.query = "select compare from %s let compare = (test_rate >= 2)" % (bucket.name)
 
             actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
+            actual_result = actual_list['results']
             expected_result = [{"compare" : doc["test_rate"] >= 2}
                                for doc in self.full_list]
-            expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
     def test_let_less_equal(self):
@@ -2484,10 +2470,9 @@ class QuerySanityTests(QueryTests):
             self.query = "select compare from %s let compare = (test_rate <= 2)" % (bucket.name)
 
             actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
+            actual_result = actual_list['results']
             expected_result = [{"compare" : doc["test_rate"] <= 2}
                                for doc in self.full_list]
-            expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
     def test_comparition_equal_not_equal(self):
@@ -2545,11 +2530,10 @@ class QuerySanityTests(QueryTests):
         for bucket in self.buckets:
             self.query = template % (bucket.name)
             actual_result = self.run_cbq_query()
-            actual_result = sorted(actual_result['results'])
+            actual_result = actual_result['results']
 
             expected_result = [{"years": len([doc['join_yr'] for doc in self.full_list]),
                                 "rate": sum([doc['test_rate'] for doc in self.full_list])}]
-            expected_result = sorted(expected_result)
             self.assertTrue(round(actual_result[0]['rate']) == round(expected_result[0]['rate']))
             self.assertTrue((actual_result[0]['years']) == (expected_result[0]['years']))
         return template
@@ -2560,7 +2544,7 @@ class QuerySanityTests(QueryTests):
         for bucket in self.buckets:
             self.query = "SELECT meta(default).id, meta(default).type FROM %s" % (bucket.name)
             actual_result = self.run_cbq_query()
-            actual_result = sorted(actual_result['results'])
+            actual_result = actual_result['results']
 
     def test_comparition_more_less_equal(self):
         self.fail_if_no_buckets()
@@ -2598,20 +2582,20 @@ class QuerySanityTests(QueryTests):
 
             actual_result = self.run_cbq_query()
             actual_result = [{"job_title": doc["job_title"],
-                              "avg_per_year" : round(doc["avg_per_year"],2)}
+                              "avg_per_year" : round(doc["avg_per_year"], 2)}
                               for doc in actual_result['results']]
             actual_result = sorted(actual_result, key=lambda doc: (doc['job_title']))
 
-            tmp_groups = set([doc['job_title'] for doc in self.full_list])
+            tmp_groups = {doc['job_title'] for doc in self.full_list}
             expected_result = [{"job_title" : group,
                                 "avg_per_year" : math.fsum([doc['test_rate']
                                                              for doc in self.full_list
                                                              if doc['job_title'] == group]) %\
-                                                  len(set([doc['join_yr'] for doc in self.full_list
-                                                           if doc['job_title'] == group]))}
+                                                  len({doc['join_yr'] for doc in self.full_list
+                                                           if doc['job_title'] == group})}
                                for group in tmp_groups]
             expected_result = [{"job_title": doc["job_title"],
-                              "avg_per_year" : round(doc["avg_per_year"],2)}
+                              "avg_per_year" : round(doc["avg_per_year"], 2)}
                               for doc in expected_result]
             expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
             self._verify_results(actual_result, expected_result)
@@ -2626,11 +2610,11 @@ class QuerySanityTests(QueryTests):
             " from {0} d group by d.job_title".format(bucket.name)
             actual_result = self.run_cbq_query()
             actual_result = [{"job_title": doc["job_title"],
-                              "avg_per_year" : round(doc["avg_per_year"],2)}
+                              "avg_per_year" : round(doc["avg_per_year"], 2)}
                               for doc in actual_result['results']]
             actual_result = sorted(actual_result, key=lambda doc: (
                                                                        doc['job_title']))
-            tmp_groups = set([doc['job_title'] for doc in self.full_list])
+            tmp_groups = {doc['job_title'] for doc in self.full_list}
             expected_result = [{"job_title" : group,
                                 "avg_per_year" : (math.fsum([doc['tasks_points']['task1']
                                                              for doc in self.full_list
@@ -2638,34 +2622,34 @@ class QuerySanityTests(QueryTests):
                                                   math.fsum([doc['tasks_points']['task2']
                                                              for doc in self.full_list
                                                              if doc['job_title'] == group]))%\
-                                                  len(set([doc['join_yr'] for doc in self.full_list
-                                                           if doc['job_title'] == group]))}
+                                                  len({doc['join_yr'] for doc in self.full_list
+                                                           if doc['job_title'] == group})}
                                for group in tmp_groups]
             expected_result = [{"job_title": doc["job_title"],
-                              "avg_per_year" : round(doc["avg_per_year"],2)}
+                              "avg_per_year" : int(round(doc["avg_per_year"], 2))}
                               for doc in expected_result]
             expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
             self._verify_results(actual_result, expected_result)
 
         # https://issues.couchbase.com/browse/MB-29401
-        def test_sum_large_negative_numbers(self):
-            self.fail_if_no_buckets()
+    def test_sum_large_negative_numbers(self):
+        self.fail_if_no_buckets()
 
-            self.run_cbq_query("insert into default (KEY, VALUE) VALUES ('doc1',{ 'f1' : -822337203685477580 })")
-            self.run_cbq_query("insert into default (KEY, VALUE) VALUES ('doc2',{ 'f1' : -822337203685477580 })")
-            self.query = "select SUM(f1) from default"
-            result = self.run_cbq_query()
-            found_result = result['results'][0]['$1']
-            expected_result = -1644674407370955160
-            self.assertEqual(found_result, expected_result)
+        self.run_cbq_query("insert into default (KEY, VALUE) VALUES ('doc1',{ 'f1' : -822337203685477580 })")
+        self.run_cbq_query("insert into default (KEY, VALUE) VALUES ('doc2',{ 'f1' : -822337203685477580 })")
+        self.query = "select SUM(f1) from default"
+        result = self.run_cbq_query()
+        found_result = result['results'][0]['$1']
+        expected_result = -1644674407370955160
+        self.assertEqual(found_result, expected_result)
 
-            self.run_cbq_query("insert into default (KEY, VALUE) VALUES ('doc3',{ 'f2' : -822337203685477580 })")
-            self.run_cbq_query("insert into default (KEY, VALUE) VALUES ('doc4',{ 'f2' : 10 })")
-            self.query = "select SUM(f2) from default"
-            result = self.run_cbq_query()
-            found_result = result['results'][0]['$1']
-            expected_result = -822337203685477570
-            self.assertEqual(found_result, expected_result)
+        self.run_cbq_query("insert into default (KEY, VALUE) VALUES ('doc3',{ 'f2' : -822337203685477580 })")
+        self.run_cbq_query("insert into default (KEY, VALUE) VALUES ('doc4',{ 'f2' : 10 })")
+        self.query = "select SUM(f2) from default"
+        result = self.run_cbq_query()
+        found_result = result['results'][0]['$1']
+        expected_result = -822337203685477570
+        self.assertEqual(found_result, expected_result)
 
 ##############################################################################################
 #
@@ -2837,8 +2821,8 @@ class QuerySanityTests(QueryTests):
         now_time = datetime.datetime.fromtimestamp(now_millis)
         now_millis = now_millis * 1000
         try:
-            now_time_zone = round((round((datetime.datetime.now()-datetime.datetime.utcnow()).total_seconds())/1800)/2)
-        except AttributeError, ex:
+            now_time_zone = round((round((datetime.datetime.now()-datetime.datetime.utcnow()).total_seconds())//1800)//2)
+        except AttributeError as ex:
             raise Exception("Test requires python 2.7 : SKIPPING TEST")
         now_time_str = "%s-%02d-%02d" % (now_time.year, now_time.month, now_time.day)
         self.query = "select str_to_millis('%s') as now" % now_time_str
@@ -2864,7 +2848,7 @@ class QuerySanityTests(QueryTests):
         now_millis = now_millis * 1000
         self.query = 'select date_part_millis(%s, "hour") as hour, ' % (now_millis) +\
         'date_part_millis(%s,"minute") as minute, date_part_millis(' % (now_millis) +\
-        '%s,"second") as sec, date_part_millis(%s,"millisecond") as msec' % (now_millis,now_millis)
+        '%s,"second") as sec, date_part_millis(%s,"millisecond") as msec' % (now_millis, now_millis)
         res = self.run_cbq_query()
         self.assertTrue(res["results"][0]["hour"] == now_time.hour,
                         "Result expected: %s. Actual %s" % (now_time.hour, res["results"]))
@@ -2998,14 +2982,12 @@ class QuerySanityTests(QueryTests):
         for bucket in self.buckets:
             self.query = "SELECT TOSTR(join_mo) month FROM %s" % bucket.name
             actual_result = self.run_cbq_query()
-            actual_result = sorted(actual_result['results'])
+            actual_result = actual_result['results']
             self.query = "SELECT REVERSE(TOSTR(join_mo)) rev_month FROM %s" % bucket.name
             actual_result1 = self.run_cbq_query()
-            actual_result2 = sorted(actual_result1['results'])
+            actual_result2 = actual_result1['results']
             expected_result = [{"month" : str(doc['join_mo'])} for doc in self.full_list]
-            expected_result = sorted(expected_result)
             expected_result2 = [{"rev_month" : str(doc['join_mo'])[::-1]} for doc in self.full_list]
-            expected_result2 = sorted(expected_result2)
             self._verify_results(actual_result, expected_result)
             self._verify_results(actual_result2, expected_result2)
 
@@ -3058,12 +3040,11 @@ class QuerySanityTests(QueryTests):
             self.query = 'SELECT name, skills' +\
             ' FROM %s WHERE reverse(skills[0])=("0102" || "lliks")' % (bucket.name)
             actual_list1 = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
-            actual_result2 = sorted(actual_list1['results'])
+            actual_result = actual_list['results']
+            actual_result2 = actual_list1['results']
             expected_result = [{"name" : doc["name"], "skills" : doc["skills"]}
                                for doc in self.full_list
                                if doc["skills"][0] == 'skill2010']
-            expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
             self._verify_results(actual_result, actual_result2)
 ##############################################################################################
@@ -3077,10 +3058,9 @@ class QuerySanityTests(QueryTests):
             self.query = "SELECT SPLIT(email, '@')[0] as login" +\
             " FROM %s" % (bucket.name)
             actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
+            actual_result = actual_list['results']
             expected_result = [{"login" : doc["email"].split('@')[0]}
                                for doc in self.full_list]
-            expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
     def test_split_where(self):
@@ -3089,11 +3069,10 @@ class QuerySanityTests(QueryTests):
             self.query = 'SELECT name FROM %s' % (bucket.name) +\
             ' WHERE SPLIT(email, \'-\')[0] = SPLIT(name, \'-\')[1]'
             actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
+            actual_result = actual_list['results']
             expected_result = [{"name" : doc["name"]}
                                for doc in self.full_list
                                if doc["email"].split('-')[0] == doc["name"].split('-')[1]]
-            expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
 ##############################################################################################
@@ -3106,12 +3085,12 @@ class QuerySanityTests(QueryTests):
         for bucket in self.buckets:
             self.query = "select name from %s union select email from %s" % (bucket.name, bucket.name)
             actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
+            actual_result = actual_list['results']
             expected_result = [{"name" : doc["name"]}
                                for doc in self.full_list]
             expected_result.extend([{"email" : doc["email"]}
                                    for doc in self.full_list])
-            expected_result = sorted([dict(y) for y in set(tuple(x.items()) for x in expected_result)])
+            expected_result = [dict(y) for y in set(tuple(x.items()) for x in expected_result)]
             self._verify_results(actual_result, expected_result)
 
     def test_prepared_union(self):
@@ -3124,12 +3103,12 @@ class QuerySanityTests(QueryTests):
         self.assertTrue(len(self.buckets) > 1, 'This test needs more than one bucket')
         self.query = "select name from %s union select email from %s" % (self.buckets[0].name, self.buckets[1].name)
         actual_list = self.run_cbq_query()
-        actual_result = sorted(actual_list['results'])
+        actual_result = actual_list['results']
         expected_result = [{"name" : doc["name"]}
                             for doc in self.full_list]
         expected_result.extend([{"email" : doc["email"]}
                                 for doc in self.full_list])
-        expected_result = sorted([dict(y) for y in set(tuple(x.items()) for x in expected_result)])
+        expected_result = [dict(y) for y in set(tuple(x.items()) for x in expected_result)]
         self._verify_results(actual_result, expected_result)
 
     def test_union_all(self):
@@ -3138,24 +3117,22 @@ class QuerySanityTests(QueryTests):
             self.query = "select name from %s union all select email from %s" % (bucket.name, bucket.name)
 
             actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
+            actual_result = actual_list['results']
             expected_result = [{"name" : doc["name"]}
                                for doc in self.full_list]
             expected_result.extend([{"email" : doc["email"]}
                                    for doc in self.full_list])
-            expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
     def test_union_all_multiply_buckets(self):
         self.assertTrue(len(self.buckets) > 1, 'This test needs more than one bucket')
         self.query = "select name from %s union all select email from %s" % (self.buckets[0].name, self.buckets[1].name)
         actual_list = self.run_cbq_query()
-        actual_result = sorted(actual_list['results'])
+        actual_result = actual_list['results']
         expected_result = [{"name" : doc["name"]}
                             for doc in self.full_list]
         expected_result.extend([{"email" : doc["email"]}
                                 for doc in self.full_list])
-        expected_result = sorted(expected_result)
         self._verify_results(actual_result, expected_result)
 
     def test_union_where(self):
@@ -3163,26 +3140,26 @@ class QuerySanityTests(QueryTests):
         for bucket in self.buckets:
             self.query = "select name from %s union select email from %s where join_mo > 2" % (bucket.name, bucket.name)
             actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
+            actual_result = actual_list['results']
             expected_result = [{"name" : doc["name"]}
                                for doc in self.full_list]
             expected_result.extend([{"email" : doc["email"]}
                                    for doc in self.full_list if doc["join_mo"] > 2])
-            expected_result = sorted([dict(y) for y in set(tuple(x.items()) for x in expected_result)])
+            expected_result = [dict(y) for y in set(tuple(x.items()) for x in expected_result)]
             self._verify_results(actual_result, expected_result)
 
     def test_union_where_covering(self):
         created_indexes = []
         ind_list = ["one", "two"]
-        index_name="one"
+        index_name = "one"
         self.fail_if_no_buckets()
         for bucket in self.buckets:
             for ind in ind_list:
                 index_name = "coveringindex%s" % ind
-                if ind =="one":
-                    self.query = "CREATE INDEX %s ON %s(name, email, join_mo)  USING %s" % (index_name, bucket.name,self.index_type)
-                elif ind =="two":
-                    self.query = "CREATE INDEX %s ON %s(email,join_mo) USING %s" % (index_name, bucket.name,self.index_type)
+                if ind == "one":
+                    self.query = "CREATE INDEX %s ON %s(name, email, join_mo)  USING %s" % (index_name, bucket.name, self.index_type)
+                elif ind == "two":
+                    self.query = "CREATE INDEX %s ON %s(email, join_mo) USING %s" % (index_name, bucket.name, self.index_type)
                 self.run_cbq_query()
                 self._wait_for_index_online(bucket, index_name)
                 created_indexes.append(index_name)
@@ -3192,12 +3169,10 @@ class QuerySanityTests(QueryTests):
                 self.check_explain_covering_index(index_name[0])
             self.query = "select name from %s where name is not null union select email from %s where email is not null and join_mo >2" % (bucket.name, bucket.name)
             actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
-            expected_result = [{"name" : doc["name"]}
-                                for doc in self.full_list]
-            expected_result.extend([{"email" : doc["email"]}
-                                    for doc in self.full_list if doc["join_mo"] > 2])
-            expected_result = sorted([dict(y) for y in set(tuple(x.items()) for x in expected_result)])
+            actual_result = actual_list['results']
+            expected_result = [{"name": doc["name"]} for doc in self.full_list]
+            expected_result.extend([{"email": doc["email"]} for doc in self.full_list if doc["join_mo"] > 2])
+            expected_result = [dict(y) for y in set(tuple(x.items()) for x in expected_result)]
             self._verify_results(actual_result, expected_result)
             for index_name in created_indexes:
                 self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name, self.index_type)
@@ -3216,10 +3191,10 @@ class QuerySanityTests(QueryTests):
         for bucket in self.buckets:
             self.query = "select count(name) as names from %s union select count(email) as emails from %s" % (bucket.name, bucket.name)
             actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
+            actual_result = actual_list['results']
             expected_result = [{"names" : len(self.full_list)}]
             expected_result.extend([{"emails" : len(self.full_list)}])
-            expected_result = sorted([dict(y) for y in set(tuple(x.items()) for x in expected_result)])
+            expected_result = [dict(y) for y in set(tuple(x.items()) for x in expected_result)]
             self._verify_results(actual_result, expected_result)
 
     def test_union_aggr_fns_covering(self):
@@ -3231,9 +3206,9 @@ class QuerySanityTests(QueryTests):
             for ind in ind_list:
                 index_name = "coveringindex%s" % ind
                 if ind =="one":
-                    self.query = "CREATE INDEX %s ON %s(name, email, join_day)  USING %s" % (index_name, bucket.name,self.index_type)
+                    self.query = "CREATE INDEX %s ON %s(name, email, join_day)  USING %s" % (index_name, bucket.name, self.index_type)
                 elif ind =="two":
-                    self.query = "CREATE INDEX %s ON %s(email)  USING %s" % (index_name, bucket.name,self.index_type)
+                    self.query = "CREATE INDEX %s ON %s(email)  USING %s" % (index_name, bucket.name, self.index_type)
                 self.run_cbq_query()
                 self._wait_for_index_online(bucket, index_name)
                 created_indexes.append(index_name)
@@ -3243,20 +3218,20 @@ class QuerySanityTests(QueryTests):
                 self.check_explain_covering_index(index_name)
             self.query = "select count(name) as names from %s where join_day is not null union select count(email) as emails from %s where email is not null" % (bucket.name, bucket.name)
             actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
+            actual_result = actual_list['results']
             expected_result = [{"names" : len(self.full_list)}]
             expected_result.extend([{"emails" : len(self.full_list)}])
-            expected_result = sorted([dict(y) for y in set(tuple(x.items()) for x in expected_result)])
+            expected_result = [dict(y) for y in set(tuple(x.items()) for x in expected_result)]
             self._verify_results(actual_result, expected_result)
             for index_name in created_indexes:
-                self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name,self.index_type)
+                self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name, self.index_type)
                 self.run_cbq_query()
             self.query = "CREATE PRIMARY INDEX ON %s" % bucket.name
             self.run_cbq_query()
-            self.sleep(15,'wait for index')
+            self.sleep(15, 'wait for index')
             self.query = "select count(name) as names from %s where join_day is not null union select count(email) as emails from %s where email is not null" % (bucket.name, bucket.name)
             result = self.run_cbq_query()
-            self.assertEqual(actual_result,sorted(result['results']))
+            self.assertEqual(actual_result, sorted(result['results']))
             self.query = "DROP PRIMARY INDEX ON %s" % bucket.name
             self.run_cbq_query()
 
@@ -3280,7 +3255,7 @@ class QuerySanityTests(QueryTests):
                 self.check_explain_covering_index(index_name[0])
             self.query="select meta().id, meta().cas from {0} where meta().id is not null order by meta().id limit 10".format(bucket.name)
             actual_list = self.run_cbq_query()
-            actual_result = (actual_list['results'])
+            actual_result = actual_list['results']
             for index_name in created_indexes:
                 self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name, self.index_type)
                 self.run_cbq_query()
@@ -3290,7 +3265,9 @@ class QuerySanityTests(QueryTests):
             self._wait_for_index_online(bucket, '#primary')
             self.query = "select meta().id, meta().cas from {0} use index(`#primary`) where meta().id is not null order by meta().id limit 10".format(bucket.name)
             expected_list = self.run_cbq_query()
-            self.assertEqual(actual_result,sorted(expected_list['results']))
+            diffs = DeepDiff(actual_result, expected_list['results'], ignore_order=True)
+            if diffs:
+                self.assertTrue(False, diffs)
             self.query = "DROP PRIMARY INDEX ON %s" % bucket.name
             self.run_cbq_query()
 
@@ -3313,7 +3290,7 @@ class QuerySanityTests(QueryTests):
                 self.check_explain_covering_index(index_name[0])
             self.query="select meta().id, meta().cas from {0} where meta().id like 'query-testemployee6%' order by meta().id limit 10".format(bucket.name)
             actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
+            actual_result = actual_list['results']
             for index_name in created_indexes:
                 self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name, self.index_type)
                 self.run_cbq_query()
@@ -3323,7 +3300,9 @@ class QuerySanityTests(QueryTests):
             self._wait_for_index_online(bucket, '#primary')
             self.query = "select meta().id, meta().cas from {0} where meta().id like 'query-testemployee6%' order by meta().id limit 10".format(bucket.name)
             expected_list = self.run_cbq_query()
-            self.assertTrue(actual_result,sorted(expected_list['results']))
+            diffs = DeepDiff(actual_result, expected_list['results'], ignore_order=True)
+            if diffs:
+                self.assertTrue(False, diffs)
             self.query = "DROP PRIMARY INDEX ON %s" % bucket.name
             self.run_cbq_query()
 
@@ -3366,7 +3345,7 @@ class QuerySanityTests(QueryTests):
                 self.check_explain_covering_index(index_name[0])
             self.query="select meta().id, meta().cas from {0} where meta().id >10 order by meta().id limit 10".format(bucket.name)
             actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
+            actual_result = actual_list['results']
             for index_name in created_indexes:
                 self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name, self.index_type)
                 self.run_cbq_query()
@@ -3376,7 +3355,9 @@ class QuerySanityTests(QueryTests):
             self._wait_for_index_online(bucket, '#primary')
             self.query = "select meta().id, meta().cas from {0} use index(`#primary`)  where meta().id > 10 order by meta().id limit 10".format(bucket.name)
             expected_list = self.run_cbq_query()
-            self.assertTrue(actual_result,sorted(expected_list['results']))
+            diffs = DeepDiff(actual_result, expected_list['results'], ignore_order=True)
+            if diffs:
+                self.assertTrue(False, diffs)
             self.query = "DROP PRIMARY INDEX ON %s" % bucket.name
             self.run_cbq_query()
 
@@ -3402,7 +3383,7 @@ class QuerySanityTests(QueryTests):
                 self.check_explain_covering_index(index_name[0])
             self.query="select meta().id, name from {0} where meta().id >10 and name is not null order by meta().id limit 10".format(bucket.name)
             actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
+            actual_result = actual_list['results']
             for index_name in created_indexes:
                 self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name, self.index_type)
                 self.run_cbq_query()
@@ -3412,7 +3393,9 @@ class QuerySanityTests(QueryTests):
             self._wait_for_index_online(bucket, '#primary')
             self.query = "select meta().id, name from {0} use index(`#primary`) where meta().id > 10 and name is not null order by meta().id limit 10".format(bucket.name)
             expected_list = self.run_cbq_query()
-            self.assertTrue(actual_result,sorted(expected_list['results']))
+            diffs = DeepDiff(actual_result, expected_list['results'], ignore_order=True)
+            if diffs:
+                self.assertTrue(False, diffs)
             self.query = "DROP PRIMARY INDEX ON %s" % bucket.name
             self.run_cbq_query()
 
@@ -3452,10 +3435,10 @@ class QuerySanityTests(QueryTests):
         for bucket in self.buckets:
             self.query = "select name from %s intersect select name from %s s where s.join_day>5" % (bucket.name, bucket.name)
             actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
+            actual_result = actual_list['results']
             expected_result = [{"name" : doc["name"]}
                                for doc in self.full_list if doc['join_day'] > 5]
-            expected_result = sorted([dict(y) for y in set(tuple(x.items()) for x in expected_result)])
+            expected_result = [dict(y) for y in set(tuple(x.items()) for x in expected_result)]
             self._verify_results(actual_result, expected_result)
 
     def test_intersect_covering(self):
@@ -3467,9 +3450,9 @@ class QuerySanityTests(QueryTests):
             for ind in ind_list:
                 index_name = "coveringindex%s" % ind
                 if ind =="one":
-                    self.query = "CREATE INDEX %s ON %s(job_title, name)  USING %s" % (index_name, bucket.name,self.index_type)
+                    self.query = "CREATE INDEX %s ON %s(job_title, name)  USING %s" % (index_name, bucket.name, self.index_type)
                 elif ind =="two":
-                    self.query = "CREATE INDEX %s ON %s(join_day, name)  USING %s" % (index_name, bucket.name,self.index_type)
+                    self.query = "CREATE INDEX %s ON %s(join_day, name)  USING %s" % (index_name, bucket.name, self.index_type)
                 self.run_cbq_query()
                 self._wait_for_index_online(bucket, index_name)
                 created_indexes.append(index_name)
@@ -3479,22 +3462,24 @@ class QuerySanityTests(QueryTests):
                 self.check_explain_covering_index(index_name)
             self.query = "select name from %s where job_title='Engineer' intersect select name from %s s where s.join_day>5" % (bucket.name, bucket.name)
             actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
+            actual_result = actual_list['results']
             expected_result = [{"name" : doc["name"]}
             for doc in self.full_list if doc['join_day'] > 5]
-            expected_result = sorted([dict(y) for y in set(tuple(x.items()) for x in expected_result)])
+            expected_result = [dict(y) for y in set(tuple(x.items()) for x in expected_result)]
             self._verify_results(actual_result, expected_result)
 
             for ind in ind_list:
                 index_name = "coveringindex%s" % ind
-                self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name,self.index_type)
+                self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name, self.index_type)
                 self.run_cbq_query()
             self.query = "CREATE PRIMARY INDEX ON %s" % bucket.name
             self.run_cbq_query()
             self._wait_for_index_online(bucket, '#primary')
             self.query = "select name from %s where job_title='Engineer' intersect select name from %s s where s.join_day>5" % (bucket.name, bucket.name)
             expected_list = self.run_cbq_query()
-            self.assertEqual(actual_result,sorted(expected_list['results']))
+            diffs = DeepDiff(actual_result, expected_list['results'], ignore_order=True)
+            if diffs:
+                self.assertTrue(False, diffs)
             self.query = "DROP PRIMARY INDEX ON %s" % bucket.name
             self.run_cbq_query()
 
@@ -3503,10 +3488,9 @@ class QuerySanityTests(QueryTests):
         for bucket in self.buckets:
             self.query = "select name from %s intersect all select name from %s s where s.join_day>5" % (bucket.name, bucket.name)
             actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
+            actual_result = actual_list['results']
             expected_result = [{"name" : doc["name"]}
                                for doc in self.full_list if doc['join_day'] > 5]
-            expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
     def test_prepared_intersect(self):
@@ -3518,7 +3502,7 @@ class QuerySanityTests(QueryTests):
     def test_except_secondsetempty(self):
         self.fail_if_no_buckets()
         for bucket in self.buckets:
-            self.query = "drop primary index on %s USING %s" % (bucket.name,self.primary_indx_type);
+            self.query = "drop primary index on %s USING %s" % (bucket.name, self.primary_indx_type);
             self.run_cbq_query()
         try:
             self.query = "(select id keyspace_id from system:keyspaces) except (select indexes.keyspace_id from system:indexes)"
@@ -3542,10 +3526,10 @@ class QuerySanityTests(QueryTests):
         for bucket in self.buckets:
             self.query = "select name from %s except select name from %s s where s.join_day>5" % (bucket.name, bucket.name)
             actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
+            actual_result = actual_list['results']
             expected_result = [{"name" : doc["name"]}
                                for doc in self.full_list if not doc['join_day'] > 5]
-            expected_result = sorted([dict(y) for y in set(tuple(x.items()) for x in expected_result)])
+            expected_result = [dict(y) for y in set(tuple(x.items()) for x in expected_result)]
             self._verify_results(actual_result, expected_result)
 
     def test_except_all(self):
@@ -3553,10 +3537,9 @@ class QuerySanityTests(QueryTests):
         for bucket in self.buckets:
             self.query = "select name from %s except all select name from %s s where s.join_day>5" % (bucket.name, bucket.name)
             actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
+            actual_result = actual_list['results']
             expected_result = [{"name" : doc["name"]}
                                for doc in self.full_list if not doc['join_day'] > 5]
-            expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
 ##############################################################################################
@@ -3569,11 +3552,10 @@ class QuerySanityTests(QueryTests):
         for bucket in self.buckets:
             self.query = "select name, VMs from %s WHERE 5 WITHIN VMs" % (bucket.name)
             actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
+            actual_result = actual_list['results']
             expected_result = [{"name" : doc["name"], "VMs" : doc["VMs"]}
                                for doc in self.full_list
                                if len([vm for vm in doc["VMs"] if vm["RAM"] == 5])]
-            expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
     def test_prepared_within_list_object(self):
@@ -3587,11 +3569,10 @@ class QuerySanityTests(QueryTests):
         for bucket in self.buckets:
             self.query = "select name, VMs from %s where name within [['employee-2', 'employee-4'], ['employee-5']] " % (bucket.name)
             actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
+            actual_result = actual_list['results']
             expected_result = [{"name" : doc["name"], "VMs" : doc["VMs"]}
                                for doc in self.full_list
                                if doc["name"] in ['employee-2', 'employee-4', 'employee-5']]
-            expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
     def test_within_object(self):
@@ -3599,11 +3580,10 @@ class QuerySanityTests(QueryTests):
         for bucket in self.buckets:
             self.query = "select name, tasks_points from %s WHERE 1 WITHIN tasks_points" % (bucket.name)
             actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
+            actual_result = actual_list['results']
             expected_result = [{"name" : doc["name"], "tasks_points" : doc["tasks_points"]}
                                for doc in self.full_list
                                if doc["tasks_points"]["task1"] == 1 or doc["tasks_points"]["task2"] == 1]
-            expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
     def test_within_array(self):
@@ -3611,11 +3591,10 @@ class QuerySanityTests(QueryTests):
         for bucket in self.buckets:
             self.query = " select name, skills from %s where 'skill2010' within skills" % (bucket.name)
             actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
+            actual_result = actual_list['results']
             expected_result = [{"name" : doc["name"], "skills" : doc["skills"]}
                                for doc in self.full_list
                                if 'skill2010' in doc["skills"]]
-            expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
 ##############################################################################################
@@ -3628,12 +3607,11 @@ class QuerySanityTests(QueryTests):
         for bucket in self.buckets:
             self.query = "select raw name from %s " % (bucket.name)
             actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
+            actual_result = actual_list['results']
             self.query = "select raw reverse(reverse(name)) from %s " % (bucket.name)
             actual_list1 = self.run_cbq_query()
-            actual_result1 = sorted(actual_list1['results'])
+            actual_result1 = actual_list1['results']
             expected_result = [doc["name"] for doc in self.full_list]
-            expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
             self._verify_results(actual_result, actual_result1)
 
@@ -3642,37 +3620,36 @@ class QuerySanityTests(QueryTests):
         for bucket in self.buckets:
             self.query = "select raw skills[0] from %s limit 5" % (bucket.name)
             actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
+            actual_result = actual_list['results']
             expected_result = [doc["skills"][0] for doc in self.full_list][:5]
-            expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
     def test_raw_order(self):
         self.fail_if_no_buckets()
         for bucket in self.buckets:
-            self.query = "select raw name from {0} order by name {1}".format(bucket.name,"desc")
+            self.query = "select raw name from {0} order by name {1}".format(bucket.name, "desc")
             actual_list = self.run_cbq_query()
             actual_result = actual_list['results']
             expected_result = [ doc["name"]
                                for doc in self.full_list]
-            expected_result = sorted(expected_result,reverse=True)
-            self.assertEqual(actual_result, expected_result)
-            self.query = "select raw name from {0} order by name {1}".format(bucket.name,"asc")
+            diffs = DeepDiff(actual_result, expected_result, ignore_order=True)
+            if diffs:
+                self.assertTrue(False, diffs)
+            self.query = "select raw name from {0} order by name {1}".format(bucket.name, "asc")
             actual_list = self.run_cbq_query()
             actual_result = actual_list['results']
             expected_result = [doc["name"] for doc in self.full_list]
-            expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
-            self.query = "select raw meta().id from {0} order by meta().id {1}".format(bucket.name,"asc")
+            self.query = "select raw meta().id from {0} order by meta().id {1}".format(bucket.name, "asc")
             actual_list = self.run_cbq_query()
             actual_result = actual_list['results']
             expected_result = sorted(actual_result)
-            self.assertEqual(actual_result,expected_result)
-            self.query = "select raw meta().id from {0} order by meta().id {1}".format(bucket.name,"desc")
+            self.assertEqual(actual_result, expected_result)
+            self.query = "select raw meta().id from {0} order by meta().id {1}".format(bucket.name, "desc")
             actual_list = self.run_cbq_query()
             actual_result = actual_list['results']
-            expected_result = sorted(actual_result,reverse=True)
-            self.assertEqual(actual_result,expected_result)
+            expected_result = sorted(actual_result, reverse=True)
+            self.assertEqual(actual_result, expected_result)
 
     def test_push_limit(self):
         self.fail_if_no_buckets()
@@ -3699,10 +3676,9 @@ class QuerySanityTests(QueryTests):
             self.query = "select join_day from %s where join_day > abs(-10)" % (bucket.name)
 
             actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
+            actual_result = actual_list['results']
             expected_result = [doc["join_day"] for doc in self.full_list
                                if doc["join_day"] > abs(-10)]
-            expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
     #This test has no usages anywhere
@@ -3771,11 +3747,10 @@ class QuerySanityTests(QueryTests):
                          " from %s" % (bucket.name)
 
             actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
+            actual_result = actual_list['results']
             expected_result = [{"join_day" : doc["join_day"], "join_mo" : doc["join_mo"],
                                 "equality" : doc["join_day"] if doc["join_day"]!=doc["join_mo"] else 'NaN'}
                                for doc in self.full_list]
-            expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
     def test_posinf(self):
@@ -3785,11 +3760,10 @@ class QuerySanityTests(QueryTests):
                          " from %s" % (bucket.name)
 
             actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
+            actual_result = actual_list['results']
             expected_result = [{"join_day" : doc["join_day"], "join_mo" : doc["join_mo"],
                                 "equality" : doc["join_day"] if doc["join_day"]!=doc["join_mo"] else '+Infinity'}
                                for doc in self.full_list]
-            expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
 ##############################################################################################
@@ -3803,10 +3777,10 @@ class QuerySanityTests(QueryTests):
         self.assertTrue('uuid' in actual_list['results'][0] and actual_list['results'][0]['uuid'], 'UUid is not working')
 
     def test_string_fn_negative(self):
-        queries_errors = {'select name from %s when contains(VMs, "Sale")' : ('syntax error', 3000),
-                          'select TITLE(test_rate) as OS from %s' : ('syntax error', 3000),
-                          'select REPEAT(name, -2) as name from %s' : ('syntax error', 3000),
-                          'select REPEAT(name, a) as name from %s' : ('syntax error', 3000),}
+        queries_errors = {'select name from %s when contains(VMs, "Sale")': ('syntax error', 3000),
+                          'select TITLE(test_rate) as OS from %s': ('syntax error', 3000),
+                          'select REPEAT(name, -2) as name from %s': ('syntax error', 3000),
+                          'select REPEAT(name, a) as name from %s': ('syntax error', 3000),}
         self.negative_common_body(queries_errors)
 
     def test_contains(self):
@@ -3815,16 +3789,18 @@ class QuerySanityTests(QueryTests):
             self.query = "select name from %s where contains(job_title, 'Sale')" % (bucket.name)
 
             actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
+            actual_result = actual_list['results']
 
             self.query = "select name from %s where contains(reverse(job_title), reverse('Sale'))" % (bucket.name)
             actual_list1= self.run_cbq_query()
-            actual_result1 = sorted(actual_list1['results'])
-            self.assertEqual(actual_result1, actual_result)
+            actual_result1 = actual_list1['results']
+            diffs = DeepDiff(actual_result, actual_result1, ignore_order=True)
+            if diffs:
+                self.assertTrue(False, diffs)
+
             expected_result = [{"name" : doc["name"]}
                                for doc in self.full_list
                                if doc['job_title'].find('Sale') != -1]
-            expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
     def test_initcap(self):
@@ -3833,10 +3809,9 @@ class QuerySanityTests(QueryTests):
             self.query = "select INITCAP(VMs[0].os) as OS from %s" % (bucket.name)
 
             actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
+            actual_result = actual_list['results']
             expected_result = [{"OS" : (doc["VMs"][0]["os"][0].upper() + doc["VMs"][0]["os"][1:])}
                                for doc in self.full_list]
-            expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
     def test_title(self):
@@ -3845,18 +3820,16 @@ class QuerySanityTests(QueryTests):
             self.query = "select TITLE(VMs[0].os) as OS from %s" % (bucket.name)
 
             actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
+            actual_result = actual_list['results']
             self.query = "select TITLE(REVERSE(VMs[0].os)) as rev_os from %s" % (bucket.name)
 
             actual_list1 = self.run_cbq_query()
-            actual_result1 = sorted(actual_list1['results'])
+            actual_result1 = actual_list1['results']
 
 
             expected_result = [{"OS" : (doc["VMs"][0]["os"][0].upper() + doc["VMs"][0]["os"][1:])}
                                for doc in self.full_list]
             expected_result1 = [{"rev_os" : (doc["VMs"][0]["os"][::-1][0].upper() + doc["VMs"][0]["os"][::-1][1:])} for doc in self.full_list]
-            expected_result = sorted(expected_result)
-            expected_result1 = sorted(expected_result1)
             self._verify_results(actual_result, expected_result)
             self._verify_results(actual_result1, expected_result1)
 
@@ -3871,16 +3844,14 @@ class QuerySanityTests(QueryTests):
         for bucket in self.buckets:
             self.query = "select POSITION(VMs[1].name, 'vm') pos from %s" % (bucket.name)
             actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
+            actual_result = actual_list['results']
             expected_result = [{"pos" : (doc["VMs"][1]["name"].find('vm'))} for doc in self.full_list]
-            expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
             self.query = "select POSITION(VMs[1].name, 'server') pos from %s" % (bucket.name)
             actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
+            actual_result = actual_list['results']
             expected_result = [{"pos" : (doc["VMs"][1]["name"].find('server'))}
                                for doc in self.full_list]
-            expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
         test_word = 'california'
@@ -3939,17 +3910,18 @@ class QuerySanityTests(QueryTests):
             self.query = "select email from %s where REGEXP_CONTAINS(email, '-m..l')" % (bucket.name)
 
             actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
+            actual_result = actual_list['results']
             self.query = "select email from %s where REGEXP_CONTAINS(reverse(email), 'l..m-')" % (bucket.name)
             actual_list1 = self.run_cbq_query()
-            actual_result1 = sorted(actual_list1['results'])
-            self.assertEquals(actual_result,actual_result1)
+            actual_result1 = actual_list1['results']
+            diffs = DeepDiff(actual_result, actual_result1, ignore_order=True)
+            if diffs:
+                self.assertTrue(False, diffs)
             actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
+            actual_result = actual_list['results']
             expected_result = [{"email" : doc["email"]}
                                for doc in self.full_list
                                if len(re.compile('-m..l').findall(doc['email'])) > 0]
-            expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
     def test_regex_like(self):
@@ -3958,12 +3930,11 @@ class QuerySanityTests(QueryTests):
             self.query = "select email from %s where REGEXP_LIKE(email, '.*-mail.*')" % (bucket.name)
 
             actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
+            actual_result = actual_list['results']
 
             expected_result = [{"email" : doc["email"]}
                                for doc in self.full_list
                                if re.compile('.*-mail.*').search(doc['email'])]
-            expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
     def test_regex_position(self):
@@ -4023,19 +3994,17 @@ class QuerySanityTests(QueryTests):
             self.query = "select name, REGEXP_REPLACE(email, '-mail', 'domain') as mail from %s" % (bucket.name)
 
             actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
+            actual_result = actual_list['results']
             expected_result = [{"name" : doc["name"],
                                 "mail" : doc["email"].replace('-mail', 'domain')}
                                for doc in self.full_list]
-            expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
             self.query = "select name, REGEXP_REPLACE(email, 'e', 'a', 2) as mail from %s" % (bucket.name)
             actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
+            actual_result = actual_list['results']
             expected_result = [{"name" : doc["name"],
                                 "mail" : doc["email"].replace('e', 'a', 2)}
                                for doc in self.full_list]
-            expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
     def test_replace(self):
@@ -4044,11 +4013,10 @@ class QuerySanityTests(QueryTests):
             self.query = "select name, REPLACE(email, 'a', 'e', 1) as mail from %s" % (bucket.name)
 
             actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
+            actual_result = actual_list['results']
             expected_result = [{"name" : doc["name"],
                                 "mail" : doc["email"].replace('a', 'e', 1)}
                                for doc in self.full_list]
-            expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
     def test_repeat(self):
@@ -4057,10 +4025,9 @@ class QuerySanityTests(QueryTests):
             self.query = "select REPEAT(name, 2) as name from %s" % (bucket.name)
 
             actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
+            actual_result = actual_list['results']
             expected_result = [{"name" : doc["name"] * 2}
                                for doc in self.full_list]
-            expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
 ##############################################################################################
@@ -4074,11 +4041,10 @@ class QuerySanityTests(QueryTests):
             self.query = "select test_r, test_r > 2 compare from %s let test_r = (test_rate / 2)" % (bucket.name)
 
             actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
-            expected_result = [{"test_r" : doc["test_rate"] / 2,
-                                "compare" : (doc["test_rate"] / 2) > 2}
+            actual_result = actual_list['results']
+            expected_result = [{"test_r" : doc["test_rate"] // 2,
+                                "compare" : (doc["test_rate"] // 2) > 2}
                                for doc in self.full_list]
-            expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
     def test_prepared_let_nums(self):
@@ -4093,17 +4059,16 @@ class QuerySanityTests(QueryTests):
 
             self.query = "select name, join_date as date from %s let join_date = tostr(join_yr) || '-' || tostr(join_mo)" % (bucket.name)
             actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
+            actual_result = actual_list['results']
             expected_result = [{"name": doc["name"],
                                 "date": '%s-%s' % (doc['join_yr'], doc['join_mo'])}
                                for doc in self.full_list]
-            expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
             self.query = "select name, join_date as date from %s let join_date = reverse(tostr(join_yr)) || '-' || reverse(tostr(join_mo)) order by meta().id limit 10" % (bucket.name)
             actual_list2 = self.run_cbq_query()
             actual_result2 = actual_list2['results']
-            expected_result2 = [{u'date': u'1102-01', u'name': u'employee-9'}, {u'date': u'1102-01', u'name': u'employee-9'}, {u'date': u'1102-01', u'name': u'employee-9'}, {u'date': u'1102-01', u'name': u'employee-9'}, {u'date': u'1102-01', u'name': u'employee-9'}, {u'date': u'1102-01', u'name': u'employee-9'}, {u'date': u'0102-11', u'name': u'employee-4'}, {u'date': u'0102-11', u'name': u'employee-4'}, {u'date': u'0102-11', u'name': u'employee-4'}, {u'date': u'0102-11', u'name': u'employee-4'}]
+            expected_result2 = [{'date': '1102-01', 'name': 'employee-9'}, {'date': '1102-01', 'name': 'employee-9'}, {'date': '1102-01', 'name': 'employee-9'}, {'date': '1102-01', 'name': 'employee-9'}, {'date': '1102-01', 'name': 'employee-9'}, {'date': '1102-01', 'name': 'employee-9'}, {'date': '0102-11', 'name': 'employee-4'}, {'date': '0102-11', 'name': 'employee-4'}, {'date': '0102-11', 'name': 'employee-4'}, {'date': '0102-11', 'name': 'employee-4'}]
             self._verify_results(actual_result2, expected_result2)
 
     def test_letting(self):
@@ -4114,13 +4079,12 @@ class QuerySanityTests(QueryTests):
                     self.query = "SELECT d.join_mo, sum_test from %s d WHERE d.join_mo>7 group by d.join_mo letting sum_test = sum(d.tasks_points.task1)" % (bucket.name)
 
             actual_list = self.run_cbq_query()
-            actual_result = sorted(actual_list['results'])
-            tmp_groups = set([doc['join_mo'] for doc in self.full_list if doc['join_mo']>7])
+            actual_result = actual_list['results']
+            tmp_groups = {doc['join_mo'] for doc in self.full_list if doc['join_mo']>7}
             expected_result = [{"join_mo" : group,
                               "sum_test" : sum([x["tasks_points"]["task1"] for x in self.full_list
                                                if x["join_mo"] == group])}
                                for group in tmp_groups]
-            expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
     def test_prepared_letting(self):
@@ -4132,7 +4096,7 @@ class QuerySanityTests(QueryTests):
     # https://issues.couchbase.com/browse/MB-26086
     def check_special_symbols(self):
         self.fail_if_no_buckets()
-        symbols = ['~','!','@','#','$','%','^','&','*','(',')','_','-','+','=','{','[','}',']','|','.',':',';','"','<',',','>','.','?','/']
+        symbols = ['~', '!', '@', '#', '$', '%', '^', '&', '*', '(', ')', '_', '-', '+', '=', '{', '[', '}', ']', '|', '.', ':', ';', '"', '<', ',', '>', '.', '?', '/']
         errorsSimple = {}
         errorsComplex = {}
         query = "INSERT INTO default VALUES ('simple', {"

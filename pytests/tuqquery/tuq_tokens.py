@@ -67,7 +67,7 @@ class TokenTests(QueryTests):
         self.query = 'create index idx22 on `beer-sample`( DISTINCT ARRAY v FOR v in tokens(description,{"specials":"random"}) END  )'
         self.run_cbq_query()
 
-        for i in xrange(1,22):
+        for i in range(1, 22):
             index = 'idx{0}'.format(i)
             created_indexes.append(index)
 
@@ -198,10 +198,15 @@ class TokenTests(QueryTests):
             self.query = "DROP INDEX %s.%s USING %s" % ("`beer-sample`", idx, self.index_type)
             actual_result = self.run_cbq_query()
 
-    #This test is specific to beer-sample bucket
+    '''This test is specific to beer-sample bucket'''
     def test_tokens_simple_syntax(self):
         self.rest.load_sample("beer-sample")
-        self.sleep(20)
+        bucket_doc_map = {"beer-sample": 7303}
+        bucket_status_map = {"beer-sample": "healthy"}
+        self.wait_for_buckets_status(bucket_status_map, 5, 120)
+        self.wait_for_bucket_docs(bucket_doc_map, 5, 120)
+        self._wait_for_index_online("beer-sample", "beer_primary")
+        self.sleep(10)
         created_indexes = []
         try:
             idx1 = "idx_suffixes"
@@ -210,20 +215,23 @@ class TokenTests(QueryTests):
             idx4 = "idx_addresses"
             self.query = 'CREATE INDEX {0} ON `beer-sample`( DISTINCT SUFFIXES( name ) )'.format(idx1)
             self.run_cbq_query()
+            self._wait_for_index_online("beer-sample", "beer_primary")
             created_indexes.append(idx1)
             self.query = "explain select * from `beer-sample` where name like '%Cafe%'"
             actual_result = self.run_cbq_query()
             plan = self.ExplainPlanHelper(actual_result)
-            self.assertTrue(plan['~children'][0]['scan']['index']==idx1)
+            self.assertEqual(plan['~children'][0]['scan']['index'], idx1)
             self.query = 'CREATE INDEX {0} ON `beer-sample`( DISTINCT TOKENS( description ) )'.format(idx2)
             self.run_cbq_query()
+            self._wait_for_index_online("beer-sample", "beer_primary")
             created_indexes.append(idx2)
             self.query = "explain select * from `beer-sample` where contains_token(description,'Great')"
             actual_result = self.run_cbq_query()
             plan = self.ExplainPlanHelper(actual_result)
-            self.assertTrue(plan['~children'][0]['scan']['index']==idx2)
+            self.assertEqual(plan['~children'][0]['scan']['index'], idx2)
             self.query = "CREATE INDEX {0} ON `beer-sample`( DISTINCT PAIRS( SELF ) )".format(idx3)
             self.run_cbq_query()
+            self._wait_for_index_online("beer-sample", "beer_primary")
             created_indexes.append(idx3)
             self.query = "explain select * from `beer-sample` where name like 'A%' and abv > 6"
             actual_result = self.run_cbq_query()
@@ -231,23 +239,25 @@ class TokenTests(QueryTests):
             self.assertTrue("idx_suffixes" in str(plan))
             self.query = "CREATE INDEX {0} ON `beer-sample`( ALL address )".format(idx4)
             self.run_cbq_query()
+            self._wait_for_index_online("beer-sample", "beer_primary")
+            created_indexes.append(idx4)
             self.query = "explain select min(addr) from `beer-sample` unnest address as addr"
-            actual_result=self.run_cbq_query()
+            actual_result = self.run_cbq_query()
             plan = self.ExplainPlanHelper(actual_result)
-            self.assertTrue(plan['~children'][0]['index']==idx4)
+            self.assertEqual(plan['~children'][0]['index'], idx4)
             self.query = "explain select count(a) from `beer-sample` unnest address as a"
-            actual_result=self.run_cbq_query()
+            actual_result = self.run_cbq_query()
             plan = self.ExplainPlanHelper(actual_result)
-            self.assertTrue(plan['~children'][0]['index']==idx4)
+            self.assertEqual(plan['~children'][0]['index'], idx4)
             self.query = "explain select * from `beer-sample` where any place in address satisfies " \
                          "place LIKE '100 %' end"
-            actual_result=self.run_cbq_query()
+            actual_result = self.run_cbq_query()
             plan = self.ExplainPlanHelper(actual_result)
             self.assertTrue(idx4 in str(plan))
             self.assertTrue(idx3 in str(plan))
         finally:
                 for idx in created_indexes:
-                    self.query = "DROP INDEX `beer-sample`.%s" % ( idx)
+                    self.query = "DROP INDEX `beer-sample`.%s" % (idx)
                     self.run_cbq_query()
                 self.rest.delete_bucket("beer-sample")
 
