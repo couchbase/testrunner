@@ -931,7 +931,6 @@ class rbacPermissionList():
             #"completeJoin":"/completeJoin;POST",
             #"doJoinCluster":"/node/controller/doJoinCluster;POST;{'clusterMemberHostIp':192.168.46.101,'clusterMemberPort':8091,'user':'Administrator,'password':'password'}",
 
-            #"doJoinClusterV2":"/node/controller/doJoinClusterV2;POST;{'hostname':'server02','user':user,'password':password}",
             ##"rename":"/node/controller/rename:POST;{'hostname':'server02','user':user,'password':password}",
             #"settings":"POST /nodes/controller/settings;POST;{'index_path':'/tmp/index'}",
             #"setupServices":"/node/controller/setupServices;POST;{'services':'','user':user,'password':password}",
