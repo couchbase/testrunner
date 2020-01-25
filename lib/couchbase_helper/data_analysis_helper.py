@@ -763,13 +763,13 @@ class DataCollector(object):
         status = False
         for bucket in buckets:
             backup_data[bucket.name] = {}
-            output, error = conn.execute_command("ls %s/backup/201*/%s*/data "\
+            output, error = conn.execute_command("ls %s/backup/20*/%s*/data "\
                                                         % (backup_dir, bucket.name))
             if "shard_0.fdb" in output:
                 if master_key == "random_keys":
                     master_key = ".\{12\}$"
                 cmd = "%sforestdb_dump%s --plain-meta "\
-                      "%s/backup/201*/%s*/data/shard_0.fdb | grep -A 8 '^Doc\sID:\s%s' "\
+                      "%s/backup/20*/%s*/data/shard_0.fdb | grep -A 8 '^Doc\sID:\s%s' "\
                                                     % (cli_command, cmd_ext,\
                                                        backup_dir, bucket.name, master_key)
                 dump_output, error = conn.execute_command(cmd)

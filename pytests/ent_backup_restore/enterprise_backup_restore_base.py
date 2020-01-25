@@ -842,12 +842,12 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
     def backup_compact_deleted_keys_validation(self, delete_keys):
         self.log.info("Check deleted keys status in file after compact")
         conn = RemoteMachineShellConnection(self.backupset.backup_host)
-        output, error = conn.execute_command("ls %s/backup/201*/default*/data "\
+        output, error = conn.execute_command("ls %s/backup/20*/default*/data "\
                                                      % self.backupset.directory)
         deleted_key_status = {}
         if "shard_0.fdb" in output:
             cmd = "%sforestdb_dump%s --plain-meta --no-body "\
-                  "%s/backup/201*/default*/data/shard_0.fdb | grep -A 6 ent-backup "\
+                  "%s/backup/20*/default*/data/shard_0.fdb | grep -A 6 ent-backup "\
                                          % (self.cli_command_location, self.cmd_ext,\
                                          self.backupset.directory)
             dump_output, error = conn.execute_command(cmd)
