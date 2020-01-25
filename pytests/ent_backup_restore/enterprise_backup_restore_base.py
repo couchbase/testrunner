@@ -1027,12 +1027,12 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
     def backup_compact_deleted_keys_validation(self, delete_keys):
         self.log.info("Check deleted keys status in file after compact")
         conn = RemoteMachineShellConnection(self.backupset.backup_host)
-        output, error = conn.execute_command("ls {0}/backup/201*/default*/data "\
+        output, error = conn.execute_command("ls {0}/backup/20*/default*/data "\
                                                      .format(self.backupset.directory))
         deleted_key_status = {}
         if "shard_0.sqlite.0" in output:
             cmd = "{0}cbsqlitedump{1} "\
-                  " -f {2}/backup/201*/default*/data/shard_0.sqlite.0 | grep -A 6 ent-backup "\
+                  " -f {2}/backup/20*/default*/data/shard_0.sqlite.0 | grep -A 6 ent-backup "\
                                          % (self.cli_command_location, self.cmd_ext,\
                                          self.backupset.directory)
             dump_output, error = conn.execute_command(cmd)
