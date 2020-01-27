@@ -64,8 +64,12 @@ def main():
     parser.add_option('-b', '--branch', dest='branch', default='master')
     parser.add_option('-g', '--cherrypick', dest='cherrypick', default=None)
     # whether to use production version of a test_suite_executor or test version
-    parser.add_option('-l', '--launch_job', dest='launch_job', default='test_suite_executor')
-    parser.add_option('-f', '--jenkins_server_url', dest='jenkins_server_url', default='http://qa.sc.couchbase.com')
+    parser.add_option('-l','--launch_job', dest='launch_job', default='test_suite_executor')
+    parser.add_option('-f','--jenkins_server_url', dest='jenkins_server_url', default='http://qa.sc.couchbase.com')
+    parser.add_option('-m','--retry_params', dest='retry_params', default='')
+
+    # set of parameters for testing purposes.
+    #TODO: delete them after successful testing
 
     # dashboardReportedParameters is of the form param1=abc,param2=def
     parser.add_option('-d', '--dashboardReportedParameters', dest='dashboardReportedParameters', default=None)
@@ -85,6 +89,8 @@ def main():
     print('cherrypick command is', options.cherrypick)
 
     print('the reportedParameters are', options.dashboardReportedParameters)
+
+    print('retry params are', options.retry_params)
 
     # What do we do with any reported parameters?
     # 1. Append them to the extra (testrunner) parameters
@@ -252,14 +258,18 @@ def main():
 
     # this are VM/Docker dependent - or maybe not
     launchString = launchStringBase + '/buildWithParameters?token=test_dispatcher&' + \
-                   'version_number={0}&confFile={1}&descriptor={2}&component={3}&subcomponent={4}&' + \
-                   'iniFile={5}&parameters={6}&os={7}&initNodes={' \
-                   '8}&installParameters={9}&branch={10}&slave={' \
-                   '11}&owners={12}&mailing_list={13}&mode={14}&timeout={15}'
+                        'version_number={0}&confFile={1}&descriptor={2}&component={3}&subcomponent={4}&' + \
+                         'iniFile={5}&parameters={6}&os={7}&initNodes={' \
+                         '8}&installParameters={9}&branch={10}&slave={' \
+                         '11}&owners={12}&mailing_list={13}&mode={14}&timeout={15}'
+
+    launchString = launchString + '&retry_params=' + urllib.parse.quote(options.retry_params)
+
     if options.url is not None:
         launchString = launchString + '&url=' + options.url
     if options.cherrypick is not None:
         launchString = launchString + '&cherrypick=' + urllib.parse.quote(options.cherrypick)
+
 
     summary = []
 
