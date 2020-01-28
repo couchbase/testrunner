@@ -403,7 +403,7 @@ def _parse_user_input():
         userinput = TestInput.TestInputParser.get_test_input(sys.argv)
     except IndexError:
         print_result_and_exit(install_constants.USAGE)
-    except getopt.GetoptError, err:
+    except (getopt.GetoptError, err):
         print_result_and_exit(str(err))
 
     # Mandatory params

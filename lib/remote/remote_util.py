@@ -1200,9 +1200,9 @@ class RemoteMachineShellConnection:
             else:
                 rpath = remote_path + "/" + f.filename
                 if count < 10:
-                print(('removing %s' % (rpath)))
+                    print(('removing %s' % (rpath)))
                     count += 1
-                sftp.remove(rpath)
+                    sftp.remove(rpath)
         print(('removing %s' % (remote_path)))
         sftp.rmdir(remote_path)
 
@@ -4614,9 +4614,9 @@ class RemoteMachineShellConnection:
                     # This must be opensuse, hack for now....
                     o, r = self.execute_command("cat /etc/SuSE-release")
                     self.log_command_output(o, r)
-                  if o[0] != b"":
-                    o = o[0].split(b" ")
-                    if o[2] in centos_version:
+                    if o[0] != b"":
+                      o = o[0].split(b" ")
+                      if o[2] in centos_version:
                         o, r = self.execute_command("rpm -qa | grep pkgconfig")
                         self.log_command_output(o, r)
                         if not o:

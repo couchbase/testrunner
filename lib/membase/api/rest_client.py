@@ -837,7 +837,7 @@ class RestConnection(object):
         count = 1
         while True:
             try:
-                    response, content = httplib2.Http(timeout=timeout).request(api, method, params, headers=headers)
+                response, content = httplib2.Http(timeout=timeout).request(api, method, params, headers=headers)
                 if response['status'] in ['200', '201', '202']:
                     return True, content, response
                 else:
@@ -3491,10 +3491,10 @@ class RestConnection(object):
             log.info("%s"%api)
         else:
             params = {key : query}
-              if 'creds' in query_params and query_params['creds']:
-                headers = self._create_headers_with_auth(query_params['creds'][0]['user'],
-                                                         query_params['creds'][0]['pass'])
-                del query_params['creds']
+            if 'creds' in query_params and query_params['creds']:
+              headers = self._create_headers_with_auth(query_params['creds'][0]['user'],
+                                                       query_params['creds'][0]['pass'])
+              del query_params['creds']
             params.update(query_params)
             params = urllib.urlencode(params)
             params = urllib.parse.urlencode(params)
@@ -4814,8 +4814,8 @@ class RestConnection(object):
     def enable_ip_version(self, afamily='ipv6'):
         log.info("Start enable {0} on this node {1}".format(afamily, self.baseUrl))
         self.update_autofailover_settings(False, 60)
-        params = urllib.parse.urlencode({'afamily': afamily})
-                                   'nodeEncryption': 'off'})
+        params = urllib.parse.urlencode({'afamily': afamily,
+                                         'nodeEncryption': 'off'})
         api = "{0}node/controller/enableExternalListener".format(self.baseUrl)
         status, content, header = self._http_request(api, 'POST', params)
         if status:

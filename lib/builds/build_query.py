@@ -6,7 +6,7 @@ import time
 import urllib.request, urllib.error, urllib.parse
 import re
 import socket
-import BeautifulSoup
+from bs4 import BeautifulSoup
 import testconstants
 import logger
 import traceback
