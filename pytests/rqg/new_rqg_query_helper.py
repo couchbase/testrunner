@@ -1340,10 +1340,10 @@ class RQGQueryHelperNew(BaseRQGQueryHelper):
                 n1ql_map['window_frame_exclusion'] = ''
 
         converted_sql = 'SELECT char_field1, decimal_field1, '+sql_map['window_function_name']+'('+sql_map['window_function_arguments']+')'+' '+sql_map['nthval_from']+' '+sql_map['nulls_treatment']+\
-                        ' OVER('+sql_map['window_partition']+' '+sql_map['window_order']+' '+sql_map['window_frame']+' '+sql_map['window_frame_exclusion']+') as wf FROM simple_table'
+                        ' OVER('+sql_map['window_partition']+' '+sql_map['window_order']+' '+sql_map['window_frame']+' '+sql_map['window_frame_exclusion']+') as wf FROM simple_table where primary_key_id is not null'
 
         converted_n1ql = 'SELECT char_field1, decimal_field1, '+n1ql_map['window_function_name']+'('+n1ql_map['window_function_arguments']+')'+' '+n1ql_map['nthval_from']+' '+n1ql_map['nulls_treatment']+\
-                        ' OVER('+n1ql_map['window_partition']+' '+n1ql_map['window_order']+' '+n1ql_map['window_frame']+' '+n1ql_map['window_frame_exclusion']+') as wf FROM simple_table'
+                        ' OVER('+n1ql_map['window_partition']+' '+n1ql_map['window_order']+' '+n1ql_map['window_frame']+' '+n1ql_map['window_frame_exclusion']+') as wf FROM simple_table  where primary_key_id is not null'
 
         return converted_sql.lower(), converted_n1ql.lower()
 

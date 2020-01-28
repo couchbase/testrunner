@@ -1,7 +1,7 @@
 import random
-from .mc_bin_client import MemcachedClient, decodeCollectionID
-from .memcacheConstants import *
-import queue
+from mc_bin_client import MemcachedClient,decodeCollectionID
+from memcacheConstants import *
+import Queue
 import time
 
 MAX_SEQNO = 0xFFFFFFFFFFFFFFFF
@@ -53,7 +53,7 @@ class DcpClient(MemcachedClient):
         """ opens an dcp producer connection """
         self.collections = collections
         self.delete_times = delete_times
-        op = OpenProducer(name, xattr, delete_times)
+        op = OpenProducer(name,xattr,delete_times)
         return self._open(op)
 
     def open_notifier(self, name):

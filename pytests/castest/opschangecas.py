@@ -15,7 +15,6 @@ from remote.remote_util import RemoteMachineShellConnection
 
 
 class OpsChangeCasTests(CasBaseTest):
-
     def setUp(self):
         super(OpsChangeCasTests, self).setUp()
 
@@ -186,9 +185,9 @@ class OpsChangeCasTests(CasBaseTest):
                 raise Exception(ex)
 
     def _corrupt_max_cas(self, mcd, key):
-
         # set the CAS to -2 and then mutate to increment to -1 and then it should stop there
-        mcd.setWithMetaInvalid(key, json.dumps({'value':'value2'}), 0, 0, 0, -2)
+        mcd.setWithMetaInvalid(key, json.dumps({'value': 'value2'}),
+                               0, 0, 0, -2)
         # print 'max cas pt1', mcd.getMeta(key)[4]
         mcd.set(key, 0, 0, json.dumps({'value':'value3'}))
         # print 'max cas pt2', mcd.getMeta(key)[4]
@@ -206,7 +205,8 @@ class OpsChangeCasTests(CasBaseTest):
         client = VBucketAwareMemcached(rest, 'default')
 
         # set a key
-        client.memcached(KEY_NAME).set(KEY_NAME, 0, 0, json.dumps({'value':'value1'}))
+        client.memcached(KEY_NAME).set(KEY_NAME, 0, 0,
+                                       json.dumps({'value': 'value1'}))
 
         # figure out which node it is on
         mc_active = client.memcached(KEY_NAME)
@@ -223,16 +223,17 @@ class OpsChangeCasTests(CasBaseTest):
         # remove that node
         self.log.info('Remove the node with -1 max cas')
 
-        rebalance = self.cluster.async_rebalance(self.servers[-1:], [], [self.master])
-        # rebalance = self.cluster.async_rebalance([self.master], [], self.servers[-1:])
-
+        rebalance = self.cluster.async_rebalance(self.servers[-1:],
+                                                 [],
+                                                 [self.master])
         rebalance.result()
         replica_CAS = mc_replica.getMeta(KEY_NAME)[4]
 
         # add the node back
         self.log.info('Add the node back, the max_cas should be healed')
-        rebalance = self.cluster.async_rebalance(self.servers[-1:], [self.master], [])
-        # rebalance = self.cluster.async_rebalance([self.master], self.servers[-1:],[])
+        rebalance = self.cluster.async_rebalance(self.servers[-1:],
+                                                 [self.master],
+                                                 [])
 
         rebalance.result()
 
@@ -250,10 +251,11 @@ class OpsChangeCasTests(CasBaseTest):
         KEY_NAME = 'key1'
 
         rest = RestConnection(self.master)
-        client = VBucketAwareMemcached(rest, 'default')
 
         # set a key
-        client.memcached(KEY_NAME).set(KEY_NAME, 0, 0, json.dumps({'value':'value1'}))
+        client = VBucketAwareMemcached(rest, 'default')
+        client.memcached(KEY_NAME).set(KEY_NAME, 0, 0,
+                                       json.dumps({'value': 'value1'}))
         # client.memcached(KEY_NAME).set('k2', 0, 0,json.dumps({'value':'value2'}))
 
         # figure out which node it is on
@@ -261,10 +263,7 @@ class OpsChangeCasTests(CasBaseTest):
 
         # set the CAS to -2 and then mutate to increment to -1 and then it should stop there
         self._corrupt_max_cas(mc_active, KEY_NAME)
-
-        # print 'max cas k2', mc_active.getMeta('k2')[4]
-
-        # CAS should be 0 now, do some gets and sets to verify that nothing bad happens
+        corrupt_cas = mc_active.getMeta(KEY_NAME)[4]
 
         # self._restart_memcache('default')
         remote = RemoteMachineShellConnection(self.master)
@@ -273,12 +272,13 @@ class OpsChangeCasTests(CasBaseTest):
         remote.start_server()
         time.sleep(30)
 
-        rest = RestConnection(self.master)
         client = VBucketAwareMemcached(rest, 'default')
         mc_active = client.memcached(KEY_NAME)
 
-        maxCas = mc_active.getMeta(KEY_NAME)[4]
-        self.assertTrue(maxCas == 0, 'max cas after reboot is not 0 it is {0}'.format(maxCas))
+        curr_cas = mc_active.getMeta(KEY_NAME)[4]
+        self.assertTrue(curr_cas == corrupt_cas,
+                        'Corrupted cas (%s) != curr_cas (%s)'
+                        % (corrupt_cas, curr_cas))
 
     #MB-21448 bug test
     #Description: REPLACE_WITH_CAS on a key that has recently been deleted and then requested 

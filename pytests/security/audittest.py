@@ -18,6 +18,7 @@ from testconstants import MAC_COUCHBASE_BIN_PATH
 from random import randint
 from datetime import datetime
 import subprocess
+import commands
 import logger
 import urllib.request, urllib.parse, urllib.error
 from security.auditmain import audit
@@ -60,6 +61,10 @@ class auditTest(BaseTestCase):
         return ipAddress
         '''
 
+    def getLocalIPV6Address(self):
+        result = socket.getaddrinfo(socket.gethostname(), 0, socket.AF_INET6)
+        return result[0][4][0]
+
     def setupLDAPSettings (self, rest):
         api = rest.baseUrl + 'settings/saslauthdAuth'
         params = urllib.parse.urlencode({"enabled":'true',"admins":[],"roAdmins":[]})
@@ -80,8 +85,8 @@ class auditTest(BaseTestCase):
     #Check to make sure the audit code DOES NOT appear in the logs (for audit n1ql filtering)
     def checkFilter(self, eventID, host):
         Audit = audit(eventID=eventID, host=host)
-        exists, entry = Audit.validateEmpty()
-        self.assertTrue(exists, "There was an audit entry found. Audits for the code %s should not be logged. Here is the entry: %s" % (eventID, entry))
+        not_exists, entry = Audit.validateEmpty()
+        self.assertTrue(not_exists, "There was an audit entry found. Audits for the code %s should not be logged. Here is the entry: %s" % (eventID, entry))
 
 
     #Tests to check for bucket events
@@ -90,6 +95,9 @@ class auditTest(BaseTestCase):
         user = self.master.rest_username
         source = 'ns_server'
         rest = RestConnection(self.master)
+
+        if "ip6" in self.master.ip or self.master.ip.startswith("["):
+            self.ipAddress = self.getLocalIPV6Address()
 
         if (ops in ['create']):
             expectedResults = {'bucket_name':'TestBucket', 'ram_quota':104857600, 'num_replicas':1,
@@ -218,7 +226,7 @@ class auditTest(BaseTestCase):
             type = self.input.param('type', None)
             self.cluster.failover(self.servers, servs_inout)
             self.cluster.rebalance(self.servers, [], [])
-            expectedResults = {'source':source, 'user':self.master.rest_username, "ip":self.ipAddress, "port":57457, 'type':type, 'nodes':'ns_1@' + servs_inout[0].ip}
+            expectedResults = {'source':source, 'user':self.master.rest_username, "ip":self.ipAddress, "port":57457, 'type':type, 'nodes':'[ns_1@' + servs_inout[0].ip + ']'}
 
         if (ops == 'nodeRecovery'):
             expectedResults = {'node':'ns_1@' + servs_inout[0].ip, 'type':'delta', 'source':source, 'user':self.master.rest_username, "ip":self.ipAddress, "port":57457}
@@ -247,7 +255,7 @@ class auditTest(BaseTestCase):
             #Get a REST Command for loading sample
 
         elif (ops == 'enableAutoFailover'):
-            expectedResults = {'max_nodes':1, "timeout":120, 'source':source, "user":user, 'ip':self.ipAddress, 'port':12345}
+            expectedResults = {'max_nodes':1, "timeout":120, 'source':source, "user":user, 'ip':self.ipAddress, 'port':12345,'failover_server_group':False}
             rest.update_autofailover_settings(True, expectedResults['timeout'])
 
         elif (ops == 'disableAutoFailover'):
@@ -586,7 +594,7 @@ class auditTest(BaseTestCase):
         os_type = shell.extract_remote_info().distribution_type
         log.info ("OS type is {0}".format(os_type))
         if os_type == 'windows':
-          command = "%smcstat.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH_RAW)
+     	     command = "%smcstat.exe" % (testconstants.WIN_COUCHBASE_BIN_PATH_RAW)
         else:
              command = "%smcstat" % (testconstants.LINUX_COUCHBASE_BIN_PATH)
 

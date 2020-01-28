@@ -1,21 +1,24 @@
 from .newupgradebasetest import NewUpgradeBaseTest
 import queue
 import copy
-from membase.helper.cluster_helper import ClusterOperationHelper
 import threading
 from random import randint
 from remote.remote_util import RemoteMachineShellConnection
 from couchbase_helper.tuq_helper import N1QLHelper
+from pytests.eventing.eventing_helper import EventingHelper
 from eventing.eventing_base import EventingBaseTest
-from pytests.eventing.eventing_constants import HANDLER_CODE
 from lib.testconstants import STANDARD_BUCKET_PORT
 from membase.api.rest_client import RestConnection, RestHelper
-from couchbase_helper.documentgenerator import BlobGenerator
 from membase.helper.bucket_helper import BucketOperationHelper
+from membase.helper.cluster_helper import ClusterOperationHelper
+from pytests.eventing.eventing_constants import HANDLER_CODE
+from remote.remote_util import RemoteMachineShellConnection
+from newupgradebasetest import NewUpgradeBaseTest
+from rebalance.rebalance_base import RebalanceBaseTest
 
 
 
-class UpgradeTests(NewUpgradeBaseTest):
+class UpgradeTests(NewUpgradeBaseTest, EventingBaseTest):
 
     def setUp(self):
         super(UpgradeTests, self).setUp()
@@ -44,8 +47,11 @@ class UpgradeTests(NewUpgradeBaseTest):
         self.dst_bucket_name = self.input.param('dst_bucket_name', 'dst_bucket')
         self.dst_bucket_name1 = self.input.param('dst_bucket_name1', 'dst_bucket1')
         self.metadata_bucket_name = self.input.param('metadata_bucket_name', 'metadata')
+        self.source_bucket_mutation_name = self.input.param('source_bucket_mutation_name', 'source_bucket_mutation')
+        self.dst_bucket_curl_name = self.input.param('dst_bucket_curl_name', 'dst_bucket_curl')
         self.create_functions_buckets = self.input.param('create_functions_buckets', True)
         self.use_memory_manager = self.input.param('use_memory_manager', True)
+        self.test_upgrade_with_xdcr = self.input.param('xdcr', False)
         self.final_events = []
         self.n1ql_helper = None
         self.total_buckets = 1
@@ -136,6 +142,10 @@ class UpgradeTests(NewUpgradeBaseTest):
                                            self.after_upgrade_services_in, start_node = 0)
         self.fts_obj = None
         self.index_name_prefix = None
+        if self.test_upgrade_with_xdcr:
+            from pytests.xdcr.xdcr_callable import XDCRCallable
+            # Setup XDCR src and target clusters
+            self.xdcr_handle = XDCRCallable(self.servers[:self.nodes_init])
 
     def tearDown(self):
         super(UpgradeTests, self).tearDown()
@@ -797,6 +807,12 @@ class UpgradeTests(NewUpgradeBaseTest):
                                                 bucket_params=bucket_params)
             self.cluster.create_standard_bucket(name=self.metadata_bucket_name, port=STANDARD_BUCKET_PORT + 1,
                                                 bucket_params=bucket_params)
+            self.cluster.create_standard_bucket(name=self.dst_bucket_name1, port=STANDARD_BUCKET_PORT + 1,
+                                                bucket_params=bucket_params)
+            self.cluster.create_standard_bucket(name=self.source_bucket_mutation_name, port=STANDARD_BUCKET_PORT + 1,
+                                                bucket_params=bucket_params)
+            self.cluster.create_standard_bucket(name=self.dst_bucket_curl_name, port=STANDARD_BUCKET_PORT + 1,
+                                                bucket_params=bucket_params)
             self.buckets = RestConnection(self.master).get_buckets()
             self.gens_load = self.generate_docs(self.docs_per_day)
             self.expiry = 3
@@ -806,18 +822,17 @@ class UpgradeTests(NewUpgradeBaseTest):
             self.rest = RestConnection(self.restServer)
             self.load(self.gens_load, buckets=self.buckets, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
-            function_name = "Function_{0}_{1}".format(randint(1, 1000000000), self._testMethodName)
-            self.function_name = function_name[0:90]
-            body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_ON_UPDATE, worker_count=3)
-            bk_events_created = False
-            rs_events_created = False
-            try:
-                self.deploy_function(body)
-                bk_events_created = True
-                self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
-            except Exception as e:
-                self.log.error(e)
-            finally:
+
+            event = EventingHelper(servers=self.servers,master=self.master)
+            event.deploy_bucket_op_function()
+            event.verify_documents_in_destination_bucket('test_import_function_1', 1, 'dst_bucket')
+            event.undeploy_bucket_op_function()
+            event.deploy_curl_function()
+            event.verify_documents_in_destination_bucket('bucket_op_curl', 1, 'dst_bucket_curl')
+            event.undeploy_curl_function()
+            event.deploy_sbm_function()
+            event.verify_documents_in_destination_bucket('bucket_op_sbm', 1, 'source_bucket_mutation')
+            event.undeploy_sbm_function()
                 self.undeploy_and_delete_function(body)
         except Exception as e:
             self.log.info(e)
@@ -1011,6 +1026,62 @@ class UpgradeTests(NewUpgradeBaseTest):
         except Exception as ex:
             raise
 
+    def auto_retry_with_rebalance_in(self, queue=None):
+        self.change_retry_rebalance_settings(True, 300, 1)
+        rebalance_in = False
+        service_in = copy.deepcopy(self.after_upgrade_services_in)
+        if service_in is None:
+            service_in = ["kv"]
+        free_nodes = self._convert_server_map(self._get_free_nodes())
+        free_node_in = []
+        if not free_nodes.values():
+            raise Exception("No free node available to rebalance in")
+        try:
+            self.nodes_in_list = self.out_servers_pool.values()[:self.nodes_in]
+            if int(self.nodes_in) == 1:
+                if len(free_nodes.keys()) > 1:
+                    free_node_in = [free_nodes.values()[0]]
+                    if len(self.after_upgrade_services_in) > 1:
+                        service_in = [self.after_upgrade_services_in[0]]
+                else:
+                    free_node_in = free_nodes.values()
+                self.log.info("<<<=== rebalance_in node {0} with services {1}" \
+                              .format(free_node_in, service_in[0]))
+                shell = RemoteMachineShellConnection(free_node_in[0])
+                shell.stop_server()
+                rebalance = \
+                    self.cluster.async_rebalance(self.servers[:self.nodes_init],
+                                                 free_node_in,
+                                                 [], services=service_in)
+
+            rebalance.result()
+            self.in_servers_pool.update(free_nodes)
+            rebalance_in = True
+            if any("index" in services for services in service_in):
+                self.log.info("Set storageMode to forestdb after add "
+                              "index node {0} to cluster".format(free_nodes.keys()))
+                RestConnection(free_nodes.values()[0]).set_indexer_storage_mode()
+            if self.after_upgrade_services_in and \
+                    len(self.after_upgrade_services_in) > 1:
+                self.log.info("remove service '{0}' from service list after "
+                              "rebalance done ".format(self.after_upgrade_services_in[0]))
+                self.after_upgrade_services_in.pop(0)
+            self.sleep(10, "wait 10 seconds after rebalance")
+            if free_node_in and free_node_in[0] not in self.servers:
+                self.servers.append(free_node_in[0])
+        except Exception, ex:
+            self.log.info("Rebalance failed with : {0}".format(str(ex)))
+            self.check_retry_rebalance_succeeded()
+            if queue is not None:
+                queue.put(False)
+        else:
+            self.fail("Rebalance did not fail as expected. Hence could not validate auto-retry feature..")
+        finally:
+            self.start_server(free_node_in[0])
+        if rebalance_in and queue is not None:
+            queue.put(True)
+
+
     def kv_ops_initialize(self, queue=None):
         try:
             self.log.info("kv_ops_initialize")
@@ -1176,6 +1247,38 @@ class UpgradeTests(NewUpgradeBaseTest):
             self.fts_obj = self.create_fts_index_query_compare()
             return self.fts_obj
         except Exception as ex:
+            self.log.info(ex)
+            if queue is not None:
+                queue.put(False)
+        if queue is not None:
+            queue.put(True)
+
+    def xdcr_create_replication(self):
+        try:
+            self.xdcr_handle._create_replication()
+        except Exception, ex:
+            self.log.info(ex)
+
+    def xdcr_set_replication_properties(self):
+        try:
+            param_str = self.__input.param(
+                "%s@%s" %
+                ("default", "C"), None)
+            self.xdcr_handle._set_replication_properties(param_str)
+        except Exception, ex:
+            self.log.info(ex)
+
+    def xdcr_get_replication_properties(self):
+        try:
+            self.xdcr_handle._get_replication_properties()
+        except Exception, ex:
+            self.log.info(ex)
+
+    def create_n1ql_index_query(self, queue=None):
+        try:
+            self.create_n1ql_index_and_query()
+            #return self.n1ql_obj
+        except Exception, ex:
             self.log.info(ex)
             if queue is not None:
                 queue.put(False)

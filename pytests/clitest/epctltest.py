@@ -22,7 +22,10 @@ class epctlTests(CliBaseTest):
     def epctl_test(self):
         """We use cbepctl to do persistence or set param operatins and verify
         verify the result by checking the command output"""
-
+        if self.cb_version[:5] == "6.5.0":
+            self.log.info("\n\n******* Due to issue in MB-36904, \
+                           \nthis test will be skipped in 6.5.0 ********\n")
+            return
         for bucket in self.buckets:
             if self.cb_version[:5] in COUCHBASE_FROM_WATSON:
                 if self.param == "item_num_based_new_chk":

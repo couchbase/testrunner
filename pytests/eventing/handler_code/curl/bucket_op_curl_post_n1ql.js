@@ -16,7 +16,7 @@ function OnUpdate(doc, meta) {
     	if(response.status == 200){
     	    var id=meta.id;
     	    var status= response.status;
-    	    var query= INSERT into dst_bucket (KEY, VALUE) VALUES ($id, $status);
+    	    var query= UPSERT into dst_bucket (KEY, VALUE) VALUES ($id, $status);
     	}
     }
     catch (e) {

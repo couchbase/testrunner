@@ -336,7 +336,7 @@ class QueryAutoPrepareTests(QueryTests):
 
             self.run_cbq_query(query="PREPARE P1 FROM select * from default WHERE join_day = 10 limit 5",
                                server=self.servers[0])
-            self.sleep(5)
+            self.sleep(30)
             prepared_results = self.run_cbq_query(query="select * from system:prepareds")
             self.assertEqual(prepared_results['metrics']['resultCount'], self.nodes_init, "Count mismatch dumping results from system:prepareds: " % prepared_results)
 
@@ -352,7 +352,7 @@ class QueryAutoPrepareTests(QueryTests):
             self.rest.create_bucket(bucket="default", ramQuotaMB=100)
             self.wait_for_buckets_status({"default": "healthy"}, 5, 120)
             # this sleep is need because index deletion after bucket deletion is async
-            self.sleep(5)
+            self.sleep(60)
             self.wait_for_index_drop("default", "idx", [("join_day", 0)], self.index_type.lower())
             self.run_cbq_query(query="CREATE INDEX idx on default(join_day)")
             self._wait_for_index_online("default", "idx")

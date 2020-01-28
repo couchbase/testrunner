@@ -7,10 +7,13 @@ function OnUpdate(doc,meta) {
     createTimer(DocTimerCallback, expiry, meta.id, context);
 }
 function DocTimerCallback(context) {
+    while(true){
     try {
         src_bucket[context.docID] = context.random_text;
+        break;
     } catch(e) {
         log(e);
+    }
     }
 }
 function random_gen(){

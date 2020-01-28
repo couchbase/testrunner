@@ -5,7 +5,7 @@ Copyright (c) 2007  Dustin Sallings <dustin@spy.net>
 """
 
 import array
-import builtins as exceptions
+import exceptions
 import hmac
 import json
 import random
@@ -87,7 +87,7 @@ class MemcachedErrorMetaclass(type):
         return (super(MemcachedErrorMetaclass, cls)
                 .__call__(*args, **kwargs))
 
-class MemcachedError(exceptions.Exception, metaclass=MemcachedErrorMetaclass):
+class MemcachedError(exceptions.Exception):
     """Error raised when a command fails."""
 
     def __init__(self, status, msg):
@@ -296,18 +296,18 @@ class MemcachedClient(object):
         """Decrement or create the named counter."""
         return self.__incrdecr(memcacheConstants.CMD_DECR, key, amt, init, exp, collection)
 
-    def _doMetaCmd(self, cmd, key, value, cas, exp, flags, seqno, remote_cas, options, meta_len, collection):
-        extra = struct.pack('>IIQQIH', flags, exp, seqno, remote_cas, options, meta_len)
-        return self._doCmd(cmd, key, value, extra, cas, collection)
+    def _doMetaCmd(self, cmd, key, value, cas, exp, flags, seqno, remote_cas):
+        extra = struct.pack('>IIQQ', flags, exp, seqno, remote_cas)
+        return self._doCmd(cmd, key, value, extra, cas)
 
     def set(self, key, exp, flags, val, collection=None):
         """Set a value in the memcached server."""
         return self._mutate(memcacheConstants.CMD_SET, key, exp, flags, 0, val, collection)
 
-    def setWithMeta(self, key, value, exp, flags, seqno, remote_cas, options, meta_len, collection=None):
+    def setWithMeta(self, key, value, exp, flags, seqno, remote_cas):
         """Set a value and its meta data in the memcached server."""
         return self._doMetaCmd(memcacheConstants.CMD_SET_WITH_META,
-                               key, value, 0, exp, flags, seqno, remote_cas, options, meta_len, collection)
+                               key, value, 0, exp, flags, seqno, remote_cas)
 
     def delWithMeta(self, key, exp, flags, seqno, remote_cas, collection=None):
         return self._doMetaCmd(memcacheConstants.CMD_DELETE_WITH_META,
@@ -422,7 +422,7 @@ class MemcachedClient(object):
         return self._doCmd(memcacheConstants.CMD_START_PERSISTENCE, '', '')
 
     def set_param(self, vbucket, key, val, type):
-        print("setting param:", key, val)
+        self.log.info("setting flush param: {} {}".format(key, val))
         self.vbucketId = vbucket
         type = struct.pack(memcacheConstants.SET_PARAM_FMT, type)
         return self._doCmd(memcacheConstants.CMD_SET_PARAM, key, val, type)
@@ -633,7 +633,7 @@ class MemcachedClient(object):
         if not self.is_collections_supported():
                 raise exceptions.RuntimeError("Collections are not enabled")
 
-        if isinstance(collection, str):
+        if type(collection) == str:
             # expect scope.collection for name API
             try:
                 collection = self.collection_map[collection]
@@ -662,5 +662,5 @@ class MemcachedClient(object):
         parsed = json.loads(manifest)
         for scope in parsed['scopes']:
             for collection in scope['collections']:
-                key = scope['name'] + "." + collection['name']
-                self.collection_map[key] = int(collection['uid'], 16)
+                key = scope[u'name'] + "." + collection[u'name']
+                self.collection_map[key] = int(collection[u'uid'],16)

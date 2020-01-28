@@ -362,9 +362,12 @@ class CreateMembaseBucketsTests(unittest.TestCase):
         info = rest.get_nodes_self()
         rest.init_cluster(username=serverInfo.rest_username,
                           password=serverInfo.rest_password)
-        rest.init_cluster_memoryQuota(memoryQuota=info.mcdMemoryReserved)
         bucket_num = rest.get_internalSettings("maxBucketCount")
+        log.info("max # buckets allow in cluster: {0}".format(bucket_num))
         bucket_ram = 100
+        cluster_ram = info.memoryQuota
+        max_buckets = cluster_ram / bucket_ram
+        log.info("RAM setting for this cluster: {0}".format(cluster_ram))
         testuser = [{'id': 'cbadminbucket', 'name': 'cbadminbucket',
                                                 'password': 'password'}]
         rolelist = [{'id': 'cbadminbucket', 'name': 'cbadminbucket',
@@ -374,17 +377,20 @@ class CreateMembaseBucketsTests(unittest.TestCase):
 
 
 
-        for i in range(bucket_num):
+        for i in range(max_buckets):
             bucket_name = 'max_buckets-{0}'.format(uuid.uuid4())
             rest.create_bucket(bucket=bucket_name,
                                ramQuotaMB=bucket_ram,
                                authType='sasl', proxyPort=proxyPort)
             ready = BucketOperationHelper.wait_for_memcached(serverInfo, bucket_name)
+            log.info("kv RAM left in cluster: {0}".format(cluster_ram - 100))
+            cluster_ram -= bucket_ram
             self.assertTrue(ready, "wait_for_memcached failed")
 
         buckets = rest.get_buckets()
-        if len(buckets) != bucket_num:
-            msg = 'tried to create {0} buckets, only created {1}'.format(bucket_count, len(buckets))
+        if len(buckets) != max_buckets:
+            msg = 'tried to create {0} buckets, only created {1}'\
+                               .format(bucket_count, len(buckets))
             self.fail(msg)
         try:
             rest.create_bucket(bucket=bucket_name,
@@ -393,11 +399,12 @@ class CreateMembaseBucketsTests(unittest.TestCase):
             msg = 'bucket creation did not fail even though system was overcommited'
             self.fail(msg)
         except BucketCreationException as ex:
-            self.log.info('BucketCreationException was thrown as expected when we try to create {0} buckets'.
-                          format(bucket_num + 1))
+            log.info('\n******\nBucketCreationException was thrown as expected when\
+                           we try to create {0} buckets'.format(max_buckets + 1))
         buckets = rest.get_buckets()
-        if len(buckets) != bucket_num:
-            msg = 'tried to create {0} buckets, only created {1}'.format(bucket_num + 1, len(buckets))
+        if len(buckets) != max_buckets:
+            msg = 'tried to create {0} buckets, only created {1}'\
+                                           .format(max_buckets + 1, len(buckets))
             self.fail(msg)
 
 

@@ -72,8 +72,12 @@ class BackupRestoreValidationBase:
                 if key not in extra:
                     extra[key] = []
                 extra[key].append(actual[key])
+        """ from 7.0, there are 2 keys with value None """
+        keys_with_value_none = ["exclude_buckets", "include_buckets"]
         for expected_key in list(expected.keys()):
             if expected_key in actual:
+                if expected_key in keys_with_value_none:
+                    continue
                 if not isinstance(expected[expected_key], dict) and not isinstance(expected[expected_key], list):
                     if str(expected[expected_key]) != str(actual[expected_key]):
                         is_equal = False
@@ -143,7 +147,15 @@ class BackupRestoreValidationBase:
             data = complete_map[bucket]
             for key in data:
                 value = data[key]
-                value = ",".join(value.split(',')[4:5])
+                if '"b\'' in value:
+                    value = ",".join(value.split(',')[4:8])
+                else:
+                    value = ",".join(value.split(',')[4:5])
+                value = value.replace('""', '"')
+                if value.startswith('"b\''):
+                    value = value[3:-2]
+                elif value.startswith("b"):
+                    value = value.split(',')[0]
                 data[key] = value
             with open(file_path, 'w') as f:
                 json.dump(data, f)

@@ -176,7 +176,8 @@ class RbacN1QL(QueryTests):
                 (self.curl_path, self.users[0]['id'], self.users[0]['password'], self.master.ip, self.buckets[0].name)
         output, error = shell.execute_command(cmd)
         shell.log_command_output(output, error)
-        if "views_admin" in self.roles[0]['roles']:
+
+        if "views_admin" in self.roles[0]['roles'] or "bucket_admin(bucket0)" in self.roles[0]['roles']:
             self.assertTrue(any("success" not in line for line in output), "Able to create index on {0} as user {1}".
                         format(self.buckets[0].name, self.users[0]['id']))
             self.log.info("Create Query failed as expected")
@@ -189,7 +190,7 @@ class RbacN1QL(QueryTests):
                 (self.curl_path, self.users[0]['id'], self.users[0]['password'], self.master.ip, self.buckets[0].name)
         output, error = shell.execute_command(cmd)
         shell.log_command_output(output, error)
-        if "views_admin" in self.roles[0]['roles']:
+        if "views_admin" in self.roles[0]['roles'] or "bucket_admin(bucket0)" in self.roles[0]['roles']:
             self.assertTrue(any("success" not in line for line in output), "Able to build index on {0} as user {1}".
                         format(self.buckets[0].name, self.users[0]['id']))
             self.log.info("Build Query failed as expected")

@@ -36,7 +36,7 @@ from testconstants import SHERLOCK_VERSION
 from testconstants import CB_VERSION_NAME
 from testconstants import COUCHBASE_MP_VERSION
 from testconstants import CE_EE_ON_SAME_FOLDER
-from testconstants import STANDARD_BUCKET_PORT
+from testconstants import STANDARD_BUCKET_PORT, IPV4_REGEX
 
 class NewUpgradeBaseTest(QueryHelperTests, EventingBaseTest, FTSBaseTest):
     def setUp(self):
@@ -50,10 +50,13 @@ class NewUpgradeBaseTest(QueryHelperTests, EventingBaseTest, FTSBaseTest):
         self.use_hostnames = self.input.param("use_hostnames", False)
         self.product = self.input.param('product', 'couchbase-server')
         self.initial_version = self.input.param('initial_version', '2.5.1-1083')
+        self.use_domain_name = self.input.param('use_domain_names', 0)
         self.initial_vbuckets = self.input.param('initial_vbuckets', 1024)
+        self.clean_upgrade_install = self.input.param("clean_upgrade_install", True)
         self.upgrade_versions = self.input.param('upgrade_version', '4.1.0-4963')
         self.upgrade_versions = self.upgrade_versions.split(";")
         self.skip_cleanup = self.input.param("skip_cleanup", False)
+        self.debug_logs = self.input.param("debug_logs", False)
         self.init_nodes = self.input.param('init_nodes', True)
 
         self.is_downgrade = self.input.param('downgrade', False)
@@ -93,8 +96,8 @@ class NewUpgradeBaseTest(QueryHelperTests, EventingBaseTest, FTSBaseTest):
         self.metadata_bucket_name = self.input.param('metadata_bucket_name', 'metadata')
         self.cb_bucket_name = self.input.param('cb_bucket_name', 'travel-sample')
         self.cb_server_ip = self.input.param("cb_server_ip", None)
-        self.cbas_bucket_name = self.input.param('cbas_bucket_name', 'travel')
-        self.cbas_dataset_name = self.input.param("cbas_dataset_name", 'travel_ds')
+        self.cbas_bucket_name = self.input.param('cbas_bucket_name', 'travel-sample')
+        self.cbas_dataset_name = self.input.param("cbas_dataset_name", 'travel')
         self.cbas_dataset_name_invalid = self.input.param('cbas_dataset_name_invalid',
                                                                 self.cbas_dataset_name)
         self.cbas_bucket_name_invalid = self.input.param('cbas_bucket_name_invalid',
@@ -186,6 +189,8 @@ class NewUpgradeBaseTest(QueryHelperTests, EventingBaseTest, FTSBaseTest):
         params['version'] = self.initial_version
         params['vbuckets'] = [self.initial_vbuckets]
         params['init_nodes'] = self.init_nodes
+        params['debug_logs'] = self.debug_logs
+        params['use_domain_names'] = self.use_domain_name
         if 5 <= int(self.initial_version[:1]) or 5 <= int(self.upgrade_versions[0][:1]):
             params['fts_query_limit'] = 10000000
         if version:
@@ -223,13 +228,12 @@ class NewUpgradeBaseTest(QueryHelperTests, EventingBaseTest, FTSBaseTest):
                 server.hostname = hostname
 
     def operations(self, servers, services=None):
+        set_services = services
         if services is not None:
             if "-" in services:
                 set_services = services.split("-")
             else:
                 set_services = services.split(",")
-        else:
-            set_services = services
 
         if 4.5 > float(self.initial_version[:3]):
             self.gsi_type = "forestdb"
@@ -410,10 +414,14 @@ class NewUpgradeBaseTest(QueryHelperTests, EventingBaseTest, FTSBaseTest):
     def verification(self, servers, check_items=True):
         if self.use_hostnames:
             for server in servers:
+                is_server_with_ipv4 = re.match(IPV4_REGEX, server.ip)
+                if is_server_with_ipv4:
+                    self.fail("ini file needs hostname in server ip to run")
                 node_info = RestConnection(server).get_nodes_self()
                 new_hostname = node_info.hostname
-                self.assertEqual("%s:%s" % (server.hostname, server.port), new_hostname,
-                                 "Hostname is incorrect for server %s. Settings are %s" % (server.ip, new_hostname))
+                self.assertEqual("{0}:{1}".format(server.ip, server.port), new_hostname,
+                                 "Hostname is incorrect for server {0}. Settings are {1}"\
+                                 .format(server.ip, new_hostname))
         if self.master.ip != self.rest.ip or \
            self.master.ip == self.rest.ip and str(self.master.port) != str(self.rest.port):
             if self.port:
@@ -1097,17 +1105,17 @@ class NewUpgradeBaseTest(QueryHelperTests, EventingBaseTest, FTSBaseTest):
             else:
                 return True
 
-    def create_dataset_on_bucket(self, cbas_bucket_name, cbas_dataset_name,
+    def create_dataset_on_bucket(self, cbas_dataset_name, cbas_bucket_name,
                                  where_field=None, where_value = None,
                                  validate_error_msg=False, username = None,
                                  password = None):
         """
         Creates a shadow dataset on a CBAS bucket
         """
-        cmd_create_dataset = "create shadow dataset {0} on {1};".format(
+        cmd_create_dataset = "create dataset {0} on `{1}`".format(
             cbas_dataset_name, cbas_bucket_name)
         if where_field and where_value:
-            cmd_create_dataset = "create shadow dataset {0} on {1} WHERE `{2}`=\"{3}\";"\
+            cmd_create_dataset = "create dataset {0} on {1} WHERE `{2}`=\"{3}\";"\
                                               .format(cbas_dataset_name, cbas_bucket_name,
                                                       where_field, where_value)
         status, metrics, errors, results, _ = \
@@ -1123,18 +1131,15 @@ class NewUpgradeBaseTest(QueryHelperTests, EventingBaseTest, FTSBaseTest):
                 return True
 
     def test_create_dataset_on_bucket(self):
-        # Create bucket on CBAS
-        self.create_bucket_on_cbas(cbas_bucket_name=self.cbas_bucket_name,
-                                   cb_bucket_name=self.cb_bucket_name,
-                                   cb_server_ip=self.cb_server_ip)
-
-        # Create dataset on the CBAS bucket
         result = self.create_dataset_on_bucket(
-            cbas_bucket_name=self.cbas_bucket_name_invalid,
             cbas_dataset_name=self.cbas_dataset_name,
+            cbas_bucket_name=self.cbas_bucket_name,
             validate_error_msg=self.validate_error)
         if not result:
-            self.fail("FAIL : Actual error msg does not match the expected")
+            if self.validate_error:
+                self.fail("FAIL : Actual error msg does not match the expected")
+            else:
+                self.fail("Failed to create data set on bucket")
 
     def create_replica_index(self):
         self.log.info("create_index")

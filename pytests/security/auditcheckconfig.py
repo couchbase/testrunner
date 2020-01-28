@@ -145,7 +145,7 @@ class auditcheckconfig(BaseTestCase):
                                "descriptors_path":self.changePathWindows(auditIns.getAuditConfigElement('descriptors_path')),
                                "log_path":self.changePathWindows((auditIns.getAuditLogPath())[:-1]), "source":"internal",
                                "user":"couchbase", "rotate_interval":86400, "version":2, 'hostname':self.getHostName(self.master),
-                               "uuid":"64333612"}
+                               "uuid":"111731321"}
             self.checkConfig(self.AUDITCONFIGRELOAD, self.master, expectedResults)
 
     #Test error on setting of Invalid Log file path
@@ -564,7 +564,7 @@ class auditCLITest(CliBaseTest):
         tempEnable = auditIns.getAuditStatus()
         try:
             cli_command = 'setting-audit'
-            options = "--audit-enable=0"
+            options = "--audit-enabled=0"
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
                         options=options, cluster_host="localhost", user=self.ldapUser, password=self.ldapPass)
             tempEnable = auditIns.getAuditStatus()
@@ -573,7 +573,7 @@ class auditCLITest(CliBaseTest):
                 log_path = audit.WINLOGFILEPATH
             else:
                 log_path = audit.LINLOGFILEPATH
-            options = "--audit-enable=1 --audit-log-path=" + log_path
+            options = "--audit-enabled=1 --audit-log-path=" + log_path
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
                         options=options, cluster_host="localhost", user=self.ldapUser, password=self.ldapPass)
             tempEnable = auditIns.getAuditStatus()

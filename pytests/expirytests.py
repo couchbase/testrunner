@@ -10,7 +10,7 @@ import uuid
 import logger
 import time
 import datetime
-from membase.api.rest_client import RestConnection
+from membase.api.rest_client import RestConnection, RestHelper
 from membase.api.tap import TapConnection
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
@@ -24,12 +24,6 @@ class ExpiryTests(unittest.TestCase):
     _servers = None
     _bucket_port = None
     _bucket_name = None
-
-    def suite_setUp(self):
-        self.log.info("suite_setUp...")
-
-    def suite_tearDown(self):
-        self.log.info("suite_tearDown...")
 
     def setUp(self):
         self.log = logger.Logger.get_logger()
@@ -56,12 +50,13 @@ class ExpiryTests(unittest.TestCase):
         # Assign user to role
         role_list = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'roles': 'admin'}]
         RbacBase().add_user_role(role_list, RestConnection(self.master), 'builtin')
-        
-        self.log.info("-->create_bucket: {},{},{}".format(self._bucket_name,bucket_ram,info.memcached))
+
         rest.create_bucket(bucket=self._bucket_name,
                            ramQuotaMB=bucket_ram,
                            proxyPort=info.memcached)
-        
+        bucket_ready = RestHelper(rest).vbucket_map_ready(self._bucket_name)
+        if not bucket_ready:
+            self.fail("bucket {0} not ready after 120 seconds".format(self._bucket_name))
         msg = 'create_bucket succeeded but bucket "default" does not exist'
         
         if (testconstants.TESTRUNNER_CLIENT in list(os.environ.keys())) and os.environ[testconstants.TESTRUNNER_CLIENT] == testconstants.PYTHON_SDK:
@@ -93,7 +88,6 @@ class ExpiryTests(unittest.TestCase):
     # test case to set 1000 keys and verify that those keys are stored
     #e1
     def test_expired_keys(self):
-        self.log.info("--> in test_expired_keys...")
         serverInfo = self.master
         client = self.client
         expirations = [2, 5, 10]

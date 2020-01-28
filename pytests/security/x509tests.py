@@ -153,10 +153,13 @@ class x509tests(BaseTestCase):
             return False
 
     def _sdk_connection(self, root_ca_path=x509main.CACERTFILEPATH + x509main.CACERTFILE, bucket='default', host_ip=None):
-        self.sleep(30)
+        self.sleep(10)
         result = False
         self.add_built_in_server_user([{'id': bucket, 'name': bucket, 'password': 'password'}], \
                                       [{'id': bucket, 'name': bucket, 'roles': 'admin'}], self.master)
+        self.add_built_in_server_user([{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'password': 'password'}], \
+                                      [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'roles': 'admin'}], self.master)
+        self.sleep(10)
         if self.sdk_version == 'pre-vulcan':
             connection_string = 'couchbases://' + host_ip + '/' + bucket + '?certpath=' + root_ca_path
             self.log.info("Connection string is -{0}".format(connection_string))
@@ -168,8 +171,6 @@ class x509tests(BaseTestCase):
             except Exception as ex:
                 self.log.info("Expection is  -{0}".format(ex))
         elif self.sdk_version == 'vulcan':
-            self.add_built_in_server_user([{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'password': 'password'}], \
-                                      [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'roles': 'admin'}], self.master)
             key_file = x509main.CACERTFILEPATH + self.ip_address + ".key"
             chain_file = x509main.CACERTFILEPATH + "/long_chain" + self.ip_address + ".pem"
             connection_string = 'couchbases://' + host_ip + '/?certpath=' + chain_file + "&keypath=" + key_file
@@ -981,8 +982,8 @@ class x509tests(BaseTestCase):
         rest = RestConnection(self.master)
         rest.create_bucket(bucket='default', ramQuotaMB=100)
         
-        status, output = x509main()._execute_command_clientcert(host.ip, url='/pools/default', port=18091, headers="", client_cert=True, curl=False)
-        self.assertEqual(status, 401, "Invalid user gets authenticated successfully")
+        status = x509main()._execute_command_clientcert(host.ip, url='/pools/default', port=18091, headers="", client_cert=True, curl=False)
+        self.assertEqual(status[0], 'error' , "Invalid user gets authenticated successfully")
 
     def test_upload_json_tests(self):
         rest = RestConnection(self.master)

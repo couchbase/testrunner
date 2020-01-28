@@ -257,4 +257,7 @@ class AutoFailoverAbortsRebalance(AutoFailoverBaseTest, BaseTestCase):
             else:
                 self.fail("Rebalance was not aborted by auto fail-over")
         # Reset auto failover settings
-        self.disable_autofailover_and_validate()
+        try:
+            self.disable_autofailover_and_validate()
+        except:
+            pass

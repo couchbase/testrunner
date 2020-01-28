@@ -12,7 +12,7 @@ direction:
 	ASC | DESC;
 
 select_from:
-	OUTER_BUCKET_NAME.* ;
+	BUCKET_NAME.* ;
 
 #JOIN RULES
 

@@ -1,5 +1,6 @@
 import json
 
+from couchbase_helper.tuq_helper import N1QLHelper
 from lib.couchbase_helper.documentgenerator import BlobGenerator, JsonDocGenerator, JSONNonDocGenerator
 from lib.membase.api.rest_client import RestConnection
 from lib.testconstants import STANDARD_BUCKET_PORT
@@ -14,6 +15,7 @@ log = logging.getLogger()
 class EventingNegative(EventingBaseTest):
     def setUp(self):
         super(EventingNegative, self).setUp()
+        self.rest.set_service_memoryQuota(service='memoryQuota', memoryQuota=1200)
         if self.create_functions_buckets:
             self.bucket_size = 100
             log.info(self.bucket_size)
@@ -77,9 +79,7 @@ class EventingNegative(EventingBaseTest):
         # set both src and metadata bucket as same
         body['depcfg']['metadata_bucket'] = self.src_bucket_name
         try:
-            self.rest.save_function(body['appname'], body)
-            # Try to deploy the function
-            self.rest.deploy_function(body['appname'], body)
+            self.rest.create_function(self.function_name,body)
         except Exception as ex:
             if "Source bucket same as metadata bucket" not in str(ex):
                 self.fail("Eventing function allowed both source and metadata bucket to be same")
@@ -251,11 +251,11 @@ class EventingNegative(EventingBaseTest):
                                    'create', compression=self.sdk_compression)
         # create a function which sleeps for 5 secs and set execution_timeout to 1s
         body = self.create_save_function_body(self.function_name, HANDLER_CODE_ERROR.EXECUTION_TIME_MORE_THAN_TIMEOUT,
-                                              execution_timeout=30)
+                                              execution_timeout=10)
         # deploy the function
         self.deploy_function(body)
         # This is intentionally added so that we wait for some mutations to process and we decide none are processed
-        self.sleep(60)
+        self.sleep(100)
         # No docs should be present in dst_bucket as the all the function executions should have timed out
         self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         eventing_nodes = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
@@ -316,11 +316,12 @@ class EventingNegative(EventingBaseTest):
         # create a string with space and other special chars
         body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_WITH_DOC_TIMER)
         body['appname'] = "a b c @ # $ % ^ & * ( ) + ="
+        err_msg='Function name can only start with characters in range A-Z, a-z, 0-9 and can only contain characters in range A-Z, a-z, 0-9, underscore and hyphen'
         try:
             content = self.rest.create_function("abc", body)
         except Exception as e:
-            if "Function name can only contain characters in range A-Z, a-z, 0-9 and underscore, hyphen" not in str(e):
-                self.fail("Deployment is expected to be failed when space is present in function name")
+            if err_msg not in str(e):
+                self.fail("Deployment is expected to be failed when space is present in function name expected err message {}".format(err_msg))
 
     def test_deploy_function_invalid_alias_name(self):
         body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_WITH_DOC_TIMER)
@@ -398,3 +399,108 @@ class EventingNegative(EventingBaseTest):
             if "Can not execute DML query on bucket" not in str(e):
                 log.info(str(e))
                 self.fail("Not correct exception thrown")
+
+    def test_n1ql_with_wrong_query(self):
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                 batch_size=self.batch_size)
+        body = self.create_save_function_body(self.function_name, 'handler_code/n1ql_op_negative.js', worker_count=3)
+        self.deploy_function(body)
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016,skip_stats_validation=True)
+        # delete all documents
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size, op_type='delete')
+        # Wait for eventing to catch up with all the delete mutations and verify results
+        self.verify_eventing_results(self.function_name, 0, on_delete=True,skip_stats_validation=True)
+        self.undeploy_and_delete_function(body)
+
+
+    def test_n1ql_without_n1ql_node(self):
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                 batch_size=self.batch_size)
+        body = self.create_save_function_body(self.function_name, 'handler_code/n1ql_op_no_n1ql.js', worker_count=3)
+        self.deploy_function(body)
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016,skip_stats_validation=True)
+        # delete all documents
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size, op_type='delete')
+        # Wait for eventing to catch up with all the delete mutations and verify results
+        self.verify_eventing_results(self.function_name, 0, on_delete=True,skip_stats_validation=True)
+        self.undeploy_and_delete_function(body)
+
+    def test_n1ql_without_index_node(self):
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                 batch_size=self.batch_size)
+        body = self.create_save_function_body(self.function_name, 'handler_code/n1ql_op_without_index.js', worker_count=3)
+        self.deploy_function(body)
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016,skip_stats_validation=True)
+        # delete all documents
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size, op_type='delete')
+        # Wait for eventing to catch up with all the delete mutations and verify results
+        self.verify_eventing_results(self.function_name, 0, on_delete=True,skip_stats_validation=True)
+        self.undeploy_and_delete_function(body)
+
+    def test_n1ql_max_connection(self):
+        self.n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
+        self.n1ql_helper = N1QLHelper(shell=self.shell, max_verify=self.max_verify, buckets=self.buckets,
+                                      item_flag=self.item_flag, n1ql_port=self.n1ql_port,
+                                      full_docs_list=self.full_docs_list, log=self.log, input=self.input,
+                                      master=self.master, use_rest=True)
+        # primary index is required as we run some queries from handler code
+        self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
+        self.load_sample_buckets(self.server, "travel-sample")
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                 batch_size=self.batch_size)
+        body = self.create_save_function_body(self.function_name, 'handler_code/n1ql_op_connection.js', worker_count=1)
+        self.deploy_function(body)
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016,skip_stats_validation=True)
+        # delete all documents
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size, op_type='delete')
+        # Wait for eventing to catch up with all the delete mutations and verify results
+        self.verify_eventing_results(self.function_name, 0, on_delete=True,skip_stats_validation=True)
+        self.undeploy_and_delete_function(body)
+
+    #MB-32127
+    def test_field_boundary_update_for_deployed_function(self):
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_ON_UPDATE, worker_count=3,dcp_stream_boundary="from_now")
+        self.deploy_function(body)
+        update_body={"deployment_status":True, "processing_status":True, "dcp_stream_boundary":"everything"}
+        try:
+            self.rest.set_settings_for_function(self.function_name,update_body)
+        except Exception as e:
+            if "ERR_APP_ALREADY_DEPLOYED" not in str(e):
+                raise Exception("Feed boundary updated when app is deployed")
+
+    #MB-31140
+    def test_eventing_error_type(self):
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        body = self.create_save_function_body(self.function_name, 'handler_code/eventing_error.js', worker_count=1)
+        self.deploy_function(body)
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+
+
+    #MB-31140
+    def test_n1ql_error_type(self):
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        body = self.create_save_function_body(self.function_name, 'handler_code/n1ql_error.js', worker_count=1)
+        self.deploy_function(body)
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+
+    #MB-31140
+    def test_curl_error_type(self):
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        body = self.create_save_function_body(self.function_name, 'handler_code/curl_error.js', worker_count=1)
+        self.deploy_function(body)
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+
+    #MB-35750
+    def test_non_json(self):
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        body = self.create_save_function_body(self.function_name, 'handler_code/non_json.js', worker_count=1)
+        self.deploy_function(body)
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016*3, skip_stats_validation=True)

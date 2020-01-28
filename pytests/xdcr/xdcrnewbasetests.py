@@ -5,6 +5,7 @@ import logger
 import logging
 import re
 import urllib.request, urllib.parse, urllib.error
+import random
 
 from couchbase_helper.cluster import Cluster
 from membase.api.rest_client import RestConnection, Bucket
@@ -128,6 +129,7 @@ class REPL_PARAM:
     CHECKPOINT_INTERVAL = "checkpointInterval"
     OPTIMISTIC_THRESHOLD = "optimisticReplicationThreshold"
     FILTER_EXP = "filterExpression"
+    FILTER_SKIP_RESTREAM = "filterSkipRestream"
     SOURCE_NOZZLES = "sourceNozzlePerNode"
     TARGET_NOZZLES = "targetNozzlePerNode"
     BATCH_COUNT = "workerBatchSize"
@@ -145,6 +147,7 @@ class TEST_XDCR_PARAM:
     CHECKPOINT_INTERVAL = "checkpoint_interval"
     OPTIMISTIC_THRESHOLD = "optimistic_threshold"
     FILTER_EXP = "filter_expression"
+    FILTER_SKIP_RESTREAM = "filter_skip_restream"
     SOURCE_NOZZLES = "source_nozzles"
     TARGET_NOZZLES = "target_nozzles"
     BATCH_COUNT = "batch_count"
@@ -162,6 +165,7 @@ class TEST_XDCR_PARAM:
             TEST_XDCR_PARAM.CHECKPOINT_INTERVAL: REPL_PARAM.CHECKPOINT_INTERVAL,
             TEST_XDCR_PARAM.OPTIMISTIC_THRESHOLD: REPL_PARAM.OPTIMISTIC_THRESHOLD,
             TEST_XDCR_PARAM.FILTER_EXP: REPL_PARAM.FILTER_EXP,
+            TEST_XDCR_PARAM.FILTER_SKIP_RESTREAM: REPL_PARAM.FILTER_SKIP_RESTREAM,
             TEST_XDCR_PARAM.SOURCE_NOZZLES: REPL_PARAM.SOURCE_NOZZLES,
             TEST_XDCR_PARAM.TARGET_NOZZLES: REPL_PARAM.TARGET_NOZZLES,
             TEST_XDCR_PARAM.BATCH_COUNT: REPL_PARAM.BATCH_COUNT,
@@ -181,6 +185,7 @@ class XDCR_PARAM:
     XDCR_CHECKPOINT_INTERVAL = "xdcrCheckpointInterval"
     XDCR_OPTIMISTIC_THRESHOLD = "xdcrOptimisticReplicationThreshold"
     XDCR_FILTER_EXP = "xdcrFilterExpression"
+    XDCR_FILTER_SKIP_RESTREAM = "xdcrfilterSkipRestream"
     XDCR_SOURCE_NOZZLES = "xdcrSourceNozzlePerNode"
     XDCR_TARGET_NOZZLES = "xdcrTargetNozzlePerNode"
     XDCR_BATCH_COUNT = "xdcrWorkerBatchSize"
@@ -403,7 +408,7 @@ class NodeHelper:
         return str(dir)
 
     @staticmethod
-    def check_goxdcr_log(server, str, goxdcr_log=None, print_matches=None, log_name=None, timeout=0):
+    def check_goxdcr_log(server, search_str, goxdcr_log=None, print_matches=None, log_name=None, timeout=0):
         """ Checks if a string 'str' is present in 'log_name' on 'server'
             and returns the number of occurances
             @param goxdcr_log: goxdcr log location on the server
@@ -420,7 +425,7 @@ class NodeHelper:
             cmd = "grep "
         else:
             cmd = "zgrep "
-        cmd += "\"{0}\" {1}".format(str, goxdcr_log)
+        cmd += "\"{0}\" {1}".format(search_str, goxdcr_log)
         iter = 0
         count = 0
         matches = []
@@ -431,8 +436,8 @@ class NodeHelper:
             if count > 0 or timeout == 0:
                 break
             else:
+                NodeHelper._log.info("Waiting {0}s for {1} to appear in {2} ..".format(timeout, search_str, log_name))
                 time.sleep(timeout)
-                NodeHelper._log.info("Waiting {0}s for {1} to appear in {2} ..".format(timeout, str, log_name))
             iter += 1
         shell.disconnect()
         NodeHelper._log.info(count)
@@ -787,9 +792,31 @@ class XDCReplication:
             self.__from_bucket.name, self.__dest_cluster.get_name(),
             self.__to_bucket.name)
 
-    # get per replication params specified as from_bucket@cluster_name=
-    # eg. default@C1="xdcrFilterExpression:loadOne,xdcrCheckpointInterval:60,
-    # xdcrFailureRestartInterval:20"
+    def __get_random_filter(self, filter_type):
+        from scripts.edgyjson.main import JSONDoc
+        obj = JSONDoc(template="query.json", filter=True, load=False)
+        filter_type = filter_type.split("-")[1]
+        if filter_type == "random":
+            filter_type = random.choice(obj.filters_json_objs_dict.keys())
+        num_exps = random.randint(0, 5)
+        ex = ""
+        while num_exps:
+            nesting_level = random.randint(0, 5)
+            ex_no_brackets = random.choice(obj.filters_json_objs_dict[filter_type])
+            ex_with_brackets = '( ' + ex_no_brackets + ' )'
+            # Generate nested exps: for eg ((exp1 AND exp2) OR exp3)
+            for _ in xrange(nesting_level):
+                ex += '( ' + random.choice([ex_no_brackets, ex_with_brackets]) \
+                        + ' )' + random.choice([" AND ", " OR "])
+            num_exps -= 1
+        # Enclose keys having '_' in quotes (eg:'string_long')
+        if '_' in ex:
+            ex = ("'%s_%s'") % ex
+        ex += random.choice(obj.filters_json_objs_dict[filter_type])
+        return ex
+
+    # get per replication params specified as from_bucket@cluster_name=<setting>:<value>
+    # eg. default@C1=filter_expression:loadOne,failure_restart_interval:20
     def __parse_test_xdcr_params(self):
         param_str = self.__input.param(
             "%s@%s" %
@@ -800,12 +827,14 @@ class XDCReplication:
                 dict(list(zip(argument_split[::2], argument_split[1::2])))
             )
         if 'filter_expression' in self.__test_xdcr_params:
-            if self.__test_xdcr_params['filter_expression']:
-                masked_input = {"comma": ',', "star": '*', "dot": '.', "equals": '=', "{": '', "}": ''}
+            if len(self.__test_xdcr_params['filter_expression']) > 0:
+                ex = self.__test_xdcr_params['filter_expression']
+                if ex.startswith("random"):
+                    ex = self.__get_random_filter(ex)
+                masked_input = {"comma": ',', "star": '*', "dot": '.', "equals": '=', "{": '', "}": '', "colon": ':'}
                 #need_to_encode = ['+']
                 for _ in masked_input:
-                    self.__test_xdcr_params['filter_expression'] = self.__test_xdcr_params['filter_expression']\
-                        .replace(_, masked_input[_])
+                    self.__test_xdcr_params['filter_expression'] = self.__test_xdcr_params['filter_expression'].replace(_, masked_input[_])
                 #for _ in need_to_encode:
                 #    self.__test_xdcr_params['filter_expression'] = self.__test_xdcr_params['filter_expression'] \
                 #        .replace(_, urllib.quote_plus(_))
@@ -1215,8 +1244,17 @@ class CouchbaseCluster:
             if eviction_policy in EVICTION_POLICY.EPH:
                 bucket_params['eviction_policy'] = eviction_policy
             else:
+                bucket_params['eviction_policy'] = EVICTION_POLICY.NO_EVICTION
+            # NRU eviction for src bkt implemented in 6.0.2
+            # AllowSourceNRUCreation internal setting needs to be enabled for 6.0.2 to 6.5.0
+            # It is enabled by default for 6.5.0 and up
+            rest = RestConnection(server)
+            if rest.check_node_versions("6.0"):
+                self.set_internal_setting("AllowSourceNRUCreation", "true")
                 bucket_params['eviction_policy'] = EVICTION_POLICY.NRU_EVICTION
-            if eviction_policy == EVICTION_POLICY.NRU_EVICTION:
+            elif rest.check_node_versions("6.5"):
+                bucket_params['eviction_policy'] = EVICTION_POLICY.NRU_EVICTION
+            if eviction_policy == EVICTION_POLICY.NRU_EVICTION :
                 if "6.0.2-" in NodeHelper.get_cb_version(server):
                     self.set_internal_setting("AllowSourceNRUCreation", "true")
         else:
@@ -2610,6 +2648,7 @@ class XDCRNewBaseTest(unittest.TestCase):
         self.__cb_clusters = []
         self.__cluster_op = Cluster()
         self.__init_parameters()
+        self.filter_exp = {}
         self.log.info(
             "==== XDCRNewbasetests setup is started for test #{0} {1} ===="
             .format(self.__case_number, self._testMethodName))
@@ -3621,38 +3660,55 @@ class XDCRNewBaseTest(unittest.TestCase):
             self.__execute_query(server, "CREATE PRIMARY INDEX " + bucket + "_index "
                                  + "ON " + bucket)
 
-    def _get_doc_count(self, server, filter_exp, bucket):
-        doc_count = self.__execute_query(server, "SELECT COUNT(*) FROM "
-                                         + bucket +
-                                         " WHERE " + filter_exp)
-        return doc_count if doc_count else 0
+    def _get_doc_count(self, server):
+        doc_count = 0
+        for bucket in self.filter_exp.keys():
+            exp = self.filter_exp[bucket]
+            if len(exp) > 1:
+                exp = " AND ".join(exp)
+            else:
+                exp = next(iter(exp))
+            if "DATE" in exp:
+                exp = exp.replace("DATE", '')
+            doc_count = self.__execute_query(server, "SELECT COUNT(*) FROM "
+                                             + bucket +
+                                             " WHERE " + exp)
+            if not doc_count:
+                return 0
+        return doc_count
 
     def verify_filtered_items(self, src_master, dest_master, replications, skip_index=False):
+        # Assuming src and dest bucket of replication have the same name
         for repl in replications:
             # Assuming src and dest bucket of the replication have the same name
             bucket = repl['source']
             if not skip_index:
                 self._create_index(src_master, bucket)
                 self._create_index(dest_master, bucket)
+            # filter_exp = {default:([filter_exp1, filter_exp2])}
+            # and query will be "select count from default where filter_exp1 AND filter_exp2"
             if repl['filterExpression']:
-                filter_exp = repl['filterExpression']
+                exp_in_brackets = '( ' + str(repl['filterExpression']) + ' )'
             else:
-                self.fail("Replication created without any filter.")
-            src_count = self._get_doc_count(src_master, filter_exp, bucket)
-            dest_count = self._get_doc_count(dest_master, filter_exp, bucket)
-            if src_count != dest_count:
-                self.fail("Doc count {0} on {1} does not match "
-                          "doc count {2} on {3} "
-                          "after applying filter {4}"
-                          .format(src_count, src_master.ip,
-                                  dest_count, dest_master.ip,
-                                  filter_exp))
-            self.log.info("Doc count {0} on {1} matches "
-                          "doc count {2} on {3} "
-                          "after applying filter {4}"
-                          .format(src_count, src_master.ip,
-                                  dest_count, dest_master.ip,
-                                  filter_exp))
+                if bucket in self.filter_exp.keys():
+                    self.filter_exp[bucket].add(exp_in_brackets)
+                else:
+                    self.filter_exp[bucket] = {exp_in_brackets}
+        src_count = self._get_doc_count(src_master)
+        dest_count = self._get_doc_count(dest_master)
+        if src_count != dest_count:
+            self.fail("Doc count {0} on {1} does not match "
+                      "doc count {2} on {3} "
+                      "after applying filter {4}"
+                      .format(src_count, src_master.ip,
+                              dest_count, dest_master.ip,
+                              self.filter_exp))
+        self.log.info("Doc count {0} on {1} matches "
+                      "doc count {2} on {3} "
+                      "after applying filter {4}"
+                      .format(src_count, src_master.ip,
+                              dest_count, dest_master.ip,
+                              self.filter_exp))
 
     def verify_results(self, skip_verify_data=[], skip_verify_revid=[]):
         """Verify data between each couchbase and remote clusters.

@@ -300,11 +300,7 @@ class BucketOperationHelper():
                     bucket_info.saslPassword.encode('ascii'))
                 else:
                     client.sasl_auth_plain(admin_user, admin_pass)
-                    try:
-                       bucket = bucket.encode('ascii')
-                    except AttributeError:
-                      pass
-
+                    bucket = bucket.encode('ascii')
                     client.bucket_select(bucket)
                 for i in server_dict[every_ip_port]:
                     try:
@@ -331,7 +327,7 @@ class BucketOperationHelper():
                                                bucket_info.saslPassword.encode('ascii'))
                         continue
 
-                    if c.find(b"\x01") > 0 or c.find(b"\x02") > 0:
+                    if c.find("\x01") > 0 or c.find("\x02") > 0:
                         ready_vbuckets[i] = True
                     elif i in ready_vbuckets:
                         log.warning("vbucket state changed from active to {0}".format(c))
@@ -347,7 +343,7 @@ class BucketOperationHelper():
         msg = "waiting for memcached bucket : {0} in {1} to accept set ops"
         log.info(msg.format(bucket, node.ip))
         all_vbuckets_ready = BucketOperationHelper.wait_for_vbuckets_ready_state(node,
-                                                                                 bucket, timeout_in_seconds, log_msg)
+                                                bucket, timeout_in_seconds, log_msg)
         # return (counter == vbucket_count) and all_vbuckets_ready
         return all_vbuckets_ready
 

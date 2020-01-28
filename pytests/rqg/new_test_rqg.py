@@ -87,6 +87,9 @@ class RQGTestsNew(BaseRQGTests):
         # run the query
         for test in tests_to_run:
             if test == "BASIC":
+                if self.check_explain_plan:
+                    result_run['check_explain_plan'] = self._check_explain_plan_for_secondary_index(n1ql_query=n1ql_query);
+
                 if self.use_new_rqg:
                     result_run["run_query_without_index_hint"] = self._run_queries_and_verify_new(n1ql_query=n1ql_query,
                                                                                               sql_query=sql_query,
@@ -111,8 +114,7 @@ class RQGTestsNew(BaseRQGTests):
         client = RQGMySQLClientNew(database=self.database, host=self.mysql_url, user_id=self.user_id, password=self.password)
 
         try:
-
-            actual_result = self.n1ql_helper.run_cbq_query(query=n1ql_query, server=self.n1ql_server, scan_consistency="request_plus")
+            actual_result = self.n1ql_query_runner_wrapper(n1ql_query=n1ql_query, server=self.n1ql_server, scan_consistency="request_plus")
             n1ql_result = actual_result["results"]
             # Run SQL Query
             sql_result = expected_result
@@ -196,11 +198,12 @@ class RQGTestsNew(BaseRQGTests):
         n1ql_result = new_n1ql_result
         actual_result = n1ql_result
 
-        expected_result = sql_result
+        actual_result = sorted(actual_result)
+        expected_result = sorted(sql_result)
 
-        #if len(actual_result) != len(expected_result):
-        #    extra_msg = self._get_failure_message(expected_result, actual_result)
-        #    raise Exception("Results are incorrect. Actual num %s. Expected num: %s. :: %s \n" % (len(actual_result), len(expected_result), extra_msg))
+        if len(actual_result) != len(expected_result):
+            extra_msg = self._get_failure_message(expected_result, actual_result)
+            raise Exception("Results are incorrect. Actual num %s. Expected num: %s. :: %s \n" % (len(actual_result), len(expected_result), extra_msg))
 
         diffs = DeepDiff(actual_result, expected_result, ignore_order=True)
         if diffs:
@@ -280,12 +283,12 @@ class RQGTestsNew(BaseRQGTests):
                 query_params = {'timeout': '1200s'}
             else:
                 query_params={}
-            actual_result = self.n1ql_helper.run_cbq_query(query=n1ql_query, server=self.n1ql_server, query_params=query_params, scan_consistency="request_plus")
+            actual_result = self.n1ql_query_runner_wrapper(n1ql_query=n1ql_query, server=self.n1ql_server, query_params=query_params, scan_consistency="request_plus")
             if self.prepared:
                 name = actual_result["results"][0]['name']
                 prepared_query = "EXECUTE '%s'" % name
                 self.log.info(" N1QL QUERY :: {0}".format(prepared_query))
-                actual_result = self.n1ql_helper.run_cbq_query(query=prepared_query, server=self.n1ql_server, query_params=query_params, scan_consistency="request_plus")
+                actual_result = self.n1ql_query_runner_wrapper(n1ql_query=prepared_query, server=self.n1ql_server, query_params=query_params, scan_consistency="request_plus")
             n1ql_result = actual_result["results"]
 
             # Run SQL Query

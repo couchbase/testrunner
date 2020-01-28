@@ -1,7 +1,7 @@
 query:
     select;
 select:
-    SELECT WINDOW_FUNCTION_NAME_START window_function_type WINDOW_FUNCTION_NAME_END (window_function_arguments) window_function_options OVER ( window_clause ) AS WF FROM BUCKET_NAME;
+    SELECT WINDOW_FUNCTION_NAME_START window_function_type WINDOW_FUNCTION_NAME_END (window_function_arguments) window_function_options OVER ( window_clause ) AS WF FROM BUCKET_NAME WHERE PRIMARY_KEY_ID IS NOT NULL;
 
 window_function_arguments:
     WINDOW_FUNCTION_ARGUMENTS_START aggregate_quantifier DECIMAL_FIELD1 WINDOW_FUNCTION_ARGUMENTS_END;

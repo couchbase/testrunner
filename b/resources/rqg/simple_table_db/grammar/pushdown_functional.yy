@@ -89,12 +89,12 @@ string_func:
     LENGTH ;
 
 special_string_func:
-    POSITION( string_field ? search_string ) |
-    POSITION( LOWER( string_field ) ? search_string ) |
-    POSITION( LOWER( string_field ) ? LOWER( search_string ) ) |
-    POSITION( string_field ? UPPER( search_string ) ) |
-    POSITION( UPPER( string_field ) ? search_string ) |
-    POSITION( UPPER( string_field ) ? UPPER( search_string ) ) ;
+    POSITION( string_field , search_string ) |
+    POSITION( LOWER( string_field ) , search_string ) |
+    POSITION( LOWER( string_field ) , LOWER( search_string ) ) |
+    POSITION( string_field , UPPER( search_string ) ) |
+    POSITION( UPPER( string_field ) , search_string ) |
+    POSITION( UPPER( string_field ) , UPPER( search_string ) ) ;
 
 search_string:
     "a" |
@@ -109,7 +109,7 @@ search_string:
     "n" ;
 
 special_date_func:
-    DATE_PART_STR( datetime_field & date_part ) ;
+    DATE_PART_STR( datetime_field , date_part ) ;
 
 date_part:
     "DAY" |

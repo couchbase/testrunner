@@ -101,9 +101,16 @@ class BackupRestoreValidations(BackupRestoreValidationBase):
             data = restored_data[bucket.name]
             for key in data:
                 value = data[key]
-                value = ",".join(value.split(',')[4:5])
+                if '"b\'' in value:
+                    value = ",".join(value.split(',')[4:8])
+                else:
+                    value = ",".join(value.split(',')[4:5])
+                value = value.replace('""', '"')
+                if value.startswith('"b\''):
+                    value = value[3:-2]
+                elif value.startswith("b"):
+                    value = value.split(',')[0]
                 data[key] = value
-
             self.log.info("Compare backup data in bucket %s " % bucket.name)
             is_equal, not_equal, extra, not_present = \
                                         self.compare_dictionary(backedup_kv, data)

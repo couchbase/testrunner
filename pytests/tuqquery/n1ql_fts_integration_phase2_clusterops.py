@@ -105,6 +105,7 @@ class N1qlFTSIntegrationPhase2ClusteropsTest(QueryTests):
         self.load_test_buckets()
         self.cbcluster = CouchbaseCluster(name='cluster', nodes=self.servers, log=self.log)
         fts_idx = self._create_fts_index(index_name="idx_beer_sample_fts", doc_count=7303, source_name='beer-sample')
+        self.run_cbq_query("drop index `beer-sample`.beer_primary")
 
         n1ql_query = "select meta().id from `beer-sample` where search(`beer-sample`, {\"query\":{\"field\":\"state\", \"match\":\"California\"}, \"size\":10000})"
         n1ql_results_before_failover = self.run_cbq_query(n1ql_query)['results']
@@ -197,6 +198,7 @@ class N1qlFTSIntegrationPhase2ClusteropsTest(QueryTests):
     def _create_fts_index(self, index_name='', doc_count=0, source_name=''):
         fts_index = self.cbcluster.create_fts_index(name=index_name, source_name=source_name)
         rest = self.get_rest_client(self.servers[0].rest_username, self.servers[0].rest_password)
+        self.sleep(10)
         indexed_doc_count = fts_index.get_indexed_doc_count(rest)
         #indexed_doc_count = rest.get_fts_stats(index_name, source_name, "doc_count")
         while indexed_doc_count < doc_count:

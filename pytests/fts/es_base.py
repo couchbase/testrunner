@@ -4,6 +4,7 @@ from tasks.taskmanager import TaskManager
 from tasks.task import *
 from remote.remote_util import RemoteMachineShellConnection, RemoteUtilHelper
 import time
+import ast
 
 class BLEVE:
     STOPWORDS = ['i', 'me', 'my', 'myself', 'we', 'our', 'ours', 'ourselves',
@@ -201,7 +202,7 @@ class ElasticSearchBase(object):
                 return True, content, response
             else:
                 try:
-                    json_parsed = json.loads(content)
+                    json_parsed = ast.literal_eval(content)
                 except ValueError as e:
                     json_parsed = {}
                     json_parsed["error"] = "status: {0}, content: {1}".\

@@ -23,12 +23,6 @@ class StableTopFTS(FTSBaseTest):
     def tearDown(self):
         super(StableTopFTS, self).tearDown()
 
-    def suite_setUp(self):
-        self.log.info("*** StableTopFTS: suite_setUp() ***")
-
-    def suite_tearDown(self):
-        self.log.info("*** StableTopFTS: suite_tearDown() ***")
-
     def check_fts_service_started(self):
         try:
             rest = RestConnection(self._cb_cluster.get_random_fts_node())
@@ -50,6 +44,25 @@ class StableTopFTS(FTSBaseTest):
                 self.sleep(60, "Waiting for updates to get indexed...")
         self.wait_for_indexing_complete()
         self.validate_index_count(equal_bucket_doc_count=True)
+
+    def test_index_docvalues_option(self):
+        index = self.create_index(
+            bucket=self._cb_cluster.get_bucket_by_name('default'),
+            index_name="custom_index")
+        self.load_data()
+        self.wait_for_indexing_complete()
+        if float(self.get_zap_docvalue_disksize()) != float(0):
+            self.fail("zap files size with docvalue not empty with docValues = False")
+        else:
+            self.log.info(" zap files size found to be : {0}".format(self.get_zap_docvalue_disksize()))
+
+        index.update_docvalues_email_custom_index(True)
+        self.wait_for_indexing_complete()
+
+        if float(self.get_zap_docvalue_disksize()) == float(0):
+            self.fail("zap files size with docvalue found to be empty with docValues = True")
+        else:
+            self.log.info(" zap files size found to be : {0}".format(self.get_zap_docvalue_disksize()))
 
     def test_maxttl_setting(self):
         self.create_simple_default_index()
@@ -628,7 +641,6 @@ class StableTopFTS(FTSBaseTest):
         Index and query index, update map, query again, uses RQG
         """
         fail = False
-        error = None
         index = self.create_index(
             bucket=self._cb_cluster.get_bucket_by_name('default'),
             index_name="custom_index")
@@ -641,7 +653,6 @@ class StableTopFTS(FTSBaseTest):
         except AssertionError as err:
             self.log.error(err)
             fail = True
-            error = err
         self.log.info("Editing custom index with new map...")
         index.generate_new_custom_map(seed=index.cm_id+10)
         index.index_definition['uuid'] = index.get_uuid()
@@ -651,9 +662,14 @@ class StableTopFTS(FTSBaseTest):
         self.create_es_index_mapping(index.es_custom_map)
         self.load_data()
         self.wait_for_indexing_complete()
-        self.run_query_and_compare(index)
+        if self.run_via_n1ql:
+            n1ql_executor = self._cb_cluster
+        else:
+            n1ql_executor = None
+
+        self.run_query_and_compare(index, n1ql_executor=n1ql_executor)
         if fail:
-            raise error
+            raise err
 
     def index_query_in_parallel(self):
         """
@@ -718,7 +734,12 @@ class StableTopFTS(FTSBaseTest):
         self.create_es_index_mapping(index.es_custom_map, index.index_definition)
         self.wait_for_indexing_complete()
         try:
-            self.run_query_and_compare(index)
+            if self.run_via_n1ql:
+                n1ql_executor = self._cb_cluster
+            else:
+                n1ql_executor = None
+
+            self.run_query_and_compare(index, n1ql_executor=n1ql_executor)
         except AssertionError as err:
             self.log.error(err)
             fail = True
@@ -941,6 +962,7 @@ class StableTopFTS(FTSBaseTest):
         bucket = self._cb_cluster.get_bucket_by_name("travel-sample")
         index = self.create_index(bucket, "travel-index")
         self.sleep(10)
+        self.wait_for_indexing_complete()
 
         # Add Type Mapping
         index.add_type_mapping_to_index_definition(type="airport",
@@ -1727,6 +1749,80 @@ class StableTopFTS(FTSBaseTest):
             n1ql_executor = None
         self.run_query_and_compare(geo_index, n1ql_executor=n1ql_executor)
 
+    def test_geo_polygon_query(self):
+        """
+        Tests both geo polygon queries
+        compares results against ES
+        :return: Nothing
+        """
+        geo_index = self.create_geo_index_and_load()
+        self.generate_random_geo_polygon_queries(geo_index, self.num_queries, self.polygon_feature, self.num_vertices)
+        if self.run_via_n1ql:
+            n1ql_executor = self._cb_cluster
+        else:
+            n1ql_executor = None
+        self.run_query_and_compare(geo_index, n1ql_executor=n1ql_executor)
+
+    def test_geo_polygon_on_edge_corner_query(self):
+        expected_hits = int(self._input.param("expected_hits", 0))
+        expected_doc_ids = self._input.param("expected_doc_ids", None)
+        polygon_points = str(self._input.param("polygon_points", None))
+        geo_index = self.create_geo_index_and_load()
+
+        query = '{"field": "geo", "polygon_points" : ' + polygon_points + '}'
+
+        self.log.info(query)
+
+        query = json.loads(query)
+
+        contents = ""
+
+        for index in self._cb_cluster.get_indexes():
+            hits, contents, _, _ = index.execute_query(query=query,
+                                                       zero_results_ok=True,
+                                                       expected_hits=expected_hits,
+                                                       return_raw_hits=True)
+
+            self.log.info("Hits: %s" % hits)
+            self.log.info("Content: %s" % contents)
+
+        for doc_id in expected_doc_ids.split(","):
+            doc_exist = False
+            for content in contents:
+                if content['id'] == doc_id:
+                    self.log.info(content)
+                    doc_exist = True
+            if not doc_exist:
+                self.fail("expected doc_id : " + str(doc_id) + " does not exist")
+
+
+    def test_geo_polygon_with_holes_must_not(self):
+        geo_index = self.create_geo_index_and_load()
+
+        query = '{"must": {"conjuncts": [{"field": "geo", "polygon_points": ' \
+                '[[-124.29807832031247, 38.01868304390075], ' \
+                '[-122.34800507812497, 37.12617594722073], [-120.52976777343747, 38.35114759945404], ' \
+                '[-120.72752167968747, 39.44978110907268], [-122.90834850139811, 40.22582625155702], ' \
+                '[-124.24868053264811, 39.61072953444142]]}]}, ' \
+                '"must_not": {"disjuncts": [{"field": "geo", "polygon_points": ' \
+                '[[-122.56773164062497, 39.72703407666045], ' \
+                '[-123.02915742187497, 38.96238669420149], [-122.07334687499997, 38.189396892659744], ' \
+                '[-120.79893281249997, 38.585519836298694]]}]}}'
+
+        self.log.info(query)
+
+        query = json.loads(query)
+
+        for index in self._cb_cluster.get_indexes():
+            hits, contents, _, _ = index.execute_query(query=query,
+                                                       zero_results_ok=False,
+                                                       expected_hits=18,
+                                                       return_raw_hits=True)
+
+            self.log.info("Hits: %s" % hits)
+            self.log.info("Content: %s" % contents)
+
+
 
     def test_sort_geo_query(self):
         """
@@ -1868,11 +1964,13 @@ class StableTopFTS(FTSBaseTest):
         f.write(cert)
         f.close()
 
+        fts_node = self._cb_cluster.get_random_fts_node()
+
         cmd = "curl -g -k "+\
               "-XPUT -H \"Content-Type: application/json\" "+\
               "-u Administrator:password "+\
               "https://{0}:{1}/api/index/default_idx -d ".\
-                  format(self._master.ip, fts_ssl_port) +\
+                  format(fts_node.ip, fts_ssl_port) +\
               "\'{0}\'".format(json.dumps(idx))
 
         self.log.info("Running command : {0}".format(cmd))
@@ -1882,7 +1980,7 @@ class StableTopFTS(FTSBaseTest):
                     "-XPOST -H \"Content-Type: application/json\" " + \
                     "-u Administrator:password " + \
                     "https://{0}:18094/api/index/default_idx/query -d ". \
-                        format(self._master.ip, fts_ssl_port) + \
+                        format(fts_node.ip, fts_ssl_port) + \
                     "\'{0}\'".format(json.dumps(qry))
             self.sleep(20, "wait for indexing to complete")
             output = subprocess.check_output(query, shell=True)

@@ -25,12 +25,21 @@ class XDCRAdvFilterTests(XDCRNewBaseTest):
         self.src_rest = RestConnection(self.src_master)
         self.dest_rest = RestConnection(self.dest_master)
         initial_xdcr = random.choice([True, False])
-        if initial_xdcr:
-            self.load_data()
-            self.setup_xdcr()
-        else:
-            self.setup_xdcr()
-            self.load_data()
+        self.skip_validation = self._input.param("ok_if_random_filter_invalid", False)
+        try:
+            if initial_xdcr:
+                 self.load_data()
+                 self.setup_xdcr()
+            else:
+                self.setup_xdcr()
+                self.load_data()
+        except Exception as e:
+            if self.skip_validation:
+                if "create replication failed : status:False,content:{\"errors\":{\"filterExpression\":" in e.message:
+                    self.log.warn("Random filter generated may not be valid, skipping doc count validation")
+                    self.tearDown()
+            else:
+                self.fail(e.message)
 
     def tearDown(self):
         XDCRNewBaseTest.tearDown(self)
@@ -54,7 +63,7 @@ class XDCRAdvFilterTests(XDCRNewBaseTest):
             JSONDoc(server=server, username="Administrator", password="password",
                     bucket=bucket, startseqnum=random.randrange(1, 10000000, 1),
                     randkey=False, encoding="utf-8",
-                    num_docs=num_docs, template="mix.json", xattrs=True)
+                    num_docs=num_docs, template="query.json", xattrs=True)
             self.sleep(30, "Waiting for docs to be loaded")
         except Exception as e:
             self.fail(
@@ -122,4 +131,5 @@ class XDCRAdvFilterTests(XDCRNewBaseTest):
         self.sleep(30)
         self.perform_update_delete()
 
-        self.verify_results()
+        if not self.skip_validation:
+            self.verify_results()

@@ -268,5 +268,17 @@
             "value": 10
                 }
             }
+    },
+    {
+          "httpRequest" : {
+                "method" : "GET",
+                "path" : "//slash"
+              },
+          "httpResponse" : {
+                "body" : {
+                        "type": "JSON",
+                        "json": "{\"name\":\"vikas\"}"
+                        }
+          }
     }
 ]

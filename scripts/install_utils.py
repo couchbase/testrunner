@@ -81,6 +81,9 @@ class NodeHelper:
         for _ in to_be_replaced:
             if _ in os:
                 os = os.replace(_, '')
+        if self.info.deliverable_type == "dmg":
+            major_version = os.split('.')
+            os = major_version[0] + '.' + major_version[1]
         return os
 
     def uninstall_cb(self):
@@ -291,35 +294,35 @@ class NodeHelper:
         self.wait_for_completion(duration * 2, event)
         start_time = time.time()
         while time.time() < start_time + timeout:
-            #try:
-            init_success = False
-            self.pre_init_cb()
+            try:
+                init_success = False
+                self.pre_init_cb()
 
-            self.rest = RestConnection(self.node)
-            # Make sure that data_path and index_path are writable by couchbase user
-            for path in set(filter(None, [self.node.data_path, self.node.index_path])):
-                for cmd in ("rm -rf {0}/*".format(path),
-                            "chown -R couchbase:couchbase {0}".format(path)):
-                    self.shell.execute_command(cmd)
-            self.rest.set_data_path(data_path=self.node.data_path, index_path=self.node.index_path)
-            self.allocate_memory_quotas()
-            self.rest.init_node_services(hostname=None,
-                                         username=self.node.rest_username,
-                                         password=self.node.rest_password,
-                                         services=self.get_services())
+                self.rest = RestConnection(self.node)
+                # Make sure that data_path and index_path are writable by couchbase user
+                for path in set(filter(None, [self.node.data_path, self.node.index_path])):
+                    for cmd in ("rm -rf {0}/*".format(path),
+                                "chown -R couchbase:couchbase {0}".format(path)):
+                        self.shell.execute_command(cmd)
+                self.rest.set_data_path(data_path=self.node.data_path, index_path=self.node.index_path)
+                self.allocate_memory_quotas()
+                self.rest.init_node_services(hostname=None,
+                                             username=self.node.rest_username,
+                                             password=self.node.rest_password,
+                                             services=self.get_services())
 
-            if "index" in self.get_services():
-                self.rest.set_indexer_storage_mode(storageMode=params["storage_mode"])
+                if "index" in self.get_services():
+                    self.rest.set_indexer_storage_mode(storageMode=params["storage_mode"])
 
-            self.rest.init_cluster(username=self.node.rest_username,
-                                   password=self.node.rest_password)
-            init_success = True
-            if init_success:
-                break
-            self.wait_for_completion(duration, event)
-            # except Exception as e:
-            #     log.warn("Exception {0} occurred on {1}, retrying..".format(e, self.ip))
-            #     self.wait_for_completion(duration, event)
+                self.rest.init_cluster(username=self.node.rest_username,
+                                       password=self.node.rest_password)
+                init_success = True
+                if init_success:
+                    break
+                self.wait_for_completion(duration, event)
+            except Exception as e:
+                log.warn("Exception {0} occurred on {1}, retrying..".format(e.message, self.ip))
+                self.wait_for_completion(duration, event)
         self.post_init_cb()
 
     def wait_for_completion(self, duration, event):
@@ -400,8 +403,8 @@ def _parse_user_input():
         userinput = TestInput.TestInputParser.get_test_input(sys.argv)
     except IndexError:
         print_result_and_exit(install_constants.USAGE)
-    except getopt.GetoptError:
-        print_result_and_exit(getopt.GetoptError.msg)
+    except getopt.GetoptError, err:
+        print_result_and_exit(str(err))
 
     # Mandatory params
     if not userinput.servers:

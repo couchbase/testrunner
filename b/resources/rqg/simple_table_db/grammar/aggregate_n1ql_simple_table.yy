@@ -24,7 +24,7 @@ sel_from:
 	COUNT(*) | COUNT( field ) | MIN( non_string_field ) | COUNT( DISTINCT 1 ) | COUNT( DISTINCT field ) | COUNT( 1 );
 
 select_from:
-	COUNT(*) |  COUNT( field ) | SUM( non_string_field ) | SUM(DISTINCT non_string_field ) | aggregate_function( non_string_field ) | aggregate_function( DISTINCT non_string_field ) |  MAX( non_string_field ) | MIN( non_string_field );
+	COUNT(*) |  COUNT( field ) | SUM( non_string_field ) | SUM(DISTINCT non_string_field ) | aggregate_function( non_string_field ) | aggregate_function(non_string_field ) |  MAX( non_string_field ) | MIN( non_string_field );
 
 aggregate_function:
     AVG | STDDEV | VARIANCE | STDDEV_SAMP | STDDEV_POP | VARIANCE_POP | VARIANCE_SAMP | MEAN ;
@@ -177,8 +177,8 @@ string_values:
 # BOOLEAN RULES
 
 bool_condition:
-	bool_field |
-	NOT (bool_field) |
+	bool_field = true|
+	NOT (bool_field = true) |
 	bool_equals_condition |
 	bool_not_equals_condition ;
 

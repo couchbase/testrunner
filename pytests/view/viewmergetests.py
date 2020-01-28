@@ -382,7 +382,13 @@ class ViewMergingTests(BaseTestCase):
             if vbucket.master not in clients:
                 ip, port = vbucket.master.split(':')
                 sport = str((int(port[-2:]))//2 + int(self.master.port))
-                clients[vbucket.master] = MemcachedClientHelper.direct_client(self._get_server(sport), self.default_bucket_name)
+                if sport:
+                    clients[vbucket.master] = \
+                        MemcachedClientHelper.direct_client(self._get_server(sport),\
+                                                            self.default_bucket_name)
+                else:
+                    clients[vbucket.master] = MemcachedClientHelper.direct_client(self.master,\
+                                                                     self.default_bucket_name)
         return clients
 
     def populate_alternated(self, num_vbuckets, docs):

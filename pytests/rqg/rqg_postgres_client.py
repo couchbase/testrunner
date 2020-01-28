@@ -274,7 +274,9 @@ class RQGPostgresClient(PostgresClient):
             target_map[table_name]["primary_key_field"] = primary_key_field
             if number_of_tables > 1:
                 table_name_alias = "t_"+str(count)
+                outer_table_name_alias = "t_"+str(count)+"_"+str(count)
                 target_map[table_name]["alias_name"] = table_name_alias
+                target_map[table_name]["outer_alias_name"] = outer_table_name_alias
             count += 1
         return target_map
 

@@ -126,7 +126,9 @@ class NodeInitializeTask(Task):
                 self.set_exception(error)
                 return
         info = Future.wait_until(lambda: rest.get_nodes_self(),
-                                 lambda x: x.memoryTotal > 0, 10)
+                                 lambda x: x.memoryTotal > 0,
+                                 timeout_secs=60, interval_time=0.1,
+                                 exponential_backoff=False)
         self.log.info("server: %s, nodes/self: %s", self.server, info.__dict__)
 
         username = self.server.rest_username
@@ -244,6 +246,7 @@ class BucketCreateTask(Task):
         Task.__init__(self, "bucket_create_task")
         self.server = bucket_params['server']
         self.bucket = bucket_params['bucket_name']
+        self.alt_addr = TestInputSingleton.input.param("alt_addr", False)
         self.replicas = bucket_params['replicas']
         self.port = bucket_params['port']
         self.size = bucket_params['size']
@@ -339,7 +342,7 @@ class BucketCreateTask(Task):
                 self.set_result(True)
                 self.state = FINISHED
                 return
-            if BucketOperationHelper.wait_for_memcached(self.server, self.bucket):
+            if BucketOperationHelper.wait_for_memcached(self.server, self.bucket, self.alt_addr):
                 self.log.info("bucket '{0}' was created with per node RAM quota: {1}".format(self.bucket, self.size))
                 self.set_result(True)
                 self.state = FINISHED
@@ -553,7 +556,6 @@ class RebalanceTask(Task):
         # not just 'running' and at 100%) before we declare ourselves done
         if progress != -1 and status != 'none':
             if self.retry_get_progress < retry_get_process_num:
-                self.log.info("-->progress!=-1 and status!=none, scheduling again...retry_get_progress={}<retry_get_process_num={}".format(self.retry_get_progress,retry_get_process_num))
                 task_manager.schedule(self, 10)
             else:
                 self.state = FINISHED
@@ -565,9 +567,7 @@ class RebalanceTask(Task):
             success_cleaned = []
             for removed in self.to_remove:
                 try:
-                    self.log.info("-->Start: Calling RestConnection({})".format(removed))
                     rest = RestConnection(removed)
-                    self.log.info("-->End: Calling RestConnection({})".format(removed))
                 except ServerUnavailableException as e:
                     self.log.error(e)
                     continue
@@ -1110,22 +1110,14 @@ class LoadDocumentsGeneratorsTask(LoadDocumentsTask):
 
     def run_normal_throughput_mode(self):
         iterator = 0
-        #self.log.info("-->run_normal_throuhput,generators:{}".format(self.generators))
         for generator in self.generators:
             self.generator = generator
             if self.op_types:
                 self.op_type = self.op_types[iterator]
             if self.buckets:
                 self.bucket = self.buckets[iterator]
-            try:
-              while self.has_next() and not self.done():
+            while self.has_next() and not self.done():
                 self.next()
-            except NotImplementedError:
-              self.log.info("Not implemented,iteration:{}".format(iterator)) 
-              #traceback.print_exc()
-              #return
-            except Exception as e:
-              traceback.print_exc()
             iterator += 1
 
     def run_high_throughput_mode(self):
@@ -1137,7 +1129,6 @@ class LoadDocumentsGeneratorsTask(LoadDocumentsTask):
             gen_end = max(int(gen.end), 1)
             gen_range = max(int(gen.end/self.process_concurrency), 1)
             for pos in range(gen_start, gen_end, gen_range):
-              try:
                 partition_gen = copy.deepcopy(gen)
                 partition_gen.start = pos
                 partition_gen.itr = pos
@@ -1148,8 +1139,6 @@ class LoadDocumentsGeneratorsTask(LoadDocumentsTask):
                         partition_gen,
                         self.batch_size)
                 self.generators.append(batch_gen)
-              except Exception as e:
-                traceback.print_exc()
 
 
         iterator = 0
@@ -1203,24 +1192,20 @@ class LoadDocumentsGeneratorsTask(LoadDocumentsTask):
                 client = VBucketAwareMemcached(
                     RestConnection(self.server),
                     self.bucket, compression=self.compression)
-            try:
-              if self.op_types:
+            if self.op_types:
                 self.op_type = self.op_types[iterator]
-              if self.buckets:
+            if self.buckets:
                 self.bucket = self.buckets[iterator]
 
-              while generator.has_next() and not self.done():
+            while generator.has_next() and not self.done():
 
                 # generate
                 key_value = generator.next_batch()
                 # create
-                #self.log.info("-->run_generator:calling _care_batch_client...key_value={},client={}".format(key_value,client))
                 self._create_batch_client(key_value, client)
 
                 # cache
                 self.cache_items(tmp_kv_store, key_value)
-            except Exception as e:
-                traceback.print_exc()
 
         except Exception as ex:
             rv["err"] = ex
@@ -1433,7 +1418,20 @@ class ESRunQueryCompare(Task):
                 should_verify_n1ql = False
 
             if self.n1ql_executor and should_verify_n1ql:
-                n1ql_query = "select meta().id from default where type='emp' and search(default, " + str(
+                if self.fts_index.dataset == 'all':
+                    query_type = 'emp'
+                    if int(TestInputSingleton.input.param("doc_maps", 1)) > 1:
+                        query_type = 'wiki'
+                    wiki_fields = ["revision.text", "title"]
+                    if any(field in str(json.dumps(self.fts_query)) for field in wiki_fields):
+                        query_type = 'wiki'
+                else:
+                    query_type = self.fts_index.dataset
+                geo_strings = ['"field": "geo"']
+                if any(geo_str in str(json.dumps(self.fts_query)) for geo_str in geo_strings):
+                    query_type = 'earthquake'
+
+                n1ql_query = "select meta().id from default where type='" + str(query_type) + "' and search(default, " + str(
                     json.dumps(self.fts_query)) + ")"
                 self.log.info("Running N1QL query: "+str(n1ql_query))
                 n1ql_result = self.n1ql_executor.run_n1ql_query(query=n1ql_query)
@@ -2278,33 +2276,24 @@ class ViewCreateTask(Task):
 
         try:
             # appending view to existing design doc
-            #self.log.info("-->Calling rest.get_ddoc...")
             content, meta = self.rest.get_ddoc(self.bucket, self.design_doc_name)
-            #self.log.info("-->Calling DesignDocument._init_from_json...")
             ddoc = DesignDocument._init_from_json(self.design_doc_name, content)
             # if view is to be updated
-            #self.log.info("-->Checking if view needs to be updated...")
             if self.view:
                 if self.view.is_spatial:
-                    #self.log.info("-->Calling Design doc spatial view: add_view")
                     ddoc.add_spatial_view(self.view)
                 else:
-                    #self.log.info("-->Calling Design doc: add_view")
                     ddoc.add_view(self.view)
             self.ddoc_rev_no = self._parse_revision(meta['rev'])
         except ReadDocumentException:
             # creating first view in design doc
-            self.log.info("-->creating first view in design doc...")
             if self.view:
                 if self.view.is_spatial:
-                    self.log.info("-->creating first spatial view in design doc...")
                     ddoc = DesignDocument(self.design_doc_name, [], spatial_views=[self.view])
                 else:
-                    self.log.info("-->creating first non-spatial view in design doc...")
                     ddoc = DesignDocument(self.design_doc_name, [self.view])
             # create an empty design doc
             else:
-                self.log.info("-->creating empty design doc...")
                 ddoc = DesignDocument(self.design_doc_name, [])
             if self.ddoc_options:
                 ddoc.options = self.ddoc_options
@@ -2380,11 +2369,8 @@ class ViewCreateTask(Task):
     def _check_ddoc_revision(self):
         valid = False
         try:
-            #self.log.info("-->rest.get_ddoc: {},{}".format(self.bucket,self.design_doc_name))
             content, meta = self.rest.get_ddoc(self.bucket, self.design_doc_name)
-            #self.log.info("-->content={},meta={}".format(content,meta))
             new_rev_id = self._parse_revision(meta['rev'])
-            #self.log.info("-->new_rev_id={}".format(new_rev_id))
             if new_rev_id != self.ddoc_rev_no:
                 self.ddoc_rev_no = new_rev_id
                 valid = True
@@ -3017,7 +3003,8 @@ class MonitorViewQueryResultsTask(Task):
                     RestHelper(self.rest)._wait_for_indexer_ddoc(self.servers, self.design_doc_name)
                     if self.current_retry == 70:
                         self.query["stale"] = 'false'
-                    self.log.info("View result is still not expected (ddoc={}, query={}, server={}). retry# {} of {} in 10 sec".format(self.design_doc_name, self.query, self.servers[0].ip, self.current_retry, self.retries))
+                    self.log.info("View result is still not expected (ddoc=%s, query=%s, server=%s). retry in 10 sec" % (
+                                    self.design_doc_name, self.query, self.servers[0].ip))
                     self.state = EXECUTING
                     task_manager.schedule(self, 10)
             elif len(self.expected_docs) < len(self.results.get('rows', [])):
@@ -3638,10 +3625,9 @@ class GenerateExpectedViewResultsTask(Task):
 
 
         # sort expected results to match view results
-        #self.log.info("-->emitted_rows={}".format(self.emitted_rows))
-        expected_rows = sorted(self.emitted_rows, key=(lambda x: (x['key'],x['id'])),reverse=descending_set)
-                               #cmp=GenerateExpectedViewResultsTask.cmp_result_rows,
-                               #reverse=descending_set)
+        expected_rows = sorted(self.emitted_rows,
+                               cmp=GenerateExpectedViewResultsTask.cmp_result_rows,
+                               reverse=descending_set)
 
         # filter rows according to query flags
         if startkey_set:
@@ -3675,7 +3661,6 @@ class GenerateExpectedViewResultsTask(Task):
                 start_key = start_key.strip("\"")
             if isinstance(end_key, str):
                 end_key = end_key.strip("\"")
-            #self.log.info("-->start_key={},end_key={},expected_rows:{}".format(start_key,end_key,expected_rows))
             expected_rows = [row for row in expected_rows if row['key'] >= start_key and row['key'] <= end_key]
 
         if key_set:
@@ -3793,16 +3778,14 @@ class GenerateExpectedViewResultsTask(Task):
                             groups[key]['min'] = min(row['value'], groups[key]['min'])
                             groups[key]['sumsqr'] += row['value'] ** 2
             expected_rows = []
-            is_reduce_group=False
             for group, value in groups.items():
                 if isinstance(group, str) and group.find("[") == 0:
                     group = group[1:-1].split(",")
                     group = [int(k) for k in group]
                 expected_rows.append({"key" : group, "value" : value})
-                is_reduce_group=True
-            if not is_reduce_group: #sort only when not reduced to group
-                expected_rows = sorted(self.emitted_rows, key=(lambda x: (x['key'],x['id'])),reverse=descending_set)
-
+            expected_rows = sorted(expected_rows,
+                               cmp=GenerateExpectedViewResultsTask.cmp_result_rows,
+                               reverse=descending_set)
         if 'skip' in query:
             expected_rows = expected_rows[(int(query['skip'])):]
         if 'limit' in query:

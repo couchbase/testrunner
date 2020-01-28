@@ -209,7 +209,7 @@ class FailoverTests(FailoverBaseTest):
         # Verify Active and Replica Bucket Count
         if self.num_replicas > 0:
             nodes = self.get_nodes_in_cluster(self.master)
-            self.vb_distribution_analysis(servers=nodes, buckets=self.buckets, std=20.0, total_vbuckets=self.total_vbuckets)
+            self.vb_distribution_analysis(servers=nodes, buckets=self.buckets, std=20.0 , total_vbuckets=self.total_vbuckets)
         self.log.info("End VERIFICATION for Rebalance after Failover Only")
 
     def run_add_back_operation_and_verify(self, chosen, prev_vbucket_stats, record_static_data_set, prev_failover_stats):
@@ -232,10 +232,12 @@ class FailoverTests(FailoverBaseTest):
                 self.rest.add_back_node(node.id)
 
         # Doc_mutation before triggering rebalance
-        tasks = self._async_load_all_buckets(
-            self.master, self.gen_update, "update", 0)
-        for task in tasks:
-            task.result()
+        if self.flusher_batch_split_trigger and \
+                self.num_replicas >= self.num_failed_nodes:
+            tasks = self._async_load_all_buckets(
+                self.master, self.gen_update, "update", 0)
+            for task in tasks:
+                task.result()
 
         self.sleep(20, "After failover before invoking rebalance...")
         self.rest.rebalance(otpNodes=[node.id for node in self.nodes],
@@ -264,6 +266,7 @@ class FailoverTests(FailoverBaseTest):
             self.rest.rebalance(otpNodes=[node.id for node in self.nodes],
                                 ejectedNodes=[],
                                 deltaRecoveryBuckets=self.deltaRecoveryBuckets)
+            self.sleep(10, "Wait for rebalance to start")
 
         # Check if node has to be killed or restarted during rebalance
         # Monitor Rebalance
@@ -282,7 +285,7 @@ class FailoverTests(FailoverBaseTest):
         self.verify_for_recovery_type(chosen, self.server_map, self.buckets, recoveryTypeMap, fileMapsForVerification, self.deltaRecoveryBuckets)
 
         # Comparison of all data if required
-        if not self.withMutationOps:
+        if not self.withMutationOps and self.flusher_batch_split_trigger is None:
             self.sleep(60)
             self.data_analysis_all(record_static_data_set, self.servers, self.buckets, path=None, addedItems=None)
 
@@ -296,7 +299,7 @@ class FailoverTests(FailoverBaseTest):
         # Verify Active and Replica Bucket Count
         if self.num_replicas > 0:
             nodes = self.get_nodes_in_cluster(self.master)
-            self.vb_distribution_analysis(servers=nodes, buckets=self.buckets, std=20.0, total_vbuckets=self.total_vbuckets)
+            self.vb_distribution_analysis(servers=nodes, buckets=self.buckets, std=20.0 , total_vbuckets=self.total_vbuckets)
 
         self.log.info("End VERIFICATION for Add-back and rebalance")
 
@@ -360,10 +363,13 @@ class FailoverTests(FailoverBaseTest):
                     self.victim_node_operations(node)
                     # Start Graceful Again
                     self.log.info(" Start Graceful Failover Again !")
-                    self.sleep(60)
+                    self.sleep(120)
                     success_failed_over = self.rest.fail_over(node.id, graceful=(self.graceful and graceful_failover))
+                    self.sleep(180)
                     msg = "graceful failover failed for nodes {0}".format(node.id)
-                    self.assertTrue(self.rest.monitorRebalance(stop_if_loop=True), msg=msg)
+                    self.log.info("chosen: {0} get_failover_count: {1}".format(len(chosen),
+                                                                               self.get_failover_count()))
+                    self.assertEquals(len(chosen), self.get_failover_count(), msg=msg)
                 else:
                     msg = "rebalance failed while removing failover nodes {0}".format(node.id)
                     self.assertTrue(self.rest.monitorRebalance(stop_if_loop=True), msg=msg)
@@ -394,7 +400,7 @@ class FailoverTests(FailoverBaseTest):
         # Verify Active and Replica Bucket Count
         if self.num_replicas > 0:
             nodes = self.filter_servers(self.servers, chosen)
-            self.vb_distribution_analysis(servers=nodes, buckets=self.buckets, std=20.0, total_vbuckets=self.total_vbuckets, type="failover", graceful=(self.graceful and graceful_failover))
+            self.vb_distribution_analysis(servers=nodes, buckets=self.buckets, std=20.0 , total_vbuckets=self.total_vbuckets, type="failover", graceful=(self.graceful and graceful_failover))
 
     def run_failover_operations_with_ops(self, chosen, failover_reason):
         """ Method to run fail over operations used in the test scenario based on failover reason """
@@ -558,7 +564,7 @@ class FailoverTests(FailoverBaseTest):
         prefix = ("", "dev_")[is_dev_ddoc]
 
         query = {}
-        query["connectionTimeout"] = 60000;
+        query["connectionTimeout"] = 60000
         query["full_set"] = "true"
 
         views = []
@@ -594,7 +600,7 @@ class FailoverTests(FailoverBaseTest):
         ddoc_name = "ddoc1"
         prefix = ("", "dev_")[is_dev_ddoc]
         query = {}
-        query["connectionTimeout"] = 60000;
+        query["connectionTimeout"] = 60000
         query["full_set"] = "true"
         expected_rows = None
         timeout = None
@@ -686,6 +692,7 @@ class FailoverTests(FailoverBaseTest):
             for stop_node in stop_nodes:
                 self.stop_server(stop_node)
             self.sleep(10)
+            self.log.info(" Starting Node")
             for start_node in stop_nodes:
                 self.start_server(start_node)
         if self.firewallOnNodes:
@@ -697,4 +704,14 @@ class FailoverTests(FailoverBaseTest):
             self.log.info(" Disable Firewall for Node ")
             for start_node in stop_nodes:
                 self.stop_firewall_on_node(start_node)
-        self.sleep(60)
+        self.sleep(120)
+
+    def get_failover_count(self):
+        rest = RestConnection(self.master)
+        cluster_status = rest.cluster_status()
+        failover_count = 0
+        # check for inactiveFailed
+        for node in cluster_status['nodes']:
+            if node['clusterMembership'] == "inactiveFailed":
+                failover_count += 1
+        return failover_count

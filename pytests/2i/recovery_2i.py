@@ -3,6 +3,7 @@ from threading import Thread
 import time
 
 from .base_2i import BaseSecondaryIndexingTests
+from couchbase.n1ql import CONSISTENCY_REQUEST
 from couchbase_helper.query_definitions import QueryDefinition
 from lib.memcached.helper.data_helper import MemcachedClientHelper
 from membase.api.rest_client import RestConnection
@@ -10,6 +11,7 @@ from membase.helper.cluster_helper import ClusterOperationHelper
 from remote.remote_util import RemoteMachineShellConnection
 
 log = logging.getLogger(__name__)
+
 
 class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
 
@@ -291,8 +293,6 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             raise
 
     def test_server_crash(self):
-        if self.doc_ops:
-            return
         pre_recovery_tasks = self.async_run_operations(phase="before")
         self._run_tasks([pre_recovery_tasks])
         self.get_dgm_for_plasma()
@@ -347,8 +347,6 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             self.sleep(20)
 
     def test_server_restart(self):
-        if self.doc_ops:
-            return
         pre_recovery_tasks = self.async_run_operations(phase="before")
         self._run_tasks([pre_recovery_tasks])
         self.get_dgm_for_plasma()
@@ -675,6 +673,62 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         post_recovery_tasks = self.async_run_operations(phase="after")
         self.sleep(180)
         self._run_tasks([post_recovery_tasks])
+
+    def test_recover_index_from_in_memory_snapshot(self):
+        """
+        MB-32102
+        MB-35663
+        """
+        bucket_name = ""
+        for bucket in self.buckets:
+            bucket_name = bucket.name
+            break
+        index_name = self.get_index_map()[bucket_name].keys()[0]
+        # Blocking node B firewall
+        data_nodes = self.get_kv_nodes()
+        if len(data_nodes) < 3:
+            self.fail("Can't run this with less than 3 KV nodes")
+        node_b, node_c = (None, None)
+        for node in data_nodes:
+            if node.ip == self.master.ip:
+                continue
+            if not node_b:
+                node_b = node
+            else:
+                node_c = node
+                break
+        # get num_rollback stats before triggering in-memory recovery
+        conn = RestConnection(self.master)
+        num_rollback_before_recovery = conn.get_num_rollback_stat(bucket_name)
+        self.block_incoming_network_from_node(node_b, node_c)
+
+        # killing Memcached on Node B
+        remote_client = RemoteMachineShellConnection(node_b)
+        remote_client.kill_memcached()
+        remote_client.disconnect()
+
+        # Failing over Node B
+        self.cluster.failover(servers=self.servers, failover_nodes=[node_b])
+
+        # resume the communication between node B and node C
+        self.resume_blocked_incoming_network_from_node(node_b, node_c)
+        # get num_rollback stats after in-memory recovery of indexes
+        num_rollback_after_recovery = conn.get_num_rollback_stat(bucket_name)
+        self.assertEqual(num_rollback_before_recovery, num_rollback_after_recovery,
+                         "Recovery didn't happen from in-memory snapshot")
+        self.log.info("Node has recovered from in-memory snapshots")
+        # Loading few more docs so that indexer will index updated as well as new docs
+        gens_load = self.generate_docs(num_items=self.docs_per_day * 2)
+        self.load(gens_load, flag=self.item_flag, batch_size=self.batch_size, op_type="create", verify_data=False)
+
+        use_index_query = "select Count(*) from {0} USE INDEX ({1})".format(bucket_name, index_name)
+        result = self.n1ql_helper.run_cbq_query(query=use_index_query, server=self.n1ql_node,
+                                                scan_consistency=CONSISTENCY_REQUEST)["results"][0]["$1"]
+        expected_result = self.docs_per_day * 2 * 2016
+        self.assertEqual(result, expected_result, "Indexer hasn't recovered properly from in-memory as"
+                                                  " indexes haven't catch up with "
+                                                  "request_plus/consistency_request")
+        self.log.info("Indexer continues to index as expected")
 
     def test_partial_rollback(self):
         self.multi_create_index()

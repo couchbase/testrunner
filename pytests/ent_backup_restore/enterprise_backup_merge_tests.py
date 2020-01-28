@@ -25,7 +25,8 @@ class EnterpriseBackupMergeTest(EnterpriseBackupMergeBase):
             RestConnection(self.master).disable_auto_compaction()
         if self.expires:
             for bucket in self.buckets:
-                cb = self._get_python_sdk_client(self.master.ip, bucket, self.backupset.cluster_host)
+                cb = self._get_python_sdk_client(self.master.ip, bucket,
+                                                 self.backupset.cluster_host)
                 for i in range(1, self.num_items + 1):
                     cb.upsert("doc" + str(i), {"key":"value"})
         else:
@@ -37,6 +38,9 @@ class EnterpriseBackupMergeTest(EnterpriseBackupMergeBase):
             self.do_backup_merge_actions()
         start = self.number_of_backups_taken
         end = self.number_of_backups_taken
+        if self.backup_corrupted:
+            self.log.info("Stop restore due to backup files corrupted as intended")
+            return
         if self.reset_restore_cluster:
             self.log.info("*** start to reset cluster")
             self.backup_reset_clusters(self.cluster_to_restore)
@@ -44,6 +48,9 @@ class EnterpriseBackupMergeTest(EnterpriseBackupMergeBase):
                 self._initialize_nodes(Cluster(),
                                        self.servers[:self.nodes_init])
             else:
+                shell = RemoteMachineShellConnection(self.input.clusters[0][0])
+                shell.enable_diag_eval_on_non_local_hosts()
+                shell.disconnect()
                 rest = RestConnection(self.input.clusters[0][0])
                 rest.force_eject_node()
                 master_services = self.get_services([self.backupset.cluster_host],

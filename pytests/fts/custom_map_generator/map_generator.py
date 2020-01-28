@@ -21,10 +21,13 @@ EMP_NESTED_FIELDS = {
     }
 }
 
+# Need to work on double nested field "revision_text_text"
+
 WIKI_FIELDS = {
     'text': ["title", "type"],
     'number': ["mutated"],
-    'object': ["revision", "text", "contributor"]
+    #'object': ["revision", "text", "contributor"]
+    'object': ["revision"]
 }
 
 TOTAL_WIKI_FIELDS = 6
@@ -33,20 +36,20 @@ WIKI_NESTED_FIELDS = {
     'revision': {
         'datetime': ["timestamp"]
     },
-    'text': {
-        'text': ["#text"]
-    },
-    'contributor': {
-        'text': ["username"]
-    }
+    #'text': {
+    #    'text': ["#text"]
+    #},
+    #'contributor': {
+    #    'text': ["username"]
+    #}
 }
 
 FULL_FIELD_NAMES = {
     'reports': 'manages_reports',
     'team_size': 'manages_team_size',
     'timestamp': 'revision_timestamp',
-    '#text': 'revision_text_text',
-    'username': 'revision_contributor_username'
+    #'#text': 'revision_text_text',
+    #'username': 'revision_contributor_username'
 }
 
 CUSTOM_ANALYZER_TEMPLATE = {
@@ -166,13 +169,14 @@ class CustomMapGenerator:
     """
     # Generates an FTS and equivalent ES custom map for emp/wiki datasets
     """
-    def __init__(self, seed=0, dataset="emp", num_custom_analyzers=0,multiple_filters=False):
+    def __init__(self, seed=0, dataset="emp", num_custom_analyzers=0,multiple_filters=False, custom_map_add_non_indexed_fields=True):
         random.seed(seed)
         self.fts_map = {"types": {}}
         self.es_map = {}
         self.num_field_maps = random.randint(1, 10)
         self.queryable_fields = {}
         self.num_custom_analyzers = num_custom_analyzers
+        self.custom_map_add_non_indexed_fields = custom_map_add_non_indexed_fields
         # Holds the list of custom analyzers created by
         # build_custom_analyzer method
         self.custom_analyzers=[]
@@ -278,10 +282,12 @@ class CustomMapGenerator:
             if field not in iter(self.nested_fields.keys()):
                 fts_child, es_child = self.get_child_field(field, type)
             else:
-                fts_child, es_child = self.get_child_map(field)
+                fts_child, es_child = self.get_child_map(field, dataset)
             self.fts_map['types'][dataset]['properties'][field] = fts_child
             self.es_map[dataset]['properties'][field] = es_child
-        self.add_non_indexed_field_to_query()
+
+        if self.custom_map_add_non_indexed_fields:
+            self.add_non_indexed_field_to_query()
 
     def add_non_indexed_field_to_query(self):
         """
@@ -310,24 +316,32 @@ class CustomMapGenerator:
                 print("Unable to add a non-indexed field after %s retries" \
                       % self.max_fields)
 
-    def get_child_map(self, field):
+    def get_child_map(self, field, dataset):
         """
         Child maps are for nested json structures i.e, any higher level field
         having another nested structure as its value
         """
-        fts_child_map = {}
-        fts_child_map['dynamic'] = False
-        fts_child_map['enabled'] = True
-        fts_child_map['fields'] = []
+        current_prop = self.fts_map['types'][dataset]['properties']
+        if field not in current_prop.iterkeys():
+            fts_child_map = {}
+            fts_child_map['dynamic'] = False
+            fts_child_map['enabled'] = True
+            fts_child_map['fields'] = []
+            fts_child_map['properties'] = {}
+
+            es_child_map = {}
+            es_child_map['dynamic'] = False
+            es_child_map['enabled'] = True
+            es_child_map['type'] = "object"
+            es_child_map['properties'] = {}
+        else:
+            fts_child_map = self.fts_map['types'][dataset]['properties'][field]
+            es_child_map = self.es_map[dataset]['properties'][field]
+
         field, type = self.get_nested_child_field(field)
         fts_child, es_child = self.get_child_field(field, type)
-        fts_child_map['properties'] = {field: fts_child}
-
-        es_child_map = {}
-        es_child_map['dynamic'] = False
-        es_child_map['enabled'] = True
-        es_child_map['type'] = "object"
-        es_child_map['properties'] = {field: es_child}
+        fts_child_map['properties'][field] = fts_child
+        es_child_map['properties'][field] = es_child
 
         return fts_child_map, es_child_map
 

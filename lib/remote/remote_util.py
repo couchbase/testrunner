@@ -165,10 +165,13 @@ class RemoteMachineHelper(object):
             processes = self.remote_shell.get_running_processes()
             for process in processes:
                 if process.name == process_name:
+                    ##log.info(process.name)
+                    log.info("process {2} is running on {0}: with pid {1}".format(self.remote_shell.ip, process.pid,process_name))
                     return process
                 elif process_name in process.args:
+                    log.info("process is running in args {0}: {1}".format(self.remote_shell.ip, process.args))
                     return process
-            return None
+        return None
 
 
 class RemoteMachineShellConnection:
@@ -248,10 +251,17 @@ class RemoteMachineShellConnection:
                 break
             except paramiko.AuthenticationException:
                 log.error("Authentication failed")
-                exit(1)
+                if exit_on_failure:
+                    exit(1)
+                else:
+                    break
             except paramiko.BadHostKeyException:
                 log.error("Invalid Host key")
-                exit(1)
+                if exit_on_failure:
+                    exit(1)
+                else:
+                    break
+
             except Exception as e:
                 if str(e).find('PID check failed. RNG must be re-initialized') != -1 and\
                         attempt != max_attempts_connect:
@@ -330,6 +340,7 @@ class RemoteMachineShellConnection:
         # ps -Ao pid,comm
         processes = []
         output, error = self.execute_command('ps -Ao pid,comm,vsz,rss,args', debug=False)
+        ##log.info(output)
         if output:
             for line in output:
                 # split to words
@@ -597,17 +608,23 @@ class RemoteMachineShellConnection:
             # Changed from kill -9 $(ps aux | grep 'memcached' | awk '{print $2}'
             # as grep was also returning eventing
             # process which was using memcached-cert
+            RemoteMachineHelper(self).is_process_running('memcached')
             o, r = self.execute_command("kill -9 $(ps aux | pgrep 'memcached')"
-                                                                 , debug=False)
+                                                                 , debug=True)
             self.log_command_output(o, r, debug=False)
+            self.sleep(5,"waiting for memcached to start")
+            out,err=self.execute_command('pgrep memcached')
+            log.info("memcached pid:{} and err: {}".format(out,err))
         return o, r
 
     def stop_memcached(self):
         self.extract_remote_info()
         if self.info.type.lower() == 'windows':
+            RemoteMachineHelper(self).is_process_running('memcached')
             o, r = self.execute_command("taskkill /F /T /IM memcached*")
             self.log_command_output(o, r, debug=False)
         else:
+            RemoteMachineHelper(self).is_process_running('memcached')
             o, r = self.execute_command("kill -SIGSTOP $(pgrep memcached)")
             self.log_command_output(o, r, debug=False)
         return o, r
@@ -616,9 +633,11 @@ class RemoteMachineShellConnection:
         self.extract_remote_info()
         if self.info.type.lower() == 'windows':
             o, r = self.execute_command("taskkill /F /T /IM memcached*")
+            RemoteMachineHelper(self).is_process_running('memcached')
             self.log_command_output(o, r)
         else:
             o, r = self.execute_command("kill -SIGCONT $(pgrep memcached)")
+            RemoteMachineHelper(self).is_process_running('memcached')
             self.log_command_output(o, r)
         return o, r
 
@@ -635,9 +654,11 @@ class RemoteMachineShellConnection:
     def kill_eventing_process(self, name):
         self.extract_remote_info()
         if self.info.type.lower() == 'windows':
+            RemoteMachineHelper(self).is_process_running(name)
             o, r = self.execute_command(command="taskkill /F /T /IM {0}*".format(name))
             self.log_command_output(o, r)
         else:
+            RemoteMachineHelper(self).is_process_running(name)
             o, r = self.execute_command(command="killall -9 {0}".format(name))
             self.log_command_output(o, r)
         return o, r
@@ -774,9 +795,16 @@ class RemoteMachineShellConnection:
                     return True
             else:
                 if self.file_exists(LINUX_CB_PATH, VERSION_FILE):
-                    log.info("{0} **** The version file {1} {2}  exists".format(self.ip,
+                    log.info("{0} **** The linux version file {1} {2}  exists".format(self.ip,
                                                       LINUX_CB_PATH, VERSION_FILE ))
                     return True
+        return False
+
+    def is_couchbase_running(self):
+        self.extract_remote_info()
+        o=RemoteMachineHelper(self).is_process_running('beam.smp')
+        if o !=None:
+            return True
         return False
 
     def is_moxi_installed(self):
@@ -1029,8 +1057,8 @@ class RemoteMachineShellConnection:
         # fix this :
             command1 = "cd /tmp ; D=$(mktemp -d cb_XXXX) ; mv {0} $D ; mv core.* $D ;"\
                                      " rm -f * ; mv $D/* . ; rmdir $D".format(filename)
-            if self.info.distribution_type.lower() == 'suse':
-                command1 = "cd /var/cache/zypper/RPMS/; rm -rf couchbase-server*"
+            if "suse" in self.info.distribution_type.lower():
+                command1 += "; cd /var/cache/zypper/RPMS/; rm -rf couchbase-server*"
             command_root = "cd /tmp;wget -q -O {0} {1};cd /tmp;ls -lh".format(filename, url)
             file_location = "/tmp"
             output, error = self.execute_command_raw(command1, debug=False)
@@ -1164,13 +1192,16 @@ class RemoteMachineShellConnection:
         return True
 
     def rmtree(self, sftp, remote_path, level=0):
+        count = 0
         for f in sftp.listdir_attr(remote_path):
             rpath = remote_path + "/" + f.filename
             if stat.S_ISDIR(f.st_mode):
                 self.rmtree(sftp, rpath, level=(level + 1))
             else:
                 rpath = remote_path + "/" + f.filename
+                if count < 10:
                 print(('removing %s' % (rpath)))
+                    count += 1
                 sftp.remove(rpath)
         print(('removing %s' % (remote_path)))
         sftp.rmdir(remote_path)
@@ -1894,8 +1925,7 @@ class RemoteMachineShellConnection:
     """
     def install_server(self, build, startserver=True, path='/tmp', vbuckets=None,
                        swappiness=10, force=False, openssl='', upr=None, xdcr_upr=None,
-                       fts_query_limit=None, cbft_env_options=None, enable_ipv6=None,
-                       debug_logs=True):
+                       fts_query_limit=None, cbft_env_options=None, debug_logs=True):
 
         log.info('*****install server ***')
         server_type = None
@@ -1993,15 +2023,23 @@ class RemoteMachineShellConnection:
                     self.check_pkgconfig(self.info.deliverable_type, openssl)
                     if "SUSE" in self.info.distribution_type:
                         if environment:
-                            output, error = self.execute_command("export {0};zypper -n install /tmp/{1}".format(environment.strip(), build.name))
-                            self.log_command_output(output, error)
+                            if "suse 12" in self.info.distribution_version.lower():
+                                output, error = self.execute_command("export {0};zypper -n install /tmp/{1}"
+                                                         .format(environment.strip(), build.name))
+                                self.log_command_output(output, error)
+                            elif "suse 15" in self.info.distribution_version.lower():
+                                output, error = self.execute_command("export {0};zypper --no-gpg-checks -n install --allow-unsigned-rpm /tmp/{1}"
+                                                     .format(environment.strip(), build.name))
+                                self.log_command_output(output, error)
                         else:
-                            output, error = self.execute_command("zypper -n install /tmp/{0}".format(build.name))
-                            self.log_command_output(output, error)
+                            if "suse 12" in self.info.distribution_version.lower():
+                                output, error = self.execute_command("zypper -n install /tmp/{0}".format(build.name))
+                                self.log_command_output(output, error)
+                            elif "suse 15" in self.info.distribution_version.lower():
+                                output, error = self.execute_command("zypper --no-gpg-checks -n install --allow-unsigned-rpm /tmp/{0}".format(build.name))
+                                self.log_command_output(output, error)
                     else:
-                        log.info("--> Running rpm_cmd...")
                         rpm_cmd = "yes | {0}yum localinstall -y /tmp/{1}"
-                        log.info("-->cmd={}".format(rpm_cmd))
                         if force:
                             # temporary fix for bzip2 - need to be redone
                             # output, error = self.execute_command('{0}rpm -Uvh --force /tmp/{1}'\
@@ -2121,15 +2159,6 @@ class RemoteMachineShellConnection:
                 success &= self.log_command_output(output, error, track_words)
                 startserver = True
 
-            if enable_ipv6:
-                """ dist_cfg contains {dist_type,inet_tcp}. in IPv4.
-                    We need to change it to {dist_type,inet6_tcp}. in IPv6 server
-                """
-                output, error = self.execute_command("echo '{{dist_type,inet6_tcp}}.' > {0}"\
-                                                                  .format(LINUX_DIST_CONFIG))
-                success &= self.log_command_output(output, error, track_words)
-                startserver = True
-
             # skip output: [WARNING] couchbase-server is already started
             # dirname error skipping for CentOS-6.6 (MB-12536)
             track_words = ("error", "fail", "dirname")
@@ -2145,30 +2174,25 @@ class RemoteMachineShellConnection:
                     self.log_command_output(output, error, track_words)
                 else:
                     success &= self.log_command_output(output, error, track_words, debug=False)
-        elif self.info.deliverable_type in ["zip"]:
+        elif self.info.deliverable_type in ["dmg"]:
             """ close Safari browser before install """
             self.terminate_process(self.info, "/Applications/Safari.app/Contents/MacOS/Safari")
-            o, r = self.execute_command("ps aux | grep Archive | awk '{print $2}' | xargs kill -9")
-            output, error = self.execute_command("cd ~/Downloads ; open couchbase-server*.zip")
+            self.execute_command("ps aux | grep Archive | awk '{print $2}' | xargs kill -9")
+            output, error = self.execute_command("cd ~/Downloads ; hdiutil attach couchbase-server*.dmg")
             extracted = False
             count = 1
             if not output:
-                log.info("\n****** waiting to unzip file in server: {0}".format(self.ip))
+                log.info("\n****** waiting to mount dmg file on server: {0}".format(self.ip))
                 while not extracted:
-                    found, error = self.execute_command("ls ~/Downloads/couchbase-server*/",
-                                                         debug=False)
-                    if "Couchbase Server.app" not in found:
+                    found, error = self.execute_command("ls /Volumes/Couchbase\ Installer*/",
+                                                        debug=False)
+                    if "Couchbase\ Server.app" not in found:
                         time.sleep(10)
                         count += 1
                     else:
                         extracted = True
-            else:
-                found, error = self.execute_command("ls ~/Downloads/couchbase-server*/",
-                                                     debug=False)
-                if "Couchbase Server.app" not in found:
-                    raise Exception("Faile to open zip file")
 
-            cmd1 = "mv ~/Downloads/couchbase-server*/Couchbase\ Server.app /Applications/"
+            cmd1 = "cp -R /Volumes/Couchbase*/Couchbase\ Server.app /Applications"
             cmd2 = "sudo xattr -d -r com.apple.quarantine /Applications/Couchbase\ Server.app"
             cmd3 = "open /Applications/Couchbase\ Server.app"
             output, error = self.execute_command(cmd1)
@@ -2184,19 +2208,14 @@ class RemoteMachineShellConnection:
 
     def install_server_win(self, build, version, startserver=True,
                            vbuckets=None, fts_query_limit=None,
-                           enable_ipv6=None, windows_msi=False, cbft_env_options=None):
+                           windows_msi=False, cbft_env_options=None, enable_ipv6=False):
 
 
         log.info('******start install_server_win ********')
         if windows_msi:
             self.remove_win_backup_dir()
             self.remove_win_collect_tmp()
-            if enable_ipv6:
-                output, error = self.execute_command("cd /cygdrive/c/tmp;"
-                                                 "msiexec /i {0}.msi USE_IPV6=true /qn "\
-                                                    .format(version))
-            else:
-                output, error = self.execute_command("cd /cygdrive/c/tmp;"
+            output, error = self.execute_command("cd /cygdrive/c/tmp;"
                                                      "msiexec /i {0}.msi /qn " \
                                                      .format(version))
             self.log_command_output(output, error)
@@ -2208,93 +2227,8 @@ class RemoteMachineShellConnection:
                     ipv6=enable_ipv6
                 )
             return len(error) == 0
-        remote_path = None
-        success = True
-        track_words = ("warning", "error", "fail")
-        if build.name.lower().find("membase") != -1:
-            remote_path = testconstants.WIN_MB_PATH
-            abbr_product = "mb"
-        elif build.name.lower().find("couchbase") != -1:
-            remote_path = WIN_CB_PATH
-            abbr_product = "cb"
-
-        if remote_path is None:
-            raise Exception("its not a membase or couchbase?")
-        self.extract_remote_info()
-        log.info('deliverable_type : {0}'.format(self.info.deliverable_type))
-        if self.info.type.lower() == 'windows':
-            task = "install"
-            bat_file = "install.bat"
-            dir_paths = ['/cygdrive/c/automation', '/cygdrive/c/tmp']
-            capture_iss_file = ""
-            # build = self.build_url(params)
-            self.create_multiple_dir(dir_paths)
-            self.copy_files_local_to_remote('resources/windows/automation', \
-                                                    '/cygdrive/c/automation')
-            #self.create_windows_capture_file(task, abbr_product, version)
-            capture_iss_file = self.modify_bat_file('/cygdrive/c/automation', \
-                                             bat_file, abbr_product, version, task)
-            self.stop_schedule_tasks()
-            self.remove_win_backup_dir()
-            self.remove_win_collect_tmp()
-            log.info('sleep for 5 seconds before running task '
-                                'schedule uninstall on {0}'.format(self.ip))
-
-            """ the code below need to remove when bug MB-11985
-                                                            is fixed in 3.0.1 """
-            if task == "install" and (version[:5] in COUCHBASE_VERSION_2 or \
-                                      version[:5] in COUCHBASE_FROM_VERSION_3):
-                log.info("due to bug MB-11985, we need to delete below registry "
-                                        "before install version 2.x.x and 3.x.x")
-                output, error = self.execute_command("reg delete \
-                         'HKLM\Software\Wow6432Node\Ericsson\Erlang\ErlSrv' /f ")
-                self.log_command_output(output, error)
-            """ end remove code """
-
-            """ run task schedule to install cb server """
-            output, error = self.execute_command("cmd /c schtasks /run /tn installme")
-            success &= self.log_command_output(output, error, track_words)
-            file_check = 'VERSION.txt'
-            self.wait_till_file_added(remote_path, file_check, timeout_in_seconds=600)
-            if version[:3] != "2.5":
-                ended = self.wait_till_process_ended(build.product_version[:10])
-                if not ended:
-                    sys.exit("*****  Node %s failed to install  *****" % (self.ip))
-            if version[:3] == "2.5":
-                self.sleep(20, "wait for server to start up completely")
-            else:
-                self.sleep(10, "wait for server to start up completely")
-            output, error = self.execute_command("rm -f *-diag.zip")
-            self.log_command_output(output, error, track_words)
-            if vbuckets and int(vbuckets) != 1024:
-                self.set_vbuckets_win(build.version_number, vbuckets)
-            if fts_query_limit:
-                self.set_fts_query_limit_win(
-                    build = version,
-                    name="CBFT_ENV_OPTIONS",
-                    value="bleveMaxResultWindow={0}".format(int(fts_query_limit)),
-                    ipv6=enable_ipv6
-                )
-
-            if "4.0" in version[:5]:
-                """  remove folder if it exists in work around of bub MB-13046 """
-                self.execute_command("rm -rf \
-                /cygdrive/c/Jenkins/workspace/sherlock-windows/couchbase/install/etc/security")
-                """ end remove code for bug MB-13046 """
-            if capture_iss_file:
-                    log.info("****Delete {0} in windows automation directory" \
-                                                          .format(capture_iss_file))
-                    output, error = self.execute_command("rm -f \
-                               /cygdrive/c/automation/{0}".format(capture_iss_file))
-                    self.log_command_output(output, error)
-                    log.info("Delete {0} in slave resources/windows/automation dir" \
-                             .format(capture_iss_file))
-                    os.system("rm -f resources/windows/automation/{0}" \
-                                                          .format(capture_iss_file))
-            self.delete_file(WIN_TMP_PATH, build.product_version[:10] + ".exe")
-            log.info('***** done install_server_win *****')
-            return success
-
+        else:
+            raise Exception("Windows does not support this file type")
 
     def install_server_via_repo(self, deliverable_type, cb_edition, remote_client):
         success = True
@@ -2835,6 +2769,11 @@ class RemoteMachineShellConnection:
             self.log_command_output(output, error)
             output, error = self.execute_command("rm -rf ~/Library/Application\ Support/Couchbase")
             self.log_command_output(output, error)
+            """ Unmount existing app """
+            volumes, _ = self.execute_command("ls /Volumes | grep Couchbase\ Installer")
+            for volume in volumes:
+                output, error = self.execute_command("hdiutil unmount " + '"' + "/Volumes/" + volume + '"')
+                self.log_command_output(output, error)
         if self.nonroot:
             if self.nr_home_path != "/home/%s/" % self.username:
                 log.info("remove all non default install dir")
@@ -3045,13 +2984,8 @@ class RemoteMachineShellConnection:
         # success means that there are no track_words in the output
         # and there are no errors at all, if track_words is not empty
         # if track_words=(), the result is not important, and we return True
-        #log.info("--> log_command_output: start ...")
         success = True
         for line in error:
-            try:
-              line=line.decode()
-            except AttributeError:
-              pass     
             if debug:
                 log.error(line)
             if track_words:
@@ -3090,10 +3024,6 @@ class RemoteMachineShellConnection:
                               "\nGo to log_command_output to add error mesg to bypass it.")
                     success = False
         for line in output:
-            try:
-              line=line.decode()
-            except AttributeError:
-              pass     
             if debug:
                 log.info(line)
             if any(s.encode("utf-8").lower() in line.encode("utf-8").lower() for s in track_words):
@@ -3107,7 +3037,6 @@ class RemoteMachineShellConnection:
                     success = False
                     log.error('something wrong happened on {0}!!! output:{1}, error:{2}, track_words:{3}'
                               .format(self.ip, output, error, track_words))
-        #log.info("--> log_command_output: end ...")
         return success
 
     def execute_commands_inside(self, main_command,query, queries,bucket1,password,bucket2,source,subcommands=[], min_output_size=0,
@@ -3143,28 +3072,23 @@ class RemoteMachineShellConnection:
             filedata = fileout.read()
             fileout.close()
 
-        newdata = filedata
-        try:
-            newdata = newdata.decode().replace("bucketname", bucket2)
-        except AttributeError:
-            pass
+        newdata = filedata.replace("bucketname",bucket2)
+        newdata = newdata.replace("user",bucket1)
+        newdata = newdata.replace("pass",password)
+        newdata = newdata.replace("bucket1",bucket1)
 
-        newdata = newdata.replace("user", bucket1)
-        newdata = newdata.replace("pass", password)
-        newdata = newdata.replace("bucket1", bucket1)
-
-        newdata = newdata.replace("user1", bucket1)
-        newdata = newdata.replace("pass1", password)
-        newdata = newdata.replace("bucket2", bucket2)
-        newdata = newdata.replace("user2", bucket2)
-        newdata = newdata.replace("pass2", password)
+        newdata = newdata.replace("user1",bucket1)
+        newdata = newdata.replace("pass1",password)
+        newdata = newdata.replace("bucket2",bucket2)
+        newdata = newdata.replace("user2",bucket2)
+        newdata = newdata.replace("pass2",password)
 
         if (self.remote and not(queries=="")) :
-            f = sftp.open(filename, 'w')
+            f = sftp.open(filename,'w')
             f.write(newdata)
             f.close()
         elif not(queries==""):
-            f = open(filename, 'w')
+            f = open(filename,'w')
             f.write(newdata)
             f.close()
         if not(queries==""):
@@ -3217,7 +3141,7 @@ class RemoteMachineShellConnection:
            #output = output + end_msg
 
         else:
-            p = Popen(main_command, shell=True, stdout=PIPE, stderr=PIPE)
+            p = Popen(main_command , shell=True, stdout=PIPE, stderr=PIPE)
             stdout, stderro = p.communicate()
             output = stdout
             print(output)
@@ -3250,8 +3174,7 @@ class RemoteMachineShellConnection:
         output = re.sub('\s+', '', output)
         return (output)
 
-    def execute_command(self, command, info=None, debug=True, use_channel=False):
-        #log.info("--> execute_command: start...")
+    def execute_command(self, command, info=None, debug=True, use_channel=False, timeout=600):
         if getattr(self, "info", None) is None and info is not None :
             self.info = info
         else:
@@ -3263,7 +3186,7 @@ class RemoteMachineShellConnection:
         if self.use_sudo:
             command = "sudo " + command
 
-        return self.execute_command_raw(command, debug=debug, use_channel=use_channel)
+        return self.execute_command_raw(command, debug=debug, use_channel=use_channel, timeout=timeout)
 
     def execute_command_raw(self, command, debug=True, use_channel=False, timeout=600):
         if debug:
@@ -3295,16 +3218,8 @@ class RemoteMachineShellConnection:
 
         if self.remote:
             for line in stdout.read().splitlines():
-                try:
-                   line = line.decode()
-                except AttributeError:
-                   pass
                 output.append(line)
             for line in stderro.read().splitlines():
-                try:
-                   line = line.decode()
-                except AttributeError:
-                   pass
                 error.append(line)
             if temp:
                 line = temp.splitlines()
@@ -3434,9 +3349,7 @@ class RemoteMachineShellConnection:
                         os_distro = 'Oracle Linux'
                         os_version = etc_issue
                         is_linux_distro = True
-                    else:
-                        log.info("It could be other operating system."
-                                 "  Go to check at other location")
+
                     file.close()
                     # now remove this file
                     os.remove(filename)
@@ -3496,6 +3409,10 @@ class RemoteMachineShellConnection:
                             os_distro = 'CentOS'
                             os_version = "CentOS 7"
                             is_linux_distro = True
+                        elif redhat_release.lower().find('release 8') != -1:
+                            os_distro = 'CentOS'
+                            os_version = "CentOS 8"
+                            is_linux_distro = True
                         elif redhat_release.lower().find('red hat enterprise') != -1:
                             if "8.0" in redhat_release.lower():
                                 os_distro = "Red Hat"
@@ -3543,17 +3460,12 @@ class RemoteMachineShellConnection:
                 text, err = p.communicate()
                 os_arch = ''
             for line in text:
-                #print("os_arch={},line={}".format(os_arch,line))
-                try:
-                  os_arch += line.decode("utf-8")
-                except AttributeError:
-                  os_arch += str(line)
-
+                os_arch += line
                 # at this point we should know if its a linux or windows ditro
             ext = { 'Ubuntu' : "deb",
                    'CentOS'  : "rpm",
                    'Red Hat' : "rpm",
-                   "Mac"     : "zip",
+                   "Mac"     : "dmg",
                    "Debian"  : "deb",
                    "openSUSE": "rpm",
                    "SUSE"    : "rpm",
@@ -3637,6 +3549,8 @@ class RemoteMachineShellConnection:
                     mesg = "Need to set domain name in server {0} like 'sc.couchbase.com'"\
                                                                            .format(self.ip)
                     raise Exception(mesg)
+            else:
+                return "{0}.{1}".format(info.hostname[0], 'sc.couchbase.com')
 
     def get_cpu_info(self, win_info=None, mac=False):
         if win_info:
@@ -3757,31 +3671,52 @@ class RemoteMachineShellConnection:
             self.log_command_output(o, r)
 
     def start_couchbase(self):
-        self.extract_remote_info()
-        if self.info.type.lower() == 'windows':
-            o, r = self.execute_command("net start couchbaseserver")
-            self.log_command_output(o, r)
-        if self.info.type.lower() == "linux":
-            if self.nonroot:
-                log.info("Start Couchbase Server with non root method")
-                o, r = self.execute_command('%s%scouchbase-server \-- -noinput -detached '\
-                                                           % (self.nr_home_path,
-                                                              LINUX_COUCHBASE_BIN_PATH))
+        running=self.is_couchbase_running()
+        retry=0
+        while not running and retry < 3:
+            log.info("Starting couchbase server")
+            self.extract_remote_info()
+            if self.info.type.lower() == 'windows':
+                o, r = self.execute_command("net start couchbaseserver")
                 self.log_command_output(o, r)
-            else:
-                fv, sv, bn = self.get_cbversion("linux")
-                if self.info.distribution_version.lower() in SYSTEMD_SERVER \
-                       and sv in COUCHBASE_FROM_WATSON:
-                    """from watson, systemd is used in centos 7, suse 12 """
-                    log.info("Running systemd command on this server")
-                    o, r = self.execute_command("systemctl start couchbase-server.service")
+                running = self.is_couchbase_running()
+                retry=retry+1
+            if self.info.type.lower() == "linux":
+                if self.nonroot:
+                    log.info("Start Couchbase Server with non root method")
+                    o, r = self.execute_command('%s%scouchbase-server \-- -noinput -detached '\
+                                                               % (self.nr_home_path,
+                                                                  LINUX_COUCHBASE_BIN_PATH))
                     self.log_command_output(o, r)
+                    running = self.is_couchbase_running()
+                    retry = retry + 1
                 else:
-                    o, r = self.execute_command("/etc/init.d/couchbase-server start")
-                    self.log_command_output(o, r)
-        if self.info.distribution_type.lower() == "mac":
-            o, r = self.execute_command("open /Applications/Couchbase\ Server.app")
-            self.log_command_output(o, r)
+                    fv, sv, bn = self.get_cbversion("linux")
+                    if self.info.distribution_version.lower() in SYSTEMD_SERVER \
+                           and sv in COUCHBASE_FROM_WATSON:
+                        """from watson, systemd is used in centos 7, suse 12 """
+                        log.info("Running systemd command on this server")
+                        o, r = self.execute_command("systemctl start couchbase-server.service")
+                        self.log_command_output(o, r)
+                        self.sleep(5,"waiting for couchbase server to come up")
+                        o, r = self.execute_command("systemctl status couchbase-server.service | grep ExecStop=/opt/couchbase/bin/couchbase-server")
+                        log.info("Couchbase server status: {}".format(o))
+                        running = self.is_couchbase_running()
+                        retry = retry + 1
+                    else:
+                        o, r = self.execute_command("/etc/init.d/couchbase-server start")
+                        self.log_command_output(o, r)
+                        running = self.is_couchbase_running()
+                        retry = retry + 1
+            if self.info.distribution_type.lower() == "mac":
+                o, r = self.execute_command("open /Applications/Couchbase\ Server.app")
+                self.log_command_output(o, r)
+                running = self.is_couchbase_running()
+                retry = retry + 1
+        if not running and retry >= 3:
+            sys.exit("Server not started even after 3 retries")
+
+
 
     def pause_memcached(self, os="linux", timesleep=30):
         log.info("*** pause memcached process ***")
@@ -4107,13 +4042,15 @@ class RemoteMachineShellConnection:
             errors.extend(error)
         return outputs, errors
 
-    def delete_files(self, file_location):
+    def delete_files(self, file_location, debug=False):
         command = "%s%s" % ("rm -rf ", file_location)
-        output, error = self.execute_command(command)
-        self.log_command_output(output, error)
+        output, error = self.execute_command(command, debug=debug)
+        if debug:
+            self.log_command_output(output, error)
 
     def get_data_map_using_cbtransfer(self, buckets, data_path=None, userId="Administrator",
-                                      password="password", getReplica=False, mode="memory"):
+                                      password="password", getReplica=False, mode="memory",
+                                      debug=False):
         self.extract_remote_info()
         temp_path = "/tmp/"
         if self.info.type.lower() == 'windows':
@@ -4153,7 +4090,7 @@ class RemoteMachineShellConnection:
             dest_path = "/tmp/" + fileName
             destination = "csv:" + csv_path
             log.info("Run cbtransfer to get data map")
-            self.execute_cbtransfer(source, destination, options)
+            self.execute_cbtransfer(source, destination, options, debug)
             file_existed = self.file_exists(temp_path, genFileName)
             if file_existed:
                 self.copy_file_remote_to_local(path, dest_path)
@@ -4167,7 +4104,8 @@ class RemoteMachineShellConnection:
                 os.remove(dest_path)
         return headerInfo, bucketMap
 
-    def execute_cbtransfer(self, source, destination, command_options=''):
+    def execute_cbtransfer(self, source, destination, command_options='',
+                           debug=False):
         transfer_command = "%scbtransfer" % (LINUX_COUCHBASE_BIN_PATH)
         if self.nonroot:
             transfer_command = '/home/%s%scbtransfer' % (self.username,
@@ -4184,8 +4122,9 @@ class RemoteMachineShellConnection:
                                                           source,
                                                           destination,
                                                           command_options)
-        output, error = self.execute_command(command, use_channel=True)
-        self.log_command_output(output, error)
+        output, error = self.execute_command(command, debug=debug, use_channel=True)
+        if debug:
+            self.log_command_output(output, error)
         log.info("done execute cbtransfer")
         return output
 
@@ -4385,7 +4324,7 @@ class RemoteMachineShellConnection:
         return output, error
 
     def execute_couchbase_cli(self, cli_command, cluster_host='localhost', options='',
-                              cluster_port=None, user='Administrator', password='password', additional_input=None):
+                              cluster_port=None, user='Administrator', password='password'):
         cb_client = "%scouchbase-cli" % (LINUX_COUCHBASE_BIN_PATH)
         if self.nonroot:
             cb_client = "/home/%s%scouchbase-cli" % (self.username,
@@ -4410,10 +4349,7 @@ class RemoteMachineShellConnection:
             passwd_param = (" --cluster-password {0}".format(password), "")[password is None]
         # now we can run command in format where all parameters are optional
         # {PATH}/couchbase-cli [COMMAND] [CLUSTER:[PORT]] [USER] [PASWORD] [OPTIONS]
-        if additional_input:
-            command = additional_input + " | " + cb_client + " " + cli_command + cluster_param + user_param + passwd_param + " " + options
-        else:
-            command = cb_client + " " + cli_command + cluster_param + user_param + passwd_param + " " + options
+        command = cb_client + " " + cli_command + cluster_param + user_param + passwd_param + " " + options
         log.info("command to run: {0}".format(command))
         output, error = self.execute_command(command, debug=False, use_channel=True)
         return output, error
@@ -4585,12 +4521,7 @@ class RemoteMachineShellConnection:
                 self.execute_command("cd /bin; %s --no-check-certificate -q %s "
                                                         % (wget, download_command))
                 out, err = self.execute_command(cmd)
-                out0 = out[0]
-                try: 
-                  out0 = out0.decode()
-                except AttributeError:
-                  pass 
-                if out and command_output in out0:
+                if out and command_output in out[0]:
                     log.info("%s command is ready" % cmd)
                 else:
                     mesg = "Failed to download %s " % cmd
@@ -4598,25 +4529,13 @@ class RemoteMachineShellConnection:
         elif self.info.distribution_type.lower() == 'centos':
             if cmd == "unzip":
                 command_output = "UnZip 6.00 of 20 April 2009"
-                #log.info("{},{},{},{}".format(type(out),type(command_output),type(out),type(out[0])))
-                out0 = out[0]
-                try: 
-                  out0 = out0.decode()
-                except AttributeError:
-                  pass 
-     
-                if out and command_output in out0:
+                if out and command_output in out[0]:
                     log.info("unzip command is ready")
                     found_command = True
             if not found_command and err and "command not found" in err[0]:
                 self.execute_command("yum install -y unzip")
                 out, err = self.execute_command(cmd)
-                out0 = out[0]
-                try: 
-                  out0 = out0.decode()
-                except AttributeError:
-                  pass 
-                if out and command_output in out0:
+                if out and command_output in out[0]:
                     log.info("%s command is ready" % cmd)
                 else:
                     mesg = "Failed to install %s " % cmd
@@ -4671,9 +4590,8 @@ class RemoteMachineShellConnection:
                                     o, r = self.execute_command("dpkg --get-selections | grep libssl")
                                     log.info("package {0} should not appear below".format(s[:11]))
                                     self.log_command_output(o, r)
-
+           
     def check_pkgconfig(self, deliverable_type, openssl):
-        log.info("check_pkgconfig : start")
         if "SUSE" in self.info.distribution_type:
             o, r = self.execute_command("zypper -n if pkg-config 2>/dev/null| grep -i \"Installed: Yes\"")
             self.log_command_output(o, r)
@@ -4692,8 +4610,7 @@ class RemoteMachineShellConnection:
                 o, r = self.execute_command("cat /etc/redhat-release")
                 self.log_command_output(o, r)
 
-                try:
-                  if o is None:
+                if o is None:
                     # This must be opensuse, hack for now....
                     o, r = self.execute_command("cat /etc/SuSE-release")
                     self.log_command_output(o, r)
@@ -4718,13 +4635,6 @@ class RemoteMachineShellConnection:
                                     self.log_command_output(o, r)
                     else:
                         log.info("no need to install pkgconfig")
-                except Exception as e:
-                    log.info("{}".format(e))
-                    exc_type, exc_obj, exc_tb = sys.exc_info()
-                    fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-                    print(exc_type, fname, exc_tb.tb_lineno)
-                  
-        log.info("check_pkgconfig : end")
 
     def check_man_page(self):
         log.info("check if man installed on vm?")
@@ -4917,9 +4827,7 @@ class RemoteMachineShellConnection:
         if (not is_cluster_compatible):
             log.info("Enabling diag/eval on non-local hosts is available only post 5.5.2 or 6.0 releases")
             return None, "Enabling diag/eval on non-local hosts is available only post 5.5.2 or 6.0 releases"
-        log.info("-->command start: {}".format(command))
         output, error = self.execute_command(command)
-        log.info("-->command end: {}, {}, {}".format(command,output,error))
         return output, error
 
 
@@ -5004,6 +4912,28 @@ class RemoteMachineShellConnection:
     def update_dist_type(self):
         output, error = self.execute_command("echo '{{dist_type,inet6_tcp}}.' > {0}".format(LINUX_DIST_CONFIG))
         self.log_command_output(output, error)
+
+    def alt_addr_add_node(self, main_server=None, internal_IP=None,
+                                server_add=None,
+                                user="Administrator",
+                                passwd="password",
+                                services="kv", cmd_ext=""):
+        """ in alternate address, we need to use curl to add node """
+
+        if internal_IP is None:
+            raise Exception("Need internal IP to add node.")
+        if main_server is None:
+            raise Exception("Need master IP to run")
+        cmd = 'curl{0} -X POST -d  "hostname={1}&user={2}&password={3}&services={4}" '\
+                             .format(cmd_ext, internal_IP, server_add.rest_username,
+                                     server_add.rest_password, services)
+        cmd += '-u {0}:{1} http://{2}:8091/controller/addNode'\
+                             .format(main_server.rest_username,
+                                     main_server.rest_password,
+                                     main_server.ip)
+        output, error = self.execute_command(cmd)
+        return output, error
+
 
 class RemoteUtilHelper(object):
 

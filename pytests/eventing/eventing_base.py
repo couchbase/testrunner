@@ -40,7 +40,7 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
             "Setting the min possible memory quota so that adding mode nodes to the cluster wouldn't be a problem.")
         self.rest.set_service_memoryQuota(service='memoryQuota', memoryQuota=330)
         self.rest.set_service_memoryQuota(service='indexMemoryQuota', memoryQuota=INDEX_QUOTA)
-        # self.rest.set_service_memoryQuota(service='eventingMemoryQuota', memoryQuota=EVENTING_QUOTA)
+        self.rest.set_service_memoryQuota(service='eventingMemoryQuota', memoryQuota=EVENTING_QUOTA)
         self.src_bucket_name = self.input.param('src_bucket_name', 'src_bucket')
         self.eventing_log_level = self.input.param('eventing_log_level', 'INFO')
         self.dst_bucket_name = self.input.param('dst_bucket_name', 'dst_bucket')
@@ -56,7 +56,7 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         self.function_name = function_name[0:90]
         self.timer_storage_chan_size = self.input.param('timer_storage_chan_size', 10000)
         self.dcp_gen_chan_size = self.input.param('dcp_gen_chan_size', 10000)
-        self.is_sbm=self.input.param('source_bucket_mutation', False)
+        self.is_sbm=self.input.param('source_bucket_mutation',False)
         self.n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
         self.n1ql_helper = N1QLHelper(shell=self.shell, max_verify=self.max_verify, buckets=self.buckets,
                                       item_flag=self.item_flag, n1ql_port=self.n1ql_port,
@@ -64,15 +64,15 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
                                       master=self.master, use_rest=True)
         self.pause_resume = self.input.param('pause_resume', False)
         self.pause_resume_number = self.input.param('pause_resume_number', 1)
-        self.is_curl=self.input.param('curl', False)
+        self.is_curl=self.input.param('curl',False)
         self.hostname = self.input.param('host', 'https://postman-echo.com/')
         self.curl_username = self.input.param('curl_user', None)
         self.curl_password = self.input.param('curl_password', None)
         self.auth_type = self.input.param('auth_type', 'no-auth')
-        self.bearer_key=self.input.param('bearer_key', None)
+        self.bearer_key=self.input.param('bearer_key',None)
         self.url = self.input.param('path', None)
-        self.cookies = self.input.param('cookies', False)
-        self.bearer_key = self.input.param('bearer_key', '')
+        self.cookies = self.input.param('cookies',False)
+        self.bearer_key = self.input.param('bearer_key','')
         if self.hostname=='local':
             self.insall_dependencies()
             s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -90,7 +90,7 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         buckets = rest.get_buckets()
         for bucket in buckets:
             stats = rest.get_bucket_stats(bucket)
-            self.log.info("Bucket {} DGM is {}".format(bucket, stats["vb_active_resident_items_ratio"]))
+            self.log.info("Bucket {} DGM is {}".format(bucket,stats["vb_active_resident_items_ratio"]))
         self.hostname = self.input.param('host', 'https://postman-echo.com/')
         if self.hostname == 'local':
             self.teardown_curl()
@@ -103,8 +103,8 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
                                   skip_timer_threshold=86400,
                                   sock_batch_size=1, tick_duration=5000, timer_processing_tick_interval=500,
                                   timer_worker_pool_size=3, worker_count=3, processing_status=True,
-                                  cpp_worker_thread_count=1, multi_dst_bucket=False, execution_timeout=60,
-                                  data_chan_size=10000, worker_queue_cap=100000, deadline_timeout=62):
+                                  cpp_worker_thread_count=1, multi_dst_bucket=False, execution_timeout=20,
+                                  data_chan_size=10000, worker_queue_cap=100000, deadline_timeout=62,language_compatibility='6.5.0'):
         body = {}
         body['appname'] = appname
         script_dir = os.path.dirname(__file__)
@@ -159,6 +159,7 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
                                            "allow_cookies": self.cookies})
             if self.auth_type=="bearer":
                 body['depcfg']['curl'][0]['bearer_key']=self.bearer_key
+        body['settings']['language_compatibility']=language_compatibility
         return body
 
     def wait_for_bootstrap_to_complete(self, name, iterations=20):
@@ -236,6 +237,13 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
             stats_dst = self.rest.get_bucket_stats(bucket)
             if curr_items == stats_dst["curr_items"]:
                 count += 1
+            else:
+                count=0
+        try:
+            stats_src = self.rest.get_bucket_stats(self.src_bucket_name)
+            log.info("Documents in source bucket : {}".format(stats_src["curr_items"]))
+        except :
+            pass
         if stats_dst["curr_items"] != expected_dcp_mutations:
             total_dcp_backlog = 0
             timers_in_past = 0
@@ -495,7 +503,7 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         remote_client.reboot_node()
         remote_client.disconnect()
         # wait for restart and warmup on all node
-        self.sleep(self.wait_timeout * 5)
+        self.sleep(self.wait_timeout * 2)
         # disable firewall on these nodes
         self.stop_firewall_on_node(server)
         # wait till node is ready after warmup
@@ -613,9 +621,14 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         o=os.system('python scripts/curl_setup.py start')
         self.log.info("=== started docker container =======".format(o))
         self.sleep(10)
+        if o!=0:
+            self.log.info("script result {}".format(o))
+            raise Exception("unable to start docker")
         o=os.system('python scripts/curl_setup.py setup')
         self.log.info("=== setup done =======")
-        self.log.info(o)
+        if o!=0:
+            self.log.info("script result {}".format(o))
+            raise Exception("curl setup fail")
 
     def teardown_curl(self):
         o = os.system('python scripts/curl_setup.py stop')
@@ -632,3 +645,45 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
                 import docker
             except ImportError as e:
                 raise Exception("docker installation fails with {}".format(o))
+
+    def load_sample_buckets(self, server, bucketName):
+        from lib.remote.remote_util import RemoteMachineShellConnection
+        shell = RemoteMachineShellConnection(server)
+        shell.execute_command("""curl -v -u Administrator:password \
+                             -X POST http://{0}:8091/sampleBuckets/install \
+                          -d '["{1}"]'""".format(server.ip, bucketName))
+        shell.disconnect()
+        self.sleep(20)
+
+    def check_eventing_rebalance(self):
+        status=self.rest.get_eventing_rebalance_status()
+        self.log.info("Eventing rebalance status: {}".format(status))
+        if status=="true":
+            return True
+        else:
+            return False
+
+    def auto_retry_setup(self):
+        self.sleep_time = self.input.param("sleep_time", 15)
+        self.enabled = self.input.param("enabled", True)
+        self.afterTimePeriod = self.input.param("afterTimePeriod", 150)
+        self.maxAttempts = self.input.param("maxAttempts", 1)
+        self.log.info("Changing the retry rebalance settings ....")
+        self.change_retry_rebalance_settings(enabled=self.enabled, afterTimePeriod=self.afterTimePeriod,
+                                             maxAttempts=self.maxAttempts)
+
+    def change_retry_rebalance_settings(self, enabled=True,
+                                        afterTimePeriod=300, maxAttempts=1):
+        # build the body
+        body = dict()
+        if enabled:
+            body["enabled"] = "true"
+        else:
+            body["enabled"] = "false"
+        body["afterTimePeriod"] = afterTimePeriod
+        body["maxAttempts"] = maxAttempts
+        rest = RestConnection(self.master)
+        rest.set_retry_rebalance_settings(body)
+        result = rest.get_retry_rebalance_settings()
+        self.log.info("Retry Rebalance settings changed to : {0}"
+                      .format(json.loads(result)))

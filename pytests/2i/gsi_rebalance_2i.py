@@ -26,10 +26,21 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         self.rest = RestConnection(self.servers[0])
         self.n1ql_server = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
         self.create_primary_index = False
+        self.retry_time = self.input.param("retry_time", 300)
+        self.rebalance_out = self.input.param("rebalance_out", False)
+        self.sleep_time = self.input.param("sleep_time", 1)
+        self.num_retries = self.input.param("num_retries", 1)
+        self.build_index = self.input.param("build_index", False)
+        self.rebalance_out = self.input.param("rebalance_out", False)
         shell = RemoteMachineShellConnection(self.servers[0])
         info = shell.extract_remote_info().type.lower()
         if info == 'linux':
-            self.cli_command_location = testconstants.LINUX_COUCHBASE_BIN_PATH
+            if self.nonroot:
+                nonroot_base_path = "/home/{0}".format(self.master.ssh_username)
+                self.cli_command_location = nonroot_base_path + \
+                                       testconstants.LINUX_COUCHBASE_BIN_PATH
+            else:
+                self.cli_command_location = testconstants.LINUX_COUCHBASE_BIN_PATH
         elif info == 'windows':
             self.cmd_ext = ".exe"
             self.cli_command_location = testconstants.WIN_COUCHBASE_BIN_PATH_RAW
@@ -202,7 +213,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         rebalance.result()
         # rebalance out a node
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [index_server])
-        self.sleep(2)
+        self.sleep(4)
         try:
             # when rebalance is in progress, run create index
             self.n1ql_helper.run_cbq_query(
@@ -230,7 +241,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         rebalance.result()
         # rebalance out a node
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [index_server])
-        self.sleep(2)
+        self.sleep(15)
         try:
             # when rebalance is in progress, run drop index
             self._drop_index(self.query_definitions[0], self.buckets[0])
@@ -382,8 +393,12 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         failover_task.result()
         self.sleep(30)
         # do a full recovery and rebalance
-        self.rest.set_recovery_type('ns_1@' + index_server.ip, "full")
-        self.rest.add_back_node('ns_1@' + index_server.ip)
+        add_back_ip = index_server.ip
+        if add_back_ip.startswith("["):
+            hostname = add_back_ip[add_back_ip.find("[") + 1:add_back_ip.find("]")]
+            add_back_ip = hostname
+        self.rest.set_recovery_type('ns_1@' + add_back_ip, "full")
+        self.rest.add_back_node('ns_1@' + add_back_ip)
         reb1 = self.cluster.rebalance(self.servers[:self.nodes_init], [], [])
         if self.ansi_join:
             self.ansi_join_query(stage="post_rebalance", expected=expected_result)
@@ -718,7 +733,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         t1 = threading.Thread(target=self._create_replica_index, args=(create_index_query,))
         t1.start()
         try:
-            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], to_add_nodes, [],
+            rebalance = self.cluster.rebalance(self.servers[:self.nodes_init], to_add_nodes, [],
                                                      services=services_in)
             reached = RestHelper(self.rest).rebalance_reached()
             self.assertTrue(reached, "rebalance failed, stuck or did not complete")
@@ -1405,7 +1420,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         # rebalance out a indexer node
         try:
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [index_server])
-            self.sleep(5)
+            self.sleep(15)
             # reboot a kv node during gsi rebalance
             self.reboot_node(kv_server[1])
             reached = RestHelper(self.rest).rebalance_reached()
@@ -1622,7 +1637,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
                                                       stats_map_before_rebalance, stats_map_after_rebalance, [],
                                                       [nodes_out_list])
         # rebalance in a node
-        command = "{0}couchbase-cli server-add -c {1} -u {2} -p {3} --server-add={4}:8091 --server-add-username={5} " \
+        command = "{0}couchbase-cli server-add -c {1} -u {2} -p {3} --server-add={4} --server-add-username={5} " \
                   "--server-add-password={6}".format(
             self.cli_command_location,
             kv_node.ip, kv_node.rest_username,
@@ -2284,9 +2299,6 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
         self.run_operation(phase="before")
-        self.sleep(30)
-        self.run_operation(phase="during")
-        self.run_operation(phase="after")
 
     def test_gsi_rebalance_in_indexer_node_with_node_eject_only_as_false(self):
         self.run_operation(phase="before")
@@ -2727,6 +2739,62 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
                                                       to_add_nodes, [], swap_rebalance=True)
         self.run_operation(phase="after")
 
+    def test_retry_rebalance(self):
+        body = {"enabled": "true", "afterTimePeriod": self.retry_time , "maxAttempts" : self.num_retries}
+        rest = RestConnection(self.master)
+        rest.set_retry_rebalance_settings(body)
+        result = rest.get_retry_rebalance_settings()
+        self.shell.execute_cbworkloadgen(rest.username, rest.password, 2000000, 100, "default", 1024, '-j')
+        if not self.build_index:
+            self.run_operation(phase="before")
+            self.sleep(30)
+        index_server = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
+        map_before_rebalance, stats_map_before_rebalance = self._return_maps()
+        services_in = ["index"]
+        if self.rebalance_out:
+            # rebalance in a node
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]], [],
+                                                 services=services_in)
+            rebalance.result()
+        try:
+            if self.build_index:
+                thread1 = threading.Thread(name='ddl', target=self.create_workload_index)
+                thread1.start()
+                self.sleep(5)
+            if self.rebalance_out:
+                rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [index_server])
+            else:
+                rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
+                                                         [self.servers[self.nodes_init]], [],
+                                                         services=services_in)
+            self.sleep(4)
+            # reboot an index node during gsi rebalance
+            if not self.build_index:
+                self.reboot_node(index_server)
+            reached = RestHelper(self.rest).rebalance_reached()
+            self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+            rebalance.result()
+        except Exception, ex:
+            if "Rebalance failed" not in str(ex):
+                self.fail("rebalance failed with some unexpected error : {0}".format(str(ex)))
+        else:
+            self.fail("rebalance did not fail after index node reboot")
+        # Rerun rebalance to check if it can recover from failure
+        if self.build_index:
+            thread1.join()
+        self.check_retry_rebalance_succeeded()
+        if self.rebalance_out and not self.build_index:
+            map_after_rebalance, stats_map_after_rebalance = self._return_maps()
+            # validate the results
+            self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance, map_after_rebalance,
+                                                      stats_map_before_rebalance, stats_map_after_rebalance,
+                                                      [], [index_server])
+    def create_workload_index(self):
+        workload_index = "CREATE INDEX idx12345 ON default(name)"
+        self.n1ql_helper.run_cbq_query(query=workload_index,
+                                       server=self.n1ql_node)
+        return
+
     def _return_maps(self):
         index_map = self.get_index_map()
         stats_map = self.get_index_stats(perNode=False)
@@ -2949,7 +3017,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
 
     def _create_restore(self, server, username="Administrator", password="password"):
         remote_client = RemoteMachineShellConnection(server)
-        cmd = "cbbackupmgr restore --archive /data/backups --repo example{0} --cluster couchbase://127.0.0.1 --username {1} --password {2}".format(
+        cmd = "cbbackupmgr restore --archive /data/backups --repo example{0} --cluster couchbase://127.0.0.1 --username {1} --password {2} --force-updates".format(
             self.rand, username, password)
         command = "{0}{1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)

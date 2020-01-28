@@ -441,6 +441,7 @@ class QueryTests(BaseTestCase):
                 post_queries = test_dict[test_name].get('post_queries', [])
                 asserts = test_dict[test_name].get('asserts', [])
                 cleanups = test_dict[test_name].get('cleanups', [])
+                server = test_dict[test_name].get('server', None)
 
                 # INDEX STAGE
                 
@@ -479,7 +480,7 @@ class QueryTests(BaseTestCase):
 
                 self.log.info('Running Query Stage')
                 for query in queries:
-                    res = self.run_cbq_query(query)
+                    res = self.run_cbq_query(query, server=server)
                     res_dict['q_res'].append(res)
 
                 # POST_QUERIES STAGE
@@ -1340,7 +1341,7 @@ class QueryTests(BaseTestCase):
             return
         for bucket in self.buckets:
             try:
-                self.with_retry(lambda: self.ensure_primary_indexes_exist(), eval=None, delay=1, tries=10)
+                self.with_retry(lambda: self.ensure_primary_indexes_exist(), eval=None, delay=1, tries=30)
                 self.primary_index_created = True
                 self.log.info("-->waiting for indexes online, bucket:{}".format(bucket.name))
                 self._wait_for_index_online(bucket.name, '#primary')
@@ -2201,7 +2202,7 @@ class QueryTests(BaseTestCase):
         elif role in ["select(default)", "query_select(default)", "select(standard_bucket0)", "query_select(standard_bucket0)"]:
             self.assertTrue(str(res).find("'code': 13014") != -1)
         elif role in ["insert(default)", "query_insert(default)", "query_update(default)", "query_delete(default)"]:
-            self.assertTrue(res['status'] == 'stopped')
+            self.assertTrue(res['status'] == 'fatal')
         else:
             self.assertTrue(res['status'] == 'success')
 
@@ -2395,9 +2396,12 @@ class QueryTests(BaseTestCase):
         res = self.curl_with_roles(self.query)
         role_list = ["query_delete(default)", "query_delete(standard_bucket0)", "delete(default)", "bucket_full_access(default)"]
         self.assertNotEqual(res['status'], 'success') if role in role_list else self.assertTrue(res['status'] == 'success')
-        self.query = 'delete from system:active_requests'
-        res = self.curl_with_roles(self.query)
-        self.assertTrue(res['status'] == 'stopped')
+        try:
+            self.query = 'delete from system:active_requests'
+            res = self.curl_with_roles(self.query)
+            self.assertTrue(res['status'] == 'stopped')
+        except:
+            self.assertTrue(res['status'] == 'fatal')
         if role not in role_list:
             self.query = 'delete from system:prepareds'
             res = self.curl_with_roles(self.query)
@@ -2448,7 +2452,9 @@ class QueryTests(BaseTestCase):
                 actual_result_list.append(actual_result['results'][i]['default']['_id'])
             elif test in ["test_desc_isReverse_ascOrder"]:
                 actual_result_list.append(actual_result['results'][i]['id'])
-        self.assertEqual(actual_result_list, expected_result_list)
+        if test != "do_not_test_against_hardcode":
+            self.assertEqual(actual_result_list, expected_result_list)
+
         query = query.replace("from default", "from default use index(`#primary`)")
         expected_result = self.run_cbq_query(query)
         self.assertEqual(actual_result['results'], expected_result['results'])
@@ -3166,9 +3172,35 @@ class QueryTests(BaseTestCase):
 
 ##############################################################################################
 #
-#   tuq_xattrs.py helpers
+#   tuq_cluster_ops helpers
 #
 ##############################################################################################
+
+    def run_queries_until_timeout(self,timeout=300):
+        self.log.info("Running queries for %s seconds to ensure no issues" % timeout)
+        init_time = time.time()
+        check = False
+        next_time = init_time
+        while not check:
+            try:
+                result = self.run_cbq_query("select * from default limit 10000")
+                time.sleep(2)
+                self.log.info("Query Succeeded")
+                check = next_time - init_time > timeout
+                next_time = time.time()
+                self.fail = False
+            except Exception as e:
+                self.log.error("Query Failed")
+                self.log.error(str(e))
+                time.sleep(2)
+                check = next_time - init_time > timeout
+                if next_time - init_time > timeout:
+                    self.log.error("Queries are failing after the interval, queries should have recovered by now!")
+                    self.fail = True
+                next_time = time.time()
+
+        return
+
 
 ##############################################################################################
 #

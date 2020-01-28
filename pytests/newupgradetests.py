@@ -799,6 +799,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         after_upgrade_buckets_in = self.input.param("after_upgrade_buckets_in", False)
         after_upgrade_buckets_out = self.input.param("after_upgrade_buckets_out", False)
         after_upgrade_buckets_flush = self.input.param("after_upgrade_buckets_flush", False)
+        self.index_quota_percent = self.input.param("index_quota_percent", 30)
 
         self.swap_num_servers = self.input.param('swap_num_servers', 4)
         # Install initial version on the specified nodes
@@ -1845,6 +1846,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         self.bucket_size = 1000
         # Install initial version on the specified nodes
         self._install(self.servers[:6])
+        self.init_installed_servers = len(self.servers[:6])
         # Configure the nodes with services
         self.operations(self.servers[:6], services="kv,kv,n1ql,index,n1ql,index")
         # get the n1ql node which will be used in pre,during and post upgrade for running n1ql commands
@@ -1912,16 +1914,19 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                 if self.initial_build_type == "community" and self.upgrade_build_type == "enterprise":
                     upgrade_threads = self._async_update(upgrade_version, [self.servers[6]], save_upgrade_config=True)
                 else:
-                    upgrade_threads = self._async_update(upgrade_version, [self.servers[6]])
-
-                for upgrade_thread in upgrade_threads:
-                    upgrade_thread.join()
-                success_upgrade = True
-                while not self.queue.empty():
-                    success_upgrade &= self.queue.get()
-                if not success_upgrade:
-                    self.fail("Upgrade failed. See logs above!")
-                self.sleep(120)
+                    if self.init_installed_servers == len(self.servers):
+                        upgrade_threads = self._async_update(upgrade_version, [self.servers[6]])
+                    else:
+                        self._install([self.servers[6]], version=upgrade_version)
+                if self.init_installed_servers == len(self.servers):
+                    for upgrade_thread in upgrade_threads:
+                        upgrade_thread.join()
+                    success_upgrade = True
+                    while not self.queue.empty():
+                        success_upgrade &= self.queue.get()
+                    if not success_upgrade:
+                        self.fail("Upgrade failed. See logs above!")
+                    self.sleep(120)
                 self.cluster.rebalance(self.servers[:6], [self.servers[6]], [],
                                        services=["kv", "index", "n1ql"])
         # creating new buckets after upgrade
@@ -1948,10 +1953,16 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
 
         self.bucket_size = 1000
         # Install initial version on the specified nodes
-        self._install(self.servers[:6])
+        if self.clean_upgrade_install:
+            self._install(self.servers[:6])
+            self.init_installed_servers = len(self.servers[:6])
+        else:
+            self._install(self.servers)
+            self.init_installed_servers = len(self.servers)
         # Configure the nodes with services
         self.operations(self.servers[:6], services="kv,index,n1ql,n1ql,kv,index")
-        # get the n1ql node which will be used in pre,during and post upgrade for running n1ql commands
+        # get the n1ql node which will be used in pre,during and post upgrade
+        # for running n1ql commands
         self.n1ql_server = self.get_nodes_from_services_map(
             service_type="n1ql")
         # Run the pre upgrade operations, typically creating index
@@ -1970,8 +1981,9 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         # upgrade index and kv nodes to new version when we have multiple nodes
         upgrade_nodes = self.servers[4:6]
         for upgrade_version in self.upgrade_versions:
-            self.sleep(self.sleep_time, "Pre-setup of old version is done. Wait for upgrade to {0} version". \
-                       format(upgrade_version))
+            self.sleep(self.sleep_time, "Pre-setup of old version is done.  "\
+                                        "Wait for upgrade to {0} version". \
+                                                     format(upgrade_version))
             for server in upgrade_nodes:
                 remote = RemoteMachineShellConnection(server)
                 remote.stop_server()
@@ -1980,20 +1992,26 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                     self.sleep(self.expire_time)
                 if self.input.param('remove_manifest_files', False):
                     for file in ['manifest.txt', 'manifest.xml', 'VERSION.txt,']:
-                        output, error = remote.execute_command("rm -rf /opt/couchbase/{0}".format(file))
+                        cmd = "rm -rf /opt/couchbase/{0}".format(file)
+                        output, error = remote.execute_command(cmd)
                         remote.log_command_output(output, error)
                 if self.input.param('remove_config_files', False):
-                    for file in ['config', 'couchbase-server.node', 'ip', 'couchbase-server.cookie']:
-                        output, error = remote.execute_command(
-                            "rm -rf /opt/couchbase/var/lib/couchbase/{0}".format(file))
+                    for file in ['config', 'couchbase-server.node', 'ip',\
+                                 'couchbase-server.cookie']:
+                        cmd = "rm -rf /opt/couchbase/var/lib/couchbase/{0}".format(file)
+                        output, error = remote.execute_command(cmd)
                         remote.log_command_output(output, error)
                     self.buckets = []
                 remote.disconnect()
 
-            if self.initial_build_type == "community" and self.upgrade_build_type == "enterprise":
-                upgrade_threads = self._async_update(upgrade_version, upgrade_nodes, save_upgrade_config=True)
+            if self.initial_build_type == "community" and \
+               self.upgrade_build_type == "enterprise":
+                upgrade_threads = self._async_update(upgrade_version,\
+                                                     upgrade_nodes, \
+                                                     save_upgrade_config=True)
             else:
-                upgrade_threads = self._async_update(upgrade_version, upgrade_nodes)
+                upgrade_threads = self._async_update(upgrade_version,\
+                                                     upgrade_nodes)
             # wait upgrade statuses
             self.n1ql_server = self.get_nodes_from_services_map(
                 service_type="n1ql")
@@ -2013,19 +2031,30 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         # Add new services after the upgrade
         if after_upgrade_services_in is not False:
             for upgrade_version in self.upgrade_versions:
-                if self.initial_build_type == "community" and self.upgrade_build_type == "enterprise":
-                    upgrade_threads = self._async_update(upgrade_version, [self.servers[6]], save_upgrade_config=True)
+                if self.initial_build_type == "community" and \
+                   self.upgrade_build_type == "enterprise":
+                    upgrade_threads = self._async_update(upgrade_version,
+                                                         [self.servers[6]],
+                                                         save_upgrade_config=True)
                 else:
-                    upgrade_threads = self._async_update(upgrade_version, [self.servers[6]])
-
-                for upgrade_thread in upgrade_threads:
-                    upgrade_thread.join()
-                success_upgrade = True
-                while not self.queue.empty():
-                    success_upgrade &= self.queue.get()
-                if not success_upgrade:
-                    self.fail("Upgrade failed. See logs above!")
-                self.sleep(120)
+                    if self.init_installed_servers == len(self.servers):
+                        self.log.info("It will be upgrade install {0}in new node"
+                                                        .format(upgrade_version))
+                        upgrade_threads = self._async_update(upgrade_version,
+                                                             [self.servers[6]])
+                    else:
+                        self.log.info("It will be clean install {0} in new node"
+                                                        .format(upgrade_version))
+                        self._install([self.servers[6]], version=upgrade_version)
+                if self.init_installed_servers == len(self.servers):
+                    for upgrade_thread in upgrade_threads:
+                        upgrade_thread.join()
+                    success_upgrade = True
+                    while not self.queue.empty():
+                        success_upgrade &= self.queue.get()
+                    if not success_upgrade:
+                        self.fail("Upgrade failed. See logs above!")
+                    self.sleep(120)
                 self.cluster.rebalance(self.servers[:6], [self.servers[6]], [],
                                        services=["kv", "index", "n1ql"])
         # creating new buckets after upgrade
@@ -2035,8 +2064,10 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
             self._create_standard_buckets(self.master, 1)
             if self.ddocs_num:
                 self.create_ddocs_and_views()
-                gen_load = BlobGenerator('upgrade', 'upgrade-', self.value_size, end=self.num_items)
-                self._load_all_buckets(self.master, gen_load, "create", self.expire_time, flag=self.item_flag)
+                gen_load = BlobGenerator('upgrade', 'upgrade-',\
+                                          self.value_size, end=self.num_items)
+                self._load_all_buckets(self.master, gen_load, "create",\
+                                       self.expire_time, flag=self.item_flag)
         # deleting buckets after upgrade
         if after_upgrade_buckets_out is not False:
             self._all_buckets_delete(self.master)
@@ -2332,7 +2363,12 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                 self.fail("This test needs at least 5 servers to run")
             nodes_init = 4
             if initial_services_setting is not None:
-                initial_services_setting += "-kv,fts,index"
+                tmp = initial_services_setting.split("-")
+                if nodes_init > len(tmp):
+                    if (nodes_init - len(tmp)) == 1:
+                        initial_services_setting += "-kv,fts,index"
+                    elif (nodes_init - len(tmp)) == 2:
+                        initial_services_setting += "-kv,n1ql-kv,fts,index"
                 self.is_fts_in_pre_upgrade = True
         self._install(self.servers[:nodes_init])
         # Configure the nodes with services
@@ -2347,9 +2383,9 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
 
         self.buckets = RestConnection(self.master).get_buckets()
         if 5 <= int(self.initial_version[:1]) and 5.5 > float(self.initial_version[:3]):
-            self.pre_upgrade(self.servers[:3])
+            self.pre_upgrade(self.servers[:nodes_init])
         elif 5.5 <= float(self.initial_version[:3]) and self.num_index_replicas > 0:
-            self.pre_upgrade(self.servers[:4])
+            self.pre_upgrade(self.servers[:nodes_init])
         seqno_expected = 1
         if self.ddocs_num:
             self.create_ddocs_and_views()
@@ -2384,6 +2420,16 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                                                   fts_query_limit=10000000)
                     if "You have successfully installed Couchbase Server." not in output:
                         self.fail("Upgrade failed. See logs above!")
+                    if total_nodes == 1:
+                        rest_upgrade = RestConnection(upgrade_nodes[total_nodes])
+                        healthy = RestHelper(rest_upgrade).is_cluster_healthy
+                        count = 0
+                        while not healthy:
+                            self.sleep(5, "wait for cluster to update its config")
+                            healthy = RestHelper(rest_upgrade).is_cluster_healthy
+                            count +=1
+                            if count == 5:
+                                self.fail("Cluster does not ready after 1 minute")
                     self.cluster.rebalance(self.servers[:nodes_init], [], [])
                     total_nodes -= 1
                 if total_nodes == 0:

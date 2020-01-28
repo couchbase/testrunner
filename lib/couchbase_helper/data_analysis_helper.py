@@ -778,7 +778,8 @@ class DataCollector(object):
         return headerInfo, bucketMap
 
     def get_kv_dump_from_backup_file(self, server, cli_command, cmd_ext,
-                                     backup_dir, master_key, buckets):
+                                     backup_dir, master_key, buckets,
+                                     debug_logs=False):
         """
             Extract key value from database file shard_0.sqlite.0
             Return: key, kv store name, status and value
@@ -787,8 +788,10 @@ class DataCollector(object):
         backup_data = {}
         status = False
         now = datetime.datetime.now()
+        shards_with_data = {}
         for bucket in buckets:
             backup_data[bucket.name] = {}
+            shards_with_data[bucket.name] = []
             print("---- Collecting data in backup repo")
             if master_key == "random_keys":
                 master_key = ".\{12\}$"
@@ -801,22 +804,23 @@ class DataCollector(object):
                                                    i, master_key)
                 output, error = conn.execute_command(cmd2, debug=False)
                 if output:
+                    shards_with_data[bucket.name].append(i)
                     """ remove empty element """
                     output = [x.strip(' ') for x in output]
                     """ remove '--' element """
                     output = [ x for x in output if not "--" in x ]
-                    key_ids       =  [x.split(":")[1].strip(' ') for x in output[0::9]]
-                    key_partition =  [x.split(":")[1].strip(' ') for x in output[1::9]]
-                    key_status    =  [x.split(":")[1].strip(' ') for x in output[4::9]]
+                    key_ids       =  [x.split(":")[1].strip(' ') for x in output[0::7]]
+                    key_partition =  i
+                    key_status    =  [x.split(":")[1].strip(' ') for x in output[2::7]]
                     key_value = []
-                    for x in output[8::9]:
+                    for x in output[5::7]:
                         if x.split(":",1)[1].strip(' ').startswith("{"):
                             key_value.append(x.split(":",1)[1].strip())
                         else:
                             key_value.append(x.split(":")[-1].strip(' '))
                     for idx, key in enumerate(key_ids):
                         backup_data[bucket.name][key] = \
-                           {"KV store name":key_partition[idx], "Status":key_status[idx],
+                           {"KV store name":key_partition, "Status":key_status[idx],
                             "Value":key_value[idx]}
                     status = True
 
@@ -825,6 +829,12 @@ class DataCollector(object):
                 return  backup_data, status
             print("---- Done extract data from backup files in backup repo of bucket {0}"\
                                                                    .format(bucket.name))
+        if debug_logs:
+            print "---- shards with data in each bucket: {0}".format(shards_with_data)
+        else:
+            for bucket in buckets:
+                print "---- total vbuckets with data in bucket {0} are {1}"\
+                           .format(bucket.name, len(shards_with_data[bucket.name]))
         return backup_data, status
 
     def get_views_definition_from_backup_file(self, server, backup_dir, buckets):

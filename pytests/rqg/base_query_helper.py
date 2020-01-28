@@ -5,7 +5,6 @@ import json
 from random import randrange
 from random import randint
 from datetime import datetime
-from functools import reduce
 
 class BaseRQGQueryHelper(object):
 
@@ -425,6 +424,15 @@ class BaseRQGQueryHelper(object):
         if len(sql_token_list) == 1:
             table_name = random.choice(table_name_list)
             table_name_alias = ""
+            if "OUTER_BUCKET_NAME" in sql:
+                if "outer_alias_name" in table_map[table_name].keys():
+                    table_name_alias = table_map[table_name]["outer_alias_name"]
+                bucket_string = table_name
+                if table_name_alias != "":
+                    table_name_alias = table_map[table_name]["outer_alias_name"]
+                    bucket_string = table_name + "  " + table_name_alias
+                return sql.replace("OUTER_BUCKET_NAME", bucket_string), {table_name: table_map[table_name]}
+            else:
             if "alias_name" in list(table_map[table_name].keys()):
                 table_name_alias = table_map[table_name]["alias_name"]
             bucket_string = table_name
@@ -439,6 +447,7 @@ class BaseRQGQueryHelper(object):
                 if len(choice_list) > 0:
                     table_name = random.choice(choice_list)
                     table_name_alias = table_map[table_name]["alias_name"]
+                    outer_table_name_alias = table_map[table_name]["outer_alias_name"]
                 else:
                     table_name = table_name_list[0]
                     table_name_alias = table_map[table_name]["alias_name"]+self._random_alphabet_string()
@@ -453,6 +462,7 @@ class BaseRQGQueryHelper(object):
                             table_name_alias = table_map[table_name_list[0]]["alias_name"]+self._random_alphabet_string()
                             use_table_entry = True
                 data = token
+                data = data.replace("OUTER_BUCKET_NAME", (table_name+" "+outer_table_name_alias))
                 data = data.replace("BUCKET_NAME", (table_name+" "+table_name_alias))
                 if "ALIAS" in token:
                     data = data.replace("ALIAS", "query")
@@ -522,9 +532,11 @@ class BaseRQGQueryHelper(object):
                         table_field = field_name.split(".")[1]
                         data = data.replace("CURRENT_TABLE.NUMERIC_FIELD", (table_name_alias + "." + table_field)) + " "
                 new_sub_query += data + " "
+
                 prev_table_list.append(table_name)
             else:
                 new_sub_query += token+" "
+
         new_map = {}
         for key in list(table_map.keys()):
             if key in prev_table_list:
@@ -980,6 +992,12 @@ class BaseRQGQueryHelper(object):
         if "OUTER_BUCKET_NAME.*" in new_sql:
             projection = " "+table_map[list(table_map.keys())[0]]["alias_name"]+".* "
             new_sql = new_sql.replace("OUTER_BUCKET_NAME.*", projection)
+        if "BUCKET_NAME.*" in new_sql:
+            projection = " "+table_map[table_map.keys()[0]]["alias_name"]+".* "
+            new_sql = new_sql.replace("BUCKET_NAME.*", projection)
+        if "OUTER_BUCKET_NAME" in new_sql:
+            projection = " "+table_map[table_map.keys()[0]]+" "+table_map[table_map.keys()[0]]["outer_alias_name"]+" "
+            new_sql = new_sql.replace("OUTER_BUCKET_NAME.*", projection)
         if "ORDER_BY_SEL_VAL" in sql:
             select_field_names_list = self.extract_field_names(sql_map['select_from'], all_field_names)
             new_sql = new_sql.replace("ORDER_BY_SEL_VAL", self._convert_list(select_field_names_list, "numeric"))
@@ -1363,6 +1381,7 @@ class BaseRQGQueryHelper(object):
         index_name_fields_only = None
         aggregate_pushdown_index_name = None
         sql, table_map = self._convert_sql_template_to_value(sql=n1ql_template, table_map=table_map, table_name=table_name, aggregate_pushdown=aggregate_pushdown, ansi_joins=ansi_joins)
+
         n1ql = self._gen_sql_to_nql(sql, ansi_joins)
         sql = self._convert_condition_template_to_value_datetime(sql, table_map, sql_type="sql")
         n1ql = self._convert_condition_template_to_value_datetime(n1ql, table_map, sql_type="n1ql")
@@ -1537,7 +1556,7 @@ class BaseRQGQueryHelper(object):
         tokens = sql.split("WHERE")
         new_map[source_table]["alias_name"] = target_table
         where_condition = self._convert_condition_template_to_value(tokens[1], new_map)
-        merge_sql = "MERGE INTO {0} USING {1} ON KEY copy_simple_table.primary_key_id".format(target_table,  source_table)
+        merge_sql = "MERGE INTO {0} USING {1} ON {2}.primary_key_id={3}.primary_key_id".format(target_table,  source_table, target_table, source_table)
         merge_sql +=" WHEN MATCHED THEN"
         new_sql = " DELETE FROM {0} ".format(target_table)
         new_sql += " WHERE "+where_condition
@@ -1631,7 +1650,7 @@ class BaseRQGQueryHelper(object):
 
             # Make sure that outer select uses a table that is contained inside the query
             if outer_select_alias not in from_fields[0]:
-                select_from[1] = select_from[1].replace(outer_select_alias, table_map[list(table_map.keys())[0]]['alias_name'])
+                select_from[1] = select_from[1].replace(outer_select_alias, table_map[table_map.keys()[0]]['outer_alias_name'])
 
             new_sql = "SELECT " + select_from[1] + "FROM (SELECT" + select_from[2] + "FROM " + from_fields[1] + "WHERE " \
                       + where_condition[0] + from_fields[0] + "WHERE " + where_condition[1]
@@ -1684,6 +1703,7 @@ class BaseRQGQueryHelper(object):
                     new_sql += " ORDER BY "+aggregate_groupby_orderby_fields+" "
                 else:
                     new_sql += " ORDER BY "+self._covert_fields_template_to_value(order_by, table_map, converted)+" "
+
         return new_sql, table_map
 
     def random_field_choice(self, field_names):

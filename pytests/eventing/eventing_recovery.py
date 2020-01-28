@@ -43,9 +43,9 @@ class EventingRecovery(EventingBaseTest):
         if handler_code == 'bucket_op':
             self.handler_code = HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE
         elif handler_code == 'bucket_op_with_timers':
-            self.handler_code = HANDLER_CODE.BUCKET_OPS_WITH_TIMERS
+            self.handler_code = HANDLER_CODE.BUCKET_OPS_WITH_TIMERS_RECOVERY
         elif handler_code == 'bucket_op_with_cron_timers':
-            self.handler_code = HANDLER_CODE.BUCKET_OPS_WITH_CRON_TIMERS
+            self.handler_code = HANDLER_CODE.BUCKET_OPS_WITH_CRON_TIMERS_RECOVERY
         elif handler_code == 'n1ql_op_with_timers':
             # index is required for delete operation through n1ql
             self.n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
@@ -62,11 +62,11 @@ class EventingRecovery(EventingBaseTest):
             self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
             self.handler_code = HANDLER_CODE.N1QL_OPS_WITH_TIMERS
         elif handler_code == 'source_bucket_mutation':
-            self.handler_code = HANDLER_CODE.BUCKET_OP_WITH_SOURCE_BUCKET_MUTATION
+            self.handler_code = HANDLER_CODE.BUCKET_OP_WITH_SOURCE_BUCKET_MUTATION_RECOVERY
         elif handler_code == 'source_bucket_mutation_with_timers':
-            self.handler_code = HANDLER_CODE.BUCKET_OP_SOURCE_BUCKET_MUTATION_WITH_TIMERS
+            self.handler_code = HANDLER_CODE.BUCKET_OP_SOURCE_BUCKET_MUTATION_WITH_TIMERS_RECOVERY
         elif handler_code == 'bucket_op_curl_get':
-            self.handler_code = HANDLER_CODE_CURL.BUCKET_OP_WITH_CURL_GET
+            self.handler_code = HANDLER_CODE_CURL.BUCKET_OP_WITH_CURL_GET_RECOVERY
         elif handler_code == 'bucket_op_curl_post':
             self.handler_code = HANDLER_CODE_CURL.BUCKET_OP_WITH_CURL_POST
         elif handler_code == 'bucket_op_curl_put':
@@ -80,9 +80,9 @@ class EventingRecovery(EventingBaseTest):
         elif handler_code == 'timer_op_curl_put':
             self.handler_code = HANDLER_CODE_CURL.TIMER_OP_WITH_CURL_PUT
         elif handler_code == 'timer_op_curl_delete':
-            self.handler_code = HANDLER_CODE_CURL.TIMER_OP_WITH_CURL_DELETE
+            self.handler_code = HANDLER_CODE_CURL.TIMER_OP_WITH_CURL_DELETE_RECOVERY
         else:
-            self.handler_code = HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE
+            self.handler_code = HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE_RECOVERY
 
     def tearDown(self):
         super(EventingRecovery, self).tearDown()
@@ -173,7 +173,7 @@ class EventingRecovery(EventingBaseTest):
         # Wait for eventing to catch up with all the delete mutations and verify results
         # See MB-30772
         if self.is_sbm:
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2, skip_stats_validation=True)
+            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         else:
             self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
@@ -244,8 +244,60 @@ class EventingRecovery(EventingBaseTest):
         # load some data
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
+        # kill erlang on eventing when eventing is processing mutations
+        for node in [eventing_node]:
+            self.print_eventing_stats_from_all_eventing_nodes()
+            self.kill_erlang_service(node)
+        if self.pause_resume:
+            self.wait_for_handler_state(body['appname'], "paused")
+            self.resume_function(body)
+        # Wait for eventing to catch up with all the update mutations and verify results
+        if self.is_sbm:
+            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2, skip_stats_validation=True)
+        else:
+            self.verify_eventing_results(self.function_name,self.docs_per_day * 2016, skip_stats_validation=True)
+        # pause handler
+        if self.pause_resume:
+            self.pause_function(body)
+        # delete all documents
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size, op_type='delete')
         # kill erlang on kv and eventing when eventing is processing mutations
-        for node in [kv_node, eventing_node]:
+        for node in [eventing_node]:
+            self.print_eventing_stats_from_all_eventing_nodes()
+            self.kill_erlang_service(node)
+        if self.pause_resume:
+            self.wait_for_handler_state(body['appname'], "paused")
+            self.resume_function(body)
+        # Wait for eventing to catch up with all the delete mutations and verify results
+        if self.is_sbm:
+            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        else:
+            self.verify_eventing_results(self.function_name,0, skip_stats_validation=True)
+        self.undeploy_and_delete_function(body)
+        # intentionally added , as it requires some time for eventing-consumers to shutdown
+        self.sleep(60)
+        self.assertTrue(self.check_if_eventing_consumers_are_cleaned_up(),
+                        msg="eventing-consumer processes are not cleaned up even after undeploying the function")
+
+    def test_killing_kv_erlang_when_eventing_is_processing_mutations(self):
+        kv_node = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=False)
+        eventing_node = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
+        body = self.create_save_function_body(self.function_name, self.handler_code,execution_timeout=30)
+        if self.is_curl:
+            body['depcfg']['curl'] = []
+            body['depcfg']['curl'].append({"hostname": self.hostname, "value": "server", "auth_type": self.auth_type,
+                                           "username": self.curl_username, "password": self.curl_password,"cookies": self.cookies})
+        self.deploy_function(body)
+        # pause handler
+        if self.pause_resume:
+            self.pause_function(body)
+        # load some data
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        # kill erlang on kv when eventing is processing mutations
+        for node in [kv_node]:
+            self.print_eventing_stats_from_all_eventing_nodes()
             self.kill_erlang_service(node)
         if self.pause_resume:
             self.wait_for_handler_state(body['appname'], "paused")
@@ -261,8 +313,9 @@ class EventingRecovery(EventingBaseTest):
         # delete all documents
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size, op_type='delete')
-        # kill erlang on kv and eventing when eventing is processing mutations
-        for node in [kv_node, eventing_node]:
+        # kill erlang on kv when eventing is processing mutations
+        for node in [kv_node]:
+            self.print_eventing_stats_from_all_eventing_nodes()
             self.kill_erlang_service(node)
         if self.pause_resume:
             self.wait_for_handler_state(body['appname'], "paused")
@@ -697,7 +750,7 @@ class EventingRecovery(EventingBaseTest):
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
         if self.pause_resume:
-            self.pause_function(body, wait_for_pause=False)
+            self.pause_function(body)
         # rebalance in a eventing node when eventing is processing mutations
         services_in = ["eventing"]
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]], [],
@@ -707,6 +760,9 @@ class EventingRecovery(EventingBaseTest):
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         # kill eventing consumer when eventing is processing mutations
         self.kill_consumer(eventing_node)
+        if self.pause_resume:
+            self.wait_for_handler_state(body['appname'], "paused")
+        else:
         self.wait_for_handler_state(body['appname'], "deployed")
         rebalance.result()
         if self.pause_resume:
@@ -731,7 +787,7 @@ class EventingRecovery(EventingBaseTest):
         if self.is_sbm:
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         else:
-            self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+            self.verify_eventing_results(self.function_name,0, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
         # Get all eventing nodes
         nodes_out_list = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
@@ -758,14 +814,14 @@ class EventingRecovery(EventingBaseTest):
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
         if self.pause_resume:
-            self.pause_function(body, wait_for_pause=False)
+            self.pause_function(body)
         try:
             # rebalance in a eventing node when eventing is processing mutations
             services_in = ["eventing"]
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]], [],
                                                      services=services_in)
             self.sleep(5)
-            reached = RestHelper(self.rest).rebalance_reached(percentage=60)
+            reached = RestHelper(self.rest).rebalance_reached(percentage=30)
             self.assertTrue(reached, "rebalance failed, stuck or did not complete")
             # kill eventing producer when eventing is processing mutations
             self.kill_producer(eventing_node)
@@ -775,7 +831,7 @@ class EventingRecovery(EventingBaseTest):
             else:
                 self.wait_for_handler_state(body['appname'], "deployed")
             rebalance.result()
-        except Exception as ex:
+        except Exception, ex:
             log.info("Rebalance failed as expected after eventing got killed: {0}".format(str(ex)))
         else:
             self.fail("Rebalance succeeded even after killing eventing processes")
@@ -798,7 +854,87 @@ class EventingRecovery(EventingBaseTest):
         if self.pause_resume:
             self.pause_function(body)
             self.sleep(30)
+        # kill eventing producer when eventing is processing mutations
+        self.kill_producer(eventing_node)
+        self.sleep(120)
+        if self.pause_resume:
+            self.wait_for_handler_state(body['appname'], "paused")
             self.resume_function(body)
+        else:
+            self.wait_for_handler_state(body['appname'], "deployed")
+        # Wait for eventing to catch up with all the delete mutations and verify results
+        # This is required to ensure eventing works after rebalance goes through successfully
+        if self.is_sbm:
+            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        else:
+            self.verify_eventing_results(self.function_name,0, skip_stats_validation=True)
+        self.undeploy_and_delete_function(body)
+        # Get all eventing nodes
+        nodes_out_list = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
+        # rebalance out all eventing nodes
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init + 1], [], nodes_out_list)
+        reached = RestHelper(self.rest).rebalance_reached()
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        rebalance.result()
+
+    def test_auto_retry_of_failed_rebalance_when_producer_killed(self):
+        gen_load_del = copy.deepcopy(self.gens_load)
+        self.auto_retry_setup()
+        eventing_node = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
+        sock_batch_size = self.input.param('sock_batch_size', 1)
+        worker_count = self.input.param('worker_count', 3)
+        cpp_worker_thread_count = self.input.param('cpp_worker_thread_count', 1)
+        body = self.create_save_function_body(self.function_name, self.handler_code, sock_batch_size=sock_batch_size,
+                                              worker_count=worker_count,
+                                              cpp_worker_thread_count=cpp_worker_thread_count)
+        if self.is_curl:
+            body['depcfg']['curl'] = []
+            body['depcfg']['curl'].append({"hostname": self.hostname, "value": "server", "auth_type": self.auth_type,
+                                           "username": self.curl_username, "password": self.curl_password,
+                                           "cookies": self.cookies})
+        self.deploy_function(body)
+        if self.pause_resume:
+            self.pause_function(body)
+        # load some data
+        task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
+                                                self.buckets[0].kvs[1], 'create', compression=self.sdk_compression)
+        self.sleep(10)
+        try:
+            # rebalance in a eventing node when eventing is processing mutations
+            services_in = ["eventing"]
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]],
+                                                     [], services=services_in)
+            self.sleep(5)
+            reached = RestHelper(self.rest).rebalance_reached(percentage=60)
+            self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+            # kill eventing producer when eventing is processing mutations
+            self.kill_producer(eventing_node)
+            if self.pause_resume:
+                self.wait_for_handler_state(body['appname'], "paused")
+                self.resume_function(body)
+            else:
+                self.wait_for_handler_state(body['appname'], "deployed")
+            rebalance.result()
+        except Exception, ex:
+            log.info("Rebalance failed as expected after eventing got killed: {0}".format(str(ex)))
+            # auto retry the failed rebalance
+            self.check_retry_rebalance_succeeded()
+        else:
+            self.fail("Rebalance succeeded even after killing eventing processes")
+        if self.pause_resume:
+            self.resume_function(body)
+        task.result()
+        # Wait for eventing to catch up with all the update mutations and verify results after rebalance
+        if self.is_sbm:
+            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2, skip_stats_validation=True)
+        else:
+            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        # delete json documents
+        self.load(gen_load_del, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size, op_type='delete')
+        if self.pause_resume:
+            self.pause_function(body)
+            self.sleep(30)
         # kill eventing producer when eventing is processing mutations
         self.kill_producer(eventing_node)
         self.sleep(120)

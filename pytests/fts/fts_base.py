@@ -9,6 +9,8 @@ import logger
 import logging
 import re
 import json
+import math
+import random
 
 from couchbase_helper.cluster import Cluster
 from membase.api.rest_client import RestConnection, Bucket
@@ -30,6 +32,7 @@ from lib.membase.api.exception import FTSException
 from .es_base import ElasticSearchBase
 from security.rbac_base import RbacBase
 from lib.couchbase_helper.tuq_helper import N1QLHelper
+from random_query_generator.rand_query_gen import FTSESQueryGenerator
 
 
 class RenameNodeException(FTSException):
@@ -540,7 +543,8 @@ class FTSIndex:
             "sourceType": "couchbase",
             "sourceName": "default",
             "sourceUUID": "",
-            "planParams": {}
+            "planParams": {},
+            "sourceParams": {}
         }
         self.name = self.index_definition['name'] = name
         self.es_custom_map = None
@@ -558,6 +562,7 @@ class FTSIndex:
 
         # Support for custom map
         self.custom_map = TestInputSingleton.input.param("custom_map", False)
+        self.custom_map_add_non_indexed_fields = TestInputSingleton.input.param("custom_map_add_non_indexed_fields", True)
         self.num_custom_analyzers = TestInputSingleton.input.param("num_custom_analyzers", 0)
         self.multiple_filters = TestInputSingleton.input.param("multiple_filters", False)
         self.cm_id = TestInputSingleton.input.param("cm_id", 0)
@@ -647,7 +652,7 @@ class FTSIndex:
         from .custom_map_generator.map_generator import CustomMapGenerator
         cm_gen = CustomMapGenerator(seed=seed, dataset=self.dataset,
                                 num_custom_analyzers=self.num_custom_analyzers,
-                                multiple_filters=self.multiple_filters)
+                                multiple_filters=self.multiple_filters, custom_map_add_non_indexed_fields=self.custom_map_add_non_indexed_fields)
         fts_map, self.es_custom_map = cm_gen.get_map()
         self.smart_query_fields = cm_gen.get_smart_query_fields()
         print(self.smart_query_fields)
@@ -951,6 +956,20 @@ class FTSIndex:
         self.index_definition['uuid'] = self.get_uuid()
         self.update()
 
+    def update_index_partitions(self, new):
+        status, index_def = self.get_index_defn()
+        self.index_definition = index_def["indexDef"]
+        self.index_definition['planParams']['indexPartitions'] = new
+        self.index_definition['uuid'] = self.get_uuid()
+        self.update()
+
+    def update_docvalues_email_custom_index(self, new):
+        status, index_def = self.get_index_defn()
+        self.index_definition = index_def["indexDef"]
+        self.index_definition['params']['mapping']['types']['emp']['properties']['email']['fields'][0]['docvalues'] = new
+        self.index_definition['uuid'] = self.get_uuid()
+        self.update()
+
     def update_num_replicas(self, new):
         self.index_definition['planParams']['numReplicas'] = new
         self.index_definition['uuid'] = self.get_uuid()
@@ -1027,8 +1046,8 @@ class FTSIndex:
         query_json['explain'] = explain
         if max_matches is not None and max_matches != 'None':
             query_json['size'] = int(max_matches)
-        else:
-            del query_json['size']
+	else:
+	    del query_json['size']
         if max_limit_matches is not None:
             query_json['limit'] = int(max_limit_matches)
         if show_results_from_item:
@@ -1194,7 +1213,6 @@ class FTSIndex:
         doc_ids = []
         time_taken = 0
         status = {}
-        facets = []
         try:
             hits, matches, time_taken, status, facets = \
                 self.__cluster.run_fts_query_with_facets(self.name, query_dict)
@@ -2119,6 +2137,21 @@ class CouchbaseCluster:
         index.create()
         return index
 
+    def create_fts_index_wait_for_completion(self, sample_index_name_1, sample_bucket_name):
+        fts_idx = self.create_fts_index(name=sample_index_name_1, source_name=sample_bucket_name)
+
+        indexed_doc_count = 0
+        self.__log.info(RestConnection(self.get_master_node()).get_buckets_itemCount()[sample_bucket_name])
+        while indexed_doc_count < RestConnection(self.get_master_node()).get_buckets_itemCount()[sample_bucket_name]:
+            try:
+                time.sleep(10)
+                indexed_doc_count = fts_idx.get_indexed_doc_count()
+            except KeyError, k:
+                continue
+
+        return fts_idx
+
+
     def get_fts_index_by_name(self, name):
         """ Returns an FTSIndex object with the given name """
         for index in self.__indexes:
@@ -2728,6 +2761,19 @@ class CouchbaseCluster:
         task = self.__async_rebalance_out(num_nodes=num_nodes)
         task.result()
 
+    def enable_retry_rebalance(self, retry_time, num_retries):
+        body = {"enabled": "true", "afterTimePeriod": retry_time, "maxAttempts": num_retries}
+        rest = RestConnection(self.get_master_node())
+        rest.set_retry_rebalance_settings(body)
+        result = rest.get_retry_rebalance_settings()
+        self.__log.info("Retry Rebalance settings changed to : {0}"
+                      .format(json.loads(result)))
+
+    def disable_retry_rebalance(self):
+        rest = RestConnection(self.get_master_node())
+        body = {"enabled": "false"}
+        rest.set_retry_rebalance_settings(body)
+
     def async_rebalance_in(self, num_nodes=1, services=None):
         """Rebalance-in nodes into Cluster asynchronously
         @param num_nodes: number of nodes to rebalance-in to cluster.
@@ -2933,11 +2979,11 @@ class CouchbaseCluster:
         for failover_node in self.__fail_over_nodes:
             for server_node in server_nodes:
                 if server_node.ip == failover_node.ip:
-                    rest.add_back_node(server_node.id)
                     if recovery_type:
                         rest.set_recovery_type(
                             otpNode=server_node.id,
                             recoveryType=recovery_type)
+                    rest.add_back_node(server_node.id)
         for node in self.__fail_over_nodes:
             if node not in self.__nodes:
                 self.__nodes.append(node)
@@ -3011,6 +3057,10 @@ class CouchbaseCluster:
         NodeHelper.reboot_server(reboot_node, test_case)
         return reboot_node
 
+    def reboot_after_timeout(self, timeout=5):
+        time.sleep(timeout)
+        self.reboot_one_node(test_case=self)
+
     def restart_couchbase_on_all_nodes(self):
         for node in self.__nodes:
             NodeHelper.do_a_warm_up(node)
@@ -3076,6 +3126,36 @@ class FTSBaseTest(unittest.TestCase):
 
     def __is_cluster_run(self):
         return len({server.ip for server in self._input.servers}) == 1
+
+    def _check_retry_rebalance_succeeded(self):
+        rest = RestConnection(self._cb_cluster.get_master_node())
+        result = json.loads(rest.get_pending_rebalance_info())
+        self.log.info(result)
+        retry_after_secs = result["retry_after_secs"]
+        attempts_remaining = result["attempts_remaining"]
+        retry_rebalance = result["retry_rebalance"]
+        self.log.info("Attempts remaining : {0}, Retry rebalance : {1}".format(attempts_remaining, retry_rebalance))
+        while attempts_remaining:
+            # wait for the afterTimePeriod for the failed rebalance to restart
+            self.sleep(retry_after_secs, message="Waiting for the afterTimePeriod to complete")
+            try:
+                result = rest.monitorRebalance()
+                msg = "monitoring rebalance {0}"
+                self.log.info(msg.format(result))
+            except Exception:
+                result = json.loads(rest.get_pending_rebalance_info())
+                self.log.info(result)
+                try:
+                    attempts_remaining = result["attempts_remaining"]
+                    retry_rebalance = result["retry_rebalance"]
+                    retry_after_secs = result["retry_after_secs"]
+                except KeyError:
+                    self.fail("Retrying of rebalance still did not help. All the retries exhausted...")
+                self.log.info("Attempts remaining : {0}, Retry rebalance : {1}".format(attempts_remaining,
+                                                                                       retry_rebalance))
+            else:
+                self.log.info("Retry rebalanced fixed the rebalance failure")
+                break
 
     def tearDown(self):
         """Clusters cleanup"""
@@ -3147,6 +3227,13 @@ class FTSBaseTest(unittest.TestCase):
                                 "log_level",
                                 None)))
 
+    def _set_bleve_max_result_window(self):
+        bmrw_value = self._input.param("bmrw_value", 100000000)
+        for node in self._cb_cluster.get_fts_nodes():
+            self.log.info("updating bleve_max_result_window of node : {0}".format(node))
+            rest = RestConnection(node)
+            rest.set_bleve_max_result_window(bmrw_value)
+
     def __setup_for_test(self):
         use_hostanames = self._input.param("use_hostnames", False)
         no_buckets = self._input.param("no_buckets", False)
@@ -3172,6 +3259,8 @@ class FTSBaseTest(unittest.TestCase):
         # Assign user to role
         role_list = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'roles': 'admin'}]
         RbacBase().add_user_role(role_list, RestConnection(master), 'builtin')
+
+        self._set_bleve_max_result_window()
         
         self.__set_free_servers()
         if not no_buckets:
@@ -3230,6 +3319,8 @@ class FTSBaseTest(unittest.TestCase):
         self.__eviction_policy = self._input.param("eviction_policy", 'valueOnly')
         self.__mixed_priority = self._input.param("mixed_priority", None)
         self.expected_no_of_results = self._input.param("expected_no_of_results", None)
+        self.polygon_feature = self._input.param("polygon_feature", "regular")
+        self.num_vertices = self._input.param("num_vertices", None)
 
         # Public init parameters - Used in other tests too.
         # Move above private to this section if needed in future, but
@@ -3887,6 +3978,38 @@ class FTSBaseTest(unittest.TestCase):
         else:
             return index.fts_queries
 
+    def generate_random_geo_polygon_queries(self, index, num_queries=1, polygon_feature="regular", num_vertices=None):
+        """
+        Generates a bunch of geo polygon queries for
+        fts and es.
+        :param num_vertices: number of vertexes in the polygon
+        :param polygon_feature: regular or irregular
+        :param index: fts index object
+        :param num_queries: no of queries to be generated
+        :return: fts or fts and es queries
+        """
+        gen_queries = 0
+        from lib.couchbase_helper.data import LON_LAT
+        while gen_queries < num_queries:
+            center = random.choice(LON_LAT)
+            fts_query, es_query, ave_radius, num_verts, format = FTSESQueryGenerator.construct_geo_polygon_query(center, polygon_feature, num_vertices)
+
+            index.fts_queries.append(
+                json.loads(json.dumps(fts_query, ensure_ascii=False)))
+
+            if self.compare_es:
+                self.es.es_queries.append(
+                    json.loads(json.dumps(es_query, ensure_ascii=False)))
+
+            gen_queries += 1
+
+            self.log.info("query " + str(gen_queries) + " generated for the polygon with center: " + str(center) + ", num_vertices: " + str(num_verts) +
+                          ", ave_radius: " + str(ave_radius) + " and format: " + str(format))
+        if self.es:
+
+            return index.fts_queries, self.es.es_queries
+        else:
+            return index.fts_queries
 
     def create_index(self, bucket, index_name, index_params=None,
                      plan_params=None):
@@ -4008,6 +4131,16 @@ class FTSBaseTest(unittest.TestCase):
                               doc['_type'],
                               key)
 
+    def get_zap_docvalue_disksize(self):
+        shell = RemoteMachineShellConnection(self._cb_cluster.get_random_fts_node())
+        command = "cd /opt/couchbase/var/lib/couchbase/data/\@fts; find . -name \"*.zap\"|  sort -n | tail -1 | xargs -I {} sh -c \"/opt/couchbase/bin/cbft-bleve zap docvalue {} | tail -1\""
+        output, error = shell.execute_command(command)
+        if error and "remoteClients registered for tls config updates" not in error[0]:
+            self.fail("error running command : {0} , error : {1}".format(command, error))
+        self.log.info(output)
+        self.log.info(re.findall("\d+\.\d+", output[0]))
+        return re.findall("\d+\.\d+", output[0])[0]
+
     def create_geo_index_and_load(self):
         """
         Indexes geo spatial data
@@ -4039,6 +4172,10 @@ class FTSBaseTest(unittest.TestCase):
         )
         geo_index.index_definition["params"] = {
             "mapping": {
+                "default_mapping": {
+                    "dynamic": True,
+                    "enabled": False
+                },
                 "types": {
                     "earthquake": {
                         "enabled": True,

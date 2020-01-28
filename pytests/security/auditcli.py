@@ -18,6 +18,8 @@ import random
 import zlib
 import subprocess
 import urllib.request, urllib.parse, urllib.error
+import commands
+
 
 class auditcli(BaseTestCase):
     def setUp(self):
@@ -46,6 +48,12 @@ class auditcli(BaseTestCase):
         TestInputSingleton.input.test_params["default_bucket"] = False
         self.eventID = self.input.param('id', None)
         AuditTemp = audit(host=self.master)
+        currentState = AuditTemp.getAuditStatus()
+        self.log.info("Current status of audit on ip - {0} is {1}".format(self.master.ip, currentState))
+        if not currentState:
+            self.log.info("Enabling Audit ")
+            AuditTemp.setAuditEnable('true')
+            self.sleep(30)
         self.ipAddress = self.getLocalIPAddress()
         self.ldapUser = self.input.param('ldapUser', 'Administrator')
         self.ldapPass = self.input.param('ldapPass', 'password')
@@ -123,18 +131,18 @@ class auditcli(BaseTestCase):
         source = self.source
         remote_client = RemoteMachineShellConnection(self.master)
         for num in range(nodes_add):
-            options = "--server-add={0}:8091 --server-add-username=Administrator --server-add-password=password".format(self.servers[num + 1].ip)
+            options = "--server-add={0} --server-add-username=Administrator --server-add-password=password".format(self.servers[num + 1].ip)
             output, error = remote_client.execute_couchbase_cli(cli_command='server-add', options=options, cluster_host="localhost", user=self.ldapUser, password=self.ldapPass)
         output, error = remote_client.execute_couchbase_cli(cli_command='rebalance', cluster_host="localhost", user=self.ldapUser, password=self.ldapPass)
 
         if (cli_command == "server-add"):
-            expectedResults = {"services":['kv'], 'port':8091, 'hostname':self.servers[num + 1].ip,
-                                   'groupUUID':"0", 'nodes':'ns_1@' + self.servers[num + 1].ip, 'source':source,
-                                   'user':self.master.rest_username, "real_userid:user":self.ldapUser, "ip":'127.0.0.1', "remote:port":57457}
+            expectedResults = {"services":['kv'], 'port':18091, 'hostname':self.servers[num + 1].ip,
+                                   'groupUUID':"0", 'node':'ns_1@' + self.servers[num + 1].ip, 'source':source,
+                                   'user':self.master.rest_username, "real_userid:user":self.ldapUser, "ip":'::1', "remote:port":57457}
             self.checkConfig(self.eventID, self.master, expectedResults)
             expectedResults = {"delta_recovery_buckets":"all", 'known_nodes':["ns_1@" + self.master.ip, "ns_1@" + self.servers[num + 1].ip],
                                     'ejected_nodes':[], 'source':'ns_server', 'source':source, 'user':self.master.rest_username,
-                                    "ip":'127.0.0.1', "port":57457, "real_userid:user":self.ldapUser}
+                                    "ip":'::1', "port":57457, "real_userid:user":self.ldapUser}
             self.checkConfig(8200, self.master, expectedResults)
 
         if (cli_command == 'server-remove'):
@@ -146,7 +154,7 @@ class auditcli(BaseTestCase):
                 #self.checkConfig(self.eventID, self.master, expectedResults)
                 expectedResults = {"delta_recovery_buckets":"all", 'known_nodes':["ns_1@" + self.master.ip, "ns_1@" + self.servers[num + 1].ip],
                                     'ejected_nodes':["ns_1@" + self.servers[num + 1].ip], 'source':source, 'user':self.master.rest_username,
-                                    "ip":'127.0.0.1', "port":57457, "real_userid:user":self.ldapUser}
+                                    "ip":'::1', "port":57457, "real_userid:user":self.ldapUser}
                 self.checkConfig(8200, self.master, expectedResults)
 
 
@@ -157,7 +165,7 @@ class auditcli(BaseTestCase):
                 options = "--server-failover={0}:8091".format(self.servers[nodes_add - nodes_rem - num].ip)
                 options += " --force"
                 output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user=self.ldapUser, password=self.ldapPass)
-                expectedResults = {'source':source, "real_userid:user":self.ldapUser, 'user':self.master.rest_username, "ip":'127.0.0.1', "port":57457, 'type':'hard', 'node':'ns_1@' + self.servers[nodes_add - nodes_rem - num].ip}
+                expectedResults = {'source':source, "real_userid:user":self.ldapUser, 'user':self.master.rest_username, "ip":'::1', "port":57457, 'type':'hard', 'nodes':'[ns_1@' + self.servers[nodes_add - nodes_rem - num].ip + ']'}
                 self.checkConfig(self.eventID, self.master, expectedResults)
 
         if (cli_command == "server-readd"):
@@ -171,7 +179,7 @@ class auditcli(BaseTestCase):
                 cli_command = "server-readd"
                 options = "--server-add={0}:8091 ".format(self.servers[nodes_add - nodes_rem - num ].ip)
                 output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user=self.ldapUser, password=self.ldapPass)
-                expectedResults = {'node':'ns_1@' + self.servers[nodes_add - nodes_rem - num ].ip, 'type':'full', "real_userid:user":self.ldapUser, 'source':source, 'user':self.master.rest_username, "ip":'127.0.0.1', "port":57457}
+                expectedResults = {'node':'ns_1@' + self.servers[nodes_add - nodes_rem - num ].ip, 'type':'full', "real_userid:user":self.ldapUser, 'source':source, 'user':self.master.rest_username, "ip":'::1', "port":57457}
                 self.checkConfig(self.eventID, self.master, expectedResults)
 
         remote_client.disconnect()
@@ -194,7 +202,7 @@ class auditcli(BaseTestCase):
                                'replica_index':True, 'eviction_policy':'value_only', 'type':'membase', \
                                'auth_type':'sasl', "autocompaction":'false', "purge_interval":"undefined", \
                                 "flush_enabled":False, "num_threads":3, "source":self.source, \
-                               "user":self.ldapUser, "ip":'127.0.0.1', "port":57457, 'sessionid':'', \
+                               "user":self.ldapUser, "ip":'::1', "port":57457, 'sessionid':'', \
                                'conflict_resolution_type':'seqno','storage_mode':'couchstore'}
         self.checkConfig(8201, self.master, expectedResults)
         remote_client.disconnect()
@@ -235,7 +243,7 @@ class auditcli(BaseTestCase):
                             'replica_index':True, 'eviction_policy':'value_only', 'type':'membase', \
                             'auth_type':'none', "autocompaction":'false', "purge_interval":"undefined", \
                             "flush_enabled":True, "num_threads":3, "source":self.source, \
-                            "user":self.ldapUser, "ip":'127.0.0.1', "port":57457, 'sessionid':'',
+                            "user":self.ldapUser, "ip":'::1', "port":57457, 'sessionid':'',
                             'auth_type':self.source, 'storage_mode': 'couchstore'}
         self.checkConfig(8202, self.master, expectedResults)
 
@@ -243,12 +251,12 @@ class auditcli(BaseTestCase):
         options = "--bucket={0}".format(bucket)
         if enable_flush_new is not None:
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user=self.ldapUser, password=self.ldapPass)
-        expectedResults = {"bucket_name":"BBB", "source":self.source, "user":self.ldapUser, "ip":"127.0.0.1", 'port':57457}
+        expectedResults = {"bucket_name":"BBB", "source":self.source, "user":self.ldapUser, "ip":"::1", 'port':57457}
         self.checkConfig(8204, self.master, expectedResults)
 
         cli_command = "bucket-delete"
         output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user=self.ldapUser, password=self.ldapPass)
-        expectedResults = {"bucket_name":"BBB", "source":self.source, "user":self.ldapUser, "ip":"127.0.0.1", "port":57457}
+        expectedResults = {"bucket_name":"BBB", "source":self.source, "user":self.ldapUser, "ip":"::1", "port":57457}
         self.checkConfig(8203, self.master, expectedResults)
 
         remote_client.disconnect()
@@ -286,7 +294,7 @@ class auditcli(BaseTestCase):
 
         output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user=self.ldapUser, password=self.ldapPass)
         expectedResults = {"parallel_db_and_view_compaction":False, "database_fragmentation_threshold:size":10485760, "database_fragmentation_threshold:view_fragmentation_threshold":{},
-                           "real_userid:source":self.source, "real_userid:user":self.ldapUser, "remote:ip":"127.0.0.1", "remote:port":60019}
+                           "real_userid:source":self.source, "real_userid:user":self.ldapUser, "remote:ip":"::1", "remote:port":60019}
         self.checkConfig(8225, self.master, expectedResults)
         remote_client.disconnect()
 
@@ -350,7 +358,7 @@ class auditcli(BaseTestCase):
         options += (" --auto-failover-timeout={0}".format(setting_auto_failover_timeout))
 
         output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user=self.ldapUser, password=self.ldapPass)
-        expectedResults = {"max_nodes":1, "timeout":50, "real_userid:source":self.source, "real_userid:user":self.ldapUser, "remote:ip":"127.0.0.1", "port":60033}
+        expectedResults = {"max_nodes":1, "timeout":50, "real_userid:source":self.source, "real_userid:user":self.ldapUser, "remote:ip":"::1", "port":60033}
         self.checkConfig(8220, self.master, expectedResults)
         remote_client.disconnect()
 
@@ -366,7 +374,7 @@ class auditcli(BaseTestCase):
         output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, options=options, cluster_host="localhost", user=self.ldapUser, password=self.ldapPass)
         self.assertFalse(error, "Error thrown during CLI execution %s" % error)
         self.shell.execute_command("rm {0}".format(xdcr_cert))
-        expectedResults = {"real_userid:source":self.source, "real_userid:user":self.ldapUser, "remote:ip":"127.0.0.1", "port":60035}
+        expectedResults = {"real_userid:source":self.source, "real_userid:user":self.ldapUser, "remote:ip":"::1", "port":60035}
         self.checkConfig(8226, self.master, expectedResults)
 
 

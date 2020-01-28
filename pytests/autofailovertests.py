@@ -355,7 +355,8 @@ class AutoFailoverTests(unittest.TestCase):
                                replicaNumber=replicas,
                                proxyPort=info.moxi)
         else:
-            created = BucketOperationHelper.create_multiple_buckets(self.master, replicas, howmany=num_buckets)
+            created = BucketOperationHelper.create_multiple_buckets(self.master, replicas, howmany=num_buckets,
+                                                                    bucket_ram_ratio=(1.0 / 4.0))
             self.assertTrue(created, "unable to create multiple buckets")
 
         buckets = rest.get_buckets()

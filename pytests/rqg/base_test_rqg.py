@@ -18,6 +18,7 @@ from os import listdir
 from os.path import isfile, join
 import traceback
 from .rqg_postgres_client import RQGPostgresClient
+from membase.api.exception import CBQError
 
 class BaseRQGTests(BaseTestCase):
     def setUp(self):
@@ -59,8 +60,9 @@ class BaseRQGTests(BaseTestCase):
             self.generate_input_only = self.input.param("generate_input_only", False)
             self.using_gsi = self.input.param("using_gsi", True)
             self.reset_database = self.input.param("reset_database", True)
-            self.create_primary_index = self.input.param("create_primary_index", True)
+            self.create_primary_index = self.input.param("create_primary_index", False)
             self.create_secondary_indexes = self.input.param("create_secondary_indexes", False)
+            self.use_advisor = self.input.param("use_advisor", False)
             self.items = self.input.param("items", 1000)
             self.mysql_url = self.input.param("mysql_url", "localhost")
             self.mysql_url = self.mysql_url.replace("_", ".")
@@ -97,6 +99,13 @@ class BaseRQGTests(BaseTestCase):
             self.teardown_mysql = self.use_mysql and self.reset_database and (not self.skip_cleanup)
             self.keyword_list = self.query_helper._read_keywords_from_file("b/resources/rqg/n1ql_info/keywords.txt")
             self.use_secondary_index = self.run_query_with_secondary or self.run_explain_with_hints
+            self.check_explain_plan = self.input.param("explain_plan", False)
+            self.index_limit = self.input.param("index_limit", 5)
+
+            self.advise_server = self.input.advisor
+            self.advise_buckets = ["bucket_01", "bucket_02", "bucket_03", "bucket_04", "bucket_05", "bucket_06", "bucket_07", "bucket_08", "bucket_09", "bucket_10"]
+            self.advise_dict={}
+
             if self.input_rqg_path is not None:
                 self.secondary_index_info_path = self.input_rqg_path+"/index/secondary_index_definitions.txt"
                 self.db_dump_path = self.input_rqg_path+"/db_dump/database_dump.zip"
@@ -156,6 +165,7 @@ class BaseRQGTests(BaseTestCase):
             query_template_list = self.extract_query_templates()
             # Generate the query batches based on the given template file and the concurrency count
             batches = self.generate_batches(table_list, query_template_list)
+
             result_queue = queue.Queue()
             failure_queue = queue.Queue()
             input_queue = queue.Queue()
@@ -165,22 +175,15 @@ class BaseRQGTests(BaseTestCase):
             if self.crud_ops:
                 for table_name in table_list:
                     if len(batches[table_name]) > 0:
-                        t = threading.Thread(target=self._crud_ops_worker, args=(
-                        batches[table_name], table_name, table_map, result_queue, failure_queue))
-                        t.daemon = True
-                        t.start()
-                        thread_list.append(t)
-                for t in thread_list:
-                    t.join()
+                        self._crud_ops_worker(batches[table_name], table_name, table_map, result_queue, failure_queue)
+                        #t = threading.Thread(target=self._crud_ops_worker, args=(
+                        #batches[table_name], table_name, table_map, result_queue, failure_queue))
+                        #t.daemon = True
+                        #t.start()
+                        #thread_list.append(t)
+                #for t in thread_list:
+                    #t.join()
             else:
-                for table_name in table_list:
-                    # Create threads based on number of tables (each table has its own thread)
-                    t = threading.Thread(target=self._rqg_worker,
-                                         args=(table_name, table_map, input_queue, result_queue,
-                                               failure_queue))
-                    t.daemon = True
-                    t.start()
-                    thread_list.append(t)
                 while not batches.empty():
                     # Split up the batches and send them to the worker threads
                     try:
@@ -192,8 +195,20 @@ class BaseRQGTests(BaseTestCase):
                                      "query_template_list": test_query_template_list})
                     start_test_case_number += len(test_query_template_list)
 
-                for t in thread_list:
-                    t.join()
+                for table_name in table_list:
+                    # Create threads based on number of tables (each table has its own thread)
+                    self._rqg_worker(table_name, table_map, input_queue, result_queue,
+                                               failure_queue)
+                    #t = threading.Thread(target=self._rqg_worker,
+                    #                     args=(table_name, table_map, input_queue, result_queue,
+                    #                           failure_queue))
+                    #t.daemon = True
+                    #t.start()
+                    #thread_list.append(t)
+                #for t in thread_list:
+                #    if(t.is_alive()):
+                #        t.join()
+
             # Analyze the results for the failure and assert on the run
             self.analyze_test(result_queue, failure_queue)
         except Exception as ex:
@@ -204,6 +219,7 @@ class BaseRQGTests(BaseTestCase):
     def _rqg_worker(self, table_name, table_map, input_queue, result_queue, failure_record_queue=None):
         count = 0
         table_name_description_map = {table_name: table_map[table_name]}
+
         while True:
             if self.total_queries <= self.query_count:
                 break
@@ -230,6 +246,7 @@ class BaseRQGTests(BaseTestCase):
                 test_case_number = start_test_case_number
                 for test_case_input in sql_n1ql_index_map_list:
                     t = threading.Thread(target=self._run_basic_test, args=(test_case_input, test_case_number, result_queue, failure_record_queue))
+                    #self._run_basic_test(test_case_input, test_case_number, result_queue, failure_record_queue)
                     test_case_number += 1
                     t.daemon = True
                     t.start()
@@ -238,13 +255,76 @@ class BaseRQGTests(BaseTestCase):
 
                 for t in thread_list:
                     t.join()
-
                 if self.use_secondary_index and self.drop_secondary_indexes:
                     self._drop_secondary_indexes_in_batches(sql_n1ql_index_map_list)
             else:
                 count += 1
                 if count > 1000:
                     return
+
+    def n1ql_query_runner_wrapper(self, n1ql_query="", server=None, query_params={}, scan_consistency=None, verbose=True):
+        if self.use_advisor:
+            self.create_secondary_index(n1ql_query=n1ql_query)
+        result = self.n1ql_helper.run_cbq_query(query=n1ql_query, server=server, query_params=query_params, scan_consistency=scan_consistency, verbose=verbose)
+        return result
+
+    def prepare_advise_query(self, n1ql_query=""):
+        for bucket in self.advise_dict.keys():
+            n1ql_query = n1ql_query.replace(bucket, self.advise_dict[bucket])
+        return n1ql_query
+
+    def translate_index_statement(self, n1ql_query=""):
+        for key in self.advise_dict.keys():
+            n1ql_query = n1ql_query.replace(self.advise_dict[key], key)
+        return n1ql_query
+
+    def create_secondary_index(self, n1ql_query=""):
+        if self.count_secondary_indexes() >= self.index_limit:
+            self.remove_all_secondary_indexes()
+        self.n1ql_helper.wait_for_all_indexes_online()
+        advise_query = self.prepare_advise_query(n1ql_query=n1ql_query)
+
+        advise_result = self.n1ql_helper.run_cbq_query(query="ADVISE " + advise_query,
+                                                       server=self.advise_server)
+        if len(advise_result["results"][0]["advice"]["adviseinfo"]) == 0:
+            return
+        if "index recommendation at this time" not in str(
+                str(advise_result["results"][0]["advice"]["adviseinfo"][0]["recommended_indexes"])):
+            if "indexes" in advise_result["results"][0]["advice"]["adviseinfo"][0][
+                "recommended_indexes"].keys():
+                for index_statement_array in advise_result["results"][0]["advice"]["adviseinfo"][0]["recommended_indexes"]["indexes"]:
+                    index_statement = index_statement_array["index_statement"]
+                    if index_statement != "":
+                        self.n1ql_helper.wait_for_all_indexes_online()
+                        try:
+                            prepared_index_statement = self.translate_index_statement(index_statement)
+                            self.n1ql_helper.run_cbq_query(prepared_index_statement)
+                            self.n1ql_helper.wait_for_all_indexes_online()
+                        except CBQError, ex:
+                            if "already exists" in str(ex):
+                                continue
+
+            if "covering_indexes" in advise_result["results"][0]["advice"]["adviseinfo"][0][
+                "recommended_indexes"].keys():
+                for index_statement_array in advise_result["results"][0]["advice"]["adviseinfo"][0]["recommended_indexes"]["covering_indexes"]:
+                    index_statement = index_statement_array["index_statement"]
+                    if index_statement != "":
+                        self.n1ql_helper.wait_for_all_indexes_online()
+                        try:
+                            prepared_index_statement = self.translate_index_statement(index_statement)
+                            self.n1ql_helper.run_cbq_query(prepared_index_statement)
+                            self.n1ql_helper.wait_for_all_indexes_online()
+                        except CBQError, ex:
+                            if "already exists" in str(ex):
+                                continue
+
+
+    def count_secondary_indexes(self):
+        count = self.n1ql_helper.run_cbq_query("select count(*) from system:indexes")
+        return int(count["results"][0]["$1"])
+
+    def remove_all_secondary_indexes(self):
+        self.n1ql_helper.drop_all_indexes()
 
     def _run_basic_test(self, query_test_map, test_case_number, result_queue, failure_record_queue=None):
         n1ql_query = query_test_map["n1ql"]
@@ -267,6 +347,10 @@ class BaseRQGTests(BaseTestCase):
         if self.ansi_transform:
             result = self._run_explain_queries(n1ql_query=n1ql_query, keyword="u'outer':u'True'", present=False)
             result_run.update(result)
+
+        if self.check_explain_plan:
+
+            result_run['check_explain_plan'] = self._check_explain_plan_for_secondary_index(n1ql_query=n1ql_query);
 
         # run the query
         result_run["run_query_without_index_hint"] = self._run_queries_and_verify(aggregate=aggregate,
@@ -334,7 +418,7 @@ class BaseRQGTests(BaseTestCase):
             test_case_number = list(test_data.keys())[0]
             test_data = test_data[test_case_number]
             data_info = self.convert_crud_ops_query(table_name, [test_data], table_name_map)
-            verification_query = "SELECT * from {0} ORDER by primary_key_id".format(table_name)
+            verification_query = "SELECT * from {0} where primary_key_id is not null ORDER by primary_key_id".format(table_name)
             self._run_basic_crud_test(data_info[0], verification_query,  test_case_number, result_queue, failure_record_queue, table_name=table_name)
             self._populate_delta_buckets(table_name)
             self.wait_for_num_items(table_name, 1000)
@@ -429,7 +513,7 @@ class BaseRQGTests(BaseTestCase):
         while not num_items_reached:
             self.sleep(1)
             query = "SELECT COUNT(*) from {0}".format(self.database+"_"+table)
-            result = self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_server)
+            result = self.n1ql_query_runner_wrapper(n1ql_query=query, server=self.n1ql_server)
             if result["results"][0]["$1"] == num_items:
                 num_items_reached = True
 
@@ -522,6 +606,7 @@ class BaseRQGTests(BaseTestCase):
         finally:
             return {"success": explain_check, "result": message}
 
+
     def _run_basic_crud_test(self, test_data, verification_query, test_case_number, result_queue, failure_record_queue=None, table_name=None):
         self.log.info(" <<<<<<<<<<<<<<<<<<<<<<<<<<<< BEGIN RUNNING TEST {0}  >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>".format(test_case_number))
         result_run = {}
@@ -546,7 +631,7 @@ class BaseRQGTests(BaseTestCase):
         crud_ops_run_result = None
         client = RQGMySQLClient(database=self.database, host=self.mysql_url, user_id=self.user_id, password=self.password)
         try:
-            self.n1ql_helper.run_cbq_query(n1ql_query, self.n1ql_server)
+            self.n1ql_query_runner_wrapper(n1ql_query=n1ql_query, server=self.n1ql_server)
             client._insert_execute_query(query=sql_query)
         except Exception as ex:
             self.log.info(ex)
@@ -639,6 +724,15 @@ class BaseRQGTests(BaseTestCase):
                 print("Error in sql syntax")
         return sql_result
 
+    def _check_explain_plan_for_secondary_index(self, n1ql_query=None):
+        self.n1ql_query_runner_wrapper(n1ql_query=n1ql_query, server=self.n1ql_server)
+        actual_result = self.n1ql_helper.run_cbq_query(query="EXPLAIN "+n1ql_query, server=self.n1ql_server)
+        self.log.info("EXPLAIN PLAN :: "+str(actual_result))
+        if "PrimaryScan" in str(actual_result['results'][0]['plan']):
+            return {"success": False, "result": "Fail"}
+        else:
+            return {"success": True, "result": "Pass"}
+
     def _run_queries_and_verify(self, aggregate=False, subquery=False, n1ql_query=None, sql_query=None, expected_result=None):
         if not self.create_primary_index:
             n1ql_query = n1ql_query.replace("USE INDEX(`#primary` USING GSI)", " ")
@@ -656,12 +750,12 @@ class BaseRQGTests(BaseTestCase):
                 query_params = {'timeout': '1200s'}
             else:
                 query_params={}
-            actual_result = self.n1ql_helper.run_cbq_query(query=n1ql_query, server=self.n1ql_server, query_params=query_params, scan_consistency="request_plus")
+            actual_result = self.n1ql_query_runner_wrapper(n1ql_query=n1ql_query, server=self.n1ql_server, query_params=query_params, scan_consistency="request_plus")
             if self.prepared:
                 name = actual_result["results"][0]['name']
                 prepared_query = "EXECUTE '%s'" % name
                 self.log.info(" N1QL QUERY :: {0}".format(prepared_query))
-                actual_result = self.n1ql_helper.run_cbq_query(query=prepared_query, server=self.n1ql_server, query_params=query_params, scan_consistency="request_plus")
+                actual_result = self.n1ql_query_runner_wrapper(n1ql_query=prepared_query, server=self.n1ql_server, query_params=query_params, scan_consistency="request_plus")
             n1ql_result = actual_result["results"]
 
             # Run SQL Query
@@ -713,7 +807,7 @@ class BaseRQGTests(BaseTestCase):
                 hints[i] = hints[i].replace("simple_table", self.database+"_"+"simple_table")
 
         try:
-            actual_result = self.n1ql_helper.run_cbq_query(query=n1ql_query, server=self.n1ql_server, scan_consistency="request_plus")
+            actual_result = self.n1ql_query_runner_wrapper(n1ql_query=n1ql_query, server=self.n1ql_server, scan_consistency="request_plus")
             n1ql_result = actual_result["results"]
             # Run SQL Query
             sql_result = expected_result
@@ -763,7 +857,7 @@ class BaseRQGTests(BaseTestCase):
                 run_result[key] = {"success": check, "result": message}
             else:
                 try:
-                    actual_result = self.n1ql_helper.run_cbq_query(query=n1ql, server=self.n1ql_server)
+                    actual_result = self.n1ql_query_runner_wrapper(n1ql_query=n1ql, server=self.n1ql_server)
                     self.log.info(actual_result)
                     check = self.n1ql_helper.verify_index_with_explain(actual_result, index_name,
                                                                        self.check_covering_index)
@@ -786,7 +880,7 @@ class BaseRQGTests(BaseTestCase):
         self.log.info("Running query: " + n1ql)
         message = "Pass"
         try:
-            actual_result = self.n1ql_helper.run_cbq_query(query=n1ql, server=self.n1ql_server)
+            actual_result = self.n1ql_query_runner_wrapper(n1ql_query=n1ql, server=self.n1ql_server)
             self.log.info(actual_result)
             check = self.n1ql_helper.verify_explain(actual_result, keyword, present)
             if not check:
@@ -863,7 +957,7 @@ class BaseRQGTests(BaseTestCase):
                             self.n1ql_helper.run_cbq_query(query=queries[index_name],
                                                            server=self.n1ql_server, verbose=False)
                             check = self.n1ql_helper.is_index_online_and_in_list(self.database+"_"+table_name,
-                                                                                 index_name,
+                                                                                 index_name ,
                                                                                  server=self.n1ql_server,
                                                                                  timeout=240)
                         except Exception as ex:
@@ -1152,12 +1246,19 @@ class BaseRQGTests(BaseTestCase):
         failure_types = []
         message = "\n ____________________________________________________\n "
         for key in list(result.keys()):
-            if key != "test_case_number" and key != "n1ql_query" and key != "sql_query":
+            if key != "test_case_number" and key != "n1ql_query" and key != "sql_query" and key!="check_explain_plan":
                 check = check and result[key]["success"]
                 if not result[key]["success"]:
                     failure_types.append(key)
                     message += " Scenario ::  {0} \n".format(key)
                     message += " Reason :: " + str(result[key]["result"]) + "\n"
+            if key == "check_explain_plan":
+                check = check and result[key]["success"]
+                if not result[key]["success"]:
+                    failure_types.append(key)
+                    message += " Scenario ::  {0} \n".format(key)
+                    message += " Reason :: Secondary index is not in use\n"
+
         return check, message, failure_types
 
     def _check_and_push_failure_record_queue(self, result, data, failure_record_queue):
@@ -1239,6 +1340,13 @@ class BaseRQGTests(BaseTestCase):
                                 self.client._insert_execute_query(insert_sql)
         shutil.rmtree(data_file_path, ignore_errors=True)
 
+    def fill_advise_dict(self, bucket_list=[]):
+        for bucket in bucket_list:
+            if bucket not in self.advise_dict.keys():
+                self.advise_dict[bucket] = self.advise_buckets[0]
+                self.advise_buckets.remove(self.advise_buckets[0])
+
+
     def _setup_and_load_buckets(self):
         # Remove any previous buckets
         if self.skip_setup_cleanup:
@@ -1267,8 +1375,8 @@ class BaseRQGTests(BaseTestCase):
                 new_bucket_list.append(self.database + "_" + bucket)
                 if self.subquery:
                     break
-
         # Create New Buckets
+        self.fill_advise_dict(new_bucket_list)
         self._create_buckets(self.master, new_bucket_list, server_id=None, bucket_size=bucket_size)
         self.log.info("buckets created")
 
@@ -1302,11 +1410,14 @@ class BaseRQGTests(BaseTestCase):
             client = self.client_map[table_name]
         else:
             client = self.client
-        query = "delete from {0}".format(table_name)
+        query = "delete from {0} where primary_key_id is not null".format(table_name)
         client._insert_execute_query(query=query)
-        query = "delete from {0}".format(self.database+"_"+table_name)
-        self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_server, verbose=True)
-        insert_sql = "insert into {0}(KEY k ,VALUE b) SELECT meta(b).id as k, b from {1} b".format(self.database+"_"+table_name, self.database+"_"+"copy_simple_table")
+        query = "delete from {0} where primary_key_id is not null".format(self.database+"_"+table_name)
+        self.n1ql_query_runner_wrapper(n1ql_query=query, server=self.n1ql_server, verbose=True)
+        insert_sql = "insert into {0}(KEY k ,VALUE b) SELECT meta(b).id as k, b from {1} b where primary_key_id is not null".format(self.database+"_"+table_name,self.database+"_"+"copy_simple_table")
+        if self.use_advisor:
+            self.create_secondary_index("SELECT meta(b).id as k, b from {0} b where primary_key_id is not null".format(self.database+"_"+"copy_simple_table"))
+
         try:
             self.log.info("n1ql query is {0}".format(insert_sql))
             self.n1ql_helper.run_cbq_query(query=insert_sql, server=self.n1ql_server, verbose=True)

@@ -1,5 +1,4 @@
 class Constants:
-
     generator_methods = {
       "array-dates": "array_dates",
       "array_empty": "empty",
@@ -24,12 +23,10 @@ class Constants:
       "string-reserved": "rand_reserved",
       "string-vlong": "rand_string"
     }
-
     niql_reserved_keywords = [
                 'ALL', 'ALTER', 'ANALYZE', 'AND', 'ANY', 'ARRAY', 'AS', 'ASC', \
                 'BEGIN', 'BETWEEN', 'BINARY', 'BOOLEAN', 'BREAK', 'BUCKET', 'BUILD', 'BY', \
-                'CALL', 'CASE', 'CAST', 'CLUSTER', 'COLLATE', 'COLLECTION', 'COMMIT', 'CONNECT', 'CONTINUE', 'CORRELATE',
-                'COVER', \
+                'CALL', 'CASE', 'CAST', 'CLUSTER', 'COLLATE', 'COLLECTION', 'COMMIT', 'CONNECT', 'CONTINUE', 'CORRELATE', COVER', \
                 'CREATE', \
                 'DATABASE', 'DATASET', 'DATASTORE', 'DECLARE', 'DECREMENT', 'DELETE', 'DERIVED', 'DESC', 'DESCRIBE',
                 'DISTINCT', \
@@ -58,11 +55,21 @@ class Constants:
                 'VALIDATE', 'VALUE', 'VALUED', 'VALUES', 'VIA', 'VIEW', \
                 'WHEN', 'WHERE', 'WHILE', 'WITH', 'WITHIN', \
                 'WORK', \
-                'XOR'
-            ]
-
+                'XOR']
     empty ={
         "string": "",
         "array": [],
-        "doc": {}
-    }
+        "doc": {} }
+    #Operations for filter expressions
+    ARITHMETIC_UNARIES = ["ABS(%s)", "ACOS(%s)", "ASIN(%s)", "ATAN(%s)", "ATAN2(%s)", "CEIL(%s)", "COS(%s)", "DEGREES(%s)", "EXP(%s)", "LN(%s)", "LOG(%s)", "FLOOR(%s)", "POWER(%s, 5)", "RADIANS(%s)", "ROUND(%s, 5)", "SIN(%s)", "SQRT(%s)", "TAN(%s)", "-%s", "EXISTS(%s)"]
+    ARITHMETIC_BINARIES = ["%s + %s", "%s - %s", "%s * %s", "%s / %s", "%s %% %s"]
+    STRING_BINARIES = ["REGEXP_CONTAINS(%s, '%s')"]
+    COMMON = ["%s IS MISSING", "%s IS NOT MISSING", "%s IS NULL", "%s IS NOT NULL", "EXISTS(%s)"]
+    JOIN = [" AND ", " OR "]
+    NUM_OPS = 10
+    NUM_EXP = 5
+    #TODO:
+    #META().id,
+    #META().xattrs
+    #DATE
+    #arrays

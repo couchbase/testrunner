@@ -12,7 +12,6 @@ from security.auditmain import audit
 import socket
 import urllib.request, urllib.parse, urllib.error
 
-
 class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
 
     def setUp(self):
@@ -49,9 +48,9 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
             self.user_xattr_data = []
             self.meta_ids = []
         if self.feature == "curl-whitelist":
-            self.google_error_msg = "Errorevaluatingprojection.-cause:URLendpointisn'twhitelisted" \
+            self.google_error_msg = "Errorevaluatingprojection.-cause:URLendpointisntwhitelisted" \
                                     "https://maps.googleapis.com/maps/api/geocode/json."
-            self.jira_error_msg ="Errorevaluatingprojection.-cause:URLendpointisn'twhitelistedhttps://jira.atlassian." \
+            self.jira_error_msg ="Errorevaluatingprojection.-cause:URLendpointisntwhitelistedhttps://jira.atlassian." \
                                  "com/rest/api/latest/issue/JRA-9.PleasemakesuretowhitelisttheURLontheUI."
             self.cbqpath = '%scbq' % self.path + " -e %s:%s -q -u %s -p %s" \
                                                  % (self.master.ip, self.n1ql_port, self.rest.username, self.rest.password)
@@ -64,6 +63,7 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
         self.log.info("==============  QueriesUpgradeTests setup has completed ==============")
 
     def suite_setUp(self):
+
         super(QueriesUpgradeTests, self).suite_setUp()
         self.log.info("==============  QueriesUpgradeTests suite_setup has started ==============")
         self.log.info("==============  QueriesUpgradeTests suite_setup has completed ==============")
@@ -79,8 +79,11 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                 self.log.info("setting intial_version to: 4.6.5-4742")
                 self.initial_version = "4.6.5-4742"
             elif int(upgrade_major) == 6:
-                self.log.info("setting intial_version to: 5.5.2-3733")
-                self.initial_version = "5.5.2-3733"
+                self.log.info("setting intial_version to: 5.5.6-4733")
+                self.initial_version = "5.5.6-4733"
+            elif int(upgrade_major) == 7:
+                self.log.info("setting intial_version to: 6.0.3-2895")
+                self.initial_version = "6.0.3-2895"
             else:
                 self.log.info("upgrade version invalid: " + str(self.upgrade_versions[0]))
                 self.fail()
@@ -131,7 +134,8 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
 
         if self.upgrade_type == "offline":
             # stop server, upgrade, rebalance
-            self.offline_upgrade(mixed_servers)
+            self.offline_upgrade(self.servers)
+
 
         if self.upgrade_type == "online":
             # rebalance out, upgrade, rebalance in
@@ -169,9 +173,9 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
         # upgrade remaining servers
         self.log.info("upgrading remaining servers")
 
-        if self.upgrade_type == "offline":
-            # stop server, upgrade, rebalance in
-            self.offline_upgrade(remaining_servers)
+        #if self.upgrade_type == "offline":
+        #    # stop server, upgrade, rebalance in
+        #    self.offline_upgrade(remaining_servers)
 
         if self.upgrade_type == "online":
             # rebalance out, upgrade, rebalance in
@@ -246,6 +250,8 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                 if cluster_node.ip == server.ip:
                     rest.add_back_node(cluster_node.id)
                     rest.set_recovery_type(otpNode=cluster_node.id, recoveryType="full")
+
+
             participating_servers.remove(server)
             self.log.info("participating servers: {0}".format(str(participating_servers)))
             rebalance = self.cluster.async_rebalance(participating_servers, [], [])

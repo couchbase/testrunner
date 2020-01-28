@@ -89,6 +89,8 @@ class EventingRebalance(EventingBaseTest):
             self.handler_code = HANDLER_CODE_CURL.BUCKET_OP_WITH_CURL_PUT
         elif handler_code == 'bucket_op_curl_delete':
             self.handler_code = HANDLER_CODE_CURL.BUCKET_OP_WITH_CURL_DELETE
+        elif handler_code == 'bucket_op_curl_jenkins':
+            self.handler_code = HANDLER_CODE_CURL.BUCKET_OP_WITH_CURL_JENKINS
         elif handler_code == 'timer_op_curl_get':
             self.handler_code = HANDLER_CODE_CURL.TIMER_OP_WITH_CURL_GET
         elif handler_code == 'timer_op_curl_post':
@@ -97,6 +99,8 @@ class EventingRebalance(EventingBaseTest):
             self.handler_code = HANDLER_CODE_CURL.TIMER_OP_WITH_CURL_PUT
         elif handler_code == 'timer_op_curl_delete':
             self.handler_code = HANDLER_CODE_CURL.TIMER_OP_WITH_CURL_DELETE
+        elif handler_code == 'timer_op_curl_jenkins':
+            self.handler_code = HANDLER_CODE_CURL.TIMER_OP_WITH_CURL_JENKINS
         else:
             self.handler_code = HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE
         force_disable_new_orchestration = self.input.param('force_disable_new_orchestration', False)
@@ -133,12 +137,12 @@ class EventingRebalance(EventingBaseTest):
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
         if self.pause_resume:
-            self.pause_function(body, wait_for_pause=False)
+            self.pause_function(body)
         # rebalance in a eventing node when eventing is processing mutations
         services_in = ["eventing"]
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]], [],
                                                  services=services_in)
-        reached = RestHelper(self.rest).rebalance_reached(retry_count=120)
+        reached = RestHelper(self.rest).rebalance_reached(retry_count=150)
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
         if self.pause_resume:
@@ -167,7 +171,7 @@ class EventingRebalance(EventingBaseTest):
         nodes_out_list = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
         # rebalance out all eventing nodes
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init + 1], [], nodes_out_list)
-        reached = RestHelper(self.rest).rebalance_reached(retry_count=120)
+        reached = RestHelper(self.rest).rebalance_reached(retry_count=150)
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
 
@@ -187,7 +191,7 @@ class EventingRebalance(EventingBaseTest):
         # rebalance out a eventing node when eventing is processing mutations
         nodes_out_ev = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [nodes_out_ev])
-        reached = RestHelper(self.rest).rebalance_reached(retry_count=120)
+        reached = RestHelper(self.rest).rebalance_reached(retry_count=150)
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
         if self.pause_resume:
@@ -217,7 +221,7 @@ class EventingRebalance(EventingBaseTest):
         # Fail over all eventing nodes and rebalance them out
         self.cluster.failover([self.master], failover_nodes=nodes_out_list, graceful=False)
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init + 1], [], nodes_out_list)
-        reached = RestHelper(self.rest).rebalance_reached(retry_count=120)
+        reached = RestHelper(self.rest).rebalance_reached(retry_count=150)
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
 
@@ -233,13 +237,13 @@ class EventingRebalance(EventingBaseTest):
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
         if self.pause_resume:
-            self.pause_function(body, wait_for_pause=False)
+            self.pause_function(body)
         # swap rebalance an eventing node when eventing is processing mutations
         services_in = ["eventing"]
         nodes_out_ev = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]],
                                                  nodes_out_ev, services=services_in)
-        reached = RestHelper(self.rest).rebalance_reached(retry_count=120)
+        reached = RestHelper(self.rest).rebalance_reached(retry_count=150)
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
         if self.pause_resume:
@@ -268,7 +272,7 @@ class EventingRebalance(EventingBaseTest):
         nodes_out_list = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
         # rebalance out all eventing nodes
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init + 1], [], nodes_out_list)
-        reached = RestHelper(self.rest).rebalance_reached(retry_count=120)
+        reached = RestHelper(self.rest).rebalance_reached(retry_count=150)
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
 
@@ -284,12 +288,12 @@ class EventingRebalance(EventingBaseTest):
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
         if self.pause_resume:
-            self.pause_function(body, wait_for_pause=False)
+            self.pause_function(body)
         # rebalance in a kv node when eventing is processing mutations
         services_in = ["kv"]
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]], [],
                                                  services=services_in)
-        reached = RestHelper(self.rest).rebalance_reached(retry_count=120)
+        reached = RestHelper(self.rest).rebalance_reached(retry_count=150)
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
         if self.pause_resume:
@@ -331,7 +335,7 @@ class EventingRebalance(EventingBaseTest):
         # rebalance out kv node when eventing is processing mutations
         nodes_out_kv = self.servers[1]
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [nodes_out_kv])
-        reached = RestHelper(self.rest).rebalance_reached(retry_count=120)
+        reached = RestHelper(self.rest).rebalance_reached(retry_count=150)
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
         if self.pause_resume:
@@ -369,13 +373,13 @@ class EventingRebalance(EventingBaseTest):
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
         if self.pause_resume:
-            self.pause_function(body, wait_for_pause=False)
+            self.pause_function(body)
         # swap rebalance kv node when eventing is processing mutations
         services_in = ["kv"]
         nodes_out_kv = self.servers[1]
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]],
                                                  [nodes_out_kv], services=services_in)
-        reached = RestHelper(self.rest).rebalance_reached(retry_count=120)
+        reached = RestHelper(self.rest).rebalance_reached(retry_count=150)
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
         if self.pause_resume:
@@ -415,7 +419,7 @@ class EventingRebalance(EventingBaseTest):
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]], [],
                                                  services=[self.services_in])
         task.result()
-        reached = RestHelper(self.rest).rebalance_reached(retry_count=120)
+        reached = RestHelper(self.rest).rebalance_reached(retry_count=150)
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
         if self.pause_resume:
@@ -455,7 +459,7 @@ class EventingRebalance(EventingBaseTest):
         # rebalance out a node
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [nodes_out_list])
         task.result()
-        reached = RestHelper(self.rest).rebalance_reached(retry_count=120)
+        reached = RestHelper(self.rest).rebalance_reached(retry_count=150)
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
         if self.pause_resume:
@@ -498,7 +502,7 @@ class EventingRebalance(EventingBaseTest):
                            self.servers[self.nodes_init].ip, self.servers[self.nodes_init].port,
                            services=[self.services_in])
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [nodes_out_list])
-        reached = RestHelper(self.rest).rebalance_reached(retry_count=120)
+        reached = RestHelper(self.rest).rebalance_reached(retry_count=150)
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
         task.result()
@@ -546,7 +550,7 @@ class EventingRebalance(EventingBaseTest):
         try:
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
                                                      [], [eventing_node, kv_node[1]])
-            reached = RestHelper(self.rest).rebalance_reached(retry_count=120)
+            reached = RestHelper(self.rest).rebalance_reached(retry_count=150)
             self.assertTrue(reached, "rebalance failed, stuck or did not complete")
             rebalance.result()
         except Exception as ex:
@@ -782,7 +786,7 @@ class EventingRebalance(EventingBaseTest):
             # This sleep is intentional, if this is not present, rebalance_reached reports 100% (rebalance completed)
             # before rebalance could even start
             self.sleep(30)
-            reached = RestHelper(self.rest).rebalance_reached(percentage=30)
+            reached = RestHelper(self.rest).rebalance_reached(percentage=30,retry_count=150)
             self.assertTrue(reached, "Rebalance failed or did not reach {0}%".format(30))
             if not RestHelper(self.rest).is_cluster_rebalanced():
                 # stop the rebalance
@@ -835,7 +839,7 @@ class EventingRebalance(EventingBaseTest):
         services_in = ["eventing", "eventing"]
         to_add_nodes = self.servers[self.nodes_init:self.nodes_init + 2]
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], to_add_nodes, [], services=services_in)
-        reached = RestHelper(self.rest).rebalance_reached(retry_count=120)
+        reached = RestHelper(self.rest).rebalance_reached(retry_count=150)
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
         task.result()
@@ -857,7 +861,7 @@ class EventingRebalance(EventingBaseTest):
         to_remove_nodes = nodes_out_list[0:2]
         # rebalance out 2 eventing nodes
         rebalance1 = self.cluster.async_rebalance(self.servers[:self.nodes_init + 2], [], to_remove_nodes)
-        reached1 = RestHelper(self.rest).rebalance_reached(retry_count=120)
+        reached1 = RestHelper(self.rest).rebalance_reached(retry_count=150)
         self.assertTrue(reached1, "rebalance failed, stuck or did not complete")
         rebalance1.result()
         task1.result()
@@ -881,7 +885,7 @@ class EventingRebalance(EventingBaseTest):
         task2 = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, gen_load_create,
                                                  self.buckets[0].kvs[1], 'create', compression=self.sdk_compression)
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], all_eventing_nodes)
-        reached = RestHelper(self.rest).rebalance_reached(retry_count=120)
+        reached = RestHelper(self.rest).rebalance_reached(retry_count=150)
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
         task2.result()
@@ -915,7 +919,7 @@ class EventingRebalance(EventingBaseTest):
         to_add_nodes = self.servers[self.nodes_init:self.nodes_init + 2]
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], to_add_nodes, [],
                                                  services=services_in)
-        reached = RestHelper(self.rest).rebalance_reached(retry_count=120)
+        reached = RestHelper(self.rest).rebalance_reached(retry_count=150)
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
         task.result()
@@ -933,7 +937,7 @@ class EventingRebalance(EventingBaseTest):
             self.pause_function(body)
         to_remove_nodes = to_add_nodes
         rebalance1 = self.cluster.async_rebalance(self.servers[:self.nodes_init + 2], [], to_remove_nodes)
-        reached1 = RestHelper(self.rest).rebalance_reached(retry_count=120)
+        reached1 = RestHelper(self.rest).rebalance_reached(retry_count=150)
         self.assertTrue(reached1, "rebalance failed, stuck or did not complete")
         rebalance1.result()
         task1.result()
@@ -956,7 +960,7 @@ class EventingRebalance(EventingBaseTest):
         if self.pause_resume:
             self.pause_function(body)
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], all_kv_nodes[1:3])
-        reached = RestHelper(self.rest).rebalance_reached(retry_count=120)
+        reached = RestHelper(self.rest).rebalance_reached(retry_count=150)
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
         task2.result()
@@ -1003,7 +1007,7 @@ class EventingRebalance(EventingBaseTest):
         task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
                                                 self.buckets[0].kvs[1], 'create', compression=self.sdk_compression)
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [nodes_out_ev])
-        reached = RestHelper(self.rest).rebalance_reached(retry_count=120)
+        reached = RestHelper(self.rest).rebalance_reached(retry_count=150)
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
         task.result()
@@ -1042,11 +1046,12 @@ class EventingRebalance(EventingBaseTest):
                                                      services=services_in)
             self.sleep(15)
             reached = RestHelper(self.rest).rebalance_reached(percentage=30)
+            self.log.info(self.check_eventing_rebalance())
             # kill memcached on kv and eventing when eventing rebalance is going on
             for node in [kv_node, eventing_node]:
                 self.kill_memcached_service(node)
             self.sleep(15)
-            reached = RestHelper(self.rest).rebalance_reached(retry_count=120)
+            reached = RestHelper(self.rest).rebalance_reached(retry_count=150)
             self.assertTrue(reached, "rebalance failed, stuck or did not complete")
             rebalance.result()
             task.result()
@@ -1080,22 +1085,22 @@ class EventingRebalance(EventingBaseTest):
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]],
                                                      [],
                                                      services=services_in)
-            self.sleep(15)
-            reached = RestHelper(self.rest).rebalance_reached(percentage=30)
-            # kill erlang process on kv and eventing when eventing rebalance is going on
-            for node in [kv_node, eventing_node]:
+            self.sleep(2)
+            reached = RestHelper(self.rest).rebalance_reached(percentage=60)
+            for node in [eventing_node]:
                 self.kill_erlang_service(node)
             self.assertTrue(reached, "rebalance failed, stuck or did not complete")
             rebalance.result()
             task.result()
         except Exception as ex:
+            log.info(ex)
             log.info("Rebalance failed as expected after erlang got killed: {0}".format(str(ex)))
         else:
             self.fail("Rebalance succeeded even after erl crash")
         # retry the failed rebalance
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init + 1], [], [])
         self.sleep(30)
-        reached = RestHelper(self.rest).rebalance_reached(retry_count=120)
+        reached = RestHelper(self.rest).rebalance_reached(retry_count=150)
         self.assertTrue(reached, "retry of the failed rebalance failed, stuck or did not complete")
         rebalance.result()
         # delete json documents
@@ -1126,8 +1131,12 @@ class EventingRebalance(EventingBaseTest):
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]],
                                                      [],
                                                      services=services_in)
-            self.sleep(15)
             reached = RestHelper(self.rest).rebalance_reached(percentage=30)
+            # while (not self.check_eventing_rebalance() and not RestHelper(self.rest).is_cluster_rebalanced()):
+            #     self.log.info("waiting for eventing rebalance to trigger")
+            #     self.sleep(3)
+            # if (RestHelper(self.rest).is_cluster_rebalanced()):
+            #     raise Exception("Rebalance completed before killing")
             # reboot kv and eventing when eventing is processing mutations
             for node in [kv_node, eventing_node]:
                 self.reboot_server(node)
@@ -1135,13 +1144,21 @@ class EventingRebalance(EventingBaseTest):
             rebalance.result()
             task.result()
         except Exception as ex:
+            if "Rebalance completed before killing" in str(ex):
+                exit(1)
+            log.info(ex)
             log.info("Rebalance failed as expected after reboot of kv and eventing: {0}".format(str(ex)))
         else:
             self.fail("Rebalance succeeded even after rebooting kv and eventing node")
+        self.sleep(180,"waiting for node to come up")
+        if self.pause_resume:
+            self.wait_for_handler_state(self.function_name, "paused")
+        else:
+            self.wait_for_handler_state(self.function_name,"deployed")
         # retry the failed rebalance
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init + 1], [], [])
         self.sleep(30)
-        reached = RestHelper(self.rest).rebalance_reached(retry_count=120)
+        reached = RestHelper(self.rest).rebalance_reached(retry_count=150)
         self.assertTrue(reached, "retry of the failed rebalance failed, stuck or did not complete")
         rebalance.result()
         # delete json documents
@@ -1176,11 +1193,15 @@ class EventingRebalance(EventingBaseTest):
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]],
                                                      [],
                                                      services=services_in)
-            self.sleep(15)
             reached = RestHelper(self.rest).rebalance_reached(percentage=30)
             # kill eventing process when eventing rebalance is going on
             if len(eventing_nodes) < 2:
                 self.fail("At least two eventing nodes are required")
+            # while (not self.check_eventing_rebalance() and not RestHelper(self.rest).is_cluster_rebalanced()):
+            #     self.log.info("waiting for eventing rebalance to trigger")
+            #     self.sleep(3)
+            # if (RestHelper(self.rest).is_cluster_rebalanced()):
+            #     raise Exception("Rebalance completed before killing")
             self.kill_consumer(eventing_nodes[0])
             self.kill_consumer(self.servers[self.nodes_init])
             self.kill_producer(eventing_nodes[1])
@@ -1195,7 +1216,7 @@ class EventingRebalance(EventingBaseTest):
         # retry the failed rebalance
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init + 1], [], [])
         self.sleep(30)
-        reached = RestHelper(self.rest).rebalance_reached(retry_count=120)
+        reached = RestHelper(self.rest).rebalance_reached(retry_count=150)
         self.assertTrue(reached, "retry of the failed rebalance failed, stuck or did not complete")
         rebalance.result()
         # delete json documents
@@ -1219,14 +1240,14 @@ class EventingRebalance(EventingBaseTest):
         nodes_out_list = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
         # rebalance out all eventing nodes
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], nodes_out_list)
-        reached = RestHelper(self.rest).rebalance_reached(retry_count=120)
+        reached = RestHelper(self.rest).rebalance_reached(retry_count=150)
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
         # rebalance in a single eventing node
         services_in = ["eventing"]
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]], [],
                                                  services=services_in)
-        reached = RestHelper(self.rest).rebalance_reached(retry_count=120)
+        reached = RestHelper(self.rest).rebalance_reached(retry_count=150)
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
         # load data
@@ -1277,7 +1298,7 @@ class EventingRebalance(EventingBaseTest):
                            self.servers[self.nodes_init].ip, self.servers[self.nodes_init].port,
                            services=[self.services_in])
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [server_out])
-        reached = RestHelper(self.rest).rebalance_reached(retry_count=120)
+        reached = RestHelper(self.rest).rebalance_reached(retry_count=150)
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
         try:
@@ -1341,7 +1362,7 @@ class EventingRebalance(EventingBaseTest):
         else:
             self.fail("Deployment of function succeeded during rebalance...")
         finally:
-            reached = RestHelper(self.rest).rebalance_reached(retry_count=120)
+            reached = RestHelper(self.rest).rebalance_reached(retry_count=150)
             self.assertTrue(reached, "rebalance failed, stuck or did not complete")
             rebalance.result()
         self.undeploy_and_delete_function(body)
@@ -1361,7 +1382,7 @@ class EventingRebalance(EventingBaseTest):
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]],
                                                      [], services=[services_in])
             self.sleep(timeout=5)
-            reached = RestHelper(self.rest).rebalance_reached(retry_count=120)
+            reached = RestHelper(self.rest).rebalance_reached(retry_count=150)
             self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         except Exception as ex:
             log.info("{0}".format(str(ex)))
@@ -1375,7 +1396,7 @@ class EventingRebalance(EventingBaseTest):
         # Retry failed rebalance
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init+1], [], [])
         self.sleep(60)
-        reached = RestHelper(self.rest).rebalance_reached(retry_count=120)
+        reached = RestHelper(self.rest).rebalance_reached(retry_count=150)
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
         # delete json documents
@@ -1430,7 +1451,7 @@ class EventingRebalance(EventingBaseTest):
                            self.servers[self.nodes_init].ip, self.servers[self.nodes_init].port,
                            services=[self.services_in])
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [nodes_out_list])
-        reached = RestHelper(self.rest).rebalance_reached(retry_count=120)
+        reached = RestHelper(self.rest).rebalance_reached(retry_count=150)
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
         task.result()
@@ -1504,3 +1525,145 @@ class EventingRebalance(EventingBaseTest):
         except:
             pass
 
+
+    def test_killing_eventing_processes_during_eventing_rebalance_with_autoretry(self):
+        self.auto_retry_setup()
+        gen_load_del = copy.deepcopy(self.gens_load)
+        eventing_nodes = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
+        body = self.create_save_function_body(self.function_name, self.handler_code)
+        self.deploy_function(body)
+        if self.pause_resume:
+            self.pause_function(body)
+        try:
+            # load some data
+            task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
+                                                    self.buckets[0].kvs[1], 'create', compression=self.sdk_compression)
+            # rebalance in a eventing node when eventing is processing mutations
+            services_in = ["eventing"]
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]],
+                                                     [],
+                                                     services=services_in)
+            self.sleep(15)
+            reached = RestHelper(self.rest).rebalance_reached(percentage=10)
+            # kill eventing process when eventing rebalance is going on
+            if len(eventing_nodes) < 2:
+                self.fail("At least two eventing nodes are required")
+            while (not self.check_eventing_rebalance() and not RestHelper(self.rest).is_cluster_rebalanced()):
+                self.log.info("waiting for eventing rebalance to trigger")
+                self.sleep(3)
+            if (RestHelper(self.rest).is_cluster_rebalanced()):
+                raise Exception("Rebalance completed before killing")
+            self.kill_consumer(eventing_nodes[0])
+            self.kill_consumer(self.servers[self.nodes_init])
+            self.kill_producer(eventing_nodes[1])
+            self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+            rebalance.result()
+            task.result()
+        except Exception, ex:
+            log.info("Rebalance failed as expected after eventing got killed: {0}".format(str(ex)))
+            # auto retry the failed rebalance
+            self.check_retry_rebalance_succeeded()
+        else:
+            self.fail("Rebalance succeeded even after killing eventing processes")
+        self.sleep(120)
+        # delete json documents
+        self.load(gen_load_del, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size, op_type='delete')
+        if self.pause_resume:
+            self.resume_function(body)
+        # Wait for eventing to catch up with all the delete mutations and verify results
+        # This is required to ensure eventing works after rebalance goes through successfully
+        if not self.is_sbm:
+            self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+        self.undeploy_and_delete_function(body)
+
+    def test_erl_crash_on_kv_and_eventing_node_during_eventing_rebalance_with_autoretry(self):
+        self.auto_retry_setup()
+        gen_load_del = copy.deepcopy(self.gens_load)
+        kv_node = self.servers[1]
+        eventing_node = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
+        body = self.create_save_function_body(self.function_name, self.handler_code)
+        self.deploy_function(body)
+        if self.pause_resume:
+            self.pause_function(body)
+        try:
+            # load some data
+            task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
+                                                    self.buckets[0].kvs[1], 'create', compression=self.sdk_compression)
+            # rebalance in a eventing node when eventing is processing mutations
+            services_in = ["eventing"]
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]],
+                                                     [],
+                                                     services=services_in)
+            self.sleep(15)
+            reached = RestHelper(self.rest).rebalance_reached(percentage=30)
+            # kill erlang process on kv and eventing when eventing rebalance is going on
+            for node in [kv_node, eventing_node]:
+                self.kill_erlang_service(node)
+            self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+            rebalance.result()
+            task.result()
+        except Exception, ex:
+            log.info("Rebalance failed as expected after erlang got killed: {0}".format(str(ex)))
+            # auto retry failed rebalance
+            self.check_retry_rebalance_succeeded()
+        else:
+            self.fail("Rebalance succeeded even after erl crash")
+        # delete json documents
+        self.load(gen_load_del, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size, op_type='delete')
+        if self.pause_resume:
+            self.resume_function(body)
+        # Wait for eventing to catch up with all the delete mutations and verify results
+        # This is required to ensure eventing works after rebalance goes through successfully
+        if not self.is_sbm:
+            self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+        self.undeploy_and_delete_function(body)
+
+    def test_reboot_of_kv_and_eventing_node_during_eventing_rebalance_with_autoretry(self):
+        self.auto_retry_setup()
+        gen_load_del = copy.deepcopy(self.gens_load)
+        kv_node = self.servers[1]
+        eventing_node = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
+        body = self.create_save_function_body(self.function_name, self.handler_code)
+        self.deploy_function(body)
+        if self.pause_resume:
+            self.pause_function(body)
+        try:
+            # load some data
+            task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
+                                                    self.buckets[0].kvs[1], 'create', compression=self.sdk_compression)
+            # rebalance in a eventing node when eventing rebalance is going on
+            services_in = ["eventing"]
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]],
+                                                     [],
+                                                     services=services_in)
+            self.sleep(15)
+            reached = RestHelper(self.rest).rebalance_reached(percentage=30)
+            # reboot kv and eventing when eventing is processing mutations
+            for node in [kv_node, eventing_node]:
+                self.reboot_server(node)
+            self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+            rebalance.result()
+            task.result()
+        except Exception, ex:
+            log.info("Rebalance failed as expected after reboot of kv and eventing: {0}".format(str(ex)))
+            # auto retry for failed rebalance
+            self.check_retry_rebalance_succeeded()
+        else:
+            self.fail("Rebalance succeeded even after rebooting kv and eventing node")
+        # delete json documents
+        self.load(gen_load_del, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size, op_type='delete')
+        if self.pause_resume:
+            self.resume_function(body)
+        # Wait for eventing to catch up with all the delete mutations and verify results
+        # This is required to ensure eventing works after rebalance goes through successfully
+        try:
+            if not self.is_sbm:
+                self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True, timeout=240)
+        except Exception, ex:
+            log.info(str(ex))
+            # data mismatch is expected in case of a failover
+            pass
+        self.undeploy_and_delete_function(body)

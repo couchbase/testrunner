@@ -99,9 +99,16 @@ class CliBaseTest(BaseTestCase):
         except AttributeError:
             pass
         if "bin" not in bin_path:
-            self.fail("Check if cb server install on %s" % self.master.ip)
-        else:
-            self.cli_command_path = bin_path.replace('"', '') + "/"
+            if "localhost only" in bin_path:
+                self.enable_diag_eval_on_non_local_hosts()
+                bin_path  = subprocess.check_output(cmd, shell=True)
+                if "bin" not in bin_path:
+                    self.fail("Check if cb server install on {0}"
+                                         .format(self.master.ip))
+            else:
+                self.fail("Check if cb server install on {0}"
+                                     .format(self.master.ip))
+        self.cli_command_path = bin_path.replace('"','') + "/"
         self.root_path = LINUX_ROOT_PATH
         self.tmp_path = "/tmp/"
         self.tmp_path_raw = "/tmp/"
@@ -155,8 +162,9 @@ class CliBaseTest(BaseTestCase):
         self.command_options = self.input.param("command_options", None)
         if self.command_options is not None:
             self.command_options = self.command_options.split(";")
+        self.start_with_cluster = self.input.param("start_with_cluster", True)
         if str(self.__class__).find('couchbase_clitest.CouchbaseCliTest') == -1:
-            if len(self.servers) > 1 and int(self.nodes_init) == 1:
+            if len(self.servers) > 1 and int(self.nodes_init) == 1 and self.start_with_cluster:
                 servers_in = [self.servers[i + 1] for i in range(self.num_servers - 1)]
                 self.cluster.rebalance(self.servers[:1], servers_in, [])
         for bucket in self.buckets:

@@ -520,6 +520,7 @@ class CouchbaseServerInstaller(Installer):
                     RemoteUtilHelper.use_hostname_for_server_settings(server)
 
                 if params.get('enable_ipv6', 0):
+                    rest.enable_ip_version()
                     status, content = RestConnection(server).rename_node(
                         hostname=server.ip.replace('[', '').replace(']', ''))
                     if status:
@@ -567,8 +568,13 @@ class CouchbaseServerInstaller(Installer):
                         kv_quota = int(rest.get_nodes_self().mcdMemoryReserved)
                     info = rest.get_nodes_self()
                     cb_version = info.version[:5]
+                    cb_version_build = info.version[:3]
                     log.info("--> rest.get_nodes_self().mcdMemoryReserved".format(rest.get_nodes_self().mcdMemoryReserved))
+                    version_no_eventing_support = ["4.5", "4.6", "4.7", "5.0", "5.1"]
                     log.info("--> info.mcdMemoryReserved={},CLUSTER_QUOTA_RATIO={}".format(info.mcdMemoryReserved,CLUSTER_QUOTA_RATIO))
+                    if cb_version_build in version_no_eventing_support:
+                        if "eventing" in set_services:
+                            set_services.remove("eventing")
                     kv_quota = int(info.mcdMemoryReserved * CLUSTER_QUOTA_RATIO)
                     """ for fts, we need to grep quota from ns_server
                                 but need to make it works even RAM of vm is
@@ -760,8 +766,8 @@ class CouchbaseServerInstaller(Installer):
                                        vbuckets=vbuckets,
                                        fts_query_limit=fts_query_limit,
                                        cbft_env_options=cbft_env_options,
-                                       enable_ipv6=enable_ipv6,
-                                       windows_msi=self.msi )
+                                       windows_msi=self.msi,
+                                       enable_ipv6=enable_ipv6)
             else:
                 print("Downloading the build...{}".format(build))
                 downloaded = remote_client.download_build(build)

@@ -7,6 +7,7 @@ from remote.remote_util import RemoteMachineShellConnection
 from newupgradebasetest import NewUpgradeBaseTest
 from security.auditmain import audit
 import subprocess
+import commands
 import socket
 import fileinput
 import sys
@@ -69,7 +70,6 @@ class rbacTest(ldaptest):
         super(rbacTest, self).tearDown()
 
     def getLocalIPAddress(self):
-        '''
         s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         s.connect(('couchbase.com', 0))
         return s.getsockname()[0]
@@ -78,6 +78,7 @@ class rbacTest(ldaptest):
         if '1' not in ipAddress:
             status, ipAddress = subprocess.getstatusoutput("ifconfig eth0 | grep  -Eo 'inet (addr:)?([0-9]*\.){3}[0-9]*' | awk '{print $2}'")
         return ipAddress
+        '''
 
     def test_compare_orig_roles(self):
         status, content, header = rbacmain(self.master)._retrive_all_user_role(self.user_id)
@@ -358,15 +359,15 @@ class rbacTest(ldaptest):
             source = 'local'
         else:
             source = 'external'
-        expectedResults = {"full_name":"'RitamSharma'","roles":["admin"],"identity:source":source,"identity:user":userid[0],
-                           "real_userid:source":"ns_server","real_userid:user":"Administrator",
-                            "ip":self.ipAddress, "port":123456}
+        expectedResults = {"roles":["admin"],"identity:source":source,"identity:user":userid[0],
+                           "real_userid:source":"ns_server","real_userid:user":"Administrator","groups": [],"reason":"updated",
+                            "ip":self.ipAddress, "port":123456,"full_name":"'RitamSharma'"}
         if ops == 'edit':
             payload = "name=" + user_name + "&roles=" + 'admin,cluster_admin'
-            status, content, header =  rbacmain(self.master, self.auth_type)._set_user_roles(user_name=userid[0], payload=payload)
-            expectedResults = {"full_name":"'RitamSharma'","roles":["admin", "cluster_admin"],"identity:source":source,"identity:user":userid[0],
-                           "real_userid:source":"ns_server","real_userid:user":"Administrator",
-                            "ip":self.ipAddress, "port":123456}
+            status, content, header =  rbacmain(self.master, self.auth_type)._set_user_roles(user_name=userid[0],payload=payload)
+            expectedResults = {"roles":["admin","cluster_admin"],"identity:source":source,"identity:user":userid[0],
+                           "real_userid:source":"ns_server","real_userid:user":"Administrator","groups": [],"reason":"updated",
+                            "ip":self.ipAddress, "port":123456,"full_name":"'RitamSharma'"}
         elif ops == 'remove':
             status, content, header = rbacmain(self.master, self.auth_type)._delete_user(userid[0])
             expectedResults = {"identity:source":source,"identity:user":userid[0],

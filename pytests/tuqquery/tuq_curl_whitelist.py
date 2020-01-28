@@ -29,11 +29,11 @@ class QueryWhitelistTests(QueryTests):
         self.cbqpath = '%scbq' % self.path + " -e %s:%s -q -u %s -p %s"\
                                              % (self.master.ip, self.n1ql_port, self.rest.username, self.rest.password)
         #Whitelist error messages
-        self.query_error_msg = "Errorevaluatingprojection.-cause:URLendpointisn'twhitelistedhttp://%s:%s/query/service." \
+        self.query_error_msg = "Errorevaluatingprojection.-cause:URLendpointisntwhitelistedhttp://%s:%s/query/service." \
                 "PleasemakesuretowhitelisttheURLontheUI." % (self.master.ip, self.n1ql_port)
-        self.jira_error_msg ="Errorevaluatingprojection.-cause:URLendpointisn'twhitelistedhttps://jira.atlassian." \
+        self.jira_error_msg ="Errorevaluatingprojection.-cause:URLendpointisntwhitelistedhttps://jira.atlassian." \
                              "com/rest/api/latest/issue/JRA-9.PleasemakesuretowhitelisttheURLontheUI."
-        self.google_error_msg = "Errorevaluatingprojection.-cause:URLendpointisn'twhitelisted" \
+        self.google_error_msg = "Errorevaluatingprojection.-cause:URLendpointisntwhitelisted" \
                                 "https://maps.googleapis.com/maps/api/geocode/json."
         #End of whitelist error messages
         self.query_service_url = "'http://%s:%s/query/service'" % (self.master.ip, self.n1ql_port)
@@ -250,7 +250,7 @@ class QueryWhitelistTests(QueryTests):
         # Whitelist should not accept this setting and thus leave the above settting of all_access = False intact
         response, content = self.rest.create_whitelist(self.master, {"all_access": False, "allowed_urls": "blahblahblah"})
         result = json.loads(content)
-        self.assertEqual(result['errors']['allowed_urls'], "Invalid type: Must be a list of non-empty strings")
+        self.assertEqual(result['errors']['allowed_urls'], "Must be an array of non-empty strings")
         n1ql_query = 'select * from default limit 5'
         # This is the query that the cbq-engine will execute
         query = "select curl(" + self.query_service_url + \
@@ -392,12 +392,12 @@ class QueryWhitelistTests(QueryTests):
         response, content = self.rest.create_whitelist(self.master, {"all_access": False,
                                                            "disallowed_urls":"blahblahblahblahblah"})
         result = json.loads(content)
-        self.assertEqual(result['errors']['disallowed_urls'], "Invalid type: Must be a list of non-empty strings")
+        self.assertEqual(result['errors']['disallowed_urls'], "Must be an array of non-empty strings")
 
     '''Should not be able to curl localhost even if you are on the localhost unless whitelisted'''
     def test_localhost(self):
         self.rest.create_whitelist(self.master, {"all_access": False})
-        error_msg ="Errorevaluatingprojection.-cause:URLendpointisn'twhitelistedhttp://localhost:8093/query/service." \
+        error_msg ="Errorevaluatingprojection.-cause:URLendpointisntwhitelistedhttp://localhost:8093/query/service." \
                    "PleasemakesuretowhitelisttheURLontheUI."
 
         n1ql_query = 'select * from default limit 5'
@@ -408,3 +408,4 @@ class QueryWhitelistTests(QueryTests):
         self.assertTrue(error_msg in json_curl['errors'][0]['msg'],
                         "Error message is %s this is incorrect it should be %s"
                         % (json_curl['errors'][0]['msg'], error_msg))
+

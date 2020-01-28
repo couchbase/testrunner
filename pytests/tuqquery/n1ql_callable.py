@@ -11,7 +11,7 @@ class N1QLCallable:
         from pytests.tuqquery.n1ql_callable import N1QLCallable
         n1ql_callable = N1QLCallable(self.servers)
         result = n1ql_callable.run_n1ql_query("select * from system:indexes")
-        n1ql_callable.create_gsi_index(keyspace="default", name="test_idx1", fields="email", using="gsi", is_primary=False, index_condition="")
+        n1ql_callable.create_gsi_index(keyspace="bucket_name", name="test_idx1", fields="email", using="gsi", is_primary=False, index_condition="")
         n1ql_callable.drop_gsi_index(keyspace="default", name="test_idx1", is_primary=False)
     """
 

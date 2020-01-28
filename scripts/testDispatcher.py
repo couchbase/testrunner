@@ -60,6 +60,11 @@ def main():
     parser.add_option('-u', '--url', dest='url', default=None)
     parser.add_option('-j', '--jenkins', dest='jenkins', default=None)
     parser.add_option('-b', '--branch', dest='branch', default='master')
+    parser.add_option('-g','--cherrypick', dest='cherrypick', default=None)
+    # whether to use production version of a test_suite_executor or test version
+    parser.add_option('-l','--launch_job', dest='launch_job', default='test_suite_executor')
+    parser.add_option('-f','--jenkins_server_url', dest='jenkins_server_url', default='http://qa.sc.couchbase.com')
+
 
     # dashboardReportedParameters is of the form param1=abc,param2=def
     parser.add_option('-d', '--dashboardReportedParameters', dest='dashboardReportedParameters', default=None)
@@ -79,6 +84,7 @@ def main():
 
 
     print('url is', options.url)
+    print 'cherrypick command is', options.cherrypick
 
     print('the reportedParameters are', options.dashboardReportedParameters)
 
@@ -114,8 +120,13 @@ def main():
 
     cb = Bucket('couchbase://' + TEST_SUITE_DB + '/QE-Test-Suites')
 
+    if options.run == "12hr_weekly" :
+        suiteString = "('12hour' in partOf or 'weekly' in partOf)"
+    else:
+        suiteString = "'" + options.run + "' in partOf"
+
     if options.component is None or options.component == 'None':
-        queryString = "select * from `QE-Test-Suites` where '" + options.run + "' in partOf order by component"
+        queryString = "select * from `QE-Test-Suites` where " + suiteString + " order by component"
     else:
         if options.subcomponent is None or options.subcomponent == 'None':
             splitComponents = options.component.split(',')
@@ -125,8 +136,7 @@ def main():
                 if i < len(splitComponents) - 1:
                     componentString = componentString + ','
 
-
-            queryString = "select * from `QE-Test-Suites` where \"{0}\" in partOf and component in [{1}] order by component;".format(options.run, componentString)
+            queryString = "select * from `QE-Test-Suites` where {0} and component in [{1}] order by component;".format(suiteString, componentString)
 
         else:
             # have a subcomponent, assume only 1 component
@@ -138,8 +148,8 @@ def main():
                 subcomponentString = subcomponentString + "'" + splitSubcomponents[i] + "'"
                 if i < len(splitSubcomponents) - 1:
                     subcomponentString = subcomponentString + ','
-            queryString = "select * from `QE-Test-Suites` where \"{0}\" in partOf and component in ['{1}'] and subcomponent in [{2}];".\
-                format(options.run, options.component, subcomponentString)
+            queryString = "select * from `QE-Test-Suites` where {0} and component in ['{1}'] and subcomponent in [{2}];".\
+                format(suiteString, options.component, subcomponentString)
 
 
     print('the query is', queryString) #.format(options.run, componentString)
@@ -228,10 +238,7 @@ def main():
     for i in testsToLaunch: print(i['component'], i['subcomponent'])
     print('\n\n')
 
-
-
-
-    launchStringBase = 'http://qa.sc.couchbase.com/job/test_suite_executor'
+    launchStringBase = str(options.jenkins_server_url)+'/job/'+str(options.launch_job)
 
     # optional add [-docker] [-Jenkins extension]
     if options.serverType.lower() == 'docker':
@@ -256,6 +263,8 @@ def main():
                          '11}&owners={12}&mailing_list={13}&mode={14}&timeout={15}'
     if options.url is not None:
         launchString = launchString + '&url=' + options.url
+    if options.cherrypick is not None:
+        launchString = launchString + '&cherrypick=' + urllib.quote(options.cherrypick)
 
     summary = []
 

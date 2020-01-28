@@ -546,3 +546,25 @@ class EventingBucket(EventingBaseTest):
         self.verify_eventing_results(self.function_name, 2016 * self.docs_per_day, skip_stats_validation=True)
         # Undeploy and delete the function
         self.undeploy_and_delete_function(body)
+
+    def test_langague_compatibility_6_0(self):
+        # load some data
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        body = self.create_save_function_body(self.function_name,'handler_code/language_compatibility_6_0.js',
+                                              worker_count=3,language_compatibility='6.0.0')
+        self.deploy_function(body)
+        self.verify_eventing_results(self.function_name, 2016 * self.docs_per_day, skip_stats_validation=True)
+        # Undeploy and delete the function
+        self.undeploy_and_delete_function(body)
+
+    def test_langague_compatibility_6_5(self):
+        # load some data
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        body = self.create_save_function_body(self.function_name,'handler_code/language_compatibility_6_5.js',
+                                              worker_count=3)
+        self.deploy_function(body)
+        self.verify_eventing_results(self.function_name, 2016 * self.docs_per_day, skip_stats_validation=True)
+        # Undeploy and delete the function
+        self.undeploy_and_delete_function(body)

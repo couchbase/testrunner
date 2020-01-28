@@ -43,15 +43,6 @@ from scripts.collect_server_info import cbcollectRunner
 
 
 class BaseTestCase(unittest.TestCase):
-    def suite_setUp(self):
-        self.log.info("==============  BaseTestCase suite_setup has started ==============")
-        self.log.info("==============  BaseTestCase suite_setup has completed ==============")
-
-    def suite_tearDown(self):
-        self.log.info("==============  BaseTestCase suite_teardown has started ==============")
-        self.log.info("==============  BaseTestCase suite_teardown has completed ==============")
-
-
     def setUp(self):
         self.log = logger.Logger.get_logger()
         self.input = TestInputSingleton.input
@@ -127,7 +118,7 @@ class BaseTestCase(unittest.TestCase):
             self.default_bucket = self.input.param("default_bucket", True)
             self.parallelism = self.input.param("parallelism", False)
             if self.default_bucket:
-                self.default_bucket_name = self.input.param("default_bucket_name", "default")
+                self.default_bucket_name = "default"
             self.skip_standard_buckets = self.input.param("skip_standard_buckets", False)
             self.standard_buckets = self.input.param("standard_buckets", 0)
             # list of list [[2,1,1],[3,1,2,1],[4,1,1,2,3]]
@@ -200,12 +191,9 @@ class BaseTestCase(unittest.TestCase):
             self.sasl_bucket_name = "bucket"
             self.sasl_bucket_priority = self.input.param("sasl_bucket_priority", None)
             self.standard_bucket_priority = self.input.param("standard_bucket_priority", None)
+            self.magma_storage = self.input.param("magma_storage", False)
             # end of bucket parameters spot (this is ongoing)
             self.disable_diag_eval_on_non_local_host = self.input.param("disable_diag_eval_non_local", False)
-
-            if self.collection:
-                cli = CouchbaseCLI(self.master, self.master.rest_username, self.master.rest_password)
-                cli.enable_dp()
 
             if self.skip_setup_cleanup:
                 self.buckets = RestConnection(self.master).get_buckets()
@@ -331,7 +319,13 @@ class BaseTestCase(unittest.TestCase):
                             [],
                             services=self.services)
                 elif self.nodes_init > 1 and not self.skip_init_check_cbserver:
-                    self.services = self.get_services(self.servers[:self.nodes_init], self.services_init)
+                    self.services = self.get_services(self.servers[:self.nodes_init],
+                                                      self.services_init)
+                    """ if there is not node service in ini file, kv needs to be added in
+                        to avoid exception when add node """
+                    if self.services is not None and int(self.nodes_init) - len(self.services) > 0:
+                        for i in range(0, int(self.nodes_init) - len(self.services)):
+                            self.services.append("kv")
                     self.cluster.rebalance(self.servers[:1],
                                            self.servers[1:self.nodes_init],
                                            [],
@@ -343,7 +337,8 @@ class BaseTestCase(unittest.TestCase):
                         self.cluster.rebalance(self.servers, self.servers[1:],
                                            [], services=self.services)
                 self.setDebugLevel(service_type="index")
-                if not self.disable_diag_eval_on_non_local_host:
+                if not self.disable_diag_eval_on_non_local_host and \
+                                   not self.skip_init_check_cbserver:
                     self.enable_diag_eval_on_non_local_hosts()
             except BaseException as e:
                 # increase case_number to retry tearDown in setup for the next test
@@ -485,7 +480,7 @@ class BaseTestCase(unittest.TestCase):
                               .format(self.case_number, self._testMethodName))
         except BaseException:
             # kill memcached
-            self.kill_memcached()
+            # self.kill_memcached()
             # increase case_number to retry tearDown in setup for the next test
             self.case_number += 1000
         finally:
@@ -595,7 +590,7 @@ class BaseTestCase(unittest.TestCase):
                 remote_client.disconnect()
         return quota
 
-    def _create_bucket_params(self, server, bucket_name='default', replicas=1, size=0, port=11211, password=None,
+    def _create_bucket_params(self, server, replicas=1, size=0, port=11211, password=None,
                               bucket_type='membase', enable_replica_index=1, eviction_policy='valueOnly',
                               bucket_priority=None, flush_enabled=1, lww=False, maxttl=None,
                               compression_mode='passive'):
@@ -620,7 +615,6 @@ class BaseTestCase(unittest.TestCase):
 
         bucket_params = dict()
         bucket_params['server'] = server
-        bucket_params['bucket_name'] = bucket_name
         bucket_params['replicas'] = replicas
         bucket_params['size'] = size
         bucket_params['port'] = port
@@ -638,7 +632,7 @@ class BaseTestCase(unittest.TestCase):
     def _bucket_creation(self):
         if self.default_bucket:
             default_params=self._create_bucket_params(
-                server=self.master, bucket_name=self.default_bucket_name, size=self.bucket_size,
+                server=self.master, size=self.bucket_size,
                 replicas=self.num_replicas, bucket_type=self.bucket_type,
                 enable_replica_index=self.enable_replica_index,
                 eviction_policy=self.eviction_policy, lww=self.lww,
@@ -666,6 +660,26 @@ class BaseTestCase(unittest.TestCase):
         self._create_standard_buckets(self.master, self.standard_buckets)
         self._create_memcached_buckets(self.master, self.memcached_buckets)
 
+        if self.magma_storage:
+            command = "backend"
+            value = "magma"
+            self.log.info("Changing the bucket properties by changing {0} to {1}".
+                          format(command, value))
+            rest = RestConnection(self.master)
+
+            shell = RemoteMachineShellConnection(self.master)
+            shell.enable_diag_eval_on_non_local_hosts()
+            shell.disconnect()
+            for bucket in self.buckets:
+                cmd = 'ns_bucket:update_bucket_props("%s", [{extra_config_string, "%s=%s"}]).'%(bucket.name, command, value)
+                rest.diag_eval(cmd)
+
+            # Restart Memcached in all cluster nodes to reflect the settings
+            for server in self.get_kv_nodes(master=self.master):
+                shell = RemoteMachineShellConnection(server)
+                shell.restart_couchbase()
+                shell.disconnect()
+                self.wait_node_restarted(server)
 
     def _get_bucket_size(self, mem_quota, num_buckets):
         # min size is 100MB now
@@ -790,7 +804,7 @@ class BaseTestCase(unittest.TestCase):
                 else:
                     scope_num=self.standard_buckets_scope[i].remove
                     collection_num = self.standard_buckets_scope[i]
-                self.create_scope_collection(scope_num=scope_num, collection_num=collection_num, bucket=name)
+                self.create_scope_collection(scope_num=scope_num,collection_num=collection_num,bucket=name)
 
     def _create_buckets(self, server, bucket_list, server_id=None, bucket_size=None):
         if server_id is None:
@@ -816,7 +830,7 @@ class BaseTestCase(unittest.TestCase):
                 bucket_priority = self.get_bucket_priority(self.standard_bucket_priority[i])
 
             standard_params['bucket_priority']=bucket_priority
-            bucket_tasks.append(self.cluster.async_create_standard_bucket(name=bucket_name, port=STANDARD_BUCKET_PORT+i,
+            bucket_tasks.append(self.cluster.async_create_standard_bucket(name=bucket_name,port=STANDARD_BUCKET_PORT+i,
                                                                           bucket_params=standard_params))
             self.buckets.append(Bucket(name=bucket_name, authType=None, saslPassword=None,
                                        num_replicas=self.num_replicas,
@@ -962,7 +976,7 @@ class BaseTestCase(unittest.TestCase):
                                                                       bucket.kvs[kv_store],
                                                                       op_type, exp, flag, only_store_hash,
                                                                       batch_size, pause_secs, timeout_secs,
-                                                                      proxy_client, compression=self.sdk_compression, collection=collections))
+                                                                      proxy_client, compression=self.sdk_compression,collection=collections))
                     else:
                         self._load_memcached_bucket(server, gen, bucket.name, collections)
 
@@ -972,7 +986,7 @@ class BaseTestCase(unittest.TestCase):
                                                                       bucket.kvs[kv_store],
                                                                       op_type, exp, flag, only_store_hash,
                                                                       batch_size, pause_secs, timeout_secs,
-                                                                      proxy_client, compression=self.sdk_compression, collection=collection))
+                                                                      proxy_client, compression=self.sdk_compression,collection=collection))
                 else:
                     self._load_memcached_bucket(server, gen, bucket.name, collection)
 
@@ -2203,6 +2217,8 @@ class BaseTestCase(unittest.TestCase):
         self.log.info("**** add built-in '%s' user to node %s ****" % (testuser[0]["name"],
                                                                        node.ip))
         RbacBase().create_user_source(testuser, 'builtin', node)
+        # Some times in upgraded envs, user creation is taking some time. Added a small sleep to mitigate failures in subsequent steps.
+        self.sleep(5)
         self.log.info("**** add '%s' role to '%s' user ****" % (rolelist[0]["roles"],
                                                                 testuser[0]["name"]))
         status = RbacBase().add_user_role(rolelist, RestConnection(node), 'builtin')
@@ -2267,6 +2283,7 @@ class BaseTestCase(unittest.TestCase):
                     data_path = rest.get_data_path()
                     # Stop node
                     self.stop_server(node)
+                    self.sleep(5)
                     # Delete Path
                     shell.cleanup_data_config(data_path)
                     self.start_server(node)
@@ -2524,17 +2541,6 @@ class BaseTestCase(unittest.TestCase):
         items = 0
         for bucket in buckets:
             for gen_load in gens_load[bucket]:
-                try:
-                    gen_load.end = int(gen_load.end)
-                except ValueError:
-                    gen_load.end = 0
-                    pass
-                try:
-                    gen_load.start = int(gen_load.start)
-                except ValueError:
-                    gen_load.start = 0
-                    pass
-
                 items += (gen_load.end - gen_load.start)
         for bucket in buckets:
             self.log.info("%s %s to %s documents..." % (op_type, items, bucket.name))
@@ -2543,12 +2549,9 @@ class BaseTestCase(unittest.TestCase):
                                                           bucket.kvs[kv_store], op_type, exp, flag,
                                                           only_store_hash, batch_size, pause_secs,
                                                           timeout_secs, compression=self.sdk_compression, collection=collection))
-        try: 
           for task in tasks:
             task.result()
           self.num_items = items + start_items
-        except Exception as e:
-          traceback.print_exc()
 
         if verify_data:
             self.verify_cluster_stats(self.servers[:self.nodes_init])
@@ -2746,7 +2749,7 @@ class BaseTestCase(unittest.TestCase):
     '''
 
     def getLocalIPAddress(self):
-        status, ipAddress = subprocess.getstatusoutput(
+        status, ipAddress = commands.getstatusoutput(
             "ifconfig eth0 | grep 'inet addr:' | cut -d: -f2 |awk '{print $1}'")
         return ipAddress
 
@@ -2776,20 +2779,67 @@ class BaseTestCase(unittest.TestCase):
         version = rest.get_nodes_self().version
         return float(version[:3])
 
-    def create_scope(self, bucket="default", scope="scope0"):
-        Collections_Rest(self.master).create_scope(bucket, scope)
+    def create_scope(self, bucket = "default", scope = "scope0", result = True):
+        status = RestConnection(self.master).create_scope(bucket, scope)
+        if result:
+            self.assertEquals(True, status)
+            self.log.info("Scope creation passed, name={}".format(scope))
+        else:
+            self.assertEquals(False, status)
+            self.log.info("Scope creation failed, name={}".format(scope))
 
-    def create_collection(self, bucket="default", scope="scope0", collection="mycollection0"):
-        Collections_Rest(self.master).create_collection(bucket, scope, collection)
 
-    def delete_collection(self, bucket="default", scope='_default', collection='_default'):
-        Collections_Rest(self.master).delete_collection(bucket, scope, collection)
+    def create_collection(self, bucket = "default", scope = "scope0", collection = "mycollection0", result = True):
+        status = RestConnection(self.master).create_collection(bucket, scope, collection)
+        if result:
+            self.assertEquals(True, status)
+            self.log.info("Collection creation passed, name={}".format(collection))
+        else:
+            self.assertEquals(False, status)
+            self.log.info("Collection creation failed, name={}".format(collection))
 
-    def delete_scope(self, scope, bucket="default"):  # scope should be passed as default scope can not be deleted
-        Collections_Rest(self.master).delete_scope(scope, bucket)
+    def delete_collection(self, bucket = "default", scope = '_default', collection = '_default' ):
+        status = RestConnection(self.master).delete_collection(bucket, scope, collection)
+        self.assertEquals(True, status)
+        self.log.info("{} collections deleted".format(collection))
+        try:
+            if "_default._default" in self.collection_name[bucket]:
+                self.collection_name[bucket].remove("_default._default")
+        except KeyError:
+            pass
 
-    def create_scope_collection(self, scope_num, collection_num, bucket="default"):
-        Collections_Rest(self.master).create_scope_collection(self.collection_name, scope_num, collection_num, bucket)
+    def delete_scope(self, scope, bucket = "default"): # scope should be passed as default scope can not be deleted
+        status = RestConnection(self.master).delete_collection(bucket, scope)
+        self.assertEquals(True, status)
+        self.log.info("{} scope deleted".format(scope))
+        rex= re.compile(scope)
+        try:
+            # remove all the collections with the deleted scope
+            self.collection_name[bucket]=[x for x in self.collection_name[bucket] if not rex.match(self.collection_name[bucket])]
+        except KeyError:
+            pass
+
+    def create_scope_collection(self, scope_num, collection_num, bucket = "default"):
+        self.collection_name[bucket]= ["_default._default"]
+        for i in range(scope_num):
+            if i == 0:
+                scope_name = "_default"
+            else:
+                scope_name = bucket + str(i)
+                self.create_scope(bucket, scope=scope_name)
+            try:
+                if i == 0:
+                    num=int(collection_num[i] -1)
+                else:
+                    num=int(collection_num[i])
+            except:
+                num=2
+            for n in range(num):
+                collection = 'collection' + str(n)
+                self.create_collection(bucket=bucket,scope=scope_name, collection=collection)
+                self.collection_name[bucket].append(scope_name + '.' +collection)
+
+        self.log.info("created collections for the bucket {} are {}".format(bucket, self.collection_name[bucket]))
 
     def _record_vbuckets(self, master, servers):
         map = dict()
@@ -2874,3 +2924,39 @@ class BaseTestCase(unittest.TestCase):
                 stats = mc.stats()
                 self.assertEqual(int(stats['ep_flusher_batch_split_trigger']),
                                   flusher_batch_split_trigger)
+
+    def check_retry_rebalance_succeeded(self):
+        self.sleep(30)
+        attempts_remaining = retry_rebalance = retry_after_secs = None
+        for i in range(10):
+            self.log.info("Getting stats : try {0}".format(i))
+            result = json.loads(self.rest.get_pending_rebalance_info())
+            self.log.info(result)
+            if "retry_after_secs" in result:
+                retry_after_secs = result["retry_after_secs"]
+                attempts_remaining = result["attempts_remaining"]
+                retry_rebalance = result["retry_rebalance"]
+                break
+            self.sleep(self.sleep_time)
+        self.log.info("Attempts remaining : {0}, Retry rebalance : {1}".format(attempts_remaining, retry_rebalance))
+        while attempts_remaining:
+            # wait for the afterTimePeriod for the failed rebalance to restart
+            self.sleep(retry_after_secs, message="Waiting for the afterTimePeriod to complete")
+            try:
+                result = self.rest.monitorRebalance()
+                msg = "monitoring rebalance {0}"
+                self.log.info(msg.format(result))
+            except Exception:
+                result = json.loads(self.rest.get_pending_rebalance_info())
+                self.log.info(result)
+                try:
+                    attempts_remaining = result["attempts_remaining"]
+                    retry_rebalance = result["retry_rebalance"]
+                    retry_after_secs = result["retry_after_secs"]
+                except KeyError:
+                    self.fail("Retrying of rebalance still did not help. All the retries exhausted...")
+                self.log.info("Attempts remaining : {0}, Retry rebalance : {1}".format(attempts_remaining,
+                                                                                       retry_rebalance))
+            else:
+                self.log.info("Retry rebalanced fixed the rebalance failure")
+                break

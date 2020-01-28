@@ -22,7 +22,10 @@ class AutoFailoverTests(AutoFailoverBaseTest):
         self.enable_autofailover_and_validate()
         self.sleep(5)
         self.failover_actions[self.failover_action](self)
-        self.disable_autofailover_and_validate()
+        try:
+            self.disable_autofailover_and_validate()
+        except:
+            pass
 
     def test_autofailover_during_rebalance(self):
         """
@@ -52,7 +55,10 @@ class AutoFailoverTests(AutoFailoverBaseTest):
             pass
         else:
             self.fail("Rebalance should fail since a node went down")
-        self.disable_autofailover_and_validate()
+        try:
+            self.disable_autofailover_and_validate()
+        except:
+            pass
 
     def test_autofailover_after_rebalance(self):
         """
@@ -74,7 +80,10 @@ class AutoFailoverTests(AutoFailoverBaseTest):
             self.disable_firewall()
             self.fail("Rebalance failed. Check logs")
         self.failover_actions[self.failover_action](self)
-        self.disable_autofailover_and_validate()
+        try:
+            self.disable_autofailover_and_validate()
+        except:
+            pass
 
     def test_rebalance_after_autofailover(self):
         """
@@ -90,6 +99,7 @@ class AutoFailoverTests(AutoFailoverBaseTest):
         self.enable_autofailover_and_validate()
         self.sleep(5)
         self.failover_actions[self.failover_action](self)
+        self.sleep(300)
         for node in self.servers_to_add:
             self.rest.add_node(user=self.orchestrator.rest_username,
                                password=self.orchestrator.rest_password,

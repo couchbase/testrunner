@@ -329,7 +329,6 @@ def print_report(failers, os, build, component, fmt):
     print(str(n) + ". Total list of failed jobs. ")
     for job in failers:
         print((job['name']))
-
         if len(job['fail_reasons']['connection']['cases']) > 0:
             connection_failers.append(job['name'])
         if len(job['fail_reasons']['no_logs']['cases']) > 0:
@@ -401,7 +400,6 @@ def print_report(failers, os, build, component, fmt):
             print(("=" * 100))
         n = n+1
         print()
-
 
 def format_stack_trace(raw_stack_trace):
     new_stack_trace = ''
