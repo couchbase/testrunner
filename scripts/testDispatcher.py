@@ -65,6 +65,7 @@ def main():
     parser.add_option('-l','--launch_job', dest='launch_job', default='test_suite_executor')
     parser.add_option('-f','--jenkins_server_url', dest='jenkins_server_url', default='http://qa.sc.couchbase.com')
     parser.add_option('-m','--retry_params', dest='retry_params', default='')
+    parser.add_option('-i','--retries', dest='retries', default='1')
 
     # set of parameters for testing purposes.
     #TODO: delete them after successful testing
@@ -243,6 +244,7 @@ def main():
 
     launchStringBase = str(options.jenkins_server_url)+'/job/'+str(options.launch_job)
 
+
     # optional add [-docker] [-Jenkins extension]
     if options.serverType.lower() == 'docker':
         launchStringBase = launchStringBase + '-docker'
@@ -266,6 +268,7 @@ def main():
                          '11}&owners={12}&mailing_list={13}&mode={14}&timeout={15}'
 
     launchString = launchString + '&retry_params=' + urllib.quote(options.retry_params)
+    launchString = launchString + '&retries=' + options.retries
 
     if options.url is not None:
         launchString = launchString + '&url=' + options.url
