@@ -234,19 +234,14 @@ class RestConnection(object):
         if not port:
             port = 8091
 
-        #log.info("port is {} and serverInfo object type is {}".format(port,type(serverInfo)))
-        #log.info("serverInfo={}".format(vars(serverInfo)))
         if int(port) in range(9091, 9100):
             # return elastic search rest connection
             from membase.api.esrest_client import EsRestConnection
-            #log.info("--> calling object.__new__(EsRestConnection,serverInfo)")
             obj = super(EsRestConnection,cls).__new__(cls)
         else:
             # default
-            #log.info("-->default")
             obj = object.__new__(cls)
-              
-        #log.info("obj={}".format(vars(obj)))
+
         return obj
 
     def __init__(self, serverInfo):
@@ -337,7 +332,6 @@ class RestConnection(object):
 
         # for Node is unknown to this cluster error
         for iteration in range(5):
-            #log.info("--> api baseurl is {},{},{}".format(type(self.baseUrl),type('nodes/selfr'),self.baseUrl + 'nodes/self'))
             http_res, success = self.init_http_request(api=self.baseUrl + "nodes/self")
             if not success and isinstance(http_res, str) and\
                (http_res.find('Node is unknown to this cluster') > -1 or \
@@ -442,9 +436,7 @@ class RestConnection(object):
     def init_http_request(self, api):
         content = None
         try:
-            #log.info("--> api: {}".format(api))
             headers = self._create_capi_headers()
-            #log.info("--> headers: {}".format(headers))
             status, content, header = self._http_request(api, 'GET', headers)
             json_parsed = json.loads(content)
             if status:
@@ -506,12 +498,8 @@ class RestConnection(object):
           if isinstance(bucket, Bucket):
             api = '%s/%s/%s' % (self.capiBaseUrl, bucket.name, design_doc_name)
 
-          #log.info("--> calling _http_request({},{},{},{}".format(api,'PUT',str(design_doc),self._create_capi_headers()))
           status, content, header = self._http_request(api, 'PUT', str(design_doc),
                                                      headers=self._create_capi_headers())
-          #log.info("-->status={},content={},header={}".format(status,content,header))
-          #log.info("-->FIX ME.Sleeping for 60 secs..")
-          #time.sleep(60)
         except Exception as e:
           traceback.print_exc()
 
@@ -568,7 +556,6 @@ class RestConnection(object):
         log.info("index query url: {0}".format(api))
         status, content, header = self._http_request(api, headers=self._create_capi_headers(),
                                                      timeout=timeout)
-        #log.info("-->status={},content={},header={}".format(status,content,header))
         return status, content, header
 
     def view_results(self, bucket, ddoc_name, params, limit=100, timeout=120,
@@ -594,7 +581,6 @@ class RestConnection(object):
         return node_info.memcached
 
     def get_ddoc(self, bucket, ddoc_name):
-        #log.info("-->get_ddoc..") 
         status, json, meta = self._get_design_doc(bucket, ddoc_name)
         if not status:
             raise ReadDocumentException(ddoc_name, json)
@@ -739,8 +725,11 @@ class RestConnection(object):
                 meta_parsed = json.loads(meta)
             else:
                 meta_parsed = {}
-                meta_parsed["_rev"] = json_parsed["_rev"]
-                meta_parsed["_id"] = json_parsed["_id"]
+                try:
+                  meta_parsed["_rev"] = json_parsed["_rev"]
+                  meta_parsed["_id"] = json_parsed["_id"]
+                except KeyError:
+                  pass
         return status, json_parsed, meta_parsed
 
     def _delete_design_doc(self, bucket, name):
@@ -825,7 +814,11 @@ class RestConnection(object):
         if key in headers:
             val = headers[key]
             if val.startswith("Basic "):
+              try:
+                val = val.encode()
                 return str("auth: " + base64.decodebytes(val[6:]).decode())
+              except Exception as e:
+                print(e)
         return ""
 
     def _http_request(self, api, method='GET', params='', headers=None, timeout=120):
@@ -837,7 +830,23 @@ class RestConnection(object):
         count = 1
         while True:
             try:
-                response, content = httplib2.Http(timeout=timeout).request(api, method, params, headers=headers)
+                try:
+                    if TestInputSingleton.input.param("debug.api.calls", False):
+                        log.info("--->Start calling httplib2.Http({}).request({},{},{},{})".format(timeout,api,headers,method,params))
+                except AttributeError:
+                    pass
+                if method == "POST" or method == "PUT":
+                    response, content = httplib2.Http(timeout=timeout).request(api, method, params, headers=headers)
+                else:
+                    response, content = httplib2.Http(timeout=timeout).request(api, method, headers=headers)
+                try:
+                    if TestInputSingleton.input.param("debug.api.calls", False):
+                        log.info(
+                            "--->End calling httplib2.Http({}).request({},{},{},{})".format(timeout, api, headers,
+                                                                                              method, params))
+                except AttributeError:
+                    pass
+
                 if response['status'] in ['200', '201', '202']:
                     return True, content, response
                 else:
@@ -850,7 +859,6 @@ class RestConnection(object):
                     reason = "unknown"
                     if "error" in json_parsed:
                         reason = json_parsed["error"]
-                    #log.info("--->content {}:{}".format(type(content),content))
                     message = '{0} {1} body: {2} headers: {3} error: {4} reason: {5} {6} {7}'.\
                               format(method, api, params, headers, response['status'], reason,
                                      str(str(content).rstrip('\n')), self._get_auth(headers))
@@ -884,27 +892,27 @@ class RestConnection(object):
         log.info("--> status:{}".format(status))
         return status
 
-    def init_node(self, set_node_services=None):
+    def init_node(self):
         """ need a standalone method to initialize a node that could call
             anywhere with quota from testconstant """
-        self.node_services = []
-        if set_node_services is None:
-            set_node_services = self.services_node_init
-        if set_node_services is None and self.services == "":
+        log.info("--> init_node()...")
+        try:
+          self.node_services = []
+          if self.services_node_init is None and self.services == "":
             self.node_services = ["kv"]
-        elif set_node_services is None and self.services != "":
+          elif self.services_node_init is None and self.services != "":
             self.node_services = self.services.split(",")
-        elif set_node_services is not None:
-            self.node_services = set_node_services.split("-")
-        kv_quota = 0
-        while kv_quota == 0:
+          elif self.services_node_init is not None:
+            self.node_services = self.services_node_init.split("-")
+          kv_quota = 0
+          while kv_quota == 0:
             time.sleep(1)
             kv_quota = int(self.get_nodes_self().mcdMemoryReserved)
-        info = self.get_nodes_self()
-        kv_quota = int(info.mcdMemoryReserved * CLUSTER_QUOTA_RATIO)
+          info = self.get_nodes_self()
+          kv_quota = int(info.mcdMemoryReserved * CLUSTER_QUOTA_RATIO)
 
-        cb_version = info.version[:5]
-        if cb_version in COUCHBASE_FROM_VERSION_4:
+          cb_version = info.version[:5]
+          if cb_version in COUCHBASE_FROM_VERSION_4:
             if "index" in self.node_services:
                 log.info("quota for index service will be %s MB" % (INDEX_QUOTA))
                 kv_quota -= INDEX_QUOTA
@@ -924,13 +932,14 @@ class RestConnection(object):
                     raise Exception("KV RAM needs to be more than %s MB"
                             " at node  %s"  % (MIN_KV_QUOTA, self.ip))
 
-        log.info("quota for kv: %s MB" % kv_quota)
-        self.init_cluster_memoryQuota(self.username, self.password, kv_quota)
-        if cb_version in COUCHBASE_FROM_VERSION_4:
+          log.info("quota for kv: %s MB" % kv_quota)
+          self.init_cluster_memoryQuota(self.username, self.password, kv_quota)
+          if cb_version in COUCHBASE_FROM_VERSION_4:
             self.init_node_services(username=self.username, password=self.password,
                                                        services=self.node_services)
-        self.init_cluster(username=self.username, password=self.password)
-        return kv_quota
+          self.init_cluster(username=self.username, password=self.password)
+        except Exception as e:
+          traceback.print_exc()
 
     def init_node_services(self, username='Administrator', password='password', hostname='127.0.0.1', port='8091', services=None):
         log.info("--> init_node_services({},{},{},{},{})".format(username,password,hostname,port,services))
@@ -945,12 +954,12 @@ class RestConnection(object):
 
         if hostname == "127.0.0.1":
             hostname = "{0}:{1}".format(hostname, port)
-
-        if hostname:
-            params_dict['hostname'] = hostname
-
-        params = urllib.urlencode(params_dict)
+        params = urllib.parse.urlencode({ 'hostname': hostname,
+                                    'user': username,
+                                    'password': password,
+                                    'services': ",".join(services)})
         log.info('/node/controller/setupServices params on {0}: {1}:{2}'.format(self.ip, self.port, params))
+
         status, content, header = self._http_request(api, 'POST', params)
         error_message = "cannot change node services after cluster is provisioned"
         if not status and error_message in str(content):
@@ -1863,6 +1872,10 @@ class RestConnection(object):
             node = RestParser().parse_get_nodes_response(json_parsed)
         return node
 
+    def get_ip_from_ini_file(self):
+        """ in alternate address, we need to get hostname from ini file """
+        return self.ip
+
     def node_statuses(self, timeout=120):
         nodes = []
         api = self.baseUrl + 'nodeStatuses'
@@ -2007,7 +2020,6 @@ class RestConnection(object):
             for item in json_parsed:
                 bucketInfo = RestParser().parse_get_bucket_json(item)
                 bucket_map[bucketInfo.name] = bucketInfo.stats.itemCount
-        #log.info(bucket_map)
         return bucket_map
 
     def get_bucket_stats_for_node(self, bucket='default', node=None):
@@ -2319,6 +2331,10 @@ class RestConnection(object):
 
     def get_bucket(self, bucket='default', num_attempt=1, timeout=1):
         bucketInfo = None
+        try:
+          bucket = bucket.decode()
+        except AttributeError:
+          pass
         api = '%s%s%s?basic_stats=true' % (self.baseUrl, 'pools/default/buckets/', bucket)
         if isinstance(bucket, Bucket):
             api = '%s%s%s?basic_stats=true' % (self.baseUrl, 'pools/default/buckets/', bucket.name)
@@ -2581,7 +2597,7 @@ class RestConnection(object):
         log.info('settings/autoFailover params : {0}'.format(params))
         status, content, header = self._http_request(api, 'POST', params)
         if not status:
-            log.error('''failed to change autofailover_settings!
+            log.warn('''failed to change autofailover_settings!
                          See MB-7282. Workaround:
                          wget --user=Administrator --password=asdasd --post-data='rpc:call(mb_master:master_node(), erlang, apply ,[fun () -> erlang:exit(erlang:whereis(mb_master), kill) end, []]).' http://localhost:8091/diag/eval''')
         return status
@@ -3491,14 +3507,16 @@ class RestConnection(object):
             log.info("%s"%api)
         else:
             params = {key : query}
-            if 'creds' in query_params and query_params['creds']:
-              headers = self._create_headers_with_auth(query_params['creds'][0]['user'],
-                                                       query_params['creds'][0]['pass'])
-              del query_params['creds']
+            try:
+              if 'creds' in query_params and query_params['creds']:
+                headers = self._create_headers_with_auth(query_params['creds'][0]['user'],
+                                                         query_params['creds'][0]['pass'])
+                del query_params['creds']
+            except Exception:
+                traceback.print_exc()
+
             params.update(query_params)
-            params = urllib.urlencode(params)
             params = urllib.parse.urlencode(params)
-            #log.info("-->after urlencode params:{}".format(params))
             if verbose:
                 log.info('query params : {0}'.format(params))
             api = "http://%s:%s/query?%s" % (self.ip, port, params)
@@ -4204,7 +4222,8 @@ class RestConnection(object):
                                                      params=params)
         if not status:
             raise Exception(content)
-
+        #Below line is there because of MB-20758
+        content = content.split(b'[]')[0].decode()
         # Following line is added since the content uses chunked encoding
         chunkless_content = content.replace("][", ", \n")
 
@@ -4808,14 +4827,14 @@ class RestConnection(object):
         return {}
 
     """ From 6.5.0, enable IPv6 on cluster/node needs 2 settings
-    afamily: The value must be one of the following: [ipv4,ipv6] 
+        default is set to IPv6
         We need to disable auto failover first, then set network version
         Then enable autofaiover again. """
     def enable_ip_version(self, afamily='ipv6'):
         log.info("Start enable {0} on this node {1}".format(afamily, self.baseUrl))
         self.update_autofailover_settings(False, 60)
-        params = urllib.parse.urlencode({'afamily': afamily,
-                                         'nodeEncryption': 'off'})
+        params = urllib.urlencode({'afamily': afamily,
+                                   'nodeEncryption': 'off'})
         api = "{0}node/controller/enableExternalListener".format(self.baseUrl)
         status, content, header = self._http_request(api, 'POST', params)
         if status:

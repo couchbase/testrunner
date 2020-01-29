@@ -66,7 +66,7 @@ def validate_install(version):
                     node.install_success = False
 
                 afamily = "Unknown"
-                if 'addressFamily' in item.keys():
+                if 'addressFamily' in list(item.keys()):
                     afamily = item['addressFamily']
 
                 log.info("node:{0}\tversion:{1}\taFamily:{2}\tservices:{3}".format(item['hostname'],

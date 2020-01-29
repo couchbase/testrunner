@@ -712,7 +712,7 @@ class RemoteMachineShellConnection:
 
     def configure_log_location(self, new_log_location):
         mv_logs = testconstants.LINUX_LOG_PATH + '/' + new_log_location
-        print(" MV LOGS %s" % mv_logs)
+        print((" MV LOGS %s" % mv_logs))
         error_log_tag = "error_logger_mf_dir"
         # ADD NON_ROOT user config_details
         log.info("CHANGE LOG LOCATION TO %s".format(mv_logs))
@@ -1798,7 +1798,7 @@ class RemoteMachineShellConnection:
         log.info('/tmp/{0} or /tmp/{1}'.format(build.name, build.product))
         command = ''
         if self.info.type.lower() == 'windows':
-                print("build name in couchbase upgrade    ", build.product_version)
+                print(("build name in couchbase upgrade    ", build.product_version))
                 self.couchbase_upgrade_win(self.info.architecture_type, \
                                      self.info.windows_name, build.product_version)
                 log.info('********* continue upgrade process **********')
@@ -2687,11 +2687,11 @@ class RemoteMachineShellConnection:
                 if self.nonroot:
                     """ check if old files from root install left in server """
                     if self.file_exists(LINUX_CB_PATH + "etc/couchdb/", "local.ini.debsave"):
-                        print(" ***** ERROR: ***** \n"\
+                        print((" ***** ERROR: ***** \n"\
                               "Couchbase Server files was left by root install at %s .\n"\
                               "Use root user to delete them all at server %s "\
                               " (rm -rf /opt/couchbase) to remove all couchbase folder.\n" \
-                              % (LINUX_CB_PATH, self.ip))
+                              % (LINUX_CB_PATH, self.ip)))
                         sys.exit(1)
                     self.stop_server()
                 else:
@@ -2718,10 +2718,10 @@ class RemoteMachineShellConnection:
                 if self.nonroot:
                     """ check if old files from root install left in server """
                     if self.file_exists(LINUX_CB_PATH + "etc/couchdb/", "local.ini.rpmsave"):
-                        print("Couchbase Server files was left by root install at %s .\n"\
+                        print(("Couchbase Server files was left by root install at %s .\n"\
                                "Use root user to delete them all at server %s "\
                                " (rm -rf /opt/couchbase) to remove all couchbase folder.\n" \
-                               % (LINUX_CB_PATH, self.ip))
+                               % (LINUX_CB_PATH, self.ip)))
                         sys.exit(1)
                     self.stop_server()
                 else:
@@ -3218,9 +3218,9 @@ class RemoteMachineShellConnection:
 
         if self.remote:
             for line in stdout.read().splitlines():
-                output.append(line)
+                output.append(line.decode('utf-8'))
             for line in stderro.read().splitlines():
-                error.append(line)
+                error.append(line.decode('utf-8'))
             if temp:
                 line = temp.splitlines()
                 output.extend(line)
@@ -3460,7 +3460,7 @@ class RemoteMachineShellConnection:
                 text, err = p.communicate()
                 os_arch = ''
             for line in text:
-                os_arch += line
+                os_arch += line.strip().decode('utf-8')
                 # at this point we should know if its a linux or windows ditro
             ext = { 'Ubuntu' : "deb",
                    'CentOS'  : "rpm",
@@ -3768,7 +3768,7 @@ class RemoteMachineShellConnection:
             for line in output:
                 size = line.strip().split('\t')
                 if size[0].isdigit():
-                    print(size[0])
+                    print((size[0]))
                     return size[0]
                 else:
                     return 0

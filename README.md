@@ -32,6 +32,8 @@ General:
 	pip3 install deepdiff
 
 	pip3 install pyes
+        
+        pip3 install beautifulsoup4
 
 Other:
 

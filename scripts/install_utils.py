@@ -176,7 +176,7 @@ class NodeHelper:
                                     "cd " + install_constants.DOWNLOAD_DIR["WINDOWS_SERVER"] +
                                     "; vi +\"set nobomb | set fenc=ascii | x\" install_status.txt; "
                                     "grep 'Adding WIX_DOWNGRADE_DETECTED property' install_status.txt")
-                                print(check_if_downgrade * 10)
+                                print((check_if_downgrade * 10))
                             else:
                                 self.shell.execute_command(
                                     install_constants.CMDS[self.info.deliverable_type]["post_install_retry"],
@@ -300,7 +300,7 @@ class NodeHelper:
 
                 self.rest = RestConnection(self.node)
                 # Make sure that data_path and index_path are writable by couchbase user
-                for path in set(filter(None, [self.node.data_path, self.node.index_path])):
+                for path in set([_f for _f in [self.node.data_path, self.node.index_path] if _f]):
                     for cmd in ("rm -rf {0}/*".format(path),
                                 "chown -R couchbase:couchbase {0}".format(path)):
                         self.shell.execute_command(cmd)
@@ -321,7 +321,7 @@ class NodeHelper:
                     break
                 self.wait_for_completion(duration, event)
             except Exception as e:
-                log.warn("Exception {0} occurred on {1}, retrying..".format(e.message, self.ip))
+                log.warn("Exception {0} occurred on {1}, retrying..".format(e, self.ip))
                 self.wait_for_completion(duration, event)
         self.post_init_cb()
 
@@ -413,7 +413,7 @@ def _parse_user_input():
         params["servers"] = userinput.servers
 
     # Validate and extract remaining params
-    for key, value in userinput.test_params.items():
+    for key, value in list(userinput.test_params.items()):
         if key == "debug_logs":
             params["debug_logs"] = True if value.lower() == "true" else False
         if key == "install_tasks":
@@ -433,7 +433,7 @@ def _parse_user_input():
             if value.startswith("http"):
                 params["url"] = value
             else:
-                log.warn("URL:{0} is not valid, will use version to locate build".format(value))
+                log.warn('URL:{0} is not valid, will use version to locate build'.format(value))
         if key == "type" or key == "edition" and value.lower() in install_constants.CB_EDITIONS:
             params["edition"] = value.lower()
         if key == "timeout" and int(value) > 60:
