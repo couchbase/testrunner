@@ -72,12 +72,12 @@ class RandomDataGenerator(object):
                 array.append(d )
             return array
         else:
-        	array_size = randint(1, max_array_size)
-        	array = []
-        	for x in range(array_size):
-        		array_element = self.random_multi_dimension_array(level = level-1, max_array_size = max_array_size)
-        		array.append(array_element)
-        	return array
+            array_size = randint(1, max_array_size)
+            array = []
+            for x in range(array_size):
+                array_element = self.random_multi_dimension_array(level = level-1, max_array_size = max_array_size)
+                array.append(array_element)
+            return array
 
     def random_single_dimension_array(self, max_array_size = 1):
         array_size = randint(0, max_array_size)
@@ -87,8 +87,8 @@ class RandomDataGenerator(object):
         return array
 
     def gen_data(self):
-    	function_list = ["random_int", "random_float", "random_alphanumeric", "random_float","random_boolean", "random_multi_dimension_array", "random_char", "random_json"]
-    	function_name = random.choice(function_list)
+        function_list = ["random_int", "random_float", "random_alphanumeric", "random_float","random_boolean", "random_multi_dimension_array", "random_char", "random_json"]
+        function_name = random.choice(function_list)
         return (self.random_uuid() + "_" + function_name), getattr(self, function_name)()
 
     def gen_data_no_json(self):
@@ -97,8 +97,8 @@ class RandomDataGenerator(object):
         return (self.random_uuid() + "_" + function_name), getattr(self, function_name)()
 
     def random_json(self, random_fields = False, random_array_count = 4):
-    	json_body = {}
-    	function_list = ["random_int", "random_float", "random_alphanumeric", "random_float","random_boolean", "random_multi_dimension_array", "random_char"]
+        json_body = {}
+        function_list = ["random_int", "random_float", "random_alphanumeric", "random_float","random_boolean", "random_multi_dimension_array", "random_char"]
         for function in function_list:
             if random_fields and self.isChoice():
                 json_body[(self.random_uuid() + "_" + function.replace("random_", ""))] = getattr(self, function)()

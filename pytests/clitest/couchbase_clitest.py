@@ -2888,7 +2888,7 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
                                                                .format(user, roles))
         except Exception as e:
             if e and roles not in bucket_create_roles:
-                print "\nBucket permission of roles '{0}' is enforced\n".format(roles)
+                print("\nBucket permission of roles '{0}' is enforced\n".format(roles))
                 self.log.info("Create bucket with admin roles for next test")
                 cli = CouchbaseCLI(server, "Administrator", password)
                 cli.bucket_create("bucket1", self.bucket_type, self.bucket_ram,
@@ -2907,7 +2907,7 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
                 self.fail("Failed to edit bucket with roles {0} ".format(roles))
             else:
                 self.log.info("{0} has no permision to edit bucket".format(roles))
-                print "\nEnable flush with admin roles for next test\n"
+                print("\nEnable flush with admin roles for next test\n")
                 cli = CouchbaseCLI(server, "Administrator", password)
                 cli.bucket_edit("bucket1", self.bucket_ram,
                                 self.eviction_policy, 1,

@@ -84,7 +84,7 @@ def main():
 
 
     print('url is', options.url)
-    print 'cherrypick command is', options.cherrypick
+    print('cherrypick command is', options.cherrypick)
 
     print('the reportedParameters are', options.dashboardReportedParameters)
 

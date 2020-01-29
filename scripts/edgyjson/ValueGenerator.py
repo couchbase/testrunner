@@ -26,7 +26,7 @@ class ValueGenerator(object):
                 0o310,  # Octal
                 0x12c,  # Hex
                 3.14e8,  # Exponential
-                2147483648L,  # Long int
+                2147483648,  # Long int
                 "\u00dcnic\u00f6de",  # Unicode
                 True + 5,  # Boolean
                 False - 5,

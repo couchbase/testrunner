@@ -369,7 +369,7 @@ def runPhase(phase, rcq = None):
             cluster = cluster[0] # there can only be one cluster task-per-site
 
         clusterMsg = parseClusterReq(cluster)
-	logger.error("{0}".format(clusterMsg))
+        logger.error("{0}".format(clusterMsg))
         perform_admin_tasks(clusterMsg)
         rebalance_required = clusterMsg['rebalance_required']
 
