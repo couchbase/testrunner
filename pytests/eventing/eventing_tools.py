@@ -1,25 +1,20 @@
+import logging
+import os
+import subprocess
+
+from ent_backup_restore.enterprise_backup_restore_base import EnterpriseBackupRestoreBase, Backupset
+from ent_backup_restore.validation_helpers.backup_restore_validations import BackupRestoreValidations
 from lib import testconstants
-from lib.couchbase_helper.stats_tools import StatsCommon
 from lib.couchbase_helper.tuq_helper import N1QLHelper
 from lib.membase.api.rest_client import RestConnection
-from lib.testconstants import STANDARD_BUCKET_PORT
-from lib.couchbase_helper.documentgenerator import JSONNonDocGenerator, BlobGenerator
-from pytests.eventing.eventing_constants import HANDLER_CODE
 from pytests.eventing.eventing_base import EventingBaseTest
-from ent_backup_restore.enterprise_backup_restore_base import EnterpriseBackupRestoreBase, Backupset
-from upgrade.newupgradebasetest import NewUpgradeBaseTest
-from remote.remote_util import RemoteMachineShellConnection
-import logging
-import subprocess, os
-from remote.remote_util import RemoteMachineShellConnection
 from pytests.eventing.eventing_constants import EXPORTED_FUNCTION
-from ent_backup_restore.validation_helpers.backup_restore_validations \
-                                                 import BackupRestoreValidations
-from testconstants import LINUX_COUCHBASE_BIN_PATH,\
-                          COUCHBASE_DATA_PATH, WIN_COUCHBASE_DATA_PATH_RAW,\
-                          WIN_COUCHBASE_BIN_PATH_RAW, WIN_COUCHBASE_BIN_PATH, WIN_TMP_PATH_RAW,\
-                          MAC_COUCHBASE_BIN_PATH, LINUX_ROOT_PATH, WIN_ROOT_PATH,\
-                          WIN_TMP_PATH, STANDARD_BUCKET_PORT
+from pytests.eventing.eventing_constants import HANDLER_CODE
+from remote.remote_util import RemoteMachineShellConnection
+from testconstants import COUCHBASE_DATA_PATH, WIN_COUCHBASE_DATA_PATH_RAW, WIN_TMP_PATH_RAW, LINUX_ROOT_PATH, \
+    WIN_ROOT_PATH, WIN_TMP_PATH, STANDARD_BUCKET_PORT
+from upgrade.newupgradebasetest import NewUpgradeBaseTest
+
 log = logging.getLogger()
 
 
@@ -198,6 +193,8 @@ class EventingTools(EventingBaseTest, EnterpriseBackupRestoreBase, NewUpgradeBas
         self.restore_compression_mode = self.input.param("restore-compression-mode", None)
         self.enable_firewall = False
         self.vbuckets_filter_no_data = False
+        self.test_fts = self.input.param("test_fts", False)
+        self.restore_should_fail = self.input.param("restore_should_fail", False)
 
     def tearDown(self):
         super(EventingTools, self).tearDown()
@@ -220,13 +217,13 @@ class EventingTools(EventingBaseTest, EnterpriseBackupRestoreBase, NewUpgradeBas
         self.backup_create_validate()
         self.backup_cluster()
         self.backup_list()
-        self.cluster.rebalance([self.servers[1]], [self.servers[2]], [], services=["eventing"])
+        self.cluster.rebalance([self.servers[0]], [self.servers[1]], [], services=["eventing"])
         try:
             self.backup_restore_validate()
         except Exception as ex:
             if "Extra elements found in the actual metadata Data" not in str(ex):
                 self.fail("restore failed : {0}".format(str(ex)))
-        self.cluster.rebalance([self.servers[1]], [], [self.servers[2]])
+        self.cluster.rebalance([self.servers[0]], [], [self.servers[1]])
 
     def test_eventing_lifecycle_with_couchbase_cli(self):
         # load some data in the source bucket
