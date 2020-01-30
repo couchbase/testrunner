@@ -6,21 +6,19 @@ import random
 import sys
 import traceback
 
-
-
-from couchbase.cluster import Cluster, ClusterOptions
-from couchbase_core.cluster import PasswordAuthenticator
+from couchbase.cluster import Cluster
+from couchbase.cluster import PasswordAuthenticator
 import couchbase.subdocument as SD
 from couchbase.exceptions import CouchbaseTransientError
 
-sys.path.append(os.path.join(os.path.dirname(__file__), os.path.pardir))
 from .constants import Constants as constants
 from .ValueGenerator import ValueGenerator
 
-
 # Example usage: python main.py -ip 192.168.56.111 -u Administrator -p password -b default -n 5
 class JSONDoc(object):
-    def __init__(self, server=None, username=None, password=None, bucket=None, startseqnum=1, randkey=False, keyprefix="edgyjson-",encoding="utf-8", num_docs=1, template="mix.json", xattrs=False, filter=False, load=True):
+    def __init__(self, server=None, username=None, password=None, bucket=None, startseqnum=1, randkey=False,
+                 keyprefix="edgyjson-",
+                 encoding="utf-8", num_docs=1, template="mix.json", xattrs=False, filter=False, load=True):
         self.startseqnum = startseqnum
         self.randkey = randkey
         self.keyprefix = keyprefix
@@ -32,7 +30,6 @@ class JSONDoc(object):
         logging.basicConfig(stream=sys.stdout, level=logging.DEBUG)
         local = False
         if not server or len(server) < 2:
-            logging.info("No valid server provided. Generating docs locally in ./output dir")
             local = True
         else:
             self.server = server
@@ -52,12 +49,11 @@ class JSONDoc(object):
         try:
             connection = "couchbase://" + self.server
             if "ip6" in self.server or self.server.startswith("["):
-                connection = connection + "?ipv6=allow"
-            cluster = Cluster(connection, ClusterOptions(PasswordAuthenticator(self.username, self.password)))
-            # authenticator = PasswordAuthenticator(self.username, self.password)
-            # cluster.authenticate(authenticator)
-            cb = cluster.bucket(self.bucket)
-            cb_coll = cb.default_collection()
+                connection = connection+"?ipv6=allow"
+            cluster = Cluster(connection)
+            authenticator = PasswordAuthenticator(self.username, self.password)
+            cluster.authenticate(authenticator)
+            cb = cluster.open_bucket(self.bucket)
             cb.timeout = 100
         except Exception as e:
             logging.error("Connection error\n" + traceback.format_exc())
@@ -85,7 +81,7 @@ class JSONDoc(object):
         while batches:
             batch = batches[-1]
             try:
-                cb_coll.upsert_multi(batch)
+                cb.upsert_multi(batch)
                 num_completed += len(batch)
                 batches.pop()
             except CouchbaseTransientError as e:
@@ -127,7 +123,7 @@ class JSONDoc(object):
                 dockey = self.keyprefix + str(i) + ".json"
                 output = os.path.join(current_dir, "output/", dockey)
                 with open(output, 'w') as f:
-                    f.write(json.dumps(self.json_objs_dict, indent=3).encode(self.encoding, "ignore").decode())
+                    f.write(json.dumps(self.json_objs_dict, indent=3).encode(self.encoding, "ignore"))
                 logging.info("print: " + dockey)
             except Exception as e:
                 logging.error("Print error\n" + traceback.format_exc())
@@ -157,8 +153,8 @@ class JSONDoc(object):
         valuegen = ValueGenerator()
         for key, value in list(content.items()):
             if key in list(constants.generator_methods.keys()):
-                if len(value) > 1:
-                    argsdict = self.parseargs(value)
+                if value:
+                    argsdict = value
                 else:
                     argsdict = {}
                 val, filter_exp = getattr(valuegen, constants.generator_methods[key])(**argsdict)

@@ -2,7 +2,6 @@ import io
 import random
 import string
 import sys
-import requests
 from datetime import datetime
 import pytz
 import collections
