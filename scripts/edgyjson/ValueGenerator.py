@@ -146,7 +146,7 @@ class ValueGenerator(object):
 
     def __generate_expressions(self, keys, operations, relations, operands):
         exps = []
-        for _ in xrange(constants.NUM_OPS):
+        for _ in range(constants.NUM_OPS):
             if "ARITHMETIC_BINARIES" in operations:
                 ex = random.choice(constants.ARITHMETIC_BINARIES) % (
                     random.choice(keys), random.choice(operands)) + random.choice(relations) + str(

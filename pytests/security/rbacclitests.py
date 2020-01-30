@@ -148,7 +148,7 @@ class rbacclitests(BaseTestCase):
         cli_command = self.input.param("cli_command", None)
         source = self.source
         remote_client = RemoteMachineShellConnection(self.master)
-        for num in xrange(nodes_add):
+        for num in range(nodes_add):
             options = "--server-add=http://{0}:8091 --server-add-username=Administrator --server-add-password=password".format(self.servers[num + 1].ip)
             output, error = remote_client.execute_couchbase_cli(cli_command='server-add', options=options, cluster_host="127.0.0.1:8091", user=self.ldapUser, password=self.ldapPass)
         output, error = remote_client.execute_couchbase_cli(cli_command='rebalance', cluster_host="127.0.0.1:8091", user=self.ldapUser, password=self.ldapPass)

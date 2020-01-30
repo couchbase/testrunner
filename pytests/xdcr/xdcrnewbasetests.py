@@ -805,7 +805,7 @@ class XDCReplication:
             ex_no_brackets = random.choice(obj.filters_json_objs_dict[filter_type])
             ex_with_brackets = '( ' + ex_no_brackets + ' )'
             # Generate nested exps: for eg ((exp1 AND exp2) OR exp3)
-            for _ in xrange(nesting_level):
+            for _ in range(nesting_level):
                 ex += '( ' + random.choice([ex_no_brackets, ex_with_brackets]) \
                         + ' )' + random.choice([" AND ", " OR "])
             num_exps -= 1

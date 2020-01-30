@@ -786,7 +786,7 @@ class MovingTopFTS(FTSBaseTest):
         self._cb_cluster.enable_retry_rebalance(self.retry_time, self.num_retries)
         index = self.create_index_generate_queries()
         services = []
-        for _ in xrange(self.num_rebalance):
+        for _ in range(self.num_rebalance):
             services.append("fts")
         tasks = []
         retry_reb_thread = Thread(

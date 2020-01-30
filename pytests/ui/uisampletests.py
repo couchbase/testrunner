@@ -1882,7 +1882,7 @@ class NodeInitializeHelper():
         self._go_next_step(last_step=True)
 
         # self.wait.until(lambda fn: self._get_current_step_num() == 1, "first step screen is not opened")
-        # for i in xrange(1, 6):
+        # for i in range(1, 6):
         #     self.tc.log.info('Filling step %d ...' % i)
         #     getattr(self, '_fill_{0}_step'.format(i))(input)
         #     self.tc.log.info('Step %d filled in' % i)
