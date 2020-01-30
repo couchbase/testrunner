@@ -833,7 +833,7 @@ class UpgradeTests(NewUpgradeBaseTest, EventingBaseTest):
             event.deploy_sbm_function()
             event.verify_documents_in_destination_bucket('bucket_op_sbm', 1, 'source_bucket_mutation')
             event.undeploy_sbm_function()
-                self.undeploy_and_delete_function(body)
+            self.undeploy_and_delete_function(body)
         except Exception as e:
             self.log.info(e)
 
@@ -1069,7 +1069,7 @@ class UpgradeTests(NewUpgradeBaseTest, EventingBaseTest):
             self.sleep(10, "wait 10 seconds after rebalance")
             if free_node_in and free_node_in[0] not in self.servers:
                 self.servers.append(free_node_in[0])
-        except Exception, ex:
+        except Exception as ex:
             self.log.info("Rebalance failed with : {0}".format(str(ex)))
             self.check_retry_rebalance_succeeded()
             if queue is not None:
@@ -1256,7 +1256,7 @@ class UpgradeTests(NewUpgradeBaseTest, EventingBaseTest):
     def xdcr_create_replication(self):
         try:
             self.xdcr_handle._create_replication()
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(ex)
 
     def xdcr_set_replication_properties(self):
@@ -1265,20 +1265,20 @@ class UpgradeTests(NewUpgradeBaseTest, EventingBaseTest):
                 "%s@%s" %
                 ("default", "C"), None)
             self.xdcr_handle._set_replication_properties(param_str)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(ex)
 
     def xdcr_get_replication_properties(self):
         try:
             self.xdcr_handle._get_replication_properties()
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(ex)
 
     def create_n1ql_index_query(self, queue=None):
         try:
             self.create_n1ql_index_and_query()
             #return self.n1ql_obj
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(ex)
             if queue is not None:
                 queue.put(False)

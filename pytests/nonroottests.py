@@ -418,8 +418,8 @@ class NonRootTests(unittest.TestCase):
             rest2 = RestConnection(_dest_master)
             curr_count_on_src = rest1.fetch_bucket_stats(bucket="testbucket")["op"]["samples"]["curr_items"][-1]
             curr_count_on_dest = rest2.fetch_bucket_stats(bucket="testbucket")["op"]["samples"]["curr_items"][-1]
-            assert(curr_count_on_src==(src_item_count + dest_item_count), "ItemCount on source not what's expected")
-            assert(curr_count_on_dest==(src_item_count + dest_item_count), "ItemCount on destination not what's expected")
+            assert curr_count_on_src == (src_item_count + dest_item_count), "ItemCount on source not what's expected"
+            assert curr_count_on_dest == (src_item_count + dest_item_count), "ItemCount on destination not what's expected"
         elif self._os == "windows":
             # TODO: Windows support
             self.log.info("Yet to add support for windows!")
