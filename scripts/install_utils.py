@@ -193,6 +193,7 @@ class NodeHelper:
                     ret, _ = self.shell.execute_command(install_constants.CBFT_ENV_OPTIONS[name].format(value))
                     self.shell.stop_server()
                     self.shell.start_server()
+                    time.sleep(10)
                     if ret == ['1']:
                         log.info("{0} set to {1} on {2}".format(name, value, self.ip))
                         break
@@ -403,7 +404,7 @@ def _parse_user_input():
         userinput = TestInput.TestInputParser.get_test_input(sys.argv)
     except IndexError:
         print_result_and_exit(install_constants.USAGE)
-    except (getopt.GetoptError, err):
+    except getopt.GetoptError as err:
         print_result_and_exit(str(err))
 
     # Mandatory params

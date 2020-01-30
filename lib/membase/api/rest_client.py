@@ -437,7 +437,7 @@ class RestConnection(object):
         content = None
         try:
             headers = self._create_capi_headers()
-            status, content, header = self._http_request(api, 'GET', headers)
+            status, content, header = self._http_request(api, 'GET', headers=headers)
             json_parsed = json.loads(content)
             if status:
                 return json_parsed, True
