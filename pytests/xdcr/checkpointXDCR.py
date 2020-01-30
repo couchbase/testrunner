@@ -295,7 +295,6 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
             stats_count = []
             output, error = shell.execute_cbstats(self.src_cluster.get_bucket_by_name('default'), "checkpoint", print_results=False)
             for stat in output:
-                        "docs_checked,{0}".format(count),
                 if re.search("num_checkpoint_items:", stat):
                     stats_count.append(int(stat.split(": ")[1]))
             if max(stats_count) > 0:

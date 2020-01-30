@@ -334,7 +334,7 @@ class auditcheckconfig(BaseTestCase):
         intervalSec = self.input.param("intervalSec", None)
         nodes_init = self.input.param("nodes_init", 2)
         auditIns = audit(host=self.master)
-	auditIns.setAuditEnable('true')
+        auditIns.setAuditEnable('true')
         originalInt = auditIns.getAuditRotateInterval()
         auditIns.setAuditRotateInterval(intervalSec)
         firstEventTime = []

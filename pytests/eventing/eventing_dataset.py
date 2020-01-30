@@ -192,9 +192,9 @@ class EventingDataset(EventingBaseTest):
             bucket.remove(key)
         # delete a doc using n1ql query
         try:
-        self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
-        except Exception,ex:
-            if "Primary Index Already present, This looks like a bug" in ex.message:
+            self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
+        except Exception as ex:
+            if "Primary Index Already present, This looks like a bug" in str(ex):
                 pass
             else:
                 raise ex

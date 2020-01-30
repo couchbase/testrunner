@@ -1,17 +1,17 @@
-from tuq import QueryTests
-from pytests.upgrade.newupgradebasetest import NewUpgradeBaseTest
-from remote.remote_util import RemoteMachineShellConnection
-from membase.api.rest_client import RestConnection
-from membase.api.exception import CBQError
-import math
-from n1ql_callable import N1QLCallable
-import traceback
-from pytests.fts.fts_base import CouchbaseCluster
+import copy
 import random
 import string
 from random import randint
+
+import math
+from membase.api.exception import CBQError
 from membase.api.rest_client import RestConnection
-import copy
+from n1ql_callable import N1QLCallable
+from remote.remote_util import RemoteMachineShellConnection
+from tuq import QueryTests
+
+from pytests.fts.fts_base import CouchbaseCluster
+from pytests.upgrade.newupgradebasetest import NewUpgradeBaseTest
 
 
 class QueriesUpgradeTestsNew(QueryTests, NewUpgradeBaseTest):
@@ -205,7 +205,7 @@ class QueriesUpgradeTestsNew(QueryTests, NewUpgradeBaseTest):
                      "{\"field\": \"type\", \"match\":\"beer\"})"
         try:
             self.run_cbq_query(n1ql_query, server=node)
-        except CBQError, e:
+        except CBQError as e:
             fails_found = 1
             actual_error_message = str(e)
             if mode == "post-upgrade":
@@ -293,7 +293,7 @@ class QueriesUpgradeTestsNew(QueryTests, NewUpgradeBaseTest):
                                      'Merge deleted more data than intended')
                 except AssertionError:
                     error = 'Merge deleted more data than intended'
-        except CBQError, e:
+        except CBQError as e:
             fails_found = 1
             actual_error_message = str(e)
             if mode == self.post_upgrade_mode:
@@ -338,7 +338,7 @@ class QueriesUpgradeTestsNew(QueryTests, NewUpgradeBaseTest):
         result = {}
         try:
             result = self.run_cbq_query(query=query, server=node)
-        except CBQError, e:
+        except CBQError as e:
             fails_found = 1
             error_message_found = str(e)
 
@@ -461,7 +461,7 @@ class QueriesUpgradeTestsNew(QueryTests, NewUpgradeBaseTest):
             cte_result = self.run_cbq_query(query=query, server=node)
             verification_result = self.run_cbq_query(query=verify, server=node)
             self.assertEquals(cte_result["results"], verification_result["results"])
-        except CBQError, e:
+        except CBQError as e:
             error_message = str(e)
             fails_found = 1
             if "syntax error - at with" not in error_message:
@@ -521,7 +521,7 @@ class QueriesUpgradeTestsNew(QueryTests, NewUpgradeBaseTest):
             n1ql_result = self.run_cbq_query(query=query, server=node)
             my_result = "%.9f" % float(arithmetic_result)
             self.assertEquals("%.9f" % float(n1ql_result['results'][0]["$1"]), my_result, "Test is failed")
-        except CBQError, e:
+        except CBQError as e:
             fails_found = 1
             error_message = str(e)
 
@@ -545,7 +545,7 @@ class QueriesUpgradeTestsNew(QueryTests, NewUpgradeBaseTest):
         try:
             n1ql_result = self.run_cbq_query(query=query, server=node)
             self.assertEquals(True, self._check_order_nulls_first_desc(n1ql_result, "int"))
-        except CBQError, e:
+        except CBQError as e:
             fails_found = 1
             error_message = str(e)
 
@@ -579,7 +579,7 @@ class QueriesUpgradeTestsNew(QueryTests, NewUpgradeBaseTest):
             for res in simple_result['results']:
                 simple_results.append(res.values()[0])
             self.assertEquals(alias_results, simple_results, "Alias in group by is failed.")
-        except CBQError, e:
+        except CBQError as e:
             fails_found = 1
             error_message = str(e)
 
@@ -802,10 +802,10 @@ class QueriesUpgradeTestsNew(QueryTests, NewUpgradeBaseTest):
                     self.assertEquals('True', 'False',
                                       "Values are: db - "+str(db_val)+", test - "+str(test_dict[ch])+", "
                                       "letter - "+str(ch))
-        except CBQError, e:
+        except CBQError as e:
             fails_found = 1
             error_message = str(e)
-        except AssertionError, e1:
+        except AssertionError as e1:
             fails_found = 1
         if mode == self.post_upgrade_mode:
             if fails_found == 1:
@@ -860,10 +860,10 @@ class QueriesUpgradeTestsNew(QueryTests, NewUpgradeBaseTest):
             self.assertEqual(num_indexes_online, initial_num_indexes_online + 3)
 
 
-        except CBQError, e:
+        except CBQError as e:
             fails_found = 1
             error_message = str(e)
-        except Exception, e1:
+        except Exception as e1:
             fails_found = 1
         finally:
             for index in indexes:
@@ -902,7 +902,7 @@ class QueriesUpgradeTestsNew(QueryTests, NewUpgradeBaseTest):
             fts_result = self.run_cbq_query(query=test_fts_query, server=node)
             n1ql_result = self.run_cbq_query(query=test_n1ql_query, server=node)
             self.assertEquals(fts_result == n1ql_result, True)
-        except CBQError, e:
+        except CBQError as e:
             fails_found = 1
             error_message = str(e)
         if mode == self.post_upgrade_mode:
@@ -978,7 +978,7 @@ class QueriesUpgradeTestsNew(QueryTests, NewUpgradeBaseTest):
         return rest
 
     def _filter_digit_params(self, params):
-        ret_val = list(filter(lambda x: isinstance(x, int) or isinstance(x, long) or isinstance(x, float), params))
+        ret_val = list(filter(lambda x: isinstance(x, int) or isinstance(x, float), params))
         for i in range(len(ret_val)):
             ret_val[i] = float(ret_val[i])
 
@@ -1126,7 +1126,7 @@ class QueriesUpgradeTestsNew(QueryTests, NewUpgradeBaseTest):
             self.assertEqual(len(results), len(compare_docs))
             self.assertEqual(sorted(results), sorted(compare_docs))
             return True, ""
-        except AssertionError, e:
+        except AssertionError as e:
             return False, str(e)
 
     def skip_key_composite_index_plan_verifier(self, check_type=None, check_data=None):
@@ -1156,7 +1156,7 @@ class QueriesUpgradeTestsNew(QueryTests, NewUpgradeBaseTest):
             if check_type == "pushdown":
                 self.assertTrue("index_group_aggs" in str(plan))
             return True, ""
-        except AssertionError, e:
+        except AssertionError as e:
             return False, str(e)
 
     def _check_order_nulls_first_desc(self, result, datatype):

@@ -301,7 +301,7 @@ class AutoReprovisionTests(unittest.TestCase):
         elif shell.extract_remote_info().type.lower() == 'linux':
             o, r = shell.execute_command("reboot")
         shell.log_command_output(o, r)
-            time.sleep(wait_timeout * 5)
+        time.sleep(wait_timeout * 5)
         # disable firewall on the node
         shell = RemoteMachineShellConnection(self.server_fail)
         shell.disable_firewall()

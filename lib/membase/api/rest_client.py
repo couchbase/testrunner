@@ -892,27 +892,27 @@ class RestConnection(object):
         log.info("--> status:{}".format(status))
         return status
 
-    def init_node(self):
+    def init_node(self, set_node_services=None):
         """ need a standalone method to initialize a node that could call
             anywhere with quota from testconstant """
-        log.info("--> init_node()...")
-        try:
-          self.node_services = []
-          if self.services_node_init is None and self.services == "":
+        self.node_services = []
+        if set_node_services is None:
+            set_node_services = self.services_node_init
+        if set_node_services is None and self.services == "":
             self.node_services = ["kv"]
-          elif self.services_node_init is None and self.services != "":
+        elif set_node_services is None and self.services != "":
             self.node_services = self.services.split(",")
-          elif self.services_node_init is not None:
-            self.node_services = self.services_node_init.split("-")
-          kv_quota = 0
-          while kv_quota == 0:
+        elif set_node_services is not None:
+            self.node_services = set_node_services.split("-")
+        kv_quota = 0
+        while kv_quota == 0:
             time.sleep(1)
             kv_quota = int(self.get_nodes_self().mcdMemoryReserved)
-          info = self.get_nodes_self()
-          kv_quota = int(info.mcdMemoryReserved * CLUSTER_QUOTA_RATIO)
+        info = self.get_nodes_self()
+        kv_quota = int(info.mcdMemoryReserved * CLUSTER_QUOTA_RATIO)
 
-          cb_version = info.version[:5]
-          if cb_version in COUCHBASE_FROM_VERSION_4:
+        cb_version = info.version[:5]
+        if cb_version in COUCHBASE_FROM_VERSION_4:
             if "index" in self.node_services:
                 log.info("quota for index service will be %s MB" % (INDEX_QUOTA))
                 kv_quota -= INDEX_QUOTA
@@ -929,17 +929,16 @@ class RestConnection(object):
                 self.set_service_memoryQuota(service = "cbasMemoryQuota", memoryQuota=CBAS_QUOTA)
             kv_quota -= 1
             if kv_quota < MIN_KV_QUOTA:
-                    raise Exception("KV RAM needs to be more than %s MB"
-                            " at node  %s"  % (MIN_KV_QUOTA, self.ip))
+                raise Exception("KV RAM needs to be more than %s MB"
+                                " at node  %s"  % (MIN_KV_QUOTA, self.ip))
 
-          log.info("quota for kv: %s MB" % kv_quota)
-          self.init_cluster_memoryQuota(self.username, self.password, kv_quota)
-          if cb_version in COUCHBASE_FROM_VERSION_4:
+        log.info("quota for kv: %s MB" % kv_quota)
+        self.init_cluster_memoryQuota(self.username, self.password, kv_quota)
+        if cb_version in COUCHBASE_FROM_VERSION_4:
             self.init_node_services(username=self.username, password=self.password,
-                                                       services=self.node_services)
-          self.init_cluster(username=self.username, password=self.password)
-        except Exception as e:
-          traceback.print_exc()
+                                    services=self.node_services)
+        self.init_cluster(username=self.username, password=self.password)
+        return kv_quota
 
     def init_node_services(self, username='Administrator', password='password', hostname='127.0.0.1', port='8091', services=None):
         log.info("--> init_node_services({},{},{},{},{})".format(username,password,hostname,port,services))

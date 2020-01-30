@@ -40,7 +40,7 @@ class AlternateAddressTests(AltAddrBaseTest):
         try:
             super(AlternateAddressTests, self).tearDown()
         except Exception as e:
-            print e
+            print(e)
         BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
         ClusterOperationHelper.cleanup_cluster(self.servers, self.servers[0])
 
@@ -446,7 +446,7 @@ class AlternateAddressTests(AltAddrBaseTest):
             if output:
                 self.log.info("Output from kv loader: {0}".format(output))
         except CalledProcessError as e:
-            print "Error return code: ", e.returncode
+            print("Error return code: ", e.returncode)
             if e.output:
                 if self.all_alt_addr_set:
                     if "No alternate address information found" in e.output:
@@ -564,7 +564,7 @@ class AlternateAddressTests(AltAddrBaseTest):
                 self.log.info("Create bucket {0}".format(bucket_name))
                 create_bucket = create_bucket_command
                 create_bucket += " -d name={0} ".format(bucket_name)
-                print "\ncreate bucket command: ", create_bucket
+                print("\ncreate bucket command: ", create_bucket)
                 output = check_output("{0}".format(create_bucket), shell=True,
                                                    stderr=STDOUT)
                 if output:

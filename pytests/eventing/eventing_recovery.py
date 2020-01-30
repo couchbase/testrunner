@@ -763,7 +763,7 @@ class EventingRecovery(EventingBaseTest):
         if self.pause_resume:
             self.wait_for_handler_state(body['appname'], "paused")
         else:
-        self.wait_for_handler_state(body['appname'], "deployed")
+            self.wait_for_handler_state(body['appname'], "deployed")
         rebalance.result()
         if self.pause_resume:
             self.resume_function(body)
@@ -831,7 +831,7 @@ class EventingRecovery(EventingBaseTest):
             else:
                 self.wait_for_handler_state(body['appname'], "deployed")
             rebalance.result()
-        except Exception, ex:
+        except Exception as ex:
             log.info("Rebalance failed as expected after eventing got killed: {0}".format(str(ex)))
         else:
             self.fail("Rebalance succeeded even after killing eventing processes")
@@ -915,7 +915,7 @@ class EventingRecovery(EventingBaseTest):
             else:
                 self.wait_for_handler_state(body['appname'], "deployed")
             rebalance.result()
-        except Exception, ex:
+        except Exception as ex:
             log.info("Rebalance failed as expected after eventing got killed: {0}".format(str(ex)))
             # auto retry the failed rebalance
             self.check_retry_rebalance_succeeded()

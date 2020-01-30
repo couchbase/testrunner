@@ -1,4 +1,7 @@
+import os
 import re
+import shutil
+
 import testconstants
 import gc
 import sys, json
@@ -14,6 +17,10 @@ from membase.helper.cluster_helper import ClusterOperationHelper
 from remote.remote_util import RemoteMachineShellConnection, RemoteUtilHelper
 from couchbase_helper.document import DesignDocument, View
 from couchbase_helper.documentgenerator import BlobGenerator
+
+from TestInput import TestInputSingleton
+from lib.sdk_client import SDKClient
+from pytests.fts.fts_base import QUERY
 from scripts.install import InstallerJob
 from builds.build_query import BuildQuery
 from couchbase_helper.tuq_generators import JsonGenerator
@@ -220,7 +227,7 @@ class NewUpgradeBaseTest(BaseTestCase):
                         shell.execute_command("systemctl daemon-reload", debug=False)
                         shell.start_server()
                     else:
-                        log.error("Couchbase-server did not start...")
+                        self.log.error("Couchbase-server did not start...")
                 shell.disconnect()
                 if not success:
                     sys.exit("some nodes were not install successfully!")
@@ -827,7 +834,6 @@ class NewUpgradeBaseTest(BaseTestCase):
         # CREATE SDK CLIENT
         if self.use_sdk_client:
             try:
-                from sdk_client import SDKClient
                 scheme = "couchbase"
                 host=self.master.ip
                 if self.master.ip == "127.0.0.1":
@@ -908,7 +914,6 @@ class NewUpgradeBaseTest(BaseTestCase):
         return "{0}:{1}".format(server.ip, server.port)
 
     def generate_docs_simple(self, num_items, start=0):
-        from couchbase_helper.tuq_generators import JsonGenerator
         json_generator = JsonGenerator()
         return json_generator.generate_docs_simple(start=start, docs_per_day=self.docs_per_day)
 
@@ -920,7 +925,7 @@ class NewUpgradeBaseTest(BaseTestCase):
                 return self.generate_docs_array(num_items, start)
             return getattr(self, 'generate_docs_' + self.dataset)(num_items, start)
         except Exception as ex:
-            log.info(str(ex))
+            self.log.info(str(ex))
             self.fail("There is no dataset %s, please enter a valid one" % self.dataset)
 
     def create_save_function_body_test(self, appname, appcode, description="Sample Description",
@@ -1007,9 +1012,9 @@ class NewUpgradeBaseTest(BaseTestCase):
 
     def ordered(self, obj):
         if isinstance(obj, dict):
-            return sorted((k, ordered(v)) for k, v in list(obj.items()))
+            return sorted((k, self.ordered(v)) for k, v in list(obj.items()))
         if isinstance(obj, list):
-            return sorted(ordered(x) for x in obj)
+            return sorted(self.ordered(x) for x in obj)
         else:
             return obj
 
@@ -1153,7 +1158,7 @@ class NewUpgradeBaseTest(BaseTestCase):
                                      type,
                                      check_index_type))
         except Exception as ex:
-            print ex
+            print(ex)
             if queue is not None:
                 queue.put(False)
         if queue is not None:
@@ -1177,7 +1182,7 @@ class NewUpgradeBaseTest(BaseTestCase):
                 n1ql_obj.drop_gsi_index(keyspace=bucket.name, name="test_idx1",
                                         is_primary=False)
             #return self.n1ql_obj
-        except Exception, ex:
+        except Exception as ex:
             print(ex)
             if queue is not None:
                 queue.put(False)
@@ -1189,8 +1194,8 @@ class NewUpgradeBaseTest(BaseTestCase):
             self.log.info("Run queries again")
             n1ql_obj = N1QLCallable(self.servers)
             result = n1ql_obj.run_n1ql_query("select * from system:indexes")
-        except Exception, ex:
-            print ex
+        except Exception as ex:
+            print(ex)
             if queue is not None:
                 queue.put(False)
         if queue is not None:

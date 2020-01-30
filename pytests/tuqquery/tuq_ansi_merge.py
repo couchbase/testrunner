@@ -1,8 +1,4 @@
-<<<<<<< HEAD
 from .tuq import QueryTests
-=======
-from tuq import QueryTests
->>>>>>> origin/master
 from membase.api.exception import CBQError
 
 
@@ -75,11 +71,7 @@ class QueryANSIMERGETests(QueryTests):
     def test_ansi_merge_delete_where_match(self):
         keys, _ = self._insert_gen_keys(self.num_items, prefix='merge_delete_where')
         self.query = 'MERGE INTO %s USING %s s0 on meta(%s).id == meta(s0).id when matched then delete where meta(s0).id = "%s" AND s0.name = "%s"' \
-<<<<<<< HEAD
                      %(self.buckets[0].name, self.buckets[1].name, self.buckets[0].name, keys[0], "employee-1")
-=======
-                     %(self.buckets[0].name, self.buckets[1].name, self.buckets[0].name, keys[0],"employee-1")
->>>>>>> origin/master
         actual_result = self.run_cbq_query()
         self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
         self.assertEqual(actual_result['metrics']['mutationCount'], 1, 'Merge deleted more data than intended')
@@ -126,12 +118,7 @@ class QueryANSIMERGETests(QueryTests):
     def test_ansi_merge_update_match_unset(self):
         try:
             self.run_cbq_query(query='CREATE INDEX name on default(name)')
-
-<<<<<<< HEAD
             self.query = 'INSERT into %s (key , value) VALUES ("%s", %s)' % (self.buckets[1].name, "test", '{"name": "new1"}')
-=======
-            self.query = 'INSERT into %s (key , value) VALUES ("%s", %s)' % (self.buckets[1].name,"test", '{"name": "new1"}')
->>>>>>> origin/master
             actual_result = self.run_cbq_query()
             self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
             self.query = 'INSERT into %s (key , value) VALUES ("%s", %s)' % (self.buckets[0].name, "new1", '{"name": "new1"}')
@@ -276,11 +263,7 @@ class QueryANSIMERGETests(QueryTests):
         try:
             self.run_cbq_query(query='CREATE INDEX name on default(name)')
 
-<<<<<<< HEAD
             self.query = 'INSERT into %s (key , value) VALUES ("%s", %s)' % (self.buckets[0].name, "new1", '{"name": "new1"}')
-=======
-            self.query = 'INSERT into %s (key , value) VALUES ("%s", %s)' % (self.buckets[0].name, "new1",'{"name": "new1"}')
->>>>>>> origin/master
             actual_result = self.run_cbq_query()
             self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
 
@@ -290,11 +273,7 @@ class QueryANSIMERGETests(QueryTests):
             actual_result = self.run_cbq_query()
             self.assertTrue("HashJoin" in str(actual_result), "HashJoin is not being used")
 
-<<<<<<< HEAD
             self.query = 'MERGE INTO %s b1 USING ({"name":"new1"}) as s use hash(probe) on b1.name == s.name when matched then update set b1.name="%s"'  % (self.buckets[0].name, new_name)
-=======
-            self.query = 'MERGE INTO %s b1 USING ({"name":"new1"}) as s use hash(probe) on b1.name == s.name when matched then update set b1.name="%s"'  % (self.buckets[0].name,new_name)
->>>>>>> origin/master
             actual_result = self.run_cbq_query()
             self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
             self.query = 'SELECT name FROM %s' % self.buckets[0].name
@@ -404,11 +383,7 @@ class QueryANSIMERGETests(QueryTests):
                              'name', "The incorrect index is being used")
 
             self.query = 'MERGE INTO %s b1 USING %s b2 use index(name2) on b1.%s == b2.%s when matched then update set b1.%s = "ajay"' \
-<<<<<<< HEAD
                          % (self.buckets[0].name, self.buckets[1].name, 'name', 'name', 'name' )
-=======
-                         % (self.buckets[0].name, self.buckets[1].name, 'name', 'name','name' )
->>>>>>> origin/master
             self.run_cbq_query()
             self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
 
@@ -428,11 +403,7 @@ class QueryANSIMERGETests(QueryTests):
             actual_result = self.run_cbq_query()
             self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
             self.query = 'MERGE INTO %s b1 USING %s b2 on b1.%s == b2.%s when not matched then insert %s' \
-<<<<<<< HEAD
                          % (self.buckets[0].name, self.buckets[1].name, 'name', 'name', '(KEY UUID(),VALUE {"name": "new"})')
-=======
-                         % (self.buckets[0].name, self.buckets[1].name, 'name', 'name','(KEY UUID(),VALUE {"name": "new"})')
->>>>>>> origin/master
             actual_result = self.run_cbq_query()
             self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
             self.query = 'SELECT * FROM %s '  % self.buckets[0].name
@@ -446,19 +417,11 @@ class QueryANSIMERGETests(QueryTests):
     def test_ansi_merge_select_not_match_insert(self):
         try:
             self.run_cbq_query(query='CREATE INDEX name on default(name)')
-<<<<<<< HEAD
             self.query = 'INSERT into %s (key , value) VALUES ("%s", %s)' % (self.buckets[1].name, "test", '{"name": "new1"}')
             actual_result = self.run_cbq_query()
             self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
             self.query = 'MERGE INTO %s b1 USING (select * from %s b2) as s on b1.%s == s.%s when not matched then insert %s'  \
                          % (self.buckets[0].name, self.buckets[1].name, 'name', 'name', '(key "test", value {"name": "new"})')
-=======
-            self.query = 'INSERT into %s (key , value) VALUES ("%s", %s)' % (self.buckets[1].name, "test",'{"name": "new1"}')
-            actual_result = self.run_cbq_query()
-            self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
-            self.query = 'MERGE INTO %s b1 USING (select * from %s b2) as s on b1.%s == s.%s when not matched then insert %s'  \
-                         % (self.buckets[0].name, self.buckets[1].name,'name','name', '(key "test", value {"name": "new"})')
->>>>>>> origin/master
             actual_result = self.run_cbq_query()
             self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
             self.query = 'SELECT * FROM %s where meta().id == "test"'  % self.buckets[0].name
@@ -472,19 +435,11 @@ class QueryANSIMERGETests(QueryTests):
     def test_ansi_merge_json_not_match_insert(self):
         try:
             self.run_cbq_query(query='CREATE INDEX name on default(name)')
-<<<<<<< HEAD
             self.query = 'INSERT into %s (key , value) VALUES ("%s", %s)' % (self.buckets[1].name, "test", '{"name": "new1"}')
             actual_result = self.run_cbq_query()
             self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
             self.query = 'MERGE INTO %s b1 USING ({"name":"new1"}) as s on b1.%s == s.%s when not matched then insert %s'  \
                          % (self.buckets[0].name, 'name', 'name', '(key "test", value {"name": "new"})')
-=======
-            self.query = 'INSERT into %s (key , value) VALUES ("%s", %s)' % (self.buckets[1].name, "test",'{"name": "new1"}')
-            actual_result = self.run_cbq_query()
-            self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
-            self.query = 'MERGE INTO %s b1 USING ({"name":"new1"}) as s on b1.%s == s.%s when not matched then insert %s'  \
-                         % (self.buckets[0].name,'name','name', '(key "test", value {"name": "new"})')
->>>>>>> origin/master
             actual_result = self.run_cbq_query()
             self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
             self.query = 'SELECT * FROM %s where meta().id == "test"' % self.buckets[0].name
@@ -503,11 +458,7 @@ class QueryANSIMERGETests(QueryTests):
         try:
 
             self.run_cbq_query(query='CREATE INDEX name on default(name)')
-<<<<<<< HEAD
             self.query = 'INSERT into %s (key , value) VALUES ("%s", %s)' % (self.buckets[1].name, "test", '{"name": "new1"}')
-=======
-            self.query = 'INSERT into %s (key , value) VALUES ("%s", %s)' % (self.buckets[1].name, "test",'{"name": "new1"}')
->>>>>>> origin/master
             actual_result = self.run_cbq_query()
             self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
 
@@ -515,11 +466,7 @@ class QueryANSIMERGETests(QueryTests):
             self.query = 'EXPLAIN MERGE INTO %s b1 USING %s b2 use hash(probe) on b1.%s == b2.%s when not matched then insert %s' \
                          % (self.buckets[0].name, self.buckets[1].name, 'name', 'name', '(KEY "test",VALUE {"name": "new"})')
             actual_result = self.run_cbq_query()
-<<<<<<< HEAD
             self.assertTrue("HashJoin" in str(actual_result), "HashJoin is not being used")
-=======
-            self.assertTrue("HashJoin" in str(actual_result),"HashJoin is not being used")
->>>>>>> origin/master
 
             self.query = 'MERGE INTO %s b1 USING %s b2 use hash(probe) on b1.%s == b2.%s when not matched then insert %s' \
                          % (self.buckets[0].name, self.buckets[1].name, 'name', 'name', '(KEY "test",VALUE {"name": "new"})')
@@ -531,19 +478,11 @@ class QueryANSIMERGETests(QueryTests):
 
             # Test JSON use hash
             self.query = 'EXPLAIN MERGE INTO %s b1 USING ({"name":"new1"}) as s use hash(probe) on b1.%s == s.%s when not matched then insert %s'  \
-<<<<<<< HEAD
                          % (self.buckets[0].name, 'name', 'name', '(key "test1", value {"name": "new"})')
             actual_result = self.run_cbq_query()
             self.assertTrue("HashJoin" in str(actual_result), "HashJoin is not being used")
             self.query = 'MERGE INTO %s b1 USING ({"name":"new1"}) as s use hash(probe) on b1.%s == s.%s when not matched then insert %s'  \
                          % (self.buckets[0].name, 'name', 'name', '(key "test1", value {"name": "new"})')
-=======
-                         % (self.buckets[0].name,'name','name', '(key "test1", value {"name": "new"})')
-            actual_result = self.run_cbq_query()
-            self.assertTrue("HashJoin" in str(actual_result), "HashJoin is not being used")
-            self.query = 'MERGE INTO %s b1 USING ({"name":"new1"}) as s use hash(probe) on b1.%s == s.%s when not matched then insert %s'  \
-                         % (self.buckets[0].name,'name','name', '(key "test1", value {"name": "new"})')
->>>>>>> origin/master
             actual_result = self.run_cbq_query()
             self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
             self.query = 'SELECT * FROM %s where meta().id == "test1"' % self.buckets[0].name
@@ -552,20 +491,12 @@ class QueryANSIMERGETests(QueryTests):
 
             # Test subquery use hash
             self.query = 'EXPLAIN MERGE INTO %s b1 USING (select * from %s b2) as s use hash(probe) on b1.%s == s.%s when not matched then insert %s'  \
-<<<<<<< HEAD
                          % (self.buckets[0].name, self.buckets[1].name, 'name', 'name', '(key "test2", value {"name": "new"})')
-=======
-                         % (self.buckets[0].name, self.buckets[1].name,'name','name', '(key "test2", value {"name": "new"})')
->>>>>>> origin/master
             actual_result = self.run_cbq_query()
             self.assertTrue("HashJoin" in str(actual_result), "HashJoin is not being used")
 
             self.query = 'MERGE INTO %s b1 USING (select * from %s b2) as s use hash(probe) on b1.%s == s.%s when not matched then insert %s'  \
-<<<<<<< HEAD
                          % (self.buckets[0].name, self.buckets[1].name, 'name', 'name', '(key "test2", value {"name": "new"})')
-=======
-                         % (self.buckets[0].name, self.buckets[1].name,'name','name', '(key "test2", value {"name": "new"})')
->>>>>>> origin/master
             actual_result = self.run_cbq_query()
             self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
             self.query = 'SELECT * FROM %s where meta().id == "test2"' % self.buckets[0].name
@@ -596,11 +527,7 @@ class QueryANSIMERGETests(QueryTests):
             self.query = 'EXPLAIN MERGE INTO %s b1 USING %s b2 use hash(build) on b1.%s == b2.%s when not matched then insert %s' \
                          % (self.buckets[0].name, self.buckets[1].name, 'name', 'name', '(KEY "test",VALUE {"name": "new"})')
             actual_result = self.run_cbq_query()
-<<<<<<< HEAD
             self.assertFalse("HashJoin" in str(actual_result), "HashJoin is being used")
-=======
-            self.assertFalse("HashJoin" in str(actual_result),"HashJoin is being used")
->>>>>>> origin/master
 
             self.query = 'MERGE INTO %s b1 USING %s b2 use hash(build) on b1.%s == b2.%s when not matched then insert %s' \
                          % (self.buckets[0].name, self.buckets[1].name, 'name', 'name', '(KEY "test",VALUE {"name": "new"})')
@@ -612,19 +539,11 @@ class QueryANSIMERGETests(QueryTests):
 
             # Test JSON use hash
             self.query = 'EXPLAIN MERGE INTO %s b1 USING ({"name":"new1"}) as s use hash(build) on b1.%s == s.%s when not matched then insert %s'  \
-<<<<<<< HEAD
                          % (self.buckets[0].name, 'name', 'name', '(key "test1", value {"name": "new"})')
             actual_result = self.run_cbq_query()
             self.assertFalse("HashJoin" in str(actual_result), "HashJoin is being used")
             self.query = 'MERGE INTO %s b1 USING ({"name":"new1"}) as s use hash(build) on b1.%s == s.%s when not matched then insert %s'  \
                          % (self.buckets[0].name, 'name', 'name', '(key "test1", value {"name": "new"})')
-=======
-                         % (self.buckets[0].name,'name','name', '(key "test1", value {"name": "new"})')
-            actual_result = self.run_cbq_query()
-            self.assertFalse("HashJoin" in str(actual_result), "HashJoin is being used")
-            self.query = 'MERGE INTO %s b1 USING ({"name":"new1"}) as s use hash(build) on b1.%s == s.%s when not matched then insert %s'  \
-                         % (self.buckets[0].name,'name','name', '(key "test1", value {"name": "new"})')
->>>>>>> origin/master
             actual_result = self.run_cbq_query()
             self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
             self.query = 'SELECT * FROM %s where meta().id == "test1"' % self.buckets[0].name
@@ -633,20 +552,12 @@ class QueryANSIMERGETests(QueryTests):
 
             # Test subquery use hash
             self.query = 'EXPLAIN MERGE INTO %s b1 USING (select * from %s b2) as s use hash(build) on b1.%s == s.%s when not matched then insert %s'  \
-<<<<<<< HEAD
                          % (self.buckets[0].name, self.buckets[1].name, 'name', 'name', '(key "test2", value {"name": "new"})')
-=======
-                         % (self.buckets[0].name, self.buckets[1].name,'name','name', '(key "test2", value {"name": "new"})')
->>>>>>> origin/master
             actual_result = self.run_cbq_query()
             self.assertFalse("HashJoin" in str(actual_result), "HashJoin is being used")
 
             self.query = 'MERGE INTO %s b1 USING (select * from %s b2) as s use hash(build) on b1.%s == s.%s when not matched then insert %s'  \
-<<<<<<< HEAD
                          % (self.buckets[0].name, self.buckets[1].name, 'name', 'name', '(key "test2", value {"name": "new"})')
-=======
-                         % (self.buckets[0].name, self.buckets[1].name,'name','name', '(key "test2", value {"name": "new"})')
->>>>>>> origin/master
             actual_result = self.run_cbq_query()
             self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
             self.query = 'SELECT * FROM %s where meta().id == "test2"' % self.buckets[0].name
@@ -669,11 +580,7 @@ class QueryANSIMERGETests(QueryTests):
                          % (self.buckets[0].name, self.buckets[1].name, 'name', 'name', '(VALUE {"name": "new"})')
             self.run_cbq_query()
             self.assertFalse(True, "The query should have errored")
-<<<<<<< HEAD
         except CBQError as e:
-=======
-        except CBQError, e:
->>>>>>> origin/master
             self.assertTrue("syntax error - at VALUE" in str(e))
         finally:
             self.run_cbq_query(query="Drop index default.name")
@@ -693,11 +600,8 @@ class QueryANSIMERGETests(QueryTests):
                          % (self.buckets[0].name, self.buckets[1].name, 'name', 'name', '({"name": "new"})')
             self.run_cbq_query()
             self.assertFalse(True, "The query should have errored")
-<<<<<<< HEAD
+
         except CBQError as e:
-=======
-        except CBQError, e:
->>>>>>> origin/master
             self.assertTrue("MERGE with ON clause must have document key specification in INSERT action." in str(e))
         finally:
             self.run_cbq_query(query="Drop index default.name")
@@ -718,11 +622,7 @@ class QueryANSIMERGETests(QueryTests):
             actual_result = self.run_cbq_query()
             self.assertEqual(len(actual_result['results']), 1, 'Query was not run successfully')
             self.assertFalse(True, "The query should have errored")
-<<<<<<< HEAD
         except CBQError as e:
-=======
-        except CBQError, e:
->>>>>>> origin/master
             self.assertTrue("MERGE with ON KEY clause cannot have document key specification in INSERT action." in str(e))
 
     '''Test if you can use new syntax without the appropriate secondary index, should not be allowed
@@ -738,11 +638,7 @@ class QueryANSIMERGETests(QueryTests):
                          % (self.buckets[0].name, self.buckets[1].name, 'name', 'name', '(key "TEST",VALUE {"name": "new"})')
             self.run_cbq_query()
             self.assertFalse(True, "The query should have errored")
-<<<<<<< HEAD
         except CBQError as e:
-=======
-        except CBQError, e:
->>>>>>> origin/master
             self.assertTrue("No index available for ANSI join term b1" in str(e))
 
     '''Test if you can use the index hint with the legacy syntax, should not be allowed
@@ -762,11 +658,7 @@ class QueryANSIMERGETests(QueryTests):
             actual_result = self.run_cbq_query()
             self.assertEqual(len(actual_result['results']), 1, 'Query was not run successfully')
             self.assertFalse(True, "The query should have errored")
-<<<<<<< HEAD
         except CBQError as e:
-=======
-        except CBQError, e:
->>>>>>> origin/master
             self.assertTrue("MERGE with ON KEY clause cannot have USE INDEX hint specified on target." in str(e))
         finally:
             self.run_cbq_query(query="Drop index default.name")
@@ -780,11 +672,7 @@ class QueryANSIMERGETests(QueryTests):
             self.run_cbq_query()
             self.assertFalse(True, "The query should have errored")
 
-<<<<<<< HEAD
         except CBQError as e:
-=======
-        except CBQError, e:
->>>>>>> origin/master
             self.assertTrue("syntax error - at (" in str(e))
 
     '''Test if you can use a subquery as the target of a merge, the targer of a merge MUST be a keyspace'''
@@ -792,17 +680,10 @@ class QueryANSIMERGETests(QueryTests):
         try:
             keys, _ = self._insert_gen_keys(self.num_items, prefix='merge_delete')
             self.query = 'MERGE INTO (select * from %s b2) as s USING %s on meta(s).id == meta(%s).id when matched then delete' % (
-<<<<<<< HEAD
                 self.buckets[0].name, self.buckets[1].name, self.buckets[1].name)
             self.run_cbq_query()
             self.assertFalse(True, "The query should have errored")
         except CBQError as e:
-=======
-                self.buckets[0].name,self.buckets[1].name, self.buckets[1].name)
-            self.run_cbq_query()
-            self.assertFalse(True, "The query should have errored")
-        except CBQError, e:
->>>>>>> origin/master
             self.assertTrue("syntax error - at (" in str(e))
 
     '''Test if you can use the index hint on a non keyspace json value, use index hint only works with keyspaces'''
@@ -817,11 +698,7 @@ class QueryANSIMERGETests(QueryTests):
                          % (self.buckets[0].name, 'edit')
             self.run_cbq_query()
             self.assertFalse(True, "The query should have errored")
-<<<<<<< HEAD
         except CBQError as e:
-=======
-        except CBQError, e:
->>>>>>> origin/master
             self.assertTrue("FROM Expression cannot have USE KEYS or USE INDEX." in str(e))
         finally:
             self.run_cbq_query(query="Drop index default.name")
@@ -838,11 +715,7 @@ class QueryANSIMERGETests(QueryTests):
                 self.buckets[0].name, self.buckets[1].name, 'name', 'name', '(key "test2", value {"name": "new"})')
             self.run_cbq_query()
             self.assertFalse(True, "The query should have errored")
-<<<<<<< HEAD
         except CBQError as e:
-=======
-        except CBQError, e:
->>>>>>> origin/master
             self.assertTrue("FROM Subquery cannot have USE KEYS or USE INDEX." in str(e))
         finally:
             self.run_cbq_query(query="Drop index default.name")
@@ -861,11 +734,7 @@ class QueryANSIMERGETests(QueryTests):
                          % (self.buckets[0].name, self.buckets[1].name, 'name', 'name', '(KEY "test",VALUE {"name": "new"})')
             self.run_cbq_query()
             self.assertFalse(True, "The query should have errored")
-<<<<<<< HEAD
         except CBQError as e:
-=======
-        except CBQError, e:
->>>>>>> origin/master
             self.assertTrue("Keyspace reference cannot have join hint (USE HASH or USE NL)in MERGE statement." in str(e))
         finally:
             self.run_cbq_query(query="DROP INDEX default.name")
@@ -884,11 +753,7 @@ class QueryANSIMERGETests(QueryTests):
                          % (self.buckets[0].name, self.buckets[1].name, 'name', 'name', '(KEY "test",VALUE {"name": "new"})')
             self.run_cbq_query()
             self.assertFalse(True, "The query should have errored")
-<<<<<<< HEAD
         except CBQError as e:
-=======
-        except CBQError, e:
->>>>>>> origin/master
             self.assertTrue("Keyspace reference cannot have USE KEYS hint in MERGE statement." in str(e))
 
 

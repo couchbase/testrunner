@@ -433,13 +433,13 @@ class BaseRQGQueryHelper(object):
                     bucket_string = table_name + "  " + table_name_alias
                 return sql.replace("OUTER_BUCKET_NAME", bucket_string), {table_name: table_map[table_name]}
             else:
-            if "alias_name" in list(table_map[table_name].keys()):
-                table_name_alias = table_map[table_name]["alias_name"]
-            bucket_string = table_name
-            if table_name_alias != "":
-                table_name_alias = table_map[table_name]["alias_name"]
-                bucket_string = table_name+"  "+table_name_alias
-            return sql.replace("BUCKET_NAME", bucket_string), {table_name: table_map[table_name]}
+                if "alias_name" in list(table_map[table_name].keys()):
+                    table_name_alias = table_map[table_name]["alias_name"]
+                bucket_string = table_name
+                if table_name_alias != "":
+                    table_name_alias = table_map[table_name]["alias_name"]
+                    bucket_string = table_name+"  "+table_name_alias
+                return sql.replace("BUCKET_NAME", bucket_string), {table_name: table_map[table_name]}
         for token in sql_token_list:
             use_table_entry = False
             if token.strip() not in standard_tokens:

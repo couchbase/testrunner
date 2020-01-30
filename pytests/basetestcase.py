@@ -11,6 +11,7 @@ import subprocess
 import mc_bin_client
 import traceback
 import re
+import os
 
 
 from memcached.helper.data_helper import VBucketAwareMemcached
@@ -39,6 +40,7 @@ from collection.collections_rest_client import Collections_Rest
 from couchbase_cli import CouchbaseCLI
 import testconstants
 
+from lib.ep_mc_bin_client import MemcachedClient
 from scripts.collect_server_info import cbcollectRunner
 
 
@@ -2549,9 +2551,9 @@ class BaseTestCase(unittest.TestCase):
                                                           bucket.kvs[kv_store], op_type, exp, flag,
                                                           only_store_hash, batch_size, pause_secs,
                                                           timeout_secs, compression=self.sdk_compression, collection=collection))
-          for task in tasks:
+        for task in tasks:
             task.result()
-          self.num_items = items + start_items
+        self.num_items = items + start_items
 
         if verify_data:
             self.verify_cluster_stats(self.servers[:self.nodes_init])
@@ -2641,7 +2643,7 @@ class BaseTestCase(unittest.TestCase):
 
     def set_testrunner_client(self):
         self.testrunner_client = self.input.param("testrunner_client", None)
-        if self.testrunner_client != None:
+        if self.testrunner_client is not None:
             os.environ[testconstants.TESTRUNNER_CLIENT] = self.testrunner_client
 
     def sync_ops_all_buckets(self, docs_gen_map={}, batch_size=10, verify_data=True):
@@ -2657,7 +2659,7 @@ class BaseTestCase(unittest.TestCase):
         if "expiry" in list(docs_gen_map.keys()):
             self._expiry_pager(self.master)
 
-    def async_ops_all_buckets(self, docs_gen_map={}, batch_size=10):
+    def async_ops_all_buckets(self, docs_gen_map=dict(), batch_size=10):
         tasks = []
         if "expiry" in list(docs_gen_map.keys()):
             self._expiry_pager(self.master)
@@ -2749,7 +2751,7 @@ class BaseTestCase(unittest.TestCase):
     '''
 
     def getLocalIPAddress(self):
-        status, ipAddress = commands.getstatusoutput(
+        status, ipAddress = subprocess.getstatusoutput(
             "ifconfig eth0 | grep 'inet addr:' | cut -d: -f2 |awk '{print $1}'")
         return ipAddress
 

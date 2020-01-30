@@ -2774,7 +2774,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
             reached = RestHelper(self.rest).rebalance_reached()
             self.assertTrue(reached, "rebalance failed, stuck or did not complete")
             rebalance.result()
-        except Exception, ex:
+        except Exception as ex:
             if "Rebalance failed" not in str(ex):
                 self.fail("rebalance failed with some unexpected error : {0}".format(str(ex)))
         else:

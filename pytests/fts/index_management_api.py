@@ -60,7 +60,7 @@ class IndexManagementAPI(FTSBaseTest):
         try:
             fts_index.update_index_partitions(1)
             self.sleep(5)
-        except Exception, e:
+        except Exception as e:
             if "cannot update partition or replica count for a planFrozen index" in str(e):
                 self.log.info("Error expected :   {0}".format(e))
             else:

@@ -1559,7 +1559,7 @@ class EventingRebalance(EventingBaseTest):
             self.assertTrue(reached, "rebalance failed, stuck or did not complete")
             rebalance.result()
             task.result()
-        except Exception, ex:
+        except Exception as ex:
             log.info("Rebalance failed as expected after eventing got killed: {0}".format(str(ex)))
             # auto retry the failed rebalance
             self.check_retry_rebalance_succeeded()
@@ -1603,7 +1603,7 @@ class EventingRebalance(EventingBaseTest):
             self.assertTrue(reached, "rebalance failed, stuck or did not complete")
             rebalance.result()
             task.result()
-        except Exception, ex:
+        except Exception as ex:
             log.info("Rebalance failed as expected after erlang got killed: {0}".format(str(ex)))
             # auto retry failed rebalance
             self.check_retry_rebalance_succeeded()
@@ -1646,7 +1646,7 @@ class EventingRebalance(EventingBaseTest):
             self.assertTrue(reached, "rebalance failed, stuck or did not complete")
             rebalance.result()
             task.result()
-        except Exception, ex:
+        except Exception as ex:
             log.info("Rebalance failed as expected after reboot of kv and eventing: {0}".format(str(ex)))
             # auto retry for failed rebalance
             self.check_retry_rebalance_succeeded()
@@ -1662,7 +1662,7 @@ class EventingRebalance(EventingBaseTest):
         try:
             if not self.is_sbm:
                 self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True, timeout=240)
-        except Exception, ex:
+        except Exception as ex:
             log.info(str(ex))
             # data mismatch is expected in case of a failover
             pass

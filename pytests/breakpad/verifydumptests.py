@@ -9,6 +9,7 @@ from .logpoll import NSLogPoller
 
 log = logger.Logger.get_logger()
 
+
 class BreakpadVerifyDumpTests(BreakpadBase):
 
     def verify_dump_exists_after_crash(self):
@@ -75,8 +76,8 @@ class BreakpadVerifyDumpTests(BreakpadBase):
             rc = self.kill_memcached(0)
             assert rc, "Did not kill mc"
             # get restart msg
-	    msg = logp.getEventQItem()
-	    assert msg
+            msg = logp.getEventQItem()
+            assert msg
             crashes += 1
 
         logp.setMcEventFlag(False)
@@ -98,7 +99,6 @@ class BreakpadVerifyDumpTests(BreakpadBase):
         self.cluster.rebalance(
             [self.master],
             self.servers[1:], [])
-
 
         self.load_docs(nodeA, 10000)
 
@@ -143,7 +143,7 @@ class BreakpadVerifyDumpTests(BreakpadBase):
         nodeA = self.servers[index]
         self.load_docs(nodeA, 100000)
 
-        reb_poller= NSLogPoller(index)
+        reb_poller = NSLogPoller(index)
         reb_poller.start()
         reb_poller.setRebalanceEventFlag(True)
 
@@ -216,7 +216,7 @@ class BreakpadVerifyDumpTests(BreakpadBase):
                     pass
 
         # async doc loaders
-        for  i in range(10):
+        for i in range(10):
             t = threading.Thread(target=loader)
             t.start()
             threads.append(t)
@@ -249,7 +249,7 @@ class BreakpadVerifyDumpTests(BreakpadBase):
             rest.compact_bucket()
 
         # async doc loaders
-        for  i in range(10):
+        for i in range(10):
             t = threading.Thread(target=loader)
             t.start()
             threads.append(t)
@@ -262,7 +262,7 @@ class BreakpadVerifyDumpTests(BreakpadBase):
         t.start()
 
         # verify compaction event did happen
-	assert logp.getEventQItem()
+        assert logp.getEventQItem()
         logp.setCompactEventFlag(False)
 
         # kill mc

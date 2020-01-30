@@ -24,6 +24,8 @@ from couchbase_helper.stats_tools import StatsCommon
 from membase.helper.bucket_helper import BucketOperationHelper
 from memcached.helper.data_helper import MemcachedClientHelper
 from TestInput import TestInputSingleton
+from lib.couchbase_helper.documentgenerator import GeoSpatialDataLoader, WikiJSONGenerator
+from lib.memcached.helper.data_helper import KVStoreAwareSmartClient
 from scripts.collect_server_info import cbcollectRunner
 from couchbase_helper.documentgenerator import *
 
@@ -2146,7 +2148,7 @@ class CouchbaseCluster:
             try:
                 time.sleep(10)
                 indexed_doc_count = fts_idx.get_indexed_doc_count()
-            except KeyError, k:
+            except KeyError as k:
                 continue
 
         return fts_idx
@@ -4481,7 +4483,6 @@ class FTSBaseTest(unittest.TestCase):
         :param docs: List of json data
         :return: None
         """
-        from memcached.helper.data_helper import KVStoreAwareSmartClient
         memc_client  = KVStoreAwareSmartClient(RestConnection(server),
                                                'default')
         count = 1
