@@ -66,6 +66,7 @@ def main():
     parser.add_option('-f','--jenkins_server_url', dest='jenkins_server_url', default='http://qa.sc.couchbase.com')
     parser.add_option('-m','--retry_params', dest='retry_params', default='')
     parser.add_option('-i','--retries', dest='retries', default='1')
+    parser.add_option('-k','--include_tests', dest='include_tests', default=None)
 
     # set of parameters for testing purposes.
     #TODO: delete them after successful testing
@@ -269,6 +270,8 @@ def main():
 
     launchString = launchString + '&retry_params=' + urllib.quote(options.retry_params)
     launchString = launchString + '&retries=' + options.retries
+    if options.include_tests:
+        launchString = launchString + '&include_tests=' + urllib.quote(options.include_tests)
 
     if options.url is not None:
         launchString = launchString + '&url=' + options.url
