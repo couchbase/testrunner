@@ -130,7 +130,7 @@ class NewUpgradeBaseTest(BaseTestCase):
                 start=0, end=self.docs_per_day)
             self.log.info(self.ops_dist_map)
             self.docs_gen_map = self.generate_ops_docs(self.docs_per_day, 0)
-            #self.full_docs_list_after_ops = self.generate_full_docs_list_after_ops(self.docs_gen_map)
+            # self.full_docs_list_after_ops = self.generate_full_docs_list_after_ops(self.docs_gen_map)
         if self.max_verify is None:
             self.max_verify = min(self.num_items, 100000)
         shell = RemoteMachineShellConnection(self.master)
@@ -161,17 +161,17 @@ class NewUpgradeBaseTest(BaseTestCase):
         test_failed = (hasattr(self, '_resultForDoCleanups') and \
                        len(self._resultForDoCleanups.failures or \
                            self._resultForDoCleanups.errors)) or \
-                                 (hasattr(self, '_exc_info') and \
-                                  self._exc_info()[1] is not None)
+                      (hasattr(self, '_exc_info') and \
+                       self._exc_info()[1] is not None)
         if test_failed and self.skip_cleanup:
-                self.log.warn("CLEANUP WAS SKIPPED DUE TO FAILURES IN UPGRADE TEST")
-                self.cluster.shutdown(force=True)
-                self.log.info("Test Input params were:")
-                pprint(self.input.test_params)
+            self.log.warning("CLEANUP WAS SKIPPED DUE TO FAILURES IN UPGRADE TEST")
+            self.cluster.shutdown(force=True)
+            self.log.info("Test Input params were:")
+            pprint(self.input.test_params)
 
-                if self.input.param('BUGS', False):
-                    self.log.warn("Test failed. Possible reason is: {0}"
-                                           .format(self.input.param('BUGS', False)))
+            if self.input.param('BUGS', False):
+                self.log.warning("Test failed. Possible reason is: {0}"
+                                 .format(self.input.param('BUGS', False)))
         else:
             if not hasattr(self, 'rest'):
                 return
@@ -210,8 +210,8 @@ class NewUpgradeBaseTest(BaseTestCase):
         if 5 <= int(self.initial_version[:1]) or 5 <= int(self.upgrade_versions[0][:1]):
             params['fts_query_limit'] = 10000000
 
-        self.log.info("will install {0} on {1}"\
-                                .format(self.initial_version, [s.ip for s in servers]))
+        self.log.info("will install {0} on {1}" \
+                      .format(self.initial_version, [s.ip for s in servers]))
         InstallerJob().parallel_install(servers, params)
         if self.product in ["couchbase", "couchbase-server", "cb"]:
             success = True
@@ -320,7 +320,7 @@ class NewUpgradeBaseTest(BaseTestCase):
                 self.sleep(3, "Pause to load all items")
                 self.assertEqual(self.num_items * (self.num_replicas + 1), drain_rate,
                                  "Persistence is stopped, drain rate is incorrect %s. Expected %s" % (
-                                    drain_rate, self.num_items * (self.num_replicas + 1)))
+                                     drain_rate, self.num_items * (self.num_replicas + 1)))
         self.change_settings()
 
     def _get_build(self, server, version, remote, is_amazon=False, info=None):
@@ -333,28 +333,30 @@ class NewUpgradeBaseTest(BaseTestCase):
             elif version[:5] in COUCHBASE_MP_VERSION:
                 build_repo = MV_LATESTBUILD_REPO
         builds, changes = BuildQuery().get_all_builds(version=version, timeout=self.wait_timeout * 5, \
-                    deliverable_type=info.deliverable_type, architecture_type=info.architecture_type, \
-                    edition_type="couchbase-server-enterprise", repo=build_repo, \
-                    distribution_version=info.distribution_version.lower())
+                                                      deliverable_type=info.deliverable_type,
+                                                      architecture_type=info.architecture_type, \
+                                                      edition_type="couchbase-server-enterprise", repo=build_repo, \
+                                                      distribution_version=info.distribution_version.lower())
         self.log.info("finding build %s for machine %s" % (version, server))
 
         if re.match(r'[1-9].[0-9].[0-9]-[0-9]+$', version):
             version = version + "-rel"
         if version[:5] in self.released_versions:
-            appropriate_build = BuildQuery().\
+            appropriate_build = BuildQuery(). \
                 find_couchbase_release_build('%s-enterprise' % (self.product),
-                                           info.deliverable_type,
-                                           info.architecture_type,
-                                           version.strip(),
-                                           is_amazon=is_amazon,
-                                           os_version=info.distribution_version)
+                                             info.deliverable_type,
+                                             info.architecture_type,
+                                             version.strip(),
+                                             is_amazon=is_amazon,
+                                             os_version=info.distribution_version)
         else:
-             appropriate_build = BuildQuery().\
+            appropriate_build = BuildQuery(). \
                 find_build(builds, '%s-enterprise' % (self.product), info.deliverable_type,
-                                   info.architecture_type, version.strip())
+                           info.architecture_type, version.strip())
 
         if appropriate_build is None:
-            self.log.info("builds are: %s \n. Remote is %s, %s. Result is: %s" % (builds, remote.ip, remote.username, version))
+            self.log.info(
+                "builds are: %s \n. Remote is %s, %s. Result is: %s" % (builds, remote.ip, remote.username, version))
             raise Exception("Build %s for machine %s is not found" % (version, server))
         return appropriate_build
 
@@ -364,10 +366,10 @@ class NewUpgradeBaseTest(BaseTestCase):
             remote = RemoteMachineShellConnection(server)
             appropriate_build = self._get_build(server, upgrade_version, remote, info=info)
             self.assertTrue(appropriate_build.url,
-                             msg="unable to find build {0}"\
-                             .format(upgrade_version))
+                            msg="unable to find build {0}" \
+                            .format(upgrade_version))
             self.assertTrue(remote.download_build(appropriate_build),
-                             "Build wasn't downloaded!")
+                            "Build wasn't downloaded!")
             o, e = remote.couchbase_upgrade(appropriate_build,
                                             save_upgrade_config=False,
                                             forcefully=self.is_downgrade,
@@ -384,7 +386,8 @@ class NewUpgradeBaseTest(BaseTestCase):
             if self.is_linux:
                 self.wait_node_restarted(server, wait_time=testconstants.NS_SERVER_TIMEOUT * 4, wait_if_warmup=True)
             else:
-                self.wait_node_restarted(server, wait_time=testconstants.NS_SERVER_TIMEOUT * 10, wait_if_warmup=True, check_service=True)
+                self.wait_node_restarted(server, wait_time=testconstants.NS_SERVER_TIMEOUT * 10, wait_if_warmup=True,
+                                         check_service=True)
             if not skip_init:
                 self.rest.init_cluster(self.rest_settings.rest_username, self.rest_settings.rest_password)
             self.sleep(self.sleep_time)
@@ -434,7 +437,7 @@ class NewUpgradeBaseTest(BaseTestCase):
                 self.assertEqual("%s:%s" % (server.hostname, server.port), new_hostname,
                                  "Hostname is incorrect for server %s. Settings are %s" % (server.ip, new_hostname))
         if self.master.ip != self.rest.ip or \
-           self.master.ip == self.rest.ip and str(self.master.port) != str(self.rest.port):
+                self.master.ip == self.rest.ip and str(self.master.port) != str(self.rest.port):
             if self.port:
                 self.master.port = self.port
             self.rest = RestConnection(self.master)
@@ -470,13 +473,13 @@ class NewUpgradeBaseTest(BaseTestCase):
                 self.fail("email_password should be empty for security")
         if "autocompaction" in self.input.test_params:
             cluster_status = self.rest.cluster_status()
-            if cluster_status["autoCompactionSettings"]["viewFragmentationThreshold"]\
-                             ["percentage"] != self.input.param("autocompaction", 50):
-                    self.log.info("Cluster status: {0}".format(cluster_status))
-                    self.fail("autocompaction settings weren't saved")
+            if cluster_status["autoCompactionSettings"]["viewFragmentationThreshold"] \
+                    ["percentage"] != self.input.param("autocompaction", 50):
+                self.log.info("Cluster status: {0}".format(cluster_status))
+                self.fail("autocompaction settings weren't saved")
 
     def verify_all_queries(self, queue=None):
-        query = {"connectionTimeout" : 60000}
+        query = {"connectionTimeout": 60000}
         expected_rows = self.num_items
         if self.max_verify:
             expected_rows = self.max_verify
@@ -489,10 +492,10 @@ class NewUpgradeBaseTest(BaseTestCase):
                 prefix = ("", "dev_")[ddoc.views[0].dev_view]
                 try:
                     self.perform_verify_queries(len(ddoc.views), prefix, ddoc.name,
-                                                              query, bucket=bucket,
-                                                   wait_time=self.wait_timeout * 5,
-                                                       expected_rows=expected_rows,
-                                                                     retry_time=10)
+                                                query, bucket=bucket,
+                                                wait_time=self.wait_timeout * 5,
+                                                expected_rows=expected_rows,
+                                                retry_time=10)
                 except Exception as e:
                     print(e)
                     if queue is not None:
@@ -510,7 +513,7 @@ class NewUpgradeBaseTest(BaseTestCase):
             status &= self.rest.set_alerts_settings('couchbase@localhost', 'root@localhost', 'user', 'pwd')
         if "autocompaction" in self.input.test_params:
             tmp, _, _ = self.rest.set_auto_compaction(viewFragmntThresholdPercentage=
-                                     self.input.param("autocompaction", 50))
+                                                      self.input.param("autocompaction", 50))
             status &= tmp
             if not status:
                 self.fail("some settings were not set correctly!")
@@ -531,7 +534,7 @@ class NewUpgradeBaseTest(BaseTestCase):
 
     def start_index(self):
         if self.ddocs:
-            query = {"connectionTimeout" : 60000}
+            query = {"connectionTimeout": 60000}
             for bucket in self.buckets:
                 for ddoc in self.ddocs:
                     prefix = ("", "dev_")[ddoc.views[0].dev_view]
@@ -541,7 +544,7 @@ class NewUpgradeBaseTest(BaseTestCase):
         rest = RestConnection(self.master)
         nodes = rest.node_statuses()
         nodes = [node for node in nodes
-                if node.ip != self.master.ip or str(node.port) != self.master.port]
+                 if node.ip != self.master.ip or str(node.port) != self.master.port]
         self.failover_node = nodes[0]
         rest.fail_over(self.failover_node.id)
 
@@ -555,13 +558,13 @@ class NewUpgradeBaseTest(BaseTestCase):
             if int(self.ddocs_num) > 0:
                 for i in range(int(self.ddocs_num)):
                     views = self.make_default_views(self.default_view_name,
-                            self.view_num, self.is_dev_ddoc, different_map=True)
+                                                    self.view_num, self.is_dev_ddoc, different_map=True)
                     ddoc = DesignDocument(self.default_view_name + str(i), views)
                     self.ddocs.append(ddoc)
                     for view in views:
                         try:
                             self.cluster.create_view(self.master, ddoc.name, view,
-                                                                   bucket=bucket)
+                                                     bucket=bucket)
                         except Exception as e:
                             print(e)
                             if queue is not None:
@@ -585,7 +588,7 @@ class NewUpgradeBaseTest(BaseTestCase):
             if bucket.type == 'memcached':
                 continue
             ready = BucketOperationHelper.wait_for_memcached(self.master,
-                                                          bucket.name)
+                                                             bucket.name)
             self.assertTrue(ready, "wait_for_memcached failed")
             client = VBucketAwareMemcached(RestConnection(self.master), bucket)
             valid_keys, deleted_keys = bucket.kvs[1].key_set()
@@ -616,7 +619,8 @@ class NewUpgradeBaseTest(BaseTestCase):
                 if self.is_linux:
                     self.wait_node_restarted(server, wait_time=testconstants.NS_SERVER_TIMEOUT * 4, wait_if_warmup=True)
                 else:
-                    self.wait_node_restarted(server, wait_time=testconstants.NS_SERVER_TIMEOUT * 10, wait_if_warmup=True, check_service=True)
+                    self.wait_node_restarted(server, wait_time=testconstants.NS_SERVER_TIMEOUT * 10,
+                                             wait_if_warmup=True, check_service=True)
             except Exception as e:
                 print(traceback.extract_stack())
                 if queue is not None:
@@ -632,15 +636,15 @@ class NewUpgradeBaseTest(BaseTestCase):
         out_servers = set(old_vbs) - set(new_vbs)
         in_servers = set(new_vbs) - set(old_vbs)
         self.assertEqual(len(out_servers), len(in_servers),
-                        "Seems like it wasn't swap rebalance. Out %s, in %s" % (
-                                                len(out_servers), len(in_servers)))
+                         "Seems like it wasn't swap rebalance. Out %s, in %s" % (
+                             len(out_servers), len(in_servers)))
         for vb_type in ["active_vb", "replica_vb"]:
             self.log.info("Checking %s on nodes that remain in cluster..." % vb_type)
             for server, stats in old_vbs.items():
                 if server in new_vbs:
                     self.assertTrue(sorted(stats[vb_type]) == sorted(new_vbs[server][vb_type]),
-                    "Server %s Seems like %s vbuckets were shuffled, old vbs is %s, new are %s" %(
-                                    server.ip, vb_type, stats[vb_type], new_vbs[server][vb_type]))
+                                    "Server %s Seems like %s vbuckets were shuffled, old vbs is %s, new are %s" % (
+                                        server.ip, vb_type, stats[vb_type], new_vbs[server][vb_type]))
             self.log.info("%s vbuckets were not suffled" % vb_type)
             self.log.info("Checking in-out nodes...")
             vbs_servs_out = vbs_servs_in = []
@@ -661,27 +665,27 @@ class NewUpgradeBaseTest(BaseTestCase):
         else:
             upgrade_version = self.input.param('upgrade_version', '')[:5]
         if self.input.param('initial_version', '')[:5] in COUCHBASE_VERSION_2 and \
-                                       (upgrade_version in COUCHBASE_VERSION_3 or \
-                                        upgrade_version in SHERLOCK_VERSION):
+                (upgrade_version in COUCHBASE_VERSION_3 or \
+                 upgrade_version in SHERLOCK_VERSION):
             if int(self.initial_vbuckets) >= 512:
                 if self.master.ip != self.rest.ip or \
-                   self.master.ip == self.rest.ip and \
-                   str(self.master.port) != str(self.rest.port):
+                        self.master.ip == self.rest.ip and \
+                        str(self.master.port) != str(self.rest.port):
                     if self.port:
                         self.master.port = self.port
                     self.rest = RestConnection(self.master)
                     self.rest_helper = RestHelper(self.rest)
                 if self.rest._rebalance_progress_status() == 'running':
-                    self.log.info("Start monitoring DCP upgrade from {0} to {1}"\
-                           .format(self.input.param('initial_version', '')[:5], \
-                                                                 upgrade_version))
+                    self.log.info("Start monitoring DCP upgrade from {0} to {1}" \
+                                  .format(self.input.param('initial_version', '')[:5], \
+                                          upgrade_version))
                     status = self.rest.monitorRebalance()
                     if status:
                         self.log.info("Done DCP rebalance upgrade!")
                     else:
                         self.fail("Failed DCP rebalance upgrade")
-                elif any ("DCP upgrade completed successfully.\n" \
-                                    in list(d.values()) for d in self.rest.get_logs(10)):
+                elif any("DCP upgrade completed successfully.\n" \
+                         in list(d.values()) for d in self.rest.get_logs(10)):
                     self.log.info("DCP upgrade is completed")
                 else:
                     self.fail("DCP reabalance upgrade is not running")
@@ -699,7 +703,7 @@ class NewUpgradeBaseTest(BaseTestCase):
             stoped_nodes = self.servers[:self.nodes_init]
             for upgrade_version in self.upgrade_versions:
                 self.sleep(self.sleep_time, "Pre-setup of old version is done. "
-                        " Wait for upgrade to {0} version".format(upgrade_version))
+                                            " Wait for upgrade to {0} version".format(upgrade_version))
                 for server in stoped_nodes:
                     remote = RemoteMachineShellConnection(server)
                     remote.stop_server()
@@ -729,10 +733,10 @@ class NewUpgradeBaseTest(BaseTestCase):
             total_nodes = len(upgrade_nodes)
             for server in upgrade_nodes:
                 self.rest.fail_over('ns_1@' + upgrade_nodes[total_nodes - 1].ip,
-                                                                  graceful=True)
+                                    graceful=True)
                 self.sleep(timeout=60)
                 self.rest.set_recovery_type('ns_1@' + upgrade_nodes[total_nodes - 1].ip,
-                                                                                 "full")
+                                            "full")
                 output, error = self._upgrade(upgrade_version,
                                               upgrade_nodes[total_nodes - 1],
                                               fts_query_limit=10000000)
@@ -748,16 +752,16 @@ class NewUpgradeBaseTest(BaseTestCase):
 
     def dcp_rebalance_in_offline_upgrade_from_version2(self):
         if self.input.param('initial_version', '')[:5] in COUCHBASE_VERSION_2 and \
-           (self.input.param('upgrade_version', '')[:5] in COUCHBASE_VERSION_3 or \
-            self.input.param('upgrade_version', '')[:5] in SHERLOCK_VERSION) and \
-            self.input.param('num_stoped_nodes', self.nodes_init) >= self.nodes_init:
+                (self.input.param('upgrade_version', '')[:5] in COUCHBASE_VERSION_3 or \
+                 self.input.param('upgrade_version', '')[:5] in SHERLOCK_VERSION) and \
+                self.input.param('num_stoped_nodes', self.nodes_init) >= self.nodes_init:
             otpNodes = []
             nodes = self.rest.node_statuses()
             for node in nodes:
                 otpNodes.append(node.id)
-            self.log.info("Start DCP rebalance after complete offline upgrade from {0} to {1}"\
-                           .format(self.input.param('initial_version', '')[:5], \
-                                   self.input.param('upgrade_version', '')[:5]))
+            self.log.info("Start DCP rebalance after complete offline upgrade from {0} to {1}" \
+                          .format(self.input.param('initial_version', '')[:5], \
+                                  self.input.param('upgrade_version', '')[:5]))
             self.rest.rebalance(otpNodes, [])
             """ verify DCP upgrade in 3.0.0 version """
             self.monitor_dcp_rebalance()
@@ -769,50 +773,52 @@ class NewUpgradeBaseTest(BaseTestCase):
         self.generate_map_nodes_out_dist()
 
     """ subdoc base test starts here """
+
     def generate_json_for_nesting(self):
         json = {
-            "not_tested_integer_zero":0,
-            "not_tested_integer_big":1038383839293939383938393,
-            "not_tested_double_zero":0.0,
-            "not_tested_integer":1,
-            "not_tested_integer_negative":-1,
-            "not_tested_double":1.1,
-            "not_tested_double_negative":-1.1,
-            "not_tested_float":2.99792458e8,
-            "not_tested_float_negative":-2.99792458e8,
-            "not_tested_array_numbers_integer" : [1, 2, 3, 4, 5],
-            "not_tested_array_numbers_double" : [1.1, 2.2, 3.3, 4.4, 5.5],
-            "not_tested_array_numbers_float" : [2.99792458e8, 2.99792458e8, 2.99792458e8],
-            "not_tested_array_numbers_mix" : [0, 2.99792458e8, 1.1],
-            "not_tested_array_array_mix" : [[2.99792458e8, 2.99792458e8, 2.99792458e8], [0, 2.99792458e8, 1.1], [], [0, 0, 0]],
-            "not_tested_simple_string_lower_case":"abcdefghijklmnoprestuvxyz",
-            "not_tested_simple_string_upper_case":"ABCDEFGHIJKLMNOPQRSTUVWXZYZ",
-            "not_tested_simple_string_empty":"",
-            "not_tested_simple_string_datetime":"2012-10-03 15:35:46.461491",
-            "not_tested_simple_string_special_chars":"_-+!#@$%&*(){}\][;.,<>?/",
-            "not_test_json" : { "not_to_bes_tested_string_field1": "not_to_bes_tested_string"}
+            "not_tested_integer_zero": 0,
+            "not_tested_integer_big": 1038383839293939383938393,
+            "not_tested_double_zero": 0.0,
+            "not_tested_integer": 1,
+            "not_tested_integer_negative": -1,
+            "not_tested_double": 1.1,
+            "not_tested_double_negative": -1.1,
+            "not_tested_float": 2.99792458e8,
+            "not_tested_float_negative": -2.99792458e8,
+            "not_tested_array_numbers_integer": [1, 2, 3, 4, 5],
+            "not_tested_array_numbers_double": [1.1, 2.2, 3.3, 4.4, 5.5],
+            "not_tested_array_numbers_float": [2.99792458e8, 2.99792458e8, 2.99792458e8],
+            "not_tested_array_numbers_mix": [0, 2.99792458e8, 1.1],
+            "not_tested_array_array_mix": [[2.99792458e8, 2.99792458e8, 2.99792458e8], [0, 2.99792458e8, 1.1], [],
+                                           [0, 0, 0]],
+            "not_tested_simple_string_lower_case": "abcdefghijklmnoprestuvxyz",
+            "not_tested_simple_string_upper_case": "ABCDEFGHIJKLMNOPQRSTUVWXZYZ",
+            "not_tested_simple_string_empty": "",
+            "not_tested_simple_string_datetime": "2012-10-03 15:35:46.461491",
+            "not_tested_simple_string_special_chars": r"_-+!#@$%&*(){}\][;.,<>?/",
+            "not_test_json": {"not_to_bes_tested_string_field1": "not_to_bes_tested_string"}
         }
         return json
 
     def generate_simple_data_null(self):
         json = {
-            "null":None,
-            "null_array":[None, None]
+            "null": None,
+            "null_array": [None, None]
         }
         return json
 
     def generate_simple_data_boolean(self):
         json = {
-            "true":True,
-            "false":False,
-            "array":[True, False, True, False]
+            "true": True,
+            "false": False,
+            "array": [True, False, True, False]
         }
         return json
 
     def generate_nested_json(self):
         json_data = self.generate_json_for_nesting()
         json = {
-            "json_1": { "json_2": {"json_3":json_data}}
+            "json_1": {"json_2": {"json_3": json_data}}
         }
         return json
 
@@ -835,15 +841,16 @@ class NewUpgradeBaseTest(BaseTestCase):
         if self.use_sdk_client:
             try:
                 scheme = "couchbase"
-                host=self.master.ip
+                host = self.master.ip
                 if self.master.ip == "127.0.0.1":
                     scheme = "http"
-                    host="{0}:{1}".format(self.master.ip, self.master.port)
-                return SDKClient(scheme=scheme, hosts = [host], bucket = bucket.name)
+                    host = "{0}:{1}".format(self.master.ip, self.master.port)
+                return SDKClient(scheme=scheme, hosts=[host], bucket=bucket.name)
             except Exception as ex:
                 self.log.info("cannot load sdk client due to error {0}".format(str(ex)))
         # USE MC BIN CLIENT WHEN NOT USING SDK CLIENT
-        return self.direct_mc_bin_client(server, bucket, timeout= timeout)
+        return self.direct_mc_bin_client(server, bucket, timeout=timeout)
+
     """ subdoc base test ends here """
 
     def construct_plan_params(self):
@@ -896,17 +903,17 @@ class NewUpgradeBaseTest(BaseTestCase):
                 isShuffle = True
             if self.dataset != "bigdata":
                 gen_docs_map[key] = method(docs_per_day=self.ops_dist_map[key]["end"],
-                    start=self.ops_dist_map[key]["start"])
+                                           start=self.ops_dist_map[key]["start"])
             else:
                 gen_docs_map[key] = method(value_size=self.value_size,
-                    end=self.ops_dist_map[key]["end"],
-                    start=self.ops_dist_map[key]["start"])
+                                           end=self.ops_dist_map[key]["end"],
+                                           start=self.ops_dist_map[key]["start"])
         return gen_docs_map
 
     def _convert_server_map(self, servers):
         map = {}
         for server in servers:
-            key  = self._gen_server_key(server)
+            key = self._gen_server_key(server)
             map[key] = server
         return map
 
@@ -929,14 +936,14 @@ class NewUpgradeBaseTest(BaseTestCase):
             self.fail("There is no dataset %s, please enter a valid one" % self.dataset)
 
     def create_save_function_body_test(self, appname, appcode, description="Sample Description",
-                                  checkpoint_interval=10000, cleanup_timers=False,
-                                  dcp_stream_boundary="everything", deployment_status=True,
-                                  skip_timer_threshold=86400,
-                                  sock_batch_size=1, tick_duration=60000, timer_processing_tick_interval=500,
-                                  timer_worker_pool_size=3, worker_count=3, processing_status=True,
-                                  cpp_worker_thread_count=1, multi_dst_bucket=False, execution_timeout=3,
-                                  data_chan_size=10000, worker_queue_cap=100000, deadline_timeout=6
-                                  ):
+                                       checkpoint_interval=10000, cleanup_timers=False,
+                                       dcp_stream_boundary="everything", deployment_status=True,
+                                       skip_timer_threshold=86400,
+                                       sock_batch_size=1, tick_duration=60000, timer_processing_tick_interval=500,
+                                       timer_worker_pool_size=3, worker_count=3, processing_status=True,
+                                       cpp_worker_thread_count=1, multi_dst_bucket=False, execution_timeout=3,
+                                       data_chan_size=10000, worker_queue_cap=100000, deadline_timeout=6
+                                       ):
         body = {}
         body['appname'] = appname
         script_dir = os.path.dirname(__file__)
@@ -987,7 +994,7 @@ class NewUpgradeBaseTest(BaseTestCase):
             shutil.rmtree(bk_file_events_dir)
         os.makedirs(bk_file_events_dir)
         self.log.info("copy eventing definition from remote to local")
-        shell.copy_file_remote_to_local(backup_path+events_file_name,
+        shell.copy_file_remote_to_local(backup_path + events_file_name,
                                         bk_file_events_path)
         local_bk_def = open(bk_file_events_path)
         bk_file_fxn = json.loads(local_bk_def.read())
@@ -1165,6 +1172,7 @@ class NewUpgradeBaseTest(BaseTestCase):
             queue.put(True)
 
     """ Use n1ql callable to create, query n1ql """
+
     def create_n1ql_index_and_query(self, queue=None):
         """
         Call this before upgrade
@@ -1181,7 +1189,7 @@ class NewUpgradeBaseTest(BaseTestCase):
                 result = n1ql_obj.run_n1ql_query("select * from system:indexes")
                 n1ql_obj.drop_gsi_index(keyspace=bucket.name, name="test_idx1",
                                         is_primary=False)
-            #return self.n1ql_obj
+            # return self.n1ql_obj
         except Exception as ex:
             print(ex)
             if queue is not None:
@@ -1202,8 +1210,9 @@ class NewUpgradeBaseTest(BaseTestCase):
             queue.put(True)
 
     """ for cbas test """
+
     def load_sample_buckets(self, servers=None, bucketName=None, total_items=None,
-                                                                        rest=None):
+                            rest=None):
         """ Load the specified sample bucket in Couchbase """
         self.assertTrue(rest.load_sample(bucketName),
                         "Failure while loading sample bucket: {0}".format(bucketName))
@@ -1221,11 +1230,11 @@ class NewUpgradeBaseTest(BaseTestCase):
                     for server in servers:
                         num_actual += self.get_item_count(server, bucketName)
                 if int(num_actual) == total_items:
-                    self.log.info("{0} items are loaded in the {1} bucket"\
-                                           .format(num_actual, bucketName))
+                    self.log.info("{0} items are loaded in the {1} bucket" \
+                                  .format(num_actual, bucketName))
                     break
-                self.log.info("{0} items are loaded in the {1} bucket"\
-                                        .format(num_actual, bucketName))
+                self.log.info("{0} items are loaded in the {1} bucket" \
+                              .format(num_actual, bucketName))
             if int(num_actual) != total_items:
                 return False
         else:
@@ -1272,24 +1281,24 @@ class NewUpgradeBaseTest(BaseTestCase):
     def create_bucket_on_cbas(self, cbas_bucket_name, cb_bucket_name,
                               cb_server_ip=None,
                               validate_error_msg=False,
-                              username = None, password = None):
+                              username=None, password=None):
         """
         Creates a bucket on CBAS
         """
         if cb_server_ip:
             cmd_create_bucket = "create bucket " + cbas_bucket_name + \
-                              " with {\"name\":\"" + cb_bucket_name + \
-                              "\",\"nodes\":\"" + cb_server_ip + "\"};"
+                                " with {\"name\":\"" + cb_bucket_name + \
+                                "\",\"nodes\":\"" + cb_server_ip + "\"};"
         else:
             '''DP3 doesn't need to specify cb server ip as cbas node is
                part of the cluster.
             '''
             cmd_create_bucket = "create bucket " + cbas_bucket_name + \
-                            " with {\"name\":\"" + cb_bucket_name + "\"};"
+                                " with {\"name\":\"" + cb_bucket_name + "\"};"
         status, metrics, errors, results, _ = \
-                   self.execute_statement_on_cbas_via_rest(cmd_create_bucket,
-                                                           username=username,
-                                                           password=password)
+            self.execute_statement_on_cbas_via_rest(cmd_create_bucket,
+                                                    username=username,
+                                                    password=password)
 
         if validate_error_msg:
             return self.validate_error_in_response(status, errors)
@@ -1300,22 +1309,22 @@ class NewUpgradeBaseTest(BaseTestCase):
                 return True
 
     def create_dataset_on_bucket(self, cbas_bucket_name, cbas_dataset_name,
-                                 where_field=None, where_value = None,
-                                 validate_error_msg=False, username = None,
-                                 password = None):
+                                 where_field=None, where_value=None,
+                                 validate_error_msg=False, username=None,
+                                 password=None):
         """
         Creates a shadow dataset on a CBAS bucket
         """
         cmd_create_dataset = "create shadow dataset {0} on {1};".format(
-                                     cbas_dataset_name, cbas_bucket_name)
+            cbas_dataset_name, cbas_bucket_name)
         if where_field and where_value:
-            cmd_create_dataset = "create shadow dataset {0} on {1} WHERE `{2}`=\"{3}\";"\
-                                              .format(cbas_dataset_name, cbas_bucket_name,
-                                                      where_field, where_value)
+            cmd_create_dataset = "create shadow dataset {0} on {1} WHERE `{2}`=\"{3}\";" \
+                .format(cbas_dataset_name, cbas_bucket_name,
+                        where_field, where_value)
         status, metrics, errors, results, _ = \
-                        self.execute_statement_on_cbas_via_rest(cmd_create_dataset,
-                                                                username=username,
-                                                                password=password)
+            self.execute_statement_on_cbas_via_rest(cmd_create_dataset,
+                                                    username=username,
+                                                    password=password)
         if validate_error_msg:
             return self.validate_error_in_response(status, errors)
         else:

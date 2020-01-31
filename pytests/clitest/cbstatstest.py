@@ -43,7 +43,7 @@ class cbstatsTests(CliBaseTest):
                     output, error = self.shell.execute_cbstats(bucket, self.command)
                     self.verify_results(output, error)
                     if self.command in ["allocator", "kvtimings", "timings"]:
-                        self.log.warn("We will not verify exact values for this stat")
+                        self.log.warning("We will not verify exact values for this stat")
                     else:
                         self._verify_direct_client_stats(bucket, self.command, output)
         else:
@@ -173,7 +173,7 @@ class cbstatsTests(CliBaseTest):
             else:
                 if stats[0].find('tcmalloc') != -1 or stats[0].find('bytes') != -1 or\
                 stats[0].find('mem_used') != -1:
-                    self.log.warn("Stat didn't match, but it can be changed, not a bug")
+                    self.log.warning("Stat didn't match, but it can be changed, not a bug")
                     continue
                 raise Exception("Command does not throw out error message \
                                  but cbstats does not match.")

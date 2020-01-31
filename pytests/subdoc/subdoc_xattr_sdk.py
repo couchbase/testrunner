@@ -1490,7 +1490,7 @@ class XattrImportExportTests(ImportExportTests, SubdocBaseTest):
                     if sorted(samples) == sorted(exports):
                         self.log.info("export and sample json match")
                     else:
-                        self.log.warn(sorted(exports))
+                        self.log.warning(sorted(exports))
                         self.fail("export and sample json does not match")
                     sample_file.close()
                     export_file.close()

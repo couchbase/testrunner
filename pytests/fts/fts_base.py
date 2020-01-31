@@ -3199,7 +3199,7 @@ class FTSBaseTest(unittest.TestCase):
 
         try:
             if self.__is_cleanup_not_needed():
-                self.log.warn("CLEANUP WAS SKIPPED")
+                self.log.warning("CLEANUP WAS SKIPPED")
                 return
             self.log.info(
                 "====  FTSbasetests cleanup is started for test #{0} {1} ===="
@@ -4137,13 +4137,14 @@ class FTSBaseTest(unittest.TestCase):
 
     def get_zap_docvalue_disksize(self):
         shell = RemoteMachineShellConnection(self._cb_cluster.get_random_fts_node())
-        command = "cd /opt/couchbase/var/lib/couchbase/data/\@fts; find . -name \"*.zap\"|  sort -n | tail -1 | xargs -I {} sh -c \"/opt/couchbase/bin/cbft-bleve zap docvalue {} | tail -1\""
+        command = 'cd /opt/couchbase/var/lib/couchbase/data/\\@fts; find . -name "*.zap"|  sort -n | ' \
+                  'tail -1 | xargs -I {} sh -c "/opt/couchbase/bin/cbft-bleve zap docvalue {} | tail -1"'
         output, error = shell.execute_command(command)
         if error and "remoteClients registered for tls config updates" not in error[0]:
             self.fail("error running command : {0} , error : {1}".format(command, error))
         self.log.info(output)
-        self.log.info(re.findall("\d+\.\d+", output[0]))
-        return re.findall("\d+\.\d+", output[0])[0]
+        self.log.info(re.findall(r"\d+\.\d+", output[0]))
+        return re.findall(r"\d+\.\d+", output[0])[0]
 
     def create_geo_index_and_load(self):
         """

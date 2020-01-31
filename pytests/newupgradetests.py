@@ -2313,7 +2313,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                     break
                 self.sleep(2)
             if i == 19 and "rebalancetoken" not in output:
-                self.log.warn(
+                self.log.warning(
                     "rebalancetoken was not returned by /listRebalanceTokens during gsi rebalance")
             reached = RestHelper(self.rest).rebalance_reached()
             self.assertTrue(reached,

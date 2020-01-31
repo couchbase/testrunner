@@ -127,7 +127,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
                 break
             self.sleep(2)
         if i == 19 and "rebalancetoken" not in output:
-            self.log.warn("rebalancetoken was not returned by /listRebalanceTokens during gsi rebalance")
+            self.log.warning("rebalancetoken was not returned by /listRebalanceTokens during gsi rebalance")
         self.run_async_index_operations(operation_type="query")
         reached = RestHelper(self.rest).rebalance_reached()
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")

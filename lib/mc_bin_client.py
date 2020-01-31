@@ -319,7 +319,7 @@ class MemcachedClient(object):
         self._set_vbucket(key, vbucket, collection=collection)
         return self.__incrdecr(memcacheConstants.CMD_DECR, key, amt, init, exp, collection)
 
-    def set(self, key, exp, flags, val, vbucket= -1, collection=None):
+    def set(self, key, exp, flags, val, vbucket=-1, collection=None):
         """Set a value in the memcached server."""
         collection = self.collection_name(collection)
         self._set_vbucket(key, vbucket, collection=collection)
@@ -923,8 +923,8 @@ class MemcachedClient(object):
         """Reset the replication chain."""
         return self._doCmd(memcacheConstants.CMD_RESET_REPLICATION_CHAIN, '', '', '', 0)
 
-    def _set_vbucket(self, key, vbucket= -1, collection=None):
-        if vbucket < 0:
+    def _set_vbucket(self, key, vbucket=-1, collection=None):
+        if not vbucket or vbucket < 0:
             self.vbucketId = (((zlib.crc32(key.encode())) >> 16) & 0x7fff) & (self.vbucket_count - 1)
         else:
             self.vbucketId = vbucket

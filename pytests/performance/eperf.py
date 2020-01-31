@@ -246,7 +246,7 @@ class EPerfMaster(perf.PerfBase):
                 file = gzip.open("{0}.{1}.json.gz".format(i, type), 'rb')
                 break
             except IOError:
-                self.log.warn("cannot open file {0}.{1}.json.gz".format(i, type))
+                self.log.warning("cannot open file {0}.{1}.json.gz".format(i, type))
                 i += 1
 
         if file is None:
@@ -274,7 +274,7 @@ class EPerfMaster(perf.PerfBase):
             except IOError:
                 # cannot find stats produced by this client, check stats
                 # collection. the results might be incomplete.
-                self.log.warn("cannot open file: {0}.{1}.json.gz".format(i, type))
+                self.log.warning("cannot open file: {0}.{1}.json.gz".format(i, type))
                 continue
 
             dict = file.read()
@@ -598,7 +598,7 @@ class EPerfMaster(perf.PerfBase):
         """
         stack = self.cur.get('hot-stack', None)
         if not stack:
-            self.log.warn("unable to clear hot stack : stack does not exist")
+            self.log.warning("unable to clear hot stack : stack does not exist")
             return False
 
         stack.clear()
@@ -865,7 +865,7 @@ class EPerfMaster(perf.PerfBase):
             self.warmup_phase()
             return
 
-        self.log.warn("unable to find snapshot file, rerun the test")
+        self.log.warning("unable to find snapshot file, rerun the test")
         self.test_eperf_mixed(save_snapshot=True)
 
     @multi_buckets
@@ -1085,7 +1085,7 @@ class EPerfMaster(perf.PerfBase):
         try:
             time.sleep(self.parami('sleep_time', 3600))
         except KeyboardInterrupt:
-            self.log.warn("ctats collection was interrupted")
+            self.log.warning("ctats collection was interrupted")
 
         end_time = time.time()
 
@@ -1170,7 +1170,7 @@ class EPerfClient(EPerfMaster):
 
     def init_seriesly(self, host, db):
         if not Seriesly:
-            self.log.warn("unable to initialize seriesly: library not installed")
+            self.log.warning("unable to initialize seriesly: library not installed")
             return False
 
         if self.seriesly:

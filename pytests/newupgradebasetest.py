@@ -133,9 +133,9 @@ class NewUpgradeBaseTest(QueryHelperTests, EventingBaseTest, FTSBaseTest):
         self.upgrade_servers = []
         if self.initial_build_type == "community" and self.upgrade_build_type == "enterprise":
             if self.initial_version != self.upgrade_versions:
-                self.log.warn(
+                self.log.warning(
                     "we can't upgrade from couchbase CE to EE with a different version,defaulting to initial_version")
-                self.log.warn("http://developer.couchbase.com/documentation/server/4.0/install/upgrading.html")
+                self.log.warning("http://developer.couchbase.com/documentation/server/4.0/install/upgrading.html")
                 self.upgrade_versions = self.input.param('initial_version', '4.1.0-4963')
                 self.upgrade_versions = self.upgrade_versions.split(";")
         self.fts_obj = None
@@ -150,13 +150,13 @@ class NewUpgradeBaseTest(QueryHelperTests, EventingBaseTest, FTSBaseTest):
                                  (hasattr(self, '_exc_info') and \
                                   self._exc_info()[1] is not None)
         if test_failed and self.skip_cleanup:
-                self.log.warn("CLEANUP WAS SKIPPED DUE TO FAILURES IN UPGRADE TEST")
+                self.log.warning("CLEANUP WAS SKIPPED DUE TO FAILURES IN UPGRADE TEST")
                 self.cluster.shutdown(force=True)
                 self.log.info("Test Input params were:")
                 pprint(self.input.test_params)
 
                 if self.input.param('BUGS', False):
-                    self.log.warn("Test failed. Possible reason is: {0}"
+                    self.log.warning("Test failed. Possible reason is: {0}"
                                            .format(self.input.param('BUGS', False)))
         else:
             if not hasattr(self, 'rest'):

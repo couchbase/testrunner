@@ -2704,10 +2704,10 @@ class XDCRNewBaseTest(unittest.TestCase):
                     RbacBase().remove_user_role(role_del,
                                                 RestConnection(self.get_cb_cluster_by_name('C' + str(i)).get_master_node()))
             except Exception as e:
-                self.log.warn(e)
+                self.log.warning(e)
         try:
             if self.__is_cleanup_needed() or self._input.param("skip_cleanup", False):
-                self.log.warn("CLEANUP WAS SKIPPED")
+                self.log.warning("CLEANUP WAS SKIPPED")
                 return
             self.log.info(
                 "====  XDCRNewbasetests cleanup is started for test #{0} {1} ===="
@@ -3585,7 +3585,7 @@ class XDCRNewBaseTest(unittest.TestCase):
                             _count1 = rest1.fetch_bucket_stats(bucket=bucket.name, zoom=fetch_bucket_stats_by)["op"]["samples"]["curr_items"][-1]
                             _count2 = rest2.fetch_bucket_stats(bucket=bucket.name, zoom=fetch_bucket_stats_by)["op"]["samples"]["curr_items"][-1]
                         except Exception as e:
-                            self.log.warn(e)
+                            self.log.warning(e)
                             self.log.info("Trying other method to fetch bucket current items")
                             bucket_info1 = rest1.get_bucket_json(bucket.name)
                             nodes = bucket_info1["nodes"]
@@ -3820,7 +3820,7 @@ class XDCRNewBaseTest(unittest.TestCase):
                 shell.disconnect()
                 return
             else:
-                self.log.warn("couchbase service is not running. {0}".format(output))
+                self.log.warning("couchbase service is not running. {0}".format(output))
                 self.sleep(10)
         shell.disconnect()
         self.fail("Couchbase service is not running after {0} seconds".format(wait_time))

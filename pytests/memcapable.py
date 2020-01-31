@@ -926,7 +926,7 @@ class WarmUpMemcachedTest(unittest.TestCase):
                 stats = self.onenodemc.stats()
                 present_count = int(stats["curr_items"])
                 ep_warmup_thread = stats["ep_warmup_thread"]
-                self.log.warn("curr_items {0}, ep_warmup_thread {1}".format(present_count, ep_warmup_thread))
+                self.log.warning("curr_items {0}, ep_warmup_thread {1}".format(present_count, ep_warmup_thread))
                 time.sleep(1)
             else:
                 self.fail("Timed out waiting for warmup")

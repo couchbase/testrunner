@@ -804,7 +804,7 @@ class PerfBase(unittest.TestCase):
     def rebalance_nodes(self, num_nodes, cluster=None):
         """Rebalance cluster(s) if more than 1 node provided"""
         if len(self.input.servers) == 1 or num_nodes == 1:
-            self.log.warn("running on single node cluster")
+            self.log.warning("running on single node cluster")
             return
         else:
             self.log.info("rebalancing nodes - num_nodes = {0}"

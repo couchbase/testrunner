@@ -3460,7 +3460,7 @@ class RemoteMachineShellConnection:
                 text, err = p.communicate()
                 os_arch = ''
             for line in text:
-                os_arch += line.strip().decode('utf-8')
+                os_arch += line.decode('utf-8')
                 # at this point we should know if its a linux or windows ditro
             ext = { 'Ubuntu' : "deb",
                    'CentOS'  : "rpm",

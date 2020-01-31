@@ -69,7 +69,7 @@ class CreateBucketTests(BaseTestCase):
     def test_win_specific_names(self):
         version = self._get_cb_version()
         if self._get_cb_os() != 'windows':
-            self.log.warn('This test is windows specific')
+            self.log.warning('This test is windows specific')
             return
         try:
             self.test_banned_bucket_name()

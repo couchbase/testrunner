@@ -151,7 +151,7 @@ class XDCRBaseTest(unittest.TestCase):
                 self.__collect_data_files()
 
             if test_failed and (str(self.__class__).find('upgradeXDCR') != -1 or TestInputSingleton.input.param("stop-on-failure", False)):
-                    self.log.warn("CLEANUP WAS SKIPPED")
+                    self.log.warning("CLEANUP WAS SKIPPED")
                     return
             if self.print_stats:
                 self.log.info("==============  XDCRbasetests stats for test #{0} {1} =============="\
@@ -682,7 +682,7 @@ class XDCRBaseTest(unittest.TestCase):
             master_id = master_id.replace("127.0.0.1", master_server.ip).replace("localhost", master_server.ip)
         buckets = [bucket for bucket in self.buckets if bucket.master_id == master_id]
         if not buckets:
-            self.log.warn("No bucket(s) found on the server %s" % master_server)
+            self.log.warning("No bucket(s) found on the server %s" % master_server)
         return buckets
 
     def do_a_warm_up(self, node):

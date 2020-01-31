@@ -170,7 +170,7 @@ class RebalanceProgressTests(RebalanceBaseTest):
                                       server.ip, current_stat, previous_stat))
                 try:
                     if current_stat['docsTotal'] != previous_stat['docsTotal']:
-                        self.log.warn("docsTotal for node %s changed! Previous stat %s. Actual: %s" % (
+                        self.log.warning("docsTotal for node %s changed! Previous stat %s. Actual: %s" % (
                                           server.ip, current_stat, previous_stat))
                 except Exception as ex:
                     if previous_stat['docsTotal'] != 0 and current_stat['docsTotal'] == 0:
@@ -213,7 +213,7 @@ class RebalanceProgressTests(RebalanceBaseTest):
                         detailed_progress["buckets_count"] = task["detailedProgress"]["bucketsCount"]
                         break
                     except Exception as ex:
-                        self.log.warn("Didn't get statistics %s" % str(ex))
+                        self.log.warning("Didn't get statistics %s" % str(ex))
         return detailed_progress
 
     def _create_indexes(self):

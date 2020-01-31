@@ -37,7 +37,7 @@ class CBRbaseclass(XDCRReplicationBaseTest):
 
         if failover_count != autofailover_count:
             rest = RestConnection(master)
-            self.log.warn("pools/default from {0} : {1}".format(master.ip, rest.cluster_status()))
+            self.log.warning("pools/default from {0} : {1}".format(master.ip, rest.cluster_status()))
             self.fail("{0} node(s) failed over, expected {1} in {2} seconds".
                             format(failover_count, autofailover_count, time.time() - time_start))
         else:
@@ -68,7 +68,7 @@ class CBRbaseclass(XDCRReplicationBaseTest):
                 self.log.info("Cbrecovery caught up bucket {0}... {1} == {2}".format(bucket, _count1, _count2))
                 _flag = True
                 break
-            self.log.warn("Waiting for cbrecovery to catch up bucket {0}... {1} != {2}".format(bucket, _count1, _count2))
+            self.log.warning("Waiting for cbrecovery to catch up bucket {0}... {1} != {2}".format(bucket, _count1, _count2))
             self.sleep(self.wait_timeout)
         return _flag
 
@@ -304,8 +304,8 @@ class cbrecovery(CBRbaseclass, XDCRReplicationBaseTest):
                     reached = RestHelper(rest).rebalance_reached()
                     self.assertTrue(reached, "rebalance failed or did not completed")
                     if self._replication_direction_str == "unidirection":
-                        self.log.warn("we expect data lost on source cluster with unidirection replication")
-                        self.log.warn("verification data will be skipped")
+                        self.log.warning("we expect data lost on source cluster with unidirection replication")
+                        self.log.warning("verification data will be skipped")
                         return
                 elif "recovery_when_rebalance_stopped" in when_step:
                     rest.remove_all_recoveries()

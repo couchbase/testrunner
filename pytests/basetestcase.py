@@ -257,7 +257,7 @@ class BaseTestCase(unittest.TestCase):
             # avoid clean up if the previous test has been tear down
             if self.case_number == 1 or self.case_number > 1000:
                 if self.case_number > 1000:
-                    self.log.warn("teardDown for previous test failed. will retry..")
+                    self.log.warning("teardDown for previous test failed. will retry..")
                     self.case_number -= 1000
                 self.cleanup = True
                 if not self.skip_init_check_cbserver:
@@ -431,7 +431,7 @@ class BaseTestCase(unittest.TestCase):
 
             if test_failed and TestInputSingleton.input.param("stop-on-failure", False) \
                     or self.input.param("skip_cleanup", False):
-                self.log.warn("CLEANUP WAS SKIPPED")
+                self.log.warning("CLEANUP WAS SKIPPED")
             else:
 
                 if test_failed:
@@ -454,7 +454,7 @@ class BaseTestCase(unittest.TestCase):
                             except:
                                 pass
                     if self.input.param('BUGS', False):
-                        self.log.warn("Test failed. Possible reason is: {0}".format(self.input.param('BUGS', False)))
+                        self.log.warning("Test failed. Possible reason is: {0}".format(self.input.param('BUGS', False)))
 
 
 
@@ -469,7 +469,7 @@ class BaseTestCase(unittest.TestCase):
                 if self.forceEject:
                     self.force_eject_nodes()
                 if alerts is not None and len(alerts) != 0:
-                    self.log.warn("Alerts were found: {0}".format(alerts))
+                    self.log.warning("Alerts were found: {0}".format(alerts))
                 if rest._rebalance_progress_status() == 'running':
                     self.kill_memcached()
                     self.log.warning("rebalancing is still running, test should be verified")
@@ -584,7 +584,7 @@ class BaseTestCase(unittest.TestCase):
             if node_quota < quota or quota == 0:
                 quota = node_quota
         if quota < 100 and not len({server.ip for server in self.servers}) == 1:
-            self.log.warn("RAM quota was defined less than 100 MB:")
+            self.log.warning("RAM quota was defined less than 100 MB:")
             for server in servers:
                 remote_client = RemoteMachineShellConnection(server)
                 ram = remote_client.extract_remote_info().ram
@@ -1296,7 +1296,7 @@ class BaseTestCase(unittest.TestCase):
                 self.assertTrue(verified, "Lost items!!! Replication was completed but "
                                           "          sum(curr_items) don't match the curr_items_total")
         else:
-            self.log.warn("verification of items was omitted")
+            self.log.warning("verification of items was omitted")
 
     def _stats_befor_warmup(self, bucket_name):
         self.pre_warmup_stats[bucket_name] = {}
@@ -1462,7 +1462,7 @@ class BaseTestCase(unittest.TestCase):
                 shell.disconnect()
                 return
             else:
-                self.log.warn("couchbase service is not running. {0}".format(output))
+                self.log.warning("couchbase service is not running. {0}".format(output))
                 self.sleep(10)
         shell.disconnect()
         self.fail("Couchbase service is not running after {0} seconds".format(wait_time))

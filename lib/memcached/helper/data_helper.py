@@ -493,7 +493,7 @@ class ReaderThread(object):
                 client.send_get(key, self.collection)
             except Exception:
                 self._saw_error(key)
-                #        self.log.warn("attempted to get {0} keys before they are set".format(self.error_seen))
+                #        self.log.warning("attempted to get {0} keys before they are set".format(self.error_seen))
         client.close()
 
 
@@ -860,7 +860,7 @@ class VBucketAwareMemcached(object):
                         break
             except Exception as ex:
                 msg = "unable to establish connection to {0}. cleanup open connections"
-                self.log.warn(msg.format(serverIp))
+                self.log.warning(msg.format(serverIp))
                 self.done()
                 raise ex
 
@@ -1664,6 +1664,9 @@ class GeneratedDocuments(object):
             self._pad = options["padding"]
         else:
            self._pad = DocumentGenerator._random_string(options["size"])
+
+        self._pad = self._pad.decode()
+
 
     # Required for the for-in syntax
     def __iter__(self):

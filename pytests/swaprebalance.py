@@ -91,7 +91,7 @@ class SwapRebalanceBase(unittest.TestCase):
                    or (hasattr(self, '_exc_info') and self._exc_info()[1] is not None)
         if test_failed and TestInputSingleton.input.param("stop-on-failure", False)\
                         or self.input.param("skip_cleanup", False):
-                    self.log.warn("CLEANUP WAS SKIPPED")
+                    self.log.warning("CLEANUP WAS SKIPPED")
         else:
             SwapRebalanceBase.reset(self)
             SwapRebalanceBase._log_finish(self)
@@ -344,7 +344,7 @@ class SwapRebalanceBase(unittest.TestCase):
                         self.log.error("rebalance progress code : {0}".format(progress))
                         break
                     elif progress == 100:
-                        self.log.warn("Rebalance has already reached 100%")
+                        self.log.warning("Rebalance has already reached 100%")
                         break
                     elif progress >= expected_progress:
                         self.log.info("Rebalance will be stopped with {0}%".format(progress))
@@ -469,7 +469,7 @@ class SwapRebalanceBase(unittest.TestCase):
             rest.monitorRebalance()
         except RebalanceFailedException:
             # retry rebalance if it failed
-            self.log.warn("Rebalance failed but it's expected")
+            self.log.warning("Rebalance failed but it's expected")
             SwapRebalanceBase.sleep(self, 30)
             self.assertFalse(RestHelper(rest).is_cluster_rebalanced(), msg="cluster need rebalance")
             knownNodes = rest.node_statuses();

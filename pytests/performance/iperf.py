@@ -167,7 +167,7 @@ class PerfWrapper(object):
                     try:
                         self.start_replication(master, slave, bidir=bidir)
                     except Exception as error:
-                        self.log.warn(error)
+                        self.log.warning(error)
                     self.wait_for_xdc_replication()
                 return xdc_test
             return wrapper

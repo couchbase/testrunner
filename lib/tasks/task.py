@@ -348,14 +348,14 @@ class BucketCreateTask(Task):
                 self.state = FINISHED
                 return
             else:
-                self.log.warn("vbucket map not ready after try {0}".format(self.retries))
+                self.log.warning("vbucket map not ready after try {0}".format(self.retries))
                 if self.retries >= 5:
                     self.set_result(False)
                     self.state = FINISHED
                     return
         except Exception as e:
             self.log.error("Unexpected error: %s" % str(e))
-            self.log.warn("vbucket map not ready after try {0}".format(self.retries))
+            self.log.warning("vbucket map not ready after try {0}".format(self.retries))
             if self.retries >= 5:
                 self.state = FINISHED
                 self.set_exception(e)
@@ -504,7 +504,7 @@ class RebalanceTask(Task):
                         ejectedNodes.append(node.id)
         if self.rest.is_cluster_mixed():
             # workaround MB-8094
-            self.log.warn("cluster is mixed. sleep for 15 seconds before rebalance")
+            self.log.warning("cluster is mixed. sleep for 15 seconds before rebalance")
             time.sleep(15)
 
         self.rest.rebalance(otpNodes=[node.id for node in nodes], ejectedNodes=ejectedNodes)
@@ -636,7 +636,7 @@ class StatsWaitTask(Task):
                 self.set_exception(ex)
                 return
         if not self._compare(self.comparison, str(stat_result), self.value):
-            self.log.warn("Not Ready: %s %s %s %s expected on %s, %s bucket" % (self.stat, stat_result,
+            self.log.warning("Not Ready: %s %s %s %s expected on %s, %s bucket" % (self.stat, stat_result,
                       self.comparison, self.value, self._stringify_servers(), self.bucket))
             task_manager.schedule(self, 5)
             return
@@ -698,7 +698,7 @@ class XdcrStatsWaitTask(StatsWaitTask):
                 self.set_exception(ex)
                 return
         if not self._compare(self.comparison, str(stat_result), self.value):
-            self.log.warn("Not Ready: %s %s %s %s expected on %s, %s bucket" % (self.stat, stat_result,
+            self.log.warning("Not Ready: %s %s %s %s expected on %s, %s bucket" % (self.stat, stat_result,
                       self.comparison, self.value, self._stringify_servers(), self.bucket))
             task_manager.schedule(self, 5)
             return
@@ -3269,7 +3269,7 @@ class MonitorViewFragmentationTask(Task):
         try:
             auto_compact_percentage = self._get_current_auto_compaction_percentage()
             if auto_compact_percentage != "undefined" and auto_compact_percentage < self.fragmentation_value:
-                self.log.warn("Auto compaction is set to %s. Therefore fragmentation_value %s may not be reached" % (auto_compact_percentage, self.fragmentation_value))
+                self.log.warning("Auto compaction is set to %s. Therefore fragmentation_value %s may not be reached" % (auto_compact_percentage, self.fragmentation_value))
 
             self.state = CHECKING
             task_manager.schedule(self, 5)
@@ -3455,7 +3455,7 @@ class ViewCompactionTask(Task):
                         # case of rebalance when with concurrent updates it's possible that
                         # compaction value has not changed significantly
                         if new_compaction_revision > self.compaction_revision and self.with_rebalance:
-                            self.log.warn("the compaction revision was increased,\
+                            self.log.warning("the compaction revision was increased,\
                              but the actual fragmentation value has not changed significantly")
                             self.set_result(True)
                             self.state = FINISHED
@@ -3469,7 +3469,7 @@ class ViewCompactionTask(Task):
                           format(new_compaction_revision, fragmentation))
                 status, content = self.rest.set_view_info(self.bucket, self.design_doc_name)
                 stats = content["stats"]
-                self.log.warn("general compaction stats:{0}".format(stats))
+                self.log.warning("general compaction stats:{0}".format(stats))
                 self.set_exception(Exception("Check system logs, looks like compaction failed to start"))
 
         except (SetViewInfoNotFound) as ex:
@@ -3677,7 +3677,7 @@ class GenerateExpectedViewResultsTask(Task):
 
         if startkey_docid_set:
             if not startkey_set:
-                self.log.warn("Ignoring startkey_docid filter when startkey is not set")
+                self.log.warning("Ignoring startkey_docid filter when startkey is not set")
             else:
                 do_filter = False
                 if descending_set:
@@ -3694,7 +3694,7 @@ class GenerateExpectedViewResultsTask(Task):
 
         if endkey_docid_set:
             if not endkey_set:
-                self.log.warn("Ignoring endkey_docid filter when endkey is not set")
+                self.log.warning("Ignoring endkey_docid filter when endkey is not set")
             else:
                 do_filter = False
                 if descending_set:
@@ -4186,13 +4186,13 @@ class CBRecoveryTask(Task):
                     self.set_result(True)
             progress = self.rest.get_recovery_progress(self.recovery_task["recoveryStatusURI"])
             if progress == self.progress:
-                self.log.warn("cbrecovery progress was not changed")
+                self.log.warning("cbrecovery progress was not changed")
                 if self.retries > 20:
                     self.shell.disconnect()
                     self.rest.print_UI_logs()
                     self.state = FINISHED
-                    self.log.warn("ns_server_tasks: {0}".format(self.rest.ns_server_tasks()))
-                    self.log.warn("cbrecovery progress: {0}".format(self.rest.get_recovery_progress(self.recovery_task["recoveryStatusURI"])))
+                    self.log.warning("ns_server_tasks: {0}".format(self.rest.ns_server_tasks()))
+                    self.log.warning("cbrecovery progress: {0}".format(self.rest.get_recovery_progress(self.recovery_task["recoveryStatusURI"])))
                     self.set_exception(CBRecoveryFailedException("cbrecovery hangs"))
                     return
                 self.retries += 1
@@ -4212,7 +4212,7 @@ class CBRecoveryTask(Task):
                 self.shell.disconnect()
                 self.rest.print_UI_logs()
                 self.state = FINISHED
-                self.log.warn("ns_server_tasks: {0}".format(self.rest.ns_server_tasks()))
+                self.log.warning("ns_server_tasks: {0}".format(self.rest.ns_server_tasks()))
                 self.set_exception(CBRecoveryFailedException("cbrecovery was not started"))
                 return
             else:
@@ -4313,7 +4313,7 @@ class MonitorViewCompactionTask(ViewCompactionTask):
             self.disk_size = self._get_disk_size()
             self.log.info("Disk Size Before Compaction {0}".format(self.disk_size))
             if self.precompacted_fragmentation == 0:
-                self.log.warn("%s: There is nothing to compact, fragmentation is 0" % self.design_doc_name)
+                self.log.warning("%s: There is nothing to compact, fragmentation is 0" % self.design_doc_name)
                 self.set_result(False)
                 self.state = FINISHED
             elif self.precompacted_fragmentation < self.fragmentation_value:
@@ -4379,13 +4379,13 @@ class MonitorViewCompactionTask(ViewCompactionTask):
                         curr_disk_size = self._get_disk_size()
                         self.log.info("Disk Size went from {0} {1}".format(self.disk_size, curr_disk_size))
                         if new_compaction_revision > self.compaction_revision and self.precompacted_fragmentation > fragmentation:
-                            self.log.warn("the compaction revision was increase and fragmentation value went from {0} {1}".
+                            self.log.warning("the compaction revision was increase and fragmentation value went from {0} {1}".
                                           format(self.precompacted_fragmentation, fragmentation))
                             self.set_result(True)
                             self.state = FINISHED
                             return
                         elif new_compaction_revision > self.compaction_revision and self.with_rebalance:
-                            self.log.warn("the compaction revision was increased, but the actual fragmentation value has not changed significantly")
+                            self.log.warning("the compaction revision was increased, but the actual fragmentation value has not changed significantly")
                             self.set_result(True)
                             self.state = FINISHED
                             return
@@ -4397,7 +4397,7 @@ class MonitorViewCompactionTask(ViewCompactionTask):
                                format(new_compaction_revision, fragmentation))
                 status, content = self.rest.set_view_info(self.bucket, self.design_doc_name)
                 stats = content["stats"]
-                self.log.warn("general compaction stats:{0}".format(stats))
+                self.log.warning("general compaction stats:{0}".format(stats))
                 self.state = FINISHED
                 self.set_result(False)
                 self.set_exception(Exception("Check system logs, looks like compaction failed to start"))

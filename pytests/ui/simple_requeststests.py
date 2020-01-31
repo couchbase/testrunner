@@ -38,7 +38,7 @@ class SimpleRequests(BaseTestCase):
             try:
                 status, content, header = rest._http_request(url)
             except IncompleteRead as e:
-                self.log.warn("size of partial responce {0} api is {1} bytes".format(api, sys.getsizeof(e.partial)))
+                self.log.warning("size of partial responce {0} api is {1} bytes".format(api, sys.getsizeof(e.partial)))
                 if api != "diag":
                     #otherwise for /diag API we should increase request time for dynamic data in _http_request
                     passed = False
