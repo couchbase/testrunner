@@ -34,7 +34,7 @@ from lib.membase.api.exception import FTSException
 from .es_base import ElasticSearchBase
 from security.rbac_base import RbacBase
 from lib.couchbase_helper.tuq_helper import N1QLHelper
-from random_query_generator.rand_query_gen import FTSESQueryGenerator
+from .random_query_generator.rand_query_gen import FTSESQueryGenerator
 
 
 class RenameNodeException(FTSException):

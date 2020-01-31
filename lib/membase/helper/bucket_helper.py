@@ -300,7 +300,11 @@ class BucketOperationHelper():
                     bucket_info.saslPassword.encode('ascii'))
                 else:
                     client.sasl_auth_plain(admin_user, admin_pass)
-                    bucket = bucket.encode('ascii')
+                    try:
+                        bucket = bucket.encode('ascii')
+                    except AttributeError:
+                        pass
+
                     client.bucket_select(bucket)
                 for i in server_dict[every_ip_port]:
                     try:
