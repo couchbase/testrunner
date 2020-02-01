@@ -406,7 +406,6 @@ class MemcachedClientHelper(object):
                 break
             except MemcachedError:
                 retry_attempt -= 1
-                log = logger.Logger.get_logger()
                 log.info('flush raised memcached error trying again in 5 seconds...')
                 time.sleep(5)
         client.close()

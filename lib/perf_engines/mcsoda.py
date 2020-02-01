@@ -1490,7 +1490,7 @@ def run(cfg, cur, protocol, host_port, user, pswd, stats_collector=None,
         cfg['body'][mvs] = 'x'
         while len(cfg['body'][mvs]) < mvs:
             cfg['body'][mvs] = cfg['body'][mvs] + \
-                md5(str(len(cfg['body'][mvs]))).hexdigest()
+                md5(str(len(cfg['body'][mvs])).encode("utf-8")).hexdigest()
         cfg['suffix'][mvs] = "\"body\":\"" + cfg['body'][mvs] + "\"}"
 
     ctl = ctl or {'run_ok': True}
