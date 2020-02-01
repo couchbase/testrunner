@@ -685,7 +685,7 @@ def positive(x):
 
 
 def prepare_key(key_num, prefix=None):
-    key_hash = md5(str(key_num)).hexdigest()[0:16]
+    key_hash = md5(str(key_num).encode("utf-8")).hexdigest()[0:16]
     if prefix and len(prefix) > 0:
         return prefix + "-" + key_hash
     return key_hash

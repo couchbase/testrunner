@@ -397,9 +397,9 @@ class MemcachedClientHelper(object):
     def flush_bucket(server, bucket, admin_user='cbadminbucket',admin_pass='password'):
         # if memcached throws OOM error try again ?
         log = logger.Logger.get_logger()
-        client = MemcachedClientHelper.direct_client(server, bucket, admin_user=admin_user, admin_pass=admin_pass)
         retry_attempt = 5
         while retry_attempt > 0:
+            client = MemcachedClientHelper.direct_client(server, bucket, admin_user=admin_user, admin_pass=admin_pass)
             try:
                 client.flush()
                 log.info('flushed bucket {0}...'.format(bucket))
@@ -408,7 +408,8 @@ class MemcachedClientHelper(object):
                 retry_attempt -= 1
                 log.info('flush raised memcached error trying again in 5 seconds...')
                 time.sleep(5)
-        client.close()
+            finally:
+                client.close()
         return
 
 
