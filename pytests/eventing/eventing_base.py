@@ -185,7 +185,7 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
             raise Exception('Eventing took lot of time to undeploy')
 
     def verify_eventing_results(self, name, expected_dcp_mutations, doc_timer_events=False, on_delete=False,
-                                skip_stats_validation=False, bucket=None, timeout=600):
+                                skip_stats_validation=False, bucket=None, timeout=600,expected_duplicate=False):
         # This resets the rest server as the previously used rest server might be out of cluster due to rebalance
         num_nodes = self.refresh_rest_server()
         eventing_nodes = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
@@ -229,7 +229,7 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         # wait for bucket operations to complete and verify it went through successfully
         count = 0
         stats_dst = self.rest.get_bucket_stats(bucket)
-        while stats_dst["curr_items"] != expected_dcp_mutations and count < 20:
+        while stats_dst["curr_items"] <= expected_dcp_mutations and count < 20:
             message = "Waiting for handler code {2} to complete bucket operations... Current : {0} Expected : {1}".\
                       format(stats_dst["curr_items"], expected_dcp_mutations, name)
             self.sleep(timeout//20, message=message)
@@ -264,12 +264,27 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
                 log.debug("Full Stats for Node {0} is \n{1} ".format(eventing_node.ip, json.dumps(full_out,
                                                                                                 sort_keys=True,
                                                                                                 indent=4)))
-            raise Exception(
-                "Bucket operations from handler code took lot of time to complete or didn't go through. Current : {0} "
-                "Expected : {1}  dcp_backlog : {2}  TIMERS_IN_PAST : {3} lcb_exceptions : {4}".format(stats_dst["curr_items"],
-                                                                                 expected_dcp_mutations,
+            if stats_dst["curr_items"] < expected_dcp_mutations:
+                raise Exception(
+                    "missing data in destination bucket. Current : {0} "
+                    "Expected : {1}  dcp_backlog : {2}  TIMERS_IN_PAST : {3} lcb_exceptions : {4}".format(stats_dst["curr_items"],
+                                                                                     expected_dcp_mutations,
                                                                                  total_dcp_backlog,
-                                                                                 timers_in_past, lcb))
+                                                                                 timers_in_past,lcb))
+            elif stats_dst["curr_items"] > expected_dcp_mutations and not expected_duplicate:
+                raise Exception(
+                    "duplicated data in destination bucket which is not expected. Current : {0} "
+                    "Expected : {1}  dcp_backlog : {2}  TIMERS_IN_PAST : {3} lcb_exceptions : {4}".format(stats_dst["curr_items"],
+                                                                                     expected_dcp_mutations,
+                                                                                 total_dcp_backlog,
+                                                                                 timers_in_past,lcb))
+            elif stats_dst["curr_items"] > expected_dcp_mutations and expected_duplicate:
+                self.log.info(
+                    "duplicated data in destination bucket which is expected. Current : {0} "
+                    "Expected : {1}  dcp_backlog : {2}  TIMERS_IN_PAST : {3} lcb_exceptions : {4}".format(stats_dst["curr_items"],
+                                                                                     expected_dcp_mutations,
+                                                                                 total_dcp_backlog,
+                                                                                 timers_in_past,lcb))
         log.info("Final docs count... Current : {0} Expected : {1}".
                  format(stats_dst["curr_items"], expected_dcp_mutations))
         # TODO : Use the following stats in a meaningful way going forward. Just printing them for debugging.
