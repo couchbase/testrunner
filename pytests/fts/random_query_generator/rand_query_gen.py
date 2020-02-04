@@ -653,7 +653,7 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
     @staticmethod
     def get_self_intersect_vertices(verts):
         mod_verts = []
-        mid_vert = (len(verts) - 1) / 2
+        mid_vert = int((len(verts) - 1) / 2)
 
         mod_verts.append(verts[0])
         mod_verts.append(verts[mid_vert])
@@ -874,7 +874,7 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
         return fts_compound_query, es_compound_query
 
     def get_queryable_type(self):
-        doc_types = DATASET.FIELDS.keys()
+        doc_types = list(DATASET.FIELDS.keys())
         return self.get_random_value(doc_types)
 
 
