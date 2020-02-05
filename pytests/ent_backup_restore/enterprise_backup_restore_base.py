@@ -143,6 +143,11 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.gsi_names = ["num1", "num2"]
         self.enable_firewall = False
         self.eventing_log_level = self.input.param('eventing_log_level', 'INFO')
+        self.timer_storage_chan_size = self.input.param('timer_storage_chan_size', 10000)
+        self.dcp_gen_chan_size = self.input.param('dcp_gen_chan_size', 10000)
+        self.is_sbm = self.input.param('source_bucket_mutation',False)
+        self.is_curl = self.input.param('curl',False)
+        self.print_eventing_handler_code_in_logs = self.input.param('print_eventing_handler_code_in_logs', True)
         self.do_restore = self.input.param("do-restore", False)
         self.do_verify = self.input.param("do-verify", False)
         self.create_views = self.input.param("create-views", False)
