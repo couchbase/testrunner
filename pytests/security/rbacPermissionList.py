@@ -16,7 +16,7 @@ log = logger.Logger.get_logger()
 class rbacPermissionList():
 
     def _create_headers(self,username,password,capi=False):
-        authorization = base64.encodestring(('%s:%s' % (username, password)).encode()).decode()
+        authorization = base64.encodebytes(('%s:%s' % (username, password)).encode()).decode()
         if capi:
             return {'Content-Type': 'application/json',
                     'Authorization': 'Basic %s' % authorization,

@@ -11,7 +11,7 @@ sys.path.append('lib')
 from TestInput import TestInputParser
 
 def create_headers(username, password):
-    authorization = base64.encodestring('%s:%s' % (username, password))
+    authorization = base64.encodebytes('%s:%s' % (username, password))
     return {'Content-Type': 'application/x-www-form-urlencoded',
             'Authorization': 'Basic %s' % authorization,
             'Accept': '*/*'}

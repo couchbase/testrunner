@@ -87,7 +87,7 @@ class rbacmain:
         url = "pools/default/checkPermissions/"
         param = permission_set
         api = rest.baseUrl + url
-        authorization = base64.encodestring(('%s:%s' % (username, password)).encode()).decode()
+        authorization = base64.encodebytes(('%s:%s' % (username, password)).encode()).decode()
         header =  {'Content-Type': 'application/x-www-form-urlencoded',
                 'Authorization': 'Basic %s' % authorization,
                 'Accept': '*/*'}

@@ -784,7 +784,6 @@ class CouchbaseServerInstaller(Installer):
                                          openssl=openssl, upr=upr, xdcr_upr=xdcr_upr,
                                          fts_query_limit=fts_query_limit,
                                          cbft_env_options= cbft_env_options,
-                                         enable_ipv6=enable_ipv6,
                                          debug_logs=debug_logs)
                     log.info('wait 30 seconds for Couchbase server to start')
                     time.sleep(30)
@@ -794,7 +793,7 @@ class CouchbaseServerInstaller(Installer):
                 except BaseException as e:
                     success = False
                     log.error("------->installation failed: {0}".format(e))
-                    traceback.print_exec()
+                    traceback.print_exc()
                     exc_type, exc_obj, exc_tb = sys.exc_info()
                     fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
                     print(exc_type, fname, exc_tb.tb_lineno)

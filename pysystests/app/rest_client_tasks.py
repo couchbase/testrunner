@@ -108,7 +108,7 @@ def timed_url_request(url):
     return qtime, data
 
 def default_url_headers():
-    authorization = base64.encodestring('%s:%s' % (cfg.COUCHBASE_USER, cfg.COUCHBASE_PWD))
+    authorization = base64.encodebytes('%s:%s' % (cfg.COUCHBASE_USER, cfg.COUCHBASE_PWD))
 
     headers = {'Content-Type': 'application/json',
                'Authorization': 'Basic %s' % authorization,

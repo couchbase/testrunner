@@ -266,7 +266,7 @@ class x509main:
         shell.copy_file_local_to_remote(src_path, dest_path)
 
     def _create_rest_headers(self, username="Administrator", password="password"):
-        authorization = base64.encodestring(('%s:%s' % (username, password)).encode()).decode()
+        authorization = base64.encodebytes(('%s:%s' % (username, password)).encode()).decode()
         return {'Content-Type': 'application/octet-stream',
             'Authorization': 'Basic %s' % authorization,
             'Accept': '*/*'}

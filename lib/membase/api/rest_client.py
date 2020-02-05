@@ -871,7 +871,7 @@ class RestConnection(object):
                 if time.time() > end_time:
                     log.error("Tried ta connect {0} times".format(count))
                     raise ServerUnavailableException(ip=self.ip)
-            except httplib2.ServerNotFoundError as e:
+            except (AttributeError, httplib2.ServerNotFoundError) as e:
                 if count < 4:
                     log.error("ServerNotFoundError error while connecting to {0} error {1} "\
                                                                               .format(api, e))
@@ -4734,7 +4734,7 @@ class RestConnection(object):
          allow inter bucket recursion
     '''
     def allow_interbucket_recursion(self):
-        authorization = base64.encodestring('%s:%s' % (self.username, self.password))
+        authorization = self.get_authorization(self.username, self.password)
         url = "_p/event/api/v1/config"
         api = self.baseUrl + url
         headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
@@ -4749,7 +4749,7 @@ class RestConnection(object):
           Get eventing rebalance status
     '''
     def get_eventing_rebalance_status(self):
-        authorization = base64.encodestring('%s:%s' % (self.username, self.password))
+        authorization = self.get_authorization(self.username, self.password)
         url = "getAggRebalanceStatus"
         api = self.eventing_baseUrl + url
         headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
@@ -4816,13 +4816,13 @@ class RestConnection(object):
         api = self.baseUrl + url
         status, content, header = self._http_request(api, "GET")
 
-        if content != None:
+        if content is not None:
             content_json = json.loads(content)
 
-        for i in range(len(content_json)):
-            user = content_json[i]
-            if user.get('id') == user_id:
-                return user
+            for i in range(len(content_json)):
+                user = content_json[i]
+                if user.get('id') == user_id:
+                    return user
         return {}
 
     """ From 6.5.0, enable IPv6 on cluster/node needs 2 settings
@@ -4832,12 +4832,12 @@ class RestConnection(object):
     def enable_ip_version(self, afamily='ipv6'):
         log.info("Start enable {0} on this node {1}".format(afamily, self.baseUrl))
         self.update_autofailover_settings(False, 60)
-        params = urllib.urlencode({'afamily': afamily,
+        params = urllib.parse.urlencode({'afamily': afamily,
                                    'nodeEncryption': 'off'})
         api = "{0}node/controller/enableExternalListener".format(self.baseUrl)
         status, content, header = self._http_request(api, 'POST', params)
         if status:
-            params = urllib.urlencode({'afamily': afamily,
+            params = urllib.parse.urlencode({'afamily': afamily,
                                        'nodeEncryption': 'off'})
             api = "{0}node/controller/setupNetConfig".format(self.baseUrl)
             status, content, header = self._http_request(api, 'POST', params)

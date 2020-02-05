@@ -248,7 +248,7 @@ class AWSAuthConnection(object):
         params.update(self.pathlist("SecurityGroup", groupIds))
         if userData is not None:
             if base64Encode:
-                userData = base64.encodestring(userData)
+                userData = base64.encodebytes(userData)
             params["UserData"] = userData
         if keyName is not None:
             params["KeyName"] = keyName
@@ -503,7 +503,7 @@ class AWSAuthConnection(object):
     # the secret access key, optionally urlencoding the result
 
     def encode(self, aws_secret_access_key, str, urlencode=True):
-        b64_hmac = base64.encodestring(hmac.new(aws_secret_access_key, str, hashlib.sha1).digest()).strip()
+        b64_hmac = base64.encodebytes(hmac.new(aws_secret_access_key, str, hashlib.sha1).digest()).strip()
         if urlencode:
             return urllib.parse.quote_plus(b64_hmac)
         else:

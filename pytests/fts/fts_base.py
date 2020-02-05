@@ -4393,7 +4393,7 @@ class FTSBaseTest(unittest.TestCase):
             self.log.info(diag_url)
             try:
                 req = urllib.request.Request(diag_url)
-                authorization = base64.encodestring('%s:%s' % (
+                authorization = base64.encodebytes('%s:%s' % (
                     self._input.membase_settings.rest_username,
                     self._input.membase_settings.rest_password))
                 req.headers = {

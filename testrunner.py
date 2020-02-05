@@ -185,8 +185,8 @@ def parse_conf_file(filename, tests, params):
 
 
 def create_headers(username, password):
-    #authorization = base64.encodestring('%s:%s' % (username, password))
-    authorization = base64.encodestring(('%s:%s' % (username, password)).encode()).decode()
+    #authorization = base64.encodebytes('%s:%s' % (username, password))
+    authorization = base64.encodebytes(('%s:%s' % (username, password)).encode()).decode()
     authorization=authorization.rstrip('\n')
     return {'Content-Type': 'application/x-www-form-urlencoded',
             'Authorization': 'Basic %s' % authorization,
