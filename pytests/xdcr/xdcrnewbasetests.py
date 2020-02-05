@@ -1,3 +1,4 @@
+import base64
 import unittest
 import time
 import copy
@@ -405,7 +406,7 @@ class NodeHelper:
         """Gets couchbase log directory, even for cluster_run
         """
         _, dir = RestConnection(node).diag_eval('filename:absname(element(2, application:get_env(ns_server,error_logger_mf_dir))).')
-        return str(dir)
+        return dir.decode('utf-8').replace('"', '')
 
     @staticmethod
     def check_goxdcr_log(server, search_str, goxdcr_log=None, print_matches=None, log_name=None, timeout=0):

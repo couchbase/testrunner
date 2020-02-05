@@ -2914,7 +2914,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase):
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        self.assertEqual(output[0], "Flag required, but not specified: -/--backup",
+        self.assertEqual(output[0], "Flag required, but not specified: --backup",
                          "Expected error message not thrown")
         cmd = "compact --archive {0} --repo {1} --backup" \
             .format(self.backupset.directory, self.backupset.name)
