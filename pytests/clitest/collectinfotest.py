@@ -297,25 +297,16 @@ class CollectinfoTests(CliBaseTest):
         self.shell.delete_files("%s.zip" % (self.log_filename))
         self.log.info("Delete old logs directory")
         self.shell.delete_files("cbcollect_info*")
-        options = ""
-        if self.collect_all_option:
-            options = "--multi-node-diag"
-            self.log.info("Run collect log with --multi-node-diag option")
-        output, error = self.shell.execute_cbcollect_info("%s.zip %s"\
-                                                       % (self.log_filename, options))
+        output, error = self.shell.execute_cbcollect_info("%s.zip "\
+                                                       % (self.log_filename))
         if output:
             if self.debug_logs:
                     self.shell.log_command_output(output, error)
             for line in output:
-                if "--multi-node-diag" in options:
-                    if "noLogs=1&oneNode=1" in line:
+                if "noLogs=1" in line:
+                    if "oneNode=1" not in line:
                         self.log.error("Error line: %s" % line)
-                        self.fail("cbcollect got diag only from 1 node")
-                if not options:
-                    if "noLogs=1" in line:
-                        if "oneNode=1" not in line:
-                            self.log.error("Error line: %s" % line)
-                            self.fail("cbcollect did not set to collect diag only at 1 node ")
+                        self.fail("cbcollect did not set to collect diag only at 1 node ")
         self.verify_results(self, self.log_filename)
 
     def test_cbcollectinfo_memory_usuage(self):
@@ -331,14 +322,9 @@ class CollectinfoTests(CliBaseTest):
         self.shell.delete_files("%s.zip" % (self.log_filename))
         self.log.info("Delete old logs directory")
         self.shell.delete_files("cbcollect_info*")
-        options = ""
-        if self.collect_all_option:
-            options = "--multi-node-diag"
-            self.log.info("Run collect log with --multi-node-diag option")
-
         collect_threads = []
         col_thread = Thread(target=self.shell.execute_cbcollect_info,
-                                        args=("%s.zip" % (self.log_filename), options))
+                                        args=("%s.zip" % (self.log_filename)))
         collect_threads.append(col_thread)
         col_thread.start()
         monitor_mem_thread = Thread(target=self._monitor_collect_log_mem_process)

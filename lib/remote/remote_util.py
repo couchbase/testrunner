@@ -3362,9 +3362,6 @@ class RemoteMachineShellConnection:
                         os_distro = 'Oracle Linux'
                         os_version = etc_issue
                         is_linux_distro = True
-                    else:
-                        log.info("It could be other operating system."
-                                 "  Go to check at other location")
                     file.close()
                     # now remove this file
                     os.remove(filename)
@@ -4019,13 +4016,15 @@ class RemoteMachineShellConnection:
             errors.extend(error)
         return outputs, errors
 
-    def delete_files(self, file_location):
+    def delete_files(self, file_location, debug=False):
         command = "%s%s" % ("rm -rf ", file_location)
-        output, error = self.execute_command(command)
-        self.log_command_output(output, error)
+        output, error = self.execute_command(command, debug=debug)
+        if debug:
+            self.log_command_output(output, error)
 
     def get_data_map_using_cbtransfer(self, buckets, data_path=None, userId="Administrator",
-                                      password="password", getReplica=False, mode="memory"):
+                                      password="password", getReplica=False, mode="memory",
+                                      debug=False):
         self.extract_remote_info()
         temp_path = "/tmp/"
         if self.info.type.lower() == 'windows':
@@ -4063,7 +4062,7 @@ class RemoteMachineShellConnection:
             dest_path = "/tmp/" + fileName
             destination = "csv:" + csv_path
             log.info("Run cbtransfer to get data map")
-            self.execute_cbtransfer(source, destination, options)
+            self.execute_cbtransfer(source, destination, options, debug)
             file_existed = self.file_exists(temp_path, genFileName)
             if file_existed:
                 self.copy_file_remote_to_local(path, dest_path)
@@ -4077,7 +4076,8 @@ class RemoteMachineShellConnection:
                 os.remove(dest_path)
         return headerInfo, bucketMap
 
-    def execute_cbtransfer(self, source, destination, command_options=''):
+    def execute_cbtransfer(self, source, destination, command_options='',
+                           debug=False):
         transfer_command = "%scbtransfer" % (LINUX_COUCHBASE_BIN_PATH)
         if self.nonroot:
             transfer_command = '/home/%s%scbtransfer' % (self.username,
@@ -4094,8 +4094,9 @@ class RemoteMachineShellConnection:
                                                           source,
                                                           destination,
                                                           command_options)
-        output, error = self.execute_command(command, use_channel=True)
-        self.log_command_output(output, error)
+        output, error = self.execute_command(command, debug=debug, use_channel=True)
+        if debug:
+            self.log_command_output(output, error)
         log.info("done execute cbtransfer")
         return output
 
