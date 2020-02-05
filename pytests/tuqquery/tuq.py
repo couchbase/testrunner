@@ -1288,7 +1288,7 @@ class QueryTests(BaseTestCase):
                     if not isinstance(value, set) and key and isinstance(value[0], dict) and key in value:
                         curr_item[key] = sorted(value, key=lambda doc: (doc['task_name']))
                     else:
-                        curr_item[key] = sorted(value)
+                        curr_item[key] = sorted(value, key=lambda doc: doc)
                 else:
                     curr_item[key] = value
             actual_result.append(curr_item)

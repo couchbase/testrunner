@@ -836,10 +836,11 @@ class BaseSecondaryIndexingTests(QueryTests):
                     is_cluster_healthy = True
         return is_cluster_healthy
 
-    def wait_until_indexes_online(self, timeout=600,defer_build=False):
+    def wait_until_indexes_online(self, timeout=600, defer_build=False):
         rest = RestConnection(self.master)
         init_time = time.time()
         check = False
+        timed_out = False
         while not check:
             index_status = rest.get_index_status()
             next_time = time.time()
@@ -859,16 +860,21 @@ class BaseSecondaryIndexingTests(QueryTests):
                             check = False
                             time.sleep(1)
                             break
-            check = check or (next_time - init_time > timeout)
+            if next_time - init_time > timeout:
+                timed_out = True
+                check = next_time - init_time > timeout
+        if timed_out:
+            check = False
         return check
 
-    def wait_until_specific_index_online(self, index_name = '', timeout=600, defer_build=False):
+    def wait_until_specific_index_online(self, index_name='', timeout=600, defer_build=False):
         rest = RestConnection(self.master)
         init_time = time.time()
         check = False
-        next_time = init_time
+        timed_out = False
         while not check:
             index_status = rest.get_index_status()
+            next_time = init_time
             log.info(index_status)
             for index_info in list(index_status.values()):
                 for idx_name in list(index_info.keys()):
@@ -890,7 +896,36 @@ class BaseSecondaryIndexingTests(QueryTests):
                                     time.sleep(1)
                                     next_time = time.time()
                                     break
-            check = check or (next_time - init_time > timeout)
+            if next_time - init_time > timeout:
+                timed_out = True
+                check = next_time - init_time > timeout
+        if timed_out:
+            check = False
+        return check
+
+    def verify_index_in_index_map(self, index_name='', timeout=600):
+        rest = RestConnection(self.master)
+        init_time = time.time()
+        check = False
+        next_time = init_time
+        timed_out = False
+        while not check:
+            index_status = rest.get_index_status()
+            log.info(index_status)
+            for index_info in list(index_status.values()):
+                for idx_name in list(index_info.keys()):
+                    if idx_name == index_name:
+                        check = True
+                    else:
+                        check = False
+                        time.sleep(1)
+                        next_time = time.time()
+                        break
+            if next_time - init_time > timeout:
+                timed_out = True
+                check = next_time - init_time > timeout
+        if timed_out:
+            check = False
         return check
 
     def get_dgm_for_plasma(self, indexer_nodes=None, memory_quota=256):

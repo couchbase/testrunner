@@ -18,7 +18,6 @@ from testconstants import MAC_COUCHBASE_BIN_PATH
 from random import randint
 from datetime import datetime
 import subprocess
-import commands
 import logger
 import urllib.request, urllib.parse, urllib.error
 from security.auditmain import audit
@@ -73,7 +72,7 @@ class auditTest(BaseTestCase):
 
     def set_user_role(self,rest,username,user_role='admin'):
         payload = "name=" + username + "&roles=" + user_role
-        content =  rest.set_user_roles(user_id=username, payload=payload)
+        content = rest.set_user_roles(user_id=username, payload=payload)
 
     #Wrapper around auditmain
     def checkConfig(self, eventID, host, expectedResults, n1ql_audit=False):

@@ -5539,7 +5539,9 @@ class QueriesIndexTests(QueryTests):
                              " group by job_title union all select count(*) cnt, 0 randomValue, job_title from %s"  % (bucket.name) + \
                              " where job_title is not missing group by job_title) c;"
             result = self.run_cbq_query()
-            self.assertEqual(sorted(expected_result['results']), sorted(result['results']))
+            diffs = DeepDiff(expected_result['results'], result['results'], ignore_order=True)
+            if diffs:
+                self.assertTrue(False, diffs)
             self.query = "DROP PRIMARY INDEX ON %s" % bucket.name
             self.run_cbq_query()
 
