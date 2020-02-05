@@ -605,7 +605,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                     if not bucket_ready:
                         self.fail("Bucket {0} not created after 120 seconds.".format(bucket_name))
                     if has_index_node:
-                        self.sleep(15, "wait for index service ready")
+                        self.sleep(20, "wait for index service ready")
                 elif self.backupset.map_buckets and self.same_cluster:
                     bucket_maps = ""
                     bucket_name = bucket.name + "_" + str(count)
