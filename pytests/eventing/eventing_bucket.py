@@ -194,7 +194,7 @@ class EventingBucket(EventingBaseTest):
             self.resume_function(body)
         # Wait for eventing to catch up with all the update mutations and verify results
         if self.is_sbm:
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2, skip_stats_validation=True)
+            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2, skip_stats_validation=True,expected_duplicate=True)
         else:
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         if self.pause_resume:
@@ -206,7 +206,7 @@ class EventingBucket(EventingBaseTest):
             self.resume_function(body)
         # Wait for eventing to catch up with all the delete mutations and verify results
         if self.is_sbm:
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True,expected_duplicate=True)
         else:
             self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)

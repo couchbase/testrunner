@@ -114,7 +114,7 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         fh.close()
         body['depcfg'] = {}
         body['depcfg']['buckets'] = []
-        body['depcfg']['buckets'].append({"alias": self.dst_bucket_name, "bucket_name": self.dst_bucket_name,"access": "rw"})
+        body['depcfg']['buckets'].append({"alias": "dst_bucket", "bucket_name": self.dst_bucket_name,"access": "rw"})
         if multi_dst_bucket:
             body['depcfg']['buckets'].append({"alias": self.dst_bucket_name1, "bucket_name": self.dst_bucket_name1})
         body['depcfg']['metadata_bucket'] = self.metadata_bucket_name
@@ -151,7 +151,7 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         body['settings']['dcp_gen_chan_size'] = self.dcp_gen_chan_size
         if self.is_sbm:
             del body['depcfg']['buckets'][0]
-            body['depcfg']['buckets'].append({"alias": self.src_bucket_name, "bucket_name": self.src_bucket_name,"access": "rw"})
+            body['depcfg']['buckets'].append({"alias": "src_bucket", "bucket_name": self.src_bucket_name,"access": "rw"})
         body['depcfg']['curl'] = []
         if self.is_curl:
             body['depcfg']['curl'].append({"hostname": self.hostname, "value": "server", "auth_type": self.auth_type,
@@ -703,3 +703,18 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         result = rest.get_retry_rebalance_settings()
         self.log.info("Retry Rebalance settings changed to : {0}"
                       .format(json.loads(result)))
+
+    def handler_status_map(self):
+        m={}
+        result=self.rest.get_composite_eventing_status()
+        try:
+            for i in range(len(result['apps'])):
+                m[result['apps'][i]['name']] = result['apps'][i]['composite_status']
+            return m
+        except TypeError as e:
+            self.log.info("no handler is available")
+
+    def deploy_handler_by_name(self,name,wait_for_bootstrap=True):
+        self.rest.deploy_function_by_name(name)
+        if wait_for_bootstrap:
+            self.wait_for_handler_state(name, "deployed")
