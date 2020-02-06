@@ -4419,6 +4419,22 @@ class RestConnection(object):
         return content
 
     '''
+            deploy the Function 
+        '''
+
+    def deploy_function_by_name(self, name):
+        authorization = base64.encodestring('%s:%s' % (self.username, self.password))
+        url = "api/v1/functions/" + name + "/settings"
+        body = {"deployment_status": True, "processing_status": True}
+        api = self.eventing_baseUrl + url
+        headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
+        status, content, header = self._http_request(api, 'POST', headers=headers,
+                                                     params=json.dumps(body).encode("ascii", "ignore"))
+        if not status:
+            raise Exception(content)
+        return content
+
+    '''
         undeploy the Function 
     '''
     def undeploy_function(self, name):
