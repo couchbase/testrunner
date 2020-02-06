@@ -58,7 +58,7 @@ logging.getLogger("paramiko").setLevel(logging.WARNING)
 try:
     import paramiko
 except ImportError:
-    log.warn("{0} {1} {2}".format("Warning: proceeding without importing",
+    log.warning("{0} {1} {2}".format("Warning: proceeding without importing",
                                   "paramiko due to import error.",
                                   "ssh connections to remote machines will fail!\n"))
 
@@ -2169,7 +2169,7 @@ class RemoteMachineShellConnection:
                         and build.deliverable_type == "deb":
                     # skip error '* Failed to start couchbase-server' for 1.* & 2.0.0 builds(MB-7288)
                     # fix in 2.0.1 branch Change-Id: I850ad9424e295bbbb79ede701495b018b5dfbd51
-                    log.warn("Error '* Failed to start couchbase-server' for 1.* "
+                    log.warning("Error '* Failed to start couchbase-server' for 1.* "
                                                           "builds will be skipped")
                     self.log_command_output(output, error, track_words)
                 else:

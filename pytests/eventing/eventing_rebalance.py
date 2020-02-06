@@ -1520,7 +1520,7 @@ class EventingRebalance(EventingBaseTest):
             log.info("No of items in metadata bucket after undeploy/delete of all the functions : {0}".
                      format(item_count_metadata))
             if item_count_metadata != 0:
-                log.warn("metadata bucket still has some documents after undeploying the function : {0} docs are "
+                log.warning("metadata bucket still has some documents after undeploying the function : {0} docs are "
                          "remaining".format(item_count_metadata))
         except:
             pass

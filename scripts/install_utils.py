@@ -72,7 +72,7 @@ class NodeHelper:
                 if self.connect_ok:
                     break
             except Exception as e:
-                log.warn("{0} unreachable, {1}, retrying..".format(self.ip, e))
+                log.warning("{0} unreachable, {1}, retrying..".format(self.ip, e))
                 time.sleep(20)
 
     def get_os(self):
@@ -116,7 +116,7 @@ class NodeHelper:
                             break
                         self.wait_for_completion(duration, event)
                     except Exception as e:
-                        log.warn("Exception {0} occurred on {1}, retrying..".format(e, self.ip))
+                        log.warning("Exception {0} occurred on {1}, retrying..".format(e, self.ip))
                         self.wait_for_completion(duration, event)
 
     def pre_install_cb(self):
@@ -132,7 +132,7 @@ class NodeHelper:
                             break
                         self.wait_for_completion(duration, event)
                     except Exception as e:
-                        log.warn("Exception {0} occurred on {1}, retrying..".format(e, self.ip))
+                        log.warning("Exception {0} occurred on {1}, retrying..".format(e, self.ip))
                         self.wait_for_completion(duration, event)
 
     def install_cb(self):
@@ -154,7 +154,7 @@ class NodeHelper:
                         break
                     self.wait_for_completion(duration, event)
                 except Exception as e:
-                    log.warn("Exception {0} occurred on {1}, retrying..".format(e, self.ip))
+                    log.warning("Exception {0} occurred on {1}, retrying..".format(e, self.ip))
                     self.wait_for_completion(duration, event)
         self.post_install_cb()
 
@@ -183,7 +183,7 @@ class NodeHelper:
                                     debug=self.params["debug_logs"])
                         self.wait_for_completion(duration, event)
             except Exception as e:
-                log.warn("Exception {0} occurred on {1}, retrying..".format(e, self.ip))
+                log.warning("Exception {0} occurred on {1}, retrying..".format(e, self.ip))
                 self.wait_for_completion(duration, event)
 
     def set_cbft_env_options(self, name, value, retries=3):
@@ -240,7 +240,7 @@ class NodeHelper:
 
 
         except Exception as e:
-            log.warn("Exception {0} occurred during pre-init".format(e))
+            log.warning("Exception {0} occurred during pre-init".format(e))
 
     def post_init_cb(self):
         # Optionally change node name and restart server
@@ -322,7 +322,7 @@ class NodeHelper:
                     break
                 self.wait_for_completion(duration, event)
             except Exception as e:
-                log.warn("Exception {0} occurred on {1}, retrying..".format(e, self.ip))
+                log.warning("Exception {0} occurred on {1}, retrying..".format(e, self.ip))
                 self.wait_for_completion(duration, event)
         self.post_init_cb()
 
@@ -434,7 +434,7 @@ def _parse_user_input():
             if value.startswith("http"):
                 params["url"] = value
             else:
-                log.warn('URL:{0} is not valid, will use version to locate build'.format(value))
+                log.warning('URL:{0} is not valid, will use version to locate build'.format(value))
         if key == "type" or key == "edition" and value.lower() in install_constants.CB_EDITIONS:
             params["edition"] = value.lower()
         if key == "timeout" and int(value) > 60:
@@ -632,7 +632,7 @@ def check_and_retry_download_binary(cmd, node):
                 break
             time.sleep(duration)
         except Exception as e:
-            log.warn("Unable to download build: {0}, retrying..".format(e))
+            log.warning("Unable to download build: {0}, retrying..".format(e))
             time.sleep(duration)
     else:
         print_result_and_exit("Unable to download build in {0}s on {1}, exiting".format(timeout, node.ip))

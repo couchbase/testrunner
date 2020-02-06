@@ -44,10 +44,10 @@ class RestHelper(object):
                     return True
                 else:
                     if status is not None:
-                        log.warn("server {0}:{1} status is {2}"\
+                        log.warning("server {0}:{1} status is {2}"\
                             .format(self.rest.ip, self.rest.port, status.status))
                     else:
-                        log.warn("server {0}:{1} status is down"\
+                        log.warning("server {0}:{1} status is down"\
                                            .format(self.rest.ip, self.rest.port))
             except ServerUnavailableException:
                 log.error("server {0}:{1} is unavailable"\
@@ -371,7 +371,7 @@ class RestConnection(object):
             httplib2.Http(timeout=timeout).request(api, 'GET', '',
                                                    headers=self._create_capi_headers())
         except Exception as ex:
-            log.warn('Exception while streaming: %s' % str(ex))
+            log.warning('Exception while streaming: %s' % str(ex))
 
     def open_sasl_streaming_connection(self, bucket, timeout=1000):
         if self.debug_logs:
@@ -383,7 +383,7 @@ class RestConnection(object):
         try:
             t.start()
         except:
-            log.warn("thread is not started")
+            log.warning("thread is not started")
             return None
         return t
 
@@ -2362,7 +2362,7 @@ class RestConnection(object):
             # According to http://docs.couchbase.com/couchbase-manual-2.5/cb-rest-api/#deleting-buckets
             # the cluster will return with 500 if it failed to nuke
             # the bucket on all of the nodes within 30 secs
-            log.warn("Bucket deletion timed out waiting for all nodes")
+            log.warning("Bucket deletion timed out waiting for all nodes")
 
         return status
 
@@ -2596,7 +2596,7 @@ class RestConnection(object):
         log.info('settings/autoFailover params : {0}'.format(params))
         status, content, header = self._http_request(api, 'POST', params)
         if not status:
-            log.warn('''failed to change autofailover_settings!
+            log.warning('''failed to change autofailover_settings!
                          See MB-7282. Workaround:
                          wget --user=Administrator --password=asdasd --post-data='rpc:call(mb_master:master_node(), erlang, apply ,[fun () -> erlang:exit(erlang:whereis(mb_master), kill) end, []]).' http://localhost:8091/diag/eval''')
         return status
@@ -2684,7 +2684,7 @@ class RestConnection(object):
         if status:
             for i in range(wait_timeout):
                 if self._rebalance_progress_status() == 'running':
-                    log.warn("rebalance is not stopped yet after {0} sec".format(i + 1))
+                    log.warning("rebalance is not stopped yet after {0} sec".format(i + 1))
                     time.sleep(1)
                     status = False
                 else:

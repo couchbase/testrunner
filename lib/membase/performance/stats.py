@@ -541,7 +541,7 @@ class StatsCollector(object):
                     try:
                         stats = mc.stats()
                     except Exception as e:
-                        log.warn("{0}, retries = {1}".format(str(e), rerty))
+                        log.warning("{0}, retries = {1}".format(str(e), rerty))
                         time.sleep(2)
                         mc.reconnect()
                     else:

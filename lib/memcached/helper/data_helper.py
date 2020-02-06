@@ -30,7 +30,7 @@ log = logger.Logger.get_logger()
 try:
     import concurrent.futures
 except ImportError:
-    log.warn("{0} {1}".format("Can not import concurrent module.",
+    log.warning("{0} {1}".format("Can not import concurrent module.",
                               "Data for each server will be loaded/retrieved sequentially"))
 
 class MemcachedClientHelperExcetion(Exception):

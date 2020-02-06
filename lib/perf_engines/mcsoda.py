@@ -1471,7 +1471,7 @@ def final_report(cur, store, total_time):
         total_cmds = cur.get('cur-gets', 0) + cur.get('cur-sets', 0)
     log.info("ops/sec: %s" % (total_cmds / float(total_time)))
     if store.errors:
-        log.warn("errors:\n%s", json.dumps(store.errors, indent=4))
+        log.warning("errors:\n%s", json.dumps(store.errors, indent=4))
 
 
 def run(cfg, cur, protocol, host_port, user, pswd, stats_collector=None,
@@ -1554,7 +1554,7 @@ def run(cfg, cur, protocol, host_port, user, pswd, stats_collector=None,
                 threads[0].join(1)
                 threads = [t for t in threads if t.isAlive()]
     except KeyboardInterrupt:
-        log.warn("exiting because of KeyboardInterrupt")
+        log.warning("exiting because of KeyboardInterrupt")
         ctl['run_ok'] = False
 
     t_end = time.time()

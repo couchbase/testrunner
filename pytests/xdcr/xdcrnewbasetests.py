@@ -2393,7 +2393,7 @@ class CouchbaseCluster:
                     for node in nodes:
                         active_keys += node["interestingStats"]["curr_items"]
                 if active_keys != items:
-                        self.__log.warn("Not Ready: vb_active_curr_items %s == "
+                        self.__log.warning("Not Ready: vb_active_curr_items %s == "
                                 "%s expected on %s, %s bucket"
                                  % (active_keys, items, self.__name, bucket.name))
                         time.sleep(5)
@@ -2430,7 +2430,7 @@ class CouchbaseCluster:
                     for node in nodes:
                         replica_keys += node["interestingStats"]["vb_replica_curr_items"]
                 if replica_keys != items:
-                    self.__log.warn("Not Ready: vb_replica_curr_items %s == "
+                    self.__log.warning("Not Ready: vb_replica_curr_items %s == "
                             "%s expected on %s, %s bucket"
                              % (replica_keys, items, self.__name, bucket.name))
                     time.sleep(3)
