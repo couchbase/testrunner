@@ -10,6 +10,7 @@ from membase.api.rest_client import RestConnection
 from membase.api.exception import CBQError, ReadDocumentException
 from remote.remote_util import RemoteMachineShellConnection
 from security.rbac_base import RbacBase
+from deepdiff import DeepDiff
 
 
 class QueryWhitelistTests(QueryTests):
@@ -381,7 +382,7 @@ class QueryWhitelistTests(QueryTests):
                                                            "allowed_urls": "blahblahblah",
                                                            "disallowed_urls":["https://maps.googleapis.com"]})
         result = json.loads(content)
-        self.assertEqual(result['errors']['allowed_urls'], "Invalid type: Must be a list of non-empty strings")
+        self.assertEqual(result['errors']['allowed_urls'], "Must be an array of non-empty strings")
         curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
         self.assertTrue(self.google_error_msg in actual_curl['errors'][0]['msg'],

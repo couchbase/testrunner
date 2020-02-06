@@ -83,7 +83,7 @@ class QueryINDEXUNNESTTests(QueryTests):
                     'd.email == "9-mail@couchbase.com" and d.department == "Support" and v1.RAM == 10'
             expected_results = self.run_cbq_query(query=primary_query)
 
-            diffs = DeepDiff(actual_results, expected_results, ignore_order=True)
+            diffs = DeepDiff(actual_results['results'], expected_results['results'], ignore_order=True)
             if diffs:
                 self.assertTrue(False, diffs)
         finally:
@@ -108,7 +108,7 @@ class QueryINDEXUNNESTTests(QueryTests):
                     'd.email == "9-mail@couchbase.com" and d.department == "Support" and nv1.RAM == 10'
             expected_results = self.run_cbq_query(query=primary_query)
 
-            diffs = DeepDiff(actual_results, expected_results, ignore_order=True)
+            diffs = DeepDiff(actual_results['results'], expected_results['results'], ignore_order=True)
             if diffs:
                 self.assertTrue(False, diffs)
         finally:
@@ -134,7 +134,7 @@ class QueryINDEXUNNESTTests(QueryTests):
                             'lower(d.email) == "9-mail@couchbase.com" and upper(d.department) == "SUPPORT" and v1.RAM == 10'
             expected_results = self.run_cbq_query(query=primary_query)
 
-            diffs = DeepDiff(actual_results, expected_results, ignore_order=True)
+            diffs = DeepDiff(actual_results['results'], expected_results['results'], ignore_order=True)
             if diffs:
                 self.assertTrue(False, diffs)
         finally:
@@ -160,7 +160,7 @@ class QueryINDEXUNNESTTests(QueryTests):
                             'exp(d.join_mo) == 81 and upper(d.department) == "SUPPORT" and v1.RAM == 10'
             expected_results = self.run_cbq_query(query=primary_query)
 
-            diffs = DeepDiff(actual_results, expected_results, ignore_order=True)
+            diffs = DeepDiff(actual_results['results'], expected_results['results'], ignore_order=True)
             if diffs:
                 self.assertTrue(False, diffs)
         finally:
@@ -190,7 +190,7 @@ class QueryINDEXUNNESTTests(QueryTests):
                     'd.email == "9-mail@couchbase.com" and d.department == "Support" and v1.RAM == 10'
             expected_results = self.run_cbq_query(query=primary_query)
 
-            diffs = DeepDiff(actual_results, expected_results, ignore_order=True)
+            diffs = DeepDiff(actual_results['results'], expected_results['results'], ignore_order=True)
             if diffs:
                 self.assertTrue(False, diffs)
         finally:
@@ -215,7 +215,7 @@ class QueryINDEXUNNESTTests(QueryTests):
                     'd.email == "9-mail@couchbase.com" and d.department == "Support" and v1.RAM == 10'
             expected_results = self.run_cbq_query(query=primary_query)
 
-            diffs = DeepDiff(actual_results, expected_results, ignore_order=True)
+            diffs = DeepDiff(actual_results['results'], expected_results['results'], ignore_order=True)
             if diffs:
                 self.assertTrue(False, diffs)
         finally:
@@ -241,7 +241,7 @@ class QueryINDEXUNNESTTests(QueryTests):
                             'lower(d.email) == "9-mail@couchbase.com" and upper(d.department) == "SUPPORT" and v1.RAM == 10'
             expected_results = self.run_cbq_query(query=primary_query)
 
-            diffs = DeepDiff(actual_results, expected_results, ignore_order=True)
+            diffs = DeepDiff(actual_results['results'], expected_results['results'], ignore_order=True)
             if diffs:
                 self.assertTrue(False, diffs)
         finally:
@@ -267,7 +267,7 @@ class QueryINDEXUNNESTTests(QueryTests):
                             'exp(d.join_mo) == 81 and upper(d.department) == "SUPPORT" and v1.RAM == 10'
             expected_results = self.run_cbq_query(query=primary_query)
 
-            diffs = DeepDiff(actual_results, expected_results, ignore_order=True)
+            diffs = DeepDiff(actual_results['results'], expected_results['results'], ignore_order=True)
             if diffs:
                 self.assertTrue(False, diffs)
         finally:
@@ -300,7 +300,7 @@ class QueryINDEXUNNESTTests(QueryTests):
 
             expected_results = self.run_cbq_query(query=primary_query)
 
-            diffs = DeepDiff(actual_results, expected_results, ignore_order=True)
+            diffs = DeepDiff(actual_results['results'], expected_results['results'], ignore_order=True)
             if diffs:
                 self.assertTrue(False, diffs)
         finally:
@@ -328,7 +328,7 @@ class QueryINDEXUNNESTTests(QueryTests):
 
             expected_results = self.run_cbq_query(query=primary_query)
 
-            diffs = DeepDiff(actual_results, expected_results, ignore_order=True)
+            diffs = DeepDiff(actual_results['results'], expected_results['results'], ignore_order=True)
             if diffs:
                 self.assertTrue(False, diffs)
         finally:
@@ -356,7 +356,7 @@ class QueryINDEXUNNESTTests(QueryTests):
 
             expected_results = self.run_cbq_query(query=primary_query)
 
-            diffs = DeepDiff(actual_results, expected_results, ignore_order=True)
+            diffs = DeepDiff(actual_results['results'], expected_results['results'], ignore_order=True)
             if diffs:
                 self.assertTrue(False, diffs)
         finally:
@@ -384,7 +384,7 @@ class QueryINDEXUNNESTTests(QueryTests):
 
             expected_results = self.run_cbq_query(query=primary_query)
 
-            diffs = DeepDiff(actual_results, expected_results, ignore_order=True)
+            diffs = DeepDiff(actual_results['results'], expected_results['results'], ignore_order=True)
             if diffs:
                 self.assertTrue(False, diffs)
         finally:
@@ -412,7 +412,7 @@ class QueryINDEXUNNESTTests(QueryTests):
 
             expected_results = self.run_cbq_query(query=primary_query)
 
-            diffs = DeepDiff(actual_results, expected_results, ignore_order=True)
+            diffs = DeepDiff(actual_results['results'], expected_results['results'], ignore_order=True)
             if diffs:
                 self.assertTrue(False, diffs)
         finally:
@@ -440,7 +440,7 @@ class QueryINDEXUNNESTTests(QueryTests):
 
             expected_results = self.run_cbq_query(query=primary_query)
 
-            diffs = DeepDiff(actual_results, expected_results, ignore_order=True)
+            diffs = DeepDiff(actual_results['results'], expected_results['results'], ignore_order=True)
             if diffs:
                 self.assertTrue(False, diffs)
         finally:
@@ -472,7 +472,7 @@ class QueryINDEXUNNESTTests(QueryTests):
                     'd.email == "9-mail@couchbase.com" and d.department == "Support" and v1.RAM == 10'
             expected_results = self.run_cbq_query(query=primary_query)
 
-            diffs = DeepDiff(actual_results, expected_results, ignore_order=True)
+            diffs = DeepDiff(actual_results['results'], expected_results['results'], ignore_order=True)
             if diffs:
                 self.assertTrue(False, diffs)
         finally:
@@ -499,7 +499,7 @@ class QueryINDEXUNNESTTests(QueryTests):
                     'd.email == "9-mail@couchbase.com" and d.department == "Support" and v1.RAM == 10'
             expected_results = self.run_cbq_query(query=primary_query)
 
-            diffs = DeepDiff(actual_results, expected_results, ignore_order=True)
+            diffs = DeepDiff(actual_results['results'], expected_results['results'], ignore_order=True)
             if diffs:
                 self.assertTrue(False, diffs)
         finally:
@@ -527,7 +527,7 @@ class QueryINDEXUNNESTTests(QueryTests):
 
             expected_results = self.run_cbq_query(query=primary_query)
 
-            diffs = DeepDiff(actual_results, expected_results, ignore_order=True)
+            diffs = DeepDiff(actual_results['results'], expected_results['results'], ignore_order=True)
             if diffs:
                 self.assertTrue(False, diffs)
         finally:
@@ -555,7 +555,7 @@ class QueryINDEXUNNESTTests(QueryTests):
 
             expected_results = self.run_cbq_query(query=primary_query)
 
-            diffs = DeepDiff(actual_results, expected_results, ignore_order=True)
+            diffs = DeepDiff(actual_results['results'], expected_results['results'], ignore_order=True)
             if diffs:
                 self.assertTrue(False, diffs)
         finally:
