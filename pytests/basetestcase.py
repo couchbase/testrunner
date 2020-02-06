@@ -2542,7 +2542,7 @@ class BaseTestCase(unittest.TestCase):
             for gen_load in gens_load[bucket]:
                 items += (gen_load.end - gen_load.start)
         for bucket in buckets:
-            self.log.info("%s %s to %s documents..." % (op_type, items, bucket.name))
+            self.log.info("%s %s to %s documents..." % (op_type, items/len(buckets), bucket.name))
             tasks.append(self.cluster.async_load_gen_docs(self.master, bucket.name,
                                                           gens_load[bucket],
                                                           bucket.kvs[kv_store], op_type, exp, flag,
