@@ -818,4 +818,4 @@ class JoinTests(QuerySanityTests, QueryTests):
         actual_result = self.run_cbq_query()
         self.query = "select 1 from system:dual"
         expected_result = self.run_cbq_query()
-        self._verify_results(actual_result, expected_result)
+        self._verify_results(actual_result['results'], expected_result['results'])

@@ -394,7 +394,7 @@ class RebalanceHelper():
         else:
            raise Exception("bucket {0} stats doesnt contain 'curr_items_tot':".format(bucket))
         if replica_factor >= kv_nodes:
-            log.warn("the number of nodes is less than replica requires")
+            log.warning("the number of nodes is less than replica requires")
             delta = sum * (kv_nodes) - master_stats["curr_items_tot"]
         else:
             delta = sum * (replica_factor + 1) - master_stats["curr_items_tot"]

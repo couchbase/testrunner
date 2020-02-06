@@ -122,7 +122,7 @@ class DocumentGenerator(KVGenerator):
             json_doc['_id'] = self.name + '-' + str(self.itr)
         self.itr += 1
         #print("-->json dumps#{}:{}:{}".format(self.itr, json_doc['_id'],jsondumps))
-        return json_doc['_id'], json.dumps(json_doc).encode("ascii", "ignore")
+        return json_doc['_id'], json.dumps(json_doc)
 
 class SubdocDocumentGenerator(KVGenerator):
     """ An idempotent document generator."""
