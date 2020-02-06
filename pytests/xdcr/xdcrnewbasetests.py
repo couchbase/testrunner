@@ -1192,14 +1192,16 @@ class CouchbaseCluster:
         bucket_type = TestInputSingleton.input.param("bucket_type", "membase")
         bucket_params['bucket_type'] = bucket_type
         bucket_params['enable_replica_index'] = enable_replica_index
+        nru_not_enabled = ["6.0.2-", "6.0.4-"]
         if bucket_type == "ephemeral":
             if eviction_policy in EVICTION_POLICY.EPH:
                 bucket_params['eviction_policy'] = eviction_policy
             else:
                 bucket_params['eviction_policy'] = EVICTION_POLICY.NRU_EVICTION
             if bucket_params['eviction_policy'] == EVICTION_POLICY.NRU_EVICTION:
-                if "6.0.2-" in NodeHelper.get_cb_version(server):
-                    self.set_internal_setting("AllowSourceNRUCreation", "true")
+                for version in nru_not_enabled:
+                    if version in NodeHelper.get_cb_version(server):
+                        self.set_internal_setting("AllowSourceNRUCreation", "true")
         else:
             if eviction_policy in EVICTION_POLICY.CB:
                 bucket_params['eviction_policy'] = eviction_policy
