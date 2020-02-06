@@ -2784,25 +2784,25 @@ class BaseTestCase(unittest.TestCase):
     def create_scope(self, bucket = "default", scope = "scope0", result = True):
         status = RestConnection(self.master).create_scope(bucket, scope)
         if result:
-            self.assertEquals(True, status)
+            self.assertEqual(True, status)
             self.log.info("Scope creation passed, name={}".format(scope))
         else:
-            self.assertEquals(False, status)
+            self.assertEqual(False, status)
             self.log.info("Scope creation failed, name={}".format(scope))
 
 
     def create_collection(self, bucket = "default", scope = "scope0", collection = "mycollection0", result = True):
         status = RestConnection(self.master).create_collection(bucket, scope, collection)
         if result:
-            self.assertEquals(True, status)
+            self.assertEqual(True, status)
             self.log.info("Collection creation passed, name={}".format(collection))
         else:
-            self.assertEquals(False, status)
+            self.assertEqual(False, status)
             self.log.info("Collection creation failed, name={}".format(collection))
 
     def delete_collection(self, bucket = "default", scope = '_default', collection = '_default' ):
         status = RestConnection(self.master).delete_collection(bucket, scope, collection)
-        self.assertEquals(True, status)
+        self.assertEqual(True, status)
         self.log.info("{} collections deleted".format(collection))
         try:
             if "_default._default" in self.collection_name[bucket]:
@@ -2812,7 +2812,7 @@ class BaseTestCase(unittest.TestCase):
 
     def delete_scope(self, scope, bucket = "default"): # scope should be passed as default scope can not be deleted
         status = RestConnection(self.master).delete_collection(bucket, scope)
-        self.assertEquals(True, status)
+        self.assertEqual(True, status)
         self.log.info("{} scope deleted".format(scope))
         rex= re.compile(scope)
         try:

@@ -369,7 +369,7 @@ class FailoverTests(FailoverBaseTest):
                     msg = "graceful failover failed for nodes {0}".format(node.id)
                     self.log.info("chosen: {0} get_failover_count: {1}".format(len(chosen),
                                                                                self.get_failover_count()))
-                    self.assertEquals(len(chosen), self.get_failover_count(), msg=msg)
+                    self.assertEqual(len(chosen), self.get_failover_count(), msg=msg)
                 else:
                     msg = "rebalance failed while removing failover nodes {0}".format(node.id)
                     self.assertTrue(self.rest.monitorRebalance(stop_if_loop=True), msg=msg)

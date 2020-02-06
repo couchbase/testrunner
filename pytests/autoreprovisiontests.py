@@ -700,7 +700,7 @@ class AutoReprovisionTests(unittest.TestCase):
         bucket_count_map = rest.get_buckets_itemCount()
         msg = "Before count : {0} , After count : {1}"
         log.info(msg.format(inserted_count, bucket_count_map[bucket]))
-        self.assertEquals(bucket_count_map[bucket], inserted_count,
+        self.assertEqual(bucket_count_map[bucket], inserted_count,
                           msg="unable to verify keys after restore")
 
     def _cluster_setup(self):

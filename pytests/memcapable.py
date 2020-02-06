@@ -1163,7 +1163,7 @@ class MemcachedValueSizeLimitTest(unittest.TestCase):
 #            self.onenodemc.incr(key, step)
 #            self.fail("memcached did not raise an error")
 #        except mc_bin_client.MemcachedError as err:
-#            self.assertEquals(err.status, 5)
+#            self.assertEqual(err.status, 5)
 #
 #    def test_decr_till_max(self):
 #        initial_value = '1'
@@ -1180,4 +1180,4 @@ class MemcachedValueSizeLimitTest(unittest.TestCase):
 #            self.onenodemc.incr(key, step)
 #            self.fail("memcached did not raise an error")
 #        except mc_bin_client.MemcachedError as err:
-#            self.assertEquals(err.status, 5)
+#            self.assertEqual(err.status, 5)
