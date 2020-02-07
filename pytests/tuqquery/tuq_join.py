@@ -1,5 +1,4 @@
 import copy
-from tuqquery.tuq import QueryTests
 from .tuq_sanity import QuerySanityTests
 import time
 from deepdiff import DeepDiff
@@ -9,7 +8,7 @@ JOIN_LEFT = "LEFT"
 JOIN_RIGHT = "RIGHT"
 
 
-class JoinTests(QuerySanityTests, QueryTests):
+class JoinTests(QuerySanityTests):
     def setUp(self):
         try:
             self.dataset = 'join'

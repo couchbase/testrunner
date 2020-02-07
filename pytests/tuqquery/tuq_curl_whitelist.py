@@ -148,6 +148,9 @@ class QueryWhitelistTests(QueryTests):
         curl_output = self.shell.execute_command("%s https://jira.atlassian.com/rest/api/latest/issue/JRA-9"
                                                  % self.curl_path)
         expected_curl = self.convert_list_to_json(curl_output[0])
+        expected_curl['fields']['customfield_10610'] = int(expected_curl['fields']['customfield_10610'])
+        expected_curl['fields']['comment']['comments'][135]['body'] = \
+            expected_curl['fields']['comment']['comments'][135]['body'].replace(u'\xa0', '')
         url = "'https://jira.atlassian.com/rest/api/latest/issue/JRA-9'"
         query="select curl("+ url +")"
         curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
@@ -178,6 +181,9 @@ class QueryWhitelistTests(QueryTests):
         curl_output = self.shell.execute_command("%s https://jira.atlassian.com/rest/api/latest/issue/JRA-9"
                                                  % self.curl_path)
         expected_curl = self.convert_list_to_json(curl_output[0])
+        expected_curl['fields']['customfield_10610'] = int(expected_curl['fields']['customfield_10610'])
+        expected_curl['fields']['comment']['comments'][135]['body'] = \
+            expected_curl['fields']['comment']['comments'][135]['body'].replace(u'\xa0', '')
         url = "'https://jira.atlassian.com/rest/api/latest/issue/JRA-9'"
         query="select curl("+ url +")"
         curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
@@ -213,6 +219,9 @@ class QueryWhitelistTests(QueryTests):
         curl_output = self.shell.execute_command("%s https://jira.atlassian.com/rest/api/latest/issue/JRA-9"
                                                  %self.curl_path)
         expected_curl = self.convert_list_to_json(curl_output[0])
+        expected_curl['fields']['customfield_10610'] = int(expected_curl['fields']['customfield_10610'])
+        expected_curl['fields']['comment']['comments'][135]['body'] = \
+            expected_curl['fields']['comment']['comments'][135]['body'].replace(u'\xa0', '')
         url = "'https://jira.atlassian.com/rest/api/latest/issue/JRA-9'"
         query="select curl("+ url +")"
         curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
@@ -227,6 +236,9 @@ class QueryWhitelistTests(QueryTests):
         curl_output = self.shell.execute_command("%s https://jira.atlassian.com/rest/api/latest/issue/JRA-9"
                                                  % self.curl_path)
         expected_curl = self.convert_list_to_json(curl_output[0])
+        expected_curl['fields']['customfield_10610'] = int(expected_curl['fields']['customfield_10610'])
+        expected_curl['fields']['comment']['comments'][135]['body'] = \
+            expected_curl['fields']['comment']['comments'][135]['body'].replace(u'\xa0', '')
         url = "'https://jira.atlassian.com/rest/api/latest/issue/JRA-9'"
         query="select curl(" + url + ")"
         curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
