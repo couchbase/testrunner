@@ -325,14 +325,14 @@ class JoinTests(QuerySanityTests, QueryTests):
 
     def test_where_join_keys_equal_more(self):
         for bucket in self.buckets:
-            self.query = "SELECT employee.join_day, employee.tasks_ids, new_project_full.job_title new_project " +\
+            self.query = "SELECT employee.join_day, employee.tasks_ids, new_project_full.project new_project " +\
             "FROM %s as employee %s JOIN default as new_project_full " % (bucket.name, self.type_join) +\
             "ON KEYS employee.tasks_ids WHERE employee.join_day <= 2"
             actual_result = self.run_cbq_query()
             actual_result = actual_result['results']
             expected_result = self._generate_full_joined_docs_list(join_type=self.type_join)
             expected_result = [{"join_day" : doc['join_day'], "tasks_ids" : doc['tasks_ids'],
-                                "new_project" : doc['job_title']}
+                                "new_project" : doc['project']}
                                for doc in expected_result if doc and 'join_day' in doc and\
                                doc['join_day'] <= 2]
             self._verify_results(actual_result, expected_result)
@@ -352,23 +352,22 @@ class JoinTests(QuerySanityTests, QueryTests):
                 self._wait_for_index_online(bucket, index_name)
                 created_indexes.append(index_name)
         for bucket in self.buckets:
-            self.query = "EXPLAIN SELECT employee.join_day, employee.tasks_ids, new_project_full.job_title new_project " +\
+            self.query = "EXPLAIN SELECT employee.join_day, employee.tasks_ids, new_project_full.project new_project " +\
                          "FROM %s as employee %s JOIN default as new_project_full " % (bucket.name, self.type_join) +\
                          "ON KEYS employee.tasks_ids WHERE employee.join_day <= 2 order by employee.join_day limit 10"
             if self.covering_index:
                 self.check_explain_covering_index(index_name[0])
-            self.query = "SELECT employee.join_day, employee.tasks_ids, new_project_full.job_title new_project " +\
+            self.query = "SELECT employee.join_day, employee.tasks_ids, new_project_full.project new_project " +\
                          "FROM %s as employee %s JOIN default as new_project_full " % (bucket.name, self.type_join) +\
                          "ON KEYS employee.tasks_ids WHERE employee.join_day <= 2  order by employee.join_day limit 10"
             actual_result = self.run_cbq_query()
             actual_result = actual_result['results']
             expected_result = self._generate_full_joined_docs_list(join_type=self.type_join)
             expected_result = [{"join_day" : doc['join_day'], "tasks_ids" : doc['tasks_ids'],
-                                "new_project" : doc['job_title']}
+                                "new_project" : doc['project']}
             for doc in expected_result if doc and 'join_day' in doc and\
                                           doc['join_day'] <= 2]
             expected_result = expected_result[0:10]
-            #self.assertTrue(actual_result, expected_result)
             for index_name in created_indexes:
                 self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, index_name, self.index_type)
                 self.run_cbq_query()
