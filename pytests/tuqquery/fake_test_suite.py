@@ -1,4 +1,4 @@
-import random
+import time
 from tuq import QueryTests
 
 class FakeTests(QueryTests):
@@ -7,43 +7,42 @@ class FakeTests(QueryTests):
         super(FakeTests, self).suite_setUp()
 
     def test_1(self):
-        i = random.randint(0, 1)
-        self.assertEquals(i, 1, "Test 1 is failed")
+        t = int(time.time())
+        self.assertEquals(t%2, 0, "Test 1 is failed")
 
     def test_2(self):
-        i = random.randint(0, 1)
-        self.assertEquals(i, 1, "Test 1 is failed")
+        t = int(time.time())
+        self.assertEquals(t%2, 0, "Test 2 is failed")
 
     def test_3(self):
-        i = random.randint(0, 1)
-        self.assertEquals(i, 1, "Test 1 is failed")
+        t = int(time.time())
+        self.assertEquals(t%2, 0, "Test 3 is failed")
 
     def test_4(self):
-        i = random.randint(0, 1)
-        self.assertEquals(i, 1, "Test 1 is failed")
+        t = int(time.time())
+        self.assertEquals(t%2, 0, "Test 4 is failed")
 
     def test_5(self):
-        i = random.randint(0, 1)
-        self.assertEquals(i, 1, "Test 1 is failed")
+        t = int(time.time())
+        self.assertEquals(t%2, 0, "Test 5 is failed")
 
     def test_6(self):
-        i = random.randint(0, 1)
-        self.assertEquals(i, 1, "Test 1 is failed")
+        t = int(time.time())
+        self.assertEquals(t%2, 0, "Test 6 is failed")
 
     def test_7(self):
-        i = random.randint(0, 1)
-        self.assertEquals(i, 1, "Test 1 is failed")
+        t = int(time.time())
+        self.assertEquals(t%2, 0, "Test 7 is failed")
 
     def test_8(self):
-        i = random.randint(0, 1)
-        self.assertEquals(i, 1, "Test 1 is failed")
+        t = int(time.time())
+        self.assertEquals(t%2, 0, "Test 8 is failed")
 
     def test_9(self):
-        i = random.randint(0, 1)
-        self.assertEquals(i, 1, "Test 1 is failed")
+        t = int(time.time())
+        self.assertEquals(t%2, 0, "Test 9 is failed")
 
     def test_10(self):
-        i = random.randint(0, 1)
-        self.assertEquals(i, 1, "Test 1 is failed")
-
+        t = int(time.time())
+        self.assertEquals(t%2, 0, "Test 10 is failed")
 
