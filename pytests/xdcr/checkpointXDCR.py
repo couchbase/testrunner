@@ -307,6 +307,7 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
     def mutate_and_check_error404(self, n=1):
         # get vb0 active source node
         active_src_node = self.get_active_vb0_node(self.src_master)
+        shell = RemoteMachineShellConnection(self.src_cluster.get_master_node())
         os_type = shell.extract_remote_info().distribution_type
         if os_type.lower() == 'windows':
             trace_log = "C:/Program Files/Couchbase/Server/var/lib/couchbase/logs/xdcr_trace.log"
