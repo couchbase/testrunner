@@ -220,6 +220,9 @@ def append_test(tests, name):
     if "test_restore_with_filter_regex" not in name and \
         "test_restore_with_rbac" not in name and \
         "test_backup_with_rbac" not in name and \
+        "test_add_node_with_cert_diff_services" not in name and \
+        "test_add_nodes_x509_rebalance" not in name and \
+        "test_init_nodes_x509" not in name and \
          name.find('*') > 0:
         for t in unittest.TestLoader().loadTestsFromName(name.rstrip('.*')):
             tests.append(prefix + '.' + t._testMethodName)
