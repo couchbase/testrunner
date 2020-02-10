@@ -33,6 +33,7 @@ from es_base import ElasticSearchBase
 from security.rbac_base import RbacBase
 from lib.couchbase_helper.tuq_helper import N1QLHelper
 from random_query_generator.rand_query_gen import FTSESQueryGenerator
+from security.ntonencryptionBase import ntonencryptionBase
 
 
 class RenameNodeException(FTSException):
@@ -3203,6 +3204,7 @@ class FTSBaseTest(unittest.TestCase):
                 "====  FTSbasetests cleanup is started for test #{0} {1} ===="
                     .format(self.__case_number, self._testMethodName))
             self._cb_cluster.cleanup_cluster(self)
+            ntonencryptionBase().disable_nton_cluster(self._input.servers)
             if self.compare_es:
                 self.teardown_es()
             self.log.info(
@@ -3276,6 +3278,9 @@ class FTSBaseTest(unittest.TestCase):
         self.__error_count_dict = {}
         if len(self.__report_error_list) > 0:
             self.__initialize_error_count_dict()
+            
+        if self.ntonencrypt == 'enable':
+            self.setup_nton_encryption()
 
     def _enable_diag_eval_on_non_local_hosts(self):
         """
@@ -3295,6 +3300,10 @@ class FTSBaseTest(unittest.TestCase):
                         master.ip))
         else:
             self.log.info("Running in compatibility mode, not enabled diag/eval for non-local hosts")
+    
+    def setup_nton_encryption(self):
+        self.log.info('Setting up node to node encyrption from ')
+        ntonencryptionBase().setup_nton_cluster(self._input.servers,clusterEncryptionLevel=self.ntonencrypt_level)
     
     def construct_serv_list(self, serv_str):
         """
@@ -3421,6 +3430,8 @@ class FTSBaseTest(unittest.TestCase):
             if self.consistency_vectors is not None and self.consistency_vectors != '':
                 if type(self.consistency_vectors) != dict:
                     self.consistency_vectors = json.loads(self.consistency_vectors)
+        self.ntonencrypt = self._input.param('ntonencrypt','disable')
+        self.ntonencrypt_level = self._input.param('ntonencrypt_level','control')
 
     def __initialize_error_count_dict(self):
         """

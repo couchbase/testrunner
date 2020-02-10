@@ -72,7 +72,7 @@ class x509main:
         return ipAddress
         '''
 
-    def _generate_cert(self, servers, root_cn='Root\ Authority', type='go', encryption="", key_length=1024, client_ip=None, alt_names='default', dns=None, uri=None):
+    def _generate_cert(self, servers, root_cn='Root\ Authority', type='go', encryption="", key_length=1024, client_ip=None, alt_names='default', dns=None, uri=None,wildcard_dns=None):
         shell = RemoteMachineShellConnection(self.slave_host)
         shell.execute_command("rm -rf " + x509main.CACERTFILEPATH)
         shell.execute_command("mkdir " + x509main.CACERTFILEPATH)
@@ -115,10 +115,13 @@ class x509main:
                 from shutil import copyfile
                 copyfile("./pytests/security/clientconf.conf", "./pytests/security/clientconf3.conf")
                 fin = open("./pytests/security/clientconf3.conf", "a+")
-                if ".com" in server.ip:
+                if ".com" in server.ip and wildcard_dns is None:
                     fin.write("\nDNS.0 = {0}".format(server.ip))
+                elif wildcard_dns:
+                    fin.write("\nDNS.0 = {0}".format(wildcard_dns))
                 else:
                     fin.write("\nIP.0 = {0}".format(server.ip.replace('[', '').replace(']', '')))
+
                 fin.close()
                     
                 import fileinput

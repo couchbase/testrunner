@@ -34,6 +34,7 @@ from testconstants import MAX_COMPACTION_THRESHOLD
 from testconstants import LINUX_DIST_CONFIG
 from membase.helper.cluster_helper import ClusterOperationHelper
 from security.rbac_base import RbacBase
+from security.ntonencryptionBase import ntonencryptionBase
 
 
 from couchbase_cli import CouchbaseCLI
@@ -194,6 +195,10 @@ class BaseTestCase(unittest.TestCase):
             self.magma_storage = self.input.param("magma_storage", False)
             # end of bucket parameters spot (this is ongoing)
             self.disable_diag_eval_on_non_local_host = self.input.param("disable_diag_eval_non_local", False)
+            self.ntonencrypt = self.input.param('ntonencrypt','disable')
+            self.ntonencrypt_level = self.input.param('ntonencrypt_level','control')
+            self.hostname = self.input.param('hostname',False)
+            self.x509enable = self.input.param('x509enable',False)
 
             if self.skip_setup_cleanup:
                 self.buckets = RestConnection(self.master).get_buckets()
@@ -264,6 +269,16 @@ class BaseTestCase(unittest.TestCase):
             if not self.skip_init_check_cbserver:
                 self.log.info("initializing cluster")
                 self.reset_cluster()
+                cli_command = 'node-init'
+                if not self.hostname:
+                    for server in self.servers:
+                        options = '--node-init-hostname ' + server.ip
+                        remote_client = RemoteMachineShellConnection(server)
+                        output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
+                                options=options, cluster_host="localhost", user='Administrator', password='password') 
+                        print output
+                        print error
+                
                 master_services = self.get_services(self.servers[:1],
                                                     self.services_init,
                                                     start_node=0)
@@ -284,7 +299,8 @@ class BaseTestCase(unittest.TestCase):
 
                 self.change_env_variables()
                 self.change_checkpoint_params()
-
+                
+                        
                 # Add built-in user
                 if not self.skip_init_check_cbserver:
                     self.add_built_in_server_user(node=self.master)
@@ -381,7 +397,10 @@ class BaseTestCase(unittest.TestCase):
                 self._bucket_creation()
             self.log.info("==============  basetestcase setup was finished for test #{0} {1} =============="
                           .format(self.case_number, self._testMethodName))
-
+            
+            if self.ntonencrypt == 'enable' and not self.x509enable:
+                self.setup_nton_encryption()
+            
             if not self.skip_init_check_cbserver:
                 status, content, header = self._log_start(self)
                 if not status:
@@ -476,6 +495,7 @@ class BaseTestCase(unittest.TestCase):
                 BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
                 ClusterOperationHelper.cleanup_cluster(self.servers, master=self.master)
                 ClusterOperationHelper.wait_for_ns_servers_or_assert(self.servers, self)
+                ntonencryptionBase().disable_nton_cluster(self.servers)
                 self.log.info("==============  basetestcase cleanup was finished for test #{0} {1} ==============" \
                               .format(self.case_number, self._testMethodName))
         except BaseException:
@@ -2960,3 +2980,7 @@ class BaseTestCase(unittest.TestCase):
             else:
                 self.log.info("Retry rebalanced fixed the rebalance failure")
                 break
+    
+    def setup_nton_encryption(self):
+        self.log.info('Setting up node to node encyrption from ')
+        ntonencryptionBase().setup_nton_cluster(self.servers,clusterEncryptionLevel=self.ntonencrypt_level)
