@@ -18,7 +18,6 @@ import random
 import zlib
 import subprocess
 import urllib.request, urllib.parse, urllib.error
-import commands
 
 
 class auditcli(BaseTestCase):

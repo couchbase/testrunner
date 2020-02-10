@@ -7,7 +7,6 @@ from remote.remote_util import RemoteMachineShellConnection
 from newupgradebasetest import NewUpgradeBaseTest
 from security.auditmain import audit
 import subprocess
-import commands
 import socket
 import fileinput
 import sys
