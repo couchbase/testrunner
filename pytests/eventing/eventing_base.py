@@ -717,3 +717,8 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         self.rest.deploy_function_by_name(name)
         if wait_for_bootstrap:
             self.wait_for_handler_state(name, "deployed")
+
+    def pause_handler_by_name(self,name,wait_for_pause=True):
+        self.rest.pause_function_by_name(name)
+        if wait_for_pause:
+            self.wait_for_handler_state(name, "paused")
