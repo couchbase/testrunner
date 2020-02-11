@@ -201,7 +201,8 @@ class MemcachedClient(object):
         msg=struct.pack(fmt, magic,
             cmd, len(key), len(extraHeader), dtype, vbucketId,
                 len(key) + len(extraHeader) + len(val), opaque, cas)
-        self.s.sendall(msg + extraHeader + key + val)
+
+        self.s.sendall(msg + extraHeader.encode() + key.encode() + val.encode())
 
     def _socketRecv(self, amount):
         ready = select.select([self.s], [], [], 30)
@@ -210,20 +211,20 @@ class MemcachedClient(object):
         raise TimeoutError(30)
 
     def _recvMsg(self):
-        response = ""
+        response = b""
         while len(response) < MIN_RECV_PACKET:
             data = self._socketRecv(MIN_RECV_PACKET - len(response))
-            if data == '':
+            if data == b'':
                 raise exceptions.EOFError("Got empty data (remote died?).")
             response += data
         assert len(response) == MIN_RECV_PACKET
         magic, cmd, keylen, extralen, dtype, errcode, remaining, opaque, cas=\
             struct.unpack(RES_PKT_FMT, response)
 
-        rv = ""
+        rv = b""
         while remaining > 0:
             data = self._socketRecv(remaining)
-            if data == '':
+            if data == b'':
                 raise exceptions.EOFError("Got empty data (remote died?).")
             rv += data
             remaining -= len(data)

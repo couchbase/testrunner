@@ -82,7 +82,7 @@ class rbacmain:
         log.info (" Deleting User - Status - {0} -- Content - {1} -- Header - {2}".format(status, content, header))
         return status, content, header
 
-    def _check_user_permission(self, user_name, password, permission_set):
+    def _check_user_permission(self, username, password, permission_set):
         rest = RestConnection(self.master_ip)
         url = "pools/default/checkPermissions/"
         param = permission_set

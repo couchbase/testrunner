@@ -158,7 +158,7 @@ class basic_ops(BaseTestCase):
         mc.sasl_auth_plain(self.master.rest_username, self.master.rest_password)
         mc.bucket_select('default')
         stats = mc.stats()
-        self.assertEqual(int(stats['curr_items']), 125)
+        self.assertEqual(int(stats[b'curr_items']), 125)
 
     def test_large_doc_20MB(self):
         # test reproducer for MB-29258,
