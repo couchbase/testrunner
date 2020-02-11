@@ -271,7 +271,7 @@ def main():
     launchString = launchString + '&retry_params=' + urllib.quote(options.retry_params)
     launchString = launchString + '&retries=' + options.retries
     if options.include_tests:
-        launchString = launchString + '&include_tests=' + urllib.quote(options.include_tests)
+        launchString = launchString + '&include_tests='+urllib.quote(options.include_tests.replace("'", " ").strip())
 
     if options.url is not None:
         launchString = launchString + '&url=' + options.url
