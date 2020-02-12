@@ -811,11 +811,11 @@ class GenericLoadingTask(Thread, Task):
                 self.log.error("%s, key: %s update operation." % (error, key))
                 self.set_exception(error)
                 return
-        except ValueError:
+        except (ValueError, json.JSONDecodeError) as e:
             if value is None:
                 return
             index = random.choice(list(range(len(value))))
-            value = value[0:index] + random.choice(string.ascii_uppercase) + value[index + 1:]
+            value = value[0:index] + random.choice(string.ascii_uppercase).encode() + value[index + 1:]
         except BaseException as error:
             self.state = FINISHED
             self.set_exception(error)
