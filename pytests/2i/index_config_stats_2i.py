@@ -13,8 +13,13 @@ class SecondaryIndexingStatsConfigTests(BaseSecondaryIndexingTests, QueryHelperT
         self.flush_bucket = self.input.param('flush_bucket', False)
         self.move_index = self.input.param('move_index', False)
 
+    def suite_setUp(self):
+        pass
     def tearDown(self):
         super(SecondaryIndexingStatsConfigTests, self).tearDown()
+
+    def suite_tearDown(self):
+        pass
 
     def test_key_size_distribution(self):
         index_node = self.get_nodes_from_services_map(service_type="index",
@@ -699,8 +704,7 @@ class SecondaryIndexingStatsConfigTests(BaseSecondaryIndexingTests, QueryHelperT
             else:
                 count = int(count)
             shell.disconnect()
-            self.assertGreater(count, 0, "Password leak found in Indexer {"
-                                         "0}".format(server.ip))
+            self.assertGreater(count, 0, "Password leak found in Indexer {0}".format(server.ip))
 
     def test_get_index_settings(self):
         #Check Index Settings

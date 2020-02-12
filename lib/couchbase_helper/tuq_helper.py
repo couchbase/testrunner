@@ -369,21 +369,13 @@ class N1QLHelper():
             extra_msg = self._get_failure_message(sql_result, n1ql_result)
             raise Exception(msg+"\n"+extra_msg)
         n1ql_result = self._gen_dict_n1ql_func_result(n1ql_result)
-        n1ql_result = sorted(n1ql_result)
         sql_result = self._gen_dict_n1ql_func_result(sql_result)
-        sql_result = sorted(sql_result)
         if len(sql_result) == 0 and len(n1ql_result) == 0:
             return
-        if sql_result != n1ql_result:
-            i = 0
-            for sql_value, n1ql_value in zip(sql_result, n1ql_result):
-                if sql_value != n1ql_value:
-                    break
-                i = i + 1
-            num_results = len(sql_result)
-            last_idx = min(i+5, num_results)
-            msg = "mismatch in results :: result length :: {3}, first mismatch position :: {0}, sql value :: {1}, n1ql value :: {2} ".format(i, sql_result[i:last_idx], n1ql_result[i:last_idx], num_results)
-            raise Exception(msg)
+        diffs = DeepDiff(n1ql_result, sql_result, ignore_order=True)
+        if diffs:
+            self.log.info("-->actual vs expected diffs found:{0}".format(diffs))
+            raise Exception("mismatch in results:{0}".format(diffs))
 
     def _convert_to_number(self, val):
         if not isinstance(val, str):
