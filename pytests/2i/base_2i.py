@@ -907,6 +907,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         rest = RestConnection(self.master)
         init_time = time.time()
         check = False
+        seen = False
         next_time = init_time
         timed_out = False
         while not check:
@@ -915,12 +916,16 @@ class BaseSecondaryIndexingTests(QueryTests):
             for index_info in list(index_status.values()):
                 for idx_name in list(index_info.keys()):
                     if idx_name == index_name:
+                        seen = True
                         check = True
+                        break
                     else:
                         check = False
                         time.sleep(1)
                         next_time = time.time()
                         break
+            if seen:
+                check = True
             if next_time - init_time > timeout:
                 timed_out = True
                 check = next_time - init_time > timeout
