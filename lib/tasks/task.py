@@ -1765,6 +1765,10 @@ class ValidateDataTask(GenericLoadingTask):
                 o, c, d = self.client.get(key, collection=collection)
             else:
                 o, c, d = self.client.getr(key, replica_index=self.replica_to_read, collection=collection)
+            try:
+                d = d.decode()
+            except AttributeError:
+                pass
             if self.only_store_hash:
                 if crc32.crc32_hash(d) != int(value):
                     self.state = FINISHED

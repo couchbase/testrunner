@@ -487,11 +487,15 @@ class MemcachedClient(object):
         """Observe a key for persistence and replication."""
         collection = self.collection_name(collection)
         self._set_vbucket(key, vbucket, collection=collection)
+        try:
+            key = key.encode()
+        except AttributeError:
+            pass
         value = struct.pack('>HH', self.vbucketId, len(key)) + key
         opaque, cas, data = self._doCmd(memcacheConstants.CMD_OBSERVE, '', value, collection=collection)
         rep_time = (cas & 0xFFFFFFFF)
         persist_time = (cas >> 32) & 0xFFFFFFFF
-        persisted = struct.unpack('>B', data[4 + len(key)])[0]
+        persisted = struct.unpack('>B', bytes([data[4 + len(key)]]))
         return opaque, rep_time, persist_time, persisted, cas
 
 
@@ -523,7 +527,7 @@ class MemcachedClient(object):
         if klen == 0:
             return flags, data[1], data[-1][4 + klen:]
         else:
-            return flags, data[1], "{" + data[-1].split('{')[-1] # take only the value and value starts with "{"
+            return flags, data[1], b"{" + data[-1].split(b'{')[-1] # take only the value and value starts with "{"
 
     def get(self, key, vbucket= -1, collection=None):
         """Get the value for a given key within the memcached server."""

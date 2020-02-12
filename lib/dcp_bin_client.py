@@ -1,7 +1,6 @@
 import random
 from mc_bin_client import MemcachedClient,decodeCollectionID
 from memcacheConstants import *
-import Queue
 import time
 
 MAX_SEQNO = 0xFFFFFFFFFFFFFFFF

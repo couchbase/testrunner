@@ -1253,9 +1253,9 @@ class VBucketAwareMemcached(object):
             return memcached_client.getMulti(keys, collection=collection)
 
         except (EOFError, socket.error) as error:
-            if "Got empty data (remote died?)" in error.message or \
-               "Timeout waiting for socket" in error.message or \
-               "Broken pipe" in error.message or "Connection reset by peer" in error.message \
+            if "Got empty data (remote died?)" in error.strerror or \
+               "Timeout waiting for socket" in error.strerror or \
+               "Broken pipe" in error.strerror or "Connection reset by peer" in error.strerror \
                 and timeout > 0:
                 time.sleep(pause)
                 self.reset_vbuckets(self.rest, self._get_vBucket_ids(keys))

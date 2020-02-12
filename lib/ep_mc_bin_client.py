@@ -201,8 +201,22 @@ class MemcachedClient(object):
         msg=struct.pack(fmt, magic,
             cmd, len(key), len(extraHeader), dtype, vbucketId,
                 len(key) + len(extraHeader) + len(val), opaque, cas)
+        try:
+            key = key.encode()
+        except AttributeError:
+            pass
 
-        self.s.sendall(msg + extraHeader.encode() + key.encode() + val.encode())
+        try:
+            extraHeader = extraHeader.encode()
+        except AttributeError:
+            pass
+
+        try:
+            val = val.encode()
+        except AttributeError:
+            pass
+
+        self.s.sendall(msg + extraHeader + key + val)
 
     def _socketRecv(self, amount):
         ready = select.select([self.s], [], [], 30)
