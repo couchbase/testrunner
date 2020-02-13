@@ -15,7 +15,6 @@ from memcached.helper.data_helper import MemcachedError
 from memcached.helper.data_helper import VBucketAwareMemcached
 import memcacheConstants
 
-
 # The SpatialHelper operates on a single bucket over a single RestConnection
 # The original testcase needs to be passed in so we can make assertions
 class SpatialHelper:
@@ -75,14 +74,12 @@ class SpatialHelper:
             ClusterOperationHelper.wait_for_ns_servers_or_assert(
                 self.servers, self.testcase)
 
-
     def create_index_fun(self, name, fun=None):
         if fun is None:
             fun = 'function (doc, meta) {emit(doc.geometry, doc);}'
         function = self._create_function(name, fun)
         self.rest.create_spatial(self.bucket, name, function)
         self._indexes.add(name)
-
 
     # If you insert docs that are already there, they are simply
     # overwritten.
@@ -340,14 +337,12 @@ class SpatialHelper:
                 time.sleep(1)
                 timeout -= 1
 
-
     def _create_function(self, name, function):
         #if this view already exist then get the rev and embed it here?
         doc = {"language": "javascript"}
         doc["spatial"] = {name: function}
         self.log.info("doc {0}".format(doc))
         return json.dumps(doc)
-
 
     #create a bucket if it doesn't exist
     def _create_default_bucket(self):
@@ -368,17 +363,15 @@ class SpatialHelper:
             helper.bucket_exists(self.bucket),
             "unable to create {0} bucket".format(self.bucket))
 
-
     # Return the keys (document ids) of a spatial view response
     def get_keys(self, results):
         keys = []
         if results:
             rows = results["rows"]
             for row in rows:
-                keys.append(row["id"].encode("ascii", "ignore"))
+                keys.append(row["id"])
             self.log.info("there are {0} keys".format(len(keys)))
         return keys
-
 
     # Verify that the built index is correct. Wait until all data got
     # persited on disk
@@ -387,8 +380,7 @@ class SpatialHelper:
     # Note that the resultset might be way bigger, we only check if
     # the keys that should be inserted, were really inserted (i.e. that
     # there might be additional keys returned)
-    def query_index_for_verification(self, design_name, inserted,
-                                     full_docs=False,):
+    def query_index_for_verification(self, design_name, inserted, full_docs=False):
         results = self.get_results(design_name, num_expected=len(inserted))
         result_keys = self.get_keys(results)
 
@@ -424,7 +416,6 @@ class SpatialHelper:
             diff = set(inserted_expanded) - set(results_collapsed)
             self.testcase.assertEqual(diff, set())
 
-
     # Compare the inserted documents with the returned result
     # Both arguments contain a list of document names
     def verify_result(self, inserted, result):
@@ -438,7 +429,6 @@ class SpatialHelper:
             self.testcase.fail("the spatial function did return only {0} "
                                "docs and not {1} as expected"
                                .format(len(result), len(inserted)))
-
 
     def _print_keys_not_found(self, keys_not_found, how_many=10):
         how_many = min(how_many, len(keys_not_found))

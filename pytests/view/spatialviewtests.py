@@ -47,8 +47,14 @@ class SpatialViewsTests(BaseTestCase):
                                      self.non_spatial_views_per_ddoc)
             self.create_ddocs(ddocs)
 
+    def suite_setUp(self):
+        pass
+
     def tearDown(self):
         super(SpatialViewsTests, self).tearDown()
+
+    def suite_tearDown(self):
+        pass
 
     def test_add_spatial_views(self):
         ddocs =  self.make_ddocs(self.num_ddoc, self.views_per_ddoc, self.non_spatial_views_per_ddoc)
@@ -341,8 +347,14 @@ class SpatialViewQueriesTests(BaseTestCase):
         self.ddocs = self.helper.create_default_views(
                                         is_one_ddoc=self.all_view_one_ddoc)
 
+    def suite_setUp(self):
+        pass
+
     def tearDown(self):
         super(SpatialViewQueriesTests, self).tearDown()
+
+    def suite_tearDown(self):
+        pass
 
     def test_spatial_view_queries(self):
         error = self.input.param('error', None)
@@ -489,10 +501,14 @@ class SpatialViewTests(BaseTestCase):
 
         self.helper.setup_cluster()
 
+    def suite_setUp(self):
+        pass
 
     def tearDown(self):
         super(SpatialViewTests, self).tearDown()
 
+    def suite_tearDown(self):
+        pass
 
     def test_create_x_design_docs(self):
         num_design_docs = self.helper.input.param("num-design-docs")
@@ -530,9 +546,7 @@ class SpatialViewTests(BaseTestCase):
             self.assertTrue(response)
             self.assertEqual(meta["id"],
                               "_design/{0}".format(design_name))
-            self.assertEqual(
-                response["spatial"][design_name], fun)
-
+            self.assertEqual(response["spatial"][design_name], fun)
 
     def test_insert_x_docs(self):
         num_docs = self.helper.input.param("num-docs")
@@ -711,7 +725,7 @@ class SpatialViewTests(BaseTestCase):
             rows = results["rows"]
             for row in rows:
                 if "updated" in row["value"]:
-                    keys.append(row["id"].encode("ascii", "ignore"))
+                    keys.append(row["id"])
             self.log.info("{0} documents to updated".format(len(keys)))
         return keys
 
