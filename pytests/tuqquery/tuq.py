@@ -1260,9 +1260,11 @@ class QueryTests(BaseTestCase):
         self.rest.set_query_index_api_mode(3)
         self.log.info(" Analyzing Actual Result")
 
-        actual_result = _gen_dict(sorted(primary_result["results"]))
+        presults = [ x for x in primary_result["results"] if x['$1'] is not None]
+        actual_result = _gen_dict(sorted(presults, key=(lambda x: x['$1'])))
         self.log.info(" Analyzing Expected Result")
-        expected_result = _gen_dict(sorted(result["results"]))
+        eresults = [ x for x in result["results"] if x['$1'] is not None]
+        expected_result = _gen_dict(sorted(eresults, key=(lambda x: x['$1'])))
         if len(actual_result) != len(expected_result):
             return False
         if actual_result != expected_result:

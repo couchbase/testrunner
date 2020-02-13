@@ -155,7 +155,7 @@ class MemcachedClient(object):
             r, _, _ = select.select([self.s], [], [], self.timeout)
             if r:
                 data = self.s.recv(MIN_RECV_PACKET - len(response))
-                if data == '':
+                if data == b'':
                     raise exceptions.EOFError("Got empty data (remote died?). from {0}".format(self.host))
                 response += data
             else:
@@ -187,7 +187,7 @@ class MemcachedClient(object):
             r, _, _ = select.select([self.s], [], [], self.timeout)
             if r:
                 data = self.s.recv(remaining)
-                if data == '':
+                if data == b'':
                     raise exceptions.EOFError("Got empty data (remote died?). from {0}".format(self.host))
                 rv += data
                 remaining -= len(data)

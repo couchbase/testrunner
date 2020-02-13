@@ -531,9 +531,7 @@ class SpatialViewTests(BaseTestCase):
             self.assertEqual(meta["id"],
                               "_design/{0}".format(design_name))
             self.assertEqual(
-                response["spatial"][design_name].encode("ascii",
-                                                                "ignore"),
-                fun)
+                response["spatial"][design_name], fun)
 
 
     def test_insert_x_docs(self):

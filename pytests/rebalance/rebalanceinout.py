@@ -217,7 +217,8 @@ class RebalanceInOutTests(RebalanceBaseTest):
         self.bucket_size = self.input.param("bucket_size", 10)
         bucket_num = min(10, self.quota // self.bucket_size)
         self.log.info('total %s buckets will be created with size %s MB' % (bucket_num, self.bucket_size))
-        bucket_params= self._create_bucket_params(server=self.master, size=self.bucket_size, replicas=self.num_replicas)
+        bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
+                                                   replicas=self.num_replicas)
         self.cluster.create_default_bucket(bucket_params)
         self.buckets.append(Bucket(name="default", authType="sasl", saslPassword="",
                                    num_replicas=self.num_replicas, bucket_size=self.bucket_size))
@@ -278,7 +279,7 @@ class RebalanceInOutTests(RebalanceBaseTest):
 
         self.log.info('total %s buckets will be created with size %s MB' % (bucket_num, self.bucket_size))
         bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
-                                                          replicas=self.num_replicas)
+                                                   replicas=self.num_replicas)
         self.cluster.create_default_bucket(bucket_params)
         self.buckets.append(Bucket(name="default", authType="sasl", saslPassword="",
                                    num_replicas=self.num_replicas, bucket_size=self.bucket_size))
