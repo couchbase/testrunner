@@ -12,7 +12,7 @@ setup(
     author="Couchbase Inc",
     author_email="build@couchbase.com",
     install_requires=["paramiko",
-                      "pymongo",],
+                      "pymongo", 'couchbase'],
     packages=["cbtestlib",
               "cbtestlib.builds",
               "cbtestlib.cbkarma",
