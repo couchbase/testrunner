@@ -1,4 +1,6 @@
+import datetime
 import json
+import random
 
 from couchbase_helper.tuq_helper import N1QLHelper
 from eventing.eventing_base import EventingBaseTest
@@ -108,6 +110,15 @@ class EventingMultiHandler(EventingBaseTest):
         self.log.info("==========================================================================")
         self.log.info("handler status: \n {}".format(self.handler_status_map()))
 
+    def reset_param(self):
+        self.src_bucket_name = "src_bucket"
+        self.dst_bucket_name = "dst_bucket"
+        self.sleep(3)
+        random.seed(datetime.datetime.now())
+        function_name = "Function_{0}_{1}".format(random.randint(1, 1000000000), self._testMethodName)
+        # See MB-28447, From now function name can only be max of 100 chars
+        self.function_name = function_name[0:90]
+
     def test_multiple_handle_multiple_buckets_preload(self):
         # load data
         self.load(self.gens_load, buckets=self.buckets, flag=self.item_flag, verify_data=False,
@@ -138,6 +149,28 @@ class EventingMultiHandler(EventingBaseTest):
         self.load(self.gens_load, buckets=self.buckets, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
         self.create_n_handler(self.num_handlers,self.num_src_buckets,self.num_dst_buckets,self.handler_code)
+        self.print_handlers_state()
+        self.undeploy_delete_all_handler()
+
+    def test_mix_handlers(self):
+        # load data
+        self.load(self.gens_load, buckets=self.buckets, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        self.create_n_handler(self.num_handlers, self.num_src_buckets, self.num_dst_buckets, "handler_code/no_op.js")
+        #self.deploy_n_handler(self.deploy_handler, sequential=self.sequential)
+        self.reset_param()
+        self.create_n_handler(self.num_handlers, self.num_src_buckets, self.num_dst_buckets, "handler_code/delete_doc_bucket_op.js")
+        #self.deploy_n_handler(self.deploy_handler, sequential=self.sequential)
+        self.reset_param()
+        self.create_n_handler(self.num_handlers, self.num_src_buckets, self.num_dst_buckets, "handler_code/bucket_op_with_timers.js")
+        #self.deploy_n_handler(self.deploy_handler, sequential=self.sequential)
+        self.reset_param()
+        self.create_n_handler(self.num_handlers, self.num_src_buckets, self.num_dst_buckets, "handler_code/n1ql_op_without_timers.js")
+        #self.deploy_n_handler(self.deploy_handler, sequential=self.sequential)
+        self.reset_param()
+        self.create_n_handler(self.num_handlers, self.num_src_buckets, self.num_dst_buckets, "handler_code/n1ql_op_with_timers.js")
+        self.deploy_n_handler(self.deploy_handler, sequential=self.sequential)
+        self.wait_for_handlers_to_deployed()
         self.print_handlers_state()
         self.undeploy_delete_all_handler()
 
