@@ -222,7 +222,7 @@ class basic_ops(BaseTestCase):
             else:
                 self.assertNotEqual("API is accessible from localhost only", output[0])
 
-    def verify_stat(self,items, value="active" ):
+    def verify_stat(self,items, value=b"active" ):
         mc = MemcachedClient(self.master.ip, 11210)
         mc.sasl_auth_plain(self.master.rest_username, self.master.rest_password)
         mc.bucket_select('default')
@@ -272,7 +272,7 @@ class basic_ops(BaseTestCase):
 
         for bucket in self.buckets:
             # Verify the stat for compression_mode off and compressed items should be still 10000
-            self.verify_stat(items=self.num_items, value="off")
+            self.verify_stat(items=self.num_items, value=b"off")
 
     def do_get_random_key(self):
         # MB-31548, get_Random key gets hung sometimes.

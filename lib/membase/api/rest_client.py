@@ -1551,7 +1551,7 @@ class RestConnection(object):
         status, content, header = self._http_request(api, "POST", code)
         if content:
             try:
-                content = content.decode('utf-8').replace('"', '')
+                content = content.decode('utf-8')
             except (UnicodeDecodeError, AttributeError):
                 pass
         if print_log:
