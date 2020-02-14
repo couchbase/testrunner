@@ -271,7 +271,7 @@ class BaseTestCase(unittest.TestCase):
                 self.log.info("initializing cluster")
                 self.reset_cluster()
                 cli_command = 'node-init'
-                if not self.hostname:
+                if self.hostname:
                     for server in self.servers:
                         options = '--node-init-hostname ' + server.ip
                         remote_client = RemoteMachineShellConnection(server)
