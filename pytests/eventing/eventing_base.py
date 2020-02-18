@@ -50,7 +50,7 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
         self.docs_per_day = self.input.param("doc-per-day", 1)
         self.use_memory_manager = self.input.param('use_memory_manager', True)
         self.print_eventing_handler_code_in_logs = self.input.param('print_eventing_handler_code_in_logs', True)
-        random.seed(datetime.time)
+        random.seed(datetime.datetime.now())
         function_name = "Function_{0}_{1}".format(random.randint(1, 1000000000), self._testMethodName)
         # See MB-28447, From now function name can only be max of 100 chars
         self.function_name = function_name[0:90]
