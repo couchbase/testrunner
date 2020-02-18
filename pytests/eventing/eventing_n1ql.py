@@ -383,3 +383,20 @@ class EventingN1QL(EventingBaseTest):
         self.load(gen_load_del, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size, op_type='delete')
         self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+
+    def test_n1ql_with_set_expiry(self):
+        bucket_params = self._create_bucket_params(server=self.server, size=self.bucket_size,
+                                                   replicas=self.num_replicas)
+        self.cluster.create_standard_bucket(name=self.dst_bucket_name1, port=STANDARD_BUCKET_PORT + 1,
+                                            bucket_params=bucket_params)
+        self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        body = self.create_save_function_body(self.function_name, "handler_code/n1ql_op_to_set_expiry.js",
+                                              dcp_stream_boundary="everything", execution_timeout=60)
+        self.deploy_function(body)
+        self.verify_eventing_results(self.function_name, 2016, skip_stats_validation=True)
+        body = self.create_save_function_body(self.function_name+"_check", "handler_code/check_for_expiry.js",
+                                              dcp_stream_boundary="everything", execution_timeout=60,multi_dst_bucket=True)
+        self.deploy_function(body)
+        self.verify_eventing_results(self.function_name, 2016,bucket=self.dst_bucket_name1, skip_stats_validation=True)
