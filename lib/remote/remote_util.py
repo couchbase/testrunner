@@ -30,7 +30,8 @@ from testconstants import COUCHBASE_FROM_VERSION_3,\
 from testconstants import COUCHBASE_RELEASE_VERSIONS_3, CB_RELEASE_BUILDS
 from testconstants import SHERLOCK_VERSION, WIN_PROCESSES_KILLED
 from testconstants import COUCHBASE_FROM_VERSION_4, COUCHBASE_FROM_WATSON,\
-                          COUCHBASE_FROM_SPOCK
+                          COUCHBASE_FROM_SPOCK,\
+                          COUCHBASE_FROM_CHESHIRE_CAT
 from testconstants import RPM_DIS_NAME
 from testconstants import LINUX_DISTRIBUTION_NAME, LINUX_CB_PATH, \
                           LINUX_COUCHBASE_BIN_PATH
@@ -150,10 +151,11 @@ class RemoteMachineHelper(object):
             self.remote_shell.info = self.remote_shell.extract_remote_info()
 
         if self.remote_shell.info.type.lower() == 'windows':
-             output, error = self.remote_shell.execute_command('tasklist| grep {0}'
+             output, error = self.remote_shell.execute_command('tasklist | grep {0}'
                                                 .format(process_name), debug=False)
              if error or output == [""] or output == []:
                  return None
+             words = [' '.join(x.split()) for x in output]
              words = output[0].split(" ")
              words = filter(lambda x: x != "", words)
              process = RemoteMachineProcess()
@@ -172,6 +174,20 @@ class RemoteMachineHelper(object):
                     log.info("process is running in args {0}: {1}".format(self.remote_shell.ip, process.args))
                     return process
         return None
+
+    def process_count(self, process_name, os_type="windows"):
+        if os_type == 'windows':
+            output, error = self.remote_shell.execute_command('tasklist | grep {0}'
+                                                .format(process_name), debug=False)
+            if error or output == [""] or output == []:
+                return None
+            processes = [' '.join(x.split()) for x in output]
+            log.info("Process {0} in this server: {1}".format(process_name, processes))
+            count = 0
+            for process in processes:
+                if process_name in process:
+                    count += 1
+            return count
 
 
 class RemoteMachineShellConnection:

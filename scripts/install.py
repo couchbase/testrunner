@@ -19,7 +19,7 @@ from builds.build_query import BuildQuery
 import logging.config
 from membase.api.exception import ServerUnavailableException
 from membase.api.rest_client import RestConnection, RestHelper
-from remote.remote_util import RemoteMachineShellConnection, RemoteUtilHelper
+from remote.remote_util import RemoteMachineShellConnection, RemoteUtilHelper, RemoteMachineHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
 from testconstants import MV_LATESTBUILD_REPO
 from testconstants import SHERLOCK_BUILD_REPO
@@ -34,6 +34,7 @@ from testconstants import MIN_KV_QUOTA, INDEX_QUOTA, FTS_QUOTA, CBAS_QUOTA, CLUS
 from testconstants import LINUX_COUCHBASE_PORT_CONFIG_PATH, LINUX_COUCHBASE_OLD_CONFIG_PATH
 from testconstants import WIN_COUCHBASE_PORT_CONFIG_PATH, WIN_COUCHBASE_OLD_CONFIG_PATH,\
                           MACOS_NAME
+from testconstants import WIN_NUM_ERLANG_PROCESS
 import TestInput
 
 
@@ -503,6 +504,18 @@ class CouchbaseServerInstaller(Installer):
         remote_client = RemoteMachineShellConnection(params["server"])
         success = True
         success &= remote_client.is_couchbase_installed()
+        if remote_client.info.type.lower() == 'windows':
+            count = RemoteMachineHelper(remote_client).process_count("erl")
+            retry = 6
+            if count is None:
+                sys.exit("**** erlang service does not run ****")
+            while count < WIN_NUM_ERLANG_PROCESS and retry != 0:
+                time.sleep(10)
+                log.info("Wait 10 seconds for all erlang processes are up")
+                count = RemoteMachineHelper(remote_client).process_count("erl")
+                retry -= 1
+                if retry == 0:
+                    sys.exit("not all erlang processes up")
         if not success:
             mesg = "\n\nServer {0} failed to install".format(params["server"].ip)
             sys.exit(mesg)
