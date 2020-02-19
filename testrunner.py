@@ -588,7 +588,7 @@ def runtests(names, options, arg_i, arg_p, runtime_test_params):
                 continue
 
             # there is a group for this test case, if that group is not specified at run time then do not run it
-            elif len( set(runtime_test_params["GROUP"].split(";")) & set(params["GROUP"].split(";")) ) == 0:
+            elif not set(runtime_test_params["GROUP"].split(";")).issubset(set(params["GROUP"].split(";"))):
                 print "test '{0}' skipped, is not in the requested group".format(name)
                 continue
             else:
@@ -596,7 +596,7 @@ def runtests(names, options, arg_i, arg_p, runtime_test_params):
 
         elif "EXCLUDE_GROUP" in runtime_test_params:
             if 'GROUP' in params and \
-                len(set(runtime_test_params["EXCLUDE_GROUP"].split(";")) & set(params["GROUP"].split(";"))) > 0:
+                set(runtime_test_params["EXCLUDE_GROUP"].split(";")).issubset(set(params["GROUP"].split(";"))):
                     print "test '{0}' skipped, is in an excluded group".format(name)
                     continue
 
