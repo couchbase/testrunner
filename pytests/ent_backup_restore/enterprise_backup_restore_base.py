@@ -884,8 +884,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             if expected_error:
                 for line in output:
                     if self.debug_logs:
-                        print("output from cmd: ", line)
-                        print("expect error   : ", expected_error)
+                        print(("output from cmd: ", line))
+                        print(("expect error   : ", expected_error))
                     if line.find(expected_error) != -1:
                         error_found = True
                         break
@@ -1363,8 +1363,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                               % regex_pattern)
                 for key in restore_file_data[bucket.name]:
                     if self.debug_logs:
-                        print("key in backup file of bucket %s:  %s" \
-                              % (bucket.name, key))
+                        print(("key in backup file of bucket %s:  %s" \
+                              % (bucket.name, key)))
                     if validate_keys:
                         if pattern.search(key):
                             regex_backup_data[bucket.name][key] = \
@@ -1372,19 +1372,19 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                             key_in_file_match_regex += 1
                     else:
                         if self.debug_logs:
-                            print("value of key in backup file  ", \
-                                  restore_file_data[bucket.name][key])
+                            print(("value of key in backup file  ", \
+                                  restore_file_data[bucket.name][key]))
                         if pattern.search(restore_file_data[bucket.name][key]["Value"]):
                             regex_backup_data[bucket.name][key] = \
                                 restore_file_data[bucket.name][key]
                             key_in_file_match_regex += 1
                 if self.debug_logs:
-                    print("\nKeys and value in backup file of bucket {0} \
+                    print(("\nKeys and value in backup file of bucket {0} \
                            that matches pattern '{1}'" \
-                          .format(bucket.name, regex_pattern))
+                          .format(bucket.name, regex_pattern)))
                     for x in regex_backup_data[bucket.name]:
-                        print("key: ", x)
-                        print("value: ", regex_backup_data[bucket.name][x]["Value"])
+                        print(("key: ", x))
+                        print(("value: ", regex_backup_data[bucket.name][x]["Value"]))
                 self.log.info("Total keys matched in bk file of bucket {0} is {1}"
                               .format(bucket.name, key_in_file_match_regex))
                 restore_file_data = regex_backup_data
@@ -1455,15 +1455,15 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                                 .format(restore_file_data[bucket.name], key_count))
             self.log.info("******** Data macth in backup file and bucket {0} ******** " \
                           .format(bucket.name))
-            print("Bucket: ", bucket.name)
-            print("Total items in backup file:   ", len(bk_file_data[bucket.name]))
+            print(("Bucket: ", bucket.name))
+            print(("Total items in backup file:   ", len(bk_file_data[bucket.name])))
             if regex_pattern is not None:
-                print("Total items to be restored with regex pattern '{0}' is {1} " \
-                      .format(regex_pattern, key_count))
-            print("Total items in bucket should be:   ", key_count)
+                print(("Total items to be restored with regex pattern '{0}' is {1} " \
+                      .format(regex_pattern, key_count)))
+            print(("Total items in bucket should be:   ", key_count))
             rest = RestConnection(server_bucket[0])
             actual_keys = rest.get_active_key_count(bucket.name)
-            print("Total items actual in bucket:      ", actual_keys)
+            print(("Total items actual in bucket:      ", actual_keys))
             if actual_keys != key_count:
                 self.fail("Total keys matched: %s != Total keys in bucket %s: %s" \
                           "at node %s " % (key_count, bucket.name, actual_keys,
@@ -1514,8 +1514,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             if not isinstance(output[x], str):
                 continue
             if self.debug_logs:
-                print("\noutput:  ", repr(output[x]))
-                print("source:  ", repr(source[x]))
+                print(("\noutput:  ", repr(output[x])))
+                print(("source:  ", repr(source[x])))
             if output[x] != source[x]:
                 self.log.error("Element %s in output did not match " % x)
                 self.log.error("Output => %s != %s <= Source" % (output[x], source[x]))
@@ -1599,7 +1599,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                                 int(x.strip().split()[0][:-2].split(".")[0])
 
                             file_info["items"] = int(x.strip().split()[1])
-                        print("output content   ", file_info)
+                        print(("output content   ", file_info))
             return file_info
         else:
             print(message)
@@ -1873,8 +1873,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                 "ls {0}".format(logs_path + win_path))
 
         if self.debug_logs:
-            print("\nlog path: ", logs_path)
-            print("output : ", output)
+            print(("\nlog path: ", logs_path))
+            print(("output : ", output))
 
         # While we extract logs, record the name of each backup's logs archive
         log_archive_names = []
@@ -2298,7 +2298,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                                         bk_file_events_path)
         local_bk_def = open(bk_file_events_path)
         bk_file_fxn = json.loads(local_bk_def.read())
-        for k, v in bk_file_fxn[0]["settings"].items():
+        for k, v in list(bk_file_fxn[0]["settings"].items()):
             if v != bk_fxn[0]["settings"][k]:
                 self.log.info("key {0} has value not match".format(k))
                 self.log.info("{0} : {1}".format(v, bk_fxn[0]["settings"][k]))

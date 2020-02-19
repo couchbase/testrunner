@@ -277,8 +277,8 @@ class BaseTestCase(unittest.TestCase):
                         remote_client = RemoteMachineShellConnection(server)
                         output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
                                 options=options, cluster_host="localhost", user='Administrator', password='password') 
-                        print output
-                        print error
+                        print(output)
+                        print(error)
                 
                 master_services = self.get_services(self.servers[:1],
                                                     self.services_init,
@@ -423,7 +423,7 @@ class BaseTestCase(unittest.TestCase):
         """Collect cbcollectinfo logs for all the servers in the cluster.
         """
         path = TestInputSingleton.input.param("logs_folder", "/tmp")
-        print("grabbing cbcollect from {0}".format(server.ip))
+        print(("grabbing cbcollect from {0}".format(server.ip)))
         path = path or "."
         try:
             cbcollectRunner(server, path).run()
@@ -468,7 +468,7 @@ class BaseTestCase(unittest.TestCase):
                                 output, _ = shell.execute_command("ps -aef|grep %s" %
                                                                   TestInputSingleton.input.param('get_trace', None))
                                 output = shell.execute_command("pstack %s" % output[0].split()[1].strip())
-                                print(output[0])
+                                print((output[0]))
                             except:
                                 pass
                     if self.input.param('BUGS', False):
@@ -1770,13 +1770,13 @@ class BaseTestCase(unittest.TestCase):
         """ Method to print map results - Used only for debugging purpose """
         output = ""
         for bucket in list(map.keys()):
-            print("----- Bucket {0} -----".format(bucket))
+            print(("----- Bucket {0} -----".format(bucket)))
             for node in list(map[bucket].keys()):
-                print("-------------Node {0}------------".format(node))
+                print(("-------------Node {0}------------".format(node)))
                 for vbucket in list(map[bucket][node].keys()):
-                    print("   for vbucket {0}".format(vbucket))
+                    print(("   for vbucket {0}".format(vbucket)))
                     for key in list(map[bucket][node][vbucket].keys()):
-                        print("            :: for key {0} = {1}".format(key, map[bucket][node][vbucket][key]))
+                        print(("            :: for key {0} = {1}".format(key, map[bucket][node][vbucket][key])))
 
     def get_meta_data_set_all(self, dest_server, kv_store=1):
         """ Method to get all meta data set for buckets and from the servers """
@@ -2357,7 +2357,7 @@ class BaseTestCase(unittest.TestCase):
             master = self.master
         rest = RestConnection(master)
         map = rest.get_nodes_services()
-        for key, val in map.items():
+        for key, val in list(map.items()):
             for service in val:
                 if service not in list(self.services_map.keys()):
                     self.services_map[service] = []
@@ -2367,7 +2367,7 @@ class BaseTestCase(unittest.TestCase):
         list_nodes_services = {}
         rest = RestConnection(self.master)
         map = rest.get_nodes_services()
-        for k, v in map.items():
+        for k, v in list(map.items()):
             if "8091" in k:
                 k = k.replace(":8091", "")
             if len(v) == 1:

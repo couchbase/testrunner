@@ -78,21 +78,21 @@ def main():
 
     options, args = parser.parse_args()
 
-    print('the run is', options.run)
-    print('the  version is', options.version)
+    print(('the run is', options.run))
+    print(('the  version is', options.version))
     releaseVersion = float('.'.join(options.version.split('.')[:2]))
-    print('release version is', releaseVersion)
+    print(('release version is', releaseVersion))
 
-    print('nolaunch', options.noLaunch)
-    print('os', options.os)
+    print(('nolaunch', options.noLaunch))
+    print(('os', options.os))
     # print 'url', options.url
 
-    print('url is', options.url)
-    print('cherrypick command is', options.cherrypick)
+    print(('url is', options.url))
+    print(('cherrypick command is', options.cherrypick))
 
-    print('the reportedParameters are', options.dashboardReportedParameters)
+    print(('the reportedParameters are', options.dashboardReportedParameters))
 
-    print('retry params are', options.retry_params)
+    print(('retry params are', options.retry_params))
 
     # What do we do with any reported parameters?
     # 1. Append them to the extra (testrunner) parameters
@@ -146,14 +146,14 @@ def main():
             splitSubcomponents = options.subcomponent.split(',')
             subcomponentString = ''
             for i in range(len(splitSubcomponents)):
-                print('subcomponentString is', subcomponentString)
+                print(('subcomponentString is', subcomponentString))
                 subcomponentString = subcomponentString + "'" + splitSubcomponents[i] + "'"
                 if i < len(splitSubcomponents) - 1:
                     subcomponentString = subcomponentString + ','
             queryString = "select * from `QE-Test-Suites` where {0} and component in ['{1}'] and subcomponent in [{2}];". \
                 format(suiteString, options.component, subcomponentString)
 
-    print('the query is', queryString)  # .format(options.run, componentString)
+    print(('the query is', queryString))  # .format(options.run, componentString)
     query = N1QLQuery(queryString)
     results = cb.n1ql_query(queryString)
 
@@ -162,7 +162,7 @@ def main():
         try:
             data = row['QE-Test-Suites']
             data['config'] = data['config'].rstrip()  # trailing spaces causes problems opening the files
-            print('row', data)
+            print(('row', data))
 
             # check any os specific
             if 'os' not in data or (data['os'] == options.os) or \
@@ -173,7 +173,7 @@ def main():
                     if 'jenkins' in data:
                         # then this is sort of a special case, launch the old style Jenkins job
                         # not implemented yet
-                        print('Old style Jenkins', data['jenkins'])
+                        print(('Old style Jenkins', data['jenkins']))
                     else:
                         if 'initNodes' in data:
                             initNodes = data['initNodes'].lower() == 'true'
@@ -228,17 +228,17 @@ def main():
                             'mode': mode
                         })
                 else:
-                    print(data['component'], data['subcomponent'], ' is not supported in this release')
+                    print((data['component'], data['subcomponent'], ' is not supported in this release'))
             else:
-                print('OS does not apply to', data['component'], data['subcomponent'])
+                print(('OS does not apply to', data['component'], data['subcomponent']))
 
         except Exception as e:
             print('exception in querying tests, possible bad record')
-            print(traceback.format_exc())
+            print((traceback.format_exc()))
             print(data)
 
     print('tests to launch:')
-    for i in testsToLaunch: print(i['component'], i['subcomponent'])
+    for i in testsToLaunch: print((i['component'], i['subcomponent']))
     print('\n\n')
 
     launchStringBase = str(options.jenkins_server_url) + '/job/' + str(options.launch_job)
@@ -270,7 +270,7 @@ def main():
     launchString = launchString + '&retry_params=' + urllib.parse.quote(options.retry_params)
     launchString = launchString + '&retries=' + options.retries
     if options.include_tests:
-        launchString = launchString + '&include_tests='+urllib.quote(options.include_tests.replace("'", " ").strip())
+        launchString = launchString + '&include_tests='+urllib.parse.quote(options.include_tests.replace("'", " ").strip())
 
     if options.url is not None:
         launchString = launchString + '&url=' + options.url
@@ -292,15 +292,15 @@ def main():
 
             response, content = httplib2.Http(timeout=60).request(getAvailUrl, 'GET')
             if response.status != 200:
-                print(time.asctime(time.localtime(time.time())), 'invalid server response', content)
+                print((time.asctime(time.localtime(time.time())), 'invalid server response', content))
                 time.sleep(POLL_INTERVAL)
             elif int(content) == 0:
-                print(time.asctime(time.localtime(time.time())), 'no VMs')
+                print((time.asctime(time.localtime(time.time())), 'no VMs'))
                 time.sleep(POLL_INTERVAL)
             else:
                 # see if we can match a test
                 serverCount = int(content)
-                print(time.asctime(time.localtime(time.time())), 'there are', serverCount, ' servers available')
+                print((time.asctime(time.localtime(time.time())), 'there are', serverCount, ' servers available'))
 
                 haveTestToLaunch = False
                 i = 0
@@ -319,17 +319,17 @@ def main():
                             response, content = httplib2.Http(
                                 timeout=60).request(getAddPoolUrl, 'GET')
                             if response.status != 200:
-                                print(time.asctime(time.localtime(
-                                    time.time())), 'invalid server response', content)
+                                print((time.asctime(time.localtime(
+                                    time.time())), 'invalid server response', content))
                                 time.sleep(POLL_INTERVAL)
                             elif int(content) == 0:
-                                print(time.asctime(
+                                print((time.asctime(
                                     time.localtime(time.time())), \
-                                    'no {0} VMs at this time'.format(options.addPoolId))
+                                    'no {0} VMs at this time'.format(options.addPoolId)))
                                 i = i + 1
                             else:
-                                print(time.asctime(time.localtime(time.time())), \
-                                      "there are {0} {1} servers available".format(int(content), options.addPoolId))
+                                print((time.asctime(time.localtime(time.time())), \
+                                      "there are {0} {1} servers available".format(int(content), options.addPoolId)))
                                 haveTestToLaunch = True
                         else:
                             haveTestToLaunch = True
@@ -362,10 +362,10 @@ def main():
                                            format(descriptor, testsToLaunch[i]['serverCount'],
                                                   testsToLaunch[i]['timeLimit'], \
                                                   options.os, options.poolId)
-                    print('getServerURL', getServerURL)
+                    print(('getServerURL', getServerURL))
 
                     response, content = httplib2.Http(timeout=60).request(getServerURL, 'GET')
-                    print('response.status', response, content)
+                    print(('response.status', response, content))
 
                     if options.serverType.lower() != 'docker':
                         # sometimes there could be a race, before a dispatcher process acquires vms,
@@ -391,12 +391,12 @@ def main():
                                                       testsToLaunch[i]['addPoolServerCount'],
                                                       testsToLaunch[i]['timeLimit'], options.os,
                                                       options.addPoolId)
-                        print('getServerURL', getServerURL)
+                        print(('getServerURL', getServerURL))
 
                         response2, content2 = httplib2.Http(timeout=60).request(getServerURL, 'GET')
                         content2 = content2.decode('utf-8')
 
-                        print('response2.status', response2, content2)
+                        print(('response2.status', response2, content2))
 
                     if response.status == 499 or \
                             (testsToLaunch[i]['addPoolServerCount'] and
@@ -446,7 +446,7 @@ def main():
                                       '&addPoolServers=' + \
                                       urllib.parse.quote(addPoolServers)
 
-                        print('\n', time.asctime(time.localtime(time.time())), 'launching ', url)
+                        print(('\n', time.asctime(time.localtime(time.time())), 'launching ', url))
                         print(url)
 
                         if options.noLaunch:
@@ -458,7 +458,7 @@ def main():
                                 response, content = httplib2.Http(timeout=60). \
                                     request('http://' + SERVER_MANAGER + '/releaseservers/' + descriptor + '/available',
                                             'GET')
-                                print('the release response', response, content)
+                                print(('the release response', response, content))
                         else:
                             response, content = httplib2.Http(timeout=60).request(url, 'GET')
 
@@ -477,13 +477,13 @@ def main():
 
         except Exception as e:
             print('have an exception')
-            print(traceback.format_exc())
+            print((traceback.format_exc()))
             time.sleep(POLL_INTERVAL)
     # endwhile
 
     print('\n\n\ndone, everything is launched')
     for i in summary:
-        print(i['test'], 'was launched at', i['time'])
+        print((i['test'], 'was launched at', i['time']))
     return
 
 

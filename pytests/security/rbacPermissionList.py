@@ -77,7 +77,7 @@ class rbacPermissionList():
 
         for list in list_return:
             if int(list['result']) not in httpCode:
-                print("Return HTTP Code does not match with expected -- {0} and actual - {1}".format(list['result'], httpCode))
+                print(("Return HTTP Code does not match with expected -- {0} and actual - {1}".format(list['result'], httpCode)))
                 return_list.append(list)
                 flag = 'False'
                 return_value = {

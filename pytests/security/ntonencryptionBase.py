@@ -4,7 +4,7 @@ log = logger.Logger.get_logger()
 import time
 from subprocess import Popen, PIPE
 import json
-import urllib2
+import urllib.request, urllib.error, urllib.parse
 import os
 import stat
 import subprocess
@@ -162,13 +162,13 @@ class ntonencryptionBase:
 
         while attempts < 1:
             try:
-                response = urllib2.urlopen("http://testssl.sh/testssl.sh", timeout = 5)
+                response = urllib.request.urlopen("http://testssl.sh/testssl.sh", timeout = 5)
                 content = response.read()
                 f = open(testssl_file_name, 'w' )
                 f.write( content )
                 f.close()
                 break
-            except urllib2.URLError as e:
+            except urllib.error.URLError as e:
                 attempts += 1
                 log.info("have an exception getting testssl {0}".format(e))
 

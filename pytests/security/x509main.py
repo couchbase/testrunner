@@ -133,7 +133,7 @@ class x509main:
     
                 # print file contents for easy debugging
                 fout = open("./pytests/security/clientconf3.conf", "r")
-                print(fout.read())
+                print((fout.read()))
                 fout.close()
                 
                 output, error = shell.execute_command("openssl genrsa " + encryption + " -out " + x509main.CACERTFILEPATH + server.ip + ".key " + str(key_length))
@@ -176,7 +176,7 @@ class x509main:
 
             # print file contents for easy debugging
             fout = open("./pytests/security/clientconf2.conf", "r")
-            print(fout.read())
+            print((fout.read()))
             fout.close()
             
             # Generate Certificate for the client

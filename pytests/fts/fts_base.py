@@ -463,7 +463,7 @@ class NodeHelper:
         """Collect cbcollectinfo logs for all the servers in the cluster.
         """
         path = TestInputSingleton.input.param("logs_folder", "/tmp")
-        print("grabbing cbcollect from {0}".format(server.ip))
+        print(("grabbing cbcollect from {0}".format(server.ip)))
         path = path or "."
         try:
             cbcollectRunner(server, path).run()
@@ -660,7 +660,7 @@ class FTSIndex:
                                     custom_map_add_non_indexed_fields=self.custom_map_add_non_indexed_fields)
         fts_map, self.es_custom_map = cm_gen.get_map()
         self.smart_query_fields = cm_gen.get_smart_query_fields()
-        print(self.smart_query_fields)
+        print((self.smart_query_fields))
         self.index_definition['params'] = self.build_custom_index_params(
             fts_map)
         if self.num_custom_analyzers > 0:
@@ -811,7 +811,7 @@ class FTSIndex:
         Recurse through a given nested field mapping, and append the leaf node with the specified value.
         Can be enhanced to update the current value as well if required.
         """
-        for k, v in map.items():
+        for k, v in list(map.items()):
             if k == key:
                 map[k]['fields'].append(value)
                 return map
@@ -1711,7 +1711,7 @@ class CouchbaseCluster:
         self.__n1ql_nodes = []
         self.__non_fts_nodes = []
         service_map = RestConnection(self.__master_node).get_nodes_services()
-        for node_ip, services in service_map.items():
+        for node_ip, services in list(service_map.items()):
             if self.is_cluster_run():
                 # if cluster-run and ip not 127.0.0.1
                 ip = "127.0.0.1"
@@ -3315,7 +3315,7 @@ class FTSBaseTest(unittest.TestCase):
             @return services_list: like ['kv', 'kv,fts', 'index,n1ql','index']
         """
         serv_dict = {'D': 'kv', 'F': 'fts', 'I': 'index', 'Q': 'n1ql'}
-        for letter, serv in serv_dict.items():
+        for letter, serv in list(serv_dict.items()):
             serv_str = serv_str.replace(letter, serv)
         services_list = re.split('[-,:]', serv_str)
         for index, serv in enumerate(services_list):
@@ -3835,7 +3835,7 @@ class FTSBaseTest(unittest.TestCase):
             _, defn = index.get_index_defn()
 
         for pindex in defn['planPIndexes']:
-            for node, attr in pindex['nodes'].items():
+            for node, attr in list(pindex['nodes'].items()):
                 if attr['priority'] == 0:
                     break
             if node not in list(nodes_partitions.keys()):
@@ -3880,7 +3880,7 @@ class FTSBaseTest(unittest.TestCase):
         # check 2 - each pindex servicing "partitions_per_pindex" vbs
         num_fts_nodes = len(self._cb_cluster.get_fts_nodes())
         for node in list(nodes_partitions.keys()):
-            for uuid, partitions in nodes_partitions[node]['pindexes'].items():
+            for uuid, partitions in list(nodes_partitions[node]['pindexes'].items()):
                 if len(partitions) > partitions_per_pindex:
                     self.fail("sourcePartitions for pindex %s more than "
                               "max_partitions_per_pindex %s" %
@@ -3915,7 +3915,7 @@ class FTSBaseTest(unittest.TestCase):
 
         for node in list(nodes_partitions.keys()):
             num_node_partitions = 0
-            for uuid, partitions in nodes_partitions[node]['pindexes'].items():
+            for uuid, partitions in list(nodes_partitions[node]['pindexes'].items()):
                 num_node_partitions += len(partitions)
             if abs(num_node_partitions - exp_partitions_per_node) > \
                     partitions_per_pindex:
@@ -4427,14 +4427,14 @@ class FTSBaseTest(unittest.TestCase):
                 file_input.close()
                 zipped.close()
                 os.remove(path + '/' + filename)
-                print("downloaded and zipped diags @ : {0}/{1}".format(path,
-                                                                       filename))
+                print(("downloaded and zipped diags @ : {0}/{1}".format(path,
+                                                                       filename)))
             except urllib.error.URLError as error:
-                print("unable to obtain fts diags from {0}".format(diag_url))
+                print(("unable to obtain fts diags from {0}".format(diag_url)))
             except BadStatusLine:
-                print("unable to obtain fts diags from {0}".format(diag_url))
+                print(("unable to obtain fts diags from {0}".format(diag_url)))
             except Exception as e:
-                print("unable to obtain fts diags from {0} :{1}".format(diag_url, e))
+                print(("unable to obtain fts diags from {0} :{1}".format(diag_url, e)))
 
     def backup_pindex_data(self, server):
         remote = RemoteMachineShellConnection(server)

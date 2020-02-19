@@ -3711,7 +3711,7 @@ class RestConnection(object):
                     for node in tmp:
                         node["hostname"] = node["hostname"].split(":")
                         node["hostname"] = node["hostname"][0]
-                        print(node["hostname"][0])
+                        print((node["hostname"][0]))
                         nodes.append(node["hostname"])
                     zones[zone_info["groups"][i]["name"]] = nodes
         return zones
