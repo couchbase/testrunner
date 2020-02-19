@@ -115,6 +115,7 @@ MACOS_NAME = {"10.10":"Yosemite", "10.11":"El Capitan", "10.12":"Sierra", "10.13
 
 SYSTEMD_SERVER = ["centos 8", "centos 7", "suse 12", "suse 15", "ubuntu 16.04", "ubuntu 18.04",
                   "debian gnu/linux 8", "debian gnu/linux 9", "rhel8"]
+WIN_NUM_ERLANG_PROCESS = 4
 WIN_MEMBASE_DATA_PATH = '/cygdrive/c/Program\ Files/Membase/Server/var/lib/membase/data/'
 WIN_COUCHBASE_DATA_PATH = '/cygdrive/c/Program\ Files/Couchbase/Server/var/lib/couchbase/data/'
 WIN_COUCHBASE_DATA_PATH_RAW = 'c:/Program\ Files/Couchbase/Server/var/lib/couchbase/data/'
