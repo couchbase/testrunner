@@ -435,7 +435,7 @@ def _parse_user_input():
             else:
                 log.warn("URL:{0} is not valid, will use version to locate build".format(value))
         if key == "type" or key == "edition" and value.lower() in install_constants.CB_EDITIONS:
-            params["edition"] = value.lower()
+            params["cb_edition"] = value.lower()
         if key == "timeout" and int(value) > 60:
             params["timeout"] = int(value)
         if key == "storage_mode":
