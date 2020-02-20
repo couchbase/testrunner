@@ -8,8 +8,10 @@ import random
 import time
 import mc_bin_client
 import couchbase.subdocument as SD
-from sdk_client import SDKClient
-
+try:
+    from sdk_client import SDKClient
+except:
+    from sdk_client3 import SDKClient
 
 class SubdocSimpleDataset(SubdocBaseTest):
     def setUp(self):

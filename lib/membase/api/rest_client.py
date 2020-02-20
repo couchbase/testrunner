@@ -44,10 +44,10 @@ class RestHelper(object):
                     return True
                 else:
                     if status is not None:
-                        log.warning("server {0}:{1} status is {2}"\
+                        log.warn("server {0}:{1} status is {2}"\
                             .format(self.rest.ip, self.rest.port, status.status))
                     else:
-                        log.warning("server {0}:{1} status is down"\
+                        log.warn("server {0}:{1} status is down"\
                                            .format(self.rest.ip, self.rest.port))
             except ServerUnavailableException:
                 log.error("server {0}:{1} is unavailable"\
@@ -371,7 +371,7 @@ class RestConnection(object):
             httplib2.Http(timeout=timeout).request(api, 'GET', '',
                                                    headers=self._create_capi_headers())
         except Exception as ex:
-            log.warning('Exception while streaming: %s' % str(ex))
+            log.warn('Exception while streaming: %s' % str(ex))
 
     def open_sasl_streaming_connection(self, bucket, timeout=1000):
         if self.debug_logs:
@@ -383,7 +383,7 @@ class RestConnection(object):
         try:
             t.start()
         except:
-            log.warning("thread is not started")
+            log.warn("thread is not started")
             return None
         return t
 
@@ -689,6 +689,12 @@ class RestConnection(object):
         status, content, header = self._http_request(api, 'DELETE', headers=headers)
         return status
 
+    def get_collection(self, bucket):
+        api = self.baseUrl + 'pools/default/buckets/%s/collections' % (bucket)
+        headers = self._create_headers()
+        status, content, header = self._http_request(api, 'GET', headers=headers)
+        return status, content
+
     def run_view(self, bucket, view, name):
         api = self.capiBaseUrl + '/%s/_design/%s/_view/%s' % (bucket, view, name)
         status, content, header = self._http_request(api, headers=self._create_capi_headers())
@@ -904,9 +910,10 @@ class RestConnection(object):
                         log.info("--->Start calling httplib2.Http({}).request({},{},{},{})".format(timeout,api,headers,method,params))
                 except AttributeError:
                     pass
-
-                response, content = httplib2.Http(timeout=timeout).request(api, method,
-                                                                           params, headers)
+                if method == "POST" or method == "PUT":
+                    response, content = httplib2.Http(timeout=timeout).request(api, method, params, headers=headers)
+                else:
+                    response, content = httplib2.Http(timeout=timeout).request(api, method, headers=headers)
                 try:
                     if TestInputSingleton.input.param("debug.api.calls", False):
                         log.info(
@@ -1143,11 +1150,8 @@ class RestConnection(object):
         api = self.cbas_base_url + "/analytics/service"
         headers = self._create_capi_headers_with_auth(username, password)
 
-        params = {'statement': statement, 'pretty': pretty, 'client_context_id': client_context_id}
-
-        if mode is not None:
-            params['mode'] = mode
-
+        params = {'statement': statement, 'mode': mode, 'pretty': pretty,
+                  'client_context_id': client_context_id}
         params = json.dumps(params)
         status, content, header = self._http_request(api, 'POST',
                                                      headers=headers,
@@ -1502,12 +1506,8 @@ class RestConnection(object):
         return True
 
     def force_eject_node(self):
-        status, content = self.diag_eval("gen_server:cast(ns_cluster, leave).")
-        if status:
-            self.check_delay_restart_coucbase_server()
-        else:
-            log.error("Fail to reset a node: {0}".format(self.ip))
-        return status, content
+        self.diag_eval("gen_server:cast(ns_cluster, leave).")
+        self.check_delay_restart_coucbase_server()
 
     """ when we do reset couchbase server by force reject, couchbase server will not
         down right away but delay few seconds to be down depend on server spec.
@@ -2755,7 +2755,7 @@ class RestConnection(object):
         api = self.baseUrl + '/controller/stopRebalance'
         status, content, header = self._http_request(api, 'POST')
         if status:
-            for i in range(wait_timeout):
+            for i in range(int(wait_timeout)):
                 if self._rebalance_progress_status() == 'running':
                     log.warning("rebalance is not stopped yet after {0} sec".format(i + 1))
                     time.sleep(1)
@@ -3780,7 +3780,7 @@ class RestConnection(object):
                     for node in tmp:
                         node["hostname"] = node["hostname"].split(":")
                         node["hostname"] = node["hostname"][0]
-                        print((node["hostname"][0]))
+                        print(node["hostname"][0])
                         nodes.append(node["hostname"])
                     zones[zone_info["groups"][i]["name"]] = nodes
         return zones
@@ -5164,16 +5164,16 @@ class RestParser(object):
     def parse_index_status_response(self, parsed):
         index_map = {}
         for map in parsed["indexes"]:
-            bucket_name = map['bucket']
+            bucket_name = map['bucket'].encode('ascii', 'ignore')
             if bucket_name not in list(index_map.keys()):
                 index_map[bucket_name] = {}
-            index_name = map['index']
+            index_name = map['index'].encode('ascii', 'ignore')
             index_map[bucket_name][index_name] = {}
-            index_map[bucket_name][index_name]['status'] = map['status']
-            index_map[bucket_name][index_name]['progress'] = str(map['progress'])
-            index_map[bucket_name][index_name]['definition'] = map['definition']
+            index_map[bucket_name][index_name]['status'] = map['status'].encode('ascii', 'ignore')
+            index_map[bucket_name][index_name]['progress'] = str(map['progress']).encode('ascii', 'ignore')
+            index_map[bucket_name][index_name]['definition'] = map['definition'].encode('ascii', 'ignore')
             if len(map['hosts']) == 1:
-                index_map[bucket_name][index_name]['hosts'] = map['hosts'][0]
+                index_map[bucket_name][index_name]['hosts'] = map['hosts'][0].encode('ascii', 'ignore')
             else:
                 index_map[bucket_name][index_name]['hosts'] = map['hosts']
             index_map[bucket_name][index_name]['id'] = map['id']

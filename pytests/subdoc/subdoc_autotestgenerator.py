@@ -539,7 +539,7 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
             if self.verbose_func_usage:
                 self.log.info(" get ----> {0} :: {1}".format(key, path))
             if self.use_sdk_client:
-                d = client.cb.retrieve_in(key, path).get(0)[1]
+                d = client.retrieve_in(key, path).get(0)[1]
                 return d
             else:
                 r, v, d = client.get_sd(key, path)
@@ -561,7 +561,7 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
             if self.verbose_func_usage:
                 self.log.info(" counter ----> {0} :: {1} + {2}".format(key, path, value))
             if self.use_sdk_client:
-                client.cb.mutate_in(key, SD.counter(path, int(value), xattr=self.xattr))
+                client.mutate_in(key, SD.counter(path, int(value), xattr=self.xattr))
             else:
                 client.counter_sd(key, path, value)
         except Exception:

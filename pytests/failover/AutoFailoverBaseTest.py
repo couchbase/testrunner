@@ -533,7 +533,7 @@ class AutoFailoverBaseTest(BaseTestCase):
 
     def _auto_failover_message_present_in_logs(self, ipaddress):
         return any("Rebalance interrupted due to auto-failover of nodes ['ns_1@{0}'].".format(ipaddress) in
-                   list(d.values()) for d in self.rest.get_logs(10))
+                   d['text'] for d in self.rest.get_logs(20))
 
     def wait_for_failover_or_assert(self, expected_failover_count, timeout):
         time_start = time.time()
@@ -642,7 +642,7 @@ class DiskAutoFailoverBasetest(AutoFailoverBaseTest):
                          "Actual timeout set : {1}".format(self.timeout,
                                                            settings.timeout))
         self.assertTrue(settings.failoverOnDataDiskIssuesEnabled, "Failed to enable disk autofailover for the cluster")
-        self.assertEqual(self.disk_timeout, settings.failoverOnDataDiskIssuesTimeout,
+        self.assertEqual(int(self.disk_timeout), settings.failoverOnDataDiskIssuesTimeout,
                          "Incorrect timeout period for disk failover set. Expected Timeout: {0} "
                          "Actual timeout: {1}".format(self.disk_timeout, settings.failoverOnDataDiskIssuesTimeout))
 

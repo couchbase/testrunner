@@ -7,7 +7,6 @@ from mc_bin_client import MemcachedError
 from membase.api.rest_client import RestConnection, RestHelper
 from memcached.helper.data_helper import VBucketAwareMemcached, MemcachedClientHelper
 import json
-from sdk_client import SDKClient
 from couchbase.exceptions import NotFoundError
 
 

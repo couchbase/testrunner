@@ -5,8 +5,10 @@ import httplib2
 
 import couchbase.subdocument as SD
 import crc32
-from sdk_client import SDKClient
-
+try:
+    from sdk_client import SDKClient
+except:
+    from sdk_client3 import SDKClient
 from lib.membase.api.exception import XDCRException
 from remote.remote_util import RemoteMachineShellConnection, RemoteUtilHelper
 from .xdcrnewbasetests import XDCRNewBaseTest, REPLICATION_DIRECTION, TOPOLOGY

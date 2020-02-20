@@ -192,14 +192,16 @@ class RemoteMachineHelper(object):
                     count += 1
             return count
 
-
 class RemoteMachineShellConnection(KeepRefs):
+    connections = 0
+    disconnections = 0
     _ssh_client = None
 
     def __init__(self, username='root',
                  pkey_location='',
                  ip='', port=''):
         super(RemoteMachineShellConnection, self).__init__()
+        RemoteMachineShellConnection.connections += 1
         self.username = username
         self.use_sudo = True
         self.nonroot = False
@@ -3276,6 +3278,7 @@ class RemoteMachineShellConnection(KeepRefs):
                 self.log_command_output(o, r, debug=False)
 
     def disconnect(self):
+        RemoteMachineShellConnection.disconnections += 1
         self._ssh_client.close()
 
     def extract_remote_info(self):

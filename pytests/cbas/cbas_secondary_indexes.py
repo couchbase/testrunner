@@ -2,6 +2,7 @@ from .cbas_base import *
 from couchbase import FMT_BYTES
 import threading
 import random
+from membase.api.rest_client import RestConnection
 
 
 class CBASSecondaryIndexes(CBASBaseTest):
@@ -467,6 +468,9 @@ class CBASSecondaryIndexes(CBASBaseTest):
                     scheme = "http"
                     host="{0}:{1}".format(self.master.ip, self.master.port)
                 return SDKClient(scheme=scheme, hosts = [host], bucket = bucket)
+            except ImportError:
+                from sdk_client3 import SDKClient
+                return SDKClient(RestConnection(self.master), bucket = bucket)
             except Exception as ex:
                 self.log.error("cannot load sdk client due to error {0}".format(str(ex)))
         # USE MC BIN CLIENT WHEN NOT USING SDK CLIENT

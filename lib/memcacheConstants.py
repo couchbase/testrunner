@@ -23,6 +23,8 @@ CMD_VERSION = 11
 CMD_STAT = 0x10
 CMD_APPEND = 0x0e
 CMD_PREPEND = 0x0f
+CMD_STAT = 0x10
+CMD_SETQ = 0x11
 CMD_DELETEQ = 0x14
 CMD_VERBOSE = 0x1b
 CMD_TOUCH = 0x1c
@@ -146,6 +148,8 @@ CMD_GET_RANDOM_KEY = 0xb6
 # Collections
 CMD_COLLECTIONS_SET_MANIFEST = 0xb9
 CMD_COLLECTIONS_GET_MANIFEST = 0xba
+CMD_COLLECTIONS_GET_ID = 0xbb
+CMD_COLLECTIONS_GET_SCOPE_ID = 0xbc
 
 CMD_GET_ERROR_MAP = 0xfe
 
@@ -329,6 +333,9 @@ RES_PKT_FMT = ">BBHBBHIIQ"
 # magic, opcode, frameextra, keylen, extralen, datatype, status, bodylen, opaque, cas
 ALT_RES_PKT_FMT = ">BBBBBBHIIQ"
 
+# magic, opcode, frame_extra_len, keylen, extralen, datatype, vbucket, bodylen, opaque, cas
+ALT_REQ_PKT_FMT=">BBBBBBHIIQ"
+
 #opcode, flags, pathlen, vallen
 REQ_PKT_SD_MULTI_MUTATE = ">BBHI"
 
@@ -421,3 +428,4 @@ REGENERATE_CAS = 0x4
 
 # Datatypes
 DATATYPE_XATTR = 0x4
+DURABILITY_LEVEL_MAJORITY = 0x1

@@ -16,7 +16,10 @@ from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
 import memcacheConstants
 from memcached.helper.data_helper import MemcachedClientHelper
-from sdk_client import SDKSmartClient
+try:
+    from sdk_client import SDKSmartClient
+except:
+    from sdk_client3 import SDKSmartClient
 from security.rbac_base import RbacBase
 
 class ExpiryTests(unittest.TestCase):

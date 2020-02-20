@@ -7,7 +7,7 @@ import sys
 import traceback
 
 from couchbase.cluster import Cluster
-from couchbase.cluster import PasswordAuthenticator
+
 import couchbase.subdocument as SD
 from couchbase.exceptions import CouchbaseTransientError
 
@@ -47,6 +47,7 @@ class JSONDoc(object):
     def uploadDoc(self):
         # connect to cb cluster
         try:
+            from couchbase.cluster import PasswordAuthenticator
             connection = "couchbase://" + self.server
             if "ip6" in self.server or self.server.startswith("["):
                 connection = connection+"?ipv6=allow"
@@ -55,6 +56,12 @@ class JSONDoc(object):
             cluster.authenticate(authenticator)
             cb = cluster.open_bucket(self.bucket)
             cb.timeout = 100
+        except ImportError:
+            from couchbase.cluster import ClusterOptions
+            from couchbase_core.cluster import PasswordAuthenticator
+            cluster = Cluster(self.connection_string, ClusterOptions(
+                PasswordAuthenticator(self.bucket, 'password')))
+            cb = cluster.bucket(self.bucket).default_collection()
         except Exception as e:
             logging.error("Connection error\n" + traceback.format_exc())
         json_docs = {}

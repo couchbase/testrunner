@@ -1,7 +1,10 @@
 import json
 from basetestcase import BaseTestCase
 from membase.helper.cluster_helper import ClusterOperationHelper
-from sdk_client import SDKClient
+try:
+    from sdk_client import SDKClient
+except:
+    from sdk_client3 import SDKClient
 
 class SDKClientTests(BaseTestCase):
     """ Class for defining tests for python sdk """

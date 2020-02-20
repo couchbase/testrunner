@@ -1145,6 +1145,8 @@ class VBucketAwareMemcached(object):
 
     def _setMulti_rec(self, memcached_client, exp, flags, keyval, pause, timeout, rec_caller_fn, collection=None):
         try:
+            if collection:
+                self.enable_collection(memcached_client)
             errors = memcached_client.setMulti(exp, flags, keyval, collection=collection)
 
             if not errors:
@@ -1250,6 +1252,8 @@ class VBucketAwareMemcached(object):
 
     def _getMulti_from_mc(self, memcached_client, keys, pause, timeout, rec_caller_fn, collection=None):
         try:
+            if collection:
+                self.enable_collection(memcached_client)
             return memcached_client.getMulti(keys, collection=collection)
 
         except (EOFError, socket.error) as error:

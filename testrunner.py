@@ -32,6 +32,10 @@ import shutil
 import glob
 import xml.dom.minidom
 import logging
+from remote.remote_util import RemoteMachineShellConnection
+
+
+
 log = logging.getLogger(__name__)
 logging.info(__name__)
 print("*** TestRunner ***")
@@ -758,6 +762,10 @@ def runtests(names, options, arg_i, arg_p, runtime_test_params):
         if fail_count > 0:
             sys.exit(1)
 
+    print("During the test, Remote Connections: %s, Disconnections: %s" %
+              (RemoteMachineShellConnection.connections,
+               RemoteMachineShellConnection.disconnections))
+
     if TestInputSingleton.input.param("get-delays", False):
         sd.stop_measure_sched_delay()
         sd.fetch_logs()
@@ -972,6 +980,7 @@ def main():
     else:
         log.warning("Warning: No tests got selected. Please double check the .conf file and other "
               "options!")
+
 
     log.info("TestRunner: end...")
 

@@ -615,6 +615,7 @@ class RebalanceInTests(RebalanceBaseTest):
         self.sleep(20)
         shell.start_couchbase()
         shell.disconnect()
+        self.sleep(20)
         try:
             rebalance = self.cluster.async_rebalance(
                 servs_init, servs_in, [],

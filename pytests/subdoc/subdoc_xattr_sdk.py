@@ -16,7 +16,10 @@ from membase.api.rest_client import RestConnection
 from membase.helper.bucket_helper import BucketOperationHelper
 from newupgradebasetest import NewUpgradeBaseTest
 from remote.remote_util import RemoteMachineShellConnection
-from sdk_client import SDKClient
+try:
+    from sdk_client import SDKClient
+except:
+    from sdk_client3 import SDKClient
 
 from .subdoc_base import SubdocBaseTest
 

@@ -42,15 +42,24 @@ from deepdiff import DeepDiff
 
 try:
     CHECK_FLAG = False
-    if (testconstants.TESTRUNNER_CLIENT in list(os.environ.keys())) and os.environ[testconstants.TESTRUNNER_CLIENT] == testconstants.PYTHON_SDK:
-        from sdk_client import SDKSmartClient as VBucketAwareMemcached
-        from sdk_client import SDKBasedKVStoreAwareSmartClient as KVStoreAwareSmartClient
+    if (testconstants.TESTRUNNER_CLIENT == testconstants.PYTHON_SDK):
+        try:
+            from sdk_client import SDKSmartClient as VBucketAwareMemcached
+            from sdk_client import SDKBasedKVStoreAwareSmartClient as KVStoreAwareSmartClient
+        except:
+            from sdk_client3 import SDKSmartClient as VBucketAwareMemcached
+            from sdk_client3 import SDKBasedKVStoreAwareSmartClient as KVStoreAwareSmartClient
     else:
         CHECK_FLAG = True
         from memcached.helper.data_helper import VBucketAwareMemcached, KVStoreAwareSmartClient
 except Exception as e:
-    CHECK_FLAG = True
-    from memcached.helper.data_helper import VBucketAwareMemcached, KVStoreAwareSmartClient
+    CHECK_FLAG = False
+    try:
+        from sdk_client import SDKSmartClient as VBucketAwareMemcached
+        from sdk_client import SDKBasedKVStoreAwareSmartClient as KVStoreAwareSmartClient
+    except:
+        from sdk_client3 import SDKSmartClient as VBucketAwareMemcached
+        from sdk_client3 import SDKBasedKVStoreAwareSmartClient as KVStoreAwareSmartClient
 
 # TODO: Setup stacktracer
 # TODO: Needs "easy_install pygments"
@@ -1018,7 +1027,8 @@ class GenericLoadingTask(Thread, Task):
         try:
             self.client.set(key, self.exp, self.flag, value, collection=self.collection)
             if self.only_store_hash:
-                value = str(crc32.crc32_hash(value))
+                if value != None:
+                    value = str(crc32.crc32_hash(value))
             partition.set(key, value, self.exp, self.flag)
         except BaseException as error:
             self.state = FINISHED
@@ -1324,6 +1334,7 @@ class LoadDocumentsGeneratorsTask(LoadDocumentsTask):
             gen_end = max(int(gen.end), 1)
             gen_range = max(int(gen.end/self.process_concurrency), 1)
             for pos in range(gen_start, gen_end, gen_range):
+              try:
                 partition_gen = copy.deepcopy(gen)
                 partition_gen.start = pos
                 partition_gen.itr = pos
@@ -1334,6 +1345,8 @@ class LoadDocumentsGeneratorsTask(LoadDocumentsTask):
                         partition_gen,
                         self.batch_size)
                 self.generators.append(batch_gen)
+              except Exception as e:
+                traceback.print_exc()
 
 
         iterator = 0
@@ -1387,12 +1400,13 @@ class LoadDocumentsGeneratorsTask(LoadDocumentsTask):
                 client = VBucketAwareMemcached(
                     RestConnection(self.server),
                     self.bucket, compression=self.compression)
-            if self.op_types:
+            try:
+              if self.op_types:
                 self.op_type = self.op_types[iterator]
-            if self.buckets:
+              if self.buckets:
                 self.bucket = self.buckets[iterator]
 
-            while generator.has_next() and not self.done():
+              while generator.has_next() and not self.done():
 
                 # generate
                 key_value = generator.next_batch()
@@ -1401,6 +1415,8 @@ class LoadDocumentsGeneratorsTask(LoadDocumentsTask):
 
                 # cache
                 self.cache_items(tmp_kv_store, key_value)
+            except Exception as e:
+                traceback.print_exc()
 
         except Exception as ex:
             rv["err"] = ex

@@ -3,7 +3,10 @@ import os
 from basetestcase import BaseTestCase
 
 
-from sdk_client import SDKClient
+try:
+    from sdk_client import SDKClient
+except:
+    from sdk_client3 import SDKClient
 
 
 from memcached.helper.data_helper import VBucketAwareMemcached, MemcachedClientHelper

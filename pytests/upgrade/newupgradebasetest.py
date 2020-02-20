@@ -19,7 +19,6 @@ from couchbase_helper.document import DesignDocument, View
 from couchbase_helper.documentgenerator import BlobGenerator
 
 from TestInput import TestInputSingleton
-from lib.sdk_client import SDKClient
 from pytests.fts.fts_base import QUERY
 from scripts.install import InstallerJob
 from builds.build_query import BuildQuery
@@ -38,6 +37,10 @@ from testconstants import CB_VERSION_NAME
 from testconstants import COUCHBASE_FROM_VERSION_3
 from testconstants import COUCHBASE_MP_VERSION
 from testconstants import CE_EE_ON_SAME_FOLDER
+try:
+    from lib.sdk_client import SDKClient
+except:
+    from lib.sdk_client3 import SDKClient
 
 
 class NewUpgradeBaseTest(BaseTestCase):

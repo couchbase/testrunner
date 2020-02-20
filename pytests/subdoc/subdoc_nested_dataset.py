@@ -5,7 +5,10 @@ import random
 import traceback
 
 import couchbase.subdocument as SD
-from sdk_client import SDKClient
+try:
+    from sdk_client import SDKClient
+except:
+    from sdk_client3 import SDKClient
 from threading import Thread
 
 class SubdocNestedDataset(SubdocBaseTest):
