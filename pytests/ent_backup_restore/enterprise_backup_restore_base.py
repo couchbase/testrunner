@@ -484,8 +484,6 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             args += " --threads %s " % threads_count
         if self.backupset.backup_compressed:
             args += " --value-compression compressed"
-        if self.num_shards is not None:
-            args += " --shards {0} ".format(self.num_shards)
         if self.backupset.log_to_stdout:
             args += " --log-to-stdout"
         if self.backupset.auto_select_threads:
@@ -1057,8 +1055,6 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
 
     def bk_with_memcached_crash_and_restart(self):
         num_shards = ""
-        if self.num_shards is not None:
-            num_shards += " --shards {0} ".format(self.num_shards)
         backup_result = self.cluster.async_backup_cluster(
                                            cluster_host=self.backupset.cluster_host,
                                            backup_host=self.backupset.backup_host,
@@ -1106,8 +1102,6 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
 
     def bk_with_erlang_crash_and_restart(self):
         num_shards = ""
-        if self.num_shards is not None:
-            num_shards += " --shards {0} ".format(self.num_shards)
         backup_result = self.cluster.async_backup_cluster(
                                            cluster_host=self.backupset.cluster_host,
                                            backup_host=self.backupset.backup_host,
@@ -1150,8 +1144,6 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
 
     def bk_with_cb_server_stop_and_restart(self):
         num_shards = ""
-        if self.num_shards is not None:
-            num_shards += " --shards {0} ".format(self.num_shards)
         backup_result = self.cluster.async_backup_cluster(
                                            cluster_host=self.backupset.cluster_host,
                                            backup_host=self.backupset.backup_host,
@@ -1196,8 +1188,6 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         old_backup_name = ""
         new_backup_name = ""
         num_shards = ""
-        if self.num_shards is not None:
-            num_shards += " --shards {0} ".format(self.num_shards)
         conn = RemoteMachineShellConnection(self.backupset.cluster_host)
         started_couchbase = False
         try:
