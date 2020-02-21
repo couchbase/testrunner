@@ -167,7 +167,7 @@ class StableTopFTS(FTSBaseTest):
                                              consistency_vectors=self.consistency_vectors
                                             )
             self.log.info("Hits: %s" % hits)
-            for i in range(list(self.consistency_vectors.values())[0].values()[0]):
+            for i in range(list(list(self.consistency_vectors.values())[0].values())[0]):
                 self.async_perform_update_delete(self.upd_del_fields)
             hits, _, _, _ = index.execute_query(query,
                                                 zero_results_ok=zero_results_ok,
@@ -181,7 +181,7 @@ class StableTopFTS(FTSBaseTest):
         fts_node = self._cb_cluster.get_random_fts_node()
         service_map = RestConnection(self._cb_cluster.get_master_node()).get_nodes_services()
         # select FTS node to shutdown
-        for node_ip, services in service_map.items():
+        for node_ip, services in list(service_map.items()):
             ip = node_ip.split(':')[0]
             node = self._cb_cluster.get_node(ip, node_ip.split(':')[1])
             if node and 'fts' in services and 'kv' not in services:
@@ -199,7 +199,7 @@ class StableTopFTS(FTSBaseTest):
             try:
                 from .fts_base import NodeHelper
                 NodeHelper.stop_couchbase(fts_node)
-                for i in range(list(self.consistency_vectors.values())[0].values()[0]):
+                for i in range(list(list(self.consistency_vectors.values())[0].values())[0]):
                     self.async_perform_update_delete(self.upd_del_fields)
             finally:
                 NodeHelper.start_couchbase(fts_node)
@@ -234,7 +234,7 @@ class StableTopFTS(FTSBaseTest):
                                                 consistency_vectors=self.consistency_vectors)
             self.log.info("Hits: %s" % hits)
             tasks = []
-            for i in range(list(self.consistency_vectors.values())[0].values()[0]):
+            for i in range(list(list(self.consistency_vectors.values())[0].values())[0]):
                 tasks.append(Thread(target=self.async_perform_update_delete, args=(self.upd_del_fields,)))
             for task in tasks:
                 task.start()
@@ -1837,7 +1837,7 @@ class StableTopFTS(FTSBaseTest):
             self.log.info("Running Query no --> " + str(i))
             fts_query, es_query = FTSESQueryGenerator.construct_geo_location_query()
             print(fts_query)
-            print("fts_query location ---> " + str(fts_query["location"]))
+            print(("fts_query location ---> " + str(fts_query["location"])))
             # If query has geo co-ordinates in form of an object
             if "lon" in fts_query["location"]:
                 lon = fts_query["location"]["lon"]
@@ -1876,7 +1876,7 @@ class StableTopFTS(FTSBaseTest):
             if case == 3:
                 geohash = Geohash.encode(lat, lon, precision=random.randint(3, 8))
                 location = geohash
-            print("sort_fields_location ----> " + str(location))
+            print(("sort_fields_location ----> " + str(location)))
             sort_fields = [
                 {
                     "by": "geo_distance",
@@ -2010,7 +2010,7 @@ class StableTopFTS(FTSBaseTest):
             authenticator = PasswordAuthenticator('Administrator', 'password')
             cluster.authenticate(authenticator)
             cb = cluster.open_bucket('default')
-            for key, value in dic.items():
+            for key, value in list(dic.items()):
                 cb.upsert(key, value)
         except Exception as e:
             self.fail(e)

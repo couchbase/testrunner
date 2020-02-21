@@ -279,7 +279,7 @@ class CustomMapGenerator:
     def build_custom_map(self, dataset):
         for x in range(0, self.num_field_maps):
             field, type = self.get_random_field_name_and_type(self.fields)
-            if field not in iter(self.nested_fields.keys()):
+            if field not in iter(list(self.nested_fields.keys())):
                 fts_child, es_child = self.get_child_field(field, type)
             else:
                 fts_child, es_child = self.get_child_map(field, dataset)
@@ -302,19 +302,19 @@ class CustomMapGenerator:
                     self.fields)
                 if field_type != 'object' and \
                    field_type not in list(self.queryable_fields.keys()):
-                    print("Adding an extra non-indexed field '%s' to" \
-                          " list of queryable fields" % field)
+                    print(("Adding an extra non-indexed field '%s' to" \
+                          " list of queryable fields" % field))
                     self.queryable_fields[field_type] = [field]
                     break
                 if field_type != 'object' and \
                    field not in self.queryable_fields[field_type]:
-                    print("Adding an extra non-indexed field '%s' to" \
-                          " list of queryable fields" % field)
+                    print(("Adding an extra non-indexed field '%s' to" \
+                          " list of queryable fields" % field))
                     self.queryable_fields[field_type].append(field)
                     break
             else:
-                print("Unable to add a non-indexed field after %s retries" \
-                      % self.max_fields)
+                print(("Unable to add a non-indexed field after %s retries" \
+                      % self.max_fields))
 
     def get_child_map(self, field, dataset):
         """
@@ -322,7 +322,7 @@ class CustomMapGenerator:
         having another nested structure as its value
         """
         current_prop = self.fts_map['types'][dataset]['properties']
-        if field not in current_prop.iterkeys():
+        if field not in iter(current_prop.keys()):
             fts_child_map = {}
             fts_child_map['dynamic'] = False
             fts_child_map['enabled'] = True
@@ -414,7 +414,7 @@ class CustomMapGenerator:
         return field, type
 
     def get_nested_child_field(self, nested_field):
-        if nested_field in iter(self.nested_fields.keys()):
+        if nested_field in iter(list(self.nested_fields.keys())):
             return self.get_random_field_name_and_type(
                 self.nested_fields[nested_field])
 
@@ -454,4 +454,4 @@ class CustomMapGenerator:
 if __name__ == "__main__":
     import json
     custom_map = CustomMapGenerator(seed=1).get_map()
-    print(json.dumps(custom_map, indent=3))
+    print((json.dumps(custom_map, indent=3)))
