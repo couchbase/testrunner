@@ -797,7 +797,7 @@ class DataCollector(object):
                 master_key = ".\{12\}$"
             dump_output = []
             for i in range(0, 1024):
-                cmd2 = "{0}cbsqlitedump{1} "\
+                cmd2 = "{0}cbriftdump{1} "\
                        " -f {2}/backup/{3}*/{4}*/data/meta_{5}.sqlite.0 | grep -A 8 'Key: {6}' "\
                                                   .format(cli_command, cmd_ext,\
                                                    backup_dir, now.year, bucket.name,\
