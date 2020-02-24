@@ -1849,10 +1849,10 @@ class RestConnection(object):
         if status:
             json_parsed = json.loads(content)
             for map in json_parsed["indexes"]:
-                bucket_name = map['bucket'].encode('ascii', 'ignore')
+                bucket_name = map['bucket']
                 if bucket_name not in list(index_map.keys()):
                     index_map[bucket_name] = {}
-                index_name = map['index'].encode('ascii', 'ignore')
+                index_name = map['index']
                 index_map[bucket_name][index_name] = {}
                 index_map[bucket_name][index_name]['id'] = map['id']
         return index_map
