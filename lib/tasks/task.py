@@ -121,8 +121,9 @@ class NodeInitializeTask(Task):
     def execute(self, task_manager):
         try:
             rest = RestConnection(self.server)
-        except ServerUnavailableException as error:
+        except Exception as error:
                 self.state = FINISHED
+                print("debuging hanging issue task 127" + str(error))
                 self.set_exception(error)
                 return
         info = Future.wait_until(lambda: rest.get_nodes_self(),
@@ -223,8 +224,9 @@ class NodeInitializeTask(Task):
         self.server.port = self.port
         try:
             rest = RestConnection(self.server)
-        except ServerUnavailableException as error:
+        except Exception as error:
                 self.state = FINISHED
+                print("debuging hanging issue task 230" + str(error))
                 self.set_exception(error)
                 return
         info = rest.get_nodes_self()

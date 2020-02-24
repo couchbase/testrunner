@@ -766,7 +766,7 @@ class StableTopFTS(FTSBaseTest):
             index.update()
         except Exception as err:
             self.log.error(err)
-            if err.message.count(error_msg, 0, len(err.message)):
+            if str(err).count(error_msg, 0, len(str(err))):
                 self.log.info("Error is expected")
             else:
                 self.log.info("Error is not expected")
@@ -909,7 +909,7 @@ class StableTopFTS(FTSBaseTest):
                                                         facets_returned=facets)
         except Exception as err:
             self.log.error(err)
-            self.fail("Testcase failed: "+ err.message)
+            self.fail("Testcase failed: "+ str(err))
 
     def test_facets_during_index(self):
         field_indexed = self._input.param("field_indexed", True)
@@ -950,7 +950,7 @@ class StableTopFTS(FTSBaseTest):
                 self.log.info("Facets: %s" % facets)
             except Exception as err:
                 self.log.error(err)
-                self.fail("Testcase failed: "+ err.message)
+                self.fail("Testcase failed: "+ str(err))
 
     def test_doc_config(self):
         # delete default bucket
@@ -995,7 +995,7 @@ class StableTopFTS(FTSBaseTest):
                 self.log.info("Hits: %s" % hits)
         except Exception as err:
             self.log.error(err)
-            self.fail("Testcase failed: " + err.message)
+            self.fail("Testcase failed: " + str(err))
 
     def test_boost_query_type(self):
         # Create bucket, create index
@@ -1040,7 +1040,7 @@ class StableTopFTS(FTSBaseTest):
 
         except Exception as err:
             self.log.error(err)
-            self.fail("Testcase failed: " + err.message)
+            self.fail("Testcase failed: " + str(err))
 
         if not score_before_boosting_doc1 == score_before_boosting_doc2:
             self.fail("Testcase failed: Scores for emp10000021 & emp10000086 "
@@ -1150,7 +1150,7 @@ class StableTopFTS(FTSBaseTest):
 
         except Exception as err:
             self.log.error(err)
-            self.fail("Testcase failed: " + err.message)
+            self.fail("Testcase failed: " + str(err))
 
     def test_sorting_of_results(self):
         self.load_data()
@@ -1189,7 +1189,7 @@ class StableTopFTS(FTSBaseTest):
                             "Testcase failed. Actual results do not match expected.")
         except Exception as err:
             self.log.error(err)
-            self.fail("Testcase failed: " + err.message)
+            self.fail("Testcase failed: " + str(err))
 
     def test_sorting_of_results_during_indexing(self):
         self.load_data()
@@ -1223,7 +1223,7 @@ class StableTopFTS(FTSBaseTest):
                     #self.sleep(5)
         except Exception as err:
             self.log.error(err)
-            self.fail("Testcase failed: " + err.message)
+            self.fail("Testcase failed: " + str(err))
 
     def test_sorting_of_results_on_non_indexed_fields(self):
         self.load_data()
@@ -1269,7 +1269,7 @@ class StableTopFTS(FTSBaseTest):
                             "Testcase failed. Actual results do not match expected.")
         except Exception as err:
             self.log.error(err)
-            self.fail("Testcase failed: " + err.message)
+            self.fail("Testcase failed: " + str(err))
 
     def test_scoring_tf_score(self):
         """
@@ -1671,7 +1671,7 @@ class StableTopFTS(FTSBaseTest):
 
         except Exception as err:
             self.log.error(err)
-            self.fail("Testcase failed: " + err.message)
+            self.fail("Testcase failed: " + str(err))
 
     def test_snippets_highlighting_of_search_term_in_results(self):
         self.load_data()
@@ -1733,7 +1733,7 @@ class StableTopFTS(FTSBaseTest):
                             "Testcase failed. Actual results do not match expected.")
         except Exception as err:
             self.log.error(err)
-            self.fail("Testcase failed: " + err.message)
+            self.fail("Testcase failed: " + str(err))
 
     def test_geo_query(self):
         """
@@ -2064,7 +2064,7 @@ class StableTopFTS(FTSBaseTest):
                                                                                                                expected_hits))
         except Exception as err:
             self.log.error(err)
-            self.fail("Testcase failed: " + err.message)
+            self.fail("Testcase failed: " + str(err))
 
     # This test checks the correctness of search results from queries with score=none and without score=none.
     def test_result_correctness_score_none(self):
@@ -2105,7 +2105,7 @@ class StableTopFTS(FTSBaseTest):
 
         except Exception as err:
             self.log.error(err)
-            self.fail("Testcase failed: " + err.message)
+            self.fail("Testcase failed: " + str(err))
 
     # Tests the ASCII folding filter with different types of accented characters
     def test_ascii_folding_filter(self):
@@ -2266,4 +2266,4 @@ class StableTopFTS(FTSBaseTest):
                                     str(failed_search_terms)))
         except Exception as err:
             self.log.error(err)
-            self.fail("Testcase failed: " + err.message)
+            self.fail("Testcase failed: " + str(err))
