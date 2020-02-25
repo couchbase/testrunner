@@ -101,7 +101,7 @@ class CliBaseTest(BaseTestCase):
         if "bin" not in bin_path:
             if "localhost only" in bin_path:
                 self.enable_diag_eval_on_non_local_hosts()
-                bin_path  = subprocess.check_output(cmd, shell=True)
+                bin_path  = subprocess.check_output(cmd, shell=True).decode("utf-8")
                 if "bin" not in bin_path:
                     self.fail("Check if cb server install on {0}"
                                          .format(self.master.ip))

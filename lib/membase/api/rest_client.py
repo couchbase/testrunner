@@ -1059,7 +1059,7 @@ class RestConnection(object):
         print(api)
         status, content, _ = self._http_request(api, 'GET')
         if status:
-            return content
+            return content.decode('utf-8')
         else:
             log.error("listRebalanceTokens:{0},content:{1}".format(status, content))
             raise Exception("list rebalance tokens failed")

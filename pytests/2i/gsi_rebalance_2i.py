@@ -1,20 +1,18 @@
-import queue
 from datetime import datetime
 
-from .base_2i import BaseSecondaryIndexingTests, log
-from membase.api.rest_client import RestConnection, RestHelper
 import random
 import threading
+from membase.api.rest_client import RestConnection, RestHelper
+from queue import Queue
+
 from lib import testconstants
 from lib.couchbase_helper.query_definitions import SQLDefinitionGenerator, QueryDefinition, RANGE_SCAN_TEMPLATE
 from lib.couchbase_helper.tuq_generators import TuqGenerators
-from lib.membase.helper.cluster_helper import ClusterOperationHelper
 from lib.remote.remote_util import RemoteMachineShellConnection
-from pytests.ent_backup_restore.enterprise_backup_restore_base import EnterpriseBackupRestoreBase, Backupset
 from pytests.fts.fts_base import NodeHelper
 from pytests.query_tests_helper import QueryHelperTests
-from pytests.tuqquery.tuq import QueryTests
-from basetestcase import BaseTestCase
+from .base_2i import BaseSecondaryIndexingTests, log
+
 
 #class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTests,  NodeHelper,
 #                                      EnterpriseBackupRestoreBase):
@@ -2000,7 +1998,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         self.run_operation(phase="after")
 
     def test_cbindex_move_with_reboot_of_destination_node(self):
-        queue = queue.Queue()
+        queue = Queue()
         self.run_operation(phase="before")
         self.sleep(30)
         map_before_rebalance, stats_map_before_rebalance = self._return_maps()
@@ -2106,7 +2104,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         self.run_operation(phase="after")
 
     def test_cbindex_move_with_reboot_of_source_node(self):
-        queue = queue.Queue()
+        queue = Queue()
         self.run_operation(phase="before")
         self.sleep(30)
         map_before_rebalance, stats_map_before_rebalance = self._return_maps()
@@ -2182,7 +2180,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         self.run_operation(phase="after")
 
     def test_cbindex_move_with_index_server_being_killed(self):
-        queue = queue.Queue()
+        queue = Queue()
         self.run_operation(phase="before")
         self.sleep(30)
         map_before_rebalance, stats_map_before_rebalance = self._return_maps()

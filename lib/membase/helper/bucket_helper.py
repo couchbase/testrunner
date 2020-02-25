@@ -18,6 +18,8 @@ from collections import defaultdict
 from couchbase_helper.stats_tools import StatsCommon
 from remote.remote_util import RemoteMachineShellConnection
 from subprocess import call
+from membase.api.exception import ServerUnavailableException
+from queue import Queue
 
 class BucketOperationHelper():
 
@@ -424,7 +426,7 @@ class BucketOperationHelper():
     def keys_exist_or_assert_in_parallel(keys, server, bucket_name, test, concurrency=2, collection=None):
         log = logger.Logger.get_logger()
         verification_threads = []
-        queue = queue.Queue()
+        queue = Queue()
         for i in range(concurrency):
             keys_chunk = BucketOperationHelper.chunks(keys, len(keys) // concurrency)
             t = Thread(target=BucketOperationHelper.keys_exist_or_assert,
