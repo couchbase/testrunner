@@ -366,7 +366,7 @@ class EventingBucket(EventingBaseTest):
             self.resume_function(body)
         # Wait for eventing to catch up with all the delete mutations and verify results
         stats_src = RestConnection(self.master).get_bucket_stats(bucket=self.src_bucket_name)
-        self.verify_eventing_results(self.function_name, stats_src["curr_items"], skip_stats_validation=True)
+        self.verify_eventing_results(self.function_name, stats_src["curr_items"], skip_stats_validation=True,expected_duplicate=True)
         self.undeploy_and_delete_function(body)
         vb_active_auto_delete_count = StatsCommon.get_stats([self.master], self.src_bucket_name, '',
                                                             'vb_active_auto_delete_count')[self.master]
