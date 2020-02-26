@@ -640,6 +640,7 @@ class StableTopFTS(FTSBaseTest):
         """
         Index and query index, update map, query again, uses RQG
         """
+        err = None
         fail = False
         index = self.create_index(
             bucket=self._cb_cluster.get_bucket_by_name('default'),

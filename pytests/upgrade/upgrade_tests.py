@@ -13,8 +13,9 @@ from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
 from pytests.eventing.eventing_constants import HANDLER_CODE
 from remote.remote_util import RemoteMachineShellConnection
-from newupgradebasetest import NewUpgradeBaseTest
+from .newupgradebasetest import NewUpgradeBaseTest
 from rebalance.rebalance_base import RebalanceBaseTest
+from couchbase_helper.documentgenerator import BlobGenerator
 
 
 

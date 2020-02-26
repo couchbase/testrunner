@@ -1129,7 +1129,7 @@ class RestConnection(object):
         api = self.baseUrl + 'pools/default/certificate'
         status, content, _ = self._http_request(api, 'GET')
         if status:
-            return content
+            return content.decode("utf-8")
         else:
             log.error("/poos/default/certificate status:{0},content:{1}".format(status, content))
             raise Exception("certificate API failed")
