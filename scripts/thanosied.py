@@ -102,7 +102,7 @@ class DocumentGenerator:
         self.user = args.user
         self.password = args.password
         self.cb_version = args.cb_version
-        self.num_items = args.count
+        self.num_items = int(args.count)
         self.mutations = args.passes
         self.batch_size = int(args.batch_size)
         self.key_prefix = args.prefix
