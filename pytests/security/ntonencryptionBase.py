@@ -48,11 +48,13 @@ class ntonencryptionBase:
             remote_client = RemoteMachineShellConnection(servers[0])
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
                         options=options, cluster_host="localhost", user='Administrator', password='password')
+            remote_client.disconnect()
         else:
             for server in servers:
                 remote_client = RemoteMachineShellConnection(server)
                 output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
                             options=options, cluster_host="localhost", user='Administrator', password='password')
+                remote_client.disconnect()
         log.info("Output of node-to-node-encryption command is {0}".format(output))
         log.info("Error of node-to-node-encryption command is {0}".format(error))
         #To check for wildcard dns - Unable to switch on n2n if retries exceeded error occurs
@@ -83,11 +85,13 @@ class ntonencryptionBase:
             remote_client = RemoteMachineShellConnection(servers[0])
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
                         options=options, cluster_host="localhost", user='Administrator', password='password')
+            remote_client.disconnect()
         else:
             for server in servers:
                 remote_client = RemoteMachineShellConnection(server)
                 output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
                             options=options, cluster_host="localhost", user='Administrator', password='password')
+                remote_client.disconnect()
         log.info("Output of setting-security command is {0}".format(output))
         log.info("Error of setting-security command is {0}".format(error))
 
@@ -119,7 +123,8 @@ class ntonencryptionBase:
                 options = '--node-init-hostname ' + sever.ip
                 remote_client = RemoteMachineShellConnection(server)
                 output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
-                        options=options, cluster_host="localhost", user='Administrator', password='password') 
+                        options=options, cluster_host="localhost", user='Administrator', password='password')
+                remote_client.disconnect()
             
     
     def check_server_ports(self,servers):
