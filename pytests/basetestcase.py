@@ -497,10 +497,6 @@ class BaseTestCase(unittest.TestCase):
                 ClusterOperationHelper.cleanup_cluster(self.servers, master=self.master)
                 ClusterOperationHelper.wait_for_ns_servers_or_assert(self.servers, self)
                 ntonencryptionBase().disable_nton_cluster(self.servers)
-                self.log.info("closing all ssh connections")
-                for ins in RemoteMachineShellConnection.get_instances():
-                    #self.log.info(str(ins))
-                    ins.disconnect()
                 self.log.info("==============  basetestcase cleanup was finished for test #{0} {1} ==============" \
                               .format(self.case_number, self._testMethodName))
         except BaseException:
@@ -509,6 +505,10 @@ class BaseTestCase(unittest.TestCase):
             # increase case_number to retry tearDown in setup for the next test
             self.case_number += 1000
         finally:
+            self.log.info("closing all ssh connections")
+            for ins in RemoteMachineShellConnection.get_instances():
+                #self.log.info(str(ins))
+                ins.disconnect()
             if not self.input.param("skip_cleanup", False):
                 self.reset_cluster()
             # stop all existing task manager threads

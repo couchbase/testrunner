@@ -3210,13 +3210,14 @@ class FTSBaseTest(unittest.TestCase):
             if self.compare_es:
                 self.teardown_es()
 
-            for ins in RemoteMachineShellConnection.get_instances():
-                self.log.info(str(ins))
-                ins.disconnect()
             self.log.info(
                 "====  FTSbasetests cleanup is finished for test #{0} {1} ==="
                     .format(self.__case_number, self._testMethodName))
         finally:
+            self.log.info("closing all ssh connections")
+            for ins in RemoteMachineShellConnection.get_instances():
+                #self.log.info(str(ins))
+                ins.disconnect()
             self.__cluster_op.shutdown(force=True)
             unittest.TestCase.tearDown(self)
 

@@ -170,6 +170,10 @@ class XDCRBaseTest(unittest.TestCase):
             self.log.info("==============  XDCRbasetests cleanup is finished for test #{0} {1} =============="\
                 .format(self.case_number, self._testMethodName))
         finally:
+            self.log.info("closing all ssh connections")
+            for ins in RemoteMachineShellConnection.get_instances():
+                #self.log.info(str(ins))
+                ins.disconnect()
             self.cluster.shutdown(force=True)
             self._log_finish(self)
 
