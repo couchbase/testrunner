@@ -497,6 +497,10 @@ class BaseTestCase(unittest.TestCase):
                 ClusterOperationHelper.cleanup_cluster(self.servers, master=self.master)
                 ClusterOperationHelper.wait_for_ns_servers_or_assert(self.servers, self)
                 ntonencryptionBase().disable_nton_cluster(self.servers)
+                self.log.info("closing all ssh connections")
+                for ins in RemoteMachineShellConnection.get_instances():
+                    #self.log.info(str(ins))
+                    ins.disconnect()
                 self.log.info("==============  basetestcase cleanup was finished for test #{0} {1} ==============" \
                               .format(self.case_number, self._testMethodName))
         except BaseException:

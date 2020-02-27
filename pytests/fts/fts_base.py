@@ -3209,6 +3209,10 @@ class FTSBaseTest(unittest.TestCase):
             ntonencryptionBase().disable_nton_cluster(self._input.servers)
             if self.compare_es:
                 self.teardown_es()
+
+            for ins in RemoteMachineShellConnection.get_instances():
+                self.log.info(str(ins))
+                ins.disconnect()
             self.log.info(
                 "====  FTSbasetests cleanup is finished for test #{0} {1} ==="
                     .format(self.__case_number, self._testMethodName))

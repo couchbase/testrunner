@@ -2951,7 +2951,7 @@ class RestConnection(object):
     def get_fts_index_uuid(self, name, timeout=30):
         """ Returns uuid of index/alias """
         json_parsed = {}
-        api = self.fts_baseUrl + "api/index/{0}/".format(name)
+        api = self.fts_baseUrl + "api/index/{0}".format(name)
         status, content, header = self._http_request(
             api,
             headers=self._create_capi_headers(),
