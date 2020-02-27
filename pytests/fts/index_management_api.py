@@ -1,7 +1,7 @@
 # coding=utf-8
 
 import json
-from fts_base import FTSBaseTest
+from .fts_base import FTSBaseTest
 from lib.membase.api.rest_client import RestConnection
 
 

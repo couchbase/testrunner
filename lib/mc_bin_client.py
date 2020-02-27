@@ -25,6 +25,8 @@ from memcacheConstants import TOUCH_PKT_FMT, GAT_PKT_FMT, GETL_PKT_FMT, REQ_PKT_
 from memcacheConstants import COMPACT_DB_PKT_FMT
 import memcacheConstants
 import logger
+from cluster_run_manager import KeepRefs
+
 def decodeCollectionID(key):
     # A leb128 varint encodes the CID
     data = array.array('B', key)
@@ -60,12 +62,13 @@ class MemcachedError(exceptions.Exception):
     def __repr__(self):
         return "<MemcachedError #%d ``%s''>" % (self.status, self.msg)
 
-class MemcachedClient(object):
+class MemcachedClient(KeepRefs):
     """Simple memcached client."""
 
     vbucketId = 0
 
     def __init__(self, host='127.0.0.1', port=11211, timeout=30):
+        super(MemcachedClient, self).__init__()
         self.host = host
         self.port = port
         self.timeout = timeout

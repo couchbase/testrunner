@@ -8,7 +8,6 @@ import time
 import logging
 import stat
 import json
-import weakref
 
 import TestInput
 from subprocess import Popen, PIPE
@@ -53,7 +52,8 @@ from testconstants import LINUX_NONROOT_CB_BIN_PATH,\
                           NR_INSTALL_LOCATION_FILE, LINUX_DIST_CONFIG
 
 from membase.api.rest_client import RestConnection, RestHelper
-from collections import defaultdict
+from cluster_run_manager import KeepRefs
+
 
 log = logger.Logger.get_logger()
 logging.getLogger("paramiko").setLevel(logging.WARNING)
@@ -176,19 +176,8 @@ class RemoteMachineHelper(object):
                     return process
         return None
 
-class KeepSSHConnRefs(object):
-    __refs__ = defaultdict(list)
 
-    def __init__(self):
-        self.__refs__[self.__class__].append(weakref.ref(self)())
-
-    @classmethod
-    def get_instances(cls):
-        for ins in cls.__refs__[cls]:
-            yield ins
-
-
-class RemoteMachineShellConnection(KeepSSHConnRefs):
+class RemoteMachineShellConnection(KeepRefs):
     _ssh_client = None
 
     def __init__(self, username='root',

@@ -36,6 +36,8 @@ from security.rbac_base import RbacBase
 from lib.couchbase_helper.tuq_helper import N1QLHelper
 from .random_query_generator.rand_query_gen import FTSESQueryGenerator
 from security.ntonencryptionBase import ntonencryptionBase
+from lib.ep_mc_bin_client import MemcachedClient
+from lib.mc_bin_client import MemcachedClient as MC_MemcachedClient
 
 
 class RenameNodeException(FTSException):
@@ -3218,6 +3220,14 @@ class FTSBaseTest(unittest.TestCase):
             for ins in RemoteMachineShellConnection.get_instances():
                 #self.log.info(str(ins))
                 ins.disconnect()
+            self.log.info("closing all memcached connections")
+            for ins in MemcachedClient.get_instances():
+                #self.log.info(str(ins))
+                ins.close()
+
+            for ins in MC_MemcachedClient.get_instances():
+                #self.log.info(str(ins))
+                ins.close()
             self.__cluster_op.shutdown(force=True)
             unittest.TestCase.tearDown(self)
 

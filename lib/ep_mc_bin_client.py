@@ -143,13 +143,15 @@ class ErrorSubdocSuccessDeleted(MemcachedError): ERRCODE = 0xcd
 class ErrorSubdocXattrInvalidFlagCombo(MemcachedError): ERRCODE = 0xce
 class ErrorSubdocXattrInvalidKeyCombo(MemcachedError): ERRCODE = 0xcf
 class ErrorSubdocXattrUnknownMacro(MemcachedError): ERRCODE = 0xd0
+from cluster_run_manager import KeepRefs
 
-class MemcachedClient(object):
+class MemcachedClient(KeepRefs):
     """Simple memcached client."""
 
     vbucketId = 0
 
     def __init__(self, host='127.0.0.1', port=11211, family=socket.AF_UNSPEC):
+        super(MemcachedClient, self).__init__()
         self.host = host
         self.port = port
 

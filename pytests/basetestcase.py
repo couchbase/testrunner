@@ -41,6 +41,7 @@ from couchbase_cli import CouchbaseCLI
 import testconstants
 
 from lib.ep_mc_bin_client import MemcachedClient
+from lib.mc_bin_client import MemcachedClient as MC_MemcachedClient
 from scripts.collect_server_info import cbcollectRunner
 
 
@@ -509,6 +510,16 @@ class BaseTestCase(unittest.TestCase):
             for ins in RemoteMachineShellConnection.get_instances():
                 #self.log.info(str(ins))
                 ins.disconnect()
+
+            self.log.info("closing all memcached connections")
+            for ins in MemcachedClient.get_instances():
+                #self.log.info(str(ins))
+                ins.close()
+
+            for ins in MC_MemcachedClient.get_instances():
+                #self.log.info(str(ins))
+                ins.close()
+
             if not self.input.param("skip_cleanup", False):
                 self.reset_cluster()
             # stop all existing task manager threads
