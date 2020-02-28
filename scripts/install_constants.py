@@ -142,7 +142,7 @@ WAIT_TIMES = {
     # unit seconds
     # (<sleep between retries>, <message>, <give up after>)
     "deb": {
-        "download_binary": (10, "Waiting {0}s for download to complete on {1}..", 100),
+        "download_binary": (10, "Waiting {0}s for download to complete on {1}..", 300),
         "uninstall": (10, "Waiting {0}s for uninstall to complete on {1}..", 30),
         "install": (20, "Waiting {0}s for install to complete on {1}..", 100),
         "post_install": (10, "Waiting {0}s for couchbase-service to become active on {1}..", 60),
@@ -150,7 +150,7 @@ WAIT_TIMES = {
 
     },
     "dmg": {
-        "download_binary": (20, "Waiting {0}s for download to complete on {1}..", 100),
+        "download_binary": (20, "Waiting {0}s for download to complete on {1}..", 300),
         "uninstall": (10, "Waiting {0}s for uninstall to complete on {1}..", 30),
         "pre_install": (30, "Waiting for dmg to be mounted..", 60),
         "install": (50, "Waiting {0}s for install to complete on {1}..", 100),
@@ -158,14 +158,14 @@ WAIT_TIMES = {
         "init": (30, "Waiting {0}s for {1} to be initialized..", 300)
     },
     "msi": {
-        "download_binary": (20, "Waiting {0}s for download to complete on {1}..", 100),
+        "download_binary": (20, "Waiting {0}s for download to complete on {1}..", 300),
         "uninstall": (10, "Waiting {0}s for uninstall to complete on {1}..", 30),
         "install": (50, "Waiting {0}s for install to complete on {1}..", 100),
         "post_install": (30, "Waiting {0}s for couchbase-service to become active on {1}..", 120),
         "init": (30, "Waiting {0}s for {1} to be initialized..", 300)
     },
     "rpm": {
-        "download_binary": (10, "Waiting {0}s for download to complete on {1}..", 100),
+        "download_binary": (10, "Waiting {0}s for download to complete on {1}..", 300),
         "uninstall": (10, "Waiting {0}s for uninstall to complete on {1}..", 30),
         "install": (20, "Waiting {0}s for install to complete on {1}..", 100),
         "post_install": (10, "Waiting {0}s for couchbase-service to become active on {1}..", 60),

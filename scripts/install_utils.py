@@ -623,7 +623,6 @@ def check_file_exists(node, filepath):
 
 def check_and_retry_download_binary(cmd, node):
     duration, event, timeout = install_constants.WAIT_TIMES[node.info.deliverable_type]["download_binary"]
-    time.sleep(duration)
     start_time = time.time()
     while time.time() < start_time + timeout:
         try:
