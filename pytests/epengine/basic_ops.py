@@ -105,18 +105,18 @@ class basic_ops(BaseTestCase):
             self.fail("Error on First setWithMeta()")
 
         stats = mc.stats()
-        self.log.info('curr_items: {} and curr_temp_items:{}'.format(stats[b'curr_items'], stats[b'curr_temp_items']))
+        self.log.info('curr_items: {} and curr_temp_items:{}'.format(stats['curr_items'], stats['curr_temp_items']))
         self.log.info("Sleeping for 5 and checking stats again")
         time.sleep(5)
         stats = mc.stats()
-        self.log.info('curr_items: {} and curr_temp_items:{}'.format(stats[b'curr_items'], stats[b'curr_temp_items']))
+        self.log.info('curr_items: {} and curr_temp_items:{}'.format(stats['curr_items'], stats['curr_temp_items']))
 
         try:
             mc.setWithMeta('1', '{"Hello":"World"}', 3600, 0, 1, 0x1512a3186faa0000)
         except MemcachedError as error:
             stats = mc.stats()
-            self.log.info('After 2nd setWithMeta(), curr_items: {} and curr_temp_items:{}'.format(stats[b'curr_items'], stats[b'curr_temp_items']))
-            if int(stats[b'curr_temp_items']) == 1:
+            self.log.info('After 2nd setWithMeta(), curr_items: {} and curr_temp_items:{}'.format(stats['curr_items'], stats['curr_temp_items']))
+            if int(stats['curr_temp_items']) == 1:
                 self.fail("Error on second setWithMeta(), expected curr_temp_items to be 0")
             else:
                 self.log.info("<MemcachedError #%d ``%s''>" % (error.status, error.message))
@@ -140,7 +140,7 @@ class basic_ops(BaseTestCase):
         mc.sasl_auth_plain(self.master.rest_username, self.master.rest_password)
         mc.bucket_select('default')
         stats = mc.stats()
-        self.assertEqual(int(stats[b'curr_items']), 250)
+        self.assertEqual(int(stats['curr_items']), 250)
 
 
     def test_large_doc_size_2MB(self):
@@ -158,7 +158,7 @@ class basic_ops(BaseTestCase):
         mc.sasl_auth_plain(self.master.rest_username, self.master.rest_password)
         mc.bucket_select('default')
         stats = mc.stats()
-        self.assertEqual(int(stats[b'curr_items']), 125)
+        self.assertEqual(int(stats['curr_items']), 125)
 
     def test_large_doc_20MB(self):
         # test reproducer for MB-29258,
@@ -173,13 +173,13 @@ class basic_ops(BaseTestCase):
         mc.bucket_select('default')
         stats = mc.stats()
         if (document_size > 20):
-            self.assertEqual(int(stats[b'curr_items']), 0) # failed with error "Data Too Big" when document size > 20MB
+            self.assertEqual(int(stats['curr_items']), 0) # failed with error "Data Too Big" when document size > 20MB
         else:
-            self.assertEqual(int(stats[b'curr_items']), 1)
+            self.assertEqual(int(stats['curr_items']), 1)
             gens_update = self.generate_docs_bigdata(docs_per_day=1, document_size=(21 * 1024000))
             self.load(gens_update, buckets=self.src_bucket, verify_data=False, batch_size=10)
             stats = mc.stats()
-            self.assertEqual(int(stats[b'curr_items']), 1)
+            self.assertEqual(int(stats['curr_items']), 1)
 
     def test_diag_eval_curl(self):
         # Check if diag/eval can be done only by local host
@@ -227,9 +227,9 @@ class basic_ops(BaseTestCase):
         mc.sasl_auth_plain(self.master.rest_username, self.master.rest_password)
         mc.bucket_select('default')
         stats = mc.stats()
-        self.assertEqual(stats[b'ep_compression_mode'], value)
-        self.assertEqual(int(stats[b'ep_item_compressor_num_compressed']), items)
-        self.assertNotEqual(int(stats[b'vb_active_itm_memory']), int(stats[b'vb_active_itm_memory_uncompressed']))
+        self.assertEqual(stats['ep_compression_mode'], value)
+        self.assertEqual(int(stats['ep_item_compressor_num_compressed']), items)
+        self.assertNotEqual(int(stats['vb_active_itm_memory']), int(stats['vb_active_itm_memory_uncompressed']))
 
     def test_compression_active_and_off(self):
         '''
