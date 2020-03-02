@@ -1925,7 +1925,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
 
             # Verify that the correct directories/files exist in the backup
             # directory
-            dir_file_list = ["backup", "logs", "archive_list.txt"]
+            dir_file_list = ["backup", "logs", "info.json", "system_info.log"]
             for name in dir_file_list:
                 if not any(name in dir_file for dir_file in archive_top_level):
                     self.fail(
