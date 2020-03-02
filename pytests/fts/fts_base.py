@@ -34,6 +34,7 @@ from security.rbac_base import RbacBase
 from lib.couchbase_helper.tuq_helper import N1QLHelper
 from random_query_generator.rand_query_gen import FTSESQueryGenerator
 from security.ntonencryptionBase import ntonencryptionBase
+from security.SecretsMasterBase import SecretsMasterBase
 
 
 class RenameNodeException(FTSException):
@@ -3127,6 +3128,10 @@ class FTSBaseTest(unittest.TestCase):
 
     def __is_cluster_run(self):
         return len(set([server.ip for server in self._input.servers])) == 1
+    
+    def _setup_node_secret(self, secret_password):
+        for server in self._input.servers:
+            SecretsMasterBase(server).setup_pass_node(server, secret_password)
 
     def _check_retry_rebalance_succeeded(self):
         rest = RestConnection(self._cb_cluster.get_master_node())
@@ -3164,6 +3169,9 @@ class FTSBaseTest(unittest.TestCase):
             error_logger = self.check_error_count_in_fts_log()
             if error_logger:
                 self.fail("Errors found in logs : {0}".format(error_logger))
+        
+        if self.enable_secrets:
+            self._setup_node_secret("")
 
         if self._input.param("negative_test", False):
             if hasattr(self, '_resultForDoCleanups') \

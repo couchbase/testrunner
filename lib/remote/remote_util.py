@@ -1816,9 +1816,9 @@ class RemoteMachineShellConnection:
                 command = 'INSTALL_UPGRADE_CONFIG_DIR=/opt/couchbase/var/lib/membase/config {0}'\
                                              .format(install_command)
             else:
-                command = 'rpm -U /tmp/{0}'.format(build.name)
+                command = 'export CB_MASTER_PASSWORD=password; rpm -U /tmp/{0}'.format(build.name)
                 if forcefully:
-                    command = 'rpm -U --force /tmp/{0}'.format(build.name)
+                    command = 'export CB_MASTER_PASSWORD=password; rpm -U --force /tmp/{0}'.format(build.name)
         elif self.info.deliverable_type == 'deb':
             if save_upgrade_config:
                 self.couchbase_uninstall()
