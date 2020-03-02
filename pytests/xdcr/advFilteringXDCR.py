@@ -35,7 +35,7 @@ class XDCRAdvFilterTests(XDCRNewBaseTest):
                 self.load_data()
         except Exception as e:
             if self.skip_validation:
-                if "create replication failed : status:False,content:{\"errors\":{\"filterExpression\":" in e.message:
+                if "create replication failed : status:False,content:{\"errors\":{\"filterExpression\":" in str(e):
                     self.log.warning("Random filter generated may not be valid, skipping doc count validation")
                     self.tearDown()
             else:
