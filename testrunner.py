@@ -599,7 +599,7 @@ def runtests(names, options, arg_i, arg_p, runtime_test_params):
 
             # there is a group for this test case, if that group is not specified at run time then do not run it
             elif not set(runtime_test_params["GROUP"].split(";")).issubset(set(params["GROUP"].split(";"))):
-                print("test '{0}' skipped, is not in the requested group".format(name))
+                print(("test '{0}' skipped, is not in the requested group".format(name)))
                 continue
             else:
                 pass # the test was in requested group, will run it
@@ -607,7 +607,7 @@ def runtests(names, options, arg_i, arg_p, runtime_test_params):
         elif "EXCLUDE_GROUP" in runtime_test_params:
             if 'GROUP' in params and \
                 set(runtime_test_params["EXCLUDE_GROUP"].split(";")).issubset(set(params["GROUP"].split(";"))):
-                    print("test '{0}' skipped, is in an excluded group".format(name))
+                    print(("test '{0}' skipped, is in an excluded group".format(name)))
                     continue
 
         # Create Log Directory

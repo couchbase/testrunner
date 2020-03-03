@@ -825,16 +825,16 @@ class DataCollector(object):
                     status = True
 
             if not backup_data[bucket.name]:
-                print("Data base of bucket {0} is empty".format(bucket.name))
+                print(("Data base of bucket {0} is empty".format(bucket.name)))
                 return  backup_data, status
-            print("---- Done extract data from backup files in backup repo of bucket {0}"\
-                                                                   .format(bucket.name))
+            print(("---- Done extract data from backup files in backup repo of bucket {0}"\
+                                                                   .format(bucket.name)))
         if debug_logs:
-            print("---- shards with data in each bucket: {0}".format(shards_with_data))
+            print(("---- shards with data in each bucket: {0}".format(shards_with_data)))
         else:
             for bucket in buckets:
-                print("---- total vbuckets with data in bucket {0} are {1}"\
-                           .format(bucket.name, len(shards_with_data[bucket.name])))
+                print(("---- total vbuckets with data in bucket {0} are {1}"\
+                           .format(bucket.name, len(shards_with_data[bucket.name]))))
         return backup_data, status
 
     def get_views_definition_from_backup_file(self, server, backup_dir, buckets):
