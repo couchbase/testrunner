@@ -131,7 +131,10 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         else:
             raise Exception("OS not supported.")
         self.backup_validation_files_location = "/tmp/backuprestore" + self.master.ip
-        self.backupset.backup_host = self.input.clusters[1][0]
+        if self.input.bkrs_client is not None:
+            self.backupset.backup_host = self.input.bkrs_client
+        else:
+            self.backupset.backup_host = self.input.clusters[1][0]
         self.backupset.name = self.input.param("name", "backup")
         self.non_master_host = self.input.param("non-master", False)
         self.compact_backup = self.input.param("compact-backup", False)
@@ -342,6 +345,9 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         if self.backupset.disable_data:
             args += " --disable-data"
         remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
+        if self.backupset.current_bkrs_client_version[:3] >= "6.5":
+            if self.vbucket_filter is not None:
+                args += " --vbucket-filter {0}".format(self.vbucket_filter)
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, args)
         if del_old_backup:
             self.log.info("Remove any old dir before create new one")
@@ -495,7 +501,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         elif self.backupset.passwd_env_with_prompt:
             password_input = "-p "
 
-        if "4.6" <= RestConnection(self.backupset.backup_host).get_nodes_version():
+        if "4.6" <= self.backupset.current_bkrs_client_version[:3]:
             self.cluster_flag = "--cluster"
 
         args = "restore --archive {0} --repo {1} {2} http{9}://{3}:{10}{4} "\
@@ -673,7 +679,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                 args += " --replace-ttl-with {0}".format(self.replace_ttl_with)
             else:
                 args += " --replace-ttl {0}".format(self.replace_ttl)
-        if self.vbucket_filter:
+        if self.vbucket_filter and self.backupset.current_bkrs_client_version[:3] < "6.5" :
             if self.vbucket_filter == "empty":
                 args += " --vbucket-filter "
             elif self.vbucket_filter == "all":
@@ -730,13 +736,18 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                         break
             self.assertTrue(error_found, "Expected error not found: %s" % expected_error)
             return
+        bk_log_file_name = "backup.log"
+        if "6.5" <= RestConnection(self.backupset.backup_host).get_nodes_version():
+            bk_log_file_name = "backup-*.log"
+        bk_dir = self.backupset.directory
         remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
-        command = "grep 'Transfer plan finished successfully' " + self.backupset.directory + "/logs/backup.log"
+        command = "grep 'Transfer plan finished successfully' " + bk_dir + \
+                                 "/logs/{0}".format(bk_log_file_name)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
         if not output:
             self.fail("Restoring backup failed.")
-        command = "grep 'Transfer failed' " + self.backupset.directory + "/logs/backup.log"
+        command = "grep 'Transfer failed' " + bk_dir + "/logs/{0}".format(bk_log_file_name)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
         if output:
@@ -786,7 +797,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, args)
         output, error = remote_client.execute_command(command)
-        remote_client.log_command_output(output, error)
+        if self.debug_logs:
+            remote_client.log_command_output(output, error)
         remote_client.disconnect()
         if error:
             return False, error, "Getting backup list failed."
@@ -1379,58 +1391,70 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
 
     def _validate_restore_vbucket_filter(self):
         data_collector = DataCollector()
-        vbucket_filter = self.vbucket_filter.split(",")
+        if "," in self.vbucket_filter:
+            vbucket_filter = self.vbucket_filter.split(",")
+        if "-" in self.vbucket_filter:
+            vbucket_filter = []
+            vbuckets = self.vbucket_filter.split("-")
+            for x in range(int(vbuckets[0]), int(vbuckets[1]) + 1):
+                vbucket_filter.append(x)
         shell = RemoteMachineShellConnection(self.backupset.backup_host)
         rest = RestConnection(self.backupset.restore_cluster_host)
         restore_buckets_items = rest.get_buckets_itemCount()
         restore_buckets = rest.get_buckets()
         for bucket in self.buckets:
-            output, error = shell.execute_command("ls {0}/backup/*/{1}*/data "\
-                                             .format(self.backupset.directory, bucket.name))
             filter_vbucket_keys = {}
             total_filter_keys = 0
             """ get vbucket keys pair in data base """
-            if "shard_0.fdb" in output:
-                for vb in vbucket_filter:
+            for vb in vbucket_filter:
+                if self.backupset.current_bkrs_client_version[:3] < "6.5":
                     cmd = "{0}forestdb_dump{1} --plain-meta --no-body --kvs partition{3} "\
-                      "{2}/backup/*/*/data/shard_0.fdb | grep 'Doc ID'"\
-                                         .format(self.cli_command_location, self.cmd_ext,\
-                                                             self.backupset.directory, vb)
-                    dump_output, error = shell.execute_command(cmd)
-                    if dump_output:
-                        dump_output = [x.replace("Doc ID: ", "") for x in dump_output]
-
-                        filter_vbucket_keys[vb] = dump_output
-                        total_filter_keys += len(dump_output)
-                        if self.debug_logs:
-                            print("dump output: ", dump_output)
-                if filter_vbucket_keys:
-                    if int(restore_buckets_items[bucket.name]) != total_filter_keys:
-                        mesg = "** Failed to restore keys from vbucket-filter. "
-                        mesg += "\nTotal filter keys in backup file {0}".format(total_filter_keys)
-                        mesg += "\nTotal keys in bucket {0}: {1}".format(bucket.name,
-                                                                         restore_buckets_items)
-                        self.fail(mesg)
-                    else:
-                        self.log.info("Success restore items from vbucket-filter")
-                        vbuckets = rest.get_vbuckets(bucket.name)
-                        headerInfo, bucket_data = \
-                               data_collector.collect_data([self.backupset.restore_cluster_host],
-                                                           [bucket], perNode=False,
-                                                           getReplica=False, mode="memory")
-                        client = VBucketAwareMemcached(rest, bucket.name)
-                        self.log.info(" ** vbuckets should be restore: {0}".format(vbucket_filter))
-                        for key in bucket_data[bucket.name]:
-                            vBucketId = client._get_vBucket_id(key)
-                            if self.debug_logs:
-                                print("This key {0} in vbucket {1}".format(key, vBucketId))
-                            if str(vBucketId) not in vbucket_filter:
-                                self.fail("vbucketId {0} of key {1} not from vbucket filters {2}"\
-                                               .format(vBucketId, key, vbucket_filter))
+                          "{2}/backup/*/*/data/shard_0.fdb | grep 'Doc ID'"\
+                                     .format(self.cli_command_location, self.cmd_ext,\
+                                                         self.backupset.directory, vb)
                 else:
-                    self.log.info("No keys with vbucket filter {0} restored".format(vbucket_filter))
+                    cmd = "{0}cbsqlitedump{1} --no-meta --no-body "\
+                          " -f {2}/backup/*/*/data/shard_{3}.sqlite.0 | grep 'Key:'"\
+                          .format(self.cli_command_location, self.cmd_ext,\
+                                  self.backupset.directory, vb)
+
+                dump_output, error = shell.execute_command(cmd, debug=False)
+                if dump_output:
+                    if self.backupset.current_bkrs_client_version[:3] < "6.5":
+                        dump_output = [x.replace("Doc ID: ", "") for x in dump_output]
+                    else:
+                        dump_output = [x.replace("Key: ", "") for x in dump_output]
+
+                    filter_vbucket_keys[vb] = dump_output
+                    total_filter_keys += len(dump_output)
+                    if self.debug_logs:
+                        print("dump output from vb '{0}': {1}".format(vb, dump_output))
+            if filter_vbucket_keys:
+                if int(restore_buckets_items[bucket.name]) != total_filter_keys:
+                    mesg = "** Failed to restore keys from vbucket-filter. "
+                    mesg += "\nTotal filter keys in backup file {0}".format(total_filter_keys)
+                    mesg += "\nTotal keys in bucket {0}: {1}".format(bucket.name,
+                                                                     restore_buckets_items)
+                    self.fail(mesg)
+                else:
+                    self.log.info("Success restore items from vbucket-filter")
+                    vbuckets = rest.get_vbuckets(bucket.name)
+                    headerInfo, bucket_data = \
+                           data_collector.collect_data([self.backupset.restore_cluster_host],
+                                                       [bucket], perNode=False,
+                                                       getReplica=False, mode="memory")
+                    client = VBucketAwareMemcached(rest, bucket.name)
+                    self.log.info(" ** vbuckets should be restore: {0}".format(vbucket_filter))
+                    for key in bucket_data[bucket.name]:
+                        vBucketId = client._get_vBucket_id(key)
+                        if self.debug_logs:
+                            print("This key {0} in vbucket {1}".format(key, vBucketId))
+                        vbucket_filter = [int(i) for i in vbucket_filter]
+                        if vBucketId not in vbucket_filter:
+                            self.fail("vbucketId {0} of key {1} not from vbucket filters {2}"\
+                                           .format(vBucketId, key, vbucket_filter))
             else:
-                raise Exception("file shard_0.fdb did not created ")
+                self.log.info("No keys with vbucket filter {0} restored".format(vbucket_filter))
         shell.disconnect()
 
     def _validate_restore_replace_ttl_with(self, ttl_set):
@@ -1672,6 +1696,10 @@ class Backupset:
         self.new_buckets = []
         self.flushed_buckets = []
         self.deleted_backups = []
+        self.bkrs_client_version = None
+        self.current_bkrs_client_version = None
+        self.bkrs_client_upgrade = False
+        self.bkrs_client_upgrade_version = False
 
 
 class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):

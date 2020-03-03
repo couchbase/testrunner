@@ -19,7 +19,6 @@ class DirectoryStructureValidations(BackupRestoreValidationBase):
         backup_directory = "{0}/{1}".format(self.backupset.directory, self.backupset.name)
         command = "ls -lR {0}".format(backup_directory)
         output, error = remote_client.execute_command(command)
-        remote_client.log_command_output(output, error)
         remote_client.disconnect()
         current_path = self.backupset.directory
         parent_path = self.backupset.name

@@ -1,4 +1,4 @@
-import os, time
+import os, time, datetime
 import os.path
 import uuid
 from remote.remote_util import RemoteMachineShellConnection
@@ -758,47 +758,89 @@ class DataCollector(object):
             Extract key value from database file shard_0.fdb
             Return: key, kv store name, status and value
         """
+        current_cbm_version = RestConnection(server).get_nodes_version()
+        current_cbm_version = "-".join(current_cbm_version.split('-')[:2])
         conn = RemoteMachineShellConnection(server)
         backup_data = {}
         status = False
+        now = datetime.datetime.now()
+        shards_with_data = {}
         for bucket in buckets:
             backup_data[bucket.name] = {}
-            output, error = conn.execute_command("ls %s/backup/20*/%s*/data "\
+            shards_with_data[bucket.name] = []
+            print "---- Collecting data in backup repo"
+            if master_key == "random_keys":
+                master_key = ".\{12\}$"
+            if current_cbm_version[:5] < "6.5.1":
+                output, error = conn.execute_command("ls %s/backup/20*/%s*/data "\
                                                         % (backup_dir, bucket.name))
-            if "shard_0.fdb" in output:
-                if master_key == "random_keys":
-                    master_key = ".\{12\}$"
-                cmd = "%sforestdb_dump%s --plain-meta "\
-                      "%s/backup/20*/%s*/data/shard_0.fdb | grep -A 8 '^Doc\sID:\s%s' "\
-                                                    % (cli_command, cmd_ext,\
-                                                       backup_dir, bucket.name, master_key)
-                dump_output, error = conn.execute_command(cmd)
-                if dump_output:
-                    """ remove empty element """
-                    dump_output = [x.strip(' ') for x in dump_output]
-                    """ remove '--' element """
-                    dump_output = [ x for x in dump_output if not "--" in x ]
-                    print "Start extracting data from database file"
-                    key_ids       =  [x.split(":")[1].strip(' ') for x in dump_output[0::9]]
-                    key_partition =  [x.split(":")[1].strip(' ') for x in dump_output[1::9]]
-                    key_status    =  [x.split(":")[-1].strip(' ') for x in dump_output[6::9]]
-                    key_value = []
-                    for x in dump_output[8::9]:
-                        if x.split(":",1)[1].strip(' ').startswith("{"):
-                            key_value.append(x.split(":",1)[1].strip())
-                        else:
-                            key_value.append(x.split(":")[-1].strip(' '))
-                    for idx, key in enumerate(key_ids):
-                        backup_data[bucket.name][key] = \
-                               {"KV store name":key_partition[idx], "Status":key_status[idx],
-                                "Value":key_value[idx]}
-                    print "Done get data from backup file"
-                    status = True
+                if "shard_0.fdb" in output:
+                    cmd = "%sforestdb_dump%s --plain-meta "\
+                          "%s/backup/20*/%s*/data/shard_0.fdb | grep -A 8 '^Doc\sID:\s%s' "\
+                                                        % (cli_command, cmd_ext,\
+                                                           backup_dir, bucket.name, master_key)
+                    dump_output, error = conn.execute_command(cmd)
+                    if dump_output:
+                        """ remove empty element """
+                        dump_output = [x.strip(' ') for x in dump_output]
+                        """ remove '--' element """
+                        dump_output = [ x for x in dump_output if not "--" in x ]
+                        print "Start extracting data from database file"
+                        key_ids       =  [x.split(":")[1].strip(' ') for x in dump_output[0::9]]
+                        key_partition =  [x.split(":")[1].strip(' ') for x in dump_output[1::9]]
+                        key_status    =  [x.split(":")[-1].strip(' ') for x in dump_output[6::9]]
+                        key_value = []
+                        for x in dump_output[8::9]:
+                            if x.split(":",1)[1].strip(' ').startswith("{"):
+                                key_value.append(x.split(":",1)[1].strip())
+                            else:
+                                key_value.append(x.split(":")[-1].strip(' '))
+                        for idx, key in enumerate(key_ids):
+                            backup_data[bucket.name][key] = \
+                                   {"KV store name":key_partition[idx], "Status":key_status[idx],
+                                    "Value":key_value[idx]}
+                        print "Done get data from backup file"
+                        status = True
+                    else:
+                        print "Data base is empty"
+                        return  backup_data, status
                 else:
-                    print "Data base is empty"
-                    return  backup_data, status
+                    raise Exception("Could not find file shard_0.fdb at %s" % server.ip)
             else:
-                raise Exception("Could not find file shard_0.fdb at %s" % server.ip)
+                dump_output = []
+                for i in range(0, 1024):
+                    cmd2 = "{0}cbsqlitedump{1} "\
+                           " -f {2}/backup/{3}*/{4}*/data/shard_{5}.sqlite.0 | grep -A 8 'Key: {6}' "\
+                                                .format(cli_command, cmd_ext,\
+                                                        backup_dir, now.year, bucket.name,\
+                                                        i, master_key)
+                    output, error = conn.execute_command(cmd2, debug=False)
+                    if output:
+                        shards_with_data[bucket.name].append(i)
+                        """ remove empty element """
+                        output = [x.strip(' ') for x in output]
+                        """ remove '--' element """
+                        output = [ x for x in output if not "--" in x ]
+                        key_ids       =  [x.split(":")[1].strip(' ') for x in output[0::9]]
+                        key_partition =  [x.split(":")[1].strip(' ') for x in output[1::9]]
+                        key_status    =  [x.split(":")[1].strip(' ') for x in output[4::9]]
+                        key_value = []
+                        for x in output[8::9]:
+                            if x.split(":",1)[1].strip(' ').startswith("{"):
+                                key_value.append(x.split(":",1)[1].strip())
+                            else:
+                                key_value.append(x.split(":")[-1].strip(' '))
+                        for idx, key in enumerate(key_ids):
+                            backup_data[bucket.name][key] = \
+                                    {"KV store name":key_partition[idx], "Status":key_status[idx],
+                                     "Value":key_value[idx]}
+                        status = True
+                if not backup_data[bucket.name]:
+                    print "Data base of bucket {0} is empty".format(bucket.name)
+                    return  backup_data, status
+                print "---- Done extract data from backup files in backup repo of bucket {0}"\
+                                                                          .format(bucket.name)
+            print "---- shards with data in each bucket: {0}".format(shards_with_data)
         return backup_data, status
 
     def get_views_definition_from_backup_file(self, server, backup_dir, buckets):

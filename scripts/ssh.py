@@ -74,6 +74,8 @@ class RemoteJob(object):
     def parallel_remote(self, input):
         remotes = []
         params = input.test_params
+        if input.bkrs_client is not None:
+            input.servers.append(input.bkrs_client)
         for server in input.servers:
             if "script" in params:
                 remotes.append(ScriptRunner(server, params["script"]))

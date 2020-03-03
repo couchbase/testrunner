@@ -29,7 +29,10 @@ class BackupRestoreFilesValidations(BackupRestoreValidationBase):
         Generates expected backup metadata json
         :return: backup meta map
         """
-        json_helper = JSONGenerator("backup-meta.json", self.backupset.__dict__)
+        backup_meta = "backup-meta.json"
+        if self.backupset.current_bkrs_client_version == "6.5.1":
+            backup_meta = "backup-meta-651.json"
+        json_helper = JSONGenerator(backup_meta, self.backupset.__dict__)
         json_helper.generate_json()
         return json_helper.object
 

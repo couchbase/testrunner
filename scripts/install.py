@@ -63,6 +63,11 @@ Available keys:
  change_indexer_ports=false Sets indexer ports values to non-default ports
  storage_mode=plasma        Sets indexer storage mode
  enable_ipv6=False          Enable ipv6 mode in ns_server
+ bkrs_version=6.5.1-6200    If not pass, it will get build version from version params
+                            ini file need a new field [bkrs_client] to use this new option
+                            [bkrs_client]
+                            ip:123.456.789.000
+                            password:
 
 
 Examples:
@@ -203,6 +208,10 @@ class Installer(object):
                 msi = True
             else:
                 msi = False
+        if ok:
+            if "bkrs_version" in params and server.bkrs_client:
+                version = params["bkrs_version"]
+
         if ok:
             mb_alias = ["membase", "membase-server", "mbs", "mb"]
             cb_alias = ["couchbase", "couchbase-server", "cb"]
@@ -1045,10 +1054,11 @@ class InstallerJob(object):
                 print "unable to complete the installation: ", ex
         return success
 
-    def parallel_install(self, servers, params):
+    def parallel_install(self, servers, params, bkrs_client=None):
         uninstall_threads = []
         install_threads = []
         initializer_threads = []
+        bkrs_client_threads = []
         queue = Queue.Queue()
         success = True
         for server in servers:
@@ -1071,6 +1081,21 @@ class InstallerJob(object):
             uninstall_threads.append(u_t)
             install_threads.append(i_t)
             initializer_threads.append(init_t)
+        if bkrs_client is not None:
+            bkrs_params = copy.deepcopy(params)
+            bkrs_params["server"] = bkrs_client
+            u_bkrs_t = Thread(target=installer_factory(params).uninstall,
+                       name="uninstaller-thread-{0}".format(bkrs_client.ip),
+                       args=(bkrs_params,))
+            i_bkrs_t = Thread(target=installer_factory(params).install,
+                       name="installer-thread-{0}".format(bkrs_client.ip),
+                       args=(bkrs_params, queue))
+            init_bkrs_t = Thread(target=installer_factory(params).initialize,
+                       name="initializer-thread-{0}".format(bkrs_client.ip),
+                       args=(bkrs_params,))
+            u_bkrs_t.start()
+            u_bkrs_t.join()
+            print "thread {0} finished".format(u_bkrs_t.name)
         for t in uninstall_threads:
             t.start()
         for t in uninstall_threads:
@@ -1085,6 +1110,14 @@ class InstallerJob(object):
             if not success:
                 print "Server:{0}.Couchbase is still installed after uninstall".format(server)
                 return success
+            if bkrs_client is not None:
+                if "bkrs_version" not in params:
+                    bkrs_version = params["version"]
+                else:
+                    bkrs_version = params["bkrs_version"]
+                i_bkrs_t.start()
+                i_bkrs_t.join()
+                print "thread {0} finished".format(i_bkrs_t.name)
         for t in install_threads:
             t.start()
         for t in install_threads:
@@ -1095,6 +1128,10 @@ class InstallerJob(object):
         if not success:
             print "installation failed. initializer threads were skipped"
             return success
+        if bkrs_client is not None:
+            init_bkrs_t.start()
+            init_bkrs_t.join()
+            print "thread {0} finished".format(init_bkrs_t.name)
         for t in initializer_threads:
             t.start()
         for t in initializer_threads:
@@ -1228,7 +1265,7 @@ def main():
         # workaround for a python2.6 bug of using strptime with threads
         datetime.strptime("30 Nov 00", "%d %b %y")
         log.info('Doing  parallel install****')
-        success = InstallerJob().parallel_install(input.servers, input.test_params)
+        success = InstallerJob().parallel_install(input.servers, input.test_params, input.bkrs_client)
     else:
         log.info('Doing  serial install****')
         success = InstallerJob().sequential_install(input.servers, input.test_params)

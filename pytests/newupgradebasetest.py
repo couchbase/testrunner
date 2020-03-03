@@ -48,9 +48,9 @@ class NewUpgradeBaseTest(QueryHelperTests,EventingBaseTest, FTSBaseTest):
                                   "4.0.0", "4.0.0-4051", "4.1.0", "4.1.0-5005"]
         self.use_hostnames = self.input.param("use_hostnames", False)
         self.product = self.input.param('product', 'couchbase-server')
-        self.initial_version = self.input.param('initial_version', '2.5.1-1083')
+        self.initial_version = self.input.param('initial_version', '6.0.4-3082')
         self.initial_vbuckets = self.input.param('initial_vbuckets', 1024)
-        self.upgrade_versions = self.input.param('upgrade_version', '4.1.0-4963')
+        self.upgrade_versions = self.input.param('upgrade_version', '6.5.0-4960')
         self.upgrade_versions = self.upgrade_versions.split(";")
         self.skip_cleanup = self.input.param("skip_cleanup", False)
         self.init_nodes = self.input.param('init_nodes', True)

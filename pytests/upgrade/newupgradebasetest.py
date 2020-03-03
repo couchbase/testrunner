@@ -180,13 +180,15 @@ class NewUpgradeBaseTest(BaseTestCase):
         self.sleep(20, "sleep 20 seconds before run next test")
         self.log.info("==============  NewUpgradeBaseTest tearDown has completed ==============")
 
-    def _install(self, servers):
+    def _install(self, servers, version=None, community_to_enterprise=False):
         params = {}
         params['num_nodes'] = len(servers)
         params['product'] = self.product
         params['version'] = self.initial_version
         params['vbuckets'] = [self.initial_vbuckets]
         params['init_nodes'] = self.init_nodes
+        if version is not None:
+            params['version'] = version
         if self.initial_build_type is not None:
             params['type'] = self.initial_build_type
         if 5 <= int(self.initial_version[:1]) or 5 <= int(self.upgrade_versions[0][:1]):
