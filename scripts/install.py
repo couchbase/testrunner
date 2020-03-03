@@ -284,7 +284,7 @@ class Installer(object):
                 print "version   ", version
                 """
                 moxi repo:
-                   http://172.23.120.24/builds/latestbuilds/moxi/4.6.0/101/moxi-server..
+                   http://172.23.126.166/builds/latestbuilds/moxi/4.6.0/101/moxi-server..
                 """
                 build_repo = CB_REPO.replace("couchbase-server", "moxi") + version[:5] + "/"
             elif version[:5] not in COUCHBASE_VERSION_2 and \
