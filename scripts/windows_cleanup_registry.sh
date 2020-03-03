@@ -1,6 +1,6 @@
 # This script used to run with ssh.py under scripts directory
 # How to run:
-# python scripts/ssh.py  -i your_bad_vms.ini -p script=scripts/windows_cleanup_registry.sh
+# python3 scripts/ssh.py  -i your_bad_vms.ini -p script=scripts/windows_cleanup_registry.sh
 #
 taskkill /F /T /IM msiexec.exe
 taskkill /F /T /IM erl.exe

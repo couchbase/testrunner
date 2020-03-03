@@ -14,7 +14,7 @@ Options
     --help Show this help
 
 Examples:
-  python scripts/query_template_generator.py --grammar grammar.yy --queries 1000
+  python3 scripts/query_template_generator.py --grammar grammar.yy --queries 1000
 """)
     sys.exit(0)
 

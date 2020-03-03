@@ -1,5 +1,5 @@
 #this script will run until stopped. it will set keys with small/large values
-# python scripts/mixedload.py -p expiry=10,count=10000,prefix=something,size=1024
+# python3 scripts/mixedload.py -p expiry=10,count=10000,prefix=something,size=1024
 
 
 

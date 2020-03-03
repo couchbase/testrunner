@@ -67,8 +67,9 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
         self.log.info("Running {}".format(cmd))
         result = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE,
                                   stderr=subprocess.PIPE)
-        output = result.stdout.read()
-        error = result.stderr.read()
+        output = result.stdout.read().decode("utf-8")
+        error = result.stderr.read().decode("utf-8")
+
         if error:
             self.log.error(error)
             self.fail("Failed to run the loadgen.")
@@ -117,7 +118,7 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
     def update_buckets_with_high_ops(self, server, bucket, items, ops,
                                      batch=20000, threads=5, start_document=0,
                                      instances=1):
-        cmd_format = "python scripts/thanosied.py  --spec couchbase://{0} --bucket {1} --user {2} --password {3} " \
+        cmd_format = "python3 scripts/thanosied.py  --spec couchbase://{0} --bucket {1} --user {2} --password {3} " \
                      "--count {4} --batch_size {5} --threads {6} --start_document {7} --cb_version {8} --workers {9} --rate_limit {10} " \
                      "--passes 1  --update_counter {7}"
         cb_version = RestConnection(server).get_nodes_version()[:3]
@@ -130,8 +131,8 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
         self.log.info("Running {}".format(cmd))
         result = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE,
                                   stderr=subprocess.PIPE)
-        output = result.stdout.read()
-        error = result.stderr.read()
+        output = result.stdout.read().decode("utf-8")
+        error = result.stderr.read().decode("utf-8")
         if error:
             self.log.error(error)
             self.fail("Failed to run the loadgen.")
@@ -149,7 +150,7 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
                                      batch=20000, threads=5,
                                      start_document=0,
                                      instances=1):
-        cmd_format = "python scripts/thanosied.py  --spec couchbase://{0} --bucket {1} --user {2} --password {3} " \
+        cmd_format = "python3 scripts/thanosied.py  --spec couchbase://{0} --bucket {1} --user {2} --password {3} " \
                      "--count {4} --batch_size {5} --threads {6} --start_document {7} --cb_version {8} --workers {9} --rate_limit {10} " \
                      "--passes 0  --delete --num_delete {4}"
         cb_version = RestConnection(server).get_nodes_version()[:3]
@@ -162,8 +163,8 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
         self.log.info("Running {}".format(cmd))
         result = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE,
                                   stderr=subprocess.PIPE)
-        output = result.stdout.read()
-        error = result.stderr.read()
+        output = result.stdout.read().decode("utf-8")
+        error = result.stderr.read().decode("utf-8")
         if error:
             self.log.error(error)
             self.fail("Failed to run the loadgen.")
@@ -232,7 +233,7 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
                                            validate_expired=None, passes=0):
         from lib.memcached.helper.data_helper import VBucketAwareMemcached
 
-        cmd_format = "python scripts/thanosied.py  --spec couchbase://{0} --bucket {1} --user {2} --password {3} " \
+        cmd_format = "python3 scripts/thanosied.py  --spec couchbase://{0} --bucket {1} --user {2} --password {3} " \
                      "--count {4} --batch_size {5} --threads {6} --start_document {7} --cb_version {8} --validation 1 " \
                      "--rate_limit {9} --passes {10}"
         cb_version = RestConnection(server).get_nodes_version()[:3]
@@ -250,8 +251,8 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
         self.log.info("Running {}".format(cmd))
         result = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE,
                                   stderr=subprocess.PIPE)
-        output = result.stdout.read()
-        error = result.stderr.read()
+        output = result.stdout.read().decode("utf-8")
+        error = result.stderr.read().decode("utf-8")
         errors = []
         rest = RestConnection(self.master)
         VBucketAware = VBucketAwareMemcached(rest, bucket.name)

@@ -3239,7 +3239,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
     def load_buckets_with_high_ops(self, server, bucket, items, batch=2000,
                                    threads=5, start_document=0, instances=1, ttl=0):
         import subprocess
-        cmd_format = "python scripts/thanosied.py  --spec couchbase://{0} --bucket {1} --user {2} --password {3} " \
+        cmd_format = "python3 scripts/thanosied.py  --spec couchbase://{0} --bucket {1} --user {2} --password {3} " \
                      "--count {4} --batch_size {5} --threads {6} --start_document {7} --cb_version {8} --workers {9} --ttl {10} --rate_limit {11} " \
                      "--passes 1"
         cb_version = RestConnection(server).get_nodes_version()[:3]
@@ -3285,7 +3285,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
                                            updated=False, ops=0, ttl=0, deleted=False, deleted_items=0):
         import subprocess
         from lib.memcached.helper.data_helper import VBucketAwareMemcached
-        cmd_format = "python scripts/thanosied.py  --spec couchbase://{0} --bucket {1} --user {2} --password {3} " \
+        cmd_format = "python3 scripts/thanosied.py  --spec couchbase://{0} --bucket {1} --user {2} --password {3} " \
                      "--count {4} --batch_size {5} --threads {6} --start_document {7} --cb_version {8} --validation 1 --rate_limit {9}  " \
                      "--passes 1"
         cb_version = RestConnection(server).get_nodes_version()[:3]

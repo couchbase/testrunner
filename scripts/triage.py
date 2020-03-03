@@ -31,7 +31,7 @@ Options
     --help Show this help
 
 Examples:
-  python scripts/triage.py --os CENTOS --build 6.5.0-1351 --component QUERY --user username --password password
+  python3 scripts/triage.py --os CENTOS --build 6.5.0-1351 --component QUERY --user username --password password
 """)
     sys.exit(0)
 

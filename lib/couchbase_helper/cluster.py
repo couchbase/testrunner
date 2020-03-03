@@ -348,7 +348,7 @@ class Cluster(object):
         import subprocess
         from lib.membase.api.rest_client import RestConnection
 
-        cmd_format = "python scripts/high_ops_doc_gen.py  --node {0} --bucket {1} --user {2} --password {3} " \
+        cmd_format = "python3 scripts/high_ops_doc_gen.py  --node {0} --bucket {1} --user {2} --password {3} " \
                      "--count {4} --batch_size {5} --threads {6} --start_document {7} --cb_version {8} --instances {9} --ttl {10}"
         cb_version = RestConnection(server).get_nodes_version()[:3]
         cmd = cmd_format.format(server.ip, bucket.name, server.rest_username,
@@ -381,7 +381,7 @@ class Cluster(object):
         from lib.memcached.helper.data_helper import VBucketAwareMemcached
         from lib.membase.api.rest_client import RestConnection
 
-        cmd_format = "python scripts/high_ops_doc_gen.py  --node {0} --bucket {1} --user {2} --password {3} " \
+        cmd_format = "python3 scripts/high_ops_doc_gen.py  --node {0} --bucket {1} --user {2} --password {3} " \
                      "--count {4} " \
                      "--batch_size {5} --threads {6} --start_document {7} --cb_version {8} --validate"
         cb_version = RestConnection(server).get_nodes_version()[:3]

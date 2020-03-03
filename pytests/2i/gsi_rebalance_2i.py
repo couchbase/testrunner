@@ -3163,7 +3163,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
     def load_buckets_with_high_ops(self, server, bucket, items, batch=20000,
                                    threads=5, start_document=0, instances=1, ttl=0):
         import subprocess
-        cmd_format = "python scripts/high_ops_doc_gen.py  --node {0} --bucket {1} --user {2} --password {3} " \
+        cmd_format = "python3 scripts/high_ops_doc_gen.py  --node {0} --bucket {1} --user {2} --password {3} " \
                      "--count {4} --batch_size {5} --threads {6} --start_document {7} --cb_version {8} --instances {9} --ttl {10}"
         cb_version = RestConnection(server).get_nodes_version()[:3]
         if self.num_replicas > 0 and self.use_replica_to:
@@ -3197,7 +3197,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         import subprocess
         from lib.memcached.helper.data_helper import VBucketAwareMemcached
 
-        cmd_format = "python scripts/high_ops_doc_gen.py  --node {0} --bucket {1} --user {2} --password {3} " \
+        cmd_format = "python3 scripts/high_ops_doc_gen.py  --node {0} --bucket {1} --user {2} --password {3} " \
                      "--count {4} " \
                      "--batch_size {5} --threads {6} --start_document {7} --cb_version {8} --validate"
         cb_version = RestConnection(server).get_nodes_version()[:3]
