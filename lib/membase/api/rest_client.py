@@ -723,6 +723,9 @@ class RestConnection(object):
             if 'X-Couchbase-Meta' in header:
                 meta = header['X-Couchbase-Meta']
                 meta_parsed = json.loads(meta)
+            elif 'x-couchbase-meta' in header:
+                meta = header['x-couchbase-meta']
+                meta_parsed = json.loads(meta)
             else:
                 meta_parsed = {}
                 try:
