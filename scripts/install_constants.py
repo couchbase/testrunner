@@ -9,7 +9,7 @@ USAGE = """\
              debug_logs=False                               Print debug logs
              install_tasks=uninstall-install-init-cleanup   Pick 1 or more tasks  
              v, version=<numeric version>                   Example: "6.5.0-1234".
-             url=<build url>                                Example: "http://latestbuilds.service.couchbase.com/builds/latestbuilds/couchbase-server/mad-hatter/1234/couchbase-server-enterprise-6.5.0-1234-centos7.x86_64.rpm
+             url=<build url>                                Example: "http://172.23.126.166/builds/latestbuilds/couchbase-server/mad-hatter/1234/couchbase-server-enterprise-6.5.0-1234-centos7.x86_64.rpm
              edition, type=enterprise                       CB edition, community or enterprise
              timeout=600                                    End install after timeout seconds
              storage_mode=plasma                            Sets indexer storage mode
@@ -57,7 +57,7 @@ CURL_CMD = "curl {0} -o {1} -z {1} -s -m 30"
 CB_ENTERPRISE = "couchbase-server-enterprise"
 CB_COMMUNITY = "couchbase-server-community"
 CB_EDITIONS = [CB_COMMUNITY, CB_ENTERPRISE]
-CB_DOWNLOAD_SERVER = "latestbuilds.service.couchbase.com"
+CB_DOWNLOAD_SERVER = "172.23.126.166"
 
 WIN_BROWSERS = ["MicrosoftEdge.exe", "iexplore.exe"]
 RETAIN_NUM_BINARIES_AFTER_INSTALL = "2"

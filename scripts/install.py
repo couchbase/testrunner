@@ -308,7 +308,7 @@ class Installer(object):
             elif "moxi-server" in names and version[:5] != "2.5.2":
                 """
                 moxi repo:
-                   http://latestbuilds.service.couchbase.com/builds/latestbuilds/moxi/4.6.0/101/moxi-server..
+                   http://172.23.126.166/builds/latestbuilds/moxi/4.6.0/101/moxi-server..
                 """
                 build_repo = CB_REPO.replace("couchbase-server", "moxi") + version[:5] + "/"
             elif version[:5] not in COUCHBASE_VERSION_2 and \
