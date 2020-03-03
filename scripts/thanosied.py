@@ -518,7 +518,7 @@ if __name__ == "__main__":
         #    Calculate the workers that should perform the deletes and the workers that should not.
         #    ex: If num_delete=2500 and count=10000 and num_workers=10, only first 3 workers will have deletes,
         #    i.e first 2 workers will have 1000 deletes and 3rd will have 500 deletes.
-        items_per_worker = int(args.count) / num_workers
+        items_per_worker = int(int(args.count) / num_workers)
         args_counter = 0
         num_delete = int(args.num_delete)
         for i in range(0, num_delete, items_per_worker):
