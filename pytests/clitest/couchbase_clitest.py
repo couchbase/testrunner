@@ -2967,8 +2967,8 @@ class XdcrCLITest(CliBaseTest):
                           "pause": "SUCCESS: pause replication",
                           "resume": "SUCCESS: resume replication"
     }
-    SSL_MANAGE_SUCCESS = {'retrieve': "SUCCESS: retrieve certificate to \'PATH\'",
-                           'regenerate': "SUCCESS: regenerate certificate to \'PATH\'"
+    SSL_MANAGE_SUCCESS = {'retrieve': "SUCCESS: retrieve certificate to `PATH`",
+                           'regenerate': "SUCCESS: regenerate certificate to `PATH`"
                            }
 
     def setUp(self):
