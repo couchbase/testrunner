@@ -1035,7 +1035,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                                              .format(self.backupset.directory))
         deleted_key_status = {}
         if "shard_0.sqlite.0" in output:
-            cmd = "{0}cbsqlitedump{1} " \
+            cmd = "{0}cbriftdump{1} " \
                   " -f {2}/backup/201*/default*/data/shard_0.sqlite.0 | grep -A 6 ent-backup " \
                   % (self.cli_command_location, self.cmd_ext, \
                      self.backupset.directory)
@@ -2049,7 +2049,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             """ get vbucket keys pair in data base """
             self.log.info("Collecting data from backup repo ...")
             for vb in vbucket_filter:
-                cmd = "{0}cbsqlitedump{1} --no-meta --no-body " \
+                cmd = "{0}cbriftdump{1} --no-meta --no-body " \
                       " -f {2}/backup/*/*/data/shard_{3}.sqlite.0 | grep 'Key:'" \
                     .format(self.cli_command_location, self.cmd_ext, \
                             self.backupset.directory, vb)
