@@ -88,6 +88,7 @@ class TestInputServer(object):
         self.es_username = ''
         self.es_password = ''
         self.upgraded = False
+        self.collections_map = {}
 
     def __str__(self):
         #ip_str = "ip:{0}".format(self.ip)
@@ -391,6 +392,21 @@ class TestInputParser():
         return server
 
     @staticmethod
+    def get_collection_config(collection, config):
+        collection_config = {}
+        for section in config.sections():
+            if section == collection:
+                options = config.options(section)
+                for option in options:
+                    if option == 'bucket':
+                        collection_config['bucket'] = config.get(section, option)
+                    if option == 'scope':
+                        collection_config['scope'] = config.get(section, option)
+                    if option.lower() == 'maxttl':
+                        collection_config['maxTTL'] = config.get(section, option)
+        return collection_config
+
+    @staticmethod
     def get_server(ip, config):
         server = TestInputServer()
         server.ip = ip
@@ -420,6 +436,12 @@ class TestInputParser():
                         server.fts_port = config.get(section, option)
                     if option == 'eventing_port':
                         server.eventing_port = config.get(section, option)
+                    if option == 'collections':
+                        # collections_map = {collection: {bucket:'', scope:'', param:''}}
+                        collections = config.get(section, option).split(',')
+                        for collection in collections:
+                            server.collections_map[collection] = TestInputParser\
+                                .get_collection_config(collection, config)
                 break
                 #get username
                 #get password

@@ -3,7 +3,7 @@ from testconstants import COUCHBASE_FROM_4DOT6
 
 
 class CouchbaseCLI:
-    def __init__(self, server, username, password, cb_version=None):
+    def __init__(self, server, username=None, password=None, cb_version=None):
         self.server = server
         self.hostname = "%s:%s" % (server.ip, server.port)
         self.username = username
@@ -209,6 +209,33 @@ class CouchbaseCLI:
                                                              options)
         remote_client.disconnect()
         return self._was_success(stdout, "Scope {} deleted in bucket {}".format(scope, bucket))
+
+    def get_bucket_scopes(self, bucket):
+        remote_client = RemoteMachineShellConnection(self.server)
+        options = " --bucket " + str(bucket)
+        options += " --list-scopes"
+        stdout, stderr = remote_client.execute_couchbase_cli("collection-manage", self.hostname,
+                                                             options)
+        remote_client.disconnect()
+        return stdout
+
+    def get_bucket_collections(self, bucket):
+        remote_client = RemoteMachineShellConnection(self.server)
+        options = " --bucket " + str(bucket)
+        options += " --list-collections"
+        stdout, stderr = remote_client.execute_couchbase_cli("collection-manage", self.hostname,
+                                                             options)
+        remote_client.disconnect()
+        return stdout
+
+    def get_scope_collections(self, bucket, scope):
+        remote_client = RemoteMachineShellConnection(self.server)
+        options = " --bucket " + str(bucket)
+        options += " --list-collections " + str(scope)
+        stdout, stderr = remote_client.execute_couchbase_cli("collection-manage", self.hostname,
+                                                             options)
+        remote_client.disconnect()
+        return stdout
 
     #Temporarily need to enable DP mode for collections
     def enable_dp(self):

@@ -1,42 +1,71 @@
 from membase.api.rest_client import RestConnection
-import re
+
 import logger
+import threading
+
 
 class Collections_Rest(object):
     def __init__(self, node):
         self.log = logger.Logger.get_logger()
         self.rest = RestConnection(node)
 
-    def create_collection(self, bucket="default", scope="scope0", collection="mycollection0"):
-        return self.rest.create_collection(bucket, scope, collection)
+    def create_collection(self, bucket="default", scope="scope0", collection="mycollection0", params=None):
+        self.rest.create_collection(bucket, scope, collection, params)
 
-    def create_scope(self, bucket="default", scope="scope0"):
-        return self.rest.create_scope(bucket, scope)
+    def create_scope(self, bucket="default", scope="scope0", params=None):
+        self.rest.create_scope(bucket, scope, params)
 
     def delete_collection(self, bucket="default", scope='_default', collection='_default'):
-        return self.rest.delete_collection(bucket, scope, collection)
+        self.rest.delete_collection(bucket, scope, collection)
 
-    def delete_scope(self, scope, bucket="default"):  # scope should be passed as default scope can not be deleted
-        return self.rest.delete_collection(bucket, scope)
+    def delete_scope(self, scope, bucket="default"):
+        self.rest.delete_scope(bucket, scope)
 
-    def create_scope_collection(self, collection_name, scope_num, collection_num, bucket="default"):
-        collection_name[bucket] = ["_default._default"]
-        for i in range(scope_num):
-            if i == 0:
-                scope_name = "_default"
-            else:
-                scope_name = bucket + str(i)
-                self.create_scope(bucket, scope=scope_name)
-            try:
-                if i == 0:
-                    num = int(collection_num[i] - 1)
-                else:
-                    num = int(collection_num[i])
-            except:
-                num = 2
-            for n in range(num):
-                collection = 'collection' + str(n)
-                self.create_collection(bucket=bucket, scope=scope_name, collection=collection)
-                collection_name[bucket].append(scope_name + '.' + collection)
+    def create_scope_collection(self, bucket, scope, collection, params=None):
+        self.create_scope(bucket, scope)
+        self.create_collection(bucket, scope, collection, params)
 
-        self.log.info("created collections for the bucket {} are {}".format(bucket, collection_name[bucket]))
+    def delete_scope_collection(self, bucket, scope, collection):
+        self.rest.delete_collection(bucket, scope, collection)
+        self.delete_scope(bucket, scope)
+
+    def create_scope_collection(self, scope_num, collection_num, bucket="default"):
+        for s in range(1, scope_num):
+            scope = "scope_" + str(s)
+            self.create_scope(bucket, scope)
+            for c in range(1, collection_num):
+                self.create_collection(bucket, scope, "collection_" + str(c))
+
+    class CollectionFactory(threading.Thread):
+        def __init__(self, bucket, scope, collection, rest):
+            threading.Thread.__init__(self)
+            self.bucket_name = bucket
+            self.scope_name = scope
+            self.collection_name = collection
+            self.rest_handle = rest
+
+        def run(self):
+            self.rest_handle.create_collection(self.bucket_name, self.scope_name, self.collection_name)
+
+    # Multithreaded for bulk creation
+    def async_create_scope_collection(self, scope_num, collection_num, bucket="default"):
+        tasks = []
+        for s in range(1, scope_num):
+            scope = "scope_" + str(s)
+            self.create_scope(bucket, scope)
+            for c in range(1, collection_num):
+                task = self.CollectionFactory(bucket, scope, "collection_" + str(c), self.rest)
+                task.start()
+                tasks.append(task)
+
+        for task in tasks:
+            task.join()
+
+    def get_bucket_scopes(self, bucket):
+        return self.rest.get_bucket_scopes(bucket)
+
+    def get_bucket_collections(self, bucket):
+        return self.rest.get_bucket_collections(bucket)
+
+    def get_scope_collections(self, bucket, scope):
+        return self.rest.get_scope_collections(bucket, scope)

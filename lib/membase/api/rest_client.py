@@ -595,21 +595,87 @@ class RestConnection(object):
             raise Exception("unable to get random document/key for bucket %s" % (bucket))
         return json_parsed
 
-    def create_collection(self, bucket, scope, collection):
-        api = self.baseUrl + 'pools/default/buckets/%s/collections/%s' % (bucket, scope)
-        body = {'name': collection}
-        params = urllib.parse.urlencode(body)
-        headers = self._create_headers()
-        status, content, header = self._http_request(api, 'POST', params=params, headers=headers)
-        return status
-
-    def create_scope(self, bucket, scope):
+    def create_scope(self, bucket, scope, params):
         api = self.baseUrl + 'pools/default/buckets/%s/collections' % (bucket)
         body = {'name': scope}
+        if params:
+            body.update(params)
         params = urllib.parse.urlencode(body)
         headers = self._create_headers()
         status, content, header = self._http_request(api, 'POST', params=params, headers=headers)
-        return status
+        log.info("{0} with params: {1}".format(api, params))
+        error_message = "Scope with this name already exists"
+        if not status and error_message in str(content):
+            status = True
+            log.info("Scope {} already exists, moving on".format(scope))
+        if status:
+            json_parsed = json.loads(content)
+            log.info("Scope created {}->{} {}".format(bucket, scope, json_parsed))
+        else:
+            raise Exception("Create scope failed : status:{0},content:{1}".format(status, content))
+
+    def create_collection(self, bucket, scope, collection, params=None):
+        api = self.baseUrl + 'pools/default/buckets/%s/collections/%s' % (bucket, scope)
+        body = {'name': collection}
+        if params:
+            body.update(params)
+        params = urllib.parse.urlencode(body)
+        headers = self._create_headers()
+        status, content, header = self._http_request(api, 'POST', params=params, headers=headers)
+        log.info("{0} with params: {1}".format(api, params))
+        if status:
+            json_parsed = json.loads(content)
+            log.info("Collection created {}->{}->{} manifest:{}".format(bucket, scope, collection, json_parsed))
+        else:
+            raise Exception("Create collection failed : status:{0},content:{1}".format(status, content))
+
+    def _parse_manifest(self, bucket, extract=None):
+        if isinstance(bucket, Bucket):
+            bucket = bucket.name
+        api = '{0}{1}{2}{3}'.format(self.baseUrl, 'pools/default/buckets/', bucket, '/collections')
+        status, content, header = self._http_request(api)
+        if status:
+            manifest = json.loads(content)
+            scopes = []
+            collections = []
+            for scope in manifest["scopes"]:
+                scopes.append(scope['name'])
+                for collection in scope['collections']:
+                    collections.append(collection['name'])
+            if extract == "scopes":
+                return scopes
+            elif extract == "collections":
+                return collections
+        else:
+            raise Exception(
+                "Cannot get {0} for bucket {1} : status:{2},content:{3}".format(extract, bucket, status, content))
+
+    def get_bucket_scopes(self, bucket):
+        return self._parse_manifest(bucket, "scopes")
+
+    def get_bucket_collections(self, bucket):
+        return self._parse_manifest(bucket, "collections")
+
+    def get_scope_collections(self, bucket, scope):
+        if isinstance(bucket, Bucket):
+            bucket = bucket.name
+        api = '{0}{1}{2}{3}'.format(self.baseUrl, 'pools/default/buckets/', bucket, '/collections')
+        status, content, header = self._http_request(api)
+        manifest = json.loads(content)
+        if status:
+            scope_found = False
+            collections_in_scope = []
+            for scopes in manifest["scopes"]:
+                if scopes['name'] == scope:
+                    scope_found = True
+                    for collection in scopes['collections']:
+                        collections_in_scope.append(collection['name'])
+            if not scope_found:
+                log.error("Cannot get collections for scope {} because it does not exist".format(scope))
+            return collections_in_scope
+        else:
+            raise Exception("Cannot get collections for bucket {0} : status:{1},content:{2}".
+                            format(bucket, status, content))
 
     def delete_scope(self, bucket, scope):
         api = self.baseUrl + 'pools/default/buckets/%s/collections/%s' % (bucket, scope)

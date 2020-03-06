@@ -85,6 +85,8 @@ class Cluster(object):
         self.task_manager.schedule(_task)
         return _task
 
+
+
     def async_failover(self, servers=[], failover_nodes=[], graceful=False,
                        use_hostnames=False, wait_for_pending=0):
         """Asynchronously failover a set of nodes
@@ -102,6 +104,35 @@ class Cluster(object):
         self.task_manager.schedule(_task)
         return _task
 
+    def async_create_scope(self, server, bucket_name, scope_name):
+        _task = ScopeCreateTask(server, bucket_name, scope_name)
+        self.task_manager.schedule(_task)
+        return _task
+
+    def async_create_collection(self, server, bucket_name, scope_name, collection_name, collection_params):
+        _task = CollectionCreateTask(server, bucket_name, scope_name, collection_name, collection_params)
+        self.task_manager.schedule(_task)
+        return _task
+
+    def async_create_scope_collection(self, server, bucket_name, scope_name, collection_name, collection_params):
+        _task = ScopeCollectionCreateTask(server, bucket_name, scope_name, collection_name, collection_params)
+        self.task_manager.schedule(_task)
+        return _task
+
+    def async_delete_scope(self, server, bucket_name, scope_name):
+        _task = ScopeDeleteTask(server, bucket_name, scope_name)
+        self.task_manager.schedule(_task)
+        return _task
+
+    def async_delete_collection(self, server, bucket_name, scope_name, collection_name):
+        _task = CollectionDeleteTask(server, bucket_name, scope_name, collection_name)
+        self.task_manager.schedule(_task)
+        return _task
+
+    def async_delete_scope_collection(self, server, bucket_name, scope_name, collection_name):
+        _task = ScopeCollectionDeleteTask(server, bucket_name, scope_name, collection_name)
+        self.task_manager.schedule(_task)
+        return _task
 
     def async_init_node(self, server, disabled_consistent_view=None,
                         rebalanceIndexWaitingDisabled=None, rebalanceIndexPausingDisabled=None,
@@ -306,6 +337,30 @@ class Cluster(object):
             boolean - Whether or not the bucket was deleted."""
         _task = self.async_bucket_delete(server, bucket)
         return _task.result(timeout)
+
+    def create_scope(self, server, bucket_name, scope_name):
+        _task = self.async_create_scope(server, bucket_name, scope_name)
+        return _task
+
+    def create_collection(self, server, bucket_name, scope_name, collection_name, collection_params):
+        _task = self.async_create_collection(server, bucket_name, scope_name, collection_name, collection_params)
+        return _task
+
+    def create_scope_collection(self, server, bucket_name, scope_name, collection_name, collection_params):
+        _task = self.async_create_scope_collection(server, bucket_name, scope_name, collection_name, collection_params)
+        return _task
+
+    def delete_scope(self, server, bucket_name, scope_name):
+        _task = self.async_delete_scope(server, bucket_name, scope_name)
+        return _task
+
+    def delete_collection(self, server, bucket_name, scope_name, collection_name):
+        _task = self.async_delete_collection(server, bucket_name, scope_name, collection_name)
+        return _task
+
+    def delete_scope_collection(self, server, bucket_name, scope_name, collection_name):
+        _task = self.async_delete_scope_collection(server, bucket_name, scope_name, collection_name)
+        return _task
 
     def init_node(self, server, async_init_node=True, disabled_consistent_view=None, services = None, index_quota_percent = None):
         """Synchronously initializes a node
