@@ -2915,14 +2915,14 @@ class BaseTestCase(unittest.TestCase):
             self.fail("snap_start and snap_end corruption found !!! . {0}"
                       .format(failure_dict))
 
-    def set_flusher_batch_split_trigger(self, flusher_batch_split_trigger=3, buckets=None):
-        self.log.info("Changing the bucket properties by changing flusher_batch_split_trigger to {0}".
-                      format(flusher_batch_split_trigger))
+    def set_flusher_total_batch_limit(self, flusher_total_batch_limit=3, buckets=None):
+        self.log.info("Changing the bucket properties by changing flusher_total_batch_limit to {0}".
+                      format(flusher_total_batch_limit))
 
         rest = RestConnection(self.master)
         for bucket in buckets:
-            rest.change_flusher_batch_split_trigger(
-                flusher_batch_split_trigger=flusher_batch_split_trigger,
+            rest.change_flusher_total_batch_limit(
+                flusher_total_batch_limit=flusher_total_batch_limit,
                 bucket=bucket.name)
 
         # Restart Memcached in all cluster nodes to reflect the settings
@@ -2942,8 +2942,8 @@ class BaseTestCase(unittest.TestCase):
                                    self.master.rest_password)
                 mc.bucket_select(bucket.name)
                 stats = mc.stats()
-                self.assertEquals(int(stats['ep_flusher_batch_split_trigger']),
-                                  flusher_batch_split_trigger)
+                self.assertEquals(int(stats['ep_flusher_total_batch_limit']),
+                                  flusher_total_batch_limit)
 
     def check_retry_rebalance_succeeded(self):
         self.sleep(30)

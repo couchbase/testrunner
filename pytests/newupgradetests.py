@@ -2565,8 +2565,8 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         rest = RestConnection(self.master)
         bucket = rest.get_buckets()[0]
         rest.update_autofailover_settings(False, 60)
-        if self.flusher_batch_split_trigger:
-            self.set_flusher_batch_split_trigger(self.flusher_batch_split_trigger, [bucket])
+        if self.flusher_total_batch_limit:
+            self.set_flusher_total_batch_limit(self.flusher_total_batch_limit, [bucket])
         load_thread = Thread(target=self.load_buckets_with_high_ops,
                              name="high_ops_load",
                              args=(self.master, self.buckets[0], self.num_items / 2,
@@ -2579,7 +2579,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
             self.cluster.rebalance([self.servers[0]], [self.servers[i]], [])
             self.sleep(30)
         load_thread.join()
-        if self.flusher_batch_split_trigger:
+        if self.flusher_total_batch_limit:
             try:
                 self.check_snap_start_corruption(servers_to_check=self.servers[:self.nodes_init])
             except AssertionError as error:
@@ -2672,8 +2672,8 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         rest = RestConnection(self.master)
         bucket = rest.get_buckets()[0]
         rest.update_autofailover_settings(False, 60)
-        if self.flusher_batch_split_trigger:
-            self.set_flusher_batch_split_trigger(self.flusher_batch_split_trigger, [bucket])
+        if self.flusher_total_batch_limit:
+            self.set_flusher_total_batch_limit(self.flusher_total_batch_limit, [bucket])
         load_thread = Thread(target=self.load_buckets_with_high_ops,
                              name="high_ops_load",
                              args=(self.master, self.buckets[0], self.num_items / 2,
@@ -2686,7 +2686,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
             self.cluster.rebalance([self.servers[0]], [self.servers[i]], [])
             self.sleep(30)
         load_thread.join()
-        if self.flusher_batch_split_trigger:
+        if self.flusher_total_batch_limit:
             try:
                 self.check_snap_start_corruption(servers_to_check=self.servers[:self.nodes_init])
             except AssertionError as error:
@@ -2785,8 +2785,8 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         rest = RestConnection(self.master)
         bucket = rest.get_buckets()[0]
         rest.update_autofailover_settings(False, 60)
-        if self.flusher_batch_split_trigger:
-            self.set_flusher_batch_split_trigger(self.flusher_batch_split_trigger, [bucket])
+        if self.flusher_total_batch_limit:
+            self.set_flusher_total_batch_limit(self.flusher_total_batch_limit, [bucket])
         load_thread = Thread(target=self.load_buckets_with_high_ops,
                              name="high_ops_load",
                              args=(self.master, self.buckets[0], self.num_items / 2,
@@ -2799,7 +2799,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
             self.cluster.rebalance([self.servers[0]], [self.servers[i]], [])
             self.sleep(30)
         load_thread.join()
-        if self.flusher_batch_split_trigger:
+        if self.flusher_total_batch_limit:
             try:
                 self.check_snap_start_corruption(servers_to_check=self.servers[:self.nodes_init])
             except AssertionError as error:
@@ -2894,8 +2894,8 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
         rest = RestConnection(self.master)
         bucket = rest.get_buckets()[0]
         rest.update_autofailover_settings(False, 60)
-        if self.flusher_batch_split_trigger:
-            self.set_flusher_batch_split_trigger(self.flusher_batch_split_trigger, [bucket])
+        if self.flusher_total_batch_limit:
+            self.set_flusher_total_batch_limit(self.flusher_total_batch_limit, [bucket])
         load_thread = Thread(target=self.load_buckets_with_high_ops,
                              name="high_ops_load",
                              args=(self.master, self.buckets[0], self.num_items / 2,
@@ -2908,7 +2908,7 @@ class MultiNodesUpgradeTests(NewUpgradeBaseTest):
             self.cluster.rebalance([self.servers[0]], [self.servers[i]], [])
             self.sleep(30)
         load_thread.join()
-        if self.flusher_batch_split_trigger:
+        if self.flusher_total_batch_limit:
             try:
                 self.check_snap_start_corruption(servers_to_check=self.servers[:self.nodes_init])
             except AssertionError as error:
