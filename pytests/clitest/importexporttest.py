@@ -1339,7 +1339,6 @@ class ImportExportTests(CliBaseTest):
                                                              + export_file_name)
 
                     exports = export_file.read().splitlines()
-                    for x in range(len(exports)):
                     if self.debug_logs:
                         s = set(exports)
                         not_in_exports = [x for x in samples if x not in s]
