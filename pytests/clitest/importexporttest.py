@@ -1340,10 +1340,6 @@ class ImportExportTests(CliBaseTest):
 
                     exports = export_file.read().splitlines()
                     for x in range(len(exports)):
-                        tmp = exports[x].split(",")
-                        """ add leading zero to name value
-                            like pymc39 to pymc039
-                        """
                     if self.debug_logs:
                         s = set(exports)
                         not_in_exports = [x for x in samples if x not in s]
