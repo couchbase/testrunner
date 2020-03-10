@@ -1344,17 +1344,6 @@ class ImportExportTests(CliBaseTest):
                         """ add leading zero to name value
                             like pymc39 to pymc039
                         """
-                        zero_fill = 0
-                        if len(exports) >= 10 and len(exports) < 99:
-                            zero_fill = 1
-                        elif len(exports) >= 100 and len(exports) < 999:
-                            zero_fill = 2
-                        elif len(exports) >= 100 and len(exports) < 9999:
-                            zero_fill = 3
-                        tmp1 = tmp[0][13:-1].zfill(zero_fill)
-                        tmp[0] = tmp[0][:13] + tmp1 + '"'
-                        exports[x] = ",".join(tmp)
-
                     if self.debug_logs:
                         s = set(exports)
                         not_in_exports = [x for x in samples if x not in s]
@@ -1365,6 +1354,8 @@ class ImportExportTests(CliBaseTest):
                     count = 0
                     self.log.info("Compare data with sample data")
                     for x in exports:
+                        x = json.loads(x)
+                        x = '{"name":"' + x["name"]+ '","age":' + str(x["age"]) + ',"index":"' + x["index"]+ '","body":"' + x["body"]+ '"}'
                         if x in samples:
                             count += 1
                     if count != len(samples):
