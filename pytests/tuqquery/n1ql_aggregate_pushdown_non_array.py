@@ -2,14 +2,13 @@ import itertools
 import logging
 
 from couchbase_helper.tuq_helper import N1QLHelper
-from membase.api.rest_client import RestConnection
 from .tuq import QueryTests
-
 
 log = logging.getLogger(__name__)
 
 AGGREGATE_FUNCTIONS = ["SUM", "MIN", "MAX", "COUNT", "COUNTN", "AVG"]
 DISTINCT_AGGREGATE_FUNCTIONS = ["SUM", "COUNT", "AVG"]
+
 
 class AggregatePushdownClass(QueryTests):
     def setUp(self):
@@ -21,6 +20,7 @@ class AggregatePushdownClass(QueryTests):
         self.having = self.input.param("having", False)
         self.offset_limit = self.input.param("offset_limit", False)
         self.big_int = self.input.param("big_int", False)
+        self.query_buckets = self.get_query_buckets(check_all_buckets=True)
 
     def tearDown(self):
         super(AggregatePushdownClass, self).tearDown()
@@ -39,15 +39,18 @@ class AggregatePushdownClass(QueryTests):
         for index_name_def in self._create_array_index_definitions():
             try:
                 for create_def in index_name_def["create_definitions"]:
-                    result = self.run_cbq_query(create_def)
+                    print(create_def)
+                    self.run_cbq_query(create_def)
                     query_definitions = []
                     index_name = index_name_def["index_name"]
                     index_fields = index_name_def["fields"]
                     for aggr_func in aggregate_functions:
                         if self.aggr_distinct:
-                            select_clause = "SELECT " + aggr_func + "(DISTINCT {0}) from %s USE INDEX (`%s`) where {1} GROUP BY {2}"
+                            select_clause = "SELECT " + aggr_func + \
+                                            "(DISTINCT {0}) from %s USE INDEX (`%s`) where {1} GROUP BY {2}"
                         else:
-                            select_clause = "SELECT " + aggr_func + "({0}) from %s USE INDEX (`%s`) where {1} GROUP BY {2}"
+                            select_clause = "SELECT " + aggr_func + \
+                                            "({0}) from %s USE INDEX (`%s`) where {1} GROUP BY {2}"
                         if self.order_by:
                             if self.offset_limit:
                                 select_clause += " ORDER BY {3} LIMIT 10 OFFSET 200"
@@ -68,9 +71,9 @@ class AggregatePushdownClass(QueryTests):
                             query_definitions = [select_clause.format(tup[0]["name"], tup[1]["where_clause"],
                                                                       index_fields[0]["name"])
                                                  for tup in itertools.permutations(index_fields)]
-                    for bucket in self.buckets:
+                    for query_bucket in self.query_buckets:
                         for query_definition in query_definitions:
-                            query = query_definition % (bucket.name, index_name)
+                            query = query_definition % (query_bucket, index_name)
                             result = self.run_cbq_query(query)
                             explain_verification = self._verify_aggregate_explain_results(query,
                                                                                           index_name,
@@ -78,12 +81,12 @@ class AggregatePushdownClass(QueryTests):
                             if not explain_verification:
                                 failed_queries_in_explain.append(query)
                             query_verification = self._verify_aggregate_query_results(result, query_definition,
-                                                                                      bucket.name)
+                                                                                      query_bucket)
                             if not query_verification:
                                 failed_queries_in_result.append(query)
             finally:
                 for drop_def in index_name_def["drop_definitions"]:
-                    result = self.run_cbq_query(drop_def)
+                    self.run_cbq_query(drop_def)
         self.assertEqual(len(failed_queries_in_result), 0,
                          "Following Queries failed in result: {0}".format(failed_queries_in_result))
         if failed_queries_in_explain:
@@ -100,15 +103,17 @@ class AggregatePushdownClass(QueryTests):
         for index_name_def in self._create_array_index_definitions():
             try:
                 for create_def in index_name_def["create_definitions"]:
-                    result = self.run_cbq_query(create_def)
+                    self.run_cbq_query(create_def)
                     query_definitions = []
                     index_name = index_name_def["index_name"]
                     index_fields = index_name_def["fields"]
                     for aggr_func in aggregate_functions:
                         if self.aggr_distinct:
-                            select_clause = "SELECT " + aggr_func + "(DISTINCT {0}) from %s USE INDEX (`%s`) where {1} GROUP BY {2}"
+                            select_clause = "SELECT " + aggr_func + \
+                                            "(DISTINCT {0}) from %s USE INDEX (`%s`) where {1} GROUP BY {2}"
                         else:
-                            select_clause = "SELECT " + aggr_func + "({0}) from %s USE INDEX (`%s`) where {1} GROUP BY {2}"
+                            select_clause = "SELECT " + aggr_func + \
+                                            "({0}) from %s USE INDEX (`%s`) where {1} GROUP BY {2}"
                         if self.order_by:
                             if self.offset_limit:
                                 select_clause += " ORDER BY {3} LIMIT 10 OFFSET 200"
@@ -129,9 +134,9 @@ class AggregatePushdownClass(QueryTests):
                             query_definitions = [select_clause.format(tup[0]["name"], tup[1]["where_clause"],
                                                                       index_fields[0]["name"])
                                                  for tup in itertools.permutations(index_fields)]
-                    for bucket in self.buckets:
+                    for query_bucket in self.query_buckets:
                         for query_definition in query_definitions:
-                            query = query_definition % (bucket.name, index_name)
+                            query = query_definition % (query_bucket, index_name)
                             result = self.run_cbq_query(query)
                             explain_verification = self._verify_aggregate_explain_results(query,
                                                                                           index_name,
@@ -139,12 +144,12 @@ class AggregatePushdownClass(QueryTests):
                             if not explain_verification:
                                 failed_queries_in_explain.append(query)
                             query_verification = self._verify_aggregate_query_results(result, query_definition,
-                                                                                      bucket.name)
+                                                                                      query_bucket)
                             if not query_verification:
                                 failed_queries_in_result.append(query)
             finally:
                 for drop_def in index_name_def["drop_definitions"]:
-                    result = self.run_cbq_query(drop_def)
+                    self.run_cbq_query(drop_def)
         self.assertEqual(len(failed_queries_in_result), 0,
                          "Following Queries failed in result: {0}".format(failed_queries_in_result))
         if failed_queries_in_explain:
@@ -161,15 +166,17 @@ class AggregatePushdownClass(QueryTests):
         for index_name_def in self._create_array_index_definitions():
             try:
                 for create_def in index_name_def["create_definitions"]:
-                    result = self.run_cbq_query(create_def)
+                    self.run_cbq_query(create_def)
                     query_definitions = []
                     index_name = index_name_def["index_name"]
                     index_fields = index_name_def["fields"]
                     for aggr_func in aggregate_functions:
                         if self.aggr_distinct:
-                            select_clause = "SELECT " + aggr_func + "(DISTINCT {0}) from %s USE INDEX (`%s`) where {1} GROUP BY {2}"
+                            select_clause = "SELECT " + aggr_func + \
+                                            "(DISTINCT {0}) from %s USE INDEX (`%s`) where {1} GROUP BY {2}"
                         else:
-                            select_clause = "SELECT " + aggr_func + "({0}) from %s USE INDEX (`%s`) where {1} GROUP BY {2}"
+                            select_clause = "SELECT " + aggr_func + \
+                                            "({0}) from %s USE INDEX (`%s`) where {1} GROUP BY {2}"
                         if self.order_by:
                             if self.offset_limit:
                                 select_clause += " ORDER BY {3} LIMIT 10 OFFSET 200"
@@ -190,9 +197,9 @@ class AggregatePushdownClass(QueryTests):
                             query_definitions = [select_clause.format(tup[0]["name"], tup[1]["where_clause"],
                                                                       index_fields[0]["name"])
                                                  for tup in itertools.permutations(index_fields)]
-                    for bucket in self.buckets:
+                    for query_bucket in self.query_buckets:
                         for query_definition in query_definitions:
-                            query = query_definition % (bucket.name, index_name)
+                            query = query_definition % (query_bucket, index_name)
                             result = self.run_cbq_query(query)
                             explain_verification = self._verify_aggregate_explain_results(query,
                                                                                           index_name,
@@ -200,12 +207,12 @@ class AggregatePushdownClass(QueryTests):
                             if not explain_verification:
                                 failed_queries_in_explain.append(query)
                             query_verification = self._verify_aggregate_query_results(result, query_definition,
-                                                                                      bucket.name)
+                                                                                      query_bucket)
                             if not query_verification:
                                 failed_queries_in_result.append(query)
             finally:
                 for drop_def in index_name_def["drop_definitions"]:
-                    result = self.run_cbq_query(drop_def)
+                    self.run_cbq_query(drop_def)
         self.assertEqual(len(failed_queries_in_result), 0,
                          "Following Queries failed in result: {0}".format(failed_queries_in_result))
         if failed_queries_in_explain:
@@ -222,7 +229,7 @@ class AggregatePushdownClass(QueryTests):
         for index_name_def in self._create_array_index_definitions():
             try:
                 for create_def in index_name_def["create_definitions"]:
-                    result = self.run_cbq_query(create_def)
+                    self.run_cbq_query(create_def)
                     query_definitions = []
                     index_name = index_name_def["index_name"]
                     index_fields = index_name_def["fields"]
@@ -233,9 +240,9 @@ class AggregatePushdownClass(QueryTests):
                             select_clause = "SELECT " + aggr_func + "({0}) from %s USE INDEX (`%s`) where {1}"
                         query_definitions = [select_clause.format(tup[0]["name"], tup[1]["where_clause"])
                                              for tup in itertools.permutations(index_fields)]
-                    for bucket in self.buckets:
+                    for query_bucket in self.query_buckets:
                         for query_definition in query_definitions:
-                            query = query_definition % (bucket.name, index_name)
+                            query = query_definition % (query_bucket, index_name)
                             result = self.run_cbq_query(query)
                             explain_verification = self._verify_aggregate_explain_results(query,
                                                                                           index_name,
@@ -243,12 +250,12 @@ class AggregatePushdownClass(QueryTests):
                             if not explain_verification:
                                 failed_queries_in_explain.append(query)
                             query_verification = self._verify_aggregate_query_results(result, query_definition,
-                                                                                      bucket.name)
+                                                                                      query_bucket)
                             if not query_verification:
                                 failed_queries_in_result.append(query)
             finally:
                 for drop_def in index_name_def["drop_definitions"]:
-                    result = self.run_cbq_query(drop_def)
+                    self.run_cbq_query(drop_def)
         self.assertEqual(len(failed_queries_in_result), 0,
                          "Following Queries failed in result: {0}".format(failed_queries_in_result))
         if failed_queries_in_explain:
@@ -265,20 +272,23 @@ class AggregatePushdownClass(QueryTests):
         for index_name_def in self._create_array_index_definitions():
             try:
                 for create_def in index_name_def["create_definitions"]:
-                    result = self.run_cbq_query(create_def)
+                    self.run_cbq_query(create_def)
                     query_definitions = []
                     index_name = index_name_def["index_name"]
                     index_fields = index_name_def["fields"]
                     for aggr_func in aggregate_functions:
                         if self.aggr_distinct:
-                            select_clause = "SELECT " + aggr_func + "(DISTINCT {0}*5) from %s USE INDEX (`%s`) where {1} GROUP BY {2}"
+                            select_clause = "SELECT " + aggr_func + \
+                                            "(DISTINCT {0}*5) from %s USE INDEX (`%s`) where {1} GROUP BY {2}"
                         else:
-                            select_clause = "SELECT " + aggr_func + "({0}*2) from %s USE INDEX (`%s`) where {1} GROUP BY {2}"
-                        query_definitions = [select_clause.format(tup[0]["name"], tup[1]["where_clause"], tup[0]["name"])
-                                             for tup in itertools.permutations(index_fields)]
-                    for bucket in self.buckets:
+                            select_clause = "SELECT " + aggr_func + \
+                                            "({0}*2) from %s USE INDEX (`%s`) where {1} GROUP BY {2}"
+                        query_definitions = [
+                            select_clause.format(tup[0]["name"], tup[1]["where_clause"], tup[0]["name"])
+                            for tup in itertools.permutations(index_fields)]
+                    for query_bucket in self.query_buckets:
                         for query_definition in query_definitions:
-                            query = query_definition % (bucket.name, index_name)
+                            query = query_definition % (query_bucket, index_name)
                             result = self.run_cbq_query(query)
                             explain_verification = self._verify_aggregate_explain_results(query,
                                                                                           index_name,
@@ -286,12 +296,12 @@ class AggregatePushdownClass(QueryTests):
                             if not explain_verification:
                                 failed_queries_in_explain.append(query)
                             query_verification = self._verify_aggregate_query_results(result, query_definition,
-                                                                                      bucket.name)
+                                                                                      query_bucket)
                             if not query_verification:
                                 failed_queries_in_result.append(query)
             finally:
                 for drop_def in index_name_def["drop_definitions"]:
-                    result = self.run_cbq_query(drop_def)
+                    self.run_cbq_query(drop_def)
         self.assertEqual(len(failed_queries_in_result), 0,
                          "Following Queries failed in result: {0}".format(failed_queries_in_result))
         if failed_queries_in_explain:
@@ -308,20 +318,23 @@ class AggregatePushdownClass(QueryTests):
         for index_name_def in self._create_array_index_definitions():
             try:
                 for create_def in index_name_def["create_definitions"]:
-                    result = self.run_cbq_query(create_def)
+                    self.run_cbq_query(create_def)
                     query_definitions = []
                     index_name = index_name_def["index_name"]
                     index_fields = index_name_def["fields"]
                     for aggr_func in aggregate_functions:
                         if self.aggr_distinct:
-                            select_clause = "SELECT " + aggr_func + "(DISTINCT {0}) from %s USE INDEX (`%s`) where {1} GROUP BY {2}*2"
+                            select_clause = "SELECT " + aggr_func + \
+                                            "(DISTINCT {0}) from %s USE INDEX (`%s`) where {1} GROUP BY {2}*2"
                         else:
-                            select_clause = "SELECT " + aggr_func + "({0}) from %s USE INDEX (`%s`) where {1} GROUP BY {2}*2"
-                        query_definitions = [select_clause.format(tup[0]["name"], tup[1]["where_clause"], tup[0]["name"])
-                                             for tup in itertools.permutations(index_fields)]
-                    for bucket in self.buckets:
+                            select_clause = "SELECT " + aggr_func + \
+                                            "({0}) from %s USE INDEX (`%s`) where {1} GROUP BY {2}*2"
+                        query_definitions = [
+                            select_clause.format(tup[0]["name"], tup[1]["where_clause"], tup[0]["name"])
+                            for tup in itertools.permutations(index_fields)]
+                    for query_bucket in self.query_buckets:
                         for query_definition in query_definitions:
-                            query = query_definition % (bucket.name, index_name)
+                            query = query_definition % (query_bucket, index_name)
                             result = self.run_cbq_query(query)
                             explain_verification = self._verify_aggregate_explain_results(query,
                                                                                           index_name,
@@ -329,12 +342,12 @@ class AggregatePushdownClass(QueryTests):
                             if not explain_verification:
                                 failed_queries_in_explain.append(query)
                             query_verification = self._verify_aggregate_query_results(result, query_definition,
-                                                                                      bucket.name)
+                                                                                      query_bucket)
                             if not query_verification:
                                 failed_queries_in_result.append(query)
             finally:
                 for drop_def in index_name_def["drop_definitions"]:
-                    result = self.run_cbq_query(drop_def)
+                    self.run_cbq_query(drop_def)
         self.assertEqual(len(failed_queries_in_result), 0,
                          "Following Queries failed in result: {0}".format(failed_queries_in_result))
         if failed_queries_in_explain:
@@ -351,26 +364,31 @@ class AggregatePushdownClass(QueryTests):
         for index_name_def in self._create_array_index_definitions():
             try:
                 for create_def in index_name_def["create_definitions"]:
-                    result = self.run_cbq_query(create_def)
+                    self.run_cbq_query(create_def)
                     query_definitions = []
                     index_name = index_name_def["index_name"]
                     index_fields = index_name_def["fields"]
                     for aggr_func in aggregate_functions:
                         if self.aggr_distinct:
                             if self.big_int:
-                                select_clause = "SELECT " + aggr_func + "(DISTINCT 2147483650) from %s USE INDEX (`%s`) where {1} GROUP BY {2}"
+                                select_clause = "SELECT " + aggr_func + \
+                                                "(DISTINCT 2147483650) from %s USE INDEX (`%s`) where {1} GROUP BY {2}"
                             else:
-                                select_clause = "SELECT " + aggr_func + "(DISTINCT 55) from %s USE INDEX (`%s`) where {1} GROUP BY {2}"
+                                select_clause = "SELECT " + aggr_func + \
+                                                "(DISTINCT 55) from %s USE INDEX (`%s`) where {1} GROUP BY {2}"
                         else:
                             if self.big_int:
-                                select_clause = "SELECT " + aggr_func + "(2147483750) from %s USE INDEX (`%s`) where {1} GROUP BY {2}"
+                                select_clause = "SELECT " + aggr_func + \
+                                                "(2147483750) from %s USE INDEX (`%s`) where {1} GROUP BY {2}"
                             else:
-                                select_clause = "SELECT " + aggr_func + "(67) from %s USE INDEX (`%s`) where {1} GROUP BY {2}"
-                        query_definitions = [select_clause.format(tup[0]["name"], tup[1]["where_clause"], tup[0]["name"])
-                                             for tup in itertools.permutations(index_fields)]
-                    for bucket in self.buckets:
+                                select_clause = "SELECT " + aggr_func + \
+                                                "(67) from %s USE INDEX (`%s`) where {1} GROUP BY {2}"
+                        query_definitions = [
+                            select_clause.format(tup[0]["name"], tup[1]["where_clause"], tup[0]["name"])
+                            for tup in itertools.permutations(index_fields)]
+                    for query_bucket in self.query_buckets:
                         for query_definition in query_definitions:
-                            query = query_definition % (bucket.name, index_name)
+                            query = query_definition % (query_bucket, index_name)
                             result = self.run_cbq_query(query)
                             explain_verification = self._verify_aggregate_explain_results(query,
                                                                                           index_name,
@@ -378,18 +396,17 @@ class AggregatePushdownClass(QueryTests):
                             if not explain_verification:
                                 failed_queries_in_explain.append(query)
                             query_verification = self._verify_aggregate_query_results(result, query_definition,
-                                                                                      bucket.name)
+                                                                                      query_bucket)
                             if not query_verification:
                                 failed_queries_in_result.append(query)
             finally:
                 for drop_def in index_name_def["drop_definitions"]:
-                    result = self.run_cbq_query(drop_def)
+                    self.run_cbq_query(drop_def)
         self.assertEqual(len(failed_queries_in_result), 0,
                          "Following Queries failed in result: {0}".format(failed_queries_in_result))
         if failed_queries_in_explain:
             log.info("Following queries failed in explain: {0}".format(failed_queries_in_explain))
         self.log.info("Dont worry this test actually does something")
-
 
     def test_aggregate_unsupported_methods(self):
         self.fail_if_no_buckets()
@@ -398,21 +415,20 @@ class AggregatePushdownClass(QueryTests):
         for index_name_def in self._create_array_index_definitions():
             try:
                 for create_def in index_name_def["create_definitions"]:
-                    result = self.run_cbq_query(create_def)
-                    query_definitions = []
+                    self.run_cbq_query(create_def)
                     index_name = index_name_def["index_name"]
                     index_fields = index_name_def["fields"]
 
                     if self.aggr_distinct:
-                        select_clause = "SELECT  ARRAY_AGG(DISTINCT {0}) from %s USE INDEX (`%s`) where {1} GROUP BY {2}"
+                        select_clause = "SELECT ARRAY_AGG(DISTINCT {0}) from %s USE INDEX (`%s`) where {1} GROUP BY {2}"
                     else:
                         select_clause = "SELECT ARRAY_AGG({0}) from %s USE INDEX (`%s`) where {1} GROUP BY {2}"
                     query_definitions = [select_clause.format(tup[0]["name"], tup[1]["where_clause"],
                                                               index_fields[0]["name"])
                                          for tup in itertools.permutations(index_fields)]
-                    for bucket in self.buckets:
+                    for query_bucket in self.query_buckets:
                         for query_definition in query_definitions:
-                            query = query_definition % (bucket.name, index_name)
+                            query = query_definition % (query_bucket, index_name)
                             result = self.run_cbq_query(query)
                             explain_verification = self._verify_aggregate_explain_results(query,
                                                                                           index_name,
@@ -420,12 +436,12 @@ class AggregatePushdownClass(QueryTests):
                             if not explain_verification:
                                 failed_queries_in_explain.append(query)
                             query_verification = self._verify_aggregate_query_results(result, query_definition,
-                                                                                      bucket.name)
+                                                                                      query_bucket)
                             if not query_verification:
                                 failed_queries_in_result.append(query)
             finally:
                 for drop_def in index_name_def["drop_definitions"]:
-                    result = self.run_cbq_query(drop_def)
+                    self.run_cbq_query(drop_def)
         self.assertEqual(len(failed_queries_in_result), 0,
                          "Following Queries failed in result: {0}".format(failed_queries_in_result))
         if failed_queries_in_explain:
@@ -438,7 +454,7 @@ class AggregatePushdownClass(QueryTests):
         for index_name_def in self._create_array_index_definitions():
             try:
                 for create_def in index_name_def["create_definitions"]:
-                    result = self.run_cbq_query(create_def)
+                    self.run_cbq_query(create_def)
                     query_definitions = []
                     index_name = index_name_def["index_name"]
                     index_fields = index_name_def["fields"]
@@ -455,7 +471,7 @@ class AggregatePushdownClass(QueryTests):
                             for index_field in index_fields:
                                 if tup[0]['name'] == index_field['name']:
                                     query_definition = select_clause.format(tup[0]["name"], tup[1]["where_clause"],
-                                                                             index_field["name"], index_field["name"])
+                                                                            index_field["name"], index_field["name"])
                                     query_definitions.append(query_definition)
                     elif self.having:
                         if self.offset_limit:
@@ -466,18 +482,18 @@ class AggregatePushdownClass(QueryTests):
                             for index_field in index_fields:
                                 if tup[0]['name'] == index_field['name']:
                                     query_definition = select_clause.format(tup[0]["name"], tup[1]["where_clause"],
-                                                                             index_field["name"], index_field["name"])
+                                                                            index_field["name"], index_field["name"])
                                     query_definitions.append(query_definition)
                     else:
                         for tup in itertools.permutations(index_fields):
                             for index_field in index_fields:
                                 if tup[0]['name'] == index_field['name']:
                                     query_definition = select_clause.format(tup[0]["name"], tup[1]["where_clause"],
-                                                                             index_field["name"], index_field["name"])
+                                                                            index_field["name"], index_field["name"])
                                     query_definitions.append(query_definition)
-                    for bucket in self.buckets:
+                    for query_bucket in self.query_buckets:
                         for query_definition in query_definitions:
-                            query = query_definition % (bucket.name, index_name)
+                            query = query_definition % (query_bucket, index_name)
                             result = self.run_cbq_query(query)
                             explain_verification = self._verify_aggregate_explain_results(query,
                                                                                           index_name,
@@ -485,12 +501,12 @@ class AggregatePushdownClass(QueryTests):
                             if not explain_verification:
                                 failed_queries_in_explain.append(query)
                             query_verification = self._verify_aggregate_query_results(result, query_definition,
-                                                                                      bucket.name)
+                                                                                      query_bucket)
                             if not query_verification:
                                 failed_queries_in_result.append(query)
             finally:
                 for drop_def in index_name_def["drop_definitions"]:
-                    result = self.run_cbq_query(drop_def)
+                    self.run_cbq_query(drop_def)
         self.assertEqual(len(failed_queries_in_result), 0,
                          "Following Queries failed in result: {0}".format(failed_queries_in_result))
         if failed_queries_in_explain:
@@ -503,7 +519,7 @@ class AggregatePushdownClass(QueryTests):
         for index_name_def in self._create_array_index_definitions():
             try:
                 for create_def in index_name_def["create_definitions"]:
-                    result = self.run_cbq_query(create_def)
+                    self.run_cbq_query(create_def)
                     query_definitions = []
                     index_name = index_name_def["index_name"]
                     index_fields = index_name_def["fields"]
@@ -520,7 +536,7 @@ class AggregatePushdownClass(QueryTests):
                             for index_field in index_fields:
                                 if tup[0]['name'] == index_field['name']:
                                     query_definition = select_clause.format(tup[0]["name"], tup[1]["where_clause"],
-                                                                             index_field["name"], index_field["name"])
+                                                                            index_field["name"], index_field["name"])
                                     query_definitions.append(query_definition)
                     elif self.having:
                         if self.offset_limit:
@@ -531,18 +547,18 @@ class AggregatePushdownClass(QueryTests):
                             for index_field in index_fields:
                                 if tup[0]['name'] == index_field['name']:
                                     query_definition = select_clause.format(tup[0]["name"], tup[1]["where_clause"],
-                                                                             index_field["name"], index_field["name"])
+                                                                            index_field["name"], index_field["name"])
                                     query_definitions.append(query_definition)
                     else:
                         for tup in itertools.permutations(index_fields):
                             for index_field in index_fields:
                                 if tup[0]['name'] == index_field['name']:
                                     query_definition = select_clause.format(tup[0]["name"], tup[1]["where_clause"],
-                                                                             index_field["name"], index_field["name"])
+                                                                            index_field["name"], index_field["name"])
                                     query_definitions.append(query_definition)
-                    for bucket in self.buckets:
+                    for query_bucket in self.query_buckets:
                         for query_definition in query_definitions:
-                            query = query_definition % (bucket.name, index_name)
+                            query = query_definition % (query_bucket, index_name)
                             result = self.run_cbq_query(query)
                             explain_verification = self._verify_aggregate_explain_results(query,
                                                                                           index_name,
@@ -550,12 +566,12 @@ class AggregatePushdownClass(QueryTests):
                             if not explain_verification:
                                 failed_queries_in_explain.append(query)
                             query_verification = self._verify_aggregate_query_results(result, query_definition,
-                                                                                      bucket.name)
+                                                                                      query_bucket)
                             if not query_verification:
                                 failed_queries_in_result.append(query)
             finally:
                 for drop_def in index_name_def["drop_definitions"]:
-                    result = self.run_cbq_query(drop_def)
+                    self.run_cbq_query(drop_def)
         self.assertEqual(len(failed_queries_in_result), 0,
                          "Following Queries failed in result: {0}".format(failed_queries_in_result))
         if failed_queries_in_explain:
@@ -568,7 +584,7 @@ class AggregatePushdownClass(QueryTests):
         for index_name_def in self._create_array_index_definitions():
             try:
                 for create_def in index_name_def["create_definitions"]:
-                    result = self.run_cbq_query(create_def)
+                    self.run_cbq_query(create_def)
                     query_definitions = []
                     index_name = index_name_def["index_name"]
                     index_fields = index_name_def["fields"]
@@ -585,7 +601,7 @@ class AggregatePushdownClass(QueryTests):
                             for index_field in index_fields:
                                 if tup[0]['name'] == index_field['name']:
                                     query_definition = select_clause.format(tup[0]["name"], tup[1]["where_clause"],
-                                                                             index_field["name"], index_field["name"])
+                                                                            index_field["name"], index_field["name"])
                                     query_definitions.append(query_definition)
                     elif self.having:
                         if self.offset_limit:
@@ -596,19 +612,19 @@ class AggregatePushdownClass(QueryTests):
                             for index_field in index_fields:
                                 if tup[0]['name'] == index_field['name']:
                                     query_definition = select_clause.format(tup[0]["name"], tup[1]["where_clause"],
-                                                                                 index_field["name"],
-                                                                                 index_field["name"])
+                                                                            index_field["name"],
+                                                                            index_field["name"])
                                     query_definitions.append(query_definition)
                     else:
                         for tup in itertools.permutations(index_fields):
                             for index_field in index_fields:
                                 if tup[0]['name'] == index_field['name']:
                                     query_definition = select_clause.format(tup[0]["name"], tup[1]["where_clause"],
-                                                                             index_field["name"], index_field["name"])
+                                                                            index_field["name"], index_field["name"])
                                     query_definitions.append(query_definition)
-                    for bucket in self.buckets:
+                    for query_bucket in self.query_buckets:
                         for query_definition in query_definitions:
-                            query = query_definition % (bucket.name, index_name)
+                            query = query_definition % (query_bucket, index_name)
                             result = self.run_cbq_query(query)
                             explain_verification = self._verify_aggregate_explain_results(query,
                                                                                           index_name,
@@ -616,12 +632,12 @@ class AggregatePushdownClass(QueryTests):
                             if not explain_verification:
                                 failed_queries_in_explain.append(query)
                             query_verification = self._verify_aggregate_query_results(result, query_definition,
-                                                                                      bucket.name)
+                                                                                      query_bucket)
                             if not query_verification:
                                 failed_queries_in_result.append(query)
             finally:
                 for drop_def in index_name_def["drop_definitions"]:
-                    result = self.run_cbq_query(drop_def)
+                    self.run_cbq_query(drop_def)
         self.assertEqual(len(failed_queries_in_result), 0,
                          "Following Queries failed in result: {0}".format(failed_queries_in_result))
         if failed_queries_in_explain:
@@ -634,7 +650,7 @@ class AggregatePushdownClass(QueryTests):
         for index_name_def in self._create_array_index_definitions():
             try:
                 for create_def in index_name_def["create_definitions"]:
-                    result = self.run_cbq_query(create_def)
+                    self.run_cbq_query(create_def)
                     query_definitions = []
                     index_name = index_name_def["index_name"]
                     index_fields = index_name_def["fields"]
@@ -646,11 +662,11 @@ class AggregatePushdownClass(QueryTests):
                         for index_field in index_fields:
                             if tup[0]['name'] == index_field['name']:
                                 query_definition = select_clause.format(tup[0]["name"], tup[1]["where_clause"],
-                                                                         index_field["name"], index_field["name"])
+                                                                        index_field["name"], index_field["name"])
                                 query_definitions.append(query_definition)
-                    for bucket in self.buckets:
+                    for query_bucket in self.query_buckets:
                         for query_definition in query_definitions:
-                            query = query_definition % (bucket.name, index_name)
+                            query = query_definition % (query_bucket, index_name)
                             result = self.run_cbq_query(query)
                             explain_verification = self._verify_aggregate_explain_results(query,
                                                                                           index_name,
@@ -658,12 +674,12 @@ class AggregatePushdownClass(QueryTests):
                             if not explain_verification:
                                 failed_queries_in_explain.append(query)
                             query_verification = self._verify_aggregate_query_results(result, query_definition,
-                                                                                      bucket.name)
+                                                                                      query_bucket)
                             if not query_verification:
                                 failed_queries_in_result.append(query)
             finally:
                 for drop_def in index_name_def["drop_definitions"]:
-                    result = self.run_cbq_query(drop_def)
+                    self.run_cbq_query(drop_def)
         self.assertEqual(len(failed_queries_in_result), 0,
                          "Following Queries failed in result: {0}".format(failed_queries_in_result))
         if failed_queries_in_explain:
@@ -671,13 +687,13 @@ class AggregatePushdownClass(QueryTests):
 
     def test_mixed_data(self):
         self.fail_if_no_buckets()
-        result = self.run_cbq_query(query = 'UPDATE default set age = "string" where age = 63 returning age')
+        self.run_cbq_query(query='UPDATE default set age = "string" where age = 63 returning age')
         failed_queries_in_explain = []
         failed_queries_in_result = []
         for index_name_def in self._create_array_index_definitions():
             try:
                 for create_def in index_name_def["create_definitions"]:
-                    result = self.run_cbq_query(create_def)
+                    self.run_cbq_query(create_def)
                     query_definitions = []
                     index_name = index_name_def["index_name"]
                     index_fields = index_name_def["fields"]
@@ -693,7 +709,7 @@ class AggregatePushdownClass(QueryTests):
                             for index_field in index_fields:
                                 if tup[0]['name'] == index_field['name']:
                                     query_definition = select_clause.format(tup[0]["name"], tup[1]["where_clause"],
-                                                                             index_field["name"], index_field["name"])
+                                                                            index_field["name"], index_field["name"])
                                     query_definitions.append(query_definition)
                     elif self.having:
                         select_clause += " HAVING {3} is not null"
@@ -703,18 +719,18 @@ class AggregatePushdownClass(QueryTests):
                             for index_field in index_fields:
                                 if tup[0]['name'] == index_field['name']:
                                     query_definition = select_clause.format(tup[0]["name"], tup[1]["where_clause"],
-                                                                             index_field["name"], index_field["name"])
+                                                                            index_field["name"], index_field["name"])
                                     query_definitions.append(query_definition)
                     else:
                         for tup in itertools.permutations(index_fields):
                             for index_field in index_fields:
                                 if tup[0]['name'] == index_field['name']:
                                     query_definition = select_clause.format(tup[0]["name"], tup[1]["where_clause"],
-                                                                             index_field["name"], index_field["name"])
+                                                                            index_field["name"], index_field["name"])
                                     query_definitions.append(query_definition)
-                    for bucket in self.buckets:
+                    for query_bucket in self.query_buckets:
                         for query_definition in query_definitions:
-                            query = query_definition % (bucket.name, index_name)
+                            query = query_definition % (query_bucket, index_name)
                             result = self.run_cbq_query(query)
                             explain_verification = self._verify_aggregate_explain_results(query,
                                                                                           index_name,
@@ -722,12 +738,12 @@ class AggregatePushdownClass(QueryTests):
                             if not explain_verification:
                                 failed_queries_in_explain.append(query)
                             query_verification = self._verify_aggregate_query_results(result, query_definition,
-                                                                                      bucket.name)
+                                                                                      query_bucket)
                             if not query_verification:
                                 failed_queries_in_result.append(query)
             finally:
                 for drop_def in index_name_def["drop_definitions"]:
-                    result = self.run_cbq_query(drop_def)
+                    self.run_cbq_query(drop_def)
         self.assertEqual(len(failed_queries_in_result), 0,
                          "Following Queries failed in result: {0}".format(failed_queries_in_result))
         if failed_queries_in_explain:
@@ -740,7 +756,7 @@ class AggregatePushdownClass(QueryTests):
         for index_name_def in self._create_array_index_definitions():
             try:
                 for create_def in index_name_def["create_definitions"]:
-                    result = self.run_cbq_query(create_def)
+                    self.run_cbq_query(create_def)
                     query_definitions = []
                     index_name = index_name_def["index_name"]
                     index_fields = index_name_def["fields"]
@@ -756,7 +772,7 @@ class AggregatePushdownClass(QueryTests):
                             for index_field in index_fields:
                                 if tup[0]['name'] == index_field['name']:
                                     query_definition = select_clause.format(tup[0]["name"], "name = 'ajay'",
-                                                                             index_field["name"], index_field["name"])
+                                                                            index_field["name"], index_field["name"])
                                     query_definitions.append(query_definition)
                     elif self.having:
                         select_clause += " HAVING {3} is not null"
@@ -766,18 +782,18 @@ class AggregatePushdownClass(QueryTests):
                             for index_field in index_fields:
                                 if tup[0]['name'] == index_field['name']:
                                     query_definition = select_clause.format(tup[0]["name"], "name = 'ajay'",
-                                                                             index_field["name"], index_field["name"])
+                                                                            index_field["name"], index_field["name"])
                                     query_definitions.append(query_definition)
                     else:
                         for tup in itertools.permutations(index_fields):
                             for index_field in index_fields:
                                 if tup[0]['name'] == index_field['name']:
                                     query_definition = select_clause.format(tup[0]["name"], "name = 'ajay'",
-                                                                             index_field["name"], index_field["name"])
+                                                                            index_field["name"], index_field["name"])
                                     query_definitions.append(query_definition)
-                    for bucket in self.buckets:
+                    for query_bucket in self.query_buckets:
                         for query_definition in query_definitions:
-                            query = query_definition % (bucket.name, index_name)
+                            query = query_definition % (query_bucket, index_name)
                             result = self.run_cbq_query(query)
                             explain_verification = self._verify_aggregate_explain_results(query,
                                                                                           index_name,
@@ -785,16 +801,17 @@ class AggregatePushdownClass(QueryTests):
                             if not explain_verification:
                                 failed_queries_in_explain.append(query)
                             query_verification = self._verify_aggregate_query_results(result, query_definition,
-                                                                                      bucket.name)
+                                                                                      query_bucket)
                             if not query_verification:
                                 failed_queries_in_result.append(query)
             finally:
                 for drop_def in index_name_def["drop_definitions"]:
-                    result = self.run_cbq_query(drop_def)
+                    self.run_cbq_query(drop_def)
         self.assertEqual(len(failed_queries_in_result), 0,
                          "Following Queries failed in result: {0}".format(failed_queries_in_result))
         if failed_queries_in_explain:
             log.info("Following queries failed in explain: {0}".format(failed_queries_in_explain))
+
     def _create_array_index_definitions(self):
         index_fields = [{"name": "name", "where_clause": "name = 'Kala'"},
                         {"name": "age", "where_clause": "age < 85"},
@@ -812,9 +829,11 @@ class AggregatePushdownClass(QueryTests):
                     index_names_defn["fields"] = [first_field, second_field, third_field]
                     create_index_clause = "CREATE INDEX {0} on %s({1}, {2}, {3})".format(
                         index_name, first_field["name"], second_field["name"], third_field["name"])
-                    drop_index_clause = "DROP INDEX %s.{0}".format(index_name)
-                    index_names_defn["create_definitions"] = [(create_index_clause % bucket.name) for bucket in self.buckets]
-                    index_names_defn["drop_definitions"] = [(drop_index_clause % bucket.name) for bucket in self.buckets]
+                    drop_index_clause = "DROP INDEX {0} ON %s".format(index_name)
+                    index_names_defn["create_definitions"] = [create_index_clause % query_bucket
+                                                              for query_bucket in self.query_buckets]
+                    index_names_defn["drop_definitions"] = [drop_index_clause % query_bucket
+                                                            for query_bucket in self.query_buckets]
                     yield index_names_defn
 
     def _verify_aggregate_explain_results(self, query, index_name, index_fields, allow_pushdown=True):

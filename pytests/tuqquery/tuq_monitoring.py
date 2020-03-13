@@ -1,12 +1,12 @@
+import json
 import logging
 import threading
-import json
-import uuid
 import time
-from .tuq import QueryTests
-from membase.api.rest_client import RestConnection
-from membase.api.exception import CBQError, ReadDocumentException
+
 from remote.remote_util import RemoteMachineShellConnection
+
+from .tuq import QueryTests
+
 
 class QueryMonitoringTests(QueryTests):
     def setUp(self):
@@ -16,6 +16,7 @@ class QueryMonitoringTests(QueryTests):
         self.run_cbq_query('delete from system:prepareds')
         self.rest.set_completed_requests_collection_duration(self.master, 1000)
         self.rest.set_completed_requests_max_entries(self.master, 4000)
+        self.query_buckets = self.get_query_buckets(check_all_buckets=True)
 
     def suite_setUp(self):
         super(QueryMonitoringTests, self).suite_setUp()
@@ -26,11 +27,11 @@ class QueryMonitoringTests(QueryTests):
     def suite_tearDown(self):
         super(QueryMonitoringTests, self).suite_tearDown()
 
-##############################################################################################
-#
-#   Monitoring Test Cases (Normal Queries)
-#
-##############################################################################################
+    ##############################################################################################
+    #
+    #   Monitoring Test Cases (Normal Queries)
+    #
+    ##############################################################################################
 
     '''Runs the basic cluster monitoring checks: (2 queries will be run when calling this method, each query will be
                                                   called from a different node)
@@ -40,6 +41,7 @@ class QueryMonitoringTests(QueryTests):
             -check if a query can be killed from system:active_requests using its requestId
                 -once the query is killed check if it is in system:completed_requests
             -check if the queries appear in system:completed_requests when they complete.'''
+
     def test_simple_cluster_monitoring(self):
         self.test_monitoring(test='simple')
 
@@ -47,14 +49,17 @@ class QueryMonitoringTests(QueryTests):
             -check if you can delete the whole log
             -check if you can delete by node
             -check if you can delete by requestId'''
+
     def test_purge_completed(self):
         self.test_monitoring(test='purge')
 
     '''Checks to see if active_requests and completed_requests can be filtered by node'''
+
     def test_filter_by_node(self):
         self.test_monitoring(test='filter')
 
     '''Checks to see if the queries run from a server that has been downed are removed from system:completed_requests'''
+
     def test_server_failure(self):
         self.test_monitoring(test='simple')
 
@@ -65,14 +70,14 @@ class QueryMonitoringTests(QueryTests):
         remote.stop_server()
 
         time.sleep(30)
-        #Check to see that completed_requests does not contain info from the downed node
+        # Check to see that completed_requests does not contain info from the downed node
         result = self.run_cbq_query('select * from system:completed_requests')
         self.assertEqual(result['metrics']['resultCount'], 2)
         result = self.run_cbq_query('select * from system:completed_requests where node = "%s:%s"'
-                                    %(self.servers[1].ip, self.servers[1].port))
+                                    % (self.servers[1].ip, self.servers[1].port))
         self.assertEqual(result['metrics']['resultCount'], 0)
 
-        #The info from the down node should not have been restored by the node coming back online
+        # The info from the down node should not have been restored by the node coming back online
         remote.start_server()
         time.sleep(30)
         result = self.run_cbq_query('select * from system:completed_requests')
@@ -81,21 +86,24 @@ class QueryMonitoringTests(QueryTests):
                                     % (self.servers[1].ip, self.servers[1].port))
         self.assertEqual(result['metrics']['resultCount'], 0)
 
-##############################################################################################
-#
-#   Monitoring Helper Functions
-#
-##############################################################################################
+    ##############################################################################################
+    #
+    #   Monitoring Helper Functions
+    #
+    ##############################################################################################
 
     def run_parallel_query(self, server):
         logging.info('parallel query is active')
-        query = "(select * from default) union (select d from default d JOIN default def ON KEYS d.name) union (select * from default)"
+        query = "(select * from " + self.query_buckets[0] + ") union (select d from " + self.query_buckets[
+            0] + " d JOIN " + self.query_buckets[0] + " def ON KEYS d.name) union (select * from " + self.query_buckets[
+                    0] + ")"
         self.run_cbq_query(query, server=server)
 
     '''Run basic cluster monitoring checks (outlined in the helper function) by executing 2 queries in parallel, must be
        run with a sufficient number of docs to be an effective test (docs-per-day >=3).'''
+
     def test_monitoring(self, test):
-        for bucket in self.buckets:
+        for query_bucket in self.query_buckets:
             logging.info('PURGING COMPLETED REQUEST LOG')
             self.run_cbq_query('delete from system:completed_requests')
             result = self.run_cbq_query('select * from system:completed_requests')
@@ -117,6 +125,9 @@ class QueryMonitoringTests(QueryTests):
                                        args=[self.servers[1]])
                 t53 = threading.Thread(name='run_fourth_query', target=self.run_parallel_query,
                                        args=[self.servers[1]])
+            else:
+                raise Exception("Incorrect test provided")
+
             t51 = threading.Thread(name='run_second_query', target=self.run_parallel_query,
                                    args=[self.servers[2]])
             t50.start()
@@ -125,7 +136,7 @@ class QueryMonitoringTests(QueryTests):
                 t52.start()
                 t53.start()
             e.set()
-            query = '(select * from %s ) union (select * from %s )' % (bucket.name, bucket.name)
+            query = '(select * from %s ) union (select * from %s )' % (query_bucket, query_bucket)
             self.run_cbq_query(query, server=self.servers[1])
             logging.debug('event is set')
             t50.join(100)
@@ -134,7 +145,7 @@ class QueryMonitoringTests(QueryTests):
                 t52.join(100)
                 t53.join(100)
             self.assertFalse(self.threadFailure)
-            query_template = 'FROM %s select $str0, $str1 ORDER BY $str0,$str1 ASC' % bucket.name
+            query_template = 'FROM %s select $str0, $str1 ORDER BY $str0,$str1 ASC' % query_bucket
             actual_result, expected_result = self.run_query_from_template(query_template)
             self._verify_results(actual_result['results'], expected_result)
 
@@ -336,16 +347,17 @@ class QueryMonitoringTests(QueryTests):
                     self.log.error(node2)
                     return
 
-##############################################################################################
-#
-#   Monitoring Prepared Test Cases
-#
-##############################################################################################
+    ##############################################################################################
+    #
+    #   Monitoring Prepared Test Cases
+    #
+    ##############################################################################################
 
     '''Runs the basic prepared monitoring checks:
             -Check that the number of uses for a prepared statement is correctly updated
             -Check that prepared statements appear in system:active_requests when ran
             -Check that prepared statements appear in system:completed_requests when ran.'''
+
     def test_prepared_monitoring(self):
         self.test_prepared_common_body()
         time.sleep(10)
@@ -381,21 +393,22 @@ class QueryMonitoringTests(QueryTests):
             -Check if system:prepareds can be purged completely
             -Check if system:prepareds can be purged by node
             -Check if system:prepareds can be purged by preparedName.'''
+
     def test_prepared_deletion(self):
         self.test_prepared_common_body()
         self.query = "select * from system:prepareds"
         result = self.run_cbq_query()
         self.assertEqual(result['metrics']['resultCount'], 6)
 
-        #Check if you can delete everything in system:prepareds
+        # Check if you can delete everything in system:prepareds
         self.run_cbq_query("delete from system:prepareds")
         result = self.run_cbq_query("select * from system:prepareds")
         self.assertEqual(result['metrics']['resultCount'], 0)
 
-        #Reset prepared statements for next deletion check
+        # Reset prepared statements for next deletion check
         self.test_prepared_common_body()
 
-        #Check if you can delete from system:prepareds by node
+        # Check if you can delete from system:prepareds by node
         self.query = "delete from system:prepareds where node = '%s:%s'" \
                      % (self.servers[0].ip, self.servers[0].port)
         self.run_cbq_query()
@@ -414,7 +427,7 @@ class QueryMonitoringTests(QueryTests):
         result = self.run_cbq_query("select * from system:prepareds")
         self.assertEqual(result['metrics']['resultCount'], 0)
 
-        #Reset prepared statements for next deletion check
+        # Reset prepared statements for next deletion check
         self.test_prepared_common_body()
 
         self.query = "select * from system:prepareds"
@@ -422,7 +435,7 @@ class QueryMonitoringTests(QueryTests):
         prepared1 = result['results'][0]['prepareds']['name']
         prepared2 = result['results'][1]['prepareds']['name']
 
-        #Check if system:prepareds can be deleted from by prepared name
+        # Check if system:prepareds can be deleted from by prepared name
         self.query = "delete from system:prepareds where name = '%s'" % prepared1
         self.run_cbq_query()
         result = self.run_cbq_query("select * from system:prepareds")
@@ -436,6 +449,7 @@ class QueryMonitoringTests(QueryTests):
     '''Runs the basic prepared filtering checks:
             -Check if system:prepareds can be filtered by prepared statement name
             -Check if system:prepareds can be purged by node.'''
+
     def test_prepared_filtering(self):
         self.test_prepared_common_body()
         # Check that both prepareds are in system:prepareds
@@ -446,7 +460,7 @@ class QueryMonitoringTests(QueryTests):
         prepared1 = result['results'][0]['prepareds']['name']
         prepared2 = result['results'][1]['prepareds']['name']
 
-        #Check if you can access prepared statements from system:prepareds by the prepared statement's name
+        # Check if you can access prepared statements from system:prepareds by the prepared statement's name
         self.query = "select * from system:prepareds where name = '%s'" % prepared1
         name1 = self.run_cbq_query(server=self.servers[2])
         self.assertEqual(name1['metrics']['resultCount'], 3)
@@ -464,7 +478,7 @@ class QueryMonitoringTests(QueryTests):
 
         # Check to see if system:prepareds can be filtered by node
         self.query = "select * from system:prepareds where node = '%s:%s'" \
-                             % (self.servers[1].ip, self.servers[1].port)
+                     % (self.servers[1].ip, self.servers[1].port)
         node2 = self.run_cbq_query()
         self.assertEqual(node2['metrics']['resultCount'], 2)
 
@@ -486,23 +500,26 @@ class QueryMonitoringTests(QueryTests):
     def test_prepared_kill_by_node(self):
         self.test_prepared_kill(self.run_kill_prepared_by_node)
 
-##############################################################################################
-#
-#   Prepared Test Helper Functions
-#
-##############################################################################################
+    ##############################################################################################
+    #
+    #   Prepared Test Helper Functions
+    #
+    ##############################################################################################
 
     def execute_prepared(self, prepared_name, server):
         result = self.run_cbq_query('EXECUTE "%s"' % prepared_name, server=server)
 
     '''Prepares two statements on different nodes.'''
-    def test_prepared_common_body(self,test_type=None):
+
+    def test_prepared_common_body(self, test_type=None):
         self.query = "select * from system:prepareds"
         result = self.run_cbq_query()
         self.assertEqual(result['metrics']['resultCount'], 0)
 
-        self.query = "(select * from default union select * from default union select * from default) " \
-                     "union (select d from default d JOIN default def ON KEYS d.name)"
+        self.query = "(select * from " + self.query_buckets[0] + " union select * from " + self.query_buckets[
+            0] + " union select * from " + self.query_buckets[0] + ") " \
+                                                                   "union (select d from " + self.query_buckets[
+                         0] + " d JOIN " + self.query_buckets[0] + " def ON KEYS d.name)"
         self.prepared_common_body()
         self.prepared_common_body(server=self.servers[1])
 
@@ -549,6 +566,7 @@ class QueryMonitoringTests(QueryTests):
             -Check if the request can be killed by its requestId
             -Check if the request can be killed by its name.
             -Check if requests can be killed by node.'''
+
     def test_prepared_kill(self, test_to_run):
         self.test_prepared_common_body("kill")
         # Check that both prepareds are in system:prepareds
@@ -577,6 +595,7 @@ class QueryMonitoringTests(QueryTests):
         self.assertFalse(self.threadFailure)
 
     '''Helper to check if a prepared statement can be accessed by its requestId'''
+
     def run_check_requestId(self, e, t):
         while not e.isSet():
             logging.debug('wait_for_event_timeout starting')
@@ -597,6 +616,7 @@ class QueryMonitoringTests(QueryTests):
                     return
 
     '''Helper to check if a prepared statement can be killed by its requestId'''
+
     def run_kill_prepared_by_requestId(self, e, t):
         while not e.isSet():
             logging.debug('wait_for_event_timeout starting')
@@ -622,6 +642,7 @@ class QueryMonitoringTests(QueryTests):
                     return
 
     '''Helper to check if a prepared statement can be killed by its preparedName'''
+
     def run_kill_prepared_by_name(self, e, t):
         while not e.isSet():
             logging.debug('wait_for_event_timeout starting')
@@ -646,6 +667,7 @@ class QueryMonitoringTests(QueryTests):
                     return
 
     '''Helper to check if a prepared statement/multiple prepared statements can be killed by node'''
+
     def run_kill_prepared_by_node(self, e, t):
         while not e.isSet():
             logging.debug('wait_for_event_timeout starting')
@@ -691,20 +713,21 @@ class QueryMonitoringTests(QueryTests):
                     'select * from system:active_requests  where node  =  "%s:%s"'
                     % (self.servers[1].ip, self.servers[1].port))
                 if not result['metrics']['resultCount'] == 2:
-                     self.threadFailure = True
-                     logging.error(
+                    self.threadFailure = True
+                    logging.error(
                         'THE QUERIES FOR node "%s" SHOULD NOT HAVE BEEN KILLED'
-                         % self.servers[1].ip)
-                     self.log.error(json.dumps(result, sort_keys=True, indent=3))
-                     return
+                        % self.servers[1].ip)
+                    self.log.error(json.dumps(result, sort_keys=True, indent=3))
+                    return
 
-##############################################################################################
-#
-#   Configuration Test Settings (Completed_requests configuration settings)
-#
-##############################################################################################
+    ##############################################################################################
+    #
+    #   Configuration Test Settings (Completed_requests configuration settings)
+    #
+    ##############################################################################################
 
     '''Check that the configuration settings for system:completed_requests can be changed'''
+
     def test_set_completed_config(self):
         # Change the collection setting
         response, content = self.rest.set_completed_requests_collection_duration(self.master, 10000)
@@ -725,6 +748,7 @@ class QueryMonitoringTests(QueryTests):
         self.assertEqual(result['completed-limit'], 4000)
 
     '''Check that you can change the maximum number of entries that system:completed requests keeps at one time.'''
+
     def test_retention_config(self):
         self.rest.set_completed_requests_max_entries(self.master, 4000)
         num_entries = 10
@@ -734,8 +758,8 @@ class QueryMonitoringTests(QueryTests):
         self.assertEqual(result['completed-limit'], num_entries)
 
         # Run more than num_entries(10) queries
-        for i in range(num_entries*2):
-            self.run_cbq_query('select * from default')
+        for i in range(num_entries * 2):
+            self.run_cbq_query('select * from ' + self.query_buckets[0] + '')
 
         time.sleep(1)
         result = self.run_cbq_query('select * from system:completed_requests')
@@ -748,7 +772,7 @@ class QueryMonitoringTests(QueryTests):
         self.assertEqual(result['completed-limit'], num_entries)
 
         for i in range(100):
-            self.run_cbq_query('select * from default')
+            self.run_cbq_query('select * from ' + self.query_buckets[0])
 
         time.sleep(1)
         result = self.run_cbq_query('select * from system:completed_requests')
@@ -760,18 +784,19 @@ class QueryMonitoringTests(QueryTests):
         result = json.loads(content)
         self.assertEqual(result['completed-limit'], num_entries)
 
-        self.run_cbq_query('select * from default')
+        self.run_cbq_query('select * from ' + self.query_buckets[0])
 
         result = self.run_cbq_query('select * from system:completed_requests')
         self.assertEqual(result['metrics']['resultCount'], 110)
         self.rest.set_completed_requests_max_entries(self.master, 4000)
 
     '''Check that you can change the min duration a query has to run for to be stored in system:completed_requests'''
+
     def test_collection_config(self):
         self.rest.set_completed_requests_collection_duration(self.master, 1000)
         # Test the default setting of 1 second
         self.run_cbq_query('select * from system:active_requests')
-        self.run_cbq_query('select * from default')
+        self.run_cbq_query('select * from ' + self.query_buckets[0])
         result = self.run_cbq_query('select * from system:completed_requests')
         self.assertEqual(result['metrics']['resultCount'], 1)
         # Wipe the completed logs for the next test
@@ -784,14 +809,16 @@ class QueryMonitoringTests(QueryTests):
         result = json.loads(content)
         self.assertEqual(result['completed-threshold'], min_duration)
         # Construct nonsense queries that run for 5 seconds
-        self.run_cbq_query('select * from default union select * from default union select * from default')
-        self.run_cbq_query('select * from default union select * from default union select * from default')
+        self.run_cbq_query('select * from ' + self.query_buckets[0] + ' union select * from ' + self.query_buckets[
+            0] + ' union select * from ' + self.query_buckets[0])
+        self.run_cbq_query('select * from ' + self.query_buckets[0] + ' union select * from ' + self.query_buckets[
+            0] + ' union select * from ' + self.query_buckets[0])
         # Run a query that runs for a normal amount of time ~2 seconds
-        self.run_cbq_query('select * from default limit 1000')
-        self.run_cbq_query('select * from default limit 1000')
+        self.run_cbq_query('select * from ' + self.query_buckets[0] + ' limit 1000')
+        self.run_cbq_query('select * from ' + self.query_buckets[0] + ' limit 1000')
 
         # Only the queries run for longer than 8 seconds should show up
-        result=self.run_cbq_query('select * from system:completed_requests')
+        result = self.run_cbq_query('select * from system:completed_requests')
         self.assertEqual(result['metrics']['resultCount'], 2)
         # Wipe the completed logs for the next test
         self.run_cbq_query('delete from system:completed_requests')
@@ -803,7 +830,7 @@ class QueryMonitoringTests(QueryTests):
         self.assertEqual(result['completed-threshold'], min_duration)
 
         self.run_cbq_query('select * from system:active_requests')
-        self.run_cbq_query('select * from default')
+        self.run_cbq_query('select * from ' + self.query_buckets[0])
         result = self.run_cbq_query('select * from system:completed_requests')
         self.assertEqual(result['metrics']['resultCount'], 2)
 
@@ -814,8 +841,8 @@ class QueryMonitoringTests(QueryTests):
         result = json.loads(content)
         self.assertTrue(result['completed-threshold'] == min_duration)
         self.run_cbq_query('delete from system:completed_requests')
-        self.run_cbq_query('select * from default')
-        self.run_cbq_query('select * from default')
+        self.run_cbq_query('select * from ' + self.query_buckets[0])
+        self.run_cbq_query('select * from ' + self.query_buckets[0])
 
         # No queries should appear
         result = self.run_cbq_query('select * from system:completed_requests')

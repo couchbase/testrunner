@@ -1,16 +1,19 @@
-from .tuq import QueryTests
 from deepdiff import DeepDiff
+
+from .tuq import QueryTests
+
 
 class QueryINDEXUNNESTTests(QueryTests):
     def setUp(self):
         super(QueryINDEXUNNESTTests, self).setUp()
         self.log.info("==============  QueryINDEXUNNESTTests setup has started ==============")
+        self.query_bucket = self.get_query_buckets()[0]
         self.primary_indx_def = {'name': '#primary',
-                         'bucket': 'default',
-                         'fields': [],
-                         'state': 'online',
-                         'using': self.index_type.lower(),
-                         'is_primary': True}
+                                 'bucket': 'default',
+                                 'fields': [],
+                                 'state': 'online',
+                                 'using': self.index_type.lower(),
+                                 'is_primary': True}
         self.log.info("==============  QueryINDEXUNNESTTests setup has completed ==============")
         self.log_config_info()
 
@@ -38,7 +41,6 @@ class QueryINDEXUNNESTTests(QueryTests):
                         and keywords[1] in str(explain_plan['~children'][0]['spans']),
                         "The non-array index keys are not being used")
 
-
     def compare_queries(self, actual_results, compare_query):
         let_letting_docs = actual_results['results']
         compare_results = self.run_cbq_query(query=compare_query)
@@ -56,45 +58,57 @@ class QueryINDEXUNNESTTests(QueryTests):
                    'using': self.index_type.lower(),
                    'is_primary': False}
 
-        query_1 = 'SELECT v1 FROM default AS d UNNEST d.VMs AS v1 where d.email == "9-mail@couchbase.com" and d.department == "support" and v1.RAM == 10'
+        query_1 = 'SELECT v1 FROM ' + self.query_bucket + 'AS d UNNEST d.VMs AS v1 where d.email == ' \
+                                                          '"9-mail@couchbase.com" and d.department == "support" and ' \
+                                                          'v1.RAM == 10 '
         explain_1 = "Explain " + query_1
-        verify_1 = 'SELECT v1 FROM default AS d use index (`#primary`) UNNEST d.VMs AS v1 where d.email == "9-mail@couchbase.com" and d.department == "Support" and v1.RAM == 10'
+        verify_1 = 'SELECT v1 FROM ' + self.query_bucket + 'AS d use index (`#primary`) UNNEST d.VMs AS v1 where ' \
+                                                           'd.email == "9-mail@couchbase.com" and d.department == ' \
+                                                           '"Support" and v1.RAM == 10 '
 
-        queries["a"] = {"indexes": [self.primary_indx_def, index_1], "queries": [explain_1, query_1], "asserts": [self.plan_verifier(['9-mail@couchbase.com', 'support'], 0), self.verifier(verify_1, 1)]}
+        queries["a"] = {"indexes": [self.primary_indx_def, index_1], "queries": [explain_1, query_1],
+                        "asserts": [self.plan_verifier(['9-mail@couchbase.com', 'support'], 0),
+                                    self.verifier(verify_1, 1)]}
 
         self.query_runner(queries)
 
     def test_simple(self):
-        index = "CREATE INDEX array_index ON default(ALL ARRAY v1 FOR v1 IN VMs END,email,department)"
+        index = "CREATE INDEX array_index ON " + self.query_bucket + "(ALL ARRAY v1 FOR v1 IN VMs END,email,department)"
         self.run_cbq_query(query=index)
         try:
-            #First check explain to make sure improvement is happening
-            query = 'SELECT v1 FROM default AS d UNNEST d.VMs AS v1 where d.email == "9-mail@couchbase.com" and d.department == "support" and v1.RAM == 10'
+            # First check explain to make sure improvement is happening
+            query = 'SELECT v1 FROM ' + self.query_bucket + ' AS d UNNEST d.VMs AS v1 where d.email == ' \
+                                                            '"9-mail@couchbase.com" and d.department == "support" ' \
+                                                            'and v1.RAM == 10 '
             explain_query = 'EXPLAIN ' + query
             explain_plan = self.run_cbq_query(explain_query)
             plan = self.ExplainPlanHelper(explain_plan)
             self.assertTrue('9-mail@couchbase.com' in str(plan['~children'][0]['spans'])
-                            and 'support' in str(plan['~children'][0]['spans']), "The non-array index keys are not being used")
+                            and 'support' in str(plan['~children'][0]['spans']),
+                            "The non-array index keys are not being used")
 
             actual_results = self.run_cbq_query(query=query)
 
             # Ensure the results using the array_indexing improvements are the same as the primary index results
-            primary_query = 'SELECT v1 FROM default AS d use index (`#primary`) UNNEST d.VMs AS v1 where ' \
-                    'd.email == "9-mail@couchbase.com" and d.department == "Support" and v1.RAM == 10'
+            primary_query = 'SELECT v1 FROM ' + self.query_bucket + ' AS d use index (`#primary`) UNNEST d.VMs AS v1 ' \
+                                                                    'where d.email == "9-mail@couchbase.com" and ' \
+                                                                    'd.department == "Support" and v1.RAM == 10 '
             expected_results = self.run_cbq_query(query=primary_query)
 
             diffs = DeepDiff(actual_results['results'], expected_results['results'], ignore_order=True)
             if diffs:
                 self.assertTrue(False, diffs)
         finally:
-            self.run_cbq_query(query = "DROP INDEX default.array_index")
+            self.run_cbq_query(query="DROP INDEX array_index ON " + self.query_bucket)
 
     def test_arbitrary_alias(self):
-        index = "CREATE INDEX array_index ON default(ALL ARRAY v1 FOR v1 IN VMs END,email,department)"
+        index = "CREATE INDEX array_index ON " + self.query_bucket + "(ALL ARRAY v1 FOR v1 IN VMs END,email,department)"
         self.run_cbq_query(query=index)
         try:
-            #First check explain to make sure improvement is happening
-            query = 'SELECT nv1 FROM default AS d UNNEST d.VMs AS nv1 where d.email == "9-mail@couchbase.com" and d.department == "support" and nv1.RAM == 10'
+            # First check explain to make sure improvement is happening
+            query = 'SELECT nv1 FROM ' + self.query_bucket + ' AS d UNNEST d.VMs AS nv1 where d.email == ' \
+                                                             '"9-mail@couchbase.com" and d.department == "support" ' \
+                                                             'and nv1.RAM == 10 '
             explain_query = 'EXPLAIN ' + query
             explain_plan = self.run_cbq_query(explain_query)
             plan = self.ExplainPlanHelper(explain_plan)
@@ -104,22 +118,26 @@ class QueryINDEXUNNESTTests(QueryTests):
             actual_results = self.run_cbq_query(query=query)
 
             # Ensure the results using the array_indexing improvements are the same as the primary index results
-            primary_query = 'SELECT nv1 FROM default AS d use index (`#primary`) UNNEST d.VMs AS nv1 where ' \
-                    'd.email == "9-mail@couchbase.com" and d.department == "Support" and nv1.RAM == 10'
+            primary_query = 'SELECT nv1 FROM ' + self.query_bucket + ' AS d use index (`#primary`) UNNEST d.VMs AS ' \
+                                                                     'nv1 where d.email == "9-mail@couchbase.com" and' \
+                                                                     ' d.department == "Support" and nv1.RAM == 10 '
             expected_results = self.run_cbq_query(query=primary_query)
 
             diffs = DeepDiff(actual_results['results'], expected_results['results'], ignore_order=True)
             if diffs:
                 self.assertTrue(False, diffs)
         finally:
-            self.run_cbq_query(query="DROP INDEX default.array_index")
+            self.run_cbq_query(query="DROP INDEX array_index ON " + self.query_bucket)
 
     def test_str_functions(self):
-        index = "CREATE INDEX array_index ON default(ALL ARRAY v1 FOR v1 IN VMs END,lower(email),upper(department))"
+        index = "CREATE INDEX array_index ON " + self.query_bucket + "(ALL ARRAY v1 FOR v1 IN VMs END,lower(email)," \
+                                                                     "upper(department)) "
         self.run_cbq_query(query=index)
         try:
             # First check explain to make sure improvement is happening
-            query = 'SELECT v1 FROM default AS d UNNEST d.VMs AS v1 where lower(d.email) == "9-mail@couchbase.com" and upper(d.department) == "SUPPORT" and v1.RAM == 10'
+            query = 'SELECT v1 FROM ' + self.query_bucket + ' AS d UNNEST d.VMs AS v1 where lower(d.email) == ' \
+                                                            '"9-mail@couchbase.com" and upper(d.department) == ' \
+                                                            '"SUPPORT" and v1.RAM == 10 '
             explain_query = 'EXPLAIN ' + query
             explain_plan = self.run_cbq_query(explain_query)
             plan = self.ExplainPlanHelper(explain_plan)
@@ -130,22 +148,26 @@ class QueryINDEXUNNESTTests(QueryTests):
             actual_results = self.run_cbq_query(query=query)
 
             # Ensure the results using the array_indexing improvements are the same as the primary index results
-            primary_query = 'SELECT v1 FROM default AS d use index (`#primary`) UNNEST d.VMs AS v1 where ' \
-                            'lower(d.email) == "9-mail@couchbase.com" and upper(d.department) == "SUPPORT" and v1.RAM == 10'
+            primary_query = 'SELECT v1 FROM ' + self.query_bucket + ' AS d use index (`#primary`) UNNEST d.VMs AS v1 ' \
+                                                                    'where lower(d.email) == "9-mail@couchbase.com" ' \
+                                                                    'and upper(d.department) == "SUPPORT" and v1.RAM ' \
+                                                                    '== 10 '
             expected_results = self.run_cbq_query(query=primary_query)
 
             diffs = DeepDiff(actual_results['results'], expected_results['results'], ignore_order=True)
             if diffs:
                 self.assertTrue(False, diffs)
         finally:
-            self.run_cbq_query(query="DROP INDEX default.array_index")
+            self.run_cbq_query(query="DROP INDEX array_index ON " + self.query_bucket)
 
     def test_int_functions(self):
-        index = "CREATE INDEX array_index ON default(ALL ARRAY v1 FOR v1 IN VMs END,exp(join_mo),upper(department))"
+        index = "CREATE INDEX array_index ON " + self.query_bucket + "(ALL ARRAY v1 FOR v1 IN VMs END,exp(join_mo)," \
+                                                                     "upper(department)) "
         self.run_cbq_query(query=index)
         try:
             # First check explain to make sure improvement is happening
-            query = 'SELECT v1 FROM default AS d UNNEST d.VMs AS v1 where exp(d.join_mo) == 81 and upper(d.department) == "SUPPORT" and v1.RAM == 10'
+            query = 'SELECT v1 FROM ' + self.query_bucket + ' AS d UNNEST d.VMs AS v1 where exp(d.join_mo) == 81 and ' \
+                                                            'upper(d.department) == "SUPPORT" and v1.RAM == 10 '
             explain_query = 'EXPLAIN ' + query
             explain_plan = self.run_cbq_query(explain_query)
             plan = self.ExplainPlanHelper(explain_plan)
@@ -156,77 +178,94 @@ class QueryINDEXUNNESTTests(QueryTests):
             actual_results = self.run_cbq_query(query=query)
 
             # Ensure the results using the array_indexing improvements are the same as the primary index results
-            primary_query = 'SELECT v1 FROM default AS d use index (`#primary`) UNNEST d.VMs AS v1 where ' \
-                            'exp(d.join_mo) == 81 and upper(d.department) == "SUPPORT" and v1.RAM == 10'
+            primary_query = 'SELECT v1 FROM ' + self.query_bucket + ' AS d use index (`#primary`) UNNEST d.VMs AS v1 ' \
+                                                                    'where ' \
+                                                                    'exp(d.join_mo) == 81 and upper(d.department) == ' \
+                                                                    '"SUPPORT" and v1.RAM == 10 '
             expected_results = self.run_cbq_query(query=primary_query)
 
             diffs = DeepDiff(actual_results['results'], expected_results['results'], ignore_order=True)
             if diffs:
                 self.assertTrue(False, diffs)
         finally:
-            self.run_cbq_query(query="DROP INDEX default.array_index")
+            self.run_cbq_query(query="DROP INDEX array_index ON " + self.query_bucket)
 
-##############################################################################################
-#
-#  Distinct
-##############################################################################################
+    ##############################################################################################
+    #
+    #  Distinct
+    ##############################################################################################
 
     def test_distinct_simple(self):
-        index = "CREATE INDEX array_index ON default(DISTINCT ARRAY v1 FOR v1 IN VMs END,email,department)"
-        self.run_cbq_query(query=index)
-        try:
-            #First check explain to make sure improvement is happening
-            query = 'SELECT v1 FROM default AS d UNNEST d.VMs AS v1 where d.email == "9-mail@couchbase.com" and d.department == "support" and v1.RAM == 10'
-            explain_query = 'EXPLAIN ' + query
-            explain_plan = self.run_cbq_query(explain_query)
-            plan = self.ExplainPlanHelper(explain_plan)
-            self.assertTrue('9-mail@couchbase.com' in str(plan['~children'][0]['scan']['spans'])
-                            and 'support' in str(plan['~children'][0]['scan']['spans']), "The non-array index keys are not being used")
-
-            actual_results = self.run_cbq_query(query=query)
-
-            # Ensure the results using the array_indexing improvements are the same as the primary index results
-            primary_query = 'SELECT v1 FROM default AS d use index (`#primary`) UNNEST d.VMs AS v1 where ' \
-                    'd.email == "9-mail@couchbase.com" and d.department == "Support" and v1.RAM == 10'
-            expected_results = self.run_cbq_query(query=primary_query)
-
-            diffs = DeepDiff(actual_results['results'], expected_results['results'], ignore_order=True)
-            if diffs:
-                self.assertTrue(False, diffs)
-        finally:
-            self.run_cbq_query(query = "DROP INDEX default.array_index")
-
-    def test_distinct_arbitrary_simple(self):
-        index = "CREATE INDEX array_index ON default(DISTINCT ARRAY v1 FOR v1 IN VMs END,email,department)"
-        self.run_cbq_query(query=index)
-        try:
-            #First check explain to make sure improvement is happening
-            query = 'SELECT nv1 FROM default AS d UNNEST d.VMs AS nv1 where d.email == "9-mail@couchbase.com" and d.department == "support" and nv1.RAM == 10'
-            explain_query = 'EXPLAIN ' + query
-            explain_plan = self.run_cbq_query(explain_query)
-            plan = self.ExplainPlanHelper(explain_plan)
-            self.assertTrue('9-mail@couchbase.com' in str(plan['~children'][0]['scan']['spans'])
-                            and 'support' in str(plan['~children'][0]['scan']['spans']), "The non-array index keys are not being used")
-
-            actual_results = self.run_cbq_query(query=query)
-
-            # Ensure the results using the array_indexing improvements are the same as the primary index results
-            primary_query = 'SELECT v1 FROM default AS d use index (`#primary`) UNNEST d.VMs AS v1 where ' \
-                    'd.email == "9-mail@couchbase.com" and d.department == "Support" and v1.RAM == 10'
-            expected_results = self.run_cbq_query(query=primary_query)
-
-            diffs = DeepDiff(actual_results['results'], expected_results['results'], ignore_order=True)
-            if diffs:
-                self.assertTrue(False, diffs)
-        finally:
-            self.run_cbq_query(query = "DROP INDEX default.array_index")
-
-    def test_distinct_str_functions(self):
-        index = "CREATE INDEX array_index ON default(DISTINCT ARRAY v1 FOR v1 IN VMs END,lower(email),upper(department))"
+        index = "CREATE INDEX array_index ON " + self.query_bucket + "(DISTINCT ARRAY v1 FOR v1 IN VMs END,email," \
+                                                                     "department) "
         self.run_cbq_query(query=index)
         try:
             # First check explain to make sure improvement is happening
-            query = 'SELECT v1 FROM default AS d UNNEST d.VMs AS v1 where lower(d.email) == "9-mail@couchbase.com" and upper(d.department) == "SUPPORT" and v1.RAM == 10'
+            query = 'SELECT v1 FROM ' + self.query_bucket + ' AS d UNNEST d.VMs AS v1 where d.email == ' \
+                                                            '"9-mail@couchbase.com" and d.department == "support" ' \
+                                                            'and v1.RAM == 10 '
+            explain_query = 'EXPLAIN ' + query
+            explain_plan = self.run_cbq_query(explain_query)
+            plan = self.ExplainPlanHelper(explain_plan)
+            self.assertTrue('9-mail@couchbase.com' in str(plan['~children'][0]['scan']['spans'])
+                            and 'support' in str(plan['~children'][0]['scan']['spans']),
+                            "The non-array index keys are not being used")
+
+            actual_results = self.run_cbq_query(query=query)
+
+            # Ensure the results using the array_indexing improvements are the same as the primary index results
+            primary_query = 'SELECT v1 FROM ' + self.query_bucket + ' AS d use index (`#primary`) UNNEST d.VMs AS v1 ' \
+                                                                    'where ' \
+                                                                    'd.email == "9-mail@couchbase.com" and ' \
+                                                                    'd.department == "Support" and v1.RAM == 10 '
+            expected_results = self.run_cbq_query(query=primary_query)
+
+            diffs = DeepDiff(actual_results['results'], expected_results['results'], ignore_order=True)
+            if diffs:
+                self.assertTrue(False, diffs)
+        finally:
+            self.run_cbq_query(query="DROP INDEX array_index ON " + self.query_bucket)
+
+    def test_distinct_arbitrary_simple(self):
+        index = "CREATE INDEX array_index ON " + self.query_bucket + "(DISTINCT ARRAY v1 FOR v1 IN VMs END,email," \
+                                                                     "department) "
+        self.run_cbq_query(query=index)
+        try:
+            # First check explain to make sure improvement is happening
+            query = 'SELECT nv1 FROM ' + self.query_bucket + ' AS d UNNEST d.VMs AS nv1 where d.email == ' \
+                                                             '"9-mail@couchbase.com" and d.department == "support" ' \
+                                                             'and nv1.RAM == 10 '
+            explain_query = 'EXPLAIN ' + query
+            explain_plan = self.run_cbq_query(explain_query)
+            plan = self.ExplainPlanHelper(explain_plan)
+            self.assertTrue('9-mail@couchbase.com' in str(plan['~children'][0]['scan']['spans'])
+                            and 'support' in str(plan['~children'][0]['scan']['spans']),
+                            "The non-array index keys are not being used")
+
+            actual_results = self.run_cbq_query(query=query)
+
+            # Ensure the results using the array_indexing improvements are the same as the primary index results
+            primary_query = 'SELECT v1 FROM ' + self.query_bucket + ' AS d use index (`#primary`) UNNEST d.VMs AS v1 ' \
+                                                                    'where ' \
+                                                                    'd.email == "9-mail@couchbase.com" and ' \
+                                                                    'd.department == "Support" and v1.RAM == 10 '
+            expected_results = self.run_cbq_query(query=primary_query)
+
+            diffs = DeepDiff(actual_results['results'], expected_results['results'], ignore_order=True)
+            if diffs:
+                self.assertTrue(False, diffs)
+        finally:
+            self.run_cbq_query(query="DROP INDEX array_index ON " + self.query_bucket)
+
+    def test_distinct_str_functions(self):
+        index = "CREATE INDEX array_index ON " + self.query_bucket + "(DISTINCT ARRAY v1 FOR v1 IN VMs END,lower(" \
+                                                                     "email),upper(department)) "
+        self.run_cbq_query(query=index)
+        try:
+            # First check explain to make sure improvement is happening
+            query = 'SELECT v1 FROM ' + self.query_bucket + ' AS d UNNEST d.VMs AS v1 where lower(d.email) == ' \
+                                                            '"9-mail@couchbase.com" and upper(d.department) == ' \
+                                                            '"SUPPORT" and v1.RAM == 10 '
             explain_query = 'EXPLAIN ' + query
             explain_plan = self.run_cbq_query(explain_query)
             plan = self.ExplainPlanHelper(explain_plan)
@@ -237,22 +276,26 @@ class QueryINDEXUNNESTTests(QueryTests):
             actual_results = self.run_cbq_query(query=query)
 
             # Ensure the results using the array_indexing improvements are the same as the primary index results
-            primary_query = 'SELECT v1 FROM default AS d use index (`#primary`) UNNEST d.VMs AS v1 where ' \
-                            'lower(d.email) == "9-mail@couchbase.com" and upper(d.department) == "SUPPORT" and v1.RAM == 10'
+            primary_query = 'SELECT v1 FROM ' + self.query_bucket + ' AS d use index (`#primary`) UNNEST d.VMs AS v1 ' \
+                                                                    'where ' \
+                                                                    'lower(d.email) == "9-mail@couchbase.com" and ' \
+                                                                    'upper(d.department) == "SUPPORT" and v1.RAM == 10 '
             expected_results = self.run_cbq_query(query=primary_query)
 
             diffs = DeepDiff(actual_results['results'], expected_results['results'], ignore_order=True)
             if diffs:
                 self.assertTrue(False, diffs)
         finally:
-            self.run_cbq_query(query="DROP INDEX default.array_index")
+            self.run_cbq_query(query="DROP INDEX array_index ON " + self.query_bucket)
 
     def test_distinct_int_functions(self):
-        index = "CREATE INDEX array_index ON default(DISTINCT ARRAY v1 FOR v1 IN VMs END,exp(join_mo),upper(department))"
+        index = "CREATE INDEX array_index ON " + self.query_bucket + "(DISTINCT ARRAY v1 FOR v1 IN VMs END,exp(" \
+                                                                     "join_mo),upper(department)) "
         self.run_cbq_query(query=index)
         try:
             # First check explain to make sure improvement is happening
-            query = 'SELECT v1 FROM default AS d UNNEST d.VMs AS v1 where exp(d.join_mo) == 81 and upper(d.department) == "SUPPORT" and v1.RAM == 10'
+            query = 'SELECT v1 FROM ' + self.query_bucket + ' AS d UNNEST d.VMs AS v1 where exp(d.join_mo) == 81 and ' \
+                                                            'upper(d.department) == "SUPPORT" and v1.RAM == 10 '
             explain_query = 'EXPLAIN ' + query
             explain_plan = self.run_cbq_query(explain_query)
             plan = self.ExplainPlanHelper(explain_plan)
@@ -263,27 +306,33 @@ class QueryINDEXUNNESTTests(QueryTests):
             actual_results = self.run_cbq_query(query=query)
 
             # Ensure the results using the array_indexing improvements are the same as the primary index results
-            primary_query = 'SELECT v1 FROM default AS d use index (`#primary`) UNNEST d.VMs AS v1 where ' \
-                            'exp(d.join_mo) == 81 and upper(d.department) == "SUPPORT" and v1.RAM == 10'
+            primary_query = 'SELECT v1 FROM ' + self.query_bucket + ' AS d use index (`#primary`) UNNEST d.VMs AS v1 ' \
+                                                                    'where ' \
+                                                                    'exp(d.join_mo) == 81 and upper(d.department) == ' \
+                                                                    '"SUPPORT" and v1.RAM == 10 '
             expected_results = self.run_cbq_query(query=primary_query)
 
             diffs = DeepDiff(actual_results['results'], expected_results['results'], ignore_order=True)
             if diffs:
                 self.assertTrue(False, diffs)
         finally:
-            self.run_cbq_query(query="DROP INDEX default.array_index")
+            self.run_cbq_query(query="DROP INDEX array_index ON " + self.query_bucket)
 
-##############################################################################################
-#
-#  Nested Unnest
-##############################################################################################
+    ##############################################################################################
+    #
+    #  Nested Unnest
+    ##############################################################################################
 
     def test_arbitrary_nested_unnest(self):
-        index = "CREATE INDEX array_index ON default(ALL ARRAY (ALL ARRAY v2.region1 FOR v2 IN v1.Marketing END)  FOR v1 IN tasks END,email,department)"
+        index = "CREATE INDEX array_index ON " + self.query_bucket + "(ALL ARRAY (ALL ARRAY v2.region1 FOR v2 IN " \
+                                                                     "v1.Marketing END)  FOR v1 IN tasks END,email," \
+                                                                     "department) "
         self.run_cbq_query(query=index)
         try:
             # First check explain to make sure improvement is happening
-            query = 'SELECT * FROM default AS d UNNEST d.tasks AS nv1 UNNEST nv1.Marketing as nv2 where nv2.region1 == "South" and d.department == "Developer" and d.email == "1-mail@couchbase.com"'
+            query = 'SELECT * FROM ' + self.query_bucket + ' AS d UNNEST d.tasks AS nv1 UNNEST nv1.Marketing as nv2 ' \
+                                                           'where nv2.region1 == "South" and d.department == ' \
+                                                           '"Developer" and d.email == "1-mail@couchbase.com" '
             explain_query = 'EXPLAIN ' + query
             explain_plan = self.run_cbq_query(explain_query)
             plan = self.ExplainPlanHelper(explain_plan)
@@ -295,8 +344,11 @@ class QueryINDEXUNNESTTests(QueryTests):
             actual_results = self.run_cbq_query(query=query)
 
             # Ensure the results using the array_indexing improvements are the same as the primary index results
-            primary_query = 'SELECT * FROM default AS d use index (`#primary`) UNNEST d.tasks AS v1 UNNEST v1.Marketing ' \
-                            'as v2 where v2.region1 == "South" and d.department == "Developer" and d.email == "1-mail@couchbase.com"'
+            primary_query = 'SELECT * FROM ' + self.query_bucket + ' AS d use index (`#primary`) UNNEST d.tasks AS v1 ' \
+                                                                   'UNNEST v1.Marketing ' \
+                                                                   'as v2 where v2.region1 == "South" and ' \
+                                                                   'd.department == "Developer" and d.email == ' \
+                                                                   '"1-mail@couchbase.com" '
 
             expected_results = self.run_cbq_query(query=primary_query)
 
@@ -304,14 +356,18 @@ class QueryINDEXUNNESTTests(QueryTests):
             if diffs:
                 self.assertTrue(False, diffs)
         finally:
-            self.run_cbq_query(query="DROP INDEX default.array_index")
+            self.run_cbq_query(query="DROP INDEX array_index ON " + self.query_bucket)
 
     def test_distinct_arbitrary_nested_unnest(self):
-        index = "CREATE INDEX array_index ON default(DISTINCT ARRAY (DISTINCT ARRAY v2.region1 FOR v2 IN v1.Marketing END)  FOR v1 IN tasks END,email,department)"
+        index = "CREATE INDEX array_index ON " + self.query_bucket + "(DISTINCT ARRAY (DISTINCT ARRAY v2.region1 FOR " \
+                                                                     "v2 IN v1.Marketing END)  FOR v1 IN tasks END," \
+                                                                     "email,department) "
         self.run_cbq_query(query=index)
         try:
             # First check explain to make sure improvement is happening
-            query = 'SELECT * FROM default AS d UNNEST d.tasks AS nv1 UNNEST nv1.Marketing as nv2 where nv2.region1 == "South" and d.department == "Developer" and d.email == "1-mail@couchbase.com"'
+            query = 'SELECT * FROM ' + self.query_bucket + ' AS d UNNEST d.tasks AS nv1 UNNEST nv1.Marketing as nv2 ' \
+                                                           'where nv2.region1 == "South" and d.department == ' \
+                                                           '"Developer" and d.email == "1-mail@couchbase.com" '
             explain_query = 'EXPLAIN ' + query
             explain_plan = self.run_cbq_query(explain_query)
             plan = self.ExplainPlanHelper(explain_plan)
@@ -323,8 +379,11 @@ class QueryINDEXUNNESTTests(QueryTests):
             actual_results = self.run_cbq_query(query=query)
 
             # Ensure the results using the array_indexing improvements are the same as the primary index results
-            primary_query = 'SELECT * FROM default AS d use index (`#primary`) UNNEST d.tasks AS v1 UNNEST v1.Marketing ' \
-                            'as v2 where v2.region1 == "South" and d.department == "Developer" and d.email == "1-mail@couchbase.com"'
+            primary_query = 'SELECT * FROM ' + self.query_bucket + ' AS d use index (`#primary`) UNNEST d.tasks AS v1 ' \
+                                                                   'UNNEST v1.Marketing ' \
+                                                                   'as v2 where v2.region1 == "South" and ' \
+                                                                   'd.department == "Developer" and d.email == ' \
+                                                                   '"1-mail@couchbase.com" '
 
             expected_results = self.run_cbq_query(query=primary_query)
 
@@ -332,14 +391,18 @@ class QueryINDEXUNNESTTests(QueryTests):
             if diffs:
                 self.assertTrue(False, diffs)
         finally:
-            self.run_cbq_query(query="DROP INDEX default.array_index")
+            self.run_cbq_query(query="DROP INDEX array_index ON " + self.query_bucket)
 
     def test_arbitrary_distinct_all_nested_unnest(self):
-        index = "CREATE INDEX array_index ON default(DISTINCT ARRAY (ALL ARRAY v2.region1 FOR v2 IN v1.Marketing END)  FOR v1 IN tasks END,email,department)"
+        index = "CREATE INDEX array_index ON " + self.query_bucket + "(DISTINCT ARRAY (ALL ARRAY v2.region1 FOR v2 " \
+                                                                     "IN v1.Marketing END)  FOR v1 IN tasks " \
+                                                                     "END,email,department) "
         self.run_cbq_query(query=index)
         try:
             # First check explain to make sure improvement is happening
-            query = 'SELECT * FROM default AS d UNNEST d.tasks AS nv1 UNNEST nv1.Marketing as nv2 where nv2.region1 == "South" and d.department == "Developer" and d.email == "1-mail@couchbase.com"'
+            query = 'SELECT * FROM ' + self.query_bucket + ' AS d UNNEST d.tasks AS nv1 UNNEST nv1.Marketing as nv2 ' \
+                                                           'where nv2.region1 == "South" and d.department == ' \
+                                                           '"Developer" and d.email == "1-mail@couchbase.com" '
             explain_query = 'EXPLAIN ' + query
             explain_plan = self.run_cbq_query(explain_query)
             plan = self.ExplainPlanHelper(explain_plan)
@@ -351,8 +414,11 @@ class QueryINDEXUNNESTTests(QueryTests):
             actual_results = self.run_cbq_query(query=query)
 
             # Ensure the results using the array_indexing improvements are the same as the primary index results
-            primary_query = 'SELECT * FROM default AS d use index (`#primary`) UNNEST d.tasks AS v1 UNNEST v1.Marketing ' \
-                            'as v2 where v2.region1 == "South" and d.department == "Developer" and d.email == "1-mail@couchbase.com"'
+            primary_query = 'SELECT * FROM ' + self.query_bucket + ' AS d use index (`#primary`) UNNEST d.tasks AS v1 ' \
+                                                                   'UNNEST v1.Marketing ' \
+                                                                   'as v2 where v2.region1 == "South" and ' \
+                                                                   'd.department == "Developer" and d.email == ' \
+                                                                   '"1-mail@couchbase.com" '
 
             expected_results = self.run_cbq_query(query=primary_query)
 
@@ -360,14 +426,18 @@ class QueryINDEXUNNESTTests(QueryTests):
             if diffs:
                 self.assertTrue(False, diffs)
         finally:
-            self.run_cbq_query(query="DROP INDEX default.array_index")
+            self.run_cbq_query(query="DROP INDEX array_index ON " + self.query_bucket)
 
     def test_nested_unnest(self):
-        index = "CREATE INDEX array_index ON default(ALL ARRAY (ALL ARRAY v2.region1 FOR v2 IN v1.Marketing END)  FOR v1 IN tasks END,email,department)"
+        index = "CREATE INDEX array_index ON " + self.query_bucket + "(ALL ARRAY (ALL ARRAY v2.region1 FOR v2 IN " \
+                                                                     "v1.Marketing END)  FOR v1 IN tasks END,email," \
+                                                                     "department) "
         self.run_cbq_query(query=index)
         try:
             # First check explain to make sure improvement is happening
-            query = 'SELECT * FROM default AS d UNNEST d.tasks AS v1 UNNEST v1.Marketing as v2 where v2.region1 == "South" and d.department == "Developer" and d.email == "1-mail@couchbase.com"'
+            query = 'SELECT * FROM ' + self.query_bucket + ' AS d UNNEST d.tasks AS v1 UNNEST v1.Marketing as v2 ' \
+                                                           'where v2.region1 == "South" and d.department == ' \
+                                                           '"Developer" and d.email == "1-mail@couchbase.com" '
             explain_query = 'EXPLAIN ' + query
             explain_plan = self.run_cbq_query(explain_query)
             plan = self.ExplainPlanHelper(explain_plan)
@@ -379,8 +449,11 @@ class QueryINDEXUNNESTTests(QueryTests):
             actual_results = self.run_cbq_query(query=query)
 
             # Ensure the results using the array_indexing improvements are the same as the primary index results
-            primary_query = 'SELECT * FROM default AS d use index (`#primary`) UNNEST d.tasks AS v1 UNNEST v1.Marketing ' \
-                            'as v2 where v2.region1 == "South" and d.department == "Developer" and d.email == "1-mail@couchbase.com"'
+            primary_query = 'SELECT * FROM ' + self.query_bucket + ' AS d use index (`#primary`) UNNEST d.tasks AS v1 ' \
+                                                                   'UNNEST v1.Marketing ' \
+                                                                   'as v2 where v2.region1 == "South" and ' \
+                                                                   'd.department == "Developer" and d.email == ' \
+                                                                   '"1-mail@couchbase.com" '
 
             expected_results = self.run_cbq_query(query=primary_query)
 
@@ -388,14 +461,18 @@ class QueryINDEXUNNESTTests(QueryTests):
             if diffs:
                 self.assertTrue(False, diffs)
         finally:
-            self.run_cbq_query(query="DROP INDEX default.array_index")
+            self.run_cbq_query(query="DROP INDEX array_index ON " + self.query_bucket)
 
     def test_distinct_nested_unnest(self):
-        index = "CREATE INDEX array_index ON default(DISTINCT ARRAY (DISTINCT ARRAY v2.region1 FOR v2 IN v1.Marketing END)  FOR v1 IN tasks END,email,department)"
+        index = "CREATE INDEX array_index ON " + self.query_bucket + "(DISTINCT ARRAY (DISTINCT ARRAY v2.region1 FOR " \
+                                                                     "v2 IN v1.Marketing END)  FOR v1 IN tasks END," \
+                                                                     "email,department) "
         self.run_cbq_query(query=index)
         try:
             # First check explain to make sure improvement is happening
-            query = 'SELECT * FROM default AS d UNNEST d.tasks AS v1 UNNEST v1.Marketing as v2 where v2.region1 == "South" and d.department == "Developer" and d.email == "1-mail@couchbase.com"'
+            query = 'SELECT * FROM ' + self.query_bucket + ' AS d UNNEST d.tasks AS v1 UNNEST v1.Marketing as v2 ' \
+                                                           'where v2.region1 == "South" and d.department == ' \
+                                                           '"Developer" and d.email == "1-mail@couchbase.com" '
             explain_query = 'EXPLAIN ' + query
             explain_plan = self.run_cbq_query(explain_query)
             plan = self.ExplainPlanHelper(explain_plan)
@@ -407,8 +484,11 @@ class QueryINDEXUNNESTTests(QueryTests):
             actual_results = self.run_cbq_query(query=query)
 
             # Ensure the results using the array_indexing improvements are the same as the primary index results
-            primary_query = 'SELECT * FROM default AS d use index (`#primary`) UNNEST d.tasks AS v1 UNNEST v1.Marketing ' \
-                            'as v2 where v2.region1 == "South" and d.department == "Developer" and d.email == "1-mail@couchbase.com"'
+            primary_query = 'SELECT * FROM ' + self.query_bucket + ' AS d use index (`#primary`) UNNEST d.tasks AS v1 ' \
+                                                                   'UNNEST v1.Marketing ' \
+                                                                   'as v2 where v2.region1 == "South" and ' \
+                                                                   'd.department == "Developer" and d.email == ' \
+                                                                   '"1-mail@couchbase.com" '
 
             expected_results = self.run_cbq_query(query=primary_query)
 
@@ -416,14 +496,18 @@ class QueryINDEXUNNESTTests(QueryTests):
             if diffs:
                 self.assertTrue(False, diffs)
         finally:
-            self.run_cbq_query(query="DROP INDEX default.array_index")
+            self.run_cbq_query(query="DROP INDEX array_index ON " + self.query_bucket)
 
     def test_distinct_all_nested_unnest(self):
-        index = "CREATE INDEX array_index ON default(DISTINCT ARRAY (ALL ARRAY v2.region1 FOR v2 IN v1.Marketing END)  FOR v1 IN tasks END,email,department)"
+        index = "CREATE INDEX array_index ON " + self.query_bucket + "(DISTINCT ARRAY (ALL ARRAY v2.region1 FOR v2 " \
+                                                                     "IN v1.Marketing END)  FOR v1 IN tasks " \
+                                                                     "END,email,department) "
         self.run_cbq_query(query=index)
         try:
             # First check explain to make sure improvement is happening
-            query = 'SELECT * FROM default AS d UNNEST d.tasks AS v1 UNNEST v1.Marketing as v2 where v2.region1 == "South" and d.department == "Developer" and d.email == "1-mail@couchbase.com"'
+            query = 'SELECT * FROM ' + self.query_bucket + ' AS d UNNEST d.tasks AS v1 UNNEST v1.Marketing as v2 ' \
+                                                           'where v2.region1 == "South" and d.department == ' \
+                                                           '"Developer" and d.email == "1-mail@couchbase.com" '
             explain_query = 'EXPLAIN ' + query
             explain_plan = self.run_cbq_query(explain_query)
             plan = self.ExplainPlanHelper(explain_plan)
@@ -435,8 +519,11 @@ class QueryINDEXUNNESTTests(QueryTests):
             actual_results = self.run_cbq_query(query=query)
 
             # Ensure the results using the array_indexing improvements are the same as the primary index results
-            primary_query = 'SELECT * FROM default AS d use index (`#primary`) UNNEST d.tasks AS v1 UNNEST v1.Marketing ' \
-                            'as v2 where v2.region1 == "South" and d.department == "Developer" and d.email == "1-mail@couchbase.com"'
+            primary_query = 'SELECT * FROM ' + self.query_bucket + ' AS d use index (`#primary`) UNNEST d.tasks AS v1 ' \
+                                                                   'UNNEST v1.Marketing ' \
+                                                                   'as v2 where v2.region1 == "South" and ' \
+                                                                   'd.department == "Developer" and d.email == ' \
+                                                                   '"1-mail@couchbase.com" '
 
             expected_results = self.run_cbq_query(query=primary_query)
 
@@ -444,19 +531,22 @@ class QueryINDEXUNNESTTests(QueryTests):
             if diffs:
                 self.assertTrue(False, diffs)
         finally:
-            self.run_cbq_query(query="DROP INDEX default.array_index")
+            self.run_cbq_query(query="DROP INDEX array_index ON " + self.query_bucket)
 
-##############################################################################################
-#
-#  Negative
-##############################################################################################
+    ##############################################################################################
+    #
+    #  Negative
+    ##############################################################################################
 
     def test_neg_distinct_simple(self):
-        index = "CREATE INDEX array_index ON default(DISTINCT ARRAY v1 FOR v1 IN VMs END,email,department)"
+        index = "CREATE INDEX array_index ON " + self.query_bucket + "(DISTINCT ARRAY v1 FOR v1 IN VMs END,email," \
+                                                                     "department) "
         self.run_cbq_query(query=index)
         try:
-            #First check explain to make sure improvement is happening
-            query = 'SELECT v1 FROM default AS d UNNEST d.VMs AS v1 where d.email == "9-mail@couchbase.com" and d.department == "support" and v1.RAM == 10'
+            # First check explain to make sure improvement is happening
+            query = 'SELECT v1 FROM ' + self.query_bucket + ' AS d UNNEST d.VMs AS v1 where d.email == ' \
+                                                            '"9-mail@couchbase.com" and d.department == "support" ' \
+                                                            'and v1.RAM == 10 '
             explain_query = 'EXPLAIN ' + query
             explain_plan = self.run_cbq_query(explain_query)
             plan = self.ExplainPlanHelper(explain_plan)
@@ -468,22 +558,26 @@ class QueryINDEXUNNESTTests(QueryTests):
             actual_results = self.run_cbq_query(query=query)
 
             # Ensure the results using the array_indexing improvements are the same as the primary index results
-            primary_query = 'SELECT v1 FROM default AS d use index (`#primary`) UNNEST d.VMs AS v1 where ' \
-                    'd.email == "9-mail@couchbase.com" and d.department == "Support" and v1.RAM == 10'
+            primary_query = 'SELECT v1 FROM ' + self.query_bucket + ' AS d use index (`#primary`) UNNEST d.VMs AS v1 ' \
+                                                                    'where ' \
+                                                                    'd.email == "9-mail@couchbase.com" and ' \
+                                                                    'd.department == "Support" and v1.RAM == 10 '
             expected_results = self.run_cbq_query(query=primary_query)
 
             diffs = DeepDiff(actual_results['results'], expected_results['results'], ignore_order=True)
             if diffs:
                 self.assertTrue(False, diffs)
         finally:
-            self.run_cbq_query(query = "DROP INDEX default.array_index")
+            self.run_cbq_query(query="DROP INDEX array_index ON " + self.query_bucket)
 
     def test_neg_simple(self):
-        index = "CREATE INDEX array_index ON default(ALL ARRAY v1 FOR v1 IN VMs END,email,department)"
+        index = "CREATE INDEX array_index ON " + self.query_bucket + "(ALL ARRAY v1 FOR v1 IN VMs END,email,department)"
         self.run_cbq_query(query=index)
         try:
-            #First check explain to make sure improvement is happening
-            query = 'SELECT v1 FROM default AS d UNNEST d.VMs AS v1 where d.email == "9-mail@couchbase.com" and d.department == "support" and v1.RAM == 10'
+            # First check explain to make sure improvement is happening
+            query = 'SELECT v1 FROM ' + self.query_bucket + ' AS d UNNEST d.VMs AS v1 where d.email == ' \
+                                                            '"9-mail@couchbase.com" and d.department == "support" ' \
+                                                            'and v1.RAM == 10 '
             explain_query = 'EXPLAIN ' + query
             explain_plan = self.run_cbq_query(explain_query)
             plan = self.ExplainPlanHelper(explain_plan)
@@ -495,22 +589,28 @@ class QueryINDEXUNNESTTests(QueryTests):
             actual_results = self.run_cbq_query(query=query)
 
             # Ensure the results using the array_indexing improvements are the same as the primary index results
-            primary_query = 'SELECT v1 FROM default AS d use index (`#primary`) UNNEST d.VMs AS v1 where ' \
-                    'd.email == "9-mail@couchbase.com" and d.department == "Support" and v1.RAM == 10'
+            primary_query = 'SELECT v1 FROM ' + self.query_bucket + ' AS d use index (`#primary`) UNNEST d.VMs AS v1 ' \
+                                                                    'where ' \
+                                                                    'd.email == "9-mail@couchbase.com" and ' \
+                                                                    'd.department == "Support" and v1.RAM == 10 '
             expected_results = self.run_cbq_query(query=primary_query)
 
             diffs = DeepDiff(actual_results['results'], expected_results['results'], ignore_order=True)
             if diffs:
                 self.assertTrue(False, diffs)
         finally:
-            self.run_cbq_query(query="DROP INDEX default.array_index")
+            self.run_cbq_query(query="DROP INDEX array_index ON " + self.query_bucket)
 
     def test_neg_nested_unnest(self):
-        index = "CREATE INDEX array_index ON default(email,ALL ARRAY (ALL ARRAY v2.region1 FOR v2 IN v1.Marketing END)  FOR v1 IN tasks END,department)"
+        index = "CREATE INDEX array_index ON " + self.query_bucket + "(email,ALL ARRAY (ALL ARRAY v2.region1 FOR v2 " \
+                                                                     "IN v1.Marketing END)  FOR v1 IN tasks END," \
+                                                                     "department) "
         self.run_cbq_query(query=index)
         try:
             # First check explain to make sure improvement is happening
-            query = 'SELECT * FROM default AS d UNNEST d.tasks AS v1 UNNEST v1.Marketing as v2 where v2.region1 == "South" and d.department == "Developer" and d.email == "1-mail@couchbase.com"'
+            query = 'SELECT * FROM ' + self.query_bucket + ' AS d UNNEST d.tasks AS v1 UNNEST v1.Marketing as v2  ' \
+                                                           'where v2.region1 == "South" and d.department ==  ' \
+                                                           '"Developer" and d.email == "1-mail@couchbase.com" '
             explain_query = 'EXPLAIN ' + query
             explain_plan = self.run_cbq_query(explain_query)
             plan = self.ExplainPlanHelper(explain_plan)
@@ -522,8 +622,11 @@ class QueryINDEXUNNESTTests(QueryTests):
             actual_results = self.run_cbq_query(query=query)
 
             # Ensure the results using the array_indexing improvements are the same as the primary index results
-            primary_query = 'SELECT * FROM default AS d use index (`#primary`) UNNEST d.tasks AS v1 UNNEST v1.Marketing ' \
-                            'as v2 where v2.region1 == "South" and d.department == "Developer" and d.email == "1-mail@couchbase.com"'
+            primary_query = 'SELECT * FROM ' + self.query_bucket + ' AS d use index (`#primary`) UNNEST d.tasks AS v1 ' \
+                                                                   'UNNEST v1.Marketing ' \
+                                                                   'as v2 where v2.region1 == "South" and ' \
+                                                                   'd.department == "Developer" and d.email == ' \
+                                                                   '"1-mail@couchbase.com" '
 
             expected_results = self.run_cbq_query(query=primary_query)
 
@@ -531,14 +634,18 @@ class QueryINDEXUNNESTTests(QueryTests):
             if diffs:
                 self.assertTrue(False, diffs)
         finally:
-            self.run_cbq_query(query="DROP INDEX default.array_index")
+            self.run_cbq_query(query="DROP INDEX array_index ON " + self.query_bucket)
 
     def test_arbitrary_neg_nested_unnest(self):
-        index = "CREATE INDEX array_index ON default(email,ALL ARRAY (ALL ARRAY v2.region1 FOR v2 IN v1.Marketing END)  FOR v1 IN tasks END,department)"
+        index = "CREATE INDEX array_index ON " + self.query_bucket + "(email,ALL ARRAY (ALL ARRAY v2.region1 FOR v2 " \
+                                                                     "IN v1.Marketing END)  FOR v1 IN tasks END," \
+                                                                     "department) "
         self.run_cbq_query(query=index)
         try:
             # First check explain to make sure improvement is happening
-            query = 'SELECT * FROM default AS d UNNEST d.tasks AS v1 UNNEST v1.Marketing as nv2 where nv2.region1 == "South" and d.department == "Developer" and d.email == "1-mail@couchbase.com"'
+            query = 'SELECT * FROM ' + self.query_bucket + ' AS d UNNEST d.tasks AS v1 UNNEST v1.Marketing as nv2 ' \
+                                                           'where nv2.region1 == "South" and d.department == ' \
+                                                           '"Developer" and d.email == "1-mail@couchbase.com" '
             explain_query = 'EXPLAIN ' + query
             explain_plan = self.run_cbq_query(explain_query)
             plan = self.ExplainPlanHelper(explain_plan)
@@ -550,8 +657,11 @@ class QueryINDEXUNNESTTests(QueryTests):
             actual_results = self.run_cbq_query(query=query)
 
             # Ensure the results using the array_indexing improvements are the same as the primary index results
-            primary_query = 'SELECT * FROM default AS d use index (`#primary`) UNNEST d.tasks AS v1 UNNEST v1.Marketing ' \
-                            'as v2 where v2.region1 == "South" and d.department == "Developer" and d.email == "1-mail@couchbase.com"'
+            primary_query = 'SELECT * FROM ' + self.query_bucket + ' AS d use index (`#primary`) UNNEST d.tasks AS v1 ' \
+                                                                   'UNNEST v1.Marketing ' \
+                                                                   'as v2 where v2.region1 == "South" and ' \
+                                                                   'd.department == "Developer" and d.email == ' \
+                                                                   '"1-mail@couchbase.com" '
 
             expected_results = self.run_cbq_query(query=primary_query)
 
@@ -559,7 +669,4 @@ class QueryINDEXUNNESTTests(QueryTests):
             if diffs:
                 self.assertTrue(False, diffs)
         finally:
-            self.run_cbq_query(query="DROP INDEX default.array_index")
-
-
-
+            self.run_cbq_query(query="DROP INDEX array_index ON " + self.query_bucket)

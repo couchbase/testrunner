@@ -1,5 +1,6 @@
 import sys
 import time
+
 from couchbase.cluster import Cluster
 from couchbase.cluster import PasswordAuthenticator
 from membase.api.rest_client import RestConnection
@@ -16,12 +17,9 @@ class QueryExpirationTests(QueryTests):
         self.query_to_be_run = self.input.param("query_to_be_run", '')
         self.log.info("==============  QueryExpirationTests setup has completed ==============")
         self.log_config_info()
-        self.sample_bucket = self.input.param('sample_bucket', None)
-        self.sample_bucket_index = self.input.param('sample_bucket_index', None)
         self.index_stat = 'items_count'
         self.exp_index = 'idx_expire'
         self.default_bucket_name = self.input.param('bucket_name', 'default')
-
         self.cb_rest = RestConnection(self.master)
         self.cb_cluster = Cluster('couchbase://{0}'.format(self.master.ip))
         authenticator = PasswordAuthenticator(self.master.rest_username, self.master.rest_password)
@@ -45,19 +43,27 @@ class QueryExpirationTests(QueryTests):
         @Note: -i b/resources/tmp.ini -p doc-per-day=10,nodes_init=1,initial_index_number=1,primary_index_type=GSI
          -t tuqquery.ttl_with_n1ql.QueryExpirationTests.test_insert_with_ttl
         """
-        self.fail_if_no_buckets()
+        # creating default bucket
+        default_params = self._create_bucket_params(server=self.master, size=100,
+                                                    replicas=self.num_replicas, bucket_type=self.bucket_type,
+                                                    enable_replica_index=self.enable_replica_index,
+                                                    eviction_policy=self.eviction_policy, lww=self.lww,
+                                                    maxttl=self.maxttl, compression_mode=self.compression_mode)
+        self.cluster.create_default_bucket(default_params)
 
         num_iter = 10
         expiration_time = 10
-        bucket = self.buckets[0]
+        bucket = self.rest.get_bucket(self.default_bucket_name)
         self.shell.execute_cbepctl(bucket, "", "set flush_param", "exp_pager_stime", 5)
+        query_default_bucket = self.get_collection_name(self.default_bucket_name)
 
         inserted_docs = []
         # creating index on meta.expiration
-        expiration_index_query = "CREATE INDEX {1} ON {0} ( META().expiration )".format(self.default_bucket_name,
+        expiration_index_query = "CREATE INDEX {1} ON {0} ( META().expiration )".format(query_default_bucket,
                                                                                         self.exp_index)
         self.run_cbq_query(expiration_index_query)
-        self.sleep(10, "Waiting for Index to be up")
+        primary_index_query = "CREATE PRIMARY INDEX idx on {0} USING GSI".format(query_default_bucket)
+        self.run_cbq_query(primary_index_query)
 
         cb = self.cb_cluster.open_bucket(self.default_bucket_name)
         indexed_item = 0
@@ -68,7 +74,7 @@ class QueryExpirationTests(QueryTests):
             inserted_docs.append(doc_id)
             doc_body = '"{0}", {{"id":"{0}"}}'.format(doc_id)
             insert_query_1 = 'INSERT INTO {0} (KEY, VALUE) VALUES ({1},' \
-                             ' {{"expiration": {2}}})'.format(self.default_bucket_name, doc_body, expiration_time)
+                             ' {{"expiration": {2}}})'.format(query_default_bucket, doc_body, expiration_time)
             self.run_cbq_query(insert_query_1)
 
             # Checking if doc is created through sdk
@@ -77,7 +83,7 @@ class QueryExpirationTests(QueryTests):
 
             doc_id = doc_id + "_" + str(num)
             doc_body = '"{0}", {{"id":"{0}"}}'.format(doc_id)
-            insert_query_2 = 'INSERT INTO {0}  VALUES ({1}, {{"expiration": {2}}})'.format(self.default_bucket_name,
+            insert_query_2 = 'INSERT INTO {0}  VALUES ({1}, {{"expiration": {2}}})'.format(query_default_bucket,
                                                                                            doc_body,
                                                                                            expiration_time)
             self.run_cbq_query(insert_query_2)
@@ -94,7 +100,7 @@ class QueryExpirationTests(QueryTests):
             doc = cb.get(doc_id, quiet=True)
             self.assertEqual(doc.value, None,
                              "Inserted doc hasn't expired after passage of expiration time")
-        select_query = "SELECT * FROM {0}".format(self.default_bucket_name)
+        select_query = "SELECT * FROM {0}".format(query_default_bucket)
         self.run_cbq_query(select_query)
         # Getting index count after expiration of document
         result = self._is_expected_index_count(self.default_bucket_name, self.exp_index,
@@ -133,20 +139,22 @@ class QueryExpirationTests(QueryTests):
         self.cluster.create_default_bucket(default_params)
         bucket = self.rest.get_bucket(self.default_bucket_name)
         self.shell.execute_cbepctl(bucket, "", "set flush_param", "exp_pager_stime", 5)
+        query_default_bucket = self.get_collection_name(self.default_bucket_name)
+        query_sample_bucket = self.get_collection_name("`{0}`".format(self.sample_bucket))
 
         # creating index on meta.expiration and a primary index
         expiration_index_query = "CREATE INDEX {0} ON {1} ( META().expiration )".format(self.exp_index,
-                                                                                        self.default_bucket_name)
+                                                                                        query_default_bucket)
         self.run_cbq_query(expiration_index_query)
 
-        primary_index_query = "CREATE PRIMARY INDEX idx on {0} USING GSI".format(self.default_bucket_name)
+        primary_index_query = "CREATE PRIMARY INDEX idx on {0} USING GSI".format(query_default_bucket)
         self.run_cbq_query(primary_index_query)
 
         # Inserting docs into default from beer-sample
         insert_query = 'INSERT INTO {0} (KEY doc_keys, VALUE doc, OPTIONS {{"expiration": {1}}})  ' \
-                       'SELECT META(b).id AS doc_keys, b AS doc  FROM `{2}` AS b'.format(self.default_bucket_name,
-                                                                                         expiration_time,
-                                                                                         self.sample_bucket)
+                       'SELECT META(b).id AS doc_keys, b AS doc  FROM {2} AS b'.format(query_default_bucket,
+                                                                                       expiration_time,
+                                                                                       query_sample_bucket)
         self.run_cbq_query(insert_query)
 
         result = self._is_expected_index_count(bucket_name=self.default_bucket_name, idx_name=self.exp_index,
@@ -154,7 +162,7 @@ class QueryExpirationTests(QueryTests):
         self.assertTrue(result, "Indexer not able to index all the items")
 
         self.sleep(expiration_time + 10, "Allowing time to all the docs to get expired")
-        select_query = "Select * FROM {0}".format(self.default_bucket_name)
+        select_query = "Select * FROM {0}".format(query_default_bucket)
         results = self.run_cbq_query(select_query)
         self.assertEqual(len(results['results']), 0, "Docs with expiry value are not expired even after"
                                                      " passage of expiration time")
@@ -166,13 +174,13 @@ class QueryExpirationTests(QueryTests):
         self.assertTrue(result, "Indexer has indexes for expired docs")
 
         # Inserting docs with expiration time with nested select
-        update_expiration_on_beer_sample = 'UPDATE `{0}` AS b SET META(b).expiration={1}'.format(self.sample_bucket,
-                                                                                                 expiration_time * 3)
+        update_expiration_on_beer_sample = 'UPDATE {0} AS b SET META(b).expiration={1}'.format(query_sample_bucket,
+                                                                                               expiration_time * 3)
         self.run_cbq_query(update_expiration_on_beer_sample)
 
         insert_query_with_exp = 'INSERT INTO {0} (KEY doc_keys, VALUE doc, OPTIONS {{"expiration": exptime}})' \
                                 '  SELECT META(t).id AS doc_keys, t AS doc, META(t).expiration AS exptime' \
-                                '  FROM `{1}` AS t'.format(self.default_bucket_name, self.sample_bucket)
+                                '  FROM {1} AS t'.format(query_default_bucket, query_sample_bucket)
         self.run_cbq_query(insert_query_with_exp)
         result = self._is_expected_index_count(bucket_name=self.default_bucket_name, idx_name=self.exp_index,
                                                stat_name=self.index_stat, expected_stat_value=result_count)
@@ -210,12 +218,14 @@ class QueryExpirationTests(QueryTests):
         self.cluster.create_default_bucket(default_params)
         bucket = self.rest.get_bucket(self.default_bucket_name)
         self.shell.execute_cbepctl(bucket, "", "set flush_param", "exp_pager_stime", 5)
+        query_default_bucket = self.get_collection_name(self.default_bucket_name)
+        query_sample_bucket = self.get_collection_name("`{0}`".format(self.sample_bucket))
 
         # creating index on meta.expiration and a primary index
         expiration_index_query = "CREATE INDEX {0} ON {1} ( META().expiration )".format(self.exp_index,
-                                                                                        self.default_bucket_name)
+                                                                                        query_default_bucket)
         self.run_cbq_query(expiration_index_query)
-        primary_index_query = "CREATE PRIMARY INDEX idx on {0} USING GSI".format(self.default_bucket_name)
+        primary_index_query = "CREATE PRIMARY INDEX idx on {0} USING GSI".format(query_default_bucket)
         self.run_cbq_query(primary_index_query)
 
         # Insert query with invalid ttl values
@@ -224,11 +234,11 @@ class QueryExpirationTests(QueryTests):
             doc_id = "K{0}".format(num)
             doc_body = '"{0}", {{"id":"{0}"}}'.format(doc_id)
             insert_query = 'INSERT INTO {0} (KEY, VALUE) VALUES ({1},' \
-                           ' {{"expiration": {2}}})'.format(self.default_bucket_name, doc_body, expiration_time)
+                           ' {{"expiration": {2}}})'.format(query_default_bucket, doc_body, expiration_time)
             self.run_cbq_query(insert_query)
 
             select_exp_query = "SELECT META().expiration FROM {0}" \
-                               " WHERE META().id = '{1}'".format(self.default_bucket_name, doc_id)
+                               " WHERE META().id = '{1}'".format(query_default_bucket, doc_id)
             result = self.run_cbq_query(select_exp_query)
             self.assertEqual(result['results'][0]['expiration'], 0, "Expiration is set to an invalid value")
 
@@ -236,7 +246,7 @@ class QueryExpirationTests(QueryTests):
         expiration_time = 30 * 24 * 60 * 60 + 1
         doc_body = '"12345", {"id":"12345"}'
         insert_query = 'INSERT INTO {0} (KEY, VALUE) VALUES ({1},' \
-                       ' {{"expiration": {2}}})'.format(self.default_bucket_name, doc_body, expiration_time)
+                       ' {{"expiration": {2}}})'.format(query_default_bucket, doc_body, expiration_time)
         self.run_cbq_query(insert_query)
         cb = self.cb_cluster.open_bucket(self.default_bucket_name)
         doc_value = cb.get("12345", quiet=True).value
@@ -248,11 +258,11 @@ class QueryExpirationTests(QueryTests):
             doc_id = "M{0}".format(num)
             doc_body = '"{0}", {{"id":"{0}"}}'.format(doc_id)
             insert_query = 'INSERT INTO {0} (KEY, VALUE) VALUES ({1},' \
-                           ' {{"expiration": {2}}})'.format(self.default_bucket_name, doc_body, expiration_time)
+                           ' {{"expiration": {2}}})'.format(query_default_bucket, doc_body, expiration_time)
             self.run_cbq_query(insert_query)
 
             select_query = "SELECT META().expiration FROM {0}" \
-                           " WHERE META().id = '{1}'".format(self.default_bucket_name, doc_id)
+                           " WHERE META().id = '{1}'".format(query_default_bucket, doc_id)
             result = self.run_cbq_query(select_query)
             self.assertNotEqual(int(result['results'][0]['expiration']), 0, "Expiration is not set to a valid value")
 
@@ -263,7 +273,7 @@ class QueryExpirationTests(QueryTests):
         self.wait_for_bucket_docs({self.sample_bucket: result_count}, 5, 120)
         self._wait_for_index_online(self.sample_bucket, self.sample_bucket_index)
         num_docs = self.get_item_count(self.master, bucket)
-        get_doc_ids_query = 'SELECT META().id FROM `{0}`'.format(self.sample_bucket)
+        get_doc_ids_query = 'SELECT META().id FROM {0}'.format(query_sample_bucket)
         result = self.run_cbq_query(get_doc_ids_query)
         doc_ids_for_new_insertion = ['k00', 'k01', 'k02', 'k03']
         for item in result['results']:
@@ -271,19 +281,19 @@ class QueryExpirationTests(QueryTests):
 
         # Insert Queries with 0 ttl
         query_with_zero_ttl = ['INSERT INTO {0} (KEY, VALUE) VALUES'
-                               ' ("k00", {{"id":"k00"}})'.format(self.default_bucket_name),
+                               ' ("k00", {{"id":"k00"}})'.format(query_default_bucket),
                                'INSERT INTO {0} (KEY, VALUE) VALUES ("k01", {{"id":"k01"}},'
-                               ' {{"expiration":0}})'.format(self.default_bucket_name),
+                               ' {{"expiration":0}})'.format(query_default_bucket),
                                'INSERT INTO {0} VALUES ("k02", {{"id":"k02"}},'
-                               ' {{"expiration":0}})'.format(self.default_bucket_name),
-                               'INSERT INTO {0}  VALUES ("k03", {{"id":"k03"}})'.format(self.default_bucket_name),
+                               ' {{"expiration":0}})'.format(query_default_bucket),
+                               'INSERT INTO {0}  VALUES ("k03", {{"id":"k03"}})'.format(query_default_bucket),
                                'INSERT INTO {0} (KEY doc_key, VALUE doc, OPTIONS {{"expiration": 0}})'
                                ' SELECT META(t).id AS doc_key, t AS doc'
-                               ' FROM `{1}` AS t'.format(self.default_bucket_name, self.sample_bucket)]
+                               ' FROM {1} AS t'.format(query_default_bucket, query_sample_bucket)]
         for query in query_with_zero_ttl:
             self.run_cbq_query(query)
 
-        select_exp_query = "SELECT META().id, META().expiration FROM {0}".format(self.default_bucket_name)
+        select_exp_query = "SELECT META().id, META().expiration FROM {0}".format(query_default_bucket)
         result = self.run_cbq_query(select_exp_query)
         for item in result['results']:
             if item['id'] in doc_ids_for_new_insertion:
@@ -316,12 +326,13 @@ class QueryExpirationTests(QueryTests):
         bucket = self.rest.get_bucket(self.default_bucket_name)
         self.shell.execute_cbepctl(bucket, "", "set flush_param", "exp_pager_stime", 5)
         cb = self.cb_cluster.open_bucket(self.default_bucket_name)
+        query_default_bucket = self.get_collection_name(self.default_bucket_name)
 
         # creating index on meta.expiration and a primary index
         expiration_index_query = "CREATE INDEX {0} ON {1} ( META().expiration )".format(self.exp_index,
-                                                                                        self.default_bucket_name)
+                                                                                        query_default_bucket)
         self.run_cbq_query(expiration_index_query)
-        primary_index_query = "CREATE PRIMARY INDEX idx on {0} USING GSI".format(self.default_bucket_name)
+        primary_index_query = "CREATE PRIMARY INDEX idx on {0} USING GSI".format(query_default_bucket)
         self.run_cbq_query(primary_index_query)
 
         inserted_docs = []
@@ -331,14 +342,14 @@ class QueryExpirationTests(QueryTests):
             inserted_docs.append(doc_id)
             # UPSERT for creating doc first time
             upsert_query_1 = 'UPSERT INTO {0} (KEY, VALUE) VALUES ({1},' \
-                             ' {{"expiration": {2}}})'.format(self.default_bucket_name, doc_body, expiration_time)
+                             ' {{"expiration": {2}}})'.format(query_default_bucket, doc_body, expiration_time)
             self.run_cbq_query(upsert_query_1)
             # Checking if doc is created through sdk
             doc_value = cb.get(doc_id).value
             self.assertEqual(doc_value['id'], doc_id)
             # UPSERT for updating above creating doc
             upsert_query_2 = 'UPSERT INTO {0}  VALUES ({1},' \
-                             ' {{"expiration": {2}}})'.format(self.default_bucket_name, doc_body, expiration_time * 2)
+                             ' {{"expiration": {2}}})'.format(query_default_bucket, doc_body, expiration_time * 2)
             self.run_cbq_query(upsert_query_2)
 
             # Checking if doc is created through sdk
@@ -351,7 +362,7 @@ class QueryExpirationTests(QueryTests):
             doc = cb.get(doc_id, quiet=True)
             self.assertEqual(doc.value, None,
                              "Inserted doc hasn't expired after passage of expiration time")
-        select_query = "SELECT * FROM {0}".format(self.default_bucket_name)
+        select_query = "SELECT * FROM {0}".format(query_default_bucket)
         self.run_cbq_query(select_query)
         # Getting index count after expiration of document
         result = self._is_expected_index_count(self.default_bucket_name, self.exp_index, self.index_stat, 0)
@@ -384,25 +395,27 @@ class QueryExpirationTests(QueryTests):
         self.cluster.create_default_bucket(default_params)
         bucket = self.rest.get_bucket(self.default_bucket_name)
         self.shell.execute_cbepctl(bucket, "", "set flush_param", "exp_pager_stime", 5)
+        query_default_bucket = self.get_collection_name(self.default_bucket_name)
+        query_sample_bucket = self.get_collection_name("`{0}`".format(self.sample_bucket))
 
         # creating index on meta.expiration and a primary index
         expiration_index_query = "CREATE INDEX {0} ON {1} ( META().expiration )".format(self.exp_index,
-                                                                                        self.default_bucket_name)
+                                                                                        query_default_bucket)
         self.run_cbq_query(expiration_index_query)
-        primary_index_query = "CREATE PRIMARY INDEX idx on {0} USING GSI".format(self.default_bucket_name)
+        primary_index_query = "CREATE PRIMARY INDEX idx on {0} USING GSI".format(query_default_bucket)
         self.run_cbq_query(primary_index_query)
 
         upsert_query = 'UPSERT INTO {0} (KEY doc_keys, VALUE doc, OPTIONS {{"expiration": {1}}})  ' \
-                       'SELECT META(b).id AS doc_keys, b AS doc  FROM `{2}` AS b'.format(self.default_bucket_name,
-                                                                                         expiration_time,
-                                                                                         self.sample_bucket)
+                       'SELECT META(b).id AS doc_keys, b AS doc  FROM {2} AS b'.format(query_default_bucket,
+                                                                                       expiration_time,
+                                                                                       query_sample_bucket)
         self.run_cbq_query(upsert_query)
 
         result = self._is_expected_index_count(bucket_name=self.default_bucket_name, idx_name=self.exp_index,
                                                stat_name=self.index_stat, expected_stat_value=result_count)
         self.assertTrue(result, "Indexer not able to index all the items")
         self.sleep(expiration_time + 10, "Allowing time to all the docs to get expired")
-        select_query = "Select * FROM {0}".format(self.default_bucket_name)
+        select_query = "Select * FROM {0}".format(query_default_bucket)
         results = self.run_cbq_query(select_query)
         self.assertEqual(len(results['results']), 0, "Docs with expiry value are not expired even after"
                                                      " passage of expiration time")
@@ -413,18 +426,18 @@ class QueryExpirationTests(QueryTests):
         self.assertTrue(result, "Indexer has indexes for expired docs")
 
         # Inserting docs with expiration time with nested select
-        update_expiration_on_beer_sample = 'UPDATE `{0}` AS b SET META(b).expiration=1 * 10'.format(self.sample_bucket)
+        update_expiration_on_beer_sample = 'UPDATE {0} AS b SET META(b).expiration=1 * 10'.format(query_sample_bucket)
         self.run_cbq_query(update_expiration_on_beer_sample)
 
         upsert_query_with_exp = 'UPSERT INTO {0} (KEY doc_keys, VALUE doc, OPTIONS {{"expiration": exptime}})' \
                                 '  SELECT META(t).id AS doc_keys, t AS doc, META(t).expiration AS exptime' \
-                                '  FROM `{1}` AS t'.format(self.default_bucket_name, self.sample_bucket)
+                                '  FROM {1} AS t'.format(query_default_bucket, query_sample_bucket)
         self.run_cbq_query(upsert_query_with_exp)
         result = self._is_expected_index_count(bucket_name=self.default_bucket_name, idx_name=self.exp_index,
                                                stat_name=self.index_stat, expected_stat_value=result_count)
         self.assertTrue(result, "Indexer not able to index all the items")
         self.sleep(expiration_time + 10, "Allowing time to all the docs to get expired")
-        select_query = "Select * FROM {0}".format(self.default_bucket_name)
+        select_query = "Select * FROM {0}".format(query_default_bucket)
         results = self.run_cbq_query(select_query)
         self.assertEqual(len(results['results']), 0, "Docs with expiry value are not expired even after"
                                                      " passage of expiration time")
@@ -450,12 +463,14 @@ class QueryExpirationTests(QueryTests):
         self.cluster.create_default_bucket(default_params)
         bucket = self.rest.get_bucket(self.default_bucket_name)
         self.shell.execute_cbepctl(bucket, "", "set flush_param", "exp_pager_stime", 5)
+        query_default_bucket = self.get_collection_name(self.default_bucket_name)
+        query_sample_bucket = self.get_collection_name("`{0}`".format(self.sample_bucket))
 
         # creating index on meta.expiration and a primary index
         expiration_index_query = "CREATE INDEX {0} ON {1} ( META().expiration )".format(self.exp_index,
-                                                                                        self.default_bucket_name)
+                                                                                        query_default_bucket)
         self.run_cbq_query(expiration_index_query)
-        primary_index_query = "CREATE PRIMARY INDEX idx on {0} USING GSI".format(self.default_bucket_name)
+        primary_index_query = "CREATE PRIMARY INDEX idx on {0} USING GSI".format(query_default_bucket)
         self.run_cbq_query(primary_index_query)
 
         # Upsert query with invalid ttl values
@@ -464,11 +479,11 @@ class QueryExpirationTests(QueryTests):
             doc_id = "K{0}".format(num)
             doc_body = '"{0}", {{"id":"{0}"}}'.format(doc_id)
             insert_query = 'UPSERT INTO {0} (KEY, VALUE) VALUES ({1},' \
-                           ' {{"expiration": {2}}})'.format(self.default_bucket_name, doc_body, expiration_time)
+                           ' {{"expiration": {2}}})'.format(query_default_bucket, doc_body, expiration_time)
             self.run_cbq_query(insert_query)
 
             select_exp_query = "SELECT META().expiration FROM {0}" \
-                               " WHERE META().id = '{1}'".format(self.default_bucket_name, doc_id)
+                               " WHERE META().id = '{1}'".format(query_default_bucket, doc_id)
             result = self.run_cbq_query(select_exp_query)
             self.assertEqual(result['results'][0]['expiration'], 0, "Expiration is set to an invalid value")
 
@@ -476,7 +491,7 @@ class QueryExpirationTests(QueryTests):
         expiration_time = 30 * 24 * 60 * 60 + 1
         doc_body = '"12345", {"id":"12345"}'
         insert_query = 'UPSERT INTO {0} (KEY, VALUE) VALUES ({1},' \
-                       ' {{"expiration": {2}}})'.format(self.default_bucket_name, doc_body, expiration_time)
+                       ' {{"expiration": {2}}})'.format(query_default_bucket, doc_body, expiration_time)
         self.run_cbq_query(insert_query)
         cb = self.cb_cluster.open_bucket(self.default_bucket_name)
         doc_value = cb.get("12345", quiet=True).value
@@ -488,11 +503,11 @@ class QueryExpirationTests(QueryTests):
             doc_id = "K{0}".format(num)
             doc_body = '"{0}", {{"id":"{0}"}}'.format(doc_id)
             insert_query = 'UPSERT INTO {0} (KEY, VALUE) VALUES ({1},' \
-                           ' {{"expiration": {2}}})'.format(self.default_bucket_name, doc_body, expiration_time)
+                           ' {{"expiration": {2}}})'.format(query_default_bucket, doc_body, expiration_time)
             self.run_cbq_query(insert_query)
 
             select_query = "SELECT META().expiration FROM {0}" \
-                           " WHERE META().id = '{1}'".format(self.default_bucket_name, doc_id)
+                           " WHERE META().id = '{1}'".format(query_default_bucket, doc_id)
             result = self.run_cbq_query(select_query)
             self.assertNotEqual(int(result['results'][0]['expiration']), 0, "Expiration is not set to a valid value")
 
@@ -503,7 +518,7 @@ class QueryExpirationTests(QueryTests):
         self.wait_for_bucket_docs({self.sample_bucket: result_count}, 5, 120)
         self._wait_for_index_online(self.sample_bucket, self.sample_bucket_index)
         num_docs = self.get_item_count(self.master, bucket)
-        get_doc_ids_query = 'SELECT META().id FROM `{0}`'.format(self.sample_bucket)
+        get_doc_ids_query = 'SELECT META().id FROM {0}'.format(query_sample_bucket)
         result = self.run_cbq_query(get_doc_ids_query)
         doc_ids_for_new_insertion = ['k00', 'k01', 'k02', 'k03']
         for item in result['results']:
@@ -511,20 +526,20 @@ class QueryExpirationTests(QueryTests):
 
         # Insert Queries with 0 ttl
         query_with_zero_ttl = ['UPSERT INTO {0} (KEY, VALUE) VALUES'
-                               ' ("k00", {{"id":"k00"}})'.format(self.default_bucket_name),
+                               ' ("k00", {{"id":"k00"}})'.format(query_default_bucket),
                                'UPSERT INTO {0} (KEY, VALUE) VALUES ("k01", {{"id":"k01"}},'
-                               ' {{"expiration":0}})'.format(self.default_bucket_name),
+                               ' {{"expiration":0}})'.format(query_default_bucket),
                                'UPSERT INTO {0} VALUES ("k02", {{"id":"k02"}},'
-                               ' {{"expiration":0}})'.format(self.default_bucket_name),
+                               ' {{"expiration":0}})'.format(query_default_bucket),
                                'UPSERT INTO {0}  VALUES '
-                               '("k03", {{"id":"k03"}})'.format(self.default_bucket_name),
+                               '("k03", {{"id":"k03"}})'.format(query_default_bucket),
                                'UPSERT INTO {0} (KEY doc_key, VALUE doc, OPTIONS {{"expiration": 0}})'
                                ' SELECT META(t).id AS doc_key, '
-                               't AS doc FROM `{1}` AS t'.format(self.default_bucket_name, self.sample_bucket)]
+                               't AS doc FROM {1} AS t'.format(query_default_bucket, query_sample_bucket)]
         for query in query_with_zero_ttl:
             self.run_cbq_query(query)
 
-        select_exp_query = "SELECT META().id, META().expiration FROM {0}".format(self.default_bucket_name)
+        select_exp_query = "SELECT META().id, META().expiration FROM {0}".format(query_default_bucket)
         result = self.run_cbq_query(select_exp_query)
         for item in result['results']:
             if item['id'] in doc_ids_for_new_insertion:
@@ -550,59 +565,61 @@ class QueryExpirationTests(QueryTests):
 
         bucket = self.rest.get_bucket(self.sample_bucket)
         self.shell.execute_cbepctl(bucket, "", "set flush_param", "exp_pager_stime", 5)
+        query_sample_bucket = self.get_collection_name("`{0}`".format(self.sample_bucket))
 
         # creating index on meta.expiration
-        expiration_index_query = "CREATE INDEX {0} ON `{1}` ( META().expiration )".format(self.exp_index,
-                                                                                          self.sample_bucket)
+        expiration_index_query = "CREATE INDEX {0} ON {1} ( META().expiration )".format(self.exp_index,
+                                                                                        query_sample_bucket)
         self.run_cbq_query(expiration_index_query)
 
         # Running an update query on few documents(test10)
         update_count = 20
-        update_query = 'UPDATE `{0}` AS b SET b.type = "Brewery"' \
-                       ' WHERE b.type = "brewery" LIMIT {1}'.format(self.sample_bucket, update_count)
+        update_query = 'UPDATE {0} AS b SET b.type = "Brewery"' \
+                       ' WHERE b.type = "brewery" LIMIT {1}'.format(query_sample_bucket, update_count)
         self.run_cbq_query(update_query)
-        check_update_query = 'SELECT COUNT(*) FROM `{0}` WHERE type = "Brewery"'.format(self.sample_bucket)
+        check_update_query = 'SELECT COUNT(*) FROM {0} WHERE type = "Brewery"'.format(query_sample_bucket)
         result = self.run_cbq_query(check_update_query)
         self.assertEqual(result['results'][0]['$1'], update_count,
                          "No. of updated documents is not matching with expected values.")
 
         # Updating expiration time of all documents in bucket (test11)
-        update_expiry_query = 'UPDATE `{0}` AS b SET META(b).expiration = {1}'.format(self.sample_bucket,
-                                                                                      expiration_time)
+        update_expiry_query = 'UPDATE {0} AS b SET META(b).expiration = {1}'.format(query_sample_bucket,
+                                                                                    expiration_time)
         self.run_cbq_query(update_expiry_query)
-        checking_expiry_set_query = 'SELECT COUNT(*) FROM `{0}` WHERE META().expiration > 0'.format(self.sample_bucket)
+        checking_expiry_set_query = 'SELECT COUNT(*) FROM {0} WHERE META().expiration > 0'.format(query_sample_bucket)
         result = self.run_cbq_query(checking_expiry_set_query)
         self.assertEqual(result['results'][0]['$1'], result_count,
                          "No. of updated documents is not matching with expected values.")
 
         # Updating some documents with expiration value without retaining expiration value(test9)
         self.run_cbq_query(update_query)
-        check_update_query = 'SELECT COUNT(*) FROM `{0}` WHERE META().expiration = 0'.format(self.sample_bucket)
+        check_update_query = 'SELECT COUNT(*) FROM {0} WHERE META().expiration = 0'.format(query_sample_bucket)
         result = self.run_cbq_query(check_update_query)
         self.assertEqual(result['results'][0]['$1'], update_count,
                          "No. of updated documents is not matching with expected values.")
 
         # Updating some document's expiration value back to 0 from valid expiration value(test12)
-        update_expiry_to_zero = 'UPDATE `{0}` AS b SET META(b).expiration = 0 ' \
-                                'WHERE b.type = "beer" LIMIT {1}'.format(self.sample_bucket, update_count)
+        update_expiry_to_zero = 'UPDATE {0} AS b SET META(b).expiration = 0 ' \
+                                'WHERE b.type = "beer" LIMIT {1}'.format(query_sample_bucket, update_count)
         self.run_cbq_query(update_expiry_to_zero)
-        check_update_query = 'SELECT COUNT(*) FROM `{0}` WHERE type = "beer"' \
-                             ' AND META().expiration = 0'.format(self.sample_bucket)
+        check_update_query = 'SELECT COUNT(*) FROM {0} WHERE type = "beer"' \
+                             ' AND META().expiration = 0'.format(query_sample_bucket)
         result = self.run_cbq_query(check_update_query)
         self.assertEqual(result['results'][0]['$1'], update_count,
                          "No. of updated documents is not matching with expected values.")
 
         # updating document field while retaining their expiration values (test13)
-        update_field_with_expiry_query = 'UPDATE `{0}` AS b SET b.type = "Brewery",' \
+        update_field_with_expiry_query = 'UPDATE {0} AS b SET b.type = "Brewery",' \
                                          ' META(b).expiration = META(b).expiration' \
-                                         ' WHERE b.type = "brewery" LIMIT {1}'.format(self.sample_bucket,
+                                         ' WHERE b.type = "brewery" LIMIT {1}'.format(query_sample_bucket,
                                                                                       update_count)
         self.run_cbq_query(update_field_with_expiry_query)
-        check_update_query = 'SELECT COUNT(type) FROM `{0}` where type = "Brewery"'.format(self.sample_bucket)
+        check_update_query = 'SELECT COUNT(type) FROM {0} where type = "Brewery"'.format(query_sample_bucket)
         result = self.run_cbq_query(check_update_query)
         self.assertEqual(result['results'][0]['$1'], update_count * 3,  # for previous 2 updates + this update
                          "No. of updated documents is not matching with expected values.")
-        self._is_expected_index_count(self.sample_bucket, self.exp_index, self.index_stat, update_count * 2)
+        result = self._is_expected_index_count(self.sample_bucket, self.exp_index, self.index_stat, update_count * 2)
+        self.assertTrue(result, "Indexer not able to index all the items")
 
     def test_doc_ttl_with_bucket_ttl(self):
         """
@@ -626,12 +643,13 @@ class QueryExpirationTests(QueryTests):
         self.cluster.create_default_bucket(default_params)
         bucket = self.rest.get_bucket(self.default_bucket_name)
         self.shell.execute_cbepctl(bucket, "", "set flush_param", "exp_pager_stime", 5)
+        query_default_bucket = self.get_collection_name(self.default_bucket_name)
 
         # creating index on meta.expiration and a primary index
         expiration_index_query = "CREATE INDEX {0} ON {1} ( META().expiration )".format(self.exp_index,
-                                                                                        self.default_bucket_name)
+                                                                                        query_default_bucket)
         self.run_cbq_query(expiration_index_query)
-        primary_index_query = "CREATE PRIMARY INDEX idx on {0} USING GSI".format(self.default_bucket_name)
+        primary_index_query = "CREATE PRIMARY INDEX idx on {0} USING GSI".format(query_default_bucket)
         self.run_cbq_query(primary_index_query)
 
         # Inserting docs with ttl higher than bucket ttl and check if the ttl is set to bucket ttl
@@ -641,14 +659,15 @@ class QueryExpirationTests(QueryTests):
             doc_id = "k{0}".format(num)
             doc_body = '"{0}", {{"id":"{0}"}}'.format(doc_id)
             insert_query = 'INSERT INTO {0} (KEY, VALUE) VALUES ({1},' \
-                           ' {{"expiration": {2}}})'.format(self.default_bucket_name, doc_body, expiration_time)
+                           ' {{"expiration": {2}}})'.format(query_default_bucket, doc_body, expiration_time)
             self.run_cbq_query(insert_query)
             # Checking if doc is created through sdk
             doc_value = cb.get(doc_id).value
             self.assertEqual(doc_value['id'], doc_id)
         # checking for doc to expire
-        self._is_expected_index_count(bucket_name=self.default_bucket_name, idx_name=self.exp_index,
+        result = self._is_expected_index_count(bucket_name=self.default_bucket_name, idx_name=self.exp_index,
                                       stat_name=self.index_stat, expected_stat_value=0)
+        self.assertTrue(result, "Indexer still has indexes for expired docs")
         # Changing bucket ttl to a higher value
         bucket_ttl = 5 * 60
         expiration_time = 30
@@ -659,20 +678,21 @@ class QueryExpirationTests(QueryTests):
             doc_id = "k{0}".format(num)
             doc_body = '"{0}", {{"id":"{0}"}}'.format(doc_id)
             insert_query = 'UPSERT INTO {0} (KEY, VALUE) VALUES ({1},' \
-                           ' {{"expiration": {2}}})'.format(self.default_bucket_name, doc_body, expiration_time)
+                           ' {{"expiration": {2}}})'.format(query_default_bucket, doc_body, expiration_time)
             self.run_cbq_query(insert_query)
             # Checking if doc is created through sdk
             doc_value = cb.get(doc_id).value
             self.assertEqual(doc_value['id'], doc_id)
         # Validating if the doc ttl is not overridden by bucket ttl
-        get_expiration_query = 'SELECT META().expiration FROM {0}'.format(self.default_bucket_name)
+        get_expiration_query = 'SELECT META().expiration FROM {0}'.format(query_default_bucket)
         results = self.run_cbq_query(get_expiration_query)['results']
         for result in results:
             # checking if bucket ttl doesn't override doc ttl. Keeping a buffer range of 10 sec
             self.assertNotEqual(result['expiration'], 0, "Bucket ttl has overridden doc ttl")
         # checking for doc to expire
-        self._is_expected_index_count(bucket_name=self.default_bucket_name, idx_name=self.exp_index,
+        result = self._is_expected_index_count(bucket_name=self.default_bucket_name, idx_name=self.exp_index,
                                       stat_name=self.index_stat, expected_stat_value=0)
+        self.assertTrue(result, "Indexer still has indexes for expired docs")
 
         # inserting docs with ttl = bucket ttl
         self.rest.change_bucket_props(bucket=self.default_bucket_name, maxTTL=expiration_time)
@@ -680,20 +700,21 @@ class QueryExpirationTests(QueryTests):
             doc_id = "k{0}".format(num)
             doc_body = '"{0}", {{"id":"{0}"}}'.format(doc_id)
             insert_query = 'UPSERT INTO {0} (KEY, VALUE) VALUES ({1},' \
-                           ' {{"expiration": {2}}})'.format(self.default_bucket_name, doc_body, expiration_time)
+                           ' {{"expiration": {2}}})'.format(query_default_bucket, doc_body, expiration_time)
             self.run_cbq_query(insert_query)
             # Checking if doc is created through sdk
             doc_value = cb.get(doc_id).value
             self.assertEqual(doc_value['id'], doc_id)
         # Validating if the doc ttl is not overridden by bucket ttl
-        get_expiration_query = 'SELECT META().expiration FROM {0}'.format(self.default_bucket_name)
+        get_expiration_query = 'SELECT META().expiration FROM {0}'.format(query_default_bucket)
         results = self.run_cbq_query(get_expiration_query)['results']
         for result in results:
             # checking if bucket ttl doesn't override doc ttl. Keeping a buffer range of 10 sec
             self.assertNotEqual(result['expiration'], 0, "Bucket ttl has overridden doc ttl")
         # checking for doc to expire
-        self._is_expected_index_count(bucket_name=self.default_bucket_name, idx_name=self.exp_index,
+        result = self._is_expected_index_count(bucket_name=self.default_bucket_name, idx_name=self.exp_index,
                                       stat_name=self.index_stat, expected_stat_value=0)
+        self.assertTrue(result, "Indexer still has indexes for expired docs")
 
     def test_merge_update_ttl(self):
         """
@@ -710,17 +731,18 @@ class QueryExpirationTests(QueryTests):
         self._wait_for_index_online(self.sample_bucket, self.sample_bucket_index)
         bucket = self.rest.get_bucket(self.sample_bucket)
         self.shell.execute_cbepctl(bucket, "", "set flush_param", "exp_pager_stime", 5)
+        query_sample_bucket = self.get_collection_name("`{0}`".format(self.sample_bucket))
 
         # creating index on meta.expiration and a primary index
-        expiration_index_query = "CREATE INDEX {0} ON `{1}` ( META().expiration )".format(self.exp_index,
-                                                                                          self.sample_bucket)
+        expiration_index_query = "CREATE INDEX {0} ON {1} ( META().expiration )".format(self.exp_index,
+                                                                                        query_sample_bucket)
         self.run_cbq_query(expiration_index_query)
 
-        primary_index_query = "CREATE PRIMARY INDEX idx on `{0}` USING GSI".format(self.sample_bucket)
+        primary_index_query = "CREATE PRIMARY INDEX idx on {0} USING GSI".format(query_sample_bucket)
         self.run_cbq_query(primary_index_query)
 
-        merge_update_query = '''MERGE INTO `{0}` AS route
-                                USING `{0}` AS airport
+        merge_update_query = '''MERGE INTO {0} AS route
+                                USING {0} AS airport
                                 ON route.sourceairport = airport.faa
                                 WHEN MATCHED THEN
                                     UPDATE SET route.old_equipment = route.equipment,
@@ -729,12 +751,12 @@ class QueryExpirationTests(QueryTests):
                                         META(route).expiration = {1}
                                 WHERE airport.country = "France"
                                     AND route.airline = "BA"
-                                    AND CONTAINS(route.equipment, "319")'''.format(self.sample_bucket, expiration_time)
+                                    AND CONTAINS(route.equipment, "319")'''.format(query_sample_bucket, expiration_time)
         self.run_cbq_query(merge_update_query)
 
         # Validating if the expiration is set
-        get_exp_query = 'SELECT META().expiration, updated, equipment FROM `{0}`' \
-                        ' WHERE equipment = "12345"'.format(self.sample_bucket)
+        get_exp_query = 'SELECT META().expiration, updated, equipment FROM {0}' \
+                        ' WHERE equipment = "12345"'.format(query_sample_bucket)
         results = self.run_cbq_query(get_exp_query)['results']
         count = 0
         for item in results:
@@ -745,8 +767,8 @@ class QueryExpirationTests(QueryTests):
 
         # Changing expiration time again
         expiration_time = 10
-        merge_update_query = '''MERGE INTO `{0}` AS route
-                                USING `{0}` AS airport
+        merge_update_query = '''MERGE INTO {0} AS route
+                                USING {0} AS airport
                                 ON route.sourceairport = airport.faa
                                 WHEN MATCHED THEN
                                     UPDATE SET route.old_equipment = route.equipment,
@@ -755,13 +777,14 @@ class QueryExpirationTests(QueryTests):
                                         META(route).expiration = {1}
                                 WHERE airport.country = "France"
                                     AND route.airline = "BA"
-                                    AND CONTAINS(route.equipment, "12345")'''.format(self.sample_bucket,
+                                    AND CONTAINS(route.equipment, "12345")'''.format(query_sample_bucket,
                                                                                      expiration_time)
         self.run_cbq_query(merge_update_query)
 
         # Validating expiration of document
-        self._is_expected_index_count(bucket_name=self.sample_bucket, idx_name=self.exp_index,
-                                      stat_name=self.index_stat, expected_stat_value=result_count-count)
+        result = self._is_expected_index_count(bucket_name=self.sample_bucket, idx_name=self.exp_index,
+                                               stat_name=self.index_stat, expected_stat_value=result_count - count)
+        self.assertTrue(result, "Indexer still has indexes for expired docs")
 
     def test_merge_insert_ttl(self):
         """
@@ -776,16 +799,17 @@ class QueryExpirationTests(QueryTests):
         self._wait_for_index_online(self.sample_bucket, self.sample_bucket_index)
         bucket = self.rest.get_bucket(self.sample_bucket)
         self.shell.execute_cbepctl(bucket, "", "set flush_param", "exp_pager_stime", 5)
+        query_sample_bucket = self.get_collection_name("`{0}`".format(self.sample_bucket))
 
         # creating index on meta.expiration and a primary index
-        expiration_index_query = "CREATE INDEX {0} ON `{1}` ( META().expiration )".format(self.exp_index,
-                                                                                          self.sample_bucket)
+        expiration_index_query = "CREATE INDEX {0} ON {1} ( META().expiration )".format(self.exp_index,
+                                                                                        query_sample_bucket)
         self.run_cbq_query(expiration_index_query)
 
-        primary_index_query = "CREATE PRIMARY INDEX idx on `{0}` USING GSI".format(self.sample_bucket)
+        primary_index_query = "CREATE PRIMARY INDEX idx on {0} USING GSI".format(query_sample_bucket)
         self.run_cbq_query(primary_index_query)
 
-        merge_upsert_query = '''MERGE INTO `{0}` AS target
+        merge_upsert_query = '''MERGE INTO {0} AS target
                                 USING [
                                     {{"iata":"DSA", "name": "Doncaster Sheffield Airport"}},
                                     {{"iata":"VLY", "name": "Anglesey Airport / Maes Awyr Mon"}}
@@ -802,21 +826,22 @@ class QueryExpirationTests(QueryTests):
                                                     "airportname": source.name,
                                                     "type": "airport",
                                                     "inserted": true}},
-                                          OPTIONS {{"expiration": {1}}})'''.format(self.sample_bucket, expiration_time)
+                                          OPTIONS {{"expiration": {1}}})'''.format(query_sample_bucket, expiration_time)
         self.run_cbq_query(merge_upsert_query)
 
         # Validating Merge UPSERT query
-        doc_count_query = "SELECT COUNT(*) FROM `{0}`".format(self.sample_bucket)
+        doc_count_query = "SELECT COUNT(*) FROM {0}".format(query_sample_bucket)
         results = self.run_cbq_query(doc_count_query)['results']
         self.assertEqual(results[0]['$1'], result_count + 1, "MERGE failed to insert new doc")
-        check_update_query = "SELECT airportname, META().expiration FROM `{0}`" \
-                             " WHERE updated = true".format(self.sample_bucket)
+        check_update_query = "SELECT airportname, META().expiration FROM {0}" \
+                             " WHERE updated = true".format(query_sample_bucket)
         results = self.run_cbq_query(check_update_query)['results'][0]
         self.assertEqual(results['expiration'], 0, "MERGE failed to retain doc expiry")
 
         # checking if newly inserted doc is expired
-        self._is_expected_index_count(bucket_name=self.sample_bucket, idx_name=self.exp_index,
-                                      stat_name=self.index_stat, expected_stat_value=result_count)
+        result = self._is_expected_index_count(bucket_name=self.sample_bucket, idx_name=self.exp_index,
+                                               stat_name=self.index_stat, expected_stat_value=result_count)
+        self.assertTrue(result, "Indexer still has indexes for expired docs")
 
     def test_delete_with_ttl(self):
         """
@@ -833,67 +858,73 @@ class QueryExpirationTests(QueryTests):
         self._wait_for_index_online(self.sample_bucket, self.sample_bucket_index)
         bucket = self.rest.get_bucket(self.sample_bucket)
         self.shell.execute_cbepctl(bucket, "", "set flush_param", "exp_pager_stime", 5)
+        query_sample_bucket = self.get_collection_name("`{0}`".format(self.sample_bucket))
 
         # creating index on meta.expiration and a primary index
-        expiration_index_query = "CREATE INDEX {0} ON `{1}` ( META().expiration )".format(self.exp_index,
-                                                                                          self.sample_bucket)
+        expiration_index_query = "CREATE INDEX {0} ON {1} ( META().expiration )".format(self.exp_index,
+                                                                                        query_sample_bucket)
         self.run_cbq_query(expiration_index_query)
-        primary_index_query = "CREATE PRIMARY INDEX idx on `{0}` USING GSI".format(self.sample_bucket)
+        primary_index_query = "CREATE PRIMARY INDEX idx on {0} USING GSI".format(query_sample_bucket)
         self.run_cbq_query(primary_index_query)
 
         # Setting Expiry value for all docs
-        update_expiry_query = "UPDATE `{0}` as b SET META(b).expiration = {1}".format(self.sample_bucket,
-                                                                                      expiration_time)
+        update_expiry_query = "UPDATE {0} as b SET META(b).expiration = {1}".format(query_sample_bucket,
+                                                                                    expiration_time)
         self.run_cbq_query(update_expiry_query)
 
         # Running a nested SELECT Query
-        nested_select_query = 'SELECT count(t1.city) FROM `{0}` t1 WHERE t1.type = "landmark" AND t1.city IN' \
-                              ' (SELECT RAW city FROM `{0}` WHERE type = "airport" AND' \
-                              ' META().expiration > 0)'.format(self.sample_bucket)
+        nested_select_query = 'SELECT count(t1.city) FROM {0} t1 WHERE t1.type = "landmark" AND t1.city IN' \
+                              ' (SELECT RAW city FROM {0} WHERE type = "airport" AND' \
+                              ' META().expiration > 0)'.format(query_sample_bucket)
         result = self.run_cbq_query(nested_select_query)['results'][0]['$1']
         self.assertEqual(result, 2776, "Nested SELECT query didn't return as expected")
         # Running DELETE Queries
-        delete_query_with_limit = 'DELETE FROM `{0}` as d LIMIT {1}'.format(self.sample_bucket, limit_count)
+        delete_query_with_limit = 'DELETE FROM {0} as d LIMIT {1}'.format(query_sample_bucket, limit_count)
         self.run_cbq_query(delete_query_with_limit)
-        count_query = "SELECT COUNT(*) FROM `{}`".format(self.sample_bucket)
+        count_query = "SELECT COUNT(*) FROM {}".format(query_sample_bucket)
         results = self.run_cbq_query(count_query)['results']
-        self.assertEqual(results[0]['$1'], result_count-10, "DELETE failed to delete docs")
-        self._is_expected_index_count(bucket_name=self.sample_bucket, idx_name=self.exp_index,
-                                      stat_name=self.index_stat, expected_stat_value=result_count-10)
+        self.assertEqual(results[0]['$1'], result_count - 10, "DELETE failed to delete docs")
+        result =self._is_expected_index_count(bucket_name=self.sample_bucket, idx_name=self.exp_index,
+                                              stat_name=self.index_stat, expected_stat_value=result_count - 10)
+        self.assertTrue(result, "Indexer still has indexes for expired docs")
         result_count = result_count - 10
 
-        update_expiry_query = "UPDATE `{0}` as b SET META(b).expiration = {1}" \
-                              " WHERE type = 'airline'".format(self.sample_bucket, expiration_time/10)
+        update_expiry_query = "UPDATE {0} as b SET META(b).expiration = {1}" \
+                              " WHERE type = 'airline'".format(query_sample_bucket, expiration_time / 10)
         self.run_cbq_query(update_expiry_query)
-        doc_updated_query = "SELECT COUNT(*) FROM `{0}` where META().expiration = {1}".format(self.sample_bucket,
-                                                                                              expiration_time/10)
+        doc_updated_query = "SELECT COUNT(*) FROM {0} where META().expiration = {1}".format(query_sample_bucket,
+                                                                                            expiration_time / 10)
         num_of_doc_updated = self.run_cbq_query(doc_updated_query)['results'][0]['$1']
-        delete_on_expiry_query = "DELETE FROM `{0}` as b WHERE META(b).expiration > 0 and" \
-                                 " META(b).expiration < {1}".format(self.sample_bucket, expiration_time/10 + 1)
+        delete_on_expiry_query = "DELETE FROM {0} as b WHERE META(b).expiration > 0 and" \
+                                 " META(b).expiration < {1}".format(query_sample_bucket, expiration_time / 10 + 1)
         self.run_cbq_query(delete_on_expiry_query)
-        self._is_expected_index_count(bucket_name=self.sample_bucket, idx_name=self.exp_index,
-                                      stat_name=self.index_stat, expected_stat_value=result_count - num_of_doc_updated)
+        result = self._is_expected_index_count(bucket_name=self.sample_bucket, idx_name=self.exp_index,
+                                               stat_name=self.index_stat,
+                                               expected_stat_value=result_count - num_of_doc_updated)
+        self.assertTrue(result, "Indexer still has indexes for expired docs")
         result_count = result_count - num_of_doc_updated
 
         # Delete with Nested Select
         # Below query will result in deletion of 8 documents
         nested_delete_query = """
-                                DELETE FROM `{0}` as t 
+                                DELETE FROM {0} as t 
                                 WHERE META(t).id IN (
-                                                    SELECT RAW META(d).id FROM `{0}` as d
+                                                    SELECT RAW META(d).id FROM {0} as d
                                                     WHERE d.type = 'hotel' AND d.reviews IS NOT null
                                                         AND ANY hotel_review in d.reviews 
                                                                 satisfies hotel_review.ratings.Overall = 3.0
                                                                     AND hotel_review.ratings.Location = 1 END)
-                                                                    """.format(self.sample_bucket)
+                                                                    """.format(query_sample_bucket)
         self.run_cbq_query(nested_delete_query)
-        self._is_expected_index_count(bucket_name=self.sample_bucket, idx_name=self.exp_index,
+        result = self._is_expected_index_count(bucket_name=self.sample_bucket, idx_name=self.exp_index,
                                       stat_name=self.index_stat, expected_stat_value=result_count - 8)
+        self.assertTrue(result, "Indexer still has indexes for expired docs")
 
         # Waiting for all docs to expire
         self.log.info("Checking if all docs has expired")
-        self._is_expected_index_count(bucket_name=self.sample_bucket, idx_name=self.exp_index,
-                                      stat_name=self.index_stat, expected_stat_value=0, sleep_time=10)
+        result = self._is_expected_index_count(bucket_name=self.sample_bucket, idx_name=self.exp_index,
+                                               stat_name=self.index_stat, expected_stat_value=0, sleep_time=10)
+        self.assertTrue(result, "Indexer still has indexes for expired docs")
 
     def test_ttl_update_for_user_with_query_update_permission(self):
         """
@@ -911,12 +942,13 @@ class QueryExpirationTests(QueryTests):
         self._wait_for_index_online(self.sample_bucket, self.sample_bucket_index)
         bucket = self.rest.get_bucket(self.sample_bucket)
         self.shell.execute_cbepctl(bucket, "", "set flush_param", "exp_pager_stime", 5)
+        query_sample_bucket = self.get_collection_name("`{0}`".format(self.sample_bucket))
 
         # creating index on meta.expiration and a primary index
-        expiration_index_query = "CREATE INDEX {0} ON `{1}` ( META().expiration )".format(self.exp_index,
-                                                                                          self.sample_bucket)
+        expiration_index_query = "CREATE INDEX {0} ON {1} ( META().expiration )".format(self.exp_index,
+                                                                                        query_sample_bucket)
         self.run_cbq_query(expiration_index_query)
-        primary_index_query = "CREATE PRIMARY INDEX idx on `{0}` USING GSI".format(self.sample_bucket)
+        primary_index_query = "CREATE PRIMARY INDEX idx on {0} USING GSI".format(query_sample_bucket)
         self.run_cbq_query(primary_index_query)
 
         # creating a user with Query Update rbac permission only
@@ -924,17 +956,18 @@ class QueryExpirationTests(QueryTests):
         self.rest.add_set_builtin_user("test", payload)
 
         # updating expiration using test user
-        delete_query = "DELETE FROM `{0}`".format(self.sample_bucket)
+        delete_query = "DELETE FROM {0}".format(query_sample_bucket)
         try:
             self.run_cbq_query(delete_query, username="test", password="password")
         except Exception as err:
             result = "User does not have credentials to run DELETE queries" in str(err)
             self.assertTrue(result, "DELETE Query failed for non-credential reasons. Check error msg.")
             self.log.info(str(err))
-        update_expiry_query = "UPDATE `{0}` SET META().expiration = 2".format(self.sample_bucket)
+        update_expiry_query = "UPDATE {0} SET META().expiration = 2".format(query_sample_bucket)
         self.run_cbq_query(update_expiry_query, username="test", password="password")
-        self._is_expected_index_count(bucket_name=self.sample_bucket, idx_name=self.exp_index,
-                                      stat_name=self.index_stat, expected_stat_value=0)
+        result = self._is_expected_index_count(bucket_name=self.sample_bucket, idx_name=self.exp_index,
+                                               stat_name=self.index_stat, expected_stat_value=0)
+        self.assertTrue(result, "Indexer still has indexes for expired docs")
 
     def _is_expected_kv_expired_stats(self, bucket='default', expected_val=None, max_retry=25, sleep_time=2):
         """
@@ -953,9 +986,11 @@ class QueryExpirationTests(QueryTests):
                             value = stat.split(':')
                             active_expired_stats += int(value[-1].strip())
             if active_expired_stats == expected_val:
+                self.log.info("Expected: {0}, Actual: {1}".format(expected_val, active_expired_stats))
                 return True
             self.sleep(sleep_time, "Waiting before rechecking if stat matches expected value")
             count += 1
+        self.log.info("Expected: {0}, Actual: {1}".format(expected_val, active_expired_stats))
         return False
 
     def _is_expected_index_count(self, bucket_name, idx_name, stat_name, expected_stat_value,
@@ -964,10 +999,13 @@ class QueryExpirationTests(QueryTests):
             index_node = self.master
         rest = RestConnection(index_node)
         count = 0
+        curr_stat_value = None
         while count < max_try:
             curr_stat_value = rest.get_index_stats()[bucket_name][idx_name][stat_name]
             if curr_stat_value == expected_stat_value:
+                self.log.info("Expected: {0}, Actual: {1}".format(expected_stat_value, curr_stat_value))
                 return True
             self.sleep(sleep_time, "Waiting before rechecking if Index stat matches expected value")
             count += 1
+        self.log.info("Expected: {0}, Actual: {1}".format(expected_stat_value, curr_stat_value))
         return False

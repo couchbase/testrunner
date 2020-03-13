@@ -123,7 +123,7 @@ class BaseTestCase(unittest.TestCase):
             self.default_bucket = self.input.param("default_bucket", True)
             self.parallelism = self.input.param("parallelism", False)
             if self.default_bucket:
-                self.default_bucket_name = "default"
+                self.default_bucket_name = self.input.param('default_bucket_name', 'default')
             self.skip_standard_buckets = self.input.param("skip_standard_buckets", False)
             self.standard_buckets = self.input.param("standard_buckets", 0)
             # list of list [[2,1,1],[3,1,2,1],[4,1,1,2,3]]

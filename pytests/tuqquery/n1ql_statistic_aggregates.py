@@ -1,7 +1,7 @@
-from .tuq import QueryTests
 import math
-import sys
+
 from membase.api.exception import CBQError
+from .tuq import QueryTests
 
 
 class StatisticAggregatesTest(QueryTests):
@@ -12,12 +12,19 @@ class StatisticAggregatesTest(QueryTests):
         self.log.info("==============  StatisticAggregatesTest setup has started ==============")
 
         self.numbers = [1, 3, 5, 7, 9, 10, 0, 2, 4, 6, 8, 13]
-        self.func_names = ['median', 'stddev', 'variance', 'stddev_pop', 'variance_pop', 'stddev_samp', 'variance_samp', 'mean']
+        self.func_names = ['median', 'stddev', 'variance', 'stddev_pop', 'variance_pop',
+                           'stddev_samp', 'variance_samp', 'mean']
         self.datatypes = ['int', 'float']
 
-        self.primary_idx = {'name': '#primary', 'bucket': "temp_bucket", 'fields': [], 'state': 'online', 'using': self.index_type.lower(), 'is_primary': True}
-        self.idx_1 = {'name': "ix1", 'bucket': "temp_bucket", 'fields': [("int_field", 0)], 'state': "online", 'using': self.index_type.lower(), 'is_primary': False}
-        self.idx_3 = {'name': "ix3", 'bucket': "temp_bucket", 'fields': [("float_field", 0)], 'state': "online", 'using': self.index_type.lower(), 'is_primary': False}
+        if self.test_buckets == 'default':
+            self.test_buckets = 'temp_bucket'
+        self.query_bucket = self.get_query_buckets()[0]
+        self.primary_idx = {'name': '#primary', 'bucket': self.test_buckets, 'fields': [],
+                            'state': 'online', 'using': self.index_type.lower(), 'is_primary': True}
+        self.idx_1 = {'name': "ix1", 'bucket': self.test_buckets, 'fields': [("int_field", 0)],
+                      'state': "online", 'using': self.index_type.lower(), 'is_primary': False}
+        self.idx_3 = {'name': "ix3", 'bucket': self.test_buckets, 'fields': [("float_field", 0)],
+                      'state': "online", 'using': self.index_type.lower(), 'is_primary': False}
 
         self.indexes = [self.primary_idx, self.idx_1, self.idx_3]
         self.log.info("==============  StatisticAggregatesTest setup has completed ==============")
@@ -41,6 +48,7 @@ class StatisticAggregatesTest(QueryTests):
         self.log.info("==============  StatisticAggregatesTest suite_tearDown has completed ==============")
 
     ''' executes all tests from this suite '''
+
     def run_all(self):
         self.test_simple_call_all_datatypes()
         self.test_simple_call_all_datatypes_nulls_included()
@@ -53,7 +61,9 @@ class StatisticAggregatesTest(QueryTests):
         self.test_empty_args_list_calls_negative()
 
     '''test for all simple functions calls with the use of 2 datatypes: int and float.
-    select {median|stddev|variance|stddev_pop|vbariance_pop|stddev_sample|variance_sample|mean}(int|long|float) from bucket where field is not nullormissing '''
+    select {median|stddev|variance|stddev_pop|vbariance_pop|stddev_sample|variance_sample|mean}(int|long|float) 
+    from bucket where field is not nullormissing '''
+
     def test_simple_call_all_datatypes(self):
         self._load_test_data()
 
@@ -62,16 +72,18 @@ class StatisticAggregatesTest(QueryTests):
 
         for fname in self.func_names:
             for datatype in self.datatypes:
-                query = "select "+fname+"("+datatype+"_field) from temp_bucket where "+datatype+"_field is not null or missing"
+                query = "select " + fname + "(" + datatype + "_field) from " + self.query_bucket + " where " + \
+                        datatype + "_field is not null or missing"
 
                 args = [float(x) for x in self.numbers]
                 if datatype == 'float':
-                    args = [x*math.pi for x in self.numbers]
+                    args = [x * math.pi for x in self.numbers]
 
-                arithmetic_result = eval('self._calculate_'+fname+'_value(args)')
+                arithmetic_result = eval('self._calculate_' + fname + '_value(args)')
                 my_result = "%.9f" % float(arithmetic_result)
 
-                lambda1 = lambda x, y = my_result: self.assertEqual("%.9f" % float(str(x['q_res'][0]['results'][0]["$1"])), y)
+                lambda1 = lambda x, y=my_result: self.assertEqual(
+                    "%.9f" % float(str(x['q_res'][0]['results'][0]["$1"])), y)
                 test_dict["%d-default" % (count)] = {"indexes": self.indexes,
                                                      "pre_queries": [],
                                                      "queries": [query],
@@ -86,7 +98,9 @@ class StatisticAggregatesTest(QueryTests):
             self._unload_test_data()
 
     '''test for all simple functions calls with the use of 2 datatypes: int and float. Null values are included
-    select {median|stddev|variance|stddev_pop|vbariance_pop|stddev_sample|variance_sample|mean}(int|long|float) from bucket'''
+    select {median|stddev|variance|stddev_pop|vbariance_pop|stddev_sample|variance_sample|mean}(int|long|float) 
+    from bucket'''
+
     def test_simple_call_all_datatypes_nulls_included(self):
         self._load_test_data_including_nulls()
 
@@ -95,16 +109,17 @@ class StatisticAggregatesTest(QueryTests):
 
         for fname in self.func_names:
             for datatype in self.datatypes:
-                query = "select "+fname+"("+datatype+"_field) from temp_bucket"
+                query = "select " + fname + "(" + datatype + "_field) from " + self.query_bucket
 
                 args = [float(x) for x in self.numbers]
                 if datatype == 'float':
-                    args = [x*math.pi for x in self.numbers]
+                    args = [x * math.pi for x in self.numbers]
 
-                arithmetic_result = eval('self._calculate_'+fname+'_value(args)')
+                arithmetic_result = eval('self._calculate_' + fname + '_value(args)')
                 my_result = "%.9f" % float(arithmetic_result)
 
-                lambda1 = lambda x, y=my_result: self.assertEqual("%.9f" % float(str(x['q_res'][0]['results'][0]["$1"])), y)
+                lambda1 = lambda x, y=my_result: self.assertEqual(
+                    "%.9f" % float(str(x['q_res'][0]['results'][0]["$1"])), y)
                 test_dict["%d-default" % (count)] = {"indexes": self.indexes,
                                                      "pre_queries": [],
                                                      "queries": [query],
@@ -119,7 +134,9 @@ class StatisticAggregatesTest(QueryTests):
             self._unload_test_data()
 
     '''test for simple function calls with the use of only NULL parameters'''
-    '''select {median|stddev|variance|stddev_pop|vbariance_pop|stddev_sample|variance_sample|mean}(int|long|float) from bucket where field is nullormissing'''
+    '''select {median|stddev|variance|stddev_pop|vbariance_pop|stddev_sample|variance_sample|mean}(int|long|float) 
+    from bucket where field is nullormissing'''
+
     def test_simple_call_all_nulls_missings(self):
         self._load_test_data_nulls_missings()
 
@@ -127,7 +144,7 @@ class StatisticAggregatesTest(QueryTests):
         count = 0
 
         for fname in self.func_names:
-            query = "select "+fname+"(int_field) from temp_bucket"
+            query = "select " + fname + "(int_field) from " + self.query_bucket
 
             my_result = None
             lambda1 = lambda x, y=my_result: self.assertEqual(x['q_res'][0]['results'][0]["$1"], y)
@@ -145,18 +162,22 @@ class StatisticAggregatesTest(QueryTests):
             self._unload_test_data()
 
     '''test for different letter cases in function names'''
+
     def test_func_names_different_cases(self):
         self._load_test_data()
 
         test_dict = dict()
         count = 0
 
-        func_names = ['median', 'stddev', 'variance', 'stddev_pop', 'variance_pop', 'stddev_samp', 'variance_samp', 'mean',
-                      'MediaN', 'stDdev', 'vaRiance', 'stDdev_pop', 'variAnce_pop', 'stdDev_samp', 'variaNce_samp', 'meAn',
-                      'MEDIAN', 'STDDEV', 'VARIANCE', 'STDDEV_POP', 'VARIANCE_POP', 'STDDEV_SAMP', 'VARIANCE_SAMP', 'MEAN']
+        func_names = ['median', 'stddev', 'variance', 'stddev_pop', 'variance_pop', 'stddev_samp', 'variance_samp',
+                      'mean',
+                      'MediaN', 'stDdev', 'vaRiance', 'stDdev_pop', 'variAnce_pop', 'stdDev_samp', 'variaNce_samp',
+                      'meAn',
+                      'MEDIAN', 'STDDEV', 'VARIANCE', 'STDDEV_POP', 'VARIANCE_POP', 'STDDEV_SAMP', 'VARIANCE_SAMP',
+                      'MEAN']
 
         for fname in func_names:
-            query = "select "+fname+"(int_field) from temp_bucket"
+            query = "select " + fname + "(int_field) from " + self.query_bucket
 
             my_result = "success"
             lambda1 = lambda x, y=my_result: self.assertEqual(x['q_res'][0]['status'], y)
@@ -174,6 +195,7 @@ class StatisticAggregatesTest(QueryTests):
             self._unload_test_data()
 
     '''test for secondary index usage'''
+
     def test_secondary_index_usage(self):
         self._load_test_data()
 
@@ -182,14 +204,15 @@ class StatisticAggregatesTest(QueryTests):
 
         for fname in self.func_names:
             for datatype in self.datatypes:
-                query = "explain select "+fname+"("+datatype+"_field) from temp_bucket"
+                query = "explain select " + fname + "(" + datatype + "_field) from " + self.query_bucket
                 result = ''
                 if datatype == 'int':
                     result = 'ix1'
                 else:
                     result = 'ix3'
 
-                lambda1 = lambda x, y=result: self.assertEqual(x['q_res'][0]['results'][0]['plan']['~children'][0]['index'], y)
+                lambda1 = lambda x, y=result: self.assertEqual(
+                    x['q_res'][0]['results'][0]['plan']['~children'][0]['index'], y)
                 test_dict["%d-default" % (count)] = {"indexes": self.indexes,
                                                      "pre_queries": [],
                                                      "queries": [query],
@@ -204,6 +227,7 @@ class StatisticAggregatesTest(QueryTests):
             self._unload_test_data()
 
     '''mixed datatypes in function parameters list'''
+
     def test_mixed_parameters(self):
         self._load_mixed_datatypes()
 
@@ -212,7 +236,7 @@ class StatisticAggregatesTest(QueryTests):
 
         for fname in self.func_names:
             for datatype in self.datatypes:
-                query = "select "+fname+"("+datatype+"_field) from temp_bucket"
+                query = "select " + fname + "(" + datatype + "_field) from " + self.query_bucket
 
                 args = []
                 if datatype == 'int':
@@ -220,10 +244,11 @@ class StatisticAggregatesTest(QueryTests):
                 else:
                     args = [3.14, 9.14, 18.14, 21.14, 24.14, 30.14]
 
-                arithmetic_result = eval('self._calculate_'+fname+'_value(args)')
+                arithmetic_result = eval('self._calculate_' + fname + '_value(args)')
                 my_result = "%.9f" % float(arithmetic_result)
 
-                lambda1 = lambda x, y=my_result: self.assertEqual("%.9f" % float(str(x['q_res'][0]['results'][0]["$1"])), y)
+                lambda1 = lambda x, y=my_result: self.assertEqual(
+                    "%.9f" % float(str(x['q_res'][0]['results'][0]["$1"])), y)
                 test_dict["%d-default" % (count)] = {"indexes": self.indexes,
                                                      "pre_queries": [],
                                                      "queries": [query],
@@ -238,9 +263,10 @@ class StatisticAggregatesTest(QueryTests):
             self._unload_test_data()
 
     '''test for index pushdown. Available only for mean() function'''
+
     def test_index_pushdown(self):
         self._load_test_data()
-        query = "explain select mean(int_field) from temp_bucket where int_field is not missing"
+        query = "explain select mean(int_field) from " + self.query_bucket + " where int_field is not missing"
         n1ql_result = self.run_cbq_query(query)
         result = 'index_group_aggs'
 
@@ -250,6 +276,7 @@ class StatisticAggregatesTest(QueryTests):
             self._unload_test_data()
 
     '''Negative test for incorrect functions calls, like median(mean(...))'''
+
     def test_nested_calls_negative(self):
         self._load_test_data()
 
@@ -257,7 +284,7 @@ class StatisticAggregatesTest(QueryTests):
             for j in range(len(self.func_names)):
                 fname1 = self.func_names[i]
                 fname2 = self.func_names[j]
-                query = "select "+fname1+"("+fname2+"(int_field)) from temp_bucket"
+                query = "select " + fname1 + "(" + fname2 + "(int_field)) from " + self.query_bucket
                 error_detected = False
                 try:
                     n1ql_result = self.run_cbq_query(query)
@@ -269,12 +296,13 @@ class StatisticAggregatesTest(QueryTests):
         self._unload_test_data()
 
     '''Negative test for empty function parameters list'''
+
     def test_empty_args_list_calls_negative(self):
         self._load_test_data()
 
         for i in range(len(self.func_names)):
             fname = self.func_names[i]
-            query = "select "+fname+"() from temp_bucket"
+            query = "select " + fname + "() from " + self.query_bucket
             error_detected = False
             try:
                 n1ql_result = self.run_cbq_query(query)
@@ -285,52 +313,50 @@ class StatisticAggregatesTest(QueryTests):
 
         self._unload_test_data()
 
-
     '''########################################################################'''
     '''    Statistic finctions implementation                                  '''
     '''########################################################################'''
 
-
     def _calculate_median_value(self, params):
         filtered_params = self._filter_digit_params(params)
-        sortedParams = sorted(filtered_params)
-        retVal = 0
+        sorted_params = sorted(filtered_params)
+        ret_val = 0
 
-        if len(sortedParams) == 0:
-            return retVal
+        if len(sorted_params) == 0:
+            return ret_val
 
-        if len(sortedParams) == 1:
-            return sortedParams[0]
+        if len(sorted_params) == 1:
+            return sorted_params[0]
 
-        if len(sortedParams) == 2:
-            return (sortedParams[0] + sortedParams[1])//2
+        if len(sorted_params) == 2:
+            return (sorted_params[0] + sorted_params[1]) // 2
 
-        if len(sortedParams)%2 != 0:
-            retVal = sortedParams[len(sortedParams)//2]
+        if len(sorted_params) % 2 != 0:
+            ret_val = sorted_params[len(sorted_params) // 2]
         else:
-            valLeft = sortedParams[len(sortedParams)//2 -1]
-            valRight = sortedParams[len(sortedParams)//2]
-            retVal = (valLeft+valRight)//2
+            val_left = sorted_params[len(sorted_params) // 2 - 1]
+            val_right = sorted_params[len(sorted_params) // 2]
+            ret_val = (val_left + val_right) // 2
 
-        return retVal
+        return ret_val
 
     def _calculate_stddev_value(self, params):
         filtered_params = self._filter_digit_params(params)
         avg = self._calculate_avg(filtered_params)
         sum = 0
         for i in range(len(filtered_params)):
-            sum+=math.pow(filtered_params[i] - avg, 2)
+            sum += math.pow(filtered_params[i] - avg, 2)
 
-        return math.sqrt(sum//(len(filtered_params)-1))
+        return math.sqrt(sum // (len(filtered_params) - 1))
 
     def _calculate_stddev_pop_value(self, params):
         filtered_params = self._filter_digit_params(params)
         avg = self._calculate_avg(filtered_params)
         sum = 0
         for i in range(len(filtered_params)):
-            sum+=math.pow(filtered_params[i] - avg, 2)
+            sum += math.pow(filtered_params[i] - avg, 2)
 
-        return math.sqrt(sum//len(filtered_params))
+        return math.sqrt(sum // len(filtered_params))
 
     def _calculate_stddev_samp_value(self, params):
         filtered_params = self._filter_digit_params(params)
@@ -346,17 +372,16 @@ class StatisticAggregatesTest(QueryTests):
         sum = 0
         for i in range(len(params)):
             sum += params[i]
-        return sum//len(params)
-
+        return sum // len(params)
 
     def _calculate_variance_value(self, params):
         filtered_params = self._filter_digit_params(params)
         avg = self._calculate_avg(filtered_params)
         sum = 0;
         for i in range(len(filtered_params)):
-            sum+=math.pow(filtered_params[i] - avg, 2)
+            sum += math.pow(filtered_params[i] - avg, 2)
 
-        return sum//(len(filtered_params)-1)
+        return sum // (len(filtered_params) - 1)
 
     def _calculate_variance_pop_value(self, params):
         filtered_params = self._filter_digit_params(params)
@@ -365,17 +390,16 @@ class StatisticAggregatesTest(QueryTests):
         for i in range(len(filtered_params)):
             sum += math.pow(filtered_params[i] - avg, 2)
 
-        return sum//len(params)
-
+        return sum // len(params)
 
     def _calculate_variance_samp_value(self, params):
         filtered_params = self._filter_digit_params(params)
         avg = self._calculate_avg(filtered_params)
         sum = 0;
         for i in range(len(filtered_params)):
-            sum+=math.pow(filtered_params[i] - avg, 2)
+            sum += math.pow(filtered_params[i] - avg, 2)
 
-        return sum//(len(filtered_params)-1)
+        return sum // (len(filtered_params) - 1)
 
     def _filter_digit_params(self, params):
         ret_val = list([x for x in params if isinstance(x, int) or isinstance(x, int) or isinstance(x, float)])
@@ -384,33 +408,31 @@ class StatisticAggregatesTest(QueryTests):
 
         return ret_val
 
-
     '''########################################################################'''
     '''    Test data load finctions implementation                                  '''
     '''########################################################################'''
-
 
     def _load_test_data(self):
         temp_bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
                                                         replicas=self.num_replicas, bucket_type=self.bucket_type,
                                                         enable_replica_index=self.enable_replica_index,
                                                         eviction_policy=self.eviction_policy, lww=self.lww)
-        self.cluster.create_standard_bucket("temp_bucket", 11222, temp_bucket_params)
+        self.cluster.create_standard_bucket(self.test_buckets, 11222, temp_bucket_params)
 
         for bucket in self.buckets:
             self.cluster.bucket_flush(self.master, bucket=bucket, timeout=self.wait_timeout * 5)
 
         for i1 in range(len(self.numbers)):
-            query = "insert into temp_bucket values ('key_" + str(i1) + "', {"
+            query = "insert into " + self.query_bucket + " values ('key_" + str(i1) + "', {"
             int_field_insert = "'int_field': " + str(self.numbers[i1]) + ","
-            float_field_insert = "'float_field': " + str((self.numbers[i1]*math.pi))
+            float_field_insert = "'float_field': " + str((self.numbers[i1] * math.pi))
 
             query += " " + int_field_insert + float_field_insert + "})"
             self.run_cbq_query(query)
 
-        self.run_cbq_query('CREATE PRIMARY INDEX `#primary` ON `temp_bucket`')
-        self.run_cbq_query('CREATE INDEX ix1 ON temp_bucket(int_field);')
-        self.run_cbq_query('CREATE INDEX ix3 ON temp_bucket(float_field);')
+        self.run_cbq_query('CREATE PRIMARY INDEX `#primary` ON ' + self.query_bucket)
+        self.run_cbq_query('CREATE INDEX ix1 ON {0}(int_field);'.format(self.query_bucket))
+        self.run_cbq_query('CREATE INDEX ix3 ON {0}(float_field);'.format(self.query_bucket))
 
     def _load_test_data_including_nulls(self):
         self._load_test_data()
@@ -422,7 +444,7 @@ class StatisticAggregatesTest(QueryTests):
             if i % 3 == 0:
                 float_val = "missing"
 
-            query = "insert into temp_bucket values ('key_" + str(i) + "', {"
+            query = "insert into " + self.query_bucket + " values ('key_" + str(i) + "', {"
             if int_val == "null":
                 int_field_insert = "'int_field': null"
             else:
@@ -433,7 +455,7 @@ class StatisticAggregatesTest(QueryTests):
                 float_field_insert = ""
 
             comma = ','
-            if len(int_field_insert) == 0 or len (float_field_insert) == 0:
+            if len(int_field_insert) == 0 or len(float_field_insert) == 0:
                 comma = ''
 
             query += " " + int_field_insert + comma + float_field_insert + "})"
@@ -444,7 +466,7 @@ class StatisticAggregatesTest(QueryTests):
                                                         replicas=self.num_replicas, bucket_type=self.bucket_type,
                                                         enable_replica_index=self.enable_replica_index,
                                                         eviction_policy=self.eviction_policy, lww=self.lww)
-        self.cluster.create_standard_bucket("temp_bucket", 11222, temp_bucket_params)
+        self.cluster.create_standard_bucket(self.test_buckets, 11222, temp_bucket_params)
 
         for bucket in self.buckets:
             self.cluster.bucket_flush(self.master, bucket=bucket, timeout=self.wait_timeout * 5)
@@ -452,12 +474,12 @@ class StatisticAggregatesTest(QueryTests):
         for i in [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]:
             int_val = "null"
             float_val = "null"
-            if i%2 == 0:
+            if i % 2 == 0:
                 int_val = "missing"
-            if i%3 == 0:
+            if i % 3 == 0:
                 float_val = "missing"
 
-            query = "insert into temp_bucket values ('key_" + str(i) + "', {"
+            query = "insert into " + self.query_bucket + " values ('key_" + str(i) + "', {"
             if int_val == "null":
                 int_field_insert = "'int_field': null"
             else:
@@ -473,46 +495,44 @@ class StatisticAggregatesTest(QueryTests):
             query += " " + int_field_insert + comma + float_field_insert + "})"
             self.run_cbq_query(query)
 
-        self.run_cbq_query('CREATE PRIMARY INDEX `#primary` ON `temp_bucket`')
-        self.run_cbq_query('CREATE INDEX ix1 ON temp_bucket(int_field);')
-        self.run_cbq_query('CREATE INDEX ix3 ON temp_bucket(float_field);')
+        self.run_cbq_query('CREATE PRIMARY INDEX `#primary` ON ' + self.query_bucket)
+        self.run_cbq_query('CREATE INDEX ix1 ON {0}(int_field);'.format(self.query_bucket))
+        self.run_cbq_query('CREATE INDEX ix3 ON {0}(float_field);'.format(self.query_bucket))
 
     def _load_mixed_datatypes(self):
         temp_bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
                                                         replicas=self.num_replicas, bucket_type=self.bucket_type,
                                                         enable_replica_index=self.enable_replica_index,
                                                         eviction_policy=self.eviction_policy, lww=self.lww)
-        self.cluster.create_standard_bucket("temp_bucket", 11222, temp_bucket_params)
+        self.cluster.create_standard_bucket(self.test_buckets, 11222, temp_bucket_params)
 
         for bucket in self.buckets:
             self.cluster.bucket_flush(self.master, bucket=bucket, timeout=self.wait_timeout * 5)
 
-        query = "insert into temp_bucket values ('key_1', {'int_field': 1, 'float_field': 3.14})"
+        query = "insert into " + self.query_bucket + " values ('key_1', {'int_field': 1, 'float_field': 3.14})"
         self.run_cbq_query(query)
-        query = "insert into temp_bucket values ('key_2', {'int_field': 'a', 'float_field': 'a'})"
+        query = "insert into " + self.query_bucket + " values ('key_2', {'int_field': 'a', 'float_field': 'a'})"
         self.run_cbq_query(query)
-        query = "insert into temp_bucket values ('key_3', {'int_field': 3, 'float_field': 9.14})"
+        query = "insert into " + self.query_bucket + " values ('key_3', {'int_field': 3, 'float_field': 9.14})"
         self.run_cbq_query(query)
-        query = "insert into temp_bucket values ('key_4', {'int_field': null, 'float_field': null})"
+        query = "insert into " + self.query_bucket + " values ('key_4', {'int_field': null, 'float_field': null})"
         self.run_cbq_query(query)
-        query = "insert into temp_bucket values ('key_5', {'int_field': 'b', 'float_field': 'b'})"
+        query = "insert into " + self.query_bucket + " values ('key_5', {'int_field': 'b', 'float_field': 'b'})"
         self.run_cbq_query(query)
-        query = "insert into temp_bucket values ('key_6', {'int_field': 6, 'float_field': 18.14})"
+        query = "insert into " + self.query_bucket + " values ('key_6', {'int_field': 6, 'float_field': 18.14})"
         self.run_cbq_query(query)
-        query = "insert into temp_bucket values ('key_7', {'float_field': 21.14})"
+        query = "insert into " + self.query_bucket + " values ('key_7', {'float_field': 21.14})"
         self.run_cbq_query(query)
-        query = "insert into temp_bucket values ('key_8', {'int_field': 8, 'float_field': 24.14})"
+        query = "insert into " + self.query_bucket + " values ('key_8', {'int_field': 8, 'float_field': 24.14})"
         self.run_cbq_query(query)
-        query = "insert into temp_bucket values ('key_9', {'int_field': 9})"
+        query = "insert into " + self.query_bucket + " values ('key_9', {'int_field': 9})"
         self.run_cbq_query(query)
-        query = "insert into temp_bucket values ('key_10',{'int_field': 10, 'float_field': 30.14})"
+        query = "insert into " + self.query_bucket + " values ('key_10',{'int_field': 10, 'float_field': 30.14})"
         self.run_cbq_query(query)
 
-        self.run_cbq_query('CREATE PRIMARY INDEX `#primary` ON `temp_bucket`')
-        self.run_cbq_query('CREATE INDEX ix1 ON temp_bucket(int_field);')
-        self.run_cbq_query('CREATE INDEX ix3 ON temp_bucket(float_field);')
+        self.run_cbq_query('CREATE PRIMARY INDEX `#primary` ON ' + self.query_bucket)
+        self.run_cbq_query('CREATE INDEX ix1 ON {0}(int_field);'.format(self.query_bucket))
+        self.run_cbq_query('CREATE INDEX ix3 ON {0}(float_field);'.format(self.query_bucket))
 
     def _unload_test_data(self):
-        self.cluster.bucket_delete(self.master, "temp_bucket")
-
-
+        self.cluster.bucket_delete(self.master, self.test_buckets)

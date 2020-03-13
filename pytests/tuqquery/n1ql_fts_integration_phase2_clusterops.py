@@ -1,23 +1,19 @@
-from .tuq import QueryTests
-from membase.api.exception import CBQError
 from lib.membase.api.rest_client import RestConnection
+from membase.api.exception import CBQError
 from pytests.fts.fts_base import CouchbaseCluster
-from remote.remote_util import RemoteMachineShellConnection
-import json
-from pytests.security.rbac_base import RbacBase
-from lib.remote.remote_util import RemoteMachineShellConnection
-from pytests.tuqquery.n1ql_fts_integration_phase2 import N1qlFTSIntegrationPhase2Test
-import threading
+from .tuq import QueryTests
+
 
 class N1qlFTSIntegrationPhase2ClusteropsTest(QueryTests):
 
     def suite_setUp(self):
         super(N1qlFTSIntegrationPhase2ClusteropsTest, self).suite_setUp()
 
-
     def setUp(self):
         super(N1qlFTSIntegrationPhase2ClusteropsTest, self).setUp()
-
+        self.sample_bucket = 'beer-sample'
+        self.query_buckets = self.get_query_buckets(sample_buckets=[self.sample_bucket])
+        self.query_bucket = self.query_buckets[1]
         self.log.info("==============  N1qlFTSIntegrationPhase2ClusteropsTest setup has started ==============")
         self.log_config_info()
         self.log.info("==============  N1qlFTSIntegrationPhase2ClusteropsTest setup has completed ==============")
@@ -28,13 +24,13 @@ class N1qlFTSIntegrationPhase2ClusteropsTest(QueryTests):
         self.log.info("==============  N1qlFTSIntegrationPhase2ClusteropsTest tearDown has completed ==============")
         super(N1qlFTSIntegrationPhase2ClusteropsTest, self).tearDown()
 
-
     def suite_tearDown(self):
-        self.log.info("==============  N1qlFTSIntegrationPhase2ClusteropsTest suite_tearDown has started ==============")
+        self.log.info(
+            "==============  N1qlFTSIntegrationPhase2ClusteropsTest suite_tearDown has started ==============")
         self.log_config_info()
-        self.log.info("==============  N1qlFTSIntegrationPhase2ClusteropsTest suite_tearDown has completed ==============")
+        self.log.info(
+            "==============  N1qlFTSIntegrationPhase2ClusteropsTest suite_tearDown has completed ==============")
         super(N1qlFTSIntegrationPhase2ClusteropsTest, self).suite_tearDown()
-
 
     def get_rest_client(self, user, password):
         rest = RestConnection(self.cbcluster.get_random_fts_node())
@@ -47,7 +43,7 @@ class N1qlFTSIntegrationPhase2ClusteropsTest(QueryTests):
         self.cbcluster = CouchbaseCluster(name='cluster', nodes=self.servers, log=self.log)
         rest = self.get_rest_client(self.servers[0].rest_username, self.servers[0].rest_password)
 
-        self._create_fts_index(index_name="idx_beer_sample_fts", doc_count=7303, source_name='beer-sample')
+        self._create_fts_index(index_name="idx_beer_sample_fts", doc_count=7303, source_name=self.sample_bucket)
         n1ql_node = self.find_child_node_with_service("n1ql")
         if n1ql_node is None:
             self.log("Cannot find n1ql child node!")
@@ -55,8 +51,9 @@ class N1qlFTSIntegrationPhase2ClusteropsTest(QueryTests):
         if fts_node is None:
             self.log("Cannot find fts child node!")
 
-        n1ql_query = "select meta().id from `beer-sample` where search(`beer-sample`, {\"query\":{\"field\":\"state\", \"match\":\"California\"}, \"size\":1000})"
-        fts_request = {"query":{"field":"state", "match":"California"}, "size":1000}
+        n1ql_query = "select meta().id from {0} where search({0}, {{\"query\":{{\"field\":\"state\"," \
+                     " \"match\":\"California\"}}, \"size\":1000}})".format(self.sample_bucket)
+        fts_request = {"query": {"field": "state", "match": "California"}, "size": 1000}
         n1ql_results = self.run_cbq_query(n1ql_query, server=n1ql_node)['results']
         n1ql_doc_ids = []
         for result in n1ql_results:
@@ -64,7 +61,7 @@ class N1qlFTSIntegrationPhase2ClusteropsTest(QueryTests):
 
         total_hits, hits, took, status = \
             rest.run_fts_query(index_name="idx_beer_sample_fts",
-                               query_json = fts_request)
+                               query_json=fts_request)
 
         fts_doc_ids = []
         for hit in hits:
@@ -81,11 +78,13 @@ class N1qlFTSIntegrationPhase2ClusteropsTest(QueryTests):
     def test_cluster_replicas_failover_rebalance(self):
         self.load_test_buckets()
         self.cbcluster = CouchbaseCluster(name='cluster', nodes=self.servers, log=self.log)
-        fts_idx = self._create_fts_index(index_name="idx_beer_sample_fts", doc_count=7303, source_name='beer-sample')
+        fts_idx = self._create_fts_index(index_name="idx_beer_sample_fts", doc_count=7303,
+                                         source_name=self.sample_bucket)
         number_of_replicas = self.input.param("num_replicas", 0)
         self._update_replica_for_fts_index(fts_idx, number_of_replicas)
         self.sleep(60)
-        n1ql_query = "select meta().id from `beer-sample` where search(`beer-sample`, {\"query\":{\"field\":\"state\", \"match\":\"California\"}, \"size\":10000})"
+        n1ql_query = "select meta().id from {0} where search({0}, {{\"query\":{{\"field\":\"state\"," \
+                     " \"match\":\"California\"}}, \"size\":10000}})".format(self.sample_bucket)
         n1ql_results = self.run_cbq_query(n1ql_query)['results']
         n1ql_doc_ids_before_failover = []
         for result in n1ql_results:
@@ -99,15 +98,17 @@ class N1qlFTSIntegrationPhase2ClusteropsTest(QueryTests):
         for result in n1ql_results:
             n1ql_doc_ids_after_rebalance.append(result['id'])
 
-        self.assertEqual(sorted(n1ql_doc_ids_before_failover), sorted(n1ql_doc_ids_after_rebalance), "Results after rebalance does not match.")
+        self.assertEqual(sorted(n1ql_doc_ids_before_failover), sorted(n1ql_doc_ids_after_rebalance),
+                          "Results after rebalance does not match.")
 
     def test_fts_node_failover_partial_results(self):
         self.load_test_buckets()
         self.cbcluster = CouchbaseCluster(name='cluster', nodes=self.servers, log=self.log)
-        fts_idx = self._create_fts_index(index_name="idx_beer_sample_fts", doc_count=7303, source_name='beer-sample')
-        self.run_cbq_query("drop index `beer-sample`.beer_primary")
+        self._create_fts_index(index_name="idx_beer_sample_fts", doc_count=7303, source_name=self.sample_bucket)
+        self.run_cbq_query("drop index beer_primary on {0}".format(self.sample_bucket))
 
-        n1ql_query = "select meta().id from `beer-sample` where search(`beer-sample`, {\"query\":{\"field\":\"state\", \"match\":\"California\"}, \"size\":10000})"
+        n1ql_query = "select meta().id from {0} where search({0}, {{\"query\":{{\"field\":\"state\", " \
+                     "\"match\":\"California\"}}, \"size\":10000}})".format(self.sample_bucket)
         n1ql_results_before_failover = self.run_cbq_query(n1ql_query)['results']
         n1ql_doc_ids_before_failover = []
         for result in n1ql_results_before_failover:
@@ -116,21 +117,22 @@ class N1qlFTSIntegrationPhase2ClusteropsTest(QueryTests):
         self.cluster.failover(servers=self.servers, failover_nodes=[self.servers[2]], graceful=False)
         error_found = False
         try:
-            n1ql_result_after_failover = self.run_cbq_query(n1ql_query)
+            self.run_cbq_query(n1ql_query)
         except CBQError as err:
             self.assertTrue("pindex not available" in str(err), "Partial results error message is not graceful.")
             error_found = True
         self.assertEqual(error_found, True, "Partial result set is not allowed for SEARCH() queries.")
 
-
     def test_cluster_add_new_fts_node(self):
         self.load_test_buckets()
         self.cbcluster = CouchbaseCluster(name='cluster', nodes=self.servers, log=self.log)
-        fts_idx = self._create_fts_index(index_name="idx_beer_sample_fts", doc_count=7303, source_name='beer-sample')
+        fts_idx = self._create_fts_index(index_name="idx_beer_sample_fts", doc_count=7303,
+                                         source_name=self.sample_bucket)
         number_of_replicas = self.input.param("num_replicas", 0)
         self._update_replica_for_fts_index(fts_idx, number_of_replicas)
         self.sleep(60)
-        n1ql_query = "select meta().id from `beer-sample` where search(`beer-sample`, {\"query\":{\"field\":\"state\", \"match\":\"California\"}, \"size\":10000})"
+        n1ql_query = "select meta().id from {0} where search({0}, {{\"query\":{{\"field\":\"state\", " \
+                     "\"match\":\"California\"}}, \"size\":10000}})".format(self.sample_bucket)
         n1ql_results = self.run_cbq_query(n1ql_query)['results']
         n1ql_doc_ids_before_rebalance = []
         for result in n1ql_results:
@@ -143,14 +145,17 @@ class N1qlFTSIntegrationPhase2ClusteropsTest(QueryTests):
         for result in n1ql_results:
             n1ql_doc_ids_after_rebalance.append(result['id'])
 
-        self.assertEqual(sorted(n1ql_doc_ids_before_rebalance), sorted(n1ql_doc_ids_after_rebalance), "Results after rebalance does not match.")
+        self.assertEqual(sorted(n1ql_doc_ids_before_rebalance), sorted(n1ql_doc_ids_after_rebalance),
+                          "Results after rebalance does not match.")
 
     def test_partitioning(self):
         partitions_number = self.input.param("partitions_num")
         self.load_test_buckets()
         self.cbcluster = CouchbaseCluster(name='cluster', nodes=self.servers, log=self.log)
-        fts_idx = self._create_fts_index(index_name="idx_beer_sample_fts", doc_count=7303, source_name='beer-sample')
-        n1ql_query = "select meta().id from `beer-sample` where search(`beer-sample`, {\"query\":{\"field\":\"state\", \"match\":\"California\"}, \"size\":10000})"
+        fts_idx = self._create_fts_index(index_name="idx_beer_sample_fts", doc_count=7303,
+                                         source_name=self.sample_bucket)
+        n1ql_query = "select meta().id from {0} where search({0}, {{\"query\":{{\"field\":\"state\"," \
+                     " \"match\":\"California\"}}, \"size\":10000}})".format(self.sample_bucket)
         default_results = self.run_cbq_query(n1ql_query)
         self._update_partiotions_for_fts_index(fts_idx, partitions_number)
         self.sleep(60)
@@ -164,8 +169,8 @@ class N1qlFTSIntegrationPhase2ClusteropsTest(QueryTests):
         for result in new_partitioning_result['results']:
             n1ql_doc_ids_after_partitioning.append(result['id'])
 
-        self.assertEqual(sorted(n1ql_doc_ids_before_partitioning), sorted(n1ql_doc_ids_after_partitioning), "Results after partitioning do not match.")
-
+        self.assertEqual(sorted(n1ql_doc_ids_before_partitioning), sorted(n1ql_doc_ids_after_partitioning),
+                          "Results after partitioning do not match.")
 
     def _update_replica_for_fts_index(self, idx, replicas):
         idx.update_num_replicas(replicas)
@@ -182,11 +187,11 @@ class N1qlFTSIntegrationPhase2ClusteropsTest(QueryTests):
     def find_child_node_with_service(self, service=""):
         services_map = self._get_services_map()
         for node in list(services_map.keys()):
-            if node == (str(self.servers[0].ip)+":"+str(self.servers[0].port)):
+            if node == (str(self.servers[0].ip) + ":" + str(self.servers[0].port)):
                 continue
             if service in services_map[node]:
                 for server in self.servers:
-                    if (str(server.ip)+":"+str(server.port)) == node:
+                    if (str(server.ip) + ":" + str(server.port)) == node:
                         return server
         return None
 
@@ -200,12 +205,12 @@ class N1qlFTSIntegrationPhase2ClusteropsTest(QueryTests):
         rest = self.get_rest_client(self.servers[0].rest_username, self.servers[0].rest_password)
         self.sleep(10)
         indexed_doc_count = fts_index.get_indexed_doc_count(rest)
-        #indexed_doc_count = rest.get_fts_stats(index_name, source_name, "doc_count")
+        # indexed_doc_count = rest.get_fts_stats(index_name, source_name, "doc_count")
         while indexed_doc_count < doc_count:
             try:
                 indexed_doc_count = fts_index.get_indexed_doc_count(rest)
-                #indexed_doc_count = rest.get_fts_stats(index_name, source_name, "doc_count")
-            except KeyError as k:
+                # indexed_doc_count = rest.get_fts_stats(index_name, source_name, "doc_count")
+            except KeyError:
                 continue
 
         return fts_index
@@ -213,4 +218,3 @@ class N1qlFTSIntegrationPhase2ClusteropsTest(QueryTests):
     def _get_services_map(self):
         rest = RestConnection(self.servers[0])
         return rest.get_nodes_services()
-

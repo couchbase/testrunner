@@ -1,19 +1,10 @@
-import logging
-import threading
-import json
-import uuid
-import time
-import os
+from .tuq import QueryTests
+
 from TestInput import TestInputSingleton
 
-from .tuq import QueryTests
-from membase.api.rest_client import RestConnection
-from membase.api.exception import CBQError, ReadDocumentException
-from remote.remote_util import RemoteMachineShellConnection
-from security.rbac_base import RbacBase
 
 class QueryBitwiseTests(QueryTests):
-    def setup(self):
+    def setUp(self):
         super(QueryBitwiseTests, self).setUp()
         users = TestInputSingleton.input.param("users", None)
         self.all_buckets = TestInputSingleton.input.param("all_buckets", False)
@@ -24,6 +15,8 @@ class QueryBitwiseTests(QueryTests):
         self.create_users()
         self.users = self.get_user_list()
         self.roles = self.get_user_role_list()
+        self.query_buckets = self.get_query_buckets(check_all_buckets=True)
+        self.query_bucket = self.query_bucket[0]
 
     def suite_setUp(self):
         super(QueryBitwiseTests, self).suite_setUp()
@@ -44,19 +37,17 @@ class QueryBitwiseTests(QueryTests):
         self.query = "select bitand(1,1,1,1,1,1,1)"
         self.assertEqual(actual_result['results'], [{'$1': 0}])
 
-
     def test_bitwise_and_no_arguments(self):
         self.query = "select bitand()"
         try:
-          self.run_cbq_query()
+            self.run_cbq_query()
         except Exception as ex:
-          print(ex)
+            print(ex)
         self.query = "select bitand(0)"
         try:
-          self.run_cbq_query()
+            self.run_cbq_query()
         except Exception as ex:
-          print(ex)
-
+            print(ex)
 
     def test_bitwise_and_long_integers(self):
         self.query = "select bitand(9223372036854775808,1470691191458562048)"
@@ -89,9 +80,10 @@ class QueryBitwiseTests(QueryTests):
         self.query = 'select bitand(0.23,"text")'
         actual_result = self.run_cbq_query()
         self.assertEqual(actual_result['results'], [{'$1': None}])
-        self.query = 'create index idx on default(join_day)'
+        self.query = 'create index idx on {0}(join_day)'.format(self.query_bucket)
         self.run_cbq_query()
-        self.query = 'select bitand(join_day,join_yr) from default where join_day is not missing order by meta().id limit 1'
+        self.query = 'select bitand(join_day,join_yr) from {0} where join_day is not missing order by' \
+                     ' meta().id limit 1'.format(self.query_bucket)
         actual_result = self.run_cbq_query()
         self.assertEqual(actual_result['results'], [{'$1': 9}])
 
@@ -105,16 +97,15 @@ class QueryBitwiseTests(QueryTests):
         self.query = "select bitor(1,1,1,1,1,1,1)"
         self.assertEqual(actual_result['results'], [{'$1': 1}])
 
-
     def test_bitwise_or_incorrect_arguments(self):
         self.query = "select bitor()"
         try:
-           self.run_cbq_query()
+            self.run_cbq_query()
         except Exception as ex:
             print(ex)
         self.query = "select bitor(2)"
         try:
-           self.run_cbq_query()
+            self.run_cbq_query()
         except Exception as ex:
             print(ex)
         self.query = "select bitor(2,4,5)"
@@ -173,40 +164,53 @@ class QueryBitwiseTests(QueryTests):
         self.assertEqual(actual_result['results'], [{'$1': 432424234434}])
 
     def test_default_bitand_bitor_bitxor_bitnot(self):
-        self.query = "select bitand(VMs[0].RAM,VMs[1].RAM) from default where _id='query-testemployee10153.1877827-0'"
+        self.query = "select bitand(VMs[0].RAM,VMs[1].RAM) from {0} where" \
+                     " _id='query-testemployee10153.1877827-0'".format(self.query_bucket)
         actual_result = self.run_cbq_query()
         self.assertEqual(actual_result['results'], [{'$1': 10}])
-        self.query = "select bitand(tasks_points.task1,tasks_points.task2) from default where _id='query-testemployee10153.1877827-0'"
+        self.query = "select bitand(tasks_points.task1,tasks_points.task2) from {0} where" \
+                     " _id='query-testemployee10153.1877827-0'".format(self.query_bucket)
         actual_result = self.run_cbq_query()
         self.assertEqual(actual_result['results'], [{'$1': 1}])
-        self.query = "select bitor(VMs[0].RAM,VMs[1].RAM) from default where _id='query-testemployee10153.1877827-0'"
+        self.query = "select bitor(VMs[0].RAM,VMs[1].RAM) from {0} where" \
+                     " _id='query-testemployee10153.1877827-0'".format(self.query_bucket)
         actual_result = self.run_cbq_query()
         self.assertEqual(actual_result['results'], [{'$1': 10}])
-        self.query = "select bitor(tasks_points.task1,tasks_points.task2) from default where _id='query-testemployee10153.1877827-0'"
+        self.query = "select bitor(tasks_points.task1,tasks_points.task2) from {0} where" \
+                     " _id='query-testemployee10153.1877827-0'".format(self.query_bucket)
         actual_result = self.run_cbq_query()
         self.assertEqual(actual_result['results'], [{'$1': 1}])
-        self.query = "select bitxor(VMs[0].RAM,VMs[1].RAM) from default where _id='query-testemployee10153.1877827-0'"
+        self.query = "select bitxor(VMs[0].RAM,VMs[1].RAM) from {0} where" \
+                     " _id='query-testemployee10153.1877827-0'".format(self.query_bucket)
         actual_result = self.run_cbq_query()
         self.assertEqual(actual_result['results'], [{'$1': 0}])
-        self.query = "select bitxor(tasks_points.task1,tasks_points.task2) from default where _id='query-testemployee10153.1877827-0'"
+        self.query = "select bitxor(tasks_points.task1,tasks_points.task2) from {0} where" \
+                     " _id='query-testemployee10153.1877827-0'".format(self.query_bucket)
         actual_result = self.run_cbq_query()
         self.assertEqual(actual_result['results'], [{'$1': 0}])
-        self.query = "select bitnot(VMs[0].RAM) from default where _id='query-testemployee10153.1877827-0'"
+        self.query = "select bitnot(VMs[0].RAM) from {0} where" \
+                     " _id='query-testemployee10153.1877827-0'".format(self.query_bucket)
         actual_result = self.run_cbq_query()
         self.assertEqual(actual_result['results'], [{'$1': -11}])
-        self.query = "select bitnot(tasks_points.task1) from default where _id='query-testemployee10153.1877827-0'"
+        self.query = "select bitnot(tasks_points.task1) from {0} where" \
+                     " _id='query-testemployee10153.1877827-0'".format(self.query_bucket)
         actual_result = self.run_cbq_query()
         self.assertEqual(actual_result['results'], [{'$1': -2}])
 
-
     def test_more_than_10_fields(self):
-        self.query = "select bitand(tasks_points.task1,VMs[0].RAM,VMs[1].RAM,tasks_points.task2,join_day,mutated,join_mo,test_rate,VMs[0].memory,VMs[1].memory) from default where _id='query-testemployee10153.1877827-0'"
+        self.query = "select bitand(tasks_points.task1,VMs[0].RAM,VMs[1].RAM,tasks_points.task2,join_day," \
+                     "mutated,join_mo,test_rate,VMs[0].memory,VMs[1].memory) from {0} where" \
+                     " _id='query-testemployee10153.1877827-0'".format(self.query_bucket)
         actual_result = self.run_cbq_query()
         print(actual_result)
-        self.query = "select bitor(tasks_points.task1,VMs[0].RAM,VMs[1].RAM,tasks_points.task2,join_day,mutated,join_mo,test_rate,VMs[0].memory,VMs[1].memory) from default where _id='query-testemployee10153.1877827-0'"
+        self.query = "select bitor(tasks_points.task1,VMs[0].RAM,VMs[1].RAM,tasks_points.task2,join_day,mutated," \
+                     "join_mo,test_rate,VMs[0].memory,VMs[1].memory) from {0} where" \
+                     " _id='query-testemployee10153.1877827-0'".format(self.query_bucket)
         actual_result = self.run_cbq_query()
         print(actual_result)
-        self.query = "select bitxor(tasks_points.task1,VMs[0].RAM,VMs[1].RAM,tasks_points.task2,join_day,mutated,join_mo,test_rate,VMs[0].memory,VMs[1].memory) from default where _id='query-testemployee10153.1877827-0'"
+        self.query = "select bitxor(tasks_points.task1,VMs[0].RAM,VMs[1].RAM,tasks_points.task2,join_day,mutated," \
+                     "join_mo,test_rate,VMs[0].memory,VMs[1].memory) from {0} where" \
+                     " _id='query-testemployee10153.1877827-0'".format(self.query_bucket)
         actual_result = self.run_cbq_query()
         print(actual_result)
 
@@ -230,8 +234,6 @@ class QueryBitwiseTests(QueryTests):
         actual_result = self.run_cbq_query()
         self.assertEqual(actual_result['results'], [{'$1': 15}])
 
-
-
     def test_is_bitset(self):
         self.query = "Select IsBitSET(6,1,true)"
         actual_result = self.run_cbq_query()
@@ -253,7 +255,6 @@ class QueryBitwiseTests(QueryTests):
         self.assertEqual(actual_result['results'], [{'$1': True}])
         self.query = "Select IsBitSET(6,[2,3],true)"
         self.assertEqual(actual_result['results'], [{'$1': True}])
-
 
     def test_bitTest(self):
         self.query = "Select BitTest(6,[1,2],false)"
@@ -282,14 +283,3 @@ class QueryBitwiseTests(QueryTests):
         self.query = "Select BitCLEAR(6,-23232323232)"
         actual_result = self.run_cbq_query()
         self.assertEqual(actual_result['results'], [{'$1': None}])
-
-
-
-
-
-
-
-
-
-
-

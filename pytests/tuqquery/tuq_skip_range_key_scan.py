@@ -7,8 +7,9 @@ class QuerySkipRangeScanTests(QueryTests):
     def setUp(self):
         super(QuerySkipRangeScanTests, self).setUp()
         self.log.info("==============  QuerySkipRangeScanTests setup has started ==============")
-        self.primary_index_def = {'name': '#primary', 'bucket': 'default', 'fields': [],
-                                                  'state': 'online', 'using': self.index_type.lower(), 'is_primary': True}
+        self.primary_index_def = {'name': '#primary', 'bucket': self.default_bucket_name, 'fields': [],
+                                  'state': 'online', 'using': self.index_type.lower(), 'is_primary': True}
+        self.query_bucket = self.get_query_buckets()[0]
         self.log.info("==============  QuerySkipRangeScanTests setup has completed ==============")
         self.log_config_info()
 
@@ -68,68 +69,88 @@ class QuerySkipRangeScanTests(QueryTests):
     def test_basic_skip_range_scan(self):
         queries = dict()
 
-        query_1a = "select * from default where join_yr > 2010 and join_day > 3"
-        verify_1 = "select * from default USE INDEX (`#primary` USING GSI) where join_yr > 2010 and join_day > 3"
-        index_1 = {'name': 'idx1', 'bucket': 'default', 'fields': (("join_yr", 0), ("join_mo", 1), ("join_day", 2)), 'state': 'online',
+        query_1a = "select * from " + self.query_bucket + " where join_yr > 2010 and join_day > 3"
+        verify_1 = "select * from " + self.query_bucket + " USE INDEX (`#primary` USING GSI) where join_yr > 2010 and join_day > 3"
+        index_1 = {'name': 'idx1', 'bucket': self.default_bucket_name, 'fields': (("join_yr", 0), ("join_mo", 1), ("join_day", 2)),
+                   'state': 'online',
                    'using': self.index_type.lower(), 'is_primary': False}
-        query_1b = "explain select * from default where join_yr > 2010 and join_day > 3"
+        query_1b = "explain select * from " + self.query_bucket + " where join_yr > 2010 and join_day > 3"
         spans_1 = [{'inclusion': 0, 'low': '2010'}, {'inclusion': 0}, {'inclusion': 0, 'low': '3'}]
 
-        query_2a = "select * from default where join_yr > 2010 and join_mo > 3"
-        verify_2 = "select * from default USE INDEX (`#primary` USING GSI) where join_yr > 2010 and join_mo > 3"
-        index_2 = {'name': 'idx1', 'bucket': 'default', 'fields': (("join_yr", 0), ("join_mo", 1), ("join_day", 2)), 'state': 'online',
+        query_2a = "select * from " + self.query_bucket + " where join_yr > 2010 and join_mo > 3"
+        verify_2 = "select * from " + self.query_bucket + " USE INDEX (`#primary` USING GSI) where join_yr > 2010 and join_mo > 3"
+        index_2 = {'name': 'idx1', 'bucket': self.default_bucket_name, 'fields': (("join_yr", 0), ("join_mo", 1), ("join_day", 2)),
+                   'state': 'online',
                    'using': self.index_type.lower(), 'is_primary': False}
-        query_2b = "explain select * from default where join_yr > 2010 and join_mo > 3"
+        query_2b = "explain select * from " + self.query_bucket + " where join_yr > 2010 and join_mo > 3"
         spans_2 = [{'inclusion': 0, 'low': '2010'}, {'inclusion': 0, 'low': '3'}]
 
-        query_3a = "select * from default where join_yr > 2010 and join_day > 3"
-        verify_3 = "select * from default USE INDEX (`#primary` USING GSI) where join_yr > 2010 and join_day > 3"
-        index_3 = {'name': 'idx1', 'bucket': 'default', 'fields': (("join_yr", 0), ("join_mo", 1), ("join_day", 2), ("job_title", 3)), 'state': 'online',
+        query_3a = "select * from " + self.query_bucket + " where join_yr > 2010 and join_day > 3"
+        verify_3 = "select * from " + self.query_bucket + " USE INDEX (`#primary` USING GSI) where join_yr > 2010 and join_day > 3"
+        index_3 = {'name': 'idx1', 'bucket': self.default_bucket_name,
+                   'fields': (("join_yr", 0), ("join_mo", 1), ("join_day", 2), ("job_title", 3)), 'state': 'online',
                    'using': self.index_type.lower(), 'is_primary': False}
-        query_3b = "explain select * from default where join_yr > 2010 and join_day > 3"
+        query_3b = "explain select * from " + self.query_bucket + " where join_yr > 2010 and join_day > 3"
         spans_3 = [{'inclusion': 0, 'low': '2010'}, {'inclusion': 0}, {'inclusion': 0, 'low': '3'}]
 
-        query_4a = "select * from default where join_yr > 2010 and join_day > 3 and name > 'employee-9' and email > '9-mail@couchbase.com'"
-        verify_4 = "select * from default USE INDEX (`#primary` USING GSI) where join_yr > 2010 and join_day > 3 and name > 'employee-9' and email > '9-mail@couchbase.com'"
-        index_4 = {'name': 'idx1', 'bucket': 'default', 'fields': (("join_yr", 0), ("join_mo", 1), ("join_day", 2), ("job_title", 3), ("name", 4), ("test_rate", 5), ("email", 6)), 'state': 'online',
+        query_4a = "select * from " + self.query_bucket + " where join_yr > 2010 and join_day > 3 and name > 'employee-9' and email > '9-mail@couchbase.com'"
+        verify_4 = "select * from " + self.query_bucket + " USE INDEX (`#primary` USING GSI) where join_yr > 2010 and join_day > 3 and name > 'employee-9' and email > '9-mail@couchbase.com'"
+        index_4 = {'name': 'idx1', 'bucket': self.default_bucket_name, 'fields': (
+        ("join_yr", 0), ("join_mo", 1), ("join_day", 2), ("job_title", 3), ("name", 4), ("test_rate", 5), ("email", 6)),
+                   'state': 'online',
                    'using': self.index_type.lower(), 'is_primary': False}
-        query_4b = "explain select * from default where join_yr > 2010 and join_day > 3 and name > 'employee-9' and email > '9-mail@couchbase.com'"
-        spans_4 = [{'inclusion': 0, 'low': '2010'}, {'inclusion': 0}, {'inclusion': 0, 'low': '3'}, {'inclusion': 0}, {'inclusion': 0, 'low': '"employee-9"'}, {'inclusion': 0}, {'inclusion': 0, 'low': '"9-mail@couchbase.com"'}]
+        query_4b = "explain select * from " + self.query_bucket + " where join_yr > 2010 and join_day > 3 and name > 'employee-9' and email > '9-mail@couchbase.com'"
+        spans_4 = [{'inclusion': 0, 'low': '2010'}, {'inclusion': 0}, {'inclusion': 0, 'low': '3'}, {'inclusion': 0},
+                   {'inclusion': 0, 'low': '"employee-9"'}, {'inclusion': 0},
+                   {'inclusion': 0, 'low': '"9-mail@couchbase.com"'}]
 
-        query_5a = "select * from default where join_yr > 2010"
-        verify_5 = "select * from default USE INDEX (`#primary` USING GSI) where join_yr > 2010"
-        index_5 = {'name': 'idx1', 'bucket': 'default', 'fields': (("join_yr", 0), ("join_mo", 1), ("join_day", 2), ("job_title", 3)), 'state': 'online',
+        query_5a = "select * from " + self.query_bucket + " where join_yr > 2010"
+        verify_5 = "select * from " + self.query_bucket + " USE INDEX (`#primary` USING GSI) where join_yr > 2010"
+        index_5 = {'name': 'idx1', 'bucket': self.default_bucket_name,
+                   'fields': (("join_yr", 0), ("join_mo", 1), ("join_day", 2), ("job_title", 3)), 'state': 'online',
                    'using': self.index_type.lower(), 'is_primary': False}
-        query_5b = "explain select * from default where join_yr > 2010"
+        query_5b = "explain select * from " + self.query_bucket + " where join_yr > 2010"
         spans_5 = [{'inclusion': 0, 'low': '2010'}]
 
-        query_6a = "select * from default where join_yr > 2010 and join_day > 3 and name > 'employee-9'"
-        verify_6 = "select * from default USE INDEX (`#primary` USING GSI) where join_yr > 2010 and join_day > 3 and name > 'employee-9'"
-        index_6 = {'name': 'idx1', 'bucket': 'default', 'fields': (("join_yr", 0), ("join_mo", 1), ("join_day", 2), ("job_title", 3), ("name", 4), ("test_rate", 5), ("email", 6)), 'state': 'online',
+        query_6a = "select * from " + self.query_bucket + " where join_yr > 2010 and join_day > 3 and name > 'employee-9'"
+        verify_6 = "select * from " + self.query_bucket + " USE INDEX (`#primary` USING GSI) where join_yr > 2010 and join_day > 3 and name > 'employee-9'"
+        index_6 = {'name': 'idx1', 'bucket': self.default_bucket_name, 'fields': (
+        ("join_yr", 0), ("join_mo", 1), ("join_day", 2), ("job_title", 3), ("name", 4), ("test_rate", 5), ("email", 6)),
+                   'state': 'online',
                    'using': self.index_type.lower(), 'is_primary': False}
-        query_6b = "explain select * from default where join_yr > 2010 and join_day > 3 and name > 'employee-9'"
-        spans_6 = [{'inclusion': 0, 'low': '2010'}, {'inclusion': 0}, {'inclusion': 0, 'low': '3'}, {'inclusion': 0}, {'inclusion': 0, 'low': '"employee-9"'}]
+        query_6b = "explain select * from " + self.query_bucket + " where join_yr > 2010 and join_day > 3 and name > 'employee-9'"
+        spans_6 = [{'inclusion': 0, 'low': '2010'}, {'inclusion': 0}, {'inclusion': 0, 'low': '3'}, {'inclusion': 0},
+                   {'inclusion': 0, 'low': '"employee-9"'}]
 
-        query_7a = "select * from default where join_yr > 2010 and email > '9-mail@couchbase.com'"
-        verify_7 = "select * from default USE INDEX (`#primary` USING GSI) where join_yr > 2010 and email > '9-mail@couchbase.com'"
-        index_7 = {'name': 'idx1', 'bucket': 'default', 'fields': (("join_yr", 0), ("join_mo", 1), ("join_day", 2), ("job_title", 3), ("name", 4), ("test_rate", 5), ("email", 6)), 'state': 'online',
+        query_7a = "select * from " + self.query_bucket + " where join_yr > 2010 and email > '9-mail@couchbase.com'"
+        verify_7 = "select * from " + self.query_bucket + " USE INDEX (`#primary` USING GSI) where join_yr > 2010 and email > '9-mail@couchbase.com'"
+        index_7 = {'name': 'idx1', 'bucket': self.default_bucket_name, 'fields': (
+        ("join_yr", 0), ("join_mo", 1), ("join_day", 2), ("job_title", 3), ("name", 4), ("test_rate", 5), ("email", 6)),
+                   'state': 'online',
                    'using': self.index_type.lower(), 'is_primary': False}
-        query_7b = "explain select * from default where join_yr > 2010 and email > '9-mail@couchbase.com'"
-        spans_7 = [{'inclusion': 0, 'low': '2010'}, {'inclusion': 0}, {'inclusion': 0}, {'inclusion': 0}, {'inclusion': 0}, {'inclusion': 0}, {'inclusion': 0, 'low': '"9-mail@couchbase.com"'}]
+        query_7b = "explain select * from " + self.query_bucket + " where join_yr > 2010 and email > '9-mail@couchbase.com'"
+        spans_7 = [{'inclusion': 0, 'low': '2010'}, {'inclusion': 0}, {'inclusion': 0}, {'inclusion': 0},
+                   {'inclusion': 0}, {'inclusion': 0}, {'inclusion': 0, 'low': '"9-mail@couchbase.com"'}]
 
-        query_8a = "select * from default where join_yr > 2010 and job_title > 'Engineer'"
-        verify_8 = "select * from default USE INDEX (`#primary` USING GSI) where join_yr > 2010 and job_title > 'Engineer'"
-        index_8 = {'name': 'idx1', 'bucket': 'default', 'fields': (("join_yr", 0), ("join_mo", 1), ("join_day", 2), ("job_title", 3), ("name", 4), ("test_rate", 5), ("email", 6)), 'state': 'online',
+        query_8a = "select * from " + self.query_bucket + " where join_yr > 2010 and job_title > 'Engineer'"
+        verify_8 = "select * from " + self.query_bucket + " USE INDEX (`#primary` USING GSI) where join_yr > 2010 and job_title > 'Engineer'"
+        index_8 = {'name': 'idx1', 'bucket': self.default_bucket_name, 'fields': (
+        ("join_yr", 0), ("join_mo", 1), ("join_day", 2), ("job_title", 3), ("name", 4), ("test_rate", 5), ("email", 6)),
+                   'state': 'online',
                    'using': self.index_type.lower(), 'is_primary': False}
-        query_8b = "explain select * from default where join_yr > 2010 and job_title > 'Engineer'"
-        spans_8 = [{'inclusion': 0, 'low': '2010'}, {'inclusion': 0}, {'inclusion': 0}, {'inclusion': 0, 'low': '"Engineer"'}]
+        query_8b = "explain select * from " + self.query_bucket + " where join_yr > 2010 and job_title > 'Engineer'"
+        spans_8 = [{'inclusion': 0, 'low': '2010'}, {'inclusion': 0}, {'inclusion': 0},
+                   {'inclusion': 0, 'low': '"Engineer"'}]
 
-        query_9a = "select join_mo, join_day, email from default where join_yr > 2010 and test_rate > 0"
-        verify_9 = "select join_mo, join_day, email from default USE INDEX (`#primary` USING GSI) where join_yr > 2010 and test_rate > 0"
-        index_9 = {'name': 'idx1', 'bucket': 'default', 'fields': (("join_yr", 0), ("join_mo", 1), ("join_day", 2), ("job_title", 3), ("name", 4), ("test_rate", 5), ("email", 6)), 'state': 'online',
+        query_9a = "select join_mo, join_day, email from " + self.query_bucket + " where join_yr > 2010 and test_rate > 0"
+        verify_9 = "select join_mo, join_day, email from " + self.query_bucket + " USE INDEX (`#primary` USING GSI) where join_yr > 2010 and test_rate > 0"
+        index_9 = {'name': 'idx1', 'bucket': self.default_bucket_name, 'fields': (
+        ("join_yr", 0), ("join_mo", 1), ("join_day", 2), ("job_title", 3), ("name", 4), ("test_rate", 5), ("email", 6)),
+                   'state': 'online',
                    'using': self.index_type.lower(), 'is_primary': False}
-        query_9b = "explain select join_mo, join_day, email from default where join_yr > 2010 and test_rate > 0"
-        spans_9 = [{'inclusion': 0, 'low': '2010'}, {'inclusion': 0}, {'inclusion': 0}, {'inclusion': 0}, {'inclusion': 0}, {'inclusion': 0, 'low': '0'}]
+        query_9b = "explain select join_mo, join_day, email from " + self.query_bucket + " where join_yr > 2010 and test_rate > 0"
+        spans_9 = [{'inclusion': 0, 'low': '2010'}, {'inclusion': 0}, {'inclusion': 0}, {'inclusion': 0},
+                   {'inclusion': 0}, {'inclusion': 0, 'low': '0'}]
 
         queries["a"] = {"indexes": [self.primary_index_def, index_1], "queries": [query_1a, query_1b],
                         "asserts": [self.verifier(verify_1, 0), self.plan_verifier("spans", spans_1, 1),
@@ -174,83 +195,108 @@ class QuerySkipRangeScanTests(QueryTests):
 
         # without group by
 
-        query_1a = "select COUNT(join_yr), SUM(join_day) from default where join_yr > 2010"
-        verify_1 = "select COUNT(join_yr), SUM(join_day) from default USE INDEX (`#primary` USING GSI) where join_yr > 2010"
-        index_1 = {'name': 'idx1', 'bucket': 'default', 'fields': (("join_yr", 0), ("join_mo", 1), ("join_day", 2)), 'state': 'online',
+        query_1a = "select COUNT(join_yr), SUM(join_day) from " + self.query_bucket + " where join_yr > 2010"
+        verify_1 = "select COUNT(join_yr), SUM(join_day) from " + self.query_bucket + " USE INDEX (`#primary` USING GSI) where join_yr > 2010"
+        index_1 = {'name': 'idx1', 'bucket': self.default_bucket_name, 'fields': (("join_yr", 0), ("join_mo", 1), ("join_day", 2)),
+                   'state': 'online',
                    'using': self.index_type.lower(), 'is_primary': False}
-        query_1b = "explain select COUNT(join_yr), SUM(join_day) from default where join_yr > 2010"
+        query_1b = "explain select COUNT(join_yr), SUM(join_day) from " + self.query_bucket + " where join_yr > 2010"
         spans_1 = [{'inclusion': 0, 'low': '2010'}]
 
-        query_2a = "select COUNT(join_day) from default where join_yr > 2010 and test_rate > 0"
-        verify_2 = "select COUNT(join_day) from default USE INDEX (`#primary` USING GSI) where join_yr > 2010 and test_rate > 0"
-        index_2 = {'name': 'idx1', 'bucket': 'default', 'fields': (("join_yr", 0), ("join_mo", 1), ("join_day", 2), ("job_title", 3), ("name", 4), ("test_rate", 5), ("email", 6)), 'state': 'online',
+        query_2a = "select COUNT(join_day) from " + self.query_bucket + " where join_yr > 2010 and test_rate > 0"
+        verify_2 = "select COUNT(join_day) from " + self.query_bucket + " USE INDEX (`#primary` USING GSI) where join_yr > 2010 and test_rate > 0"
+        index_2 = {'name': 'idx1', 'bucket': self.default_bucket_name, 'fields': (
+        ("join_yr", 0), ("join_mo", 1), ("join_day", 2), ("job_title", 3), ("name", 4), ("test_rate", 5), ("email", 6)),
+                   'state': 'online',
                    'using': self.index_type.lower(), 'is_primary': False}
-        query_2b = "explain select COUNT(join_day) from default where join_yr > 2010 and test_rate > 0"
-        spans_2 = [{'inclusion': 0, 'low': '2010'}, {'inclusion': 0}, {'inclusion': 0, 'low': 'null'}, {'inclusion': 0}, {'inclusion': 0}, {'inclusion': 0, 'low': '0'}]
+        query_2b = "explain select COUNT(join_day) from " + self.query_bucket + " where join_yr > 2010 and test_rate > 0"
+        spans_2 = [{'inclusion': 0, 'low': '2010'}, {'inclusion': 0}, {'inclusion': 0, 'low': 'null'}, {'inclusion': 0},
+                   {'inclusion': 0}, {'inclusion': 0, 'low': '0'}]
 
-        query_3a = "select COUNT(join_day), SUM(join_day) from default where join_yr > 2010 and test_rate > 0"
-        verify_3 = "select COUNT(join_day), SUM(join_day) from default USE INDEX (`#primary` USING GSI) where join_yr > 2010 and test_rate > 0"
-        index_3 = {'name': 'idx1', 'bucket': 'default', 'fields': (("join_yr", 0), ("join_mo", 1), ("join_day", 2), ("job_title", 3), ("name", 4), ("test_rate", 5), ("email", 6)), 'state': 'online',
+        query_3a = "select COUNT(join_day), SUM(join_day) from " + self.query_bucket + " where join_yr > 2010 and test_rate > 0"
+        verify_3 = "select COUNT(join_day), SUM(join_day) from " + self.query_bucket + " USE INDEX (`#primary` USING GSI) where join_yr > 2010 and test_rate > 0"
+        index_3 = {'name': 'idx1', 'bucket': self.default_bucket_name, 'fields': (
+        ("join_yr", 0), ("join_mo", 1), ("join_day", 2), ("job_title", 3), ("name", 4), ("test_rate", 5), ("email", 6)),
+                   'state': 'online',
                    'using': self.index_type.lower(), 'is_primary': False}
-        query_3b = "explain select COUNT(join_day), SUM(join_day) from default where join_yr > 2010 and test_rate > 0"
-        spans_3 = [{'inclusion': 0, 'low': '2010'}, {'inclusion': 0}, {'inclusion': 0, 'low': 'null'}, {'inclusion': 0}, {'inclusion': 0}, {'inclusion': 0, 'low': '0'}]
+        query_3b = "explain select COUNT(join_day), SUM(join_day) from " + self.query_bucket + " where join_yr > 2010 and test_rate > 0"
+        spans_3 = [{'inclusion': 0, 'low': '2010'}, {'inclusion': 0}, {'inclusion': 0, 'low': 'null'}, {'inclusion': 0},
+                   {'inclusion': 0}, {'inclusion': 0, 'low': '0'}]
 
-        query_4a = "select COUNT(join_day), SUM(join_day+1) from default where join_yr > 2010 and test_rate > 0"
-        verify_4 = "select COUNT(join_day), SUM(join_day+1) from default USE INDEX (`#primary` USING GSI) where join_yr > 2010 and test_rate > 0"
-        index_4 = {'name': 'idx1', 'bucket': 'default', 'fields': (("join_yr", 0), ("join_mo", 1), ("join_day", 2), ("job_title", 3), ("name", 4), ("test_rate", 5), ("email", 6)), 'state': 'online',
+        query_4a = "select COUNT(join_day), SUM(join_day+1) from " + self.query_bucket + " where join_yr > 2010 and test_rate > 0"
+        verify_4 = "select COUNT(join_day), SUM(join_day+1) from " + self.query_bucket + " USE INDEX (`#primary` USING GSI) where join_yr > 2010 and test_rate > 0"
+        index_4 = {'name': 'idx1', 'bucket': self.default_bucket_name, 'fields': (
+        ("join_yr", 0), ("join_mo", 1), ("join_day", 2), ("job_title", 3), ("name", 4), ("test_rate", 5), ("email", 6)),
+                   'state': 'online',
                    'using': self.index_type.lower(), 'is_primary': False}
-        query_4b = "explain select COUNT(join_day), SUM(join_day+1) from default where join_yr > 2010 and test_rate > 0"
-        spans_4 = [{'inclusion': 0, 'low': '2010'}, {'inclusion': 0}, {'inclusion': 0}, {'inclusion': 0}, {'inclusion': 0}, {'inclusion': 0, 'low': '0'}]
+        query_4b = "explain select COUNT(join_day), SUM(join_day+1) from " + self.query_bucket + " where join_yr > 2010 and test_rate > 0"
+        spans_4 = [{'inclusion': 0, 'low': '2010'}, {'inclusion': 0}, {'inclusion': 0}, {'inclusion': 0},
+                   {'inclusion': 0}, {'inclusion': 0, 'low': '0'}]
 
-        query_5a = "select COUNT(join_day), COUNT(name) from default where join_yr > 2010 and test_rate > 0"
-        verify_5 = "select COUNT(join_day), COUNT(name) from default USE INDEX (`#primary` USING GSI) where join_yr > 2010 and test_rate > 0"
-        index_5 = {'name': 'idx1', 'bucket': 'default', 'fields': (("join_yr", 0), ("join_mo", 1), ("join_day", 2), ("job_title", 3), ("name", 4), ("test_rate", 5), ("email", 6)), 'state': 'online',
+        query_5a = "select COUNT(join_day), COUNT(name) from " + self.query_bucket + " where join_yr > 2010 and test_rate > 0"
+        verify_5 = "select COUNT(join_day), COUNT(name) from " + self.query_bucket + " USE INDEX (`#primary` USING GSI) where join_yr > 2010 and test_rate > 0"
+        index_5 = {'name': 'idx1', 'bucket': self.default_bucket_name, 'fields': (
+        ("join_yr", 0), ("join_mo", 1), ("join_day", 2), ("job_title", 3), ("name", 4), ("test_rate", 5), ("email", 6)),
+                   'state': 'online',
                    'using': self.index_type.lower(), 'is_primary': False}
-        query_5b = "explain select COUNT(join_day), COUNT(name) from default where join_yr > 2010 and test_rate > 0"
-        spans_5 = [{'inclusion': 0, 'low': '2010'}, {'inclusion': 0}, {'inclusion': 0}, {'inclusion': 0}, {'inclusion': 0}, {'inclusion': 0, 'low': '0'}]
+        query_5b = "explain select COUNT(join_day), COUNT(name) from " + self.query_bucket + " where join_yr > 2010 and test_rate > 0"
+        spans_5 = [{'inclusion': 0, 'low': '2010'}, {'inclusion': 0}, {'inclusion': 0}, {'inclusion': 0},
+                   {'inclusion': 0}, {'inclusion': 0, 'low': '0'}]
 
         # with group by
 
-        query_6a = "select COUNT(join_day) from default where join_yr > 2010 group by name"
-        verify_6 = "select COUNT(join_day) from default USE INDEX (`#primary` USING GSI) where join_yr > 2010  group by name"
-        index_6 = {'name': 'idx1', 'bucket': 'default', 'fields': (("join_yr", 0), ("join_mo", 1), ("join_day", 2), ("job_title", 3), ("name", 4), ("test_rate", 5), ("email", 6)), 'state': 'online',
+        query_6a = "select COUNT(join_day) from " + self.query_bucket + " where join_yr > 2010 group by name"
+        verify_6 = "select COUNT(join_day) from " + self.query_bucket + " USE INDEX (`#primary` USING GSI) where join_yr > 2010  group by name"
+        index_6 = {'name': 'idx1', 'bucket': self.default_bucket_name, 'fields': (
+        ("join_yr", 0), ("join_mo", 1), ("join_day", 2), ("job_title", 3), ("name", 4), ("test_rate", 5), ("email", 6)),
+                   'state': 'online',
                    'using': self.index_type.lower(), 'is_primary': False}
-        query_6b = "explain select COUNT(join_day) from default where join_yr > 2010 group by name"
+        query_6b = "explain select COUNT(join_day) from " + self.query_bucket + " where join_yr > 2010 group by name"
         spans_6 = [{'inclusion': 0, 'low': '2010'}]
 
-        query_7a = "select COUNT(join_day), COUNT(email) from default where join_yr > 2010 group by name"
-        verify_7 = "select COUNT(join_day), COUNT(email) from default USE INDEX (`#primary` USING GSI) where join_yr > 2010  group by name"
-        index_7 = {'name': 'idx1', 'bucket': 'default', 'fields': (("join_yr", 0), ("join_mo", 1), ("join_day", 2), ("job_title", 3), ("name", 4), ("test_rate", 5), ("email", 6)), 'state': 'online',
+        query_7a = "select COUNT(join_day), COUNT(email) from " + self.query_bucket + " where join_yr > 2010 group by name"
+        verify_7 = "select COUNT(join_day), COUNT(email) from " + self.query_bucket + " USE INDEX (`#primary` USING GSI) where join_yr > 2010  group by name"
+        index_7 = {'name': 'idx1', 'bucket': self.default_bucket_name, 'fields': (
+        ("join_yr", 0), ("join_mo", 1), ("join_day", 2), ("job_title", 3), ("name", 4), ("test_rate", 5), ("email", 6)),
+                   'state': 'online',
                    'using': self.index_type.lower(), 'is_primary': False}
-        query_7b = "explain select COUNT(join_day), COUNT(email) from default where join_yr > 2010 group by name"
+        query_7b = "explain select COUNT(join_day), COUNT(email) from " + self.query_bucket + " where join_yr > 2010 group by name"
         spans_7 = [{'inclusion': 0, 'low': '2010'}]
 
-        query_8a = "select name, COUNT(join_day), COUNT(email) from default where join_yr > 2010 group by name"
-        verify_8 = "select name, COUNT(join_day), COUNT(email) from default USE INDEX (`#primary` USING GSI) where join_yr > 2010  group by name"
-        index_8 = {'name': 'idx1', 'bucket': 'default', 'fields': (("join_yr", 0), ("join_mo", 1), ("join_day", 2), ("job_title", 3), ("name", 4), ("test_rate", 5), ("email", 6)), 'state': 'online',
+        query_8a = "select name, COUNT(join_day), COUNT(email) from " + self.query_bucket + " where join_yr > 2010 group by name"
+        verify_8 = "select name, COUNT(join_day), COUNT(email) from " + self.query_bucket + " USE INDEX (`#primary` USING GSI) where join_yr > 2010  group by name"
+        index_8 = {'name': 'idx1', 'bucket': self.default_bucket_name, 'fields': (
+        ("join_yr", 0), ("join_mo", 1), ("join_day", 2), ("job_title", 3), ("name", 4), ("test_rate", 5), ("email", 6)),
+                   'state': 'online',
                    'using': self.index_type.lower(), 'is_primary': False}
-        query_8b = "explain select name, COUNT(join_day), COUNT(email) from default where join_yr > 2010 group by name"
+        query_8b = "explain select name, COUNT(join_day), COUNT(email) from " + self.query_bucket + " where join_yr > 2010 group by name"
         spans_8 = [{'inclusion': 0, 'low': '2010'}]
 
-        query_9a = "select name, COUNT(join_day), COUNT(email) from default where join_yr > 2010 group by name, test_rate"
-        verify_9 = "select name, COUNT(join_day), COUNT(email) from default USE INDEX (`#primary` USING GSI) where join_yr > 2010  group by name, test_rate"
-        index_9 = {'name': 'idx1', 'bucket': 'default', 'fields': (("join_yr", 0), ("join_mo", 1), ("join_day", 2), ("job_title", 3), ("name", 4), ("test_rate", 5), ("email", 6)), 'state': 'online',
+        query_9a = "select name, COUNT(join_day), COUNT(email) from " + self.query_bucket + " where join_yr > 2010 group by name, test_rate"
+        verify_9 = "select name, COUNT(join_day), COUNT(email) from " + self.query_bucket + " USE INDEX (`#primary` USING GSI) where join_yr > 2010  group by name, test_rate"
+        index_9 = {'name': 'idx1', 'bucket': self.default_bucket_name, 'fields': (
+        ("join_yr", 0), ("join_mo", 1), ("join_day", 2), ("job_title", 3), ("name", 4), ("test_rate", 5), ("email", 6)),
+                   'state': 'online',
                    'using': self.index_type.lower(), 'is_primary': False}
-        query_9b = "explain select name, COUNT(join_day), COUNT(email) from default where join_yr > 2010 group by name, test_rate"
+        query_9b = "explain select name, COUNT(join_day), COUNT(email) from " + self.query_bucket + " where join_yr > 2010 group by name, test_rate"
         spans_9 = [{'inclusion': 0, 'low': '2010'}]
 
-        query_10a = "select name, COUNT(join_day), COUNT(email), test_rate from default where join_yr > 2010 group by name, test_rate"
-        verify_10 = "select name, COUNT(join_day), COUNT(email), test_rate from default USE INDEX (`#primary` USING GSI) where join_yr > 2010  group by name, test_rate"
-        index_10 = {'name': 'idx1', 'bucket': 'default', 'fields': (("join_yr", 0), ("join_mo", 1), ("join_day", 2), ("job_title", 3), ("name", 4), ("test_rate", 5), ("email", 6)), 'state': 'online',
-                   'using': self.index_type.lower(), 'is_primary': False}
-        query_10b = "explain select name, COUNT(join_day), COUNT(email), test_rate from default where join_yr > 2010 group by name, test_rate"
+        query_10a = "select name, COUNT(join_day), COUNT(email), test_rate from " + self.query_bucket + " where join_yr > 2010 group by name, test_rate"
+        verify_10 = "select name, COUNT(join_day), COUNT(email), test_rate from " + self.query_bucket + " USE INDEX (`#primary` USING GSI) where join_yr > 2010  group by name, test_rate"
+        index_10 = {'name': 'idx1', 'bucket': self.default_bucket_name, 'fields': (
+        ("join_yr", 0), ("join_mo", 1), ("join_day", 2), ("job_title", 3), ("name", 4), ("test_rate", 5), ("email", 6)),
+                    'state': 'online',
+                    'using': self.index_type.lower(), 'is_primary': False}
+        query_10b = "explain select name, COUNT(join_day), COUNT(email), test_rate from " + self.query_bucket + " where join_yr > 2010 group by name, test_rate"
         spans_10 = [{'inclusion': 0, 'low': '2010'}]
 
-        query_11a = "select name, COUNT(join_day), COUNT(email), test_rate from default where join_yr > 2010 group by name, test_rate having LENGTH(name) > 1 order by test_rate"
-        verify_11 = "select name, COUNT(join_day), COUNT(email), test_rate from default USE INDEX (`#primary` USING GSI) where join_yr > 2010  group by name, test_rate having LENGTH(name) > 1 order by test_rate"
-        index_11 = {'name': 'idx1', 'bucket': 'default', 'fields': (("join_yr", 0), ("join_mo", 1), ("join_day", 2), ("job_title", 3), ("name", 4), ("test_rate", 5), ("email", 6)), 'state': 'online',
+        query_11a = "select name, COUNT(join_day), COUNT(email), test_rate from " + self.query_bucket + " where join_yr > 2010 group by name, test_rate having LENGTH(name) > 1 order by test_rate"
+        verify_11 = "select name, COUNT(join_day), COUNT(email), test_rate from " + self.query_bucket + " USE INDEX (`#primary` USING GSI) where join_yr > 2010  group by name, test_rate having LENGTH(name) > 1 order by test_rate"
+        index_11 = {'name': 'idx1', 'bucket': self.default_bucket_name, 'fields': (
+        ("join_yr", 0), ("join_mo", 1), ("join_day", 2), ("job_title", 3), ("name", 4), ("test_rate", 5), ("email", 6)),
+                    'state': 'online',
                     'using': self.index_type.lower(), 'is_primary': False}
-        query_11b = "explain select name, COUNT(join_day), COUNT(email), test_rate from default where join_yr > 2010 group by name, test_rate having LENGTH(name) > 1 order by test_rate"
+        query_11b = "explain select name, COUNT(join_day), COUNT(email), test_rate from " + self.query_bucket + " where join_yr > 2010 group by name, test_rate having LENGTH(name) > 1 order by test_rate"
         spans_11 = [{'inclusion': 0, 'low': '2010'}]
 
         queries["a"] = {"indexes": [self.primary_index_def, index_1], "queries": [query_1a, query_1b],
@@ -295,18 +341,19 @@ class QuerySkipRangeScanTests(QueryTests):
 
         queries["k"] = {"indexes": [self.primary_index_def, index_11], "queries": [query_11a, query_11b],
                         "asserts": [self.verifier(verify_11, 0), self.plan_verifier("deep_spans", spans_11, 1),
-                                    self.plan_verifier("deep_index", "idx1", 1), self.plan_verifier("pushdown", None, 1)]}
+                                    self.plan_verifier("deep_index", "idx1", 1),
+                                    self.plan_verifier("pushdown", None, 1)]}
 
         self.query_runner(queries)
 
     def test_skip_range_scan_joins(self):
         queries = dict()
 
-        query_1 = "explain select * from default d1 INNER JOIN default d2 on (d1.join_yr == d2.join_yr)"
+        query_1 = "explain select * from " + self.query_bucket + " d1 INNER JOIN " + self.query_bucket + " d2 on (d1.join_yr == d2.join_yr)"
 
-        index_1a = {'name': 'idx1', 'bucket': 'default', 'fields': [("join_yr", 0)], 'state': 'online',
-                   'using': self.index_type.lower(), 'is_primary': False}
-        index_1b = {'name': 'idx2', 'bucket': 'default', 'fields': [("join_yr", 0), ("join_yr", 1)], 'state': 'online',
+        index_1a = {'name': 'idx1', 'bucket': self.default_bucket_name, 'fields': [("join_yr", 0)], 'state': 'online',
+                    'using': self.index_type.lower(), 'is_primary': False}
+        index_1b = {'name': 'idx2', 'bucket': self.default_bucket_name, 'fields': [("join_yr", 0), ("join_yr", 1)], 'state': 'online',
                     'using': self.index_type.lower(), 'is_primary': False}
         spans_1a = [{'low': 'null', 'inclusion': 0}]
         spans_1b = [{'high': '(`d1`.`join_yr`)', 'low': '(`d1`.`join_yr`)', 'inclusion': 3}]
@@ -317,11 +364,11 @@ class QuerySkipRangeScanTests(QueryTests):
                                     self.plan_verifier("spans", spans_1a, 0),
                                     self.plan_verifier("join_spans", spans_1b, 0)]}
 
-        query_2 = "explain select * from default d1 INNER JOIN default d2 on (d1.join_yr == d2.join_yr)"
+        query_2 = "explain select * from " + self.query_bucket + " d1 INNER JOIN " + self.query_bucket + " d2 on (d1.join_yr == d2.join_yr)"
 
-        index_2a = {'name': 'idx1', 'bucket': 'default', 'fields': [("join_yr", 0)], 'state': 'online',
+        index_2a = {'name': 'idx1', 'bucket': self.default_bucket_name, 'fields': [("join_yr", 0)], 'state': 'online',
                     'using': self.index_type.lower(), 'is_primary': False}
-        index_2b = {'name': 'idx2', 'bucket': 'default', 'fields': [("join_yr", 0), ("join_mo", 1)], 'state': 'online',
+        index_2b = {'name': 'idx2', 'bucket': self.default_bucket_name, 'fields': [("join_yr", 0), ("join_mo", 1)], 'state': 'online',
                     'using': self.index_type.lower(), 'is_primary': False}
         spans_2a = [{'low': 'null', 'inclusion': 0}]
         spans_2b = [{'high': '(`d1`.`join_yr`)', 'low': '(`d1`.`join_yr`)', 'inclusion': 3}]
@@ -332,13 +379,14 @@ class QuerySkipRangeScanTests(QueryTests):
                                     self.plan_verifier("spans", spans_2a, 0),
                                     self.plan_verifier("join_spans", spans_2b, 0)]}
 
-        query_3 = "explain select * from default d1 INNER JOIN default d2 on (d1.join_yr == d2.join_yr and d1.join_day == d2.join_day)"
+        query_3 = "explain select * from " + self.query_bucket + " d1 INNER JOIN " + self.query_bucket + " d2 on (d1.join_yr == d2.join_yr and d1.join_day == d2.join_day)"
 
-        index_3a = {'name': 'idx1', 'bucket': 'default', 'fields': [("join_yr", 0)], 'state': 'online',
+        index_3a = {'name': 'idx1', 'bucket': self.default_bucket_name, 'fields': [("join_yr", 0)], 'state': 'online',
                     'using': self.index_type.lower(), 'is_primary': False}
-        index_3b = {'name': 'idx2', 'bucket': 'default', 'fields': [("join_yr", 0), ("join_day", 1)], 'state': 'online',
+        index_3b = {'name': 'idx2', 'bucket': self.default_bucket_name, 'fields': [("join_yr", 0), ("join_day", 1)], 'state': 'online',
                     'using': self.index_type.lower(), 'is_primary': False}
-        index_3c = {'name': 'idx3', 'bucket': 'default', 'fields': [("join_yr", 0), ("join_mo", 1), ("join_day", 2)], 'state': 'online',
+        index_3c = {'name': 'idx3', 'bucket': self.default_bucket_name, 'fields': [("join_yr", 0), ("join_mo", 1), ("join_day", 2)],
+                    'state': 'online',
                     'using': self.index_type.lower(), 'is_primary': False}
         spans_3a = [{'low': 'null', 'inclusion': 0}]
         spans_3b = [{'high': '(`d1`.`join_yr`)', 'low': '(`d1`.`join_yr`)', 'inclusion': 3}]
@@ -349,11 +397,12 @@ class QuerySkipRangeScanTests(QueryTests):
                                     self.plan_verifier("spans", spans_3a, 0),
                                     self.plan_verifier("join_spans", spans_3b, 0)]}
 
-        query_4 = "explain select * from default d1 INNER JOIN default d2 on (d1.join_yr == d2.join_yr and d1.join_day == d2.join_day)"
+        query_4 = "explain select * from " + self.query_bucket + " d1 INNER JOIN " + self.query_bucket + " d2 on (d1.join_yr == d2.join_yr and d1.join_day == d2.join_day)"
 
-        index_4a = {'name': 'idx1', 'bucket': 'default', 'fields': [("join_yr", 0)], 'state': 'online',
+        index_4a = {'name': 'idx1', 'bucket': self.default_bucket_name, 'fields': [("join_yr", 0)], 'state': 'online',
                     'using': self.index_type.lower(), 'is_primary': False}
-        index_4b = {'name': 'idx2', 'bucket': 'default', 'fields': [("join_day", 0), ("join_mo", 1), ("join_yr", 2)], 'state': 'online',
+        index_4b = {'name': 'idx2', 'bucket': self.default_bucket_name, 'fields': [("join_day", 0), ("join_mo", 1), ("join_yr", 2)],
+                    'state': 'online',
                     'using': self.index_type.lower(), 'is_primary': False}
         spans_4a = [{'low': 'null', 'inclusion': 0}]
         spans_4b = [{'high': '(`d1`.`join_yr`)', 'low': '(`d1`.`join_yr`)', 'inclusion': 3}]
@@ -364,13 +413,14 @@ class QuerySkipRangeScanTests(QueryTests):
                                     self.plan_verifier("spans", spans_4a, 0),
                                     self.plan_verifier("join_spans", spans_4b, 0)]}
 
-        query_5 = "explain select * from default d1 INNER JOIN default d2 on (d1.join_yr == d2.join_yr and d1.join_day == d2.join_day)"
+        query_5 = "explain select * from " + self.query_bucket + " d1 INNER JOIN " + self.query_bucket + " d2 on (d1.join_yr == d2.join_yr and d1.join_day == d2.join_day)"
 
-        index_5a = {'name': 'idx1', 'bucket': 'default', 'fields': [("join_yr", 0)], 'state': 'online',
+        index_5a = {'name': 'idx1', 'bucket': self.default_bucket_name, 'fields': [("join_yr", 0)], 'state': 'online',
                     'using': self.index_type.lower(), 'is_primary': False}
-        index_5b = {'name': 'idx2', 'bucket': 'default', 'fields': [("join_day", 0), ("join_mo", 1), ("join_yr", 2)], 'state': 'online',
+        index_5b = {'name': 'idx2', 'bucket': self.default_bucket_name, 'fields': [("join_day", 0), ("join_mo", 1), ("join_yr", 2)],
+                    'state': 'online',
                     'using': self.index_type.lower(), 'is_primary': False}
-        index_5c = {'name': 'idx3', 'bucket': 'default', 'fields': [("join_yr", 0), ("join_day", 1)], 'state': 'online',
+        index_5c = {'name': 'idx3', 'bucket': self.default_bucket_name, 'fields': [("join_yr", 0), ("join_day", 1)], 'state': 'online',
                     'using': self.index_type.lower(), 'is_primary': False}
         spans_5a = [{'low': 'null', 'inclusion': 0}]
         spans_5b = [{'high': '(`d1`.`join_yr`)', 'low': '(`d1`.`join_yr`)', 'inclusion': 3}]
@@ -381,20 +431,23 @@ class QuerySkipRangeScanTests(QueryTests):
                                     self.plan_verifier("spans", spans_5a, 0),
                                     self.plan_verifier("join_spans", spans_5b, 0)]}
 
-        query_6 = "explain select * from default d1 INNER JOIN default d2 on (d1.join_yr == d2.join_yr and d1.join_day == d2.join_day)"
+        query_6 = "explain select * from " + self.query_bucket + " d1 INNER JOIN " + self.query_bucket + " d2 on (d1.join_yr == d2.join_yr and d1.join_day == d2.join_day)"
 
-        index_6a = {'name': 'idx1', 'bucket': 'default', 'fields': [("join_yr", 0)], 'state': 'online',
+        index_6a = {'name': 'idx1', 'bucket': self.default_bucket_name, 'fields': [("join_yr", 0)], 'state': 'online',
                     'using': self.index_type.lower(), 'is_primary': False}
-        index_6b = {'name': 'idx2', 'bucket': 'default', 'fields': [("join_day", 0), ("join_mo", 1), ("join_yr", 2)], 'state': 'online',
+        index_6b = {'name': 'idx2', 'bucket': self.default_bucket_name, 'fields': [("join_day", 0), ("join_mo", 1), ("join_yr", 2)],
+                    'state': 'online',
                     'using': self.index_type.lower(), 'is_primary': False}
-        index_6c = {'name': 'idx3', 'bucket': 'default', 'fields': [("join_yr", 0), ("join_day", 1)], 'state': 'online',
+        index_6c = {'name': 'idx3', 'bucket': self.default_bucket_name, 'fields': [("join_yr", 0), ("join_day", 1)], 'state': 'online',
                     'using': self.index_type.lower(), 'is_primary': False}
-        index_6d = {'name': 'idx4', 'bucket': 'default', 'fields': [("join_yr", 0), ("join_day", 1), ("join_mo", 2)], 'state': 'online',
+        index_6d = {'name': 'idx4', 'bucket': self.default_bucket_name, 'fields': [("join_yr", 0), ("join_day", 1), ("join_mo", 2)],
+                    'state': 'online',
                     'using': self.index_type.lower(), 'is_primary': False}
         spans_6a = [{'low': 'null', 'inclusion': 0}]
         spans_6b = [{'high': '(`d1`.`join_yr`)', 'low': '(`d1`.`join_yr`)', 'inclusion': 3}]
 
-        queries["f"] = {"indexes": [self.primary_index_def, index_6a, index_6b, index_6c, index_6d], "queries": [query_6],
+        queries["f"] = {"indexes": [self.primary_index_def, index_6a, index_6b, index_6c, index_6d],
+                        "queries": [query_6],
                         "asserts": [self.plan_verifier("index", "idx3", 0),
                                     self.plan_verifier("join_index", "idx3", 0),
                                     self.plan_verifier("spans", spans_6a, 0),
@@ -406,52 +459,59 @@ class QuerySkipRangeScanTests(QueryTests):
     def test_skip_range_scan_index_selection(self):
         queries = dict()
 
-        index_1 = {'name': 'idx1', 'bucket': 'default', 'fields': [("join_yr", 0)], 'state': 'online',
+        index_1 = {'name': 'idx1', 'bucket': self.default_bucket_name, 'fields': [("join_yr", 0)], 'state': 'online',
                    'using': self.index_type.lower(), 'is_primary': False}
-        index_2 = {'name': 'idx2', 'bucket': 'default', 'fields': [("join_yr", 0), ("join_mo", 1)], 'state': 'online',
+        index_2 = {'name': 'idx2', 'bucket': self.default_bucket_name, 'fields': [("join_yr", 0), ("join_mo", 1)], 'state': 'online',
                    'using': self.index_type.lower(), 'is_primary': False}
-        index_3 = {'name': 'idx3', 'bucket': 'default', 'fields': [("join_yr", 0), ("join_mo", 1), ("join_day", 2)], 'state': 'online',
+        index_3 = {'name': 'idx3', 'bucket': self.default_bucket_name, 'fields': [("join_yr", 0), ("join_mo", 1), ("join_day", 2)],
+                   'state': 'online',
                    'using': self.index_type.lower(), 'is_primary': False}
-        index_4 = {'name': 'idx4', 'bucket': 'default', 'fields': [("join_yr", 0), ("join_mo", 1), ("join_day", 2), ("job_title", 3)], 'state': 'online',
-                    'using': self.index_type.lower(), 'is_primary': False}
-        index_5 = {'name': 'idx5', 'bucket': 'default', 'fields': [("join_yr", 0), ("join_day", 1)], 'state': 'online',
-                    'using': self.index_type.lower(), 'is_primary': False}
-        index_6 = {'name': 'idx6', 'bucket': 'default', 'fields': [("join_yr", 0), ("join_mo", 1), ("join_day", 2), ("job_title", 3), ("name", 4), ("test_rate", 5)], 'state': 'online',
-                    'using': self.index_type.lower(), 'is_primary': False}
-        index_7 = {'name': 'idx7', 'bucket': 'default', 'fields': [("join_yr", 0), ("join_mo", 1), ("join_day", 2), ("job_title", 3), ("name", 4), ("test_rate", 5), ("email", 6)], 'state': 'online',
-                    'using': self.index_type.lower(), 'is_primary': False}
-        index_8 = {'name': 'idx8', 'bucket': 'default', 'fields': [("join_yr", 0), ("join_mo", 1), ("job_title", 2), ("join_day", 3)], 'state': 'online',
+        index_4 = {'name': 'idx4', 'bucket': self.default_bucket_name,
+                   'fields': [("join_yr", 0), ("join_mo", 1), ("join_day", 2), ("job_title", 3)], 'state': 'online',
+                   'using': self.index_type.lower(), 'is_primary': False}
+        index_5 = {'name': 'idx5', 'bucket': self.default_bucket_name, 'fields': [("join_yr", 0), ("join_day", 1)], 'state': 'online',
+                   'using': self.index_type.lower(), 'is_primary': False}
+        index_6 = {'name': 'idx6', 'bucket': self.default_bucket_name,
+                   'fields': [("join_yr", 0), ("join_mo", 1), ("join_day", 2), ("job_title", 3), ("name", 4),
+                              ("test_rate", 5)], 'state': 'online',
+                   'using': self.index_type.lower(), 'is_primary': False}
+        index_7 = {'name': 'idx7', 'bucket': self.default_bucket_name,
+                   'fields': [("join_yr", 0), ("join_mo", 1), ("join_day", 2), ("job_title", 3), ("name", 4),
+                              ("test_rate", 5), ("email", 6)], 'state': 'online',
+                   'using': self.index_type.lower(), 'is_primary': False}
+        index_8 = {'name': 'idx8', 'bucket': self.default_bucket_name,
+                   'fields': [("join_yr", 0), ("join_mo", 1), ("job_title", 2), ("join_day", 3)], 'state': 'online',
                    'using': self.index_type.lower(), 'is_primary': False}
 
-        query_1 = "explain select * from default where join_yr > 2010"
+        query_1 = "explain select * from " + self.query_bucket + " where join_yr > 2010"
         queries["a"] = {"indexes": [self.primary_index_def, index_1, index_2], "queries": [query_1],
                         "asserts": [self.plan_verifier("index", "idx1", 0)]}
 
-        query_2 = "explain select * from default where join_mo > 2010"
+        query_2 = "explain select * from " + self.query_bucket + " where join_mo > 2010"
         queries["b"] = {"indexes": [self.primary_index_def, index_1, index_2], "queries": [query_2],
                         "asserts": [self.plan_verifier("index", "#primary", 0)]}
 
-        query_3 = "explain select * from default where join_yr > 2010 and join_mo > 1"
+        query_3 = "explain select * from " + self.query_bucket + " where join_yr > 2010 and join_mo > 1"
         queries["c"] = {"indexes": [self.primary_index_def, index_1, index_2, index_3], "queries": [query_3],
                         "asserts": [self.plan_verifier("index", "idx2", 0)]}
 
-        query_4 = "explain select * from default where join_yr > 2010 and join_day > 1"
+        query_4 = "explain select * from " + self.query_bucket + " where join_yr > 2010 and join_day > 1"
         queries["d"] = {"indexes": [self.primary_index_def, index_3, index_4], "queries": [query_4],
                         "asserts": [self.plan_verifier("index", "idx3", 0)]}
 
-        query_5 = "explain select * from default where join_yr > 2010 and join_day > 1"
+        query_5 = "explain select * from " + self.query_bucket + " where join_yr > 2010 and join_day > 1"
         queries["e"] = {"indexes": [self.primary_index_def, index_3, index_5], "queries": [query_5],
                         "asserts": [self.plan_verifier("index", "idx3", 0)]}
 
-        query_6 = "explain select * from default where join_yr > 2010 and join_day > 1"
+        query_6 = "explain select * from " + self.query_bucket + " where join_yr > 2010 and join_day > 1"
         queries["f"] = {"indexes": [self.primary_index_def, index_4, index_5], "queries": [query_6],
                         "asserts": [self.plan_verifier("index", "idx4", 0)]}
 
-        query_6 = "explain select * from default where join_yr > 2010 and join_day > 1"
+        query_6 = "explain select * from " + self.query_bucket + " where join_yr > 2010 and join_day > 1"
         queries["g"] = {"indexes": [self.primary_index_def, index_6, index_7], "queries": [query_6],
                         "asserts": [self.plan_verifier("index", "idx6", 0)]}
 
-        query_7 = "explain select * from default where join_yr > 2010 and join_day > 1"
+        query_7 = "explain select * from " + self.query_bucket + " where join_yr > 2010 and join_day > 1"
         queries["h"] = {"indexes": [self.primary_index_def, index_3, index_8], "queries": [query_7],
                         "asserts": [self.plan_verifier("index", "idx3", 0)]}
 

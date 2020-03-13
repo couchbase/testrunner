@@ -1,5 +1,6 @@
 from tuqquery.tuq import QueryTests
 
+
 class SysCatalogTests(QueryTests):
 
     def setUp(self):
@@ -22,11 +23,11 @@ class SysCatalogTests(QueryTests):
             host = self.input.tuq_client
         else:
             host = self.master.ip
-        #host = (self.master.ip, self.input.tuq_client)[self.input.tuq_client and "client" in self.input.tuq_client]
+        # host = (self.master.ip, self.input.tuq_client)[self.input.tuq_client and "client" in self.input.tuq_client]
         if self.ipv6:
             host = 'http://[::1]'
         elif self.version == 'sherlock':
-            host ='127.0.0.1'
+            host = '127.0.0.1'
         for res in result['results']:
             self.assertEqual(res['datastores']['id'], res['datastores']['url'],
                              "Id and url don't match")
@@ -46,13 +47,13 @@ class SysCatalogTests(QueryTests):
         for res in result['results']:
             self.log.info(res)
             self.assertEqual(res['namespaces']['id'], res['namespaces']['name'],
-                        "Id and url don't match")
-            self.assertTrue(res['namespaces']['datastore_id'].find(host) != -1 or\
+                             "Id and url don't match")
+            self.assertTrue(res['namespaces']['datastore_id'].find(host) != -1 or \
                             res['namespaces']['datastore_id'].find(self.master.ip) != -1,
                             "Expected: %s, actual: %s" % (host, result))
 
     def test_negative_buckets(self):
-        queries_errors = {'SELECT * FROM system:keyspaces' : ('Invalid fetch value <nil> of type %!T(MISSING)', 5030)}
+        queries_errors = {'SELECT * FROM system:keyspaces': ('Invalid fetch value <nil> of type %!T(MISSING)', 5030)}
         self.negative_common_body(queries_errors)
 
     def test_buckets(self):
@@ -61,16 +62,16 @@ class SysCatalogTests(QueryTests):
         buckets = [bucket.name for bucket in self.buckets]
         self.log.info(result)
         self.assertFalse(set(buckets) - {b['keyspaces']['id'] for b in result['results']},
-                        "Expected ids: %s. Actual result: %s" % (buckets, result))
+                         "Expected ids: %s. Actual result: %s" % (buckets, result))
         self.assertFalse(set(buckets) - {b['keyspaces']['name'] for b in result['results']},
-                        "Expected names: %s. Actual result: %s" % (buckets, result))
+                         "Expected names: %s. Actual result: %s" % (buckets, result))
         pools = self.run_cbq_query(query='SELECT * FROM system:namespaces')
-        self.assertFalse({b['keyspaces']['namespace_id'] for b in result['results']} -\
-                        {p['namespaces']['id'] for p in pools['results']},
-                        "Expected pools: %s, actual: %s" % (pools, result))
-        self.assertFalse({b['keyspaces']['datastore_id'] for b in result['results']} -\
-                        {p['namespaces']['datastore_id'] for p in pools['results']},
-                        "Expected site_ids: %s, actual: %s" % (pools, result))
+        self.assertFalse({b['keyspaces']['namespace_id'] for b in result['results']} - \
+                         {p['namespaces']['id'] for p in pools['results']},
+                         "Expected pools: %s, actual: %s" % (pools, result))
+        self.assertFalse({b['keyspaces']['datastore_id'] for b in result['results']} - \
+                         {p['namespaces']['datastore_id'] for p in pools['results']},
+                         "Expected site_ids: %s, actual: %s" % (pools, result))
 
     def test_prepared_buckets(self):
         for bucket in self.buckets:

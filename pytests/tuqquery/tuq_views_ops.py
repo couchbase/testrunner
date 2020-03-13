@@ -3,6 +3,7 @@ from membase.api.rest_client import RestConnection
 from couchbase_helper.document import View
 from .tuq_sanity import QuerySanityTests
 
+
 class QueriesViewsTests(QuerySanityTests, QueryTests):
     def setUp(self):
         self.ddoc_name = "tuq_ddoc"
@@ -10,6 +11,7 @@ class QueriesViewsTests(QuerySanityTests, QueryTests):
         self.map_fn = 'function (doc){emit([doc.join_yr, doc.join_mo],doc.name);}'
         self.view_name = "tuq_view"
         self.default_view = View(self.view_name, self.map_fn, None, False)
+        self.query_buckets = self.get_query_buckets(check_all_buckets=True)
 
     def suite_setUp(self):
         super(QueriesViewsTests, self).suite_setUp()
@@ -38,7 +40,7 @@ class QueriesViewsTests(QuerySanityTests, QueryTests):
         self.test_array_agg()
         full_list = self.generate_full_docs_list(self.gens_load)
         task = self.cluster.async_query_view(self.master, self.ddoc_name,
-                                             self.default_view.name, {"stale" : "false"},
+                                             self.default_view.name, {"stale": "false"},
                                              len(full_list))
         self.test_array_agg()
         task.result(self.wait_timeout)
@@ -46,49 +48,49 @@ class QueriesViewsTests(QuerySanityTests, QueryTests):
 
     def test_view_query_simple(self):
         self.cluster.create_view(self.master, self.ddoc_name, self.default_view)
-        self.query = 'SELECT join_yr, join_mo, name from default' +\
-            ' ORDER BY join_yr, join_mo, name'
+        self.query = 'SELECT join_yr, join_mo, name from ' + self.query_buckets[0] + \
+                     ' ORDER BY join_yr, join_mo, name'
         tool_res = self.run_cbq_query()
-        view_res = RestConnection(self.master).\
-                  query_view(self.ddoc_name, self.default_view.name,
-                             "default", {"stale" : "false"})
+        view_res = RestConnection(self.master). \
+            query_view(self.ddoc_name, self.default_view.name,
+                       "default", {"stale": "false"})
         self._compare_view_and_tool_result(view_res['rows'], tool_res["results"])
 
     def test_view_query_limit_offset(self):
         self.cluster.create_view(self.master, self.ddoc_name, self.default_view)
-        self.query = 'SELECT join_yr, join_mo, name from default' +\
-            ' WHERE join_yr > 2010 ORDER BY join_yr, join_mo, name' +\
-            ' LIMIT 10 OFFSET 10'
+        self.query = 'SELECT join_yr, join_mo, name from ' + self.query_buckets[0] + \
+                     ' WHERE join_yr > 2010 ORDER BY join_yr, join_mo, name' + \
+                     ' LIMIT 10 OFFSET 10'
         tool_res = self.run_cbq_query()
-        view_res = RestConnection(self.master).\
-                  query_view(self.ddoc_name, self.default_view.name,
-                             "default", {"stale" : "false",
-                                         "startkey" : "[2011,null]",
-                                         "limit" : 10, "skip" : 10})
+        view_res = RestConnection(self.master). \
+            query_view(self.ddoc_name, self.default_view.name,
+                       "default", {"stale": "false",
+                                   "startkey": "[2011,null]",
+                                   "limit": 10, "skip": 10})
         self._compare_view_and_tool_result(view_res['rows'], tool_res["results"],
                                            check_values=False)
 
     def test_view_query_start_end(self):
         self.cluster.create_view(self.master, self.ddoc_name, self.default_view)
-        self.query = 'SELECT join_yr, join_mo, name from default' +\
-            ' WHERE join_yr == 2011 AND join_mo > 3 AND join_mo < 7' +\
-            'ORDER BY join_yr, join_mo, name'
+        self.query = 'SELECT join_yr, join_mo, name from ' + self.query_buckets[0] + \
+                     ' WHERE join_yr == 2011 AND join_mo > 3 AND join_mo < 7' + \
+                     'ORDER BY join_yr, join_mo, name'
         tool_res = self.run_cbq_query()
-        view_res = RestConnection(self.master).\
-                  query_view(self.ddoc_name, self.default_view.name,
-                             "default", {"stale" : "false",
-                                         "startkey" : "[2011,4]",
-                                         "endkey" : "[2011,6]"})
+        view_res = RestConnection(self.master). \
+            query_view(self.ddoc_name, self.default_view.name,
+                       "default", {"stale": "false",
+                                   "startkey": "[2011,4]",
+                                   "endkey": "[2011,6]"})
         self._compare_view_and_tool_result(view_res['rows'], tool_res["results"])
 
     def test_view_query_order(self):
         self.cluster.create_view(self.master, self.ddoc_name, self.default_view)
-        self.query = 'SELECT join_yr, join_mo, name from default' +\
-            ' WHERE join_yr == 2011 ORDER BY join_yr DESC, join_mo DESC, name DESC'
+        self.query = 'SELECT join_yr, join_mo, name from ' + self.query_buckets[0] + \
+                     ' WHERE join_yr == 2011 ORDER BY join_yr DESC, join_mo DESC, name DESC'
         tool_res = self.run_cbq_query()
-        view_res = RestConnection(self.master).\
-                  query_view(self.ddoc_name, self.default_view.name,
-                             "default", {"stale" : "false",
-                                         "endkey" : "[2011,1]",
-                                         "descending" : "true"})
+        view_res = RestConnection(self.master). \
+            query_view(self.ddoc_name, self.default_view.name,
+                       "default", {"stale": "false",
+                                   "endkey": "[2011,1]",
+                                   "descending": "true"})
         self._compare_view_and_tool_result(view_res['rows'], tool_res["results"])

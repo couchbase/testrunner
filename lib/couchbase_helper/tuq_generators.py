@@ -143,7 +143,7 @@ class TuqGenerators(object):
                             break
             else:
                 conditions += '' + satisfy_expr
-        if from_clause and from_clause.find('.') != -1:
+        if from_clause and from_clause.find('.') != -1 and ":" not in from_clause:
             sub_attrs = [att for name, group in self.type_args.items()
                          for att in group if att not in attributes]
             for attr in sub_attrs:
@@ -304,8 +304,6 @@ class TuqGenerators(object):
                     else:
                         condition += '"%s" : doc["%s"],' % (attr[2], attr[0])
         condition += '}'
-        if from_clause and from_clause.find('.') != -1:
-            condition = condition.replace('doc[', 'doc["%s"][' % from_clause.split('.')[-1])
         return condition
 
     def _filter_full_set(self, select_clause, where_clause, unnest_clause):

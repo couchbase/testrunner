@@ -8,6 +8,11 @@ class QueryMiscTests(QueryTests):
 
     def setUp(self):
         super(QueryMiscTests, self).setUp()
+        self.temp_bucket_name = 'temp_bucket'
+        
+        self.query_buckets = self.get_query_buckets(check_all_buckets=True, deferred_bucket=self.temp_bucket_name)
+        self.query_bucket = self.query_buckets[0]
+        self.temp_bucket = self.query_buckets[1]
         self.log.info("==============  QueryMiscTests setup has started ==============")
         self.log.info("==============  QueryMiscTests setup has completed ==============")
         self.log_config_info()
@@ -39,15 +44,15 @@ class QueryMiscTests(QueryTests):
         assert3 = lambda x: self.assertEqual(x['q_res'][0]['results'], [])
         asserts = [assert1, assert2, assert3]
 
-        queries["a"] = {"queries": ["SELECT META().xattrs._sync FROM default USE KEYS []"], "asserts": asserts}
-        queries["b"] = {"queries": ["SELECT META().xattrs._sync FROM default USE KEYS [\"\"]"], "asserts": asserts}
-        queries["c"] = {"queries": ["SELECT META().xattrs._sync FROM default USE KEYS [\" \"]"], "asserts": asserts}
-        queries["d"] = {"queries": ["SELECT META().xattrs._sync FROM default USE KEYS [\"\", \"\"]"], "asserts": asserts}
-        queries["e"] = {"queries": ["SELECT META().xattrs._sync FROM default USE KEYS [\" \", \"\"]"], "asserts": asserts}
-        queries["f"] = {"queries": ["SELECT META().xattrs._sync FROM default USE KEYS [\" \", \" \"]"], "asserts": asserts}
-        queries["g"] = {"queries": ["SELECT META().xattrs._sync FROM default USE KEYS [\"xxxx\"]"], "asserts": asserts}
-        queries["h"] = {"queries": ["SELECT META().xattrs._sync FROM default USE KEYS [\"xxxx\", \"yyyy\"]"], "asserts": asserts}
-        queries["i"] = {"queries": ["SELECT META().xattrs._sync FROM default USE KEYS [\"xxxx\", \"xxxx\"]"], "asserts": asserts}
+        queries["a"] = {"queries": ["SELECT META().xattrs._sync FROM " + self.query_bucket + " USE KEYS []"], "asserts": asserts}
+        queries["b"] = {"queries": ["SELECT META().xattrs._sync FROM " + self.query_bucket + " USE KEYS [\"\"]"], "asserts": asserts}
+        queries["c"] = {"queries": ["SELECT META().xattrs._sync FROM " + self.query_bucket + " USE KEYS [\" \"]"], "asserts": asserts}
+        queries["d"] = {"queries": ["SELECT META().xattrs._sync FROM " + self.query_bucket + " USE KEYS [\"\", \"\"]"], "asserts": asserts}
+        queries["e"] = {"queries": ["SELECT META().xattrs._sync FROM " + self.query_bucket + " USE KEYS [\" \", \"\"]"], "asserts": asserts}
+        queries["f"] = {"queries": ["SELECT META().xattrs._sync FROM " + self.query_bucket + " USE KEYS [\" \", \" \"]"], "asserts": asserts}
+        queries["g"] = {"queries": ["SELECT META().xattrs._sync FROM " + self.query_bucket + " USE KEYS [\"xxxx\"]"], "asserts": asserts}
+        queries["h"] = {"queries": ["SELECT META().xattrs._sync FROM " + self.query_bucket + " USE KEYS [\"xxxx\", \"yyyy\"]"], "asserts": asserts}
+        queries["i"] = {"queries": ["SELECT META().xattrs._sync FROM " + self.query_bucket + " USE KEYS [\"xxxx\", \"xxxx\"]"], "asserts": asserts}
 
         self.query_runner(queries)
 
@@ -61,9 +66,9 @@ class QueryMiscTests(QueryTests):
                                                             replicas=self.num_replicas, bucket_type=self.bucket_type,
                                                             enable_replica_index=self.enable_replica_index,
                                                             eviction_policy=self.eviction_policy, lww=self.lww)
-            self.cluster.create_standard_bucket("temp_bucket", 11222, temp_bucket_params)
+            self.cluster.create_standard_bucket(self.temp_bucket_name, 11222, temp_bucket_params)
             createdBucket = True
-            self.query = 'INSERT INTO temp_bucket VALUES(UUID(),{"severity":"low","deferred":[]}),' \
+            self.query = 'INSERT INTO ' + self.temp_bucket + ' VALUES(UUID(),{"severity":"low","deferred":[]}),' \
                          'VALUES(UUID(),{"severity":"low","deferred":[]}),' \
                          'VALUES(UUID(),{"severity":"low","deferred":[]}),' \
                          'VALUES(UUID(),{"severity":"low","deferred":[]}),' \
@@ -75,38 +80,38 @@ class QueryMiscTests(QueryTests):
                          'VALUES(UUID(),{"severity":"low","deferred":[]});'
             res = self.run_cbq_query()
 
-            self.query = 'CREATE INDEX ix1 ON temp_bucket(severity,deferred);'
+            self.query = 'CREATE INDEX ix1 ON ' + self.temp_bucket + '(severity,deferred);'
             res = self.run_cbq_query()
 
-            self._wait_for_index_online("temp_bucket", "ix1")
+            self._wait_for_index_online(self.temp_bucket_name, "ix1")
             createdIndex = True
 
-            self.query = 'SELECT META().id, deferred FROM temp_bucket WHERE severity = "low";'
+            self.query = 'SELECT META().id, deferred FROM ' + self.temp_bucket + ' WHERE severity = "low";'
             expect_res1 = self.run_cbq_query()
             self.assertEqual(len(expect_res1['results']), 10)
             for item in expect_res1['results']:
                 self.assertEqual(item["deferred"], [])
 
-            self.query = 'SELECT META().id, deferred FROM temp_bucket WHERE severity = "low" AND EVERY v IN deferred SATISFIES v != "X" END;'
+            self.query = 'SELECT META().id, deferred FROM ' + self.temp_bucket + ' WHERE severity = "low" AND EVERY v IN deferred SATISFIES v != "X" END;'
             expect_res2 = self.run_cbq_query()
             self.assertEqual(len(expect_res2['results']), 10)
             for item in expect_res2['results']:
                 self.assertEqual(item["deferred"], [])
 
-            self.query = 'SELECT META().id, deferred FROM temp_bucket WHERE severity = "low";'
+            self.query = 'SELECT META().id, deferred FROM ' + self.temp_bucket + ' WHERE severity = "low";'
             actual_res1 = self.run_cbq_query(query_params={"scan_cap": 2})
             self.assertEqual(actual_res1['results'], expect_res1['results'])
 
-            self.query = 'SELECT META().id, deferred FROM temp_bucket WHERE severity = "low" AND EVERY v IN deferred SATISFIES v != "X" END;'
+            self.query = 'SELECT META().id, deferred FROM ' + self.temp_bucket + ' WHERE severity = "low" AND EVERY v IN deferred SATISFIES v != "X" END;'
             actual_res2 = self.run_cbq_query(query_params={"scan_cap": 2})
             self.assertEqual(actual_res2['results'], expect_res2['results'])
         finally:
             if createdIndex:
-                self.query = 'DROP INDEX temp_bucket.ix1'
+                self.query = 'DROP INDEX ix1 ON ' + self.temp_bucket
                 self.run_cbq_query()
-                self.wait_for_index_drop("temp_bucket", "ix1", ["severity", "deferred"], self.gsi_type)
+                self.wait_for_index_drop(self.temp_bucket_name, "ix1", ["severity", "deferred"], self.gsi_type)
             if createdBucket:
-                self.cluster.bucket_delete(self.master, "temp_bucket")
+                self.cluster.bucket_delete(self.master, self.temp_bucket_name)
 
     '''MB-28636: query with OrderedIntersect scan returns empty result set intermittently'''
     def test_orderintersectscan_nonempty_results(self):
@@ -117,48 +122,48 @@ class QueryMiscTests(QueryTests):
                                                             replicas=self.num_replicas, bucket_type=self.bucket_type,
                                                             enable_replica_index=self.enable_replica_index,
                                                             eviction_policy=self.eviction_policy, lww=self.lww)
-            self.cluster.create_standard_bucket("temp_bucket", 11222, temp_bucket_params)
+            self.cluster.create_standard_bucket(self.temp_bucket_name, 11222, temp_bucket_params)
             createdBucket = True
 
-            self.query = 'CREATE primary index ON temp_bucket'
+            self.query = 'CREATE primary index ON ' + self.temp_bucket
             self.run_cbq_query()
-            self._wait_for_index_online("temp_bucket", "#primary")
+            self._wait_for_index_online(self.temp_bucket_name, "#primary")
             createdIndexes["#primary"] = []
 
-            self.query = 'INSERT INTO temp_bucket VALUES(UUID(), {"CUSTOMER_ID":551,"MSISDN":UUID(), "ICCID":UUID()})'
+            self.query = 'INSERT INTO ' + self.temp_bucket + ' VALUES(UUID(), {"CUSTOMER_ID":551,"MSISDN":UUID(), "ICCID":UUID()})'
             self.run_cbq_query()
 
-            self.query = 'INSERT INTO temp_bucket (KEY UUID(), VALUE d) SELECT {"CUSTOMER_ID":551,"MSISDN":UUID(),"ICCID":UUID()} AS d  FROM temp_bucket WHERE CUSTOMER_ID == 551;'
+            self.query = 'INSERT INTO ' + self.temp_bucket + ' (KEY UUID(), VALUE d) SELECT {"CUSTOMER_ID":551,"MSISDN":UUID(),"ICCID":UUID()} AS d  FROM ' + self.temp_bucket + ' WHERE CUSTOMER_ID == 551;'
             for i in range(0, 8):
                 self.run_cbq_query()
-            self.query = 'select * from temp_bucket'
+            self.query = 'select * from ' + self.temp_bucket
             res = self.run_cbq_query()
             self.assertEqual(len(res['results']), 256)
 
-            self.query = 'CREATE INDEX `xi1` ON `temp_bucket`(`CUSTOMER_ID`,`MSISDN`);'
+            self.query = 'CREATE INDEX `xi1` ON ' + self.temp_bucket + '(`CUSTOMER_ID`,`MSISDN`);'
             self.run_cbq_query()
-            self._wait_for_index_online("temp_bucket", "xi1")
+            self._wait_for_index_online(self.temp_bucket_name, "xi1")
             createdIndexes["xi1"] = ['CUSTOMER_ID', 'MSISDN']
 
-            self.query = 'CREATE INDEX `ai_SIM` ON `temp_bucket`(distinct pairs({`CUSTOMER_ID`, `ICCID`, `MSISDN` }));'
+            self.query = 'CREATE INDEX `ai_SIM` ON ' + self.temp_bucket + '(distinct pairs({`CUSTOMER_ID`, `ICCID`, `MSISDN` }));'
             self.run_cbq_query()
-            self._wait_for_index_online("temp_bucket", "ai_SIM")
+            self._wait_for_index_online(self.temp_bucket_name, "ai_SIM")
             createdIndexes["ai_SIM"] = ['distinct pairs{"CUSTOMER_ID": CUSTOMER_ID, "ICCID": ICCID, "MSISDN": MSISDN}']
 
-            self.query = 'select TIM_ID, MSISDN from temp_bucket WHERE CUSTOMER_ID = 551 ORDER BY MSISDN ASC LIMIT 2 OFFSET 0 '
+            self.query = 'select TIM_ID, MSISDN from ' + self.temp_bucket + ' WHERE CUSTOMER_ID = 551 ORDER BY MSISDN ASC LIMIT 2 OFFSET 0 '
             for i in range(0, 100):
                 res = self.run_cbq_query()
                 self.assertEqual(len(res['results']), 2)
         finally:
             for index in list(createdIndexes.keys()):
                 if index == "#primary":
-                    self.query = "DROP primary index on temp_bucket"
+                    self.query = "DROP primary index on " + self.temp_bucket
                 else:
-                    self.query = 'DROP INDEX temp_bucket.'+str(index)
+                    self.query = 'DROP INDEX %s ON %s' % (index, self.temp_bucket)
                 self.run_cbq_query()
-                self.wait_for_index_drop("temp_bucket", index, createdIndexes[index], self.gsi_type)
+                self.wait_for_index_drop(self.temp_bucket_name, index, createdIndexes[index], self.gsi_type)
             if createdBucket:
-                self.cluster.bucket_delete(self.master, "temp_bucket")
+                self.cluster.bucket_delete(self.master, self.temp_bucket_name)
 
     def test_intersectscan_thread_growth(self):
         createdIndexes = {}
@@ -168,39 +173,39 @@ class QueryMiscTests(QueryTests):
                                                             replicas=self.num_replicas, bucket_type=self.bucket_type,
                                                             enable_replica_index=self.enable_replica_index,
                                                             eviction_policy=self.eviction_policy, lww=self.lww)
-            self.cluster.create_standard_bucket("temp_bucket", 11222, temp_bucket_params)
+            self.cluster.create_standard_bucket(self.temp_bucket_name, 11222, temp_bucket_params)
             createdBucket = True
 
-            self.query = 'CREATE primary index ON temp_bucket'
+            self.query = 'CREATE primary index ON ' + self.temp_bucket
             self.run_cbq_query()
-            self._wait_for_index_online("temp_bucket", "#primary")
+            self._wait_for_index_online(self.temp_bucket_name, "#primary")
             createdIndexes["#primary"] = []
 
-            self.query = 'CREATE INDEX ix1 ON `temp_bucket`(a)'
+            self.query = 'CREATE INDEX ix1 ON ' + self.temp_bucket + '(a)'
             self.run_cbq_query()
-            self._wait_for_index_online("temp_bucket", "ix1")
+            self._wait_for_index_online(self.temp_bucket_name, "ix1")
             createdIndexes["ix1"] = ['a']
 
-            self.query = 'CREATE INDEX ix2 ON `temp_bucket`(b)'
+            self.query = 'CREATE INDEX ix2 ON ' + self.temp_bucket + '(b)'
             self.run_cbq_query()
-            self._wait_for_index_online("temp_bucket", "ix2")
+            self._wait_for_index_online(self.temp_bucket_name, "ix2")
             createdIndexes["ix2"] = ['b']
 
             for i in range(0, 20000):
-                self.query = 'INSERT INTO `temp_bucket` (KEY, VALUE) VALUES ("'+str(i)+'", {"a":'+str(i)+', "b":'+str(i)+'})'
+                self.query = 'INSERT INTO ' + self.temp_bucket + ' (KEY, VALUE) VALUES ("'+str(i)+'", {"a":'+str(i)+', "b":'+str(i)+'})'
                 self.run_cbq_query()
-            self.query = 'select * from temp_bucket'
+            self.query = 'select * from ' + self.temp_bucket
             res = self.run_cbq_query()
             self.assertEqual(len(res['results']), 20000)
 
-            self.query = 'explain select * from `temp_bucket` where a > 0 and b > 0 limit 1000'
+            self.query = 'explain select * from ' + self.temp_bucket + ' where a > 0 and b > 0 limit 1000'
             res = self.run_cbq_query()
             self.assertTrue("IntersectScan" in str(res['results'][0]['plan']))
             self.assertTrue("ix1" in str(res['results'][0]['plan']))
             self.assertTrue("ix2" in str(res['results'][0]['plan']))
 
             self.log.info("priming query engine")
-            self.query = 'select * from `temp_bucket` where a > 0 and b > 0 limit 1000'
+            self.query = 'select * from ' + self.temp_bucket + ' where a > 0 and b > 0 limit 1000'
             for i in range(0, 10):
                 res = self.run_cbq_query()
                 self.assertEqual(len(res['results']), 1000)
@@ -249,13 +254,13 @@ class QueryMiscTests(QueryTests):
         finally:
             for index in list(createdIndexes.keys()):
                 if index == "#primary":
-                    self.query = "DROP primary index on temp_bucket"
+                    self.query = "DROP primary index on " + self.temp_bucket
                 else:
-                    self.query = 'DROP INDEX temp_bucket.'+str(index)
+                    self.query = 'DROP INDEX %s ON %s ' % (index, self.temp_bucket)
                 self.run_cbq_query()
-                self.wait_for_index_drop("temp_bucket", index, createdIndexes[index], self.gsi_type)
+                self.wait_for_index_drop(self.temp_bucket_name, index, createdIndexes[index], self.gsi_type)
             if createdBucket:
-                self.cluster.bucket_delete(self.master, "temp_bucket")
+                self.cluster.bucket_delete(self.master, self.temp_bucket_name)
 
     '''MB-31600 Indexing meta().id for binary data was broken, the index would contain no data'''
     '''bug has not been fixed, will fail until then'''
@@ -264,18 +269,18 @@ class QueryMiscTests(QueryTests):
         idx_list = []
         item_count = 10
         for bucket in self.buckets:
-            if bucket.name == "default":
+            if bucket.name == self.default_bucket_name:
                 self.cluster.bucket_flush(self.master, bucket=bucket, timeout=180000)
-        bucket_doc_map = {"default": 0}
-        bucket_status_map = {"default": "healthy"}
+        bucket_doc_map = {self.default_bucket_name: 0}
+        bucket_status_map = {self.default_bucket_name: "healthy"}
         self.wait_for_buckets_status(bucket_status_map, 5, 120)
         self.wait_for_bucket_docs(bucket_doc_map, 5, 120)
-        self.shell.execute_cbworkloadgen("Administrator", "password", item_count, 100, 'default', 1024, '')
-        bucket_doc_map = {"default": 10}
+        self.shell.execute_cbworkloadgen("Administrator", "password", item_count, 100, self.default_bucket_name, 1024, '')
+        bucket_doc_map = {self.default_bucket_name: 10}
         self.wait_for_bucket_docs(bucket_doc_map, 5, 120)
         try:
-            self.run_cbq_query(query="CREATE INDEX idx1 on default(meta().id)")
-            self._wait_for_index_online("default", "idx1")
+            self.run_cbq_query(query="CREATE INDEX idx1 on " + self.query_bucket + "(meta().id)")
+            self._wait_for_index_online(self.default_bucket_name, "idx1")
             self.sleep(10)
             idx_list.append('idx1')
 
@@ -289,8 +294,8 @@ class QueryMiscTests(QueryTests):
                     expected_curl = self.convert_list_to_json(curl_output[0])
                     self.log.info(str(expected_curl))
 
-                    if 'default:idx1:items_count' in expected_curl or i == 9:
-                        self.assertEqual(expected_curl['default:idx1:items_count'], item_count)
+                    if self.default_bucket_name + ':idx1:items_count' in expected_curl or i == 9:
+                        self.assertEqual(expected_curl[self.default_bucket_name + ':idx1:items_count'], item_count)
                         found = True
                         break
                 if found:
@@ -298,8 +303,8 @@ class QueryMiscTests(QueryTests):
                 i += 1
                 self.sleep(3)
 
-            self.run_cbq_query(query="CREATE INDEX idx2 on default(meta().cas)")
-            self._wait_for_index_online("default", "idx2")
+            self.run_cbq_query(query="CREATE INDEX idx2 on " + self.query_bucket + "(meta().cas)")
+            self._wait_for_index_online(self.default_bucket_name, "idx2")
             self.sleep(10)
             idx_list.append('idx2')
 
@@ -313,8 +318,8 @@ class QueryMiscTests(QueryTests):
                     expected_curl = self.convert_list_to_json(curl_output[0])
                     self.log.info(str(expected_curl))
 
-                    if 'default:idx2:items_count' in expected_curl or i == 9:
-                        self.assertEqual(expected_curl['default:idx2:items_count'], item_count)
+                    if self.default_bucket_name + ':idx2:items_count' in expected_curl or i == 9:
+                        self.assertEqual(expected_curl[self.default_bucket_name + ':idx2:items_count'], item_count)
                         found = True
                         break
                 if found:
@@ -322,8 +327,8 @@ class QueryMiscTests(QueryTests):
                 i += 1
                 self.sleep(3)
 
-            self.run_cbq_query(query="CREATE INDEX idx3 on default(meta().expiration)")
-            self._wait_for_index_online("default", "idx3")
+            self.run_cbq_query(query="CREATE INDEX idx3 on " + self.query_bucket + "(meta().expiration)")
+            self._wait_for_index_online(self.default_bucket_name, "idx3")
             self.sleep(10)
             idx_list.append('idx3')
 
@@ -336,8 +341,8 @@ class QueryMiscTests(QueryTests):
                     # The above command returns a tuple, we want the first element of that tuple
                     expected_curl = self.convert_list_to_json(curl_output[0])
                     self.log.info(str(expected_curl))
-                    if 'default:idx3:items_count' in expected_curl or i == 9:
-                        self.assertEqual(expected_curl['default:idx3:items_count'], item_count)
+                    if self.default_bucket_name + ':idx3:items_count' in expected_curl or i == 9:
+                        self.assertEqual(expected_curl[self.default_bucket_name + ':idx3:items_count'], item_count)
                         found = True
                         break
                 if found:
@@ -347,7 +352,7 @@ class QueryMiscTests(QueryTests):
 
         finally:
             for idx in idx_list:
-                drop_query = "DROP INDEX default.%s" % (idx)
+                drop_query = "DROP INDEX %s ON %s" % (idx, self.query_bucket)
                 self.run_cbq_query(query=drop_query)
 
     def test_indexer_endpoints(self):
@@ -409,7 +414,7 @@ class QueryMiscTests(QueryTests):
                     endpoint_responses = []
                     for protocol in protocols:
                         self.log.info("\n using: "+protocol[0])
-                        cmd = curl + credential[1] + protocol[1] + protocol[2] + ip + protocol[3] + endpoint
+                        cmd = 'curl' + credential[1] + protocol[1] + protocol[2] + ip + protocol[3] + endpoint
                         curl_output = self.shell.execute_command(cmd)
                         endpoint_responses.append(curl_output)
                         self.log.info("\n"+str(curl_output)+"\n")
@@ -421,12 +426,13 @@ class QueryMiscTests(QueryTests):
 
     '''https://issues.couchbase.com/browse/CBSE-6593'''
     def test_query_cpu_max_utilization(self):
+        created_index = False
         try:
-            self.cluster.bucket_flush(self.master, bucket="default", timeout=180000)
-            self.query = "create index idx1 on default(ln,lk)"
+            self.cluster.bucket_flush(self.master, bucket=self.default_bucket_name, timeout=180000)
+            self.query = "create index idx1 on " + self.query_bucket + "(ln,lk)"
             self.run_cbq_query()
-            self._wait_for_index_online("default", "idx1")
-            createdIndex = True
+            self._wait_for_index_online(self.default_bucket_name, "idx1")
+            created_index = True
 
             thread_list = []
             for i in range(0, 250):
@@ -438,7 +444,7 @@ class QueryMiscTests(QueryTests):
             for t in thread_list:
                 t.join()
 
-            bucket_doc_map = {"default": 250000}
+            bucket_doc_map = {self.default_bucket_name: 250000}
             self.wait_for_bucket_docs(bucket_doc_map, 5, 120)
 
             end_time = time.time() + 60
@@ -481,19 +487,18 @@ class QueryMiscTests(QueryTests):
             for cpu_utilization in cpu_stats:
                 self.assertTrue(cpu_utilization < 99.99)
         finally:
-            if createdIndex:
-                self.drop_index("default", "idx1")
-                self.wait_for_index_drop("default", "idx1")
-            self.cluster.bucket_flush(self.master, bucket="default", timeout=180000)
+            if created_index:
+                self.drop_index(self.default_bucket_name, "idx1")
+            self.cluster.bucket_flush(self.master, bucket=self.default_bucket_name, timeout=180000)
 
     def run_insert_query(self):
         values = 'VALUES(UUID(),{"ln":"null","lk":"null"}),'*999
         values = values + 'VALUES(UUID(),{"ln":"null","lk":"null"});'
-        query = 'INSERT INTO default ' + values
+        query = 'INSERT INTO ' + self.query_bucket + ' ' + values
         self.run_cbq_query(query=query)
 
     def run_select_queries(self):
         end_time = time.time() + 60
-        query = 'SELECT default.* FROM default WHERE ln = "null" AND lk != "null"'
+        query = 'SELECT d.* FROM ' + self.query_bucket + ' d WHERE ln = "null" AND lk != "null"'
         while time.time() < end_time:
             res = self.run_cbq_query(query=query)

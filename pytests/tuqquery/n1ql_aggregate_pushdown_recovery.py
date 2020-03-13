@@ -7,11 +7,11 @@ from membase.api.rest_client import RestConnection
 from remote.remote_util import RemoteMachineShellConnection
 from .tuq import QueryTests
 
-
 log = logging.getLogger(__name__)
 
 AGGREGATE_FUNCTIONS = ["SUM", "MIN", "MAX", "COUNT", "COUNTN", "AVG"]
 DISTINCT_AGGREGATE_FUNCTIONS = ["SUM", "COUNT", "AVG"]
+
 
 class AggregatePushdownRecoveryClass(QueryTests):
     def setUp(self):
@@ -20,6 +20,7 @@ class AggregatePushdownRecoveryClass(QueryTests):
         self.n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
         self.aggr_distinct = self.input.param("aggr_distinct", False)
         self.graceful = self.input.param("graceful", False)
+        self.query_buckets = self.get_query_buckets(check_all_buckets=True)
 
     def tearDown(self):
         super(AggregatePushdownRecoveryClass, self).tearDown()
@@ -34,7 +35,7 @@ class AggregatePushdownRecoveryClass(QueryTests):
             mid_recovery_tasks.start()
             rebalance.result()
             mid_recovery_tasks.join()
-            #check if the nodes in cluster are healthy
+            # check if the nodes in cluster are healthy
             msg = "Cluster not in Healthy state"
             self.assertTrue(self._wait_until_cluster_is_healthy(), msg)
             log.info("==== Cluster in healthy state ====")
@@ -87,7 +88,7 @@ class AggregatePushdownRecoveryClass(QueryTests):
         self.generate_map_nodes_out_dist()
         index_names_defn = self._create_array_index_definitions()
         try:
-            self.targetProcess= self.input.param("targetProcess", 'memcached')
+            self.targetProcess = self.input.param("targetProcess", 'memcached')
             for node in self.nodes_out_list:
                 remote = RemoteMachineShellConnection(node)
                 if self.targetProcess == "memcached":
@@ -96,10 +97,11 @@ class AggregatePushdownRecoveryClass(QueryTests):
                     remote.terminate_process(process_name=self.targetProcess)
             self.sleep(60)
             if "n1ql" not in self.nodes_out_dist:
-                mid_recovery_tasks = threading.Thread(target=self._aggregate_query_using_index, args=(index_names_defn,))
+                mid_recovery_tasks = threading.Thread(target=self._aggregate_query_using_index,
+                                                      args=(index_names_defn,))
                 mid_recovery_tasks.start()
                 mid_recovery_tasks.join()
-            #check if the nodes in cluster are healthy
+            # check if the nodes in cluster are healthy
             msg = "Cluster not in Healthy state"
             self.assertTrue(self._wait_until_cluster_is_healthy(), msg)
             log.info("==== Cluster in healthy state ====")
@@ -113,9 +115,9 @@ class AggregatePushdownRecoveryClass(QueryTests):
         self.generate_map_nodes_out_dist()
         index_names_defn = self._create_array_index_definitions()
         try:
-            failover_task =self.cluster.async_failover([self.master],
-                                                       failover_nodes=self.nodes_out_list,
-                                                       graceful=self.graceful)
+            failover_task = self.cluster.async_failover([self.master],
+                                                        failover_nodes=self.nodes_out_list,
+                                                        graceful=self.graceful)
             failover_task.result()
             nodes_all = rest.node_statuses()
             nodes = []
@@ -126,7 +128,7 @@ class AggregatePushdownRecoveryClass(QueryTests):
                 else:
                     for failover_node in self.nodes_out_list:
                         nodes.extend([node for node in nodes_all
-                            if node.ip == failover_node.ip])
+                                      if node.ip == failover_node.ip])
                     for node in nodes:
                         log.info("Adding back {0} with recovery type Full...".format(node.ip))
                         rest.add_back_node(node.id)
@@ -137,7 +139,7 @@ class AggregatePushdownRecoveryClass(QueryTests):
             mid_recovery_tasks.start()
             rebalance.result()
             mid_recovery_tasks.join()
-            #check if the nodes in cluster are healthy
+            # check if the nodes in cluster are healthy
             msg = "Cluster not in Healthy state"
             self.assertTrue(self._wait_until_cluster_is_healthy(), msg)
             log.info("==== Cluster in healthy state ====")
@@ -164,11 +166,12 @@ class AggregatePushdownRecoveryClass(QueryTests):
                     index_names_defn["fields"] = [first_field, second_field, third_field]
                     create_index_clause = "CREATE INDEX {0} on %s({1}, {2}, {3})".format(
                         index_name, first_field["name"], second_field["name"], third_field["name"])
-                    drop_index_clause = "DROP INDEX %s.{0}".format(index_name)
-                    index_names_defn["create_definitions"] = [(create_index_clause % bucket.name) for bucket in self.buckets]
-                    index_names_defn["drop_definitions"] = [(drop_index_clause % bucket.name) for bucket in self.buckets]
+                    drop_index_clause = "DROP INDEX {0} ON %s".format(index_name)
+                    for query_bucket in self.query_buckets:
+                        index_names_defn["create_definitions"] = [(create_index_clause % query_bucket)]
+                        index_names_defn["drop_definitions"] = [(drop_index_clause % query_bucket)]
                     for create_def in index_names_defn["create_definitions"]:
-                        result = self.run_cbq_query(create_def)
+                        self.run_cbq_query(create_def)
                     indexes.append(index_names_defn)
         return indexes
 
@@ -179,14 +182,15 @@ class AggregatePushdownRecoveryClass(QueryTests):
             index_fields = index_name_def["fields"]
             for aggr_func in AGGREGATE_FUNCTIONS:
                 select_clause = "SELECT " + aggr_func + "({0}) from %s where {1} GROUP BY {2}"
-                query_definitions = [select_clause.format(tup[0]["name"], tup[1]["where_clause"], index_fields[0]["name"])
-                                     for tup in itertools.permutations(index_fields)]
-            for bucket in self.buckets:
+                query_definitions = [
+                    select_clause.format(tup[0]["name"], tup[1]["where_clause"], index_fields[0]["name"])
+                    for tup in itertools.permutations(index_fields)]
+            for query_bucket in self.query_buckets:
                 for query_definition in query_definitions:
-                    query = query_definition % bucket.name
+                    query = query_definition % query_bucket
                     result = self.run_cbq_query(query)
                     query_verification = self._verify_aggregate_query_results(result, query_definition,
-                                                                              bucket.name)
+                                                                              query_bucket)
                     if not query_verification:
                         failed_queries_in_result.append(query)
             self.assertEqual(len(failed_queries_in_result), 0, "Failed Queries: {0}".format(failed_queries_in_result))

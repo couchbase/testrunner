@@ -3,6 +3,7 @@ from tuqquery.tuq import QueryTests
 from xdcr.upgradeXDCR import UpgradeTests
 from xdcr.xdcrbasetests import XDCRReplicationBaseTest
 
+
 class XDCRTests(QueryTests, XDCRReplicationBaseTest):
     def setUp(self):
         try:
@@ -12,10 +13,14 @@ class XDCRTests(QueryTests, XDCRReplicationBaseTest):
             self.bucket_topology = self.input.param("bucket_topology", "default:1><2").split(";")
             self.src_init = self.input.param('src_init', 1)
             self.dest_init = self.input.param('dest_init', 1)
-            self.buckets_on_src = [str(bucket_repl.split(":")[0]) for bucket_repl in self.bucket_topology if re.search('\S+:\S*1', bucket_repl)]
-            self.buckets_on_dest = [str(bucket_repl.split(":")[0]) for bucket_repl in self.bucket_topology if re.search('\S+:\S*2', bucket_repl)]
-            self.repl_buckets_from_src = [str(bucket_repl.split(":")[0]) for bucket_repl in self.bucket_topology if bucket_repl.find("1>") != -1 ]
-            self.repl_buckets_from_dest = [str(bucket_repl.split(":")[0]) for bucket_repl in self.bucket_topology if bucket_repl.find("<2") != -1 ]
+            self.buckets_on_src = [str(bucket_repl.split(":")[0]) for bucket_repl in self.bucket_topology if
+                                   re.search('\S+:\S*1', bucket_repl)]
+            self.buckets_on_dest = [str(bucket_repl.split(":")[0]) for bucket_repl in self.bucket_topology if
+                                    re.search('\S+:\S*2', bucket_repl)]
+            self.repl_buckets_from_src = [str(bucket_repl.split(":")[0]) for bucket_repl in self.bucket_topology if
+                                          bucket_repl.find("1>") != -1]
+            self.repl_buckets_from_dest = [str(bucket_repl.split(":")[0]) for bucket_repl in self.bucket_topology if
+                                           bucket_repl.find("<2") != -1]
             if self.repl_buckets_from_dest:
                 self._replication_direction_str = "bidirection"
             else:
@@ -31,7 +36,7 @@ class XDCRTests(QueryTests, XDCRReplicationBaseTest):
         try:
             XDCRReplicationBaseTest.tearDown(self)
         except:
-                self.cluster.shutdown()
+            self.cluster.shutdown()
         if not self._testMethodName in ['suite_tearDown', 'suite_setUp']:
             return
         super(XDCRTests, self).tearDown()
@@ -43,21 +48,21 @@ class XDCRTests(QueryTests, XDCRReplicationBaseTest):
         XDCRReplicationBaseTest.setUp(self)
         self.load(self.gens_load)
         self._wait_for_replication_to_catchup()
-        bucket = UpgradeTests._get_bucket('default', self.src_master)
+        bucket = UpgradeTests._get_bucket(self.default_bucket_name, self.src_master)
         self.do_merge_bucket(self.src_master, self.dest_master, False, bucket)
         fn = getattr(self, self.method_name)
         fn()
         if self.with_reb == 'src':
-            srv_in = self.servers[self.src_init + self.dest_init :
+            srv_in = self.servers[self.src_init + self.dest_init:
                                   self.src_init + self.dest_init + self.nodes_in]
             task = self.cluster.async_rebalance(self.servers[:self.src_init],
-                               srv_in, [])
+                                                srv_in, [])
         elif self.with_reb == 'dest':
-            srv_in = self.servers[self.src_init + self.dest_init :
+            srv_in = self.servers[self.src_init + self.dest_init:
                                   self.src_init + self.dest_init + self.nodes_in]
             task = self.cluster.async_rebalance(self.servers[self.src_init:
                                                              self.src_init + self.dest_init],
-                               srv_in, [])
+                                                srv_in, [])
         else:
             self.sleep(self.wait_timeout, "Wait some time and try again")
         fn = getattr(self, self.method_name)

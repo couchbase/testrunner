@@ -1,16 +1,10 @@
-import logging
-import threading
 import json
-import uuid
-import time
-import os
 
-from .tuq import QueryTests
 from membase.api.rest_client import RestConnection
-from membase.api.exception import CBQError, ReadDocumentException
 from remote.remote_util import RemoteMachineShellConnection
 from security.rbac_base import RbacBase
-from deepdiff import DeepDiff
+
+from .tuq import QueryTests
 
 
 class QueryWhitelistTests(QueryTests):
@@ -43,6 +37,8 @@ class QueryWhitelistTests(QueryTests):
         self.create_users = self.input.param("create_users", False)
         self.full_access = self.input.param("full_access", True)
         self.run_cbq_query('delete from system:prepareds')
+        self.query_buckets = self.get_query_buckets(check_all_buckets=True)
+        self.query_bucket = self.query_buckets[0]
 
     def suite_setUp(self):
         super(QueryWhitelistTests, self).suite_setUp()
@@ -73,7 +69,7 @@ class QueryWhitelistTests(QueryTests):
     '''Test running a curl command without a whitelist present'''
     def test_no_whitelist(self):
         # The query that curl will send to couchbase
-        n1ql_query = 'select * from default limit 5'
+        n1ql_query = 'select * from ' + self.query_bucket + ' limit 5'
         # This is the query that the cbq-engine will execute
         query = "select curl(" + self.query_service_url + \
                 ", {'data' : 'statement=%s','user':'%s:%s'})" % (
@@ -89,7 +85,7 @@ class QueryWhitelistTests(QueryTests):
         response, content = self.rest.create_whitelist(self.master, {})
         result = json.loads(content)
         self.assertEqual(result['errors']['all_access'], 'The value must be supplied')
-        n1ql_query = 'select * from default limit 5'
+        n1ql_query = 'select * from ' + self.query_bucket + ' limit 5'
 
         # This is the query that the cbq-engine will execute
         query = "select curl(" + self.query_service_url + \
@@ -113,7 +109,7 @@ class QueryWhitelistTests(QueryTests):
         response, content = self.rest.create_whitelist(self.master, "thisisnotvalid")
         result = json.loads(content)
         self.assertEqual(result['errors']['_'], 'Unexpected Json')
-        n1ql_query = 'select * from default limit 5'
+        n1ql_query = 'select * from ' + self.query_bucket + ' limit 5'
         # This is the query that the cbq-engine will execute
         query = "select curl(" + self.query_service_url + \
                 ", {'data' : 'statement=%s','user':'%s:%s'})" % (
@@ -135,19 +131,19 @@ class QueryWhitelistTests(QueryTests):
     '''Test running a curl command with a whitelist that contains the field all_access: True and also
        inavlid/fake fields'''
     def test_basic_all_access_true(self):
-        n1ql_query = 'select * from default limit 5'
+        n1ql_query = 'select * from ' + self.query_bucket + ' limit 5'
         self.rest.create_whitelist(self.master, {"all_access": True})
         query = "select curl(" + self.query_service_url + \
                 ", {'data' : 'statement=%s','user':'%s:%s'})" % (
                 n1ql_query, self.username, self.password)
         curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         json_curl = self.convert_to_json(curl)
-        expected_result = self.run_cbq_query('select * from default limit 5')
+        expected_result = self.run_cbq_query('select * from ' + self.query_bucket + ' limit 5')
         self.assertEqual(json_curl['results'][0]['$1']['results'], expected_result['results'])
 
         curl_output = self.shell.execute_command("%s https://jira.atlassian.com/rest/api/latest/issue/JRA-9"
                                                  % self.curl_path)
-        expected_curl = self.convert_list_to_json(curl_output[0])
+        expected_curl = self.convert_list_to_json(curl_output[1])
         expected_curl['fields']['customfield_10610'] = int(expected_curl['fields']['customfield_10610'])
         expected_curl['fields']['comment']['comments'][135]['body'] = \
             expected_curl['fields']['comment']['comments'][135]['body'].replace(u'\xa0', '')
@@ -264,7 +260,7 @@ class QueryWhitelistTests(QueryTests):
         response, content = self.rest.create_whitelist(self.master, {"all_access": False, "allowed_urls": "blahblahblah"})
         result = json.loads(content)
         self.assertEqual(result['errors']['allowed_urls'], "Must be an array of non-empty strings")
-        n1ql_query = 'select * from default limit 5'
+        n1ql_query = 'select * from ' + self.query_bucket + ' limit 5'
         # This is the query that the cbq-engine will execute
         query = "select curl(" + self.query_service_url + \
                 ", {'data' : 'statement=%s','user':'%s:%s'})" % (
@@ -413,7 +409,7 @@ class QueryWhitelistTests(QueryTests):
         error_msg ="Errorevaluatingprojection.-cause:URLendpointisntwhitelistedhttp://localhost:8093/query/service." \
                    "PleasemakesuretowhitelisttheURLontheUI."
 
-        n1ql_query = 'select * from default limit 5'
+        n1ql_query = 'select * from ' + self.query_bucket + ' limit 5'
         query = "select curl('http://localhost:8093/query/service', {'data' : 'statement=%s'," \
                 "'user':'%s:%s'})" % (n1ql_query, self.username, self.password)
         curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')

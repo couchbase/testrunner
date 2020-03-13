@@ -1,10 +1,9 @@
-import copy
 import base64
-import testconstants
-from tuqquery.tuq import QueryTests
-from remote.remote_util import RemoteMachineShellConnection
-from couchbase_helper.documentgenerator import JSONNonDocGenerator
+
 from membase.api.exception import CBQError
+from remote.remote_util import RemoteMachineShellConnection
+from tuqquery.tuq import QueryTests
+
 
 class Base64Tests(QueryTests):
     def setUp(self):
@@ -14,6 +13,7 @@ class Base64Tests(QueryTests):
         for bucket in self.buckets:
             self.cluster.bucket_flush(self.master, bucket=bucket, timeout=self.wait_timeout * 5)
         self.load(self.gens_load)
+        self.query_buckets = self.get_query_buckets(check_all_buckets=True)
 
     def suite_setUp(self):
         super(Base64Tests, self).suite_setUp()
@@ -25,9 +25,9 @@ class Base64Tests(QueryTests):
         super(Base64Tests, self).suite_tearDown()
 
     def test_simple_query(self):
-        for bucket in self.buckets:
+        for query_bucket in self.query_buckets:
             try:
-                self.query = "select BASE64(%s) from %s" % (bucket.name, bucket.name)
+                self.query = "select BASE64(d) from %s as d" % query_bucket
                 self.run_cbq_query()
                 self.sleep(3)
                 actual_result = self.run_cbq_query()
@@ -36,14 +36,14 @@ class Base64Tests(QueryTests):
                 expected_result = [base64.b64encode(doc.encode()) for doc in expected_result]
                 self._verify_results_base64(actual_result, expected_result)
             except Exception as ex:
-                self.query = "SELECT %s FROM %s" % (bucket.name, bucket.name)
+                self.query = "SELECT d FROM %s as d" % query_bucket
                 self.run_cbq_query()
                 raise ex
 
     def test_negative_value(self):
         # tuq should not crash after error
-        for bucket in self.buckets:
-            self.query = "select BASE64() from %s" % (bucket.name)
+        for query_bucket in self.query_buckets:
+            self.query = "select BASE64() from %s" % query_bucket
             try:
                 self.run_cbq_query()
             except CBQError:

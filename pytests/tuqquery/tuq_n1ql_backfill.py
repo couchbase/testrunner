@@ -1,10 +1,10 @@
-from .tuq import QueryTests
-import os
-from membase.api.rest_client import RestHelper
-from membase.api.exception import CBQError
-import json
 import threading
-import logging
+
+from membase.api.exception import CBQError
+from membase.api.rest_client import RestHelper
+
+from .tuq import QueryTests
+
 
 class QueryN1QLBackfillTests(QueryTests):
     def setUp(self):
@@ -21,7 +21,8 @@ class QueryN1QLBackfillTests(QueryTests):
         self.curl_url = "http://%s:%s/settings/querySettings" % (self.master.ip, self.master.port)
         self.log.info("==============  QueryN1QLBackfillTests setup has completed ==============")
         self.log_config_info()
-
+        self.query_buckets = self.get_query_buckets(check_all_buckets=True)
+        self.standard_bucket_name = 'standard_bucket0'
 
     def suite_setUp(self):
         super(QueryN1QLBackfillTests, self).suite_setUp()
@@ -50,9 +51,9 @@ class QueryN1QLBackfillTests(QueryTests):
             if self.change_directory:
                 self.set_directory()
 
-            self.run_cbq_query(query="CREATE INDEX join_day on standard_bucket0(join_day)")
-            for bucket in self.buckets:
-                if bucket.name == 'standard_bucket0':
+            self.run_cbq_query(query="CREATE INDEX join_day on " + self.query_buckets[1] + "(join_day)")
+            for query_bucket, bucket in zip(self.query_buckets, self.buckets):
+                if bucket.name == self.standard_bucket_name:
                     self._wait_for_index_online(bucket, 'join_day')
             thread1 = threading.Thread(name='monitor_backfill', target=self.monitor_backfill)
             thread1.setDaemon(True)
@@ -63,32 +64,33 @@ class QueryN1QLBackfillTests(QueryTests):
 
             thread2.join()
 
-            # Check to see if the monitoring thread is still alive after query completes, monitoring thread should return
-            # once it sees backfill being used, if that has not happened by the time the query completes, we can determine
-            # backfill was not used
+            # Check to see if the monitoring thread is still alive after query completes, monitoring thread should
+            # return once it sees backfill being used, if that has not happened by the time the query completes,
+            # we can determine backfill was not used
             if thread1.isAlive():
                 self.assertTrue(False, "The backfill thread never registered any files")
             else:
                 self.log.info("The backfill directory was being used during the query")
                 self.assertTrue(True)
         finally:
-            self.run_cbq_query(query="DROP INDEX standard_bucket0.join_day")
+            self.run_cbq_query(query="DROP INDEX join_day ON " + self.query_buckets[1])
 
     '''Test to see what happens when the backfill data exceeds the max amount allowed by the tmpspacesize setting
         WIP'''
     def test_exceed_backfill(self):
         self.set_tmpspace()
         try:
-            self.run_cbq_query(query="CREATE INDEX join_day on standard_bucket0(join_day)")
-            for bucket in self.buckets:
-                if bucket.name == 'standard_bucket0':
+            self.run_cbq_query(query="CREATE INDEX join_day on " + self.query_buckets[1] + "(join_day)")
+            for query_bucket, bucket in zip(self.query_buckets, self.buckets):
+                if bucket.name == self.standard_bucket_name:
                     self._wait_for_index_online(bucket, 'join_day')
-            self.run_cbq_query(query="select * from default d JOIN standard_bucket0 s on (d.join_day == s.join_day)")
+            self.run_cbq_query(query="select * from " + self.query_buckets[0] + " d JOIN " + self.query_buckets[1] +
+                                     " s on (d.join_day == s.join_day)")
         except CBQError as error:
             self.assertTrue("Thevaluemustbeinrangefrom-1toinfinity" in str(error),
                             "The error message is incorrect. It should have been %s" % error)
         finally:
-            self.run_cbq_query(query="DROP INDEX standard_bucket0.join_day")
+            self.run_cbq_query(query="DROP INDEX join_day ON " + self.query_buckets[1])
 
     '''Test to set the directory to an absolute path (a directory that exists)
         Test to set directory to a path with spaces in it
@@ -105,7 +107,8 @@ class QueryN1QLBackfillTests(QueryTests):
             if 'queryTmpSpaceDir' in expected_curl:
                 self.log.info("Directory exists")
                 if "space" in expected_curl['queryTmpSpaceDir']:
-                    # For some reason the response strips out the whitespace, but inspecting the UI shows it is set correctly
+                    # For some reason the response strips out the whitespace, but inspecting the UI shows it is set
+                    # correctly
                     self.assertEqual(expected_curl['queryTmpSpaceDir'], '/opt/couchbase/withspace')
                 else:
                     self.assertEqual(expected_curl['queryTmpSpaceDir'], self.directory_path)
@@ -114,7 +117,7 @@ class QueryN1QLBackfillTests(QueryTests):
                 # The error message should be The value must be a valid directory
                 self.assertEqual(expected_curl['errors']['queryTmpSpaceDir'], "Thevaluemustbeavaliddirectory")
         else:
-            curl_output = self.shell.execute_command("%s -u Administrator:password %s" % (self.curl_path, self.curl_url))
+            curl_output = self.shell.execute_command(f"{self.curl_path} -u Administrator:password {self.curl_url}")
             expected_curl = self.convert_list_to_json(curl_output[0])
             self.assertEqual(expected_curl['queryTmpSpaceDir'], "/opt/couchbase/var/lib/couchbase/tmp")
 
@@ -148,7 +151,8 @@ class QueryN1QLBackfillTests(QueryTests):
         reached = RestHelper(self.rest).rebalance_reached()
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         self.sleep(1)
-        curl_url = "http://%s:%s/settings/querySettings" % (self.servers[self.nodes_init].ip, self.servers[self.nodes_init].port)
+        curl_url = "http://%s:%s/settings/querySettings" % (self.servers[self.nodes_init].ip,
+                                                            self.servers[self.nodes_init].port)
         curl_output = self.shell.execute_command("%s -u Administrator:password %s"
                                                  % (self.curl_path, curl_url))
         expected_curl = self.convert_list_to_json(curl_output[0])
@@ -214,6 +218,6 @@ class QueryN1QLBackfillTests(QueryTests):
         return
 
     def execute_query(self):
-        actual_results = self.run_cbq_query(query="select * from default d JOIN standard_bucket0 s on "
+        actual_results = self.run_cbq_query(query="select * from " + self.query_buckets[0] + " d JOIN " + self.query_buckets[1] + " s on "
                                                   "(d.join_day == s.join_day)")
         return actual_results

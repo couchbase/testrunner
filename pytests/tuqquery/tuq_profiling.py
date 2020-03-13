@@ -3,11 +3,13 @@ import threading
 import json
 from .tuq_monitoring import QueryMonitoringTests
 
+
 class QueryProfilingTests(QueryMonitoringTests):
     def setUp(self):
         super(QueryProfilingTests, self).setUp()
         self.rest.set_profiling(self.master, "off")
         self.rest.set_profiling_controls(self.master, False)
+        self.query_bucket = self.get_query_buckets()[0]
 
     def suite_setUp(self):
         super(QueryProfilingTests, self).suite_setUp()
@@ -19,12 +21,13 @@ class QueryProfilingTests(QueryMonitoringTests):
         super(QueryProfilingTests, self).suite_tearDown()
 
     '''Check that the profiling settings can be changed, and that those changes happen per node not cluster wide.'''
+
     def test_set_profile_settings(self):
         # Check that the profile setting can be changed and that the change is on a per node basis
         self.rest.set_profiling(self.master, "phases")
         result = self.rest.get_query_admin_settings(self.master)
         self.assertTrue(result['profile'] == 'phases')
-        node2= self.rest.get_query_admin_settings(self.servers[1])
+        node2 = self.rest.get_query_admin_settings(self.servers[1])
         self.assertTrue(node2['profile'] == 'off')
 
         self.rest.set_profiling(self.master, "timings")
@@ -47,30 +50,32 @@ class QueryProfilingTests(QueryMonitoringTests):
         self.assertTrue(node2['profile'] == 'off')
 
     '''Check that the controls settings can be changed, and that those changes happen per node not cluster wide.'''
+
     def test_set_controls_settings(self):
         self.rest.set_profiling_controls(self.master, True)
         result = self.rest.get_query_admin_settings(self.master)
-        self.assertTrue(result['controls'] == True)
+        self.assertTrue(result['controls'])
         node2 = self.rest.get_query_admin_settings(self.servers[1])
-        self.assertTrue(node2['controls'] == False)
+        self.assertFalse(node2['controls'])
 
         # Check an invalid value, the setting should be unchanged by an invalid value
         self.rest.set_profiling_controls(self.master, "hello")
         result = self.rest.get_query_admin_settings(self.master)
-        self.assertTrue(result['controls'] == True)
+        self.assertTrue(result['controls'])
         node2 = self.rest.get_query_admin_settings(self.servers[1])
-        self.assertTrue(node2['controls'] == False)
+        self.assertFalse(node2['controls'])
 
         self.rest.set_profiling_controls(self.master, False)
         result = self.rest.get_query_admin_settings(self.master)
-        self.assertTrue(result['controls'] == False)
+        self.assertFalse(result['controls'])
         node2 = self.rest.get_query_admin_settings(self.servers[1])
-        self.assertTrue(node2['controls'] == False)
+        self.assertFalse(node2['controls'])
 
     '''Basic check for the profiling setting profile=phases
         -Check that the default profile setting does not contain phaseTimes information
         -Check that setting profile = phases on the master node does not change the setting on other nodes
         -Check that you can change profile to phases in the middle of a query.'''
+
     def test_profiling_phases(self):
         # Test 1: Check to see if profiling = off is effective
         self.rest.set_profiling(self.master, "off")
@@ -131,6 +136,7 @@ class QueryProfilingTests(QueryMonitoringTests):
 
     '''Basic check for the profiling setting profile=timings
         -Check that the default profile setting does not contain phaseTimes'''
+
     def test_profiling_timings_default(self):
         # Test 1: Check to see if profiling = off
         self.rest.set_profiling(self.master, "off")
@@ -147,6 +153,7 @@ class QueryProfilingTests(QueryMonitoringTests):
         self.assertTrue('phaseTimes' not in result['results'][0]['completed_requests'])
 
     """Check that setting profile = timings on the master node does not change the setting on other nodes"""
+
     def test_profiling_timings_propagation(self):
         # Create flags to ensure the queries were both inside of active_requests
         query_one = False
@@ -164,16 +171,19 @@ class QueryProfilingTests(QueryMonitoringTests):
         # Make sure the node with profiling set to phases contains phaseTimes and the other query does not.
         results = self.run_cbq_query('select *, meta().plan from system:active_requests')
         for result in results['results']:
-            if result['active_requests']['statement'] == 'select * from default union select * from default' \
-                    and result['active_requests']['node'] =='%s:%s' % (self.master.ip, self.master.port):
+            if result['active_requests'][
+                'statement'] == 'select * from ' + self.query_bucket + 'union select * from ' + self.query_bucket \
+                    and result['active_requests']['node'] == '%s:%s' % (self.master.ip, self.master.port):
                 self.assertTrue('plan' in result and 'phaseTimes' in result['active_requests'])
                 query_one = True
-            elif result['active_requests']['statement'] == 'select * from default union select * from default':
+            elif result['active_requests']['statement'] == 'select * from ' + self.query_bucket + \
+                    ' union select * from ' + self.query_bucket:
                 self.assertTrue('plan' not in result and
                                 'phaseTimes' not in result['active_requests'])
                 query_two = True
 
-        self.assertTrue(query_one and query_two, "One of the queries did not appear inside of active_requests : %s" % results)
+        self.assertTrue(query_one and query_two,
+                        "One of the queries did not appear inside of active_requests : %s" % results)
 
         thread1.join()
         thread2.join()
@@ -183,18 +193,22 @@ class QueryProfilingTests(QueryMonitoringTests):
         # Make sure completed_requests contains phasetimes for the query run on the node with profiling set to phases
         results = self.run_cbq_query('select *, meta().plan from system:completed_requests')
         for result in results['results']:
-            if result['completed_requests']['statement'] == 'select * from default union select * from default' \
-                    and result['completed_requests']['node'] =='%s:%s' % (self.master.ip, self.master.port):
+            if result['completed_requests']['statement'] == 'select * from ' + self.query_bucket + \
+                    ' union select * from ' + self.query_bucket \
+                    and result['completed_requests']['node'] == '%s:%s' % (self.master.ip, self.master.port):
                 self.assertTrue('plan' in result and 'phaseTimes' in result['completed_requests'])
                 query_one = True
-            elif result['completed_requests']['statement'] == 'select * from default union select * from default':
+            elif result['completed_requests']['statement'] == 'select * from ' + self.query_bucket + \
+                    ' union select * from ' + self.query_bucket:
                 self.assertTrue('plan' not in result and
                                 'phaseTimes' not in result['completed_requests'])
                 query_two = True
 
-        self.assertTrue(query_one and query_two, "One of the queries did not appear inside of completed_requests : %s" % results)
+        self.assertTrue(query_one and query_two,
+                        "One of the queries did not appear inside of completed_requests : %s" % results)
 
     """-Check that you can change profile to timings in the middle of a query."""
+
     def test_profiling_timings_in_flight(self):
         # Test 3: Set profiling to phases in the middle of the running query and see if it takes effect.
         self.rest.set_profiling(self.master, "off")
@@ -211,7 +225,6 @@ class QueryProfilingTests(QueryMonitoringTests):
         # Check if completed_requests contains the phaseTimes
         result = self.run_cbq_query('select *, meta().plan from system:completed_requests')
         self.assertTrue('plan' in result['results'][0] and 'phaseTimes' in result['results'][0]['completed_requests'])
-
 
     def test_profiling_controls(self):
         self.rest.get_query_admin_settings(self.master)
@@ -240,13 +253,12 @@ class QueryProfilingTests(QueryMonitoringTests):
         result = self.run_cbq_query('select * from system:completed_requests')
         self.log.info(json.dumps(result, sort_keys=True, indent=3))
 
-
     def run_parallel_query(self, server):
         logging.info('parallel query is active')
-        query = 'select * from default union select * from default'
+        query = 'select * from ' + self.query_bucket + ' union select * from ' + self.query_bucket
         self.run_cbq_query(query, server=server)
 
     def run_controlled_query(self, server):
         logging.info('parallel query is active')
-        query = 'select * from default where a=$a&$a=1'
+        query = 'select * from ' + self.query_bucket + ' where a=$a&$a=1'
         self.run_cbq_query(query, server=server)
