@@ -70,6 +70,10 @@ CBFT_ENV_OPTIONS = \
     }
 
 CMDS = {
+    "processes_to_terminate": {
+        "beam.smp", "memcached", "moxi", "vbucketmigrator", "couchdb", "epmd", "memsup", "cpu_sup", "goxdcr", "erlang",
+        "eventing", "erl", "godu", "goport", "gosecrets", "projector"
+    },
     "deb": {
         "uninstall": "dpkg -r couchbase-server; "
                      "rm -rf " + DEFAULT_INSTALL_DIR["LINUX_DISTROS"] + " > /dev/null && echo 1 || echo 0",

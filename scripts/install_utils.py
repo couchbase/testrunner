@@ -119,6 +119,7 @@ class NodeHelper:
                     except Exception as e:
                         log.warn("Exception {0} occurred on {1}, retrying..".format(e.message, self.ip))
                         self.wait_for_completion(duration, event)
+            self.shell.terminate_processes(self.info, install_constants.CMDS['processes_to_terminate'])
 
     def pre_install_cb(self):
         if install_constants.CMDS[self.info.deliverable_type]["pre_install"]:
