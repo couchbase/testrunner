@@ -148,7 +148,11 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         else:
             raise Exception("OS not supported.")
         self.backup_validation_files_location = "/tmp/backuprestore" + self.master.ip
-        self.backupset.backup_host = self.input.clusters[1][0]
+        if self.input.bkrs_client is not None:
+            self.backupset.backup_host = self.input.bkrs_client
+        else:
+            self.backupset.backup_host = self.input.clusters[1][0]
+
         self.backupset.directory += "_" + self.master.ip
         self.backupset.name = self.input.param("name", "backup")
         self.non_master_host = self.input.param("non-master", False)
@@ -340,6 +344,13 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             numprocs = sysinfo['Processor(s)'].split(' ')
             return numprocs[0]
 
+    def _get_current_bkrs_client_version(self):
+        self.backupset.current_bkrs_client_version = \
+                        RestConnection(self.backupset.backup_host).get_nodes_version()
+        self.backupset.current_bkrs_client_version = \
+                   "-".join(self.backupset.current_bkrs_client_version.split('-')[:2])
+        return self.backupset.current_bkrs_client_version
+
     def backup_reset_clusters(self, servers):
         BucketOperationHelper.delete_all_buckets_or_assert(servers, self)
         ClusterOperationHelper.cleanup_cluster(servers, master=servers[0])
@@ -375,6 +386,9 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             args += " --disable-ft-indexes"
         if self.backupset.disable_data:
             args += " --disable-data"
+        if self.backupset.current_bkrs_client_version[:3] >= "6.5":
+            if self.vbucket_filter is not None:
+                args += " --vbucket-filter {0}".format(self.vbucket_filter)
         if self.backupset.log_to_stdout:
             args += " --log-to-stdout"
         if self.vbucket_filter:
@@ -593,7 +607,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             password_input = "-p "
 
         version = RestConnection(self.backupset.backup_host).get_nodes_version()
-        if "4.6" <= version:
+        if "4.6" <= self.backupset.current_bkrs_client_version[:3]:
             self.cluster_flag = "--cluster"
 
         args = "restore --archive {0} --repo {1} {2} http{9}://{3}:{10}{4} "\
@@ -2526,6 +2540,10 @@ class Backupset:
         self.log_to_stdout = False
         self.auto_select_threads = False
         self.date_range = ''
+        self.bkrs_client_version = None
+        self.current_bkrs_client_version = None
+        self.bkrs_client_upgrade = False
+        self.bwc_version = None
 
 
 class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):

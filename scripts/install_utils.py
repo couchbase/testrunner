@@ -32,7 +32,9 @@ params = {
     "enable_ipv6": False,
     "use_domain_names": False,
     "fts_quota": testconstants.FTS_QUOTA,
-    "fts_query_limit": 0
+    "fts_query_limit": 0,
+    "cluster_version": None,
+    "bkrs_client": None
 }
 
 
@@ -43,6 +45,7 @@ class build:
         self.path = path
         self.product = product
         self.version = params["version"]
+        self.bkrs_client = None
 
 
 class NodeHelper:
@@ -354,10 +357,12 @@ def hdiutil_attach(shell, dmg_path):
 
 
 def get_node_helper(ip):
+    node_match = None
     for node_helper in NodeHelpers:
         if node_helper.ip == ip:
-            return node_helper
-    return None
+            node_match = node_helper
+            break
+    return node_match
 
 
 def print_result_and_exit(err=None):
@@ -408,6 +413,9 @@ def _parse_user_input():
         print_result_and_exit("No servers specified. Please use the -i parameter." + "\n" + install_constants.USAGE)
     else:
         params["servers"] = userinput.servers
+    if userinput.bkrs_client:
+        params["bkrs_client"] = userinput.bkrs_client
+        params["servers"].append(params["bkrs_client"])
 
     # Validate and extract remaining params
     for key, value in userinput.test_params.items():
@@ -424,6 +432,9 @@ def _parse_user_input():
             if "install" not in params["install_tasks"] and "init" not in params["install_tasks"]:
                 return params  # No other parameters needed
         if key == 'v' or key == "version":
+            # if value is a list, get the first element.  re.match needs string
+            if isinstance(value, list):
+                value = value[0]
             if re.match('^[0-9\.\-]*$', value) and len(value) > 5:
                 params["version"] = value
         if key == "url":
@@ -453,6 +464,11 @@ def _parse_user_input():
             params["fts_quota"] = int(value)
         if key == "fts_query_limit" and int(value) > 0:
             params["fts_query_limit"] = int(value)
+        if key == "cluster_version":
+            params["cluster_version"] = value
+
+    if userinput.bkrs_client and not params["cluster_version"]:
+        print_result_and_exit("Need 'cluster_version' in params to proceed")
 
     if not params["version"] and not params["url"]:
         print_result_and_exit("Need valid build version or url to proceed")
@@ -533,7 +549,6 @@ def pre_install_steps():
                 node.build = build(build_binary, build_url, filepath)
         _download_build()
 
-
 def _execute_local(command, timeout):
     process = subprocess.Popen(command, stdout=subprocess.PIPE, shell=True).wait(timeout)
     process.communicate()[0].strip()
@@ -557,24 +572,28 @@ def _copy_to_nodes(src_path, dest_path):
 
 
 def __get_build_url(node, build_binary):
+    cb_version = params["version"]
+    if params["bkrs_client"]:
+        if node.ip != params["bkrs_client"].ip:
+            cb_version = params["cluster_version"]
     if params["enable_ipv6"]:
         ipv6_url = "{0}{1}/{2}/{3}".format(
             testconstants.CB_FQDN_REPO,
-            testconstants.CB_VERSION_NAME[(params["version"]).split('-')[0][:-2]],
-            params["version"].split('-')[1],
+            testconstants.CB_VERSION_NAME[cb_version.split('-')[0][:-2]],
+            cb_version.split('-')[1],
             build_binary)
         if node.shell.is_url_live(ipv6_url, exit_if_not_live=False):
             return ipv6_url
     else:
         latestbuilds_url = "{0}{1}/{2}/{3}".format(
             testconstants.CB_REPO,
-            testconstants.CB_VERSION_NAME[(params["version"]).split('-')[0][:-2]],
-            params["version"].split('-')[1],
+            testconstants.CB_VERSION_NAME[cb_version.split('-')[0][:-2]],
+            cb_version.split('-')[1],
             build_binary)
         release_url = "{0}{1}/{2}/{3}".format(
             testconstants.CB_RELEASE_REPO,
-            testconstants.CB_VERSION_NAME[(params["version"]).split('-')[0][:-2]],
-            params["version"].split('-')[1],
+            testconstants.CB_VERSION_NAME[cb_version.split('-')[0][:-2]],
+            cb_version.split('-')[1],
             build_binary)
         if node.shell.is_url_live(latestbuilds_url, exit_if_not_live=False):
             return latestbuilds_url
@@ -649,9 +668,13 @@ def __get_build_binary_name(node):
     # couchbase-server-enterprise-6.5.0-4557-rhel8.x86_64.rpm
     # couchbase-server-enterprise-6.5.0-4557-oel7.x86_64.rpm
     # couchbase-server-enterprise-6.5.0-4557-amzn2.x86_64.rpm
+    cb_version = params["version"]
+    if params["bkrs_client"]:
+        if node.ip != params["bkrs_client"].ip:
+            cb_version = params["cluster_version"]
     if node.get_os() in install_constants.X86:
         return "{0}-{1}-{2}.{3}.{4}".format(params["cb_edition"],
-                                            params["version"],
+                                            cb_version,
                                             node.get_os(),
                                             node.info.architecture_type,
                                             node.info.deliverable_type)

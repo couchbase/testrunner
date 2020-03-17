@@ -308,7 +308,8 @@ class BaseTestCase(unittest.TestCase):
                                 str(self.__class__).find('warmuptest.WarmUpTests') != -1 or \
                                 str(self.__class__).find('failover.failovertests.FailoverTests') != -1 or \
                                 str(self.__class__).find('observe.observeseqnotests.ObserveSeqNoTests') != -1 or \
-                                str(self.__class__).find('epengine.lwwepengine.LWW_EP_Engine') != -1:
+                                str(self.__class__).find('epengine.lwwepengine.LWW_EP_Engine') != -1 or \
+                                str(self.__class__).find(' ent_backup_restore.enterprise_backup_restore_bwc.EnterpriseBackupRestoreBWCTest') != -1:
 
                     self.services = self.get_services(self.servers, self.services_init)
                     # rebalance all nodes into the cluster before each test

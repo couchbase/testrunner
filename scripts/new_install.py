@@ -11,6 +11,7 @@ import install_utils, install_constants
 import logging.config
 import os
 from membase.api.exception import InstallException
+from testconstants import COUCHBASE_FROM_MAD_HATTER
 import traceback
 
 logging.config.fileConfig("scripts.logging.conf")
@@ -49,10 +50,14 @@ def do_install_task(task, node):
         traceback.print_exc()
 
 
-def validate_install(version):
+def validate_install(params):
     log.info("-" * 100)
     for node in install_utils.NodeHelpers:
+        version = params["version"]
         node.install_success = False
+        if params["cluster_version"]:
+            if node.ip != params["bkrs_client"].ip:
+                version = params["cluster_version"]
         if node.rest:
             try:
                 node_status = node.rest.cluster_status()["nodes"]
@@ -64,10 +69,12 @@ def validate_install(version):
 
                 if node.enable_ipv6 and not item["addressFamily"] == "inet6":
                     node.install_success = False
-
+                addressFamily = "No value"
+                if item["version"][:5] in COUCHBASE_FROM_MAD_HATTER:
+                    addressFamily = item['addressFamily']
                 log.info("node:{0}\tversion:{1}\taFamily:{2}\tservices:{3}".format(item['hostname'],
                                                                               item['version'],
-                                                                              item['addressFamily'],
+                                                                              addressFamily,
                                                                               item['services']))
     install_utils.print_result_and_exit()
 
@@ -97,7 +104,7 @@ def do_install(params):
                 log.error("INSTALL TIMED OUT AFTER {0}s.VALIDATING..".format(params["timeout"]))
                 break
     if "init" in params["install_tasks"]:
-        validate_install(params["version"])
+        validate_install(params)
 
 
 def main():
