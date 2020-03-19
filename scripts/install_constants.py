@@ -52,7 +52,7 @@ DEFAULT_CLI_PATH = \
         "WINDOWS_SERVER": DEFAULT_INSTALL_DIR["WINDOWS_SERVER"] + "/bin/couchbase-cli"
     }
 
-WGET_CMD = "cd {0}; wget -N {1}"
+WGET_CMD = "cd {0}; wget -Nq {1}"
 CURL_CMD = "curl {0} -o {1} -z {1} -s -m 30"
 CB_ENTERPRISE = "couchbase-server-enterprise"
 CB_COMMUNITY = "couchbase-server-community"
@@ -70,6 +70,10 @@ CBFT_ENV_OPTIONS = \
     }
 
 CMDS = {
+    "processes_to_terminate": {
+        "beam.smp", "memcached", "moxi", "vbucketmigrator", "couchdb", "epmd", "memsup", "cpu_sup", "goxdcr", "erlang",
+        "eventing", "erl", "godu", "goport", "gosecrets", "projector"
+    },
     "deb": {
         "uninstall": "dpkg -r couchbase-server; "
                      "rm -rf " + DEFAULT_INSTALL_DIR["LINUX_DISTROS"] + " > /dev/null && echo 1 || echo 0",

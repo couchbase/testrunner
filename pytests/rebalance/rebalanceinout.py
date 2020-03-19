@@ -45,7 +45,7 @@ class RebalanceInOutTests(RebalanceBaseTest):
         for task in tasks:
             task.result(self.wait_timeout * 20)
 
-        if self.flusher_batch_split_trigger is not None:
+        if self.flusher_total_batch_limit is not None:
             # Validate seq_no snap_start/stop values
             self.check_snap_start_corruption()
 
@@ -63,7 +63,7 @@ class RebalanceInOutTests(RebalanceBaseTest):
         new_failover_stats = self.compare_failovers_logs(prev_failover_stats, result_nodes, self.buckets)
         new_vbucket_stats = self.compare_vbucket_seqnos(prev_vbucket_stats, result_nodes, self.buckets,
                                                         perNode=False)
-        if self.flusher_batch_split_trigger is None:
+        if self.flusher_total_batch_limit is None:
             self.compare_vbucketseq_failoverlogs(new_vbucket_stats, new_failover_stats)
             self.sleep(30)
         self.data_analysis_active_replica_all(disk_active_dataset, disk_replica_dataset, result_nodes, self.buckets,
@@ -71,7 +71,7 @@ class RebalanceInOutTests(RebalanceBaseTest):
         self.verify_unacked_bytes_all_buckets()
         nodes = self.get_nodes_in_cluster(self.master)
         self.vb_distribution_analysis(servers=nodes, std=1.0, total_vbuckets=self.total_vbuckets)
-        if self.flusher_batch_split_trigger is not None:
+        if self.flusher_total_batch_limit is not None:
             # Validate seq_no snap_start/stop values
             self.check_snap_start_corruption()
 
@@ -147,7 +147,7 @@ class RebalanceInOutTests(RebalanceBaseTest):
         servs_out = self.servers[self.nodes_init - self.nodes_out:self.nodes_init]
         for task in tasks:
             task.result(self.wait_timeout * 20)
-        if self.flusher_batch_split_trigger is not None:
+        if self.flusher_total_batch_limit is not None:
             # Validate seq_no snap_start/stop values after initial doc_load
             self.check_snap_start_corruption()
 
@@ -158,14 +158,14 @@ class RebalanceInOutTests(RebalanceBaseTest):
         prev_failover_stats = self.get_failovers_logs(self.servers[:self.nodes_init], self.buckets)
         disk_replica_dataset, disk_active_dataset = self.get_and_compare_active_replica_data_set_all(
             self.servers[:self.nodes_init], self.buckets, path=None)
-        if self.flusher_batch_split_trigger is None:
+        if self.flusher_total_batch_limit is None:
             self.compare_vbucketseq_failoverlogs(prev_vbucket_stats, prev_failover_stats)
         self.rest = RestConnection(self.master)
         chosen = RebalanceHelper.pick_nodes(self.master, howmany=1)
         result_nodes = list(set(self.servers[:self.nodes_init] + servs_in) - set(servs_out))
         for node in servs_in:
             self.rest.add_node(self.master.rest_username, self.master.rest_password, node.ip, node.port)
-        if self.flusher_batch_split_trigger is not None:
+        if self.flusher_total_batch_limit is not None:
             # Load data after add-node
             self._load_all_buckets(self.master, gen, "update", 0)
             # Validate seq_no snap_start/stop values
@@ -182,12 +182,12 @@ class RebalanceInOutTests(RebalanceBaseTest):
         # No need to pass self.sleep_before_rebalance,
         # since prev ops are synchronous call
         self.shuffle_nodes_between_zones_and_rebalance(servs_out)
-        if self.flusher_batch_split_trigger is not None:
+        if self.flusher_total_batch_limit is not None:
             # Validate seq_no snap_start/stop values after rebalance
             self.check_snap_start_corruption()
 
         self.verify_cluster_stats(result_nodes, check_ep_items_remaining=True)
-        if self.flusher_batch_split_trigger is None:
+        if self.flusher_total_batch_limit is None:
             self.compare_failovers_logs(prev_failover_stats, result_nodes, self.buckets)
             self.sleep(30)
         self.data_analysis_active_replica_all(disk_active_dataset, disk_replica_dataset, result_nodes, self.buckets,

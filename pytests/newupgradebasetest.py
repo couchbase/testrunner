@@ -141,7 +141,7 @@ class NewUpgradeBaseTest(QueryHelperTests, EventingBaseTest, FTSBaseTest):
         self.fts_obj = None
         self.n1ql_helper = None
         self.index_name_prefix = None
-        self.flusher_batch_split_trigger = self.input.param("flusher_batch_split_trigger", None)
+        self.flusher_total_batch_limit = self.input.param("flusher_total_batch_limit", None)
 
     def tearDown(self):
         test_failed = (hasattr(self, '_resultForDoCleanups') and \
@@ -174,7 +174,7 @@ class NewUpgradeBaseTest(QueryHelperTests, EventingBaseTest, FTSBaseTest):
                 self.servers = temp
             except Exception as e:
                 if e:
-                    print("Exception ", e)
+                    print(("Exception ", e))
                 self.cluster.shutdown(force=True)
                 self.fail(e)
             super(NewUpgradeBaseTest, self).tearDown()
@@ -373,7 +373,7 @@ class NewUpgradeBaseTest(QueryHelperTests, EventingBaseTest, FTSBaseTest):
             self.sleep(10)
             return o, e
         except Exception as e:
-            print(traceback.extract_stack())
+            print((traceback.extract_stack()))
             if queue is not None:
                 queue.put(False)
                 if not self.is_linux:
@@ -591,7 +591,7 @@ class NewUpgradeBaseTest(QueryHelperTests, EventingBaseTest, FTSBaseTest):
                 else:
                     self.wait_node_restarted(server, wait_time=testconstants.NS_SERVER_TIMEOUT * 10, wait_if_warmup=True, check_service=True)
             except Exception as e:
-                print(traceback.extract_stack())
+                print((traceback.extract_stack()))
                 if queue is not None:
                     queue.put(False)
                     if not self.is_linux:
@@ -609,7 +609,7 @@ class NewUpgradeBaseTest(QueryHelperTests, EventingBaseTest, FTSBaseTest):
                                                 len(out_servers), len(in_servers)))
         for vb_type in ["active_vb", "replica_vb"]:
             self.log.info("Checking %s on nodes that remain in cluster..." % vb_type)
-            for server, stats in old_vbs.items():
+            for server, stats in list(old_vbs.items()):
                 if server in new_vbs:
                     self.assertTrue(sorted(stats[vb_type]) == sorted(new_vbs[server][vb_type]),
                     "Server %s Seems like %s vbuckets were shuffled, old vbs is %s, new are %s" %(
@@ -617,10 +617,10 @@ class NewUpgradeBaseTest(QueryHelperTests, EventingBaseTest, FTSBaseTest):
             self.log.info("%s vbuckets were not suffled" % vb_type)
             self.log.info("Checking in-out nodes...")
             vbs_servs_out = vbs_servs_in = []
-            for srv, stat in old_vbs.items():
+            for srv, stat in list(old_vbs.items()):
                 if srv in out_servers:
                     vbs_servs_out.extend(stat[vb_type])
-            for srv, stat in new_vbs.items():
+            for srv, stat in list(new_vbs.items()):
                 if srv in in_servers:
                     vbs_servs_in.extend(stat[vb_type])
             self.assertTrue(sorted(vbs_servs_out) == sorted(vbs_servs_in),

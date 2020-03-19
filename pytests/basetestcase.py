@@ -272,7 +272,7 @@ class BaseTestCase(unittest.TestCase):
                 self.log.info("initializing cluster")
                 self.reset_cluster()
                 cli_command = 'node-init'
-                if self.hostname:
+                if self.hostname is True:
                     for server in self.servers:
                         options = '--node-init-hostname ' + server.ip
                         remote_client = RemoteMachineShellConnection(server)
@@ -718,7 +718,7 @@ class BaseTestCase(unittest.TestCase):
         # Supported collection level param in 7.0
         supported_collection_params = ["maxTTL"]
 
-        for spec in self.master.collections_map.items():
+        for spec in list(self.master.collections_map.items()):
             collection_name = spec[0]
             collection_params = {}
             for bucket in self.buckets:
@@ -726,7 +726,7 @@ class BaseTestCase(unittest.TestCase):
                 if map_bucket_name == bucket.name:
                     scope_name = spec[1]["scope"]
                     for param in supported_collection_params:
-                        if param in spec[1].keys():
+                        if param in list(spec[1].keys()):
                             collection_params[param] = spec[1][param]
                     collection_tasks.append(
                         self.cluster.create_scope_collection(self.master, map_bucket_name, scope_name, collection_name,
@@ -2868,14 +2868,14 @@ class BaseTestCase(unittest.TestCase):
             self.fail("snap_start and snap_end corruption found !!! . {0}"
                       .format(failure_dict))
 
-    def set_flusher_batch_split_trigger(self, flusher_batch_split_trigger=3, buckets=None):
-        self.log.info("Changing the bucket properties by changing flusher_batch_split_trigger to {0}".
-                      format(flusher_batch_split_trigger))
+    def set_flusher_total_batch_limit(self, flusher_total_batch_limit=3, buckets=None):
+        self.log.info("Changing the bucket properties by changing flusher_total_batch_limit to {0}".
+                      format(flusher_total_batch_limit))
 
         rest = RestConnection(self.master)
         for bucket in buckets:
-            rest.change_flusher_batch_split_trigger(
-                flusher_batch_split_trigger=flusher_batch_split_trigger,
+            rest.change_flusher_total_batch_limit(
+                flusher_total_batch_limit=flusher_total_batch_limit,
                 bucket=bucket.name)
 
         # Restart Memcached in all cluster nodes to reflect the settings
@@ -2895,8 +2895,8 @@ class BaseTestCase(unittest.TestCase):
                                    self.master.rest_password)
                 mc.bucket_select(bucket.name)
                 stats = mc.stats()
-                self.assertEqual(int(stats['ep_flusher_batch_split_trigger']),
-                                  flusher_batch_split_trigger)
+                self.assertEqual(int(stats['ep_flusher_total_batch_limit']),
+                                  flusher_total_batch_limit)
 
     def check_retry_rebalance_succeeded(self):
         self.sleep(30)

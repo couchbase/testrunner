@@ -1644,12 +1644,12 @@ class RestConnection(object):
         status, content = self.diag_eval(code)
         return status, content
 
-    def change_flusher_batch_split_trigger(self, flusher_batch_split_trigger=3,
+    def change_flusher_total_batch_limit(self, flusher_total_batch_limit=3,
                                            bucket='default'):
         code = "ns_bucket:update_bucket_props(\"" + bucket \
                + "\", [{extra_config_string, " \
-               + "\"flusher_batch_split_trigger=" \
-               + str(flusher_batch_split_trigger) + "\"}])."
+               + "\"flusher_total_batch_limit=" \
+               + str(flusher_total_batch_limit) + "\"}])."
         status, content = self.diag_eval(code)
         return status, content
 
@@ -3780,7 +3780,7 @@ class RestConnection(object):
                     for node in tmp:
                         node["hostname"] = node["hostname"].split(":")
                         node["hostname"] = node["hostname"][0]
-                        print(node["hostname"][0])
+                        print((node["hostname"][0]))
                         nodes.append(node["hostname"])
                     zones[zone_info["groups"][i]["name"]] = nodes
         return zones

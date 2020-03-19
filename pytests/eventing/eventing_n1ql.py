@@ -400,3 +400,28 @@ class EventingN1QL(EventingBaseTest):
                                               dcp_stream_boundary="everything", execution_timeout=60,multi_dst_bucket=True)
         self.deploy_function(body)
         self.verify_eventing_results(self.function_name, 2016,bucket=self.dst_bucket_name1, skip_stats_validation=True)
+
+    def test_n1ql_with_ttl(self):
+        dst_bucket = self.rest.get_bucket(self.dst_bucket_name)
+        self.shell.execute_cbepctl(dst_bucket, "", "set flush_param", "exp_pager_stime", 5)
+        query = "SELECT COUNT(*) from dst_bucket"
+        self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
+        self.load(self.gens_load, buckets=[self.src_bucket[0], dst_bucket], flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+
+        # Deploying eventing function
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.N1QL_TTL_UPDATE, worker_count=3)
+        try:
+            self.deploy_function(body)
+        except Exception as ex:
+            if "Can not execute DML query on bucket" not in str(ex):
+                self.fail("recursive mutations are allowed through n1ql")
+        count = 0
+        while count < 20:
+            count += 1
+            result = self.n1ql_helper.run_cbq_query(query, server=self.n1ql_node)['results'][0]['$1']
+            if result == 0:
+                self.log.info("Eventing is able to set expiration values in dst_bucket")
+                break
+            self.sleep(timeout=2, message="Waiting for docs to get expired")
+        self.assertNotEqual(count, 20, "All docs didn't expired in dst_bucket. Check eventing logs for details.")

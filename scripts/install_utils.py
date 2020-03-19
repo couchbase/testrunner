@@ -12,6 +12,7 @@ from membase.api.rest_client import RestConnection
 import install_constants
 import TestInput
 import logging.config
+import os.path
 
 logging.config.fileConfig("scripts.logging.conf")
 log = logging.getLogger()
@@ -118,6 +119,7 @@ class NodeHelper:
                     except Exception as e:
                         log.warning("Exception {0} occurred on {1}, retrying..".format(e, self.ip))
                         self.wait_for_completion(duration, event)
+            self.shell.terminate_processes(self.info, install_constants.CMDS['processes_to_terminate'])
 
     def pre_install_cb(self):
         if install_constants.CMDS[self.info.deliverable_type]["pre_install"]:
@@ -539,8 +541,11 @@ def pre_install_steps():
 
 
 def _execute_local(command, timeout):
-    process = subprocess.Popen(command, stdout=subprocess.PIPE, shell=True).wait(timeout)
-    process.communicate()[0].strip()
+    # -- Uncomment the below 2 lines for python 3
+    # process = subprocess.Popen(command, stdout=subprocess.PIPE, shell=True).wait(timeout)
+    # process.communicate()[0].strip()
+    # -- python 2
+    process = subprocess.Popen(command, stdout=subprocess.PIPE, shell=True).wait()
 
 
 def __copy_thread(src_path, dest_path, node):
@@ -589,13 +594,8 @@ def __get_build_url(node, build_binary):
 
 def _download_build():
     if params["all_nodes_same_os"] and not params["skip_local_download"]:
-        build_url = NodeHelpers[0].build.url
-        filepath = NodeHelpers[0].build.path
-        timeout = install_constants.WAIT_TIMES[NodeHelpers[0].info.deliverable_type]["download_binary"]
-        cmd = install_constants.WGET_CMD.format(__get_download_dir(NodeHelpers[0].get_os()), build_url)
-        log.debug("Downloading build binary to {0}..".format(filepath))
-        _execute_local(cmd, timeout)
-        _copy_to_nodes(filepath, filepath)
+        check_and_retry_download_binary_local(NodeHelpers[0])
+        _copy_to_nodes(NodeHelpers[0].build.path, NodeHelpers[0].build.path)
     else:
         for node in NodeHelpers:
             build_url = node.build.url
@@ -612,6 +612,24 @@ def _download_build():
             check_and_retry_download_binary(cmd, node)
     log.debug("Done downloading build binary")
 
+def check_and_retry_download_binary_local(node):
+    log.info("Downloading build binary to {0}..".format(node.build.path))
+    duration, event, timeout = install_constants.WAIT_TIMES[node.info.deliverable_type][
+        "download_binary"]
+    cmd = install_constants.WGET_CMD.format(__get_download_dir(node.get_os()), node.build.url)
+    start_time = time.time()
+    while time.time() < start_time + timeout:
+        try:
+            _execute_local(cmd, timeout)
+            if os.path.exists(node.build.path):
+                break
+            time.sleep(duration)
+        except Exception as e:
+            log.warn("Unable to download build: {0}, retrying..".format(e.message))
+            time.sleep(duration)
+    else:
+        print_result_and_exit("Unable to download build in {0}s on {1}, exiting".format(timeout,
+                                                                                        node.build.path))
 
 def check_file_exists(node, filepath):
     output, _ = node.shell.execute_command("ls -lh {0}".format(filepath), debug=params["debug_logs"])

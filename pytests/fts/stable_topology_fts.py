@@ -2268,3 +2268,143 @@ class StableTopFTS(FTSBaseTest):
         except Exception as err:
             self.log.error(err)
             self.fail("Testcase failed: " + str(err))
+
+    def test_snowball_stemmer_token_filter(self):
+        # Reference for test data : http://www.jarte.com/help_new/accent_marks_diacriticals_and_special_characters.html
+
+        all_test_data = {
+                "generic": [
+                    {"text": "This is something else 1"},
+                    {"text": "This is something else 2"},
+                    {"text": "This is other indtadfgadad"},
+                    {"text": "This is not that"}
+                ],
+                "test_hu_data": [
+                    {"text": "This is babakocsi"},
+                    {"text": "This is babakocsijáért"},
+                    {"text": "This is babakocsit"},
+                    {"text": "This is babakocsiért"}
+                ],
+                "test_da_data": [
+                    {"text": "This is indtage"},
+                    {"text": "This is indtagelse"},
+                    {"text": "This is indtager"},
+                    {"text": "This is indtages"},
+                    {"text": "This is indtaget"}
+                ],
+                "test_fr_data": [
+                    {"text": "This is continu"},
+                    {"text": "This is continua"},
+                    {"text": "This is continuait"},
+                    {"text": "This is continuant"},
+                    {"text": "This is continuation"}
+                ],
+                "test_en_data": [
+                    {"text": "This is enjoying"},
+                    {"text": "This is enjoys"},
+                    {"text": "This is enjoy"},
+                    {"text": "This is enjoyed"},
+                    {"text": "This is enjoyments"}
+                ],
+                "test_it_data": [
+                    {"text": "This is abbandonata"},
+                    {"text": "This is abbandonate"},
+                    {"text": "This is abbandonati"},
+                    {"text": "This is abbandonato"},
+                    {"text": "This is abbandonava"}
+                ],
+                "test_es_data": [
+                    {"text": "This is torá"},
+                    {"text": "This is toreado"},
+                    {"text": "This is toreándolo"},
+                    {"text": "This is toreara"},
+                    {"text": "This is torear"}
+                ],
+                "test_de_data": [
+                    {"text": "This is aufeinanderfolge"},
+                    {"text": "This is aufeinanderfolgen"},
+                    {"text": "This is aufeinanderfolgend"},
+                    {"text": "This is aufeinanderfolgende"},
+                    {"text": "This is aufeinanderfolgenden"}
+                ]
+
+            }
+
+        all_search_terms = {
+                "search_hu_terms": [
+                        {"term": "babakocs", "expected_hits": 4}
+                    ],
+                "search_da_terms": [
+                        {"term": "indtag", "expected_hits": 5}
+                    ],
+                "search_fr_terms": [
+                    {"term": "continu", "expected_hits": 5}
+                ],
+                "search_en_terms": [
+                    {"term": "enjoy", "expected_hits": 5}
+                ],
+                "search_it_terms": [
+                    {"term": "abbandon", "expected_hits": 5}
+                ],
+                "search_es_terms": [
+                    {"term": "tor", "expected_hits": 5}
+                ],
+                "search_de_terms": [
+                    {"term": "aufeinanderfolg", "expected_hits": 5}
+                ]
+            }
+
+        test_data = all_test_data[self._input.param("test_data", "test_da_data")] + all_test_data["generic"]
+        search_terms = all_search_terms[self._input.param("search_terms", "search_da_terms")]
+        token_filter = self._input.param("token_filter", "stemmer_da_snowball")
+
+        self.create_test_dataset(self._master, test_data)
+        self.wait_till_items_in_bucket_equal(items=len(test_data))
+
+        index = self.create_index(
+            self._cb_cluster.get_bucket_by_name('default'),
+            "default_index")
+        self.wait_for_indexing_complete()
+
+        # Update index to have the child field "text"
+        index.add_child_field_to_default_mapping("text", "text")
+        index.index_definition['uuid'] = index.get_uuid()
+        index.update()
+
+        # Update index to have a custom analyzer which uses the ascii folding filter as a char filter
+        index.index_definition["params"]["mapping"]["analysis"] = {}
+        index.index_definition["params"]["mapping"]["analysis"] = json.loads(
+            "{\"analyzers\": {\"customAnalyzer1\": {\"token_filters\": [\"" + token_filter + "\"],\"tokenizer\": \"whitespace\",\"type\": \"custom\" }}}")
+
+        index.index_definition["params"]["mapping"]["default_analyzer"] = "customAnalyzer1"
+
+        index.index_definition['uuid'] = index.get_uuid()
+        index.update()
+        self.wait_for_indexing_complete()
+
+        # Run queries
+        try:
+            for index in self._cb_cluster.get_indexes():
+                all_queries_passed = True
+                failed_search_terms = []
+                for search_term in search_terms:
+                    self.log.info("=============== Querying for term {0} ===============".format(search_term["term"]))
+                    query = {'match': search_term["term"], 'field': 'text'}
+                    expected_hits = search_term["expected_hits"]
+                    hits, contents, _, _ = index.execute_query(query=query,
+                                                               zero_results_ok=True,
+                                                               return_raw_hits=True)
+
+                    self.log.info("Hits: %s" % hits)
+                    self.log.info("Content: %s" % contents)
+
+                    if hits != expected_hits:
+                        all_queries_passed = False
+                        failed_search_terms.append(search_term["term"])
+
+                self.assertTrue(all_queries_passed,
+                                "All search terms did not return expected results. Terms for which queries failed : {0}".format(
+                                    str(failed_search_terms)))
+        except Exception as err:
+            self.log.error(err)
+            self.fail("Testcase failed: " + str(err))

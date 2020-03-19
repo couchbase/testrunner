@@ -110,8 +110,8 @@ class FailoverTests(FailoverBaseTest):
         else:
             self.run_failover_operations(self.chosen, failover_reason)
 
-        # TODO: Enable this even when 'flusher_batch_split_trigger' is not set
-        if self.flusher_batch_split_trigger and \
+        # TODO: Enable this even when 'flusher_total_batch_limit' is not set
+        if self.flusher_total_batch_limit and \
                 self.num_replicas >= self.num_failed_nodes:
             tasks = self._async_load_all_buckets(
                 self.master, self.gen_update, "update", 0)
@@ -232,7 +232,7 @@ class FailoverTests(FailoverBaseTest):
                 self.rest.add_back_node(node.id)
 
         # Doc_mutation before triggering rebalance
-        if self.flusher_batch_split_trigger and \
+        if self.flusher_total_batch_limit and \
                 self.num_replicas >= self.num_failed_nodes:
             tasks = self._async_load_all_buckets(
                 self.master, self.gen_update, "update", 0)
@@ -285,7 +285,7 @@ class FailoverTests(FailoverBaseTest):
         self.verify_for_recovery_type(chosen, self.server_map, self.buckets, recoveryTypeMap, fileMapsForVerification, self.deltaRecoveryBuckets)
 
         # Comparison of all data if required
-        if not self.withMutationOps and self.flusher_batch_split_trigger is None:
+        if not self.withMutationOps and self.flusher_total_batch_limit is None:
             self.sleep(60)
             self.data_analysis_all(record_static_data_set, self.servers, self.buckets, path=None, addedItems=None)
 

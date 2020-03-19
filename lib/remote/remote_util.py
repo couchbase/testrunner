@@ -3312,68 +3312,49 @@ class RemoteMachineShellConnection(KeepRefs):
             is_mac = False
             sftp = self._ssh_client.open_sftp()
             filenames = sftp.listdir('/etc/')
-            os_distro = ""
-            os_version = ""
+            os_distro = ''
+            os_version = ''
             is_linux_distro = False
             for name in filenames:
-                if name == 'issue':
-                    # it's a linux_distro . let's downlaod this file
-                    # format Ubuntu 10.04 LTS \n \l
-                    filename = 'etc-issue-{0}'.format(uuid.uuid4())
-                    sftp.get(localpath=filename, remotepath='/etc/issue')
+                if name == 'os-release':
+                    # /etc/os-release seems like standard across linux distributions
+                    filename = 'etc-os-release-{0}'.format(uuid.uuid4())
+                    sftp.get(localpath=filename, remotepath='/etc/os-release')
                     file = open(filename)
-                    etc_issue = ''
-                    # let's only read the first line
-                    for line in file:
-                        # for SuSE that has blank first line
-                        if line.rstrip('\n'):
-                            etc_issue = line
-                            break
-                        # strip all extra characters
-                    etc_issue = etc_issue.rstrip('\n').rstrip(' ').rstrip('\\l').rstrip(' ').rstrip('\\n').rstrip(' ')
-                    if etc_issue.lower().find('ubuntu') != -1:
-                        os_distro = 'Ubuntu'
-                        os_version = etc_issue
-                        tmp_str = etc_issue.split()
-                        if tmp_str and tmp_str[1][:2].isdigit():
-                            os_version = "Ubuntu %s" % tmp_str[1][:5]
-                        is_linux_distro = True
-                    elif etc_issue.lower().find('debian') != -1:
-                        os_distro = 'Ubuntu'
-                        os_version = etc_issue
-                        is_linux_distro = True
-                    elif etc_issue.lower().find('mint') != -1:
-                        os_distro = 'Ubuntu'
-                        os_version = etc_issue
-                        is_linux_distro = True
-                    elif etc_issue.lower().find('amazon linux ami') != -1:
-                        os_distro = 'CentOS'
-                        os_version = etc_issue
-                        is_linux_distro = True
-                    elif etc_issue.lower().find('centos') != -1:
-                        os_distro = 'CentOS'
-                        os_version = etc_issue
-                        is_linux_distro = True
-                    elif etc_issue.lower().find('red hat') != -1:
-                        os_distro = 'Red Hat'
-                        os_version = etc_issue
-                        is_linux_distro = True
-                    elif etc_issue.lower().find('opensuse') != -1:
-                        os_distro = 'openSUSE'
-                        os_version = etc_issue
-                        is_linux_distro = True
-                    elif etc_issue.lower().find('suse linux') != -1:
-                        os_distro = 'SUSE'
-                        os_version = etc_issue
-                        tmp_str = etc_issue.split()
-                        if tmp_str and tmp_str[6].isdigit():
-                            os_version = "SUSE %s" % tmp_str[6]
-                        is_linux_distro = True
-                    elif etc_issue.lower().find('oracle linux') != -1:
-                        os_distro = 'Oracle Linux'
-                        os_version = etc_issue
-                        is_linux_distro = True
+                    line = file.readline()
+                    is_version_id = False
+                    is_pretty_name = False
+                    os_pretty_name = ''
+                    while line and (not is_version_id or not is_pretty_name):
+                        log.debug(line)
+                        if line.startswith('VERSION_ID'):
+                            os_version = line.split('=')[1].replace('"','')
+                            os_version = os_version.rstrip('\n').rstrip(' ').rstrip('\\l').rstrip(
+                                ' ').rstrip('\\n').rstrip(' ')
+                            is_version_id = True
+                        elif line.startswith('PRETTY_NAME'):
+                            os_pretty_name = line.split('=')[1].replace('"','')
+                            is_pretty_name = True
+                        line = file.readline()
 
+                    os_distro_dict = {'ubuntu': 'Ubuntu', 'debian': 'Ubuntu', 'mint': 'Ubuntu',
+                        'amazon linux ami': 'CentOS', 'centos': 'CentOS', 'opensuse': 'openSUSE',
+                        'red': 'Red Hat', 'suse': 'SUSE', 'oracle': 'Oracle Linux'}
+                    os_shortname_dict = {'ubuntu': 'ubuntu', 'debian': 'debian', 'mint': 'ubuntu',
+                        'amazon linux ami': 'amzn2', 'centos': 'centos', 'opensuse': 'suse',
+                        'red': 'rhel', 'suse': 'suse', 'oracle': 'oel'}
+                    log.debug("os_pretty_name:" + os_pretty_name)
+                    if os_pretty_name:
+                        os_name = os_pretty_name.split(' ')[0].lower()
+                        os_distro = os_distro_dict[os_name]
+                        if os_name != 'ubuntu':
+                            os_version = os_shortname_dict[os_name] + " " + os_version.split('.')[0]
+                        else:
+                            os_version = os_shortname_dict[os_name] + " " + os_version
+                        if os_distro:
+                            is_linux_distro = True
+                    log.info("os_distro: " + os_distro + ", os_version: " + os_version +
+                             ", is_linux_distro: " + str(is_linux_distro))
                     file.close()
                     # now remove this file
                     os.remove(filename)
@@ -3525,6 +3506,8 @@ class RemoteMachineShellConnection(KeepRefs):
             info.hostname = self.get_hostname()
             info.domain = self.get_domain()
             self.info = info
+            log.info("extract_remote_info-->distribution_type: " + info.distribution_type + ", "
+                    "distribution_version: " + info.distribution_version)
             return info
 
     def get_extended_windows_info(self):
@@ -4628,7 +4611,7 @@ class RemoteMachineShellConnection(KeepRefs):
                                     o, r = self.execute_command("dpkg --get-selections | grep libssl")
                                     log.info("package {0} should not appear below".format(s[:11]))
                                     self.log_command_output(o, r)
-           
+
     def check_pkgconfig(self, deliverable_type, openssl):
         if "SUSE" in self.info.distribution_type:
             o, r = self.execute_command("zypper -n if pkg-config 2>/dev/null| grep -i \"Installed: Yes\"")
