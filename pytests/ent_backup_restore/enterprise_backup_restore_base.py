@@ -362,9 +362,9 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
     def backup_create(self, del_old_backup=True):
         args = "config --archive {0} --repo {1}".format(self.backupset.directory, self.backupset.name)
         if self.backupset.exclude_buckets:
-            args += " --exclude-buckets \"{0}\"".format(",".join(self.backupset.exclude_buckets))
+            args += " --exclude-data \"{0}\"".format(",".join(self.backupset.exclude_buckets))
         if self.backupset.include_buckets:
-            args += " --include-buckets \"{0}\"".format(",".join(self.backupset.include_buckets))
+            args += " --include-data \"{0}\"".format(",".join(self.backupset.include_buckets))
         if self.backupset.disable_bucket_config:
             args += " --disable-bucket-config"
         if self.backupset.disable_views:
@@ -616,9 +616,9 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             if not self.backupset.rt_no_cert:
                 args += " --cacert %s" % cacert
         if self.backupset.exclude_buckets:
-            args += " --exclude-buckets {0}".format(self.backupset.exclude_buckets)
+            args += " --exclude-data {0}".format(self.backupset.exclude_buckets)
         if self.backupset.include_buckets:
-            args += " --include-buckets {0}".format(self.backupset.include_buckets)
+            args += " --include-data {0}".format(self.backupset.include_buckets)
         if self.backupset.disable_bucket_config:
             args += " --disable-bucket-config {0}".format(self.backupset.disable_bucket_config)
         if self.backupset.disable_views:
