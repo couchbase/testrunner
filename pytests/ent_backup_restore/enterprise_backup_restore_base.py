@@ -1410,6 +1410,13 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                 if restore_file_data[bucket.name]:
                     try:
                         if restore_file_data[bucket.name][key]:
+                            if isinstance(buckets_data[bucket.name][key], basestring):
+                                buckets_data[bucket.name][key] = buckets_data[bucket.name][key].replace(" ", "")
+                            else:
+                                buckets_data[bucket.name][key] = str(buckets_data[bucket.name][key]).replace(" ", "")
+                            if self.debug_logs:
+                                print "bucket data: ", buckets_data[bucket.name][key]
+                                print " backup data: ", restore_file_data[bucket.name][key]["Value"]
                             if buckets_data[bucket.name][key] \
                                           != restore_file_data[bucket.name][key]["Value"]:
                                 if count < 20:
