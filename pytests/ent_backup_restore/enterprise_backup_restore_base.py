@@ -1912,6 +1912,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                         redacted_logs, _ = shell.execute_command(
                             "ls " + redacted_logs_path)
                         for log_file in redacted_logs:
+                            if not log_file.startswith("backup-"):
+                                continue
                             self._validate_log_redaction_hashing(
                                 unredacted_logs_path + log_file,
                                 redacted_logs_path + log_file,
@@ -1983,6 +1985,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
          that used for the target file."""
 
         shell = RemoteMachineShellConnection(self.backupset.backup_host)
+        shell.execute_command("rm -f /tmp/backup_redacted_files/*")
         stdout, stderr = shell.execute_command(
             "mkdir -p /tmp/backup_redacted_files")
         if stderr:
@@ -2005,19 +2008,19 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         stdout, stderr = shell.execute_command(
             "diff {} {}".format(cblogredact_output, target_file))
 
-        shell.execute_command("rm -f /tmp/backup_redacted_files/*")
 
         if stderr:
             print stdout
             raise Exception(stderr)
-
         if stdout:
             self.fail("Log redaction hashing does not match cblogredaction's "
                       "hashing for the same salt ({}). Diff of file {} and {}"
-                      " is: {}".format(salt,
+                      " is: \n{}".format(salt,
                                        cblogredact_output,
                                        target_file,
                                        stdout))
+        shell.execute_command("rm -f /tmp/backup_redacted_files/*")
+        shell.disconnect()
 
     def _validate_restore_vbucket_filter(self):
         data_collector = DataCollector()
