@@ -86,14 +86,18 @@ class BackupRestoreValidationBase:
                         not_equal[expected_key]["expected"].append(expected[expected_key])
                         not_equal[expected_key]["actual"].append(actual[expected_key])
                 elif isinstance(expected[expected_key], list):
-                    expected_list = expected[expected_key]
-                    actual_list = actual[expected_key]
-                    if set(expected_list) != set(actual_list):
+                    if actual[expected_key] and isinstance(actual[expected_key][0], dict):
+                        expected_data = expected[expected_key]
+                        actual_data = actual[expected_key]
+                    else:
+                        expected_data = set(expected[expected_key])
+                        actual_data = set(actual[expected_key])
+                    if expected_data != actual_data:
                         is_equal = False
                         if expected_key not in not_equal:
                             not_equal[expected_key] = {"expected": [], "actual": []}
-                        not_equal[expected_key]["expected"].extend(expected_list)
-                        not_equal[expected_key]["actual"].extend(actual_list)
+                        not_equal[expected_key]["expected"].extend(expected[expected_key])
+                        not_equal[expected_key]["actual"].extend(actual[expected_key])
                 elif isinstance(expected[expected_key], dict):
                     return BackupRestoreValidationBase.compare_dictionary(expected[expected_key], actual[expected_key],
                                                                           is_equal, not_equal, extra, not_present)
