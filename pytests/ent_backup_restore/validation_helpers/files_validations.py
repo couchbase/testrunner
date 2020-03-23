@@ -39,6 +39,11 @@ class BackupRestoreFilesValidations(BackupRestoreValidationBase):
         :return: status and message
         """
         expected_meta_json = self.generate_backup_meta_json()
+        if self.backupset.exclude_buckets:
+            exclude_data = {}
+            exclude_data["bucket"] = self.backupset.exclude_buckets[0]
+            exclude_data["level"] = 1
+            expected_meta_json["exclude_data"].append(exclude_data)
         actual_meta_json = self.get_backup_meta_json()
         is_equal, not_equal, extra, not_present = self.compare_dictionary(expected_meta_json, actual_meta_json)
         return self.compare_dictionary_result_analyser(is_equal, not_equal, extra, not_present,"Backup Meta data json")
