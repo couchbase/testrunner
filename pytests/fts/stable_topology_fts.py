@@ -1975,7 +1975,7 @@ class StableTopFTS(FTSBaseTest):
 
         self.log.info("Running command : {0}".format(cmd))
         output = subprocess.check_output(cmd, shell=True)
-        if json.loads(output) == {"status":"ok"}:
+        if json.loads(output)["status"] == "ok":
             query = "curl -g -k " + \
                     "-XPOST -H \"Content-Type: application/json\" " + \
                     "-u Administrator:password " + \
