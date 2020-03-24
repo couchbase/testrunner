@@ -35,12 +35,20 @@ WINDOWS_SERVER = ["2016", "2019", "windows"]
 SUPPORTED_OS = LINUX_DISTROS + MACOS_VERSIONS + WINDOWS_SERVER
 X86 = CENTOS + SUSE + RHEL + OEL + AMAZON
 AMD64 = DEBIAN + UBUNTU + WINDOWS_SERVER
+
 DOWNLOAD_DIR = {"LINUX_DISTROS": "/tmp/",
+                "MACOS_VERSIONS": "~/Downloads/",
+                "WINDOWS_SERVER": "/cygdrive/c/tmp/"
+                }
+NON_ROOT_DOWNLOAD_DIR = {"LINUX_DISTROS": "/home/nonroot/",
                 "MACOS_VERSIONS": "~/Downloads/",
                 "WINDOWS_SERVER": "/cygdrive/c/tmp/"
                 }
 
 DEFAULT_INSTALL_DIR = {"LINUX_DISTROS": "/opt/couchbase",
+                       "MACOS_VERSIONS": "/Applications/Couchbase\ Server.app",
+                       "WINDOWS_SERVER": "/cygdrive/c/Program\ Files/Couchbase/Server"}
+DEFAULT_NONROOT_INSTALL_DIR = {"LINUX_DISTROS": "/home/nonroot/opt/couchbase/",
                        "MACOS_VERSIONS": "/Applications/Couchbase\ Server.app",
                        "WINDOWS_SERVER": "/cygdrive/c/Program\ Files/Couchbase/Server"}
 
@@ -69,58 +77,66 @@ CBFT_ENV_OPTIONS = \
             "grep bleveMaxResultWindow={0} /opt/couchbase/bin/couchbase-server > /dev/null && echo 1 || echo 0"
     }
 
+PROCESSES_TO_TERMINATE = ["beam.smp", "memcached", "moxi", "vbucketmigrator", "couchdb", "epmd", "memsup", "cpu_sup",
+                          "goxdcr", "erlang", "eventing", "erl", "godu", "goport", "gosecrets", "projector"]
+
 CMDS = {
-    "processes_to_terminate": {
-        "beam.smp", "memcached", "moxi", "vbucketmigrator", "couchdb", "epmd", "memsup", "cpu_sup", "goxdcr", "erlang",
-        "eventing", "erl", "godu", "goport", "gosecrets", "projector"
-    },
     "deb": {
-        "uninstall": "dpkg -r couchbase-server; "
-                     "rm -rf " + DEFAULT_INSTALL_DIR["LINUX_DISTROS"] + " > /dev/null && echo 1 || echo 0",
+        "uninstall":
+            "dpkg -r couchbase-server; " +
+            "rm -rf " + DEFAULT_INSTALL_DIR["LINUX_DISTROS"] + " > /dev/null && echo 1 || echo 0",
         "pre_install": None,
-        "install": "apt-get update; dpkg -i buildpath; apt-get -f install > /dev/null && echo 1 || echo 0",
+        "install":
+            "apt-get update;" +
+            "dpkg -i buildpath;" +
+            "apt-get -f install > /dev/null && echo 1 || echo 0",
         "post_install": "systemctl -q is-active couchbase-server.service && echo 1 || echo 0",
         "post_install_retry": "systemctl restart couchbase-server.service",
         "init": None,
-        "cleanup": "ls -td " + DOWNLOAD_DIR[
-            "LINUX_DISTROS"] + "couchbase*.deb | awk 'NR>" + RETAIN_NUM_BINARIES_AFTER_INSTALL + "' | xargs rm -f"
+        "cleanup": "ls -td " + DOWNLOAD_DIR["LINUX_DISTROS"] + "couchbase*.deb | awk 'NR>" + RETAIN_NUM_BINARIES_AFTER_INSTALL + "' | xargs rm -f"
     },
     "dmg": {
-        "uninstall": "osascript -e 'quit app \"Couchbase Server\"'; "
-                     "rm -rf " + DEFAULT_INSTALL_DIR["MACOS_VERSIONS"] + "; "
-                                                                         "rm -rf ~/Library/Application\ Support/Couchbase; "
-                                                                         "rm -rf ~/Library/Application\ Support/membase; "
-                                                                         "rm -rf ~/Library/Python/couchbase-py; "
-                                                                         "umount /Volumes/Couchbase* > /dev/null && echo 1 || echo 0",
+        "uninstall":
+            "osascript -e 'quit app \"Couchbase Server\"'; "
+            "rm -rf " + DEFAULT_INSTALL_DIR["MACOS_VERSIONS"] + "; "
+            "rm -rf ~/Library/Application\ Support/Couchbase; "
+            "rm -rf ~/Library/Application\ Support/membase; "
+            "rm -rf ~/Library/Python/couchbase-py; "
+            "umount /Volumes/Couchbase* > /dev/null && echo 1 || echo 0",
         "pre_install": "HDIUTIL_DETACH_ATTACH",
-        "install": "rm -rf /Applications\Couchbase\ Server.app; "
-                   "cp -R mountpoint/Couchbase\ Server.app /Applications/Couchbase\ Server.app; "
-                   "open /Applications/Couchbase\ Server.app > /dev/null && echo 1 || echo 0",
+        "install":
+            "rm -rf /Applications\Couchbase\ Server.app; "
+            "cp -R mountpoint/Couchbase\ Server.app /Applications/Couchbase\ Server.app; "
+            "open /Applications/Couchbase\ Server.app > /dev/null && echo 1 || echo 0",
         "post_install": "launchctl list | grep couchbase-server > /dev/null && echo 1 || echo 0",
         "post_install_retry": None,
         "init": None,
-        "cleanup": "ls -td " + DOWNLOAD_DIR[
-            "MACOS_VERSIONS"] + "couchbase*.dmg | awk 'NR>" + RETAIN_NUM_BINARIES_AFTER_INSTALL + "' | xargs rm -f"
+        "cleanup": "ls -td " + DOWNLOAD_DIR["MACOS_VERSIONS"] + "couchbase*.dmg | awk 'NR>" + RETAIN_NUM_BINARIES_AFTER_INSTALL + "' | xargs rm -f"
     },
     "msi": {
-        "uninstall": "cd " + DOWNLOAD_DIR["WINDOWS_SERVER"] + "; msiexec /x installed-msi /passive",
+        "uninstall":
+            "cd " + DOWNLOAD_DIR["WINDOWS_SERVER"] + "; "
+            "msiexec /x installed-msi /passive",
         "pre_install": "",
-        "install": "cd " + DOWNLOAD_DIR["WINDOWS_SERVER"] + "; msiexec /i buildbinary /passive /L*V install_status.txt",
-        "post_install": "cd " + DOWNLOAD_DIR[
-            "WINDOWS_SERVER"] + "; vi +\"set nobomb | set fenc=ascii | x\" install_status.txt; "
-                                "grep 'buildversion.*Configuration completed successfully.' install_status.txt && "
-                                "echo 1 || echo 0",
-        "post_install_retry": "cd " + DOWNLOAD_DIR[
-            "WINDOWS_SERVER"] + "; msiexec /i buildbinary /passive /L*V install_status.txt",
+        "install":
+            "cd " + DOWNLOAD_DIR["WINDOWS_SERVER"] + "; "
+            "msiexec /i buildbinary /passive /L*V install_status.txt",
+        "post_install":
+            "cd " + DOWNLOAD_DIR["WINDOWS_SERVER"] + "; " +
+            "vi +\"set nobomb | set fenc=ascii | x\" install_status.txt; " +
+            "grep 'buildversion.*Configuration completed successfully.' install_status.txt && echo 1 || echo 0",
+        "post_install_retry":
+            "cd " + DOWNLOAD_DIR["WINDOWS_SERVER"] + "; " +
+            "msiexec /i buildbinary /passive /L*V install_status.txt",
         "init": None,
-        "cleanup": "ls -td " + DOWNLOAD_DIR[
-            "WINDOWS_SERVER"] + "couchbase*.msi | awk 'NR>" + RETAIN_NUM_BINARIES_AFTER_INSTALL + "' | xargs rm -f"
+        "cleanup": "ls -td " + DOWNLOAD_DIR["WINDOWS_SERVER"] + "couchbase*.msi | awk 'NR>" + RETAIN_NUM_BINARIES_AFTER_INSTALL + "' | xargs rm -f"
     },
     "rpm": {
         "uninstall":
             "systemctl stop couchbase-server; " +
             "rpm -e couchbase-server; " +
-            "rm -rf " + DEFAULT_INSTALL_DIR["LINUX_DISTROS"] + "> /dev/null && echo 1 || echo 0",
+            "rm -rf " + DEFAULT_INSTALL_DIR["LINUX_DISTROS"] + "> /dev/null && echo 1 || echo 0; " +
+            "rm -rf " + DEFAULT_NONROOT_INSTALL_DIR["LINUX_DISTROS"] + "> /dev/null && echo 1 || echo 0; ",
         "pre_install": None,
         "install": "yes | yum localinstall -y buildpath > /dev/null && echo 1 || echo 0",
         # "install": "yes | INSTALL_DONT_START_SERVER=1 yum localinstall -y buildpath",
@@ -128,10 +144,78 @@ CMDS = {
         "post_install": "systemctl -q is-active couchbase-server && echo 1 || echo 0",
         "post_install_retry": "systemctl daemon-reexec; systemctl restart couchbase-server",
         "init": None,
-        "cleanup": "ls -td " + DOWNLOAD_DIR[
-            "LINUX_DISTROS"] + "couchbase*.rpm | awk 'NR>" + RETAIN_NUM_BINARIES_AFTER_INSTALL + "' | xargs rm -f"
+        "cleanup": "ls -td " + DOWNLOAD_DIR["LINUX_DISTROS"] + "couchbase*.rpm | awk 'NR>" + RETAIN_NUM_BINARIES_AFTER_INSTALL + "' | xargs rm -f",
     }
+}
 
+NON_ROOT_CMDS = {
+    "deb": {
+        "uninstall":
+            "dpkg -r couchbase-server; "
+            "rm -rf " + DEFAULT_INSTALL_DIR["LINUX_DISTROS"] + " > /dev/null && echo 1 || echo 0",
+        "pre_install": None,
+        "install": "apt-get update; dpkg -i buildpath; apt-get -f install > /dev/null && echo 1 || echo 0",
+        "post_install": "systemctl -q is-active couchbase-server.service && echo 1 || echo 0",
+        "post_install_retry": "systemctl restart couchbase-server.service",
+        "init": None,
+        "cleanup": "ls -td " + DOWNLOAD_DIR["LINUX_DISTROS"] + "couchbase*.deb | awk 'NR>" + RETAIN_NUM_BINARIES_AFTER_INSTALL + "' | xargs rm -f"
+    },
+    "dmg": {
+        "uninstall":
+            "osascript -e 'quit app \"Couchbase Server\"'; "
+            "rm -rf " + DEFAULT_INSTALL_DIR["MACOS_VERSIONS"] + "; "
+            "rm -rf ~/Library/Application\ Support/Couchbase; "
+            "rm -rf ~/Library/Application\ Support/membase; "
+            "rm -rf ~/Library/Python/couchbase-py; "
+            "umount /Volumes/Couchbase* > /dev/null && echo 1 || echo 0",
+        "pre_install": "HDIUTIL_DETACH_ATTACH",
+        "install":
+            "rm -rf /Applications\Couchbase\ Server.app; "
+            "cp -R mountpoint/Couchbase\ Server.app /Applications/Couchbase\ Server.app; "
+            "open /Applications/Couchbase\ Server.app > /dev/null && echo 1 || echo 0",
+        "post_install": "launchctl list | grep couchbase-server > /dev/null && echo 1 || echo 0",
+        "post_install_retry": None,
+        "init": None,
+        "cleanup": "ls -td " + DOWNLOAD_DIR["MACOS_VERSIONS"] + "couchbase*.dmg | awk 'NR>" + RETAIN_NUM_BINARIES_AFTER_INSTALL + "' | xargs rm -f"
+    },
+    "msi": {
+        "uninstall":
+            "cd " + DOWNLOAD_DIR["WINDOWS_SERVER"] + "; "
+            "msiexec /x installed-msi /passive",
+        "pre_install": "",
+        "install":
+            "cd " + DOWNLOAD_DIR["WINDOWS_SERVER"] + "; "
+            "msiexec /i buildbinary /passive /L*V install_status.txt",
+        "post_install":
+            "cd " + DOWNLOAD_DIR["WINDOWS_SERVER"] + "; "
+            "vi +\"set nobomb | set fenc=ascii | x\" install_status.txt; "
+            "grep 'buildversion.*Configuration completed successfully.' install_status.txt && echo 1 || echo 0",
+        "post_install_retry":
+            "cd " + DOWNLOAD_DIR["WINDOWS_SERVER"] + "; "
+            "msiexec /i buildbinary /passive /L*V install_status.txt",
+        "init": None,
+        "cleanup": "ls -td " + DOWNLOAD_DIR["WINDOWS_SERVER"] + "couchbase*.msi | awk 'NR>" + RETAIN_NUM_BINARIES_AFTER_INSTALL + "' | xargs rm -f"
+    },
+    "rpm": {
+        "pre_install": None,
+        "uninstall":
+            "systemctl stop couchbase-server; " +
+            "rpm -e couchbase-server; " +
+            "rm -rf " + DEFAULT_INSTALL_DIR["LINUX_DISTROS"] + " > /dev/null && echo 1 || echo 0; " +
+            "rm -rf " + DEFAULT_NONROOT_INSTALL_DIR["LINUX_DISTROS"] + " > /dev/null && echo 1 || echo 0; ",
+        "install":
+            "cd " + NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "; " 
+            "rpm2cpio buildpath | cpio --extract --make-directories --no-absolute-filenames  > /dev/null && echo 1 || echo 0; " 
+            "cd " + NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "/opt/couchbase/; " 
+            "./bin/install/reloc.sh `pwd`  > /dev/null && echo 1 || echo 0; ",
+        "suse_install": "rpm -i buildpath",
+        "post_install": NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "opt/couchbase/bin/couchbase-server \-- -noinput -detached",
+        "post_install_retry":
+            "systemctl daemon-reexec; "
+            "systemctl restart couchbase-server",
+        "init": None,
+        "cleanup": "rm -f *-diag.zip"
+    }
 }
 
 NODE_INIT = {
@@ -173,6 +257,7 @@ WAIT_TIMES = {
         "uninstall": (10, "Waiting {0}s for uninstall to complete on {1}..", 30),
         "install": (20, "Waiting {0}s for install to complete on {1}..", 100),
         "post_install": (10, "Waiting {0}s for couchbase-service to become active on {1}..", 60),
+        "pre_install": (10, "Waiting {0}s for couchbase-service to become active on {1}..", 60),
         "init": (30, "Waiting {0}s for {1} to be initialized..", 300)
     }
 }
