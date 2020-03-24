@@ -1348,10 +1348,10 @@ class ImportExportTests(CliBaseTest):
                         print "\n data in exports not in samples  ", not_in_samples
                     count = 0
                     self.log.info("Compare data with sample data")
-                    for x in exports:
-                        x = json.loads(x)
-                        x = '{"name":"' + x["name"]+ '","age":' + str(x["age"]) + ',"index":"' + x["index"]+ '","body":"' + x["body"]+ '"}'
-                        if x in samples:
+                    for x in range(0, len(exports)):
+                        k = json.loads(exports[x])
+                        exports[x] = '{"name":"' + k["name"]+ '","age":' + str(k["age"]) + ',"index":"' + k["index"]+ '","body":"' + k["body"]+ '"}'
+                        if exports[x] in samples:
                             count += 1
                     if count != len(samples):
                         self.fail("export and sample json count does not match")
