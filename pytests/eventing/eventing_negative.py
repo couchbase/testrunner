@@ -98,6 +98,7 @@ class EventingNegative(EventingBaseTest):
                                                                     bucket_params=bucket_params))
         for task in tasks:
             task.result()
+        self.sleep(10)
         body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_ON_UPDATE, worker_count=3)
         try:
             self.rest.save_function(body['appname'], body)
