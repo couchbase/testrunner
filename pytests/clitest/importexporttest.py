@@ -1192,7 +1192,8 @@ class ImportExportTests(CliBaseTest):
                                  self.master.ip, "cbadminbucket", "password",
                                  "default", self.format_type, export_file_cmd)
                 output, error = self.shell.execute_command(cmd)
-                self.shell.log_command_output(output, error)
+                if self.debug_logs:
+                    self.shell.log_command_output(output, error)
             format_type = "json"
             if self.imex_type == "csv":
                 if self.field_separator == "comma":
@@ -1253,6 +1254,9 @@ class ImportExportTests(CliBaseTest):
                     print(("\nsource data  \n", src_data))
                     print(("\nbucket data  \n", bucket_data))
                 self.log.info("Compare source data and bucket data")
+                for x in range(0, len(bucket_data)):
+                    k = json.loads(bucket_data[x])
+                    bucket_data[x] = '{"name":"' + k["name"]+ '","age":' + str(k["age"]) + ',"index":"' + k["index"]+ '","body":"' + k["body"]+ '"}'
                 if sorted(src_data) == sorted(bucket_data):
                     self.log.info("Import data match bucket data")
                     if os.path.exists("/tmp/%s" % self.master.ip):
