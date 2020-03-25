@@ -463,7 +463,7 @@ class RemoteMachineShellConnection:
         if os == "windows":
             o, r = self.execute_command("net start couchbaseserver")
             self.log_command_output(o, r)
-        elif os == "unix" or os == "linux":
+        elif os == "unix" or "linux" in os:
             if self.is_couchbase_installed():
                 if self.nonroot:
                     log.info("Start Couchbase Server with non root method")
@@ -475,7 +475,7 @@ class RemoteMachineShellConnection:
                     if self.info.distribution_version.lower() in SYSTEMD_SERVER \
                                                  and sv in COUCHBASE_FROM_WATSON:
                         """from watson, systemd is used in centos 7, suse 12 """
-                        log.info("Running systemd command on this server")
+                        log.info("Running systemd start command on this server")
                         o, r = self.execute_command("systemctl start couchbase-server.service")
                         self.log_command_output(o, r)
                     else:
@@ -485,7 +485,7 @@ class RemoteMachineShellConnection:
             o, r = self.execute_command("open /Applications/Couchbase\ Server.app")
             self.log_command_output(o, r)
         else:
-            log.error("don't know operating system or product version")
+            log.error("start_server: don't know operating system " + os + " or product version")
 
     def stop_server(self, os="unix"):
         self.extract_remote_info()
@@ -495,7 +495,7 @@ class RemoteMachineShellConnection:
         if os == "windows":
             o, r = self.execute_command("net stop couchbaseserver")
             self.log_command_output(o, r)
-        elif os == "unix" or os == "linux":
+        elif os == "unix" or "linux" in os:
             if self.is_couchbase_installed():
                 if self.nonroot:
                     o, r = self.execute_command("%s%scouchbase-server -k"
@@ -507,7 +507,7 @@ class RemoteMachineShellConnection:
                     if self.info.distribution_version.lower() in SYSTEMD_SERVER \
                                                  and sv in COUCHBASE_FROM_WATSON:
                         """from watson, systemd is used in centos 7, suse 12 """
-                        log.info("Running systemd command on this server")
+                        log.info("Running systemd stop command on this server")
                         o, r = self.execute_command("systemctl stop couchbase-server.service")
                         self.log_command_output(o, r)
                     else:
@@ -523,7 +523,7 @@ class RemoteMachineShellConnection:
             o, r = self.execute_command("killall -9 epmd")
             self.log_command_output(o, r)
         else:
-            log.error("don't know operating system or product version")
+            log.error("stop_server: don't know operating system " + os + " or product version")
 
     def restart_couchbase(self):
         """
