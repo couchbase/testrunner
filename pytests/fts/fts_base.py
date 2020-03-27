@@ -3100,6 +3100,8 @@ class FTSBaseTest(unittest.TestCase):
         self.field_name = self._input.param("field_name", None)
         self.field_type = self._input.param("field_type", None)
         self.field_alias = self._input.param("field_alias", None)
+        self.enable_secrets = self.input.param("enable_secrets", False)
+        self.secret_password = self.input.param("secret_password", 'p@ssw0rd')
 
         self.log.info(
             "==== FTSbasetests setup is started for test #{0} {1} ===="
