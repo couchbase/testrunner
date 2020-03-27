@@ -21,7 +21,7 @@ from couchbase.n1ql import N1QLQuery
 POLL_INTERVAL = 60
 SERVER_MANAGER = '172.23.105.177:8081'
 TEST_SUITE_DB = '172.23.105.177'
-
+TIMEOUT = 60
 
 def getNumberOfServers(iniFile):
     f = open(iniFile)
@@ -69,6 +69,9 @@ def main():
     parser.add_option('-m','--retry_params', dest='retry_params', default='')
     parser.add_option('-i','--retries', dest='retries', default='1')
     parser.add_option('-k','--include_tests', dest='include_tests', default=None)
+    parser.add_option('-x','--server_manager', dest='SERVER_MANAGER',
+                      default='172.23.105.177:8081')
+    parser.add_option('-z', '--timeout', dest='TIMEOUT', default = '60')
 
     # set of parameters for testing purposes.
     #TODO: delete them after successful testing
@@ -93,6 +96,13 @@ def main():
     print(('the reportedParameters are', options.dashboardReportedParameters))
 
     print(('retry params are', options.retry_params))
+    print('Server Manager is ', options.SERVER_MANAGER)
+    print('Timeout is ', options.TIMEOUT)
+
+    if options.SERVER_MANAGER:
+        SERVER_MANAGER=options.SERVER_MANAGER
+    if options.TIMEOUT:
+        TIMEOUT=int(options.TIMEOUT)
 
     # What do we do with any reported parameters?
     # 1. Append them to the extra (testrunner) parameters
@@ -288,9 +298,15 @@ def main():
                 # may want to add OS at some point
                 getAvailUrl = getAvailUrl + 'docker?os={0}&poolId={1}'.format(options.os, options.poolId)
             else:
+<<<<<<< HEAD
                 getAvailUrl = getAvailUrl + '{0}?poolId={1}'.format(options.os, options.poolId)
 
             response, content = httplib2.Http(timeout=60).request(getAvailUrl, 'GET')
+=======
+                getAvailUrl = getAvailUrl + '{0}?poolId={1}'.format(options.os,options.poolId)
+            print("URL:" + getAvailUrl)
+            response, content = httplib2.Http(timeout=TIMEOUT).request(getAvailUrl , 'GET')
+>>>>>>> c10bc614f... CBQE-5439:Parameterized the server_manager host, timeout to support different dynamic VMs API server and bit refactoring to remove hard coded values
             if response.status != 200:
                 print((time.asctime(time.localtime(time.time())), 'invalid server response', content))
                 time.sleep(POLL_INTERVAL)
@@ -317,7 +333,7 @@ def main():
                                     options.os, options.addPoolId)
 
                             response, content = httplib2.Http(
-                                timeout=60).request(getAddPoolUrl, 'GET')
+                                timeout=TIMEOUT).request(getAddPoolUrl, 'GET')
                             if response.status != 200:
                                 print((time.asctime(time.localtime(
                                     time.time())), 'invalid server response', content))
@@ -364,8 +380,13 @@ def main():
                                                   options.os, options.poolId)
                     print(('getServerURL', getServerURL))
 
+<<<<<<< HEAD
                     response, content = httplib2.Http(timeout=60).request(getServerURL, 'GET')
                     print(('response.status', response, content))
+=======
+                    response, content = httplib2.Http(timeout=TIMEOUT).request(getServerURL, 'GET')
+                    print 'response.status', response, content
+>>>>>>> c10bc614f... CBQE-5439:Parameterized the server_manager host, timeout to support different dynamic VMs API server and bit refactoring to remove hard coded values
 
                     if options.serverType.lower() != 'docker':
                         # sometimes there could be a race, before a dispatcher process acquires vms,
@@ -393,8 +414,15 @@ def main():
                                                       options.addPoolId)
                         print(('getServerURL', getServerURL))
 
+<<<<<<< HEAD
                         response2, content2 = httplib2.Http(timeout=60).request(getServerURL, 'GET')
                         content2 = content2.decode('utf-8')
+=======
+                        response2, content2 = httplib2.Http(timeout=TIMEOUT).request(getServerURL,
+                                                                                 'GET')
+                        print 'response2.status', response2, content2
+
+>>>>>>> c10bc614f... CBQE-5439:Parameterized the server_manager host, timeout to support different dynamic VMs API server and bit refactoring to remove hard coded values
 
                         print(('response2.status', response2, content2))
 
@@ -455,12 +483,18 @@ def main():
                             if options.serverType.lower() == 'docker':
                                 pass  # figure docker out later
                             else:
+<<<<<<< HEAD
                                 response, content = httplib2.Http(timeout=60). \
                                     request('http://' + SERVER_MANAGER + '/releaseservers/' + descriptor + '/available',
                                             'GET')
                                 print(('the release response', response, content))
+=======
+                                response, content = httplib2.Http(timeout=TIMEOUT).\
+                                    request('http://' + SERVER_MANAGER + '/releaseservers/' + descriptor + '/available', 'GET')
+                                print 'the release response', response, content
+>>>>>>> c10bc614f... CBQE-5439:Parameterized the server_manager host, timeout to support different dynamic VMs API server and bit refactoring to remove hard coded values
                         else:
-                            response, content = httplib2.Http(timeout=60).request(url, 'GET')
+                            response, content = httplib2.Http(timeout=TIMEOUT).request(url, 'GET')
 
                         testsToLaunch.pop(i)
                         summary.append({'test': descriptor, 'time': time.asctime(time.localtime(time.time()))})
