@@ -10,10 +10,10 @@ from membase.api.exception import DesignDocCreationException
 from membase.helper.cluster_helper import ClusterOperationHelper
 from remote.remote_util import RemoteMachineShellConnection
 import time
-import commands
+import subprocess
 import logger
 log = logger.Logger.get_logger()
-import urllib
+import urllib.request, urllib.parse, urllib.error
 import socket
 import testconstants
 from testconstants import LINUX_COUCHBASE_BIN_PATH
@@ -58,9 +58,9 @@ class SecretsMasterBase():
         s.connect(('couchbase.com', 0))
         return s.getsockname()[0]
         '''
-        status, ipAddress = commands.getstatusoutput("ifconfig eth0 | grep 'inet addr:' | cut -d: -f2 |awk '{print $1}'")
+        status, ipAddress = subprocess.getstatusoutput("ifconfig eth0 | grep 'inet addr:' | cut -d: -f2 |awk '{print $1}'")
         if '1' not in ipAddress:
-            status, ipAddress = commands.getstatusoutput("ifconfig eth0 | grep  -Eo 'inet (addr:)?([0-9]*\.){3}[0-9]*' | awk '{print $2}'")
+            status, ipAddress = subprocess.getstatusoutput("ifconfig eth0 | grep  -Eo 'inet (addr:)?([0-9]*\.){3}[0-9]*' | awk '{print $2}'")
         return ipAddress
 
     def set_password(self,host,new_password):

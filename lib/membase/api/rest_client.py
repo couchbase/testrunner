@@ -4174,7 +4174,7 @@ class RestConnection(object):
     
     def _set_secrets_password(self, new_password):
         api = self.baseUrl + "/node/controller/changeMasterPassword"
-        params = urllib.urlencode({
+        params = urllib.parse.urlencode({
             'newPassword': '{0}'.format(new_password.encode('utf-8').strip())
                                         })
         log.info("Params getting set is ---- {0}".format(params))

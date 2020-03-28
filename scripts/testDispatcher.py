@@ -96,8 +96,8 @@ def main():
     print(('the reportedParameters are', options.dashboardReportedParameters))
 
     print(('retry params are', options.retry_params))
-    print('Server Manager is ', options.SERVER_MANAGER)
-    print('Timeout is ', options.TIMEOUT)
+    print(('Server Manager is ', options.SERVER_MANAGER))
+    print(('Timeout is ', options.TIMEOUT))
 
     if options.SERVER_MANAGER:
         SERVER_MANAGER=options.SERVER_MANAGER
@@ -298,15 +298,10 @@ def main():
                 # may want to add OS at some point
                 getAvailUrl = getAvailUrl + 'docker?os={0}&poolId={1}'.format(options.os, options.poolId)
             else:
-<<<<<<< HEAD
                 getAvailUrl = getAvailUrl + '{0}?poolId={1}'.format(options.os, options.poolId)
 
-            response, content = httplib2.Http(timeout=60).request(getAvailUrl, 'GET')
-=======
-                getAvailUrl = getAvailUrl + '{0}?poolId={1}'.format(options.os,options.poolId)
-            print("URL:" + getAvailUrl)
+            print(("URL:" + getAvailUrl))
             response, content = httplib2.Http(timeout=TIMEOUT).request(getAvailUrl , 'GET')
->>>>>>> c10bc614f... CBQE-5439:Parameterized the server_manager host, timeout to support different dynamic VMs API server and bit refactoring to remove hard coded values
             if response.status != 200:
                 print((time.asctime(time.localtime(time.time())), 'invalid server response', content))
                 time.sleep(POLL_INTERVAL)
@@ -380,13 +375,8 @@ def main():
                                                   options.os, options.poolId)
                     print(('getServerURL', getServerURL))
 
-<<<<<<< HEAD
-                    response, content = httplib2.Http(timeout=60).request(getServerURL, 'GET')
-                    print(('response.status', response, content))
-=======
                     response, content = httplib2.Http(timeout=TIMEOUT).request(getServerURL, 'GET')
-                    print 'response.status', response, content
->>>>>>> c10bc614f... CBQE-5439:Parameterized the server_manager host, timeout to support different dynamic VMs API server and bit refactoring to remove hard coded values
+                    print(('response.status', response, content))
 
                     if options.serverType.lower() != 'docker':
                         # sometimes there could be a race, before a dispatcher process acquires vms,
@@ -414,15 +404,9 @@ def main():
                                                       options.addPoolId)
                         print(('getServerURL', getServerURL))
 
-<<<<<<< HEAD
-                        response2, content2 = httplib2.Http(timeout=60).request(getServerURL, 'GET')
-                        content2 = content2.decode('utf-8')
-=======
                         response2, content2 = httplib2.Http(timeout=TIMEOUT).request(getServerURL,
                                                                                  'GET')
-                        print 'response2.status', response2, content2
-
->>>>>>> c10bc614f... CBQE-5439:Parameterized the server_manager host, timeout to support different dynamic VMs API server and bit refactoring to remove hard coded values
+                        content2 = content2.decode('utf-8')
 
                         print(('response2.status', response2, content2))
 
@@ -483,16 +467,9 @@ def main():
                             if options.serverType.lower() == 'docker':
                                 pass  # figure docker out later
                             else:
-<<<<<<< HEAD
-                                response, content = httplib2.Http(timeout=60). \
-                                    request('http://' + SERVER_MANAGER + '/releaseservers/' + descriptor + '/available',
-                                            'GET')
-                                print(('the release response', response, content))
-=======
                                 response, content = httplib2.Http(timeout=TIMEOUT).\
                                     request('http://' + SERVER_MANAGER + '/releaseservers/' + descriptor + '/available', 'GET')
-                                print 'the release response', response, content
->>>>>>> c10bc614f... CBQE-5439:Parameterized the server_manager host, timeout to support different dynamic VMs API server and bit refactoring to remove hard coded values
+                                print(('the release response', response, content))
                         else:
                             response, content = httplib2.Http(timeout=TIMEOUT).request(url, 'GET')
 
