@@ -150,9 +150,10 @@ class RemoteMachineHelper(object):
         return vsz, rss
 
     def is_process_running(self, process_name):
+
         if getattr(self.remote_shell, "info", None) is None:
             self.remote_shell.info = self.remote_shell.extract_remote_info()
-
+        log.info("Checking for process " + process_name+ " on " + self.remote_shell.info.type.lower())
         if self.remote_shell.info.type.lower() == 'windows':
              output, error = self.remote_shell.execute_command('tasklist | grep {0}'
                                                 .format(process_name), debug=False)
@@ -824,8 +825,11 @@ class RemoteMachineShellConnection(KeepRefs):
         return False
 
     def is_couchbase_running(self):
+        process_name = 'beam.smp'
         self.extract_remote_info()
-        o=RemoteMachineHelper(self).is_process_running('beam.smp')
+        if self.info.type.lower() == 'windows':
+            process_name='erl.exe'
+        o=RemoteMachineHelper(self).is_process_running(process_name)
         if o !=None:
             return True
         return False
@@ -3700,6 +3704,7 @@ class RemoteMachineShellConnection(KeepRefs):
             if self.info.type.lower() == 'windows':
                 o, r = self.execute_command("net start couchbaseserver")
                 self.log_command_output(o, r)
+                self.sleep(1, "Waiting for 1 secs to start...on " + self.info.ip)
                 running = self.is_couchbase_running()
                 retry=retry+1
             if self.info.type.lower() == "linux":
@@ -3735,7 +3740,7 @@ class RemoteMachineShellConnection(KeepRefs):
                 running = self.is_couchbase_running()
                 retry = retry + 1
         if not running and retry >= 3:
-            sys.exit("Server not started even after 3 retries")
+            sys.exit("Server not started even after 3 retries on "+self.info.ip)
 
 
 
