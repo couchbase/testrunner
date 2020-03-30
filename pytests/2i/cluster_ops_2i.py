@@ -1,4 +1,4 @@
-from base_2i import BaseSecondaryIndexingTests
+from .base_2i import BaseSecondaryIndexingTests
 from membase.api.rest_client import RestConnection, RestHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
 
@@ -67,7 +67,7 @@ class SecondaryIndexingClusterOpsTests(BaseSecondaryIndexingTests):
                 self.multi_query_using_index_with_emptyresult(
                     query_definitions=self.query_definitions, buckets=self.buckets)
                 rollback_exception = False
-            except Exception, ex:
+            except Exception as ex:
                 msg = "Indexer rollback"
                 if msg not in str(ex):
                     rollback_exception = False
@@ -111,7 +111,7 @@ class SecondaryIndexingClusterOpsTests(BaseSecondaryIndexingTests):
             rebalance.result()
             # get the items in the index and check if the data loss is reflected correctly
             self.sleep(2)
-        except Exception, ex:
+        except Exception as ex:
             raise
         finally:
             self.run_multi_operations(buckets = self.buckets,
@@ -133,14 +133,14 @@ class SecondaryIndexingClusterOpsTests(BaseSecondaryIndexingTests):
             tasks = []
             # Run auto-compaction to remove the tomb stones
             for bucket in self.buckets:
-                tasks.append(self.cluster.async_compact_bucket(self.master,bucket))
+                tasks.append(self.cluster.async_compact_bucket(self.master, bucket))
             for task in tasks:
                 task.result()
             self.sleep(10)
             # run compaction and analyze results
             self.run_multi_operations(buckets = self.buckets, query_definitions = self.query_definitions,
                 create_index = True, drop_index = False, query_with_explain = True, query = True)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             raise
         finally:

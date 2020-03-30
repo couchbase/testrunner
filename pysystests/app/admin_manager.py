@@ -1,4 +1,4 @@
-from __future__ import absolute_import
+
 from app.celery import celery
 import testcfg as cfg
 from rabbit_helper import PersistedMQ
@@ -21,7 +21,7 @@ def adminConsumer(adminQueue = "admin_default"):
 
             if 'rcq' in adminMsg:
                 # filter out unspecified ops in return value
-                msg = [(k,str(adminMsg[k])) for k in adminMsg.keys() if str(adminMsg[k]) is not '' and\
+                msg = [(k, str(adminMsg[k])) for k in list(adminMsg.keys()) if str(adminMsg[k]) is not '' and\
                     string.find(str(adminMsg[k]), 'rc_') < 0]
                 rabbitHelper.putMsg(adminMsg['rcq'], "Started admin task: %s" % msg)
 

@@ -1,4 +1,4 @@
-from __future__ import absolute_import
+
 
 import re
 import sys
@@ -105,26 +105,26 @@ def parse_condition_dict(postconditions):
 
 def match_ip(condition_str, condition_map):
     m = re.match(r"\s*?(\d+.\d+.\d+.\d+):?(\d+)?\s*?", condition_str)
-    if not isinstance(m, types.NoneType):
+    if not isinstance(m, type(None)):
         condition_map["ip"], condition_map["port"] = m.groups()
 
 def match_active_task_type(condition_str, condition_map):
     m = re.match(r"\s*?(?P<active_task_type>\w+):(?P<target_value>\w+)\s*?", condition_str)
-    if not isinstance(m, types.NoneType):
+    if not isinstance(m, type(None)):
         condition_map["active_task_type"] = m.group('type').strip()
         condition_map["target_value"] = m.group('target_value').strip()
 
 def match_equality(condition_str, condition_map):
     m = re.match(r"\s*?(?P<stat>[\w]+)(?P<cmp>[\s=<>]+)(?P<value>\w+)\s*?",
                  condition_str)
-    if not isinstance(m, types.NoneType):
+    if not isinstance(m, type(None)):
         condition_map["stat"] = m.group('stat').strip()
         condition_map["cmp_type"] = m.group('cmp').strip()
         condition_map["value"] = m.group('value').strip()
 
 def match_method(condition_str, condition_map):
     m = re.match(r"\s*?(?P<method>\w+)\s*?$", condition_str)
-    if not isinstance(m, types.NoneType):
+    if not isinstance(m, type(None)):
         condition_map["method"] = m.group('method').strip()
 
 
@@ -134,7 +134,7 @@ def default_condition_params(postconditions):
     else:
         _map = parse_condition(postconditions)
 
-    return _map['stat'],_map['cmp_type'],_map['value']
+    return _map['stat'], _map['cmp_type'], _map['value']
 
 
 """ unless postcondition manually specified
@@ -306,7 +306,7 @@ class BucketStatChecker(StatChecker):
 
         stats = self.get_stats()
         if stats:
-            keys = stats.keys()
+            keys = list(stats.keys())
 
         return keys
 
@@ -351,7 +351,7 @@ class EPStatChecker(StatChecker):
 
         stats = self.get_stats()
         if stats:
-            keys = stats.keys()
+            keys = list(stats.keys())
         return keys
 
     def get_stats(self):
@@ -460,7 +460,7 @@ class ActiveTaskChecker(StatChecker):
         super(ActiveTaskChecker, self).__setattr__(name, value)
 
         # auto cache object when certain keys change
-        if self.initialized and name in ("initialized","task_started","empty_stat_count"):
+        if self.initialized and name in ("initialized", "task_started", "empty_stat_count"):
             ObjCacher().store(CacheHelper.ACTIVETASKCACHEKEY, self)
 
     @staticmethod

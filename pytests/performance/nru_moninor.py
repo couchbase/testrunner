@@ -25,7 +25,7 @@ class NRUMonitor(threading.Thread):
         super(NRUMonitor, self).__init__()
 
     def run(self):
-        print "[NRUMonitor] started running"
+        print("[NRUMonitor] started running")
 
         # TODO: evaluate all servers, smarter polling freq
         server = self.eperf.input.servers[0]
@@ -36,8 +36,8 @@ class NRUMonitor(threading.Thread):
             return
 
         while nru_num <= self.nru_num:
-            print "[NRUMonitor] nru_num = %d, sleep for %d seconds"\
-                  % (nru_num, self.freq)
+            print("[NRUMonitor] nru_num = %d, sleep for %d seconds"\
+                  % (nru_num, self.freq))
             time.sleep(self.freq)
             nru_num = self.get_nru_num()
             if nru_num < 0:
@@ -46,22 +46,22 @@ class NRUMonitor(threading.Thread):
         gmt_now = time.strftime(PerfDefaults.strftime, time.gmtime())
         speed, num_items, run_time = self.get_nru_speed()
 
-        print "[NRUMonitor] access scanner finished at: %s, speed: %s, "\
+        print("[NRUMonitor] access scanner finished at: %s, speed: %s, "\
               "num_items: %s, run_time: %s"\
-              % (gmt_now, speed, num_items, run_time)
+              % (gmt_now, speed, num_items, run_time))
 
         self.eperf.clear_hot_keys()
 
-        print "[NRUMonitor] scheduled rebalance after %d seconds"\
-              % self.reb_delay
+        print("[NRUMonitor] scheduled rebalance after %d seconds"\
+              % self.reb_delay)
 
         self.shell.disconnect()
         self.eperf.latched_rebalance(delay=self.reb_delay, sync=True)
 
         gmt_now = time.strftime(PerfDefaults.strftime, time.gmtime())
-        print "[NRUMonitor] rebalance finished: %s" % gmt_now
+        print("[NRUMonitor] rebalance finished: %s" % gmt_now)
 
-        print "[NRUMonitor] stopped running"
+        print("[NRUMonitor] stopped running")
 
     def get_nru_num(self):
         """Retrieve how many times nru access scanner has been run"""
@@ -83,37 +83,37 @@ class NRUMonitor(threading.Thread):
         if run_time <= 0:
             return -1, num_items, -1
 
-        speed = num_items / run_time
+        speed = num_items // run_time
 
         return speed, num_items, run_time
 
     def _get_shell_int(self, cmd):
         """Fire a shell command and return output as integer"""
         if not cmd:
-            print "<_get_shell_int> invalid cmd"
+            print("<_get_shell_int> invalid cmd")
             return -1
 
         output, error = self.shell.execute_command(cmd)
 
         if error:
-            print "<_get_shell_int> unable to execute cmd '%s' from %s: %s"\
-                  % (cmd, self.shell.ip, error)
+            print("<_get_shell_int> unable to execute cmd '%s' from %s: %s"\
+                  % (cmd, self.shell.ip, error))
             return -1
 
         if not output:
-            print "<_get_shell_int> unable to execute cmd '%s' from %s: "\
-                  "empty output" % (cmd, self.shell.ip)
+            print("<_get_shell_int> unable to execute cmd '%s' from %s: "\
+                  "empty output" % (cmd, self.shell.ip))
             return -1
 
         try:
             num = int(output[0].split(":")[1])
-        except (AttributeError, IndexError, ValueError), e:
-            print "<_get_shell_int> unable to execute cmd '%s' from %s:"\
-                  "output - %s, error - %s" % (cmd, self.shell.ip, output, e)
+        except (AttributeError, IndexError, ValueError) as e:
+            print("<_get_shell_int> unable to execute cmd '%s' from %s:"\
+                  "output - %s, error - %s" % (cmd, self.shell.ip, output, e))
             return -1
 
         if num < 0:
-            print "<_get_shell_int> invalid number: %d" % num
+            print("<_get_shell_int> invalid number: %d" % num)
             return -1
 
         return num

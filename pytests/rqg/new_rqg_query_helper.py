@@ -2,7 +2,7 @@ import random
 import copy
 import string
 import pprint
-from base_query_helper import BaseRQGQueryHelper
+from .base_query_helper import BaseRQGQueryHelper
 
 
 '''
@@ -124,7 +124,7 @@ class RQGQueryHelperNew(BaseRQGQueryHelper):
         indexes = {}
         indexes = self.create_join_index(conversion_map, template_map, indexes)
         query_map = {"n1ql": n1ql_template_map['N1QL'],  "sql": sql_template_map['SQL'],
-                     "bucket": str(",".join(table_map.keys())),
+                     "bucket": str(",".join(list(table_map.keys()))),
                      "expected_result": None, "indexes": indexes,
                      "tests": ["BASIC"]}
         query_map = self.convert_table_name(query_map, conversion_map)
@@ -144,7 +144,7 @@ class RQGQueryHelperNew(BaseRQGQueryHelper):
         select_subqueries = self.get_from_dict(template_map, ['SELECT_FIELDS', 'SUBQUERIES'])
         if select_subqueries == []:
             return template_map
-        subquery_aliases = select_subqueries.keys()
+        subquery_aliases = list(select_subqueries.keys())
         for alias in subquery_aliases:
             subquery_select = select_subqueries[alias]["SELECT_CLAUSE"]
             new_select_clause = "SELECT RAW " + subquery_select.split("SELECT")[1]
@@ -162,7 +162,7 @@ class RQGQueryHelperNew(BaseRQGQueryHelper):
             final_select_fields.append(field)
 
         subquery_dict = self.get_from_dict(template_map, ['SELECT_FIELDS', 'SUBQUERIES'])
-        for subquery_alias in subquery_dict.keys():
+        for subquery_alias in list(subquery_dict.keys()):
             converted_subquery_map = self.get_from_dict(template_map, ['SELECT_FIELDS', 'SUBQUERIES', subquery_alias])
             combined_subquery = "(" + self._combine_converted_clauses(converted_subquery_map) + ")[0] AS " + subquery_alias
             final_select_fields.append(combined_subquery)
@@ -237,7 +237,7 @@ class RQGQueryHelperNew(BaseRQGQueryHelper):
                 i += 1
         with_ordering = []
         with_expression_ordering_map = self.get_from_dict(template_map, key_path+['WITH_EXPRESSION_ORDER'])
-        for with_alias in with_expression_ordering_map.keys():
+        for with_alias in list(with_expression_ordering_map.keys()):
             with_ordering.append((with_alias, self.get_from_dict(template_map, key_path+['WITH_EXPRESSION_ORDER', with_alias])))
 
         with_ordering.sort(key=lambda x: x[1])
@@ -312,7 +312,7 @@ class RQGQueryHelperNew(BaseRQGQueryHelper):
         elif from_expression == "WITH_CLAUSE_ALIAS":
             # outer most select is from a with clause alias
             with_clause_aliases = self.get_from_dict(template_map, key_path+['WITH_EXPRESSIONS'])
-            with_clause_aliases = with_clause_aliases.keys()
+            with_clause_aliases = list(with_clause_aliases.keys())
             with_alias = random.choice(with_clause_aliases)
             from_clause += " " + with_alias
             from_map = {"left_table": with_alias, "class": "WITH_ALIAS", "type": "basic"}
@@ -338,7 +338,7 @@ class RQGQueryHelperNew(BaseRQGQueryHelper):
             target_alias = key_path[-1]
             target_alias_order = with_expression_ordering[target_alias]
             source_aliases = []
-            for source_alias in with_expression_ordering.keys():
+            for source_alias in list(with_expression_ordering.keys()):
                 if with_expression_ordering[source_alias] < target_alias_order:
                     source_aliases.append(source_alias)
             if len(source_aliases) == 0:
@@ -350,12 +350,12 @@ class RQGQueryHelperNew(BaseRQGQueryHelper):
                         "class": "CTE_ALIAS", "type": "basic"}
         elif from_expression == "TABLE_AND_CTE_JOIN":
             with_clause_aliases = self.get_from_dict(template_map, key_path+['WITH_EXPRESSIONS'])
-            with_clause_aliases = with_clause_aliases.keys()
+            with_clause_aliases = list(with_clause_aliases.keys())
             if len(with_clause_aliases) < 2:
                 join_order = random.choice(['TABLE_CTE', 'CTE_TABLE', 'TABLE_TABLE'])
             else:
                 with_clause_aliases = self.get_from_dict(template_map, key_path+['WITH_EXPRESSIONS'])
-                with_clause_aliases = with_clause_aliases.keys()
+                with_clause_aliases = list(with_clause_aliases.keys())
                 left_table = random.choice(with_clause_aliases)
                 with_clause_aliases.remove(left_table)
                 right_table = random.choice(with_clause_aliases)
@@ -375,7 +375,7 @@ class RQGQueryHelperNew(BaseRQGQueryHelper):
             if join_order == "TABLE_CTE" or join_order == "CTE_TABLE":
                 # select is from a table/bucket joined to a cte
                 with_clause_aliases = self.get_from_dict(template_map, key_path+['WITH_EXPRESSIONS'])
-                with_clause_aliases = with_clause_aliases.keys()
+                with_clause_aliases = list(with_clause_aliases.keys())
                 with_alias = random.choice(with_clause_aliases)
                 with_alias_fields = self.get_from_dict(template_map, key_path+['WITH_FIELDS', with_alias])
                 with_alias_fields = [tuple[0] for tuple in with_alias_fields]
@@ -396,7 +396,7 @@ class RQGQueryHelperNew(BaseRQGQueryHelper):
                             "join_type": join_type}
             elif join_order == "TABLE_TABLE":
                 table_map = conversion_map.get("table_map", {})
-                table_fields = table_map[table_name]["fields"].keys()
+                table_fields = list(table_map[table_name]["fields"].keys())
                 join_field = random.choice(table_fields)
                 join_type = random.choice(["LEFT OUTER JOIN", "RIGHT OUTER JOIN", "INNER JOIN"])
                 left_table = table_name
@@ -419,7 +419,7 @@ class RQGQueryHelperNew(BaseRQGQueryHelper):
                             "right_table": right_table, "right_table_alias": right_table_alias, "left_on_field": join_field, "right_on_field": join_field,
                             "join_type": join_type}
         else:
-            print("Unknown from clause type: " + from_expression)
+            print(("Unknown from clause type: " + from_expression))
             exit(1)
         self.set_in_dict(template_map, key_path+['FROM_FIELD'], from_map)
         self.set_in_dict(template_map, key_path+['FROM_CLAUSE'], str(from_clause))
@@ -443,7 +443,7 @@ class RQGQueryHelperNew(BaseRQGQueryHelper):
         if from_class == "BUCKET_NAME":
             # need to add random field selection from bucket
             from_table = from_map["left_table"]
-            all_fields = table_map[from_table]["fields"].keys()
+            all_fields = list(table_map[from_table]["fields"].keys())
             if where_expression == "FIELDS_CONDITION":
                 for i in range(0, num_where_comparisons):
                     random_field = random.choice(all_fields)
@@ -468,12 +468,12 @@ class RQGQueryHelperNew(BaseRQGQueryHelper):
                 self.set_in_dict(template_map, key_path+['WHERE_SUBQUERIES'], where_subquery_template)
 
             else:
-                print("WHERE CLAUSE CONVERSION - Unknown where expression type: " + str(where_expression))
+                print(("WHERE CLAUSE CONVERSION - Unknown where expression type: " + str(where_expression)))
                 exit(1)
 
         elif from_class == "BUCKET_NAME_WITH_ALIAS":
             from_table = from_map["left_table"]
-            all_fields = table_map[from_table]["fields"].keys()
+            all_fields = list(table_map[from_table]["fields"].keys())
 
             if where_expression == "FIELDS_CONDITION":
                 for i in range(0, num_where_comparisons):
@@ -500,7 +500,7 @@ class RQGQueryHelperNew(BaseRQGQueryHelper):
                 where_clause += " " + random_field + " IN " + "(" + where_subquery + ")"
                 self.set_in_dict(template_map, key_path+['WHERE_SUBQUERIES'], where_subquery_template)
             else:
-                print("WHERE CLAUSE CONVERSION - Unknown where expression type: " + str(where_expression))
+                print(("WHERE CLAUSE CONVERSION - Unknown where expression type: " + str(where_expression)))
                 exit(1)
 
         elif from_class == "SUBQUERY_CTE":
@@ -534,7 +534,7 @@ class RQGQueryHelperNew(BaseRQGQueryHelper):
                 where_clause += " " + random_field + " IN " + "(" + where_subquery + ")"
                 self.set_in_dict(template_map, key_path+['WHERE_SUBQUERIES'], where_subquery_template)
             else:
-                print("WHERE CLAUSE CONVERSION - Unknown where expression type: " + str(where_expression))
+                print(("WHERE CLAUSE CONVERSION - Unknown where expression type: " + str(where_expression)))
                 exit(1)
 
         elif from_class == "WITH_ALIAS":
@@ -567,7 +567,7 @@ class RQGQueryHelperNew(BaseRQGQueryHelper):
                 where_clause += " " + random_field + " IN " + "(" + where_subquery + ")"
                 self.set_in_dict(template_map, key_path+['WHERE_SUBQUERIES'], where_subquery_template)
             else:
-                print("WHERE CLAUSE CONVERSION - Unknown where expression type: " + str(where_expression))
+                print(("WHERE CLAUSE CONVERSION - Unknown where expression type: " + str(where_expression)))
                 exit(1)
 
         elif from_class == "CTE_ALIAS":
@@ -608,7 +608,7 @@ class RQGQueryHelperNew(BaseRQGQueryHelper):
                 where_clause += " " + random_field + " IN " + "(" + where_subquery + ")"
                 self.set_in_dict(template_map, key_path+['WHERE_SUBQUERIES'], where_subquery_template)
             else:
-                print("WHERE CLAUSE CONVERSION - Unknown where expression type: " + str(where_expression))
+                print(("WHERE CLAUSE CONVERSION - Unknown where expression type: " + str(where_expression)))
                 exit(1)
         elif from_class == "TABLE_AND_CTE_JOIN":
             from_map = self.get_from_dict(template_map, key_path + ['FROM_FIELD'])
@@ -622,7 +622,7 @@ class RQGQueryHelperNew(BaseRQGQueryHelper):
                 left_table_fields = self.get_from_dict(template_map, key_path + ['WITH_FIELDS', left_table])
                 left_table_fields = [tuple[0] for tuple in left_table_fields]
             else:
-                left_table_fields = table_map[left_table]["fields"].keys()
+                left_table_fields = list(table_map[left_table]["fields"].keys())
 
             right_table = from_map['right_table']
             right_table_alias = from_map.get('right_table_alias', "NO_ALIAS")
@@ -633,7 +633,7 @@ class RQGQueryHelperNew(BaseRQGQueryHelper):
                 right_table_fields = self.get_from_dict(template_map, key_path + ['WITH_FIELDS', right_table])
                 right_table_fields = [tuple[0] for tuple in right_table_fields]
             else:
-                right_table_fields = table_map[right_table]["fields"].keys()
+                right_table_fields = list(table_map[right_table]["fields"].keys())
 
             if where_expression == "FIELDS_CONDITION":
                 for i in range(0, num_where_comparisons):
@@ -671,11 +671,11 @@ class RQGQueryHelperNew(BaseRQGQueryHelper):
                 where_clause += " " + random_field + " IN " + "(" + where_subquery + ")"
                 self.set_in_dict(template_map, key_path+['WHERE_SUBQUERIES'], where_subquery_template)
             else:
-                print("WHERE CLAUSE CONVERSION - Unknown where expression type: " + str(where_expression))
+                print(("WHERE CLAUSE CONVERSION - Unknown where expression type: " + str(where_expression)))
                 exit(1)
 
         else:
-            print("WHERE CLAUSE CONVERSION - Unknown from expression type: " + str(from_class))
+            print(("WHERE CLAUSE CONVERSION - Unknown from expression type: " + str(from_class)))
             exit(1)
 
         self.set_in_dict(template_map, key_path+['WHERE_CLAUSE'], where_clause)
@@ -728,7 +728,7 @@ class RQGQueryHelperNew(BaseRQGQueryHelper):
 
             subquery_dict = self.get_from_dict(template_map, key_path+['SELECT_FIELDS', 'SUBQUERIES'])
 
-            for subquery_alias in subquery_dict.keys():
+            for subquery_alias in list(subquery_dict.keys()):
                 template_map = self._convert_subquery(conversion_map, template_map, key_path=key_path+['SELECT_FIELDS', 'SUBQUERIES', subquery_alias])
                 converted_subquery_map = self.get_from_dict(template_map, key_path+['SELECT_FIELDS', 'SUBQUERIES', subquery_alias])
                 combined_subquery = "(" + self._combine_converted_clauses(converted_subquery_map) + ") AS " + subquery_alias
@@ -762,7 +762,7 @@ class RQGQueryHelperNew(BaseRQGQueryHelper):
 
     def _convert_query(self, conversion_map, template_map, key_path=[]):
         query_template_map = self.get_from_dict(template_map, key_path)
-        query_template_keys = query_template_map.keys()
+        query_template_keys = list(query_template_map.keys())
         if "WITH_TEMPLATE" in query_template_keys:
             template_map = self._convert_with_clause_template_n1ql(conversion_map, template_map, key_path)
 
@@ -834,11 +834,11 @@ class RQGQueryHelperNew(BaseRQGQueryHelper):
         random_fields = []
         if from_class == "BUCKET_NAME":
             from_table = from_map['left_table']
-            all_fields = table_map[from_table]["fields"].keys()
+            all_fields = list(table_map[from_table]["fields"].keys())
             random_fields = self._random_sample(all_fields)
         elif from_class == "BUCKET_NAME_WITH_ALIAS":
             from_table = from_map['left_table']
-            all_fields = table_map[from_table]["fields"].keys()
+            all_fields = list(table_map[from_table]["fields"].keys())
             random_fields = self._random_sample(all_fields)
             random_fields = [from_map['left_table_alias'] + "." + random_field for random_field in random_fields]
         elif from_class == "WITH_ALIAS":
@@ -884,7 +884,7 @@ class RQGQueryHelperNew(BaseRQGQueryHelper):
                 left_table_fields = self.get_from_dict(template_map, key_path + ['WITH_FIELDS', left_table])
                 left_table_fields = [(left_table_alias, tuple[0]) for tuple in left_table_fields]
             else:
-                left_table_fields = table_map[left_table]["fields"].keys()
+                left_table_fields = list(table_map[left_table]["fields"].keys())
                 left_table_fields = [(left_table_alias, field) for field in left_table_fields]
 
             right_table = from_map['right_table']
@@ -896,7 +896,7 @@ class RQGQueryHelperNew(BaseRQGQueryHelper):
                 right_table_fields = self.get_from_dict(template_map, key_path + ['WITH_FIELDS', right_table])
                 right_table_fields = [(right_table_alias, tuple[0]) for tuple in right_table_fields]
             else:
-                right_table_fields = table_map[right_table]["fields"].keys()
+                right_table_fields = list(table_map[right_table]["fields"].keys())
                 right_table_fields = [(right_table_alias, field) for field in right_table_fields]
 
             all_fields = []
@@ -911,7 +911,7 @@ class RQGQueryHelperNew(BaseRQGQueryHelper):
             random_fields = [field[0] + "." + field[1] for field in random_fields]
 
         else:
-            print("Unknown from type for select clause conversion: " + str(from_class))
+            print(("Unknown from type for select clause conversion: " + str(from_class)))
             exit(1)
 
         return random_fields
@@ -919,14 +919,14 @@ class RQGQueryHelperNew(BaseRQGQueryHelper):
     def convert_table_name(self, query_map, conversion_map):
         database = conversion_map['database_name']
         query_map["n1ql"] = query_map['n1ql'].replace("simple_table", database + "_" + "simple_table")
-        for key in query_map['indexes'].keys():
+        for key in list(query_map['indexes'].keys()):
             if 'definition' in query_map['indexes'][key]:
                 query_map['indexes'][key]['definition'] = query_map['indexes'][key]['definition'].replace("simple_table", database + "_" + "simple_table")
         return query_map
 
     def _random_sample(self, list):
-        size_of_sample = random.choice(range(1, len(list) + 1))
-        random_sample = [list[i] for i in random.sample(xrange(len(list)), size_of_sample)]
+        size_of_sample = random.choice(list(range(1, len(list) + 1)))
+        random_sample = [list[i] for i in random.sample(range(len(list)), size_of_sample)]
         return random_sample
 
     def _random_constant(self, field=None):
@@ -948,7 +948,7 @@ class RQGQueryHelperNew(BaseRQGQueryHelper):
             elif "primary_key_id" in field:
                 random_constant = "'%s'" % random.randrange(1, 9999, 10)
             else:
-                print("Unknown field type: " + str(field))
+                print(("Unknown field type: " + str(field)))
                 exit(1)
         else:
             constant_type = random.choice(["STRING", "INTEGER", "DECIMAL", "BOOLEAN"])
@@ -975,7 +975,7 @@ class RQGQueryHelperNew(BaseRQGQueryHelper):
     def _extract_fields_from_clause(self, clause_type, template_map, conversion_map, key_path=[]):
         table_map = conversion_map.get("table_map", {})
         table_name = conversion_map.get("table_name", "simple_table")
-        table_fields = table_map[table_name]["fields"].keys()
+        table_fields = list(table_map[table_name]["fields"].keys())
         expression = self.get_from_dict(template_map, key_path+[clause_type + "_CLAUSE"])
         if expression.find(clause_type) == -1:
             return []
@@ -1034,7 +1034,7 @@ class RQGQueryHelperNew(BaseRQGQueryHelper):
             sql = sql.replace("STUB_" + str(subquery_index), subquery[0])
             # The on_clause of the query needs to be fixed so that the correct fields are being referenced, extract it
             old_on_clause = sql.split("ON")[1].strip().split(')')[0].strip()
-            old_on_clause = old_on_clause.replace('(','')
+            old_on_clause = old_on_clause.replace('(', '')
             # Loop through the on clause to replace the alias's that need to be changed
             for character in old_on_clause.split(" "):
                 # An alias needs to be referencing a bucket that is in the join, make sure this is the case
@@ -1072,12 +1072,12 @@ class RQGQueryHelperNew(BaseRQGQueryHelper):
 
         map = {"n1ql": n1ql,
                "sql": sql,
-               "bucket": str(",".join(table_map.keys())),
+               "bucket": str(",".join(list(table_map.keys()))),
                "expected_result": None,
                "indexes": {}
                }
 
-        table_name = random.choice(table_map.keys())
+        table_name = random.choice(list(table_map.keys()))
         map["bucket"] = table_name
 
         return map
@@ -1125,14 +1125,14 @@ class RQGQueryHelperNew(BaseRQGQueryHelper):
 
         map = {"n1ql": n1ql,
                "sql": sql,
-               "bucket": str(",".join(table_map.keys())),
+               "bucket": str(",".join(list(table_map.keys()))),
                "expected_result": None,
                "indexes": {}
                }
 
-        table_name = random.choice(table_map.keys())
+        table_name = random.choice(list(table_map.keys()))
         map["bucket"] = table_name
-        table_fields = table_map[table_name]["fields"].keys()
+        table_fields = list(table_map[table_name]["fields"].keys())
 
         aggregate_pushdown_index_name, create_aggregate_pushdown_index_statement = self._create_skip_range_key_scan_index(table_name, table_fields, sql_map)
         map = self.aggregate_special_convert(map)
@@ -1213,7 +1213,7 @@ class RQGQueryHelperNew(BaseRQGQueryHelper):
 
         map = {"n1ql": n1ql,
                 "sql": sql,
-                "bucket": str(",".join(table_map.keys())),
+                "bucket": str(",".join(list(table_map.keys()))),
                 "expected_result": None,
                 "indexes": {}
               }
@@ -1371,7 +1371,7 @@ class RQGQueryHelperNew(BaseRQGQueryHelper):
 
         map = { "n1ql": n1ql,
                 "sql": sql,
-                "bucket": str(",".join(table_map.keys())),
+                "bucket": str(",".join(list(table_map.keys()))),
                 "expected_result": None,
                 "indexes": {} }
         return map
@@ -1464,7 +1464,7 @@ class RQGQueryHelperNew(BaseRQGQueryHelper):
         return select_from
 
     def _cleanup_field_aliases_from_sql_clause(self, sql_map={}, clause_name=''):
-        if clause_name in sql_map.keys():
+        if clause_name in list(sql_map.keys()):
             clause_str = sql_map[clause_name]
 
             clause_str = clause_str.replace("NUMERIC_FIELD NUMERIC_ALIAS", "NUMERIC_FIELD").\

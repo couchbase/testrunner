@@ -1,6 +1,6 @@
 import time
 import unittest
-import urllib
+import urllib.request, urllib.parse, urllib.error
 import random, copy
 import testconstants
 from TestInput import TestInputSingleton
@@ -90,9 +90,9 @@ class CWCTests(CWCBaseTest):
                                                           services))
             self.cluster.rebalance(total_servers, [cwc_servers[len(nodes)]], \
                                                         [], services=services)
-        except Exception, e:
+        except Exception as e:
             if e:
-                print e
+                print(e)
         if status:
             if self.cb_version[:5] in COUCHBASE_FROM_WATSON:
                 add_node_rest.set_indexer_storage_mode(storageMode="memory_optimized")
@@ -180,7 +180,7 @@ class CWCTests(CWCBaseTest):
         for node in perNode:
             self.log.info("Verify log of node {0} uploaded to host: {1}" \
                           .format(node, self.uploadHost))
-            uploaded = urllib.urlopen(perNode[node]["url"]).getcode()
+            uploaded = urllib.request.urlopen(perNode[node]["url"]).getcode()
             if uploaded == 200 and self.uploadHost in perNode[node]["url"]:
                 self.log.info("Log of node {0} was uploaded to {1}" \
                               .format(node, perNode[node]["url"]))
@@ -208,7 +208,7 @@ class CWCTests(CWCBaseTest):
                            --upload-host='{4}' --customer='{5}' --ticket='{6}' " .format(self.bin_path, \
                            command, self.master.ip, num_node_collect, self.uploadHost, self.customer, \
                            self.ticket))
-        self.log.info("Command output is {0} {1}".format(o,e) )
+        self.log.info("Command output is {0} {1}".format(o, e) )
         shell.log_command_output(o, e)
         if "runCmd" in o[0]:
             o = o[1:]
@@ -239,7 +239,7 @@ class CWCTests(CWCBaseTest):
     def _generate_random_collecting_node(self, rest):
         random_nodes = []
         nodes = rest.get_nodes()
-        for k in random.sample(range(int(self.nodes_init)), int(self.collect_nodes)):
+        for k in random.sample(list(range(int(self.nodes_init))), int(self.collect_nodes)):
             random_nodes.append(nodes[k].id)
         random_nodes =",".join(random_nodes)
         self.log.info("nodes randomly selected to do CWC {0}".format(random_nodes))

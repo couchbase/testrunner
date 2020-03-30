@@ -1,4 +1,4 @@
-from cbas_base import *
+from .cbas_base import *
 from membase.api.rest_client import RestHelper
 from couchbase_cli import CouchbaseCLI
 
@@ -13,14 +13,14 @@ class CBASClusterManagement(CBASBaseTest):
     def setup_cbas_bucket_dataset_connect(self, cb_bucket, num_docs):
         # Create bucket on CBAS
         self.assertTrue(self.create_bucket_on_cbas(cbas_bucket_name=self.cbas_bucket_name,
-                       cb_bucket_name=cb_bucket),"bucket creation failed on cbas")
+                       cb_bucket_name=cb_bucket), "bucket creation failed on cbas")
         
         self.assertTrue(self.create_dataset_on_bucket(cbas_bucket_name=self.cbas_bucket_name,
                           cbas_dataset_name=self.cbas_dataset_name), "dataset creation failed on cbas")
         
-        self.assertTrue(self.connect_to_bucket(cbas_bucket_name=self.cbas_bucket_name),"Connecting cbas bucket to cb bucket failed")
+        self.assertTrue(self.connect_to_bucket(cbas_bucket_name=self.cbas_bucket_name), "Connecting cbas bucket to cb bucket failed")
         
-        self.assertTrue(self.wait_for_ingestion_complete([self.cbas_dataset_name], num_docs),"Data ingestion to cbas couldn't complete in 300 seconds.")
+        self.assertTrue(self.wait_for_ingestion_complete([self.cbas_dataset_name], num_docs), "Data ingestion to cbas couldn't complete in 300 seconds.")
         
         return True
     
@@ -37,7 +37,7 @@ class CBASClusterManagement(CBASBaseTest):
         added = 0
         for node in self.cbas_servers:
             if node.ip != self.master.ip:
-                self.add_node(node=node,rebalance=True)
+                self.add_node(node=node, rebalance=True)
                 added += 1
         nodes_after = len(self.rest.get_nodes_data_from_cluster())
         self.assertTrue(nodes_before+added == nodes_after, "While adding cbas nodes seems like some nodes were removed during rebalance.")
@@ -76,25 +76,25 @@ class CBASClusterManagement(CBASBaseTest):
         
         Author: Ritesh Agarwal
         '''
-        service_list = [["kv","cbas","index","n1ql"],
-                        ["cbas","n1ql","index"],
-                        ["kv","cbas","n1ql"],
-                        ["n1ql","cbas","fts"]
+        service_list = [["kv", "cbas", "index", "n1ql"],
+                        ["cbas", "n1ql", "index"],
+                        ["kv", "cbas", "n1ql"],
+                        ["n1ql", "cbas", "fts"]
                         ]
         for cbas_server in self.servers:
             if cbas_server.ip == self.master.ip:
                 continue
             from random import randint
             service = service_list[randint(0, len(service_list)-1)]
-            self.log.info("Adding %s to the cluster with services %s"%(cbas_server,service))
-            otpNode = self.add_node(node=cbas_server,services=service)
+            self.log.info("Adding %s to the cluster with services %s"%(cbas_server, service))
+            otpNode = self.add_node(node=cbas_server, services=service)
             
             '''Check for the correct services alloted to the nodes.'''
             nodes = self.rest.get_nodes_data_from_cluster()
             for node in nodes:
                 if node["otpNode"] == otpNode.id:
                     self.assertTrue(set(node["services"]) == set(service), "Service setting failed") 
-                    self.log.info("Successfully added %s to the cluster with services %s"%(otpNode.id,service))
+                    self.log.info("Successfully added %s to the cluster with services %s"%(otpNode.id, service))
                     
     def test_add_delete_cbas_nodes_CLI(self):
         '''
@@ -106,20 +106,20 @@ class CBASClusterManagement(CBASBaseTest):
         
         Author: Ritesh Agarwal
         '''
-        service_list = {"data,analytics,index":["kv","cbas","index"],
-                        "analytics,query,index":["cbas","n1ql","index"],
-                        "data,analytics,query":["kv","cbas","n1ql"],
-                        "analytics,query,fts":["cbas","n1ql","fts"],
+        service_list = {"data,analytics,index": ["kv", "cbas", "index"],
+                        "analytics,query,index": ["cbas", "n1ql", "index"],
+                        "data,analytics,query": ["kv", "cbas", "n1ql"],
+                        "analytics,query,fts": ["cbas", "n1ql", "fts"],
                         }
         for cbas_server in self.cbas_servers:
             if cbas_server.ip == self.master.ip:
                 continue
             import random
-            service = random.choice(service_list.keys())
-            self.log.info("Adding %s to the cluster with services %s to cluster %s"%(cbas_server,service,self.master))
+            service = random.choice(list(service_list.keys()))
+            self.log.info("Adding %s to the cluster with services %s to cluster %s"%(cbas_server, service, self.master))
             
             stdout, stderr, result = CouchbaseCLI(self.master, self.master.rest_username, self.master.rest_password).server_add(cbas_server.ip+":"+cbas_server.port, cbas_server.rest_username, cbas_server.rest_password, None, service, None)
-            self.assertTrue(result, "Server %s is not added to the cluster %s . Error: %s"%(cbas_server,self.master,stdout+stderr))
+            self.assertTrue(result, "Server %s is not added to the cluster %s . Error: %s"%(cbas_server, self.master, stdout+stderr))
             self.rebalance()
             
             '''Check for the correct services alloted to the nodes.'''
@@ -128,9 +128,9 @@ class CBASClusterManagement(CBASBaseTest):
                 if node["otpNode"].find(cbas_server.ip) != -1:
                     actual_services = set(node["services"])
                     expected_servcies = set(service_list[service])
-                    self.log.info("Expected:%s Actual:%s"%(expected_servcies,actual_services))
+                    self.log.info("Expected:%s Actual:%s"%(expected_servcies, actual_services))
                     self.assertTrue(actual_services == expected_servcies, "Service setting failed") 
-                    self.log.info("Successfully added %s to the cluster with services %s"%(node["otpNode"],service))
+                    self.log.info("Successfully added %s to the cluster with services %s"%(node["otpNode"], service))
         
         to_remove = []
         for cbas_server in self.cbas_servers:
@@ -138,12 +138,12 @@ class CBASClusterManagement(CBASBaseTest):
                 continue
             else:
                 to_remove.append(cbas_server.ip)
-        self.log.info("Removing: %s from the cluster: %s"%(to_remove,self.master))
+        self.log.info("Removing: %s from the cluster: %s"%(to_remove, self.master))
         stdout, stderr, result = CouchbaseCLI(self.master, self.master.rest_username, self.master.rest_password).rebalance(",".join(to_remove))
         if not result:
             self.log.info(15*"#"+"THIS IS A BUG: MB-24968. REMOVE THIS TRY-CATCH ONCE BUG IS FIXED."+15*"#")
             stdout, stderr, result = CouchbaseCLI(self.master, self.master.rest_username, self.master.rest_password).rebalance(",".join(to_remove))
-        self.assertTrue(result, "Server %s are not removed from the cluster %s . Console Output: %s , Error: %s"%(to_remove,self.master,stdout,stderr))
+        self.assertTrue(result, "Server %s are not removed from the cluster %s . Console Output: %s , Error: %s"%(to_remove, self.master, stdout, stderr))
 
     def test_add_another_cbas_node_rebalance(self):
         set_up_cbas = False
@@ -161,9 +161,9 @@ class CBASClusterManagement(CBASBaseTest):
             if cbas_server.ip == self.master.ip:
                 continue
             from random import randint
-            service = ["kv","cbas"]
-            self.log.info("Adding %s to the cluster with services %s"%(cbas_server,service))
-            self.add_node(node=cbas_server,services=service,wait_for_rebalance_completion=wait_for_rebalance)
+            service = ["kv", "cbas"]
+            self.log.info("Adding %s to the cluster with services %s"%(cbas_server, service))
+            self.add_node(node=cbas_server, services=service, wait_for_rebalance_completion=wait_for_rebalance)
             
             if not set_up_cbas:
                 set_up_cbas = self.setup_cbas_bucket_dataset_connect("default", docs_to_verify)
@@ -207,7 +207,7 @@ class CBASClusterManagement(CBASBaseTest):
         self.perform_doc_ops_in_all_cb_buckets(self.num_items, "create", 0, self.num_items)
         self.add_node(node=self.cbas_node)
         self.setup_cbas_bucket_dataset_connect("default", self.num_items)
-        self._run_concurrent_queries(query,"immediate",500)
+        self._run_concurrent_queries(query, "immediate", 500)
         
     def test_add_data_rebalance_runqueries(self):
         '''
@@ -223,9 +223,9 @@ class CBASClusterManagement(CBASBaseTest):
         self.create_default_bucket()
         self.perform_doc_ops_in_all_cb_buckets(self.num_items, "create", 0, self.num_items)
         self.add_node(node=self.cbas_node)
-        self.add_node(node=self.kv_servers[1],wait_for_rebalance_completion=False)
+        self.add_node(node=self.kv_servers[1], wait_for_rebalance_completion=False)
         self.setup_cbas_bucket_dataset_connect("default", self.num_items)
-        self._run_concurrent_queries(query,"immediate",500)
+        self._run_concurrent_queries(query, "immediate", 500)
         
     def test_all_cbas_node_running_queries(self):
         '''
@@ -246,14 +246,14 @@ class CBASClusterManagement(CBASBaseTest):
         
         if self.cbas_node.ip == self.master.ip:
             set_up_cbas = self.setup_cbas_bucket_dataset_connect("default", self.num_items)
-            self._run_concurrent_queries(query,"immediate",1000,RestConnection(self.cbas_node))
+            self._run_concurrent_queries(query, "immediate", 1000, RestConnection(self.cbas_node))
             
         for node in self.cbas_servers:
             if node.ip != self.master.ip:
                 self.add_node(node=node)
                 if not set_up_cbas:
                     set_up_cbas = self.setup_cbas_bucket_dataset_connect("default", self.num_items)
-                self._run_concurrent_queries(query,"immediate",1000,RestConnection(node))
+                self._run_concurrent_queries(query, "immediate", 1000, RestConnection(node))
 
     def test_add_first_cbas_restart_rebalance(self):
         '''
@@ -269,7 +269,7 @@ class CBASClusterManagement(CBASBaseTest):
         Author: Ritesh Agarwal
         '''
         self.load_sample_buckets(bucketName=self.cb_bucket_name, total_items=self.travel_sample_docs_count)
-        self.add_node(self.cbas_node, services=["kv","cbas"],wait_for_rebalance_completion=False)
+        self.add_node(self.cbas_node, services=["kv", "cbas"], wait_for_rebalance_completion=False)
         
         if self.rest._rebalance_progress_status() == "running":
             self.assertTrue(self.rest.stop_rebalance(), "Failed while stopping rebalance.")
@@ -296,13 +296,13 @@ class CBASClusterManagement(CBASBaseTest):
         self.add_node(self.cbas_node)
         self.setup_cbas_bucket_dataset_connect(self.cb_bucket_name, self.travel_sample_docs_count)
         
-        self.add_node(self.kv_servers[1],wait_for_rebalance_completion=False)
+        self.add_node(self.kv_servers[1], wait_for_rebalance_completion=False)
         if self.rest._rebalance_progress_status() == "running":
             self.assertTrue(self.rest.stop_rebalance(), "Failed while stopping rebalance.")
         else:
             self.fail("Rebalance completed before the test could have stopped rebalance.")
         
-        self.assertTrue(self.validate_cbas_dataset_items_count(self.cbas_dataset_name, self.travel_sample_docs_count),"Data loss in CBAS.")
+        self.assertTrue(self.validate_cbas_dataset_items_count(self.cbas_dataset_name, self.travel_sample_docs_count), "Data loss in CBAS.")
     
     
     def test_add_data_node_restart_rebalance(self):
@@ -322,14 +322,14 @@ class CBASClusterManagement(CBASBaseTest):
         self.add_node(self.cbas_node)
         self.setup_cbas_bucket_dataset_connect(self.cb_bucket_name, self.travel_sample_docs_count)
         
-        self.add_node(self.kv_servers[1],wait_for_rebalance_completion=False)
+        self.add_node(self.kv_servers[1], wait_for_rebalance_completion=False)
         if self.rest._rebalance_progress_status() == "running":
             self.assertTrue(self.rest.stop_rebalance(), "Failed while stopping rebalance.")
         else:
             self.fail("Rebalance completed before the test could have stopped rebalance.")
         
         self.rebalance()
-        self.assertTrue(self.validate_cbas_dataset_items_count(self.cbas_dataset_name, self.travel_sample_docs_count),"Data loss in CBAS.")
+        self.assertTrue(self.validate_cbas_dataset_items_count(self.cbas_dataset_name, self.travel_sample_docs_count), "Data loss in CBAS.")
         
     def test_add_first_cbas_stop_rebalance(self):
         '''
@@ -345,14 +345,14 @@ class CBASClusterManagement(CBASBaseTest):
         Author: Ritesh Agarwal
         '''
         self.load_sample_buckets(bucketName=self.cb_bucket_name, total_items=self.travel_sample_docs_count)
-        self.add_node(self.cbas_node, services=["kv","cbas"],wait_for_rebalance_completion=False)
+        self.add_node(self.cbas_node, services=["kv", "cbas"], wait_for_rebalance_completion=False)
         if self.rest._rebalance_progress_status() == "running":
             self.assertTrue(self.rest.stop_rebalance(), "Failed while stopping rebalance.")
         else:
             self.fail("Rebalance completed before the test could have stopped rebalance.")
         
         self.assertFalse(self.create_bucket_on_cbas(cbas_bucket_name=self.cbas_bucket_name,
-                       cb_bucket_name="travel-sample"),"bucket creation failed on cbas")
+                       cb_bucket_name="travel-sample"), "bucket creation failed on cbas")
 
     def test_add_second_cbas_stop_rebalance(self):
         '''
@@ -369,10 +369,10 @@ class CBASClusterManagement(CBASBaseTest):
         Author: Ritesh Agarwal
         '''
         self.load_sample_buckets(bucketName=self.cb_bucket_name, total_items=self.travel_sample_docs_count)
-        self.add_node(self.cbas_servers[0], services=["kv","cbas"])
+        self.add_node(self.cbas_servers[0], services=["kv", "cbas"])
         self.setup_cbas_bucket_dataset_connect(self.cb_bucket_name, self.travel_sample_docs_count)
         
-        self.add_node(self.cbas_servers[1], services=["kv","cbas"],wait_for_rebalance_completion=False)
+        self.add_node(self.cbas_servers[1], services=["kv", "cbas"], wait_for_rebalance_completion=False)
         if self.rest._rebalance_progress_status() == "running":
             self.assertTrue(self.rest.stop_rebalance(), "Failed while stopping rebalance.")
         else:
@@ -400,13 +400,13 @@ class CBASClusterManagement(CBASBaseTest):
         Author: Ritesh Agarwal
         '''
         self.load_sample_buckets(bucketName=self.cb_bucket_name, total_items=self.travel_sample_docs_count)
-        self.add_node(self.cbas_node, services=["kv","cbas"])
+        self.add_node(self.cbas_node, services=["kv", "cbas"])
         self.setup_cbas_bucket_dataset_connect(self.cb_bucket_name, self.travel_sample_docs_count)
         
         from fts.fts_base import NodeHelper
         NodeHelper.reboot_server(self.cbas_node, self)
         
-        self.assertTrue(self.validate_cbas_dataset_items_count(self.cbas_dataset_name, self.travel_sample_docs_count),"Data loss in CBAS.")
+        self.assertTrue(self.validate_cbas_dataset_items_count(self.cbas_dataset_name, self.travel_sample_docs_count), "Data loss in CBAS.")
 
     def test_restart_cb(self):
         '''
@@ -429,7 +429,7 @@ class CBASClusterManagement(CBASBaseTest):
         NodeHelper.wait_service_started(self.cbas_servers[0])
         
         self.setup_cbas_bucket_dataset_connect(self.cb_bucket_name, self.travel_sample_docs_count)
-        self.assertTrue(self.validate_cbas_dataset_items_count(self.cbas_dataset_name, self.travel_sample_docs_count),"Data loss in CBAS.")
+        self.assertTrue(self.validate_cbas_dataset_items_count(self.cbas_dataset_name, self.travel_sample_docs_count), "Data loss in CBAS.")
 
     def test_run_queries_cbas_shutdown(self):
         '''
@@ -522,4 +522,4 @@ class CBASClusterManagement(CBASBaseTest):
                           cbas_dataset_name=self.cbas_dataset_name), "dataset creation failed on cbas")
         self.assertTrue(self.connect_to_bucket(cbas_bucket_name=self.cbas_bucket_name, cb_bucket_password="password", cb_bucket_username="Administrator"),
                         "Connecting cbas bucket to cb bucket failed")
-        self.assertTrue(self.wait_for_ingestion_complete([self.cbas_dataset_name], self.travel_sample_docs_count),"Data ingestion to cbas couldn't complete in 300 seconds.")
+        self.assertTrue(self.wait_for_ingestion_complete([self.cbas_dataset_name], self.travel_sample_docs_count), "Data ingestion to cbas couldn't complete in 300 seconds.")

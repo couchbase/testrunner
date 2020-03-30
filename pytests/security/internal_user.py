@@ -1,4 +1,4 @@
-from user_base_abc import UserBase
+from .user_base_abc import UserBase
 from remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection
 import logger
@@ -24,7 +24,7 @@ class InternalUser(UserBase):
     '''
     def create_user(self):
         rest = RestConnection(self.host)
-        response = rest.add_set_builtin_user(self.user_id,self.payload)
+        response = rest.add_set_builtin_user(self.user_id, self.payload)
         return response
 
     def delete_user(self):
@@ -46,7 +46,7 @@ class InternalUser(UserBase):
             self.host = host
 
         rest = RestConnection(self.host)
-        response = rest.change_password_builtin_user(self.user_id,self.password)
+        response = rest.change_password_builtin_user(self.user_id, self.password)
 
 
     def user_setup(self,user_id=None,host=None,payload=None):

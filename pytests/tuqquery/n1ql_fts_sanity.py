@@ -1,4 +1,4 @@
-from tuq import QueryTests
+from .tuq import QueryTests
 from membase.api.exception import CBQError
 from lib.membase.api.rest_client import RestConnection
 from pytests.fts.fts_base import CouchbaseCluster
@@ -47,7 +47,7 @@ class N1qlFTSSanityTest(QueryTests):
         total_hits, hits, took, status = rest.run_fts_query(index_name="idx_default_fts",
                                                         query_json=fts_request)
         comparison_results = self._compare_n1ql_results_against_fts(n1ql_results, hits)
-        self.assertEquals(comparison_results, "OK", comparison_results)
+        self.assertEqual(comparison_results, "OK", comparison_results)
         self.log.info("n1ql+fts integration sanity test is passed. Results against n1ql query equal to fts service call results.")
         self.log.info("n1ql results: "+str(n1ql_results))
 
@@ -69,7 +69,7 @@ class N1qlFTSSanityTest(QueryTests):
         while indexed_doc_count < doc_count:
             try:
                 indexed_doc_count = fts_index.get_indexed_doc_count()
-            except KeyError, k:
+            except KeyError as k:
                 continue
 
         return fts_index
@@ -95,7 +95,7 @@ class N1qlFTSSanityTest(QueryTests):
         for index in indexes:
             rest.delete_fts_index(index.name)
 
-    def get_rest_client(self, user , password):
+    def get_rest_client(self, user, password):
         rest = RestConnection(self.cbcluster.get_random_fts_node())
         rest.username = user
         rest.password = password

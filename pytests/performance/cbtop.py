@@ -8,7 +8,7 @@ from pytests.performance.perf_defaults import PerfDefaults
 try:
     from libcbtop.main import main as cbtop_run
 except ImportError:
-    print "unable to import cbtop: see http://pypi.python.org/pypi/cbtop"
+    print("unable to import cbtop: see http://pypi.python.org/pypi/cbtop")
     cbtop_run = None
 
 

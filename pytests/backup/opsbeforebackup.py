@@ -23,9 +23,9 @@ class OpsBeforeBackupTests(BackupBaseTest):
 
         gen_load_mysql = BlobGenerator('mysql', 'mysql-', self.value_size, end=(self.num_items/2-1))
         gen_load_couchdb = BlobGenerator('couchdb', 'couchdb-', self.value_size, start=self.num_items/2, end=self.num_items)
-        gen_update = BlobGenerator('mysql', 'mysql-', self.value_size, end=(self.num_items / 2 - 1))
-        gen_delete = BlobGenerator('couchdb', 'couchdb-', self.value_size, start=self.num_items / 2, end=self.num_items)
-        gen_create = BlobGenerator('mysql', 'mysql-', self.value_size, start=self.num_items / 2 + 1, end=self.num_items *3 / 2)
+        gen_update = BlobGenerator('mysql', 'mysql-', self.value_size, end=(self.num_items // 2 - 1))
+        gen_delete = BlobGenerator('couchdb', 'couchdb-', self.value_size, start=self.num_items // 2, end=self.num_items)
+        gen_create = BlobGenerator('mysql', 'mysql-', self.value_size, start=self.num_items // 2 + 1, end=self.num_items *3 // 2)
         self._load_all_buckets(self.master, gen_load_mysql, "create", 0, 1, self.item_flag, True, batch_size=20000, pause_secs=5, timeout_secs=180)
         self._load_all_buckets(self.master, gen_load_couchdb, "create", 0, 1, self.item_flag, True, batch_size=20000, pause_secs=5, timeout_secs=180)
 

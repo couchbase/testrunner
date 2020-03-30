@@ -1,11 +1,11 @@
 from threading import Thread
 import re
 import copy
-import Queue
+import queue
 from datetime import datetime
 from membase.api.rest_client import RestConnection, Bucket
 from newupgradebasetest import NewUpgradeBaseTest
-from xdcrnewbasetests import XDCRNewBaseTest, NodeHelper
+from .xdcrnewbasetests import XDCRNewBaseTest, NodeHelper
 from TestInput import TestInputSingleton
 from remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection, RestHelper
@@ -17,7 +17,7 @@ from couchbase_helper.document import DesignDocument, View
 from testconstants import STANDARD_BUCKET_PORT
 from security.rbac_base import RbacBase
 
-class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
+class UpgradeTests(NewUpgradeBaseTest, XDCRNewBaseTest):
     def setUp(self):
         super(UpgradeTests, self).setUp()
         self.pause_xdcr_cluster = self.input.param("pause", "")
@@ -29,7 +29,7 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
         self.repl_buckets_from_src = [str(bucket_repl.split(":")[0]) for bucket_repl in self.bucket_topology if bucket_repl.find("1>") != -1 ]
         self.repl_buckets_from_dest = [str(bucket_repl.split(":")[0]) for bucket_repl in self.bucket_topology if bucket_repl.find("<2") != -1 ]
         self._override_clusters_structure(self)
-        self.queue = Queue.Queue()
+        self.queue = queue.Queue()
         self.rep_type = self.input.param("rep_type", "xmem")
         self.upgrade_versions = self.input.param('upgrade_version', '2.5.0-1059-rel')
         self.upgrade_versions = self.upgrade_versions.split(";")
@@ -279,13 +279,13 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
         if self.ddocs_src:
             for bucket_name in self.buckets_on_src:
                 bucket = self.src_cluster.get_bucket_by_name(bucket_name)
-                expected_rows = sum([len(kv_store) for kv_store in bucket.kvs.values()])
+                expected_rows = sum([len(kv_store) for kv_store in list(bucket.kvs.values())])
                 self._verify_ddocs(expected_rows, [bucket_name], self.ddocs_src, self.src_master)
 
         if self.ddocs_dest:
             for bucket_name in self.buckets_on_dest:
                 bucket = self.dest_cluster.get_bucket_by_name(bucket_name)
-                expected_rows = sum([len(kv_store) for kv_store in bucket.kvs.values()])
+                expected_rows = sum([len(kv_store) for kv_store in list(bucket.kvs.values())])
                 self._verify_ddocs(expected_rows, [bucket_name], self.ddocs_dest, self.dest_master)
 
         if float(self.upgrade_versions[0][:3]) == 4.6:
@@ -361,7 +361,7 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
         count = NodeHelper.check_goxdcr_log(master, "Trying to create a ssl over memcached connection", goxdcr_log, timeout=60)
         if count == 0:
             if NodeHelper.check_goxdcr_log(master,
-                    "Get or create ssl over proxy connection",goxdcr_log, timeout=60):
+                    "Get or create ssl over proxy connection", goxdcr_log, timeout=60):
                 self.log.info("SSL still uses ns_proxy connection!")
             return False
         self.log.info("SSL uses memcached after upgrade")
@@ -488,13 +488,13 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
         if self.ddocs_src:
             for bucket_name in self.buckets_on_src:
                 bucket = self.src_cluster.get_bucket_by_name(bucket_name)
-                expected_rows = sum([len(kv_store) for kv_store in bucket.kvs.values()])
+                expected_rows = sum([len(kv_store) for kv_store in list(bucket.kvs.values())])
                 self._verify_ddocs(expected_rows, [bucket_name], self.ddocs_src, self.src_master)
 
         if self.ddocs_dest:
             for bucket_name in self.buckets_on_dest:
                 bucket = self.dest_cluster.get_bucket_by_name(bucket_name)
-                expected_rows = sum([len(kv_store) for kv_store in bucket.kvs.values()])
+                expected_rows = sum([len(kv_store) for kv_store in list(bucket.kvs.values())])
                 self._verify_ddocs(expected_rows, [bucket_name], self.ddocs_dest, self.dest_master)
 
         if float(self.upgrade_versions[0][:3]) == 4.6:
@@ -582,7 +582,7 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
             nodes_to_upgrade.extend(self.src_nodes)
         elif upgrade_seq == "src><dest":
             min_cluster = min(len(self.src_nodes), len(self.dest_nodes))
-            for i in xrange(min_cluster):
+            for i in range(min_cluster):
                 nodes_to_upgrade.append(self.src_nodes[i])
                 nodes_to_upgrade.append(self.dest_nodes[i])
 
@@ -684,7 +684,7 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
         if ddocs_num:
             self.default_view = View(self.default_view_name, None, None)
             for bucket in buckets:
-                for i in xrange(ddocs_num):
+                for i in range(ddocs_num):
                     views = self.make_default_views(self.default_view_name, views_num,
                                                     self.is_dev_ddoc, different_map=True)
                     ddoc = DesignDocument(self.default_view_name + str(i), views)
@@ -735,8 +735,8 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
                             except RebalanceFailedException:
                                 if self._check_del_compatibility:
                                     for node in servers_to_add:
-                                        err, numerr = NodeHelper.check_goxdcr_log(node,"Invalid format specified for DCP_DELETION",\
-                                            log_name="memcached.log",print_matches=True)
+                                        err, numerr = NodeHelper.check_goxdcr_log(node, "Invalid format specified for DCP_DELETION",\
+                                            log_name="memcached.log", print_matches=True)
                                         if numerr >= 1:
                                             self.fail("MB-31141 has been hit!")
                                 else:
@@ -744,13 +744,13 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
                 elif op == 'rebalanceout':
                     if cluster == 'src':
                         self.src_master = self.servers[0]
-                        rebalance_out_candidates = filter(lambda node: node.ip != self.src_master.ip, self.src_nodes)
+                        rebalance_out_candidates = [node for node in self.src_nodes if node.ip != self.src_master.ip]
                         self.cluster.rebalance(self.src_nodes, [], rebalance_out_candidates[:self.nodes_out])
                         for node in rebalance_out_candidates[:self.nodes_out]:
                             self.src_nodes.remove(node)
                     elif cluster == 'dest':
                         self.dest_master = self.servers[self.src_init]
-                        rebalance_out_candidates = filter(lambda node: node.ip != self.dest_master.ip, self.dest_nodes)
+                        rebalance_out_candidates = [node for node in self.dest_nodes if node.ip != self.dest_master.ip]
                         self.cluster.rebalance(self.dest_nodes, [], rebalance_out_candidates[:self.nodes_out])
                         for node in rebalance_out_candidates[:self.nodes_out]:
                             self.dest_nodes.remove(node)
@@ -804,7 +804,7 @@ class UpgradeTests(NewUpgradeBaseTest,XDCRNewBaseTest):
         # workaround for MB-15761
         if float(self.initial_version[:2]) < 3.0 and self._demand_encryption:
             rest = RestConnection(self.dest_master)
-            rest.set_internalSetting('certUseSha1',"true")
+            rest.set_internalSetting('certUseSha1', "true")
             rest.regenerate_cluster_certificate()
         self._join_all_clusters()
 

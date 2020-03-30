@@ -1,4 +1,4 @@
-from gsi_index_partitioning import GSIIndexPartitioningTests
+from .gsi_index_partitioning import GSIIndexPartitioningTests
 from lib.remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection, RestHelper
 from lib.memcached.helper.data_helper import MemcachedClientHelper
@@ -34,7 +34,7 @@ class GSIProjectorTests(GSIIndexPartitioningTests):
                                            server=self.n1ql_node)
             self.n1ql_helper.run_cbq_query(query=create_index_query5,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             self.fail(
                 "index creation failed with error : {0}".format(str(ex)))
@@ -44,7 +44,7 @@ class GSIProjectorTests(GSIIndexPartitioningTests):
             create_index_query2 = "CREATE INDEX idx1 ON standard_bucket%s(body) USING GSI" % bucket_number
             create_index_query3 = "CREATE INDEX idx2 ON standard_bucket%s(age) where age > 30 USING GSI" % bucket_number
             create_index_query4 = "CREATE INDEX idx3 ON standard_bucket{0}(name) USING GSI WITH {{'num_replica': {1}}};".format(
-                bucket_number,self.num_index_replicas)
+                bucket_number, self.num_index_replicas)
             create_index_query5 = "CREATE INDEX pidx1 ON standard_bucket%s(name,age) partition by hash(BASE64(meta().id)) USING GSI" % bucket_number
             try:
                 self.n1ql_helper.run_cbq_query(query=create_index_query,
@@ -57,7 +57,7 @@ class GSIProjectorTests(GSIIndexPartitioningTests):
                                                server=self.n1ql_node)
                 self.n1ql_helper.run_cbq_query(query=create_index_query5,
                                                server=self.n1ql_node)
-            except Exception, ex:
+            except Exception as ex:
                 self.log.info(str(ex))
                 self.fail(
                     "index creation failed with error : {0}".format(str(ex)))
@@ -81,7 +81,7 @@ class GSIProjectorTests(GSIIndexPartitioningTests):
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             self.fail(
                 "index creation failed with error : {0}".format(str(ex)))
@@ -102,7 +102,7 @@ class GSIProjectorTests(GSIIndexPartitioningTests):
                                            server=self.n1ql_node)
             self.n1ql_helper.run_cbq_query(query=create_index_query4,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             self.fail(
                 "index creation failed with error : {0}".format(str(ex)))
@@ -111,7 +111,7 @@ class GSIProjectorTests(GSIIndexPartitioningTests):
             create_index_query2 = "CREATE INDEX idx1 ON standard_bucket%s(body) USING GSI WITH {'defer_build':true}" % bucket_number
             create_index_query3 = "CREATE INDEX idx2 ON standard_bucket%s(age) where age > 30 USING GSI WITH {'defer_build':true}" % bucket_number
             create_index_query4 = "CREATE INDEX idx3 ON standard_bucket{0}(name) USING GSI WITH {{'num_replica': {1}, 'defer_build':true}};".format(
-                bucket_number,self.num_index_replicas)
+                bucket_number, self.num_index_replicas)
             try:
                 self.n1ql_helper.run_cbq_query(query=create_index_query2,
                                                server=self.n1ql_node)
@@ -119,7 +119,7 @@ class GSIProjectorTests(GSIIndexPartitioningTests):
                                                server=self.n1ql_node)
                 self.n1ql_helper.run_cbq_query(query=create_index_query4,
                                                server=self.n1ql_node)
-            except Exception, ex:
+            except Exception as ex:
                 self.log.info(str(ex))
                 self.fail(
                     "index creation failed with error : {0}".format(str(ex)))
@@ -136,7 +136,7 @@ class GSIProjectorTests(GSIIndexPartitioningTests):
             try:
                 self.n1ql_helper.run_cbq_query(query=build_index_query,
                                                server=self.n1ql_node)
-            except Exception, ex:
+            except Exception as ex:
                 self.log.info(str(ex))
                 self.fail(
                     "index creation failed with error : {0}".format(str(ex)))

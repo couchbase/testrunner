@@ -1,9 +1,9 @@
 import httplib2
-import httplib
+import http.client
 import base64
 import json
-import urllib
-import urllib2
+import urllib.request, urllib.parse, urllib.error
+import urllib.request, urllib.error, urllib.parse
 import ssl
 import socket
 import paramiko
@@ -34,8 +34,8 @@ class X509clitest(x509tests):
 
     def setUp(self):
         super(X509clitest, self).setUp()
-        self.ldapUser = self.input.param('ldapuser','Administrator')
-        self.ldapPass = self.input.param('ldappass','password')
+        self.ldapUser = self.input.param('ldapuser', 'Administrator')
+        self.ldapPass = self.input.param('ldappass', 'password')
         self.install_path = x509main()._get_install_path(self.master)
         self.slave_host = ServerInfo('127.0.0.1', 22, 'root', 'couchbase')
 
@@ -62,16 +62,16 @@ class X509clitest(x509tests):
                     options=options, cluster_host="localhost", user=self.ldapUser, password=self.ldapPass)
         return output, error
 
-    def _setup_cluster_nodes(self,host):
+    def _setup_cluster_nodes(self, host):
         x509main(host)._create_inbox_folder(self.master)
         src_chain_file = x509main.CACERTFILEPATH + "long_chain" + host.ip + ".pem"
-        print src_chain_file
+        print(src_chain_file)
         dest_chain_file = self.install_path + x509main.CHAINFILEPATH + "/" + x509main.CHAINCERTFILE
-        print dest_chain_file
+        print(dest_chain_file)
         src_node_key = x509main.CACERTFILEPATH + host.ip + ".key"
-        print src_node_key
+        print(src_node_key)
         dest_node_key = self.install_path + x509main.CHAINFILEPATH + "/" + x509main.NODECAKEYFILE
-        print dest_node_key
+        print(dest_node_key)
         x509main(host)._copy_node_key_chain_cert(host, src_chain_file, dest_chain_file)
         x509main(host)._copy_node_key_chain_cert(host, src_node_key, dest_node_key)
         cli_command = 'ssl-manage'
@@ -81,17 +81,17 @@ class X509clitest(x509tests):
                     options=options, cluster_host="localhost", user=self.ldapUser, password=self.ldapPass)
         return output, error
 
-    def _setup_all_cluster_nodes(self,servers):
+    def _setup_all_cluster_nodes(self, servers):
         for server in servers:
             self._setup_cluster_nodes(server)
 
-    def _read_crt(self,host,path_cert,cert_name):
+    def _read_crt(self, host, path_cert, cert_name):
         shell = RemoteMachineShellConnection(host)
         command = 'cat ' + (path_cert + cert_name)
         output = shell.execute_command(command)
         return output
 
-    def _retrieve_cluster_cert_extended(self,server):
+    def _retrieve_cluster_cert_extended(self, server):
         cli_command = 'ssl-manage'
         options = "--cluster-cert-info --extended"
         remote_client = RemoteMachineShellConnection(server)
@@ -99,7 +99,7 @@ class X509clitest(x509tests):
                     options=options, cluster_host="localhost", user=self.ldapUser, password=self.ldapPass)
         return output, error
 
-    def _download_cluster_cert(self,server):
+    def _download_cluster_cert(self, server):
         cli_command = 'ssl-manage'
         options = "--cluster-cert-info"
         remote_client = RemoteMachineShellConnection(server)
@@ -107,7 +107,7 @@ class X509clitest(x509tests):
                     options=options, cluster_host="localhost", user=self.ldapUser, password=self.ldapPass)
         return output, error
 
-    def _download_node_cert(self,server):
+    def _download_node_cert(self, server):
         cli_command = 'ssl-manage'
         options = "--node-cert-info"
         remote_client = RemoteMachineShellConnection(server)
@@ -118,7 +118,7 @@ class X509clitest(x509tests):
 
     def test_upload_cluster_ca(self):
         output, error = self._upload_cert_cli()
-        self.assertTrue("SUCCESS: Uploaded cluster certificate" in output[0],"Error message is incorrect")
+        self.assertTrue("SUCCESS: Uploaded cluster certificate" in output[0], "Error message is incorrect")
 
     def test_setup_nodes(self):
         self.setup_master()
@@ -132,14 +132,14 @@ class X509clitest(x509tests):
         output, error = self._upload_cert_cli()
         output, error = self._setup_cluster_nodes(self.master)
         status = x509main(self.master)._validate_ssl_login()
-        self.assertEqual(status,200,"Not able to login via SSL code")
+        self.assertEqual(status, 200, "Not able to login via SSL code")
 
     def test_end_to_end_cluster(self):
         output, error = self._upload_cert_cli()
         self._setup_all_cluster_nodes(self.servers)
         for server in self.servers:
             status = x509main(server)._validate_ssl_login()
-            self.assertEqual(status,200,"Not able to login via SSL code")
+            self.assertEqual(status, 200, "Not able to login via SSL code")
 
     def test_end_to_end_after_cluster(self):
         output, error = self._upload_cert_cli()
@@ -148,27 +148,27 @@ class X509clitest(x509tests):
         self.cluster.rebalance(self.servers, servers_in, [])
         for server in self.servers:
             status = x509main(server)._validate_ssl_login()
-            self.assertEqual(status,200,"Not able to login via SSL code")
+            self.assertEqual(status, 200, "Not able to login via SSL code")
 
     def test_retrieve_cluster_cert(self):
         i =0
         output, error = self._upload_cert_cli()
         output, error = self._retrieve_cluster_cert_extended(self.master)
-        self.assertTrue("CN=Root Authority" in output[4],"Mismatch in Subject CN")
-        self.assertTrue("uploaded" in output[5],"Mismatch in type of certifcate")
-        self.assertTrue("Certificate is not signed with cluster CA." in output[9],"Mismatch in warning message")
-        self.assertTrue("ns_1@"+self.master.ip in output[10],"Mismatch in node value")
-        orig_cert = self._read_crt(self.slave_host,x509main.CACERTFILEPATH,x509main.CACERTFILE)
-        self.assertTrue(((output[3])[45:92] in orig_cert[0]),"Certificates dont match")
+        self.assertTrue("CN=Root Authority" in output[4], "Mismatch in Subject CN")
+        self.assertTrue("uploaded" in output[5], "Mismatch in type of certifcate")
+        self.assertTrue("Certificate is not signed with cluster CA." in output[9], "Mismatch in warning message")
+        self.assertTrue("ns_1@"+self.master.ip in output[10], "Mismatch in node value")
+        orig_cert = self._read_crt(self.slave_host, x509main.CACERTFILEPATH, x509main.CACERTFILE)
+        self.assertTrue(((output[3])[45:92] in orig_cert[0]), "Certificates dont match")
 
 
     def test_download_cluster_cert(self):
         output, error = self._upload_cert_cli()
         output, error = self._setup_cluster_nodes(self.master)
         output, error = self._download_cluster_cert(self.master)
-        orig_cert = self._read_crt(self.slave_host,x509main.CACERTFILEPATH,x509main.CACERTFILE)
+        orig_cert = self._read_crt(self.slave_host, x509main.CACERTFILEPATH, x509main.CACERTFILE)
         if output[1] not in orig_cert[0]:
-            self.assertFalse(True,'Downloaded cert and orig cert don"t match')
+            self.assertFalse(True, 'Downloaded cert and orig cert don"t match')
 
 
     def test_node_cert(self):
@@ -176,7 +176,7 @@ class X509clitest(x509tests):
         output, error = self._setup_cluster_nodes(self.master)
         output, error = self._download_node_cert(self.master)
         if "CN="+self.master.ip not in output[3]:
-            self.assertFalse(True,"CN does not match")
-        orig_cert = self._read_crt(self.slave_host,x509main.CACERTFILEPATH,self.master.ip + ".crt")
+            self.assertFalse(True, "CN does not match")
+        orig_cert = self._read_crt(self.slave_host, x509main.CACERTFILEPATH, self.master.ip + ".crt")
         if (output[2])[45:92] not in orig_cert[0]:
-            self.assertFalse(True,"Certificate does not match")
+            self.assertFalse(True, "Certificate does not match")

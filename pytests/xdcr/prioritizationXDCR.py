@@ -4,7 +4,7 @@ import time
 from membase.api.rest_client import RestConnection
 from remote.remote_util import RemoteMachineShellConnection
 
-from xdcrnewbasetests import XDCRNewBaseTest
+from .xdcrnewbasetests import XDCRNewBaseTest
 
 
 class XDCRPrioritization(XDCRNewBaseTest):
@@ -25,11 +25,11 @@ class XDCRPrioritization(XDCRNewBaseTest):
     def print_status(self, bucket, server, param, actual, expected, match):
         if match:
             self.log.info("For replication {0}->{0} "
-                          "from source {1}, actual {2}:{3} matches expected {2}:{4}". \
+                          "on source {1}, actual {2}:{3} matches expected {2}:{4}". \
                           format(bucket, server, param, actual, expected))
         else:
             self.fail("For replication {0}->{0} "
-                      "from source {1}, actual {2}:{3} does NOT match expected {2}:{4}". \
+                      "on source {1}, actual {2}:{3} does NOT match expected {2}:{4}". \
                       format(bucket, server, param, actual, expected))
 
     def __verify_dcp_priority(self, server, expected_priority):
@@ -40,7 +40,7 @@ class XDCRPrioritization(XDCRNewBaseTest):
             repl = rest.get_replication_for_buckets(bucket.name, bucket.name)
             # Taking 10 samples of DCP priority ~5 seconds apart.
             # cbstats takes ~4 secs + 2 seconds sleep
-            for sample in xrange(10):
+            for sample in range(10):
                 output, error = shell.execute_cbstats(bucket, "dcp", print_results=False)
                 for stat in output:
                     if re.search("eq_dcpq:xdcr:dcp_" + repl['id'] + ".*==:priority:", stat):
@@ -60,12 +60,16 @@ class XDCRPrioritization(XDCRNewBaseTest):
         rest = RestConnection(server)
         buckets = rest.get_buckets()
         for bucket in buckets:
-            goxdcr_priority = str(rest.get_xdcr_param(bucket.name, bucket.name, "priority")).lower()
-            expected_priority[bucket.name] = ["low", "medium", "high"]
-            if goxdcr_priority == "low":
-                expected_priority[bucket.name].remove("high")
-            elif goxdcr_priority == "high":
-                expected_priority[bucket.name].remove("low")
+            if self.initial:
+                goxdcr_priority = str(rest.get_xdcr_param(bucket.name, bucket.name, "priority")).lower()
+                # All replications start with 'medium' dcp priority
+                expected_priority[bucket.name] = ["medium"]
+                if goxdcr_priority == "low" or goxdcr_priority == "high":
+                    expected_priority[bucket.name].append(goxdcr_priority)
+                elif goxdcr_priority == "medium":
+                    expected_priority[bucket.name].append("high")
+            else:
+                expected_priority[bucket.name] = "medium"
         self.__verify_dcp_priority(server, expected_priority)
 
     def _verify_goxdcr_priority(self, cluster):

@@ -14,8 +14,9 @@ from testconstants import LINUX_DISTRIBUTION_NAME
 from random import randint
 from datetime import datetime
 import time
-import commands
+import subprocess
 import logger
+import traceback
 log = logger.Logger.get_logger()
 
 class audit:
@@ -115,7 +116,7 @@ class audit:
             log.info ("Value of remotepath is {0} and current Path - {1}".format(tempfile, tmpfile))
             sftp.get('{0}'.format(tempfile), '{0}'.format(tmpfile))
             sftp.close()
-        except Exception, e:
+        except Exception as e:
             log.info (" Value of e is {0}".format(e))
             shell.disconnect()
 
@@ -260,7 +261,7 @@ class audit:
         expectedResult - dictionary of fields and value for event
     '''
     def checkConfig(self, expectedResults):
-        fieldVerification, valueVerification = self.validateEvents(expectedResults,n1ql_audit)
+        fieldVerification, valueVerification = self.validateEvents(expectedResults, n1ql_audit)
         self.assertTrue(fieldVerification, "One of the fields is not matching")
         self.assertTrue(valueVerification, "Values for one of the fields is not matching")
 
@@ -311,23 +312,33 @@ class audit:
         for items in data['modules']:
             for particulars in items['events']:
                 if particulars['id'] == eventNumber:
-                    for key, value in particulars.items():
+                    for key, value in list(particulars.items()):
                         if (key not in fields):
                             defaultFields[key] = value
                         elif key == 'mandatory_fields':
                             for items in particulars['mandatory_fields']:
+                                #log.info("-->items:{},{}".format(type(items),items))
+                                try:
+                                  items = items.decode()
+                                except AttributeError:
+                                  pass
                                 mandatoryFields.append(items)
-                                if (isinstance((particulars['mandatory_fields'][items.encode('utf-8')]), dict)):
+                                if (isinstance((particulars['mandatory_fields'][items]), dict)):
                                     tempStr = items
-                                    for secLevel in particulars['mandatory_fields'][items].items():
+                                    for secLevel in list(particulars['mandatory_fields'][items].items()):
                                         tempStr = tempStr + ":" + secLevel[0]
                                     mandatorySecLevel.append(tempStr)
                         elif key == 'optional_fields':
                             for items in particulars['optional_fields']:
                                 optionalFields.append(items)
-                                if (isinstance((particulars['optional_fields'][items.encode('utf-8')]), dict)):
+                                #log.info("-->items:{},{}".format(type(items),items))
+                                try:
+                                  items = items.decode()
+                                except AttributeError:
+                                  pass
+                                if (isinstance((particulars['optional_fields'][items]), dict)):
                                     tempStr = items
-                                    for secLevel in particulars['optional_fields'][items].items():
+                                    for secLevel in list(particulars['optional_fields'][items].items()):
                                         tempStr = tempStr + ":" + secLevel[0]
                                     optionalSecLevel.append(tempStr)
 
@@ -419,10 +430,10 @@ class audit:
                 if (isinstance(data[items], dict)):
                     for seclevel in data[items]:
                         tempLevel = items + ":" + seclevel
-                        if (tempLevel in expectedResult.keys()):
+                        if (tempLevel in list(expectedResult.keys())):
                             tempValue = expectedResult[tempLevel]
                         else:
-                            if seclevel in expectedResult.keys():
+                            if seclevel in list(expectedResult.keys()):
                                 tempValue = expectedResult[seclevel]
                             else:
                                 ignore = True
@@ -432,7 +443,7 @@ class audit:
                         else:
                             if not ignore:
                                 log.info('expected values - {0} -- actual value -- {1} - eventName - {2}'
-                                         .format(tempValue,data[items][seclevel], seclevel))
+                                         .format(tempValue, data[items][seclevel], seclevel))
                             if data[items][seclevel] != tempValue:
                                 log.info('Mis-Match Found expected values - {0} -- actual value -- {1} - eventName - {2}'
                                          .format(tempValue, data[items][seclevel], seclevel))
@@ -443,15 +454,15 @@ class audit:
                     else:
                         if items == "requestId" or items == 'clientContextId':
                             expectedResult[items] = data[items]
-                        log.info ('expected values - {0} -- actual value -- {1} - eventName - {2}'.format(expectedResult[items.encode('utf-8')], data[items.encode('utf-8')], items))
+                        log.info ('expected values - {0} -- actual value -- {1} - eventName - {2}'.format(expectedResult[items], data[items], items))
                         if (items == 'peername'):
                             if (expectedResult[items] not in data[items]):
                                 flag = False
-                                log.info ('Mis - Match Found expected values - {0} -- actual value -- {1} - eventName - {2}'.format(expectedResult[items.encode('utf-8')], data[items.encode('utf-8')], items))
+                                log.info ('Mis - Match Found expected values - {0} -- actual value -- {1} - eventName - {2}'.format(expectedResult[items], data[items], items))
                         else:
                             if (data[items] != expectedResult[items]):
                                 flag = False
-                                log.info ('Mis - Match Found expected values - {0} -- actual value -- {1} - eventName - {2}'.format(expectedResult[items.encode('utf-8')], data[items.encode('utf-8')], items))
+                                log.info ('Mis - Match Found expected values - {0} -- actual value -- {1} - eventName - {2}'.format(expectedResult[items], data[items], items))
             ignore = False
         return flag
 
@@ -481,6 +492,7 @@ class audit:
                 return False
                 #Compare time and minutes, will fail if time is 56 mins or above
             else:
+                #log.info("-->{},{},{},{}".format(type(hourMin),hourMin,type(currHourMin),currHourMin))
                 if ((int((hourMin.split(":"))[0])) != (int((currHourMin[0][0].split(":"))[0]))) or ((int((hourMin.split(":"))[1]) + 10) < (int((currHourMin[0][0].split(":"))[1]))):
                     log.info ("Mis-match in values for timestamp - time")
                     return False
@@ -490,8 +502,9 @@ class audit:
                         log.info ("Mis-match in value of timezone")
                         return False
 
-        except Exception, e:
-            log.info ("Value of execption is {0}".format(e))
+        except Exception as e:
+            log.info ("Value of exception is {0}".format(e))
+            traceback.print_exc()
             return False
 
 
@@ -508,7 +521,7 @@ class audit:
         actualEvent = self.returnEvent(self.eventID)
         fieldVerification = self.validateFieldActualLog(actualEvent, self.eventID, 'ns_server', self.defaultFields, mandatoryFields, \
                                                     mandatorySecLevel, optionalFields, optionalSecLevel, self.method, n1ql_audit)
-        expectedResults = dict(defaultField.items() + expectedResults.items())
+        expectedResults = dict(list(defaultField.items()) + list(expectedResults.items()))
         valueVerification = self.validateData(actualEvent, expectedResults)
         return fieldVerification, valueVerification
 

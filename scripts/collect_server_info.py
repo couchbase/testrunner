@@ -14,7 +14,7 @@ import TestInput
 
 
 def usage(error=None):
-    print """\
+    print("""\
 Syntax: collect_server_info.py [options]
 
 Options
@@ -27,7 +27,7 @@ Available keys:
 
 Example:
  collect_server_info.py -i cluster.ini -p path=/tmp/nosql
-"""
+""")
     sys.exit(error)
 
 def time_stamp():
@@ -53,10 +53,10 @@ class couch_dbinfo_Runner(object):
         if not self.local:
             from lib.remote.remote_util import RemoteMachineShellConnection
             remote_client = RemoteMachineShellConnection(self.server)
-            print "Collecting dbinfo from %s\n" % self.server.ip
+            print("Collecting dbinfo from %s\n" % self.server.ip)
             output, error = remote_client.execute_couch_dbinfo(file_name)
-            print "\n".join(output)
-            print "\n".join(error)
+            print("\n".join(output))
+            print("\n".join(error))
 
             user_path = "/home/"
             if remote_client.info.distribution_type.lower() == 'mac':
@@ -72,7 +72,7 @@ class couch_dbinfo_Runner(object):
             status = remote_client.get_file(remote_path, file_name,
                                         "%s/%s" % (self.path, file_name))
             if status:
-                print "Downloading dbinfo logs from %s" % self.server.ip
+                print("Downloading dbinfo logs from %s" % self.server.ip)
             else:
                 raise Exception("Fail to download db logs from %s"
                                                      % self.server.ip)
@@ -92,9 +92,9 @@ class cbcollectRunner(object):
         if not self.local:
             from lib.remote.remote_util import RemoteMachineShellConnection
             remote_client = RemoteMachineShellConnection(self.server)
-            print "Collecting logs from %s\n" % self.server.ip
+            print("Collecting logs from %s\n" % self.server.ip)
             output, error = remote_client.execute_cbcollect_info(file_name)
-            print "\n".join(error)
+            print("\n".join(error))
 
             user_path = "/home/"
             if remote_client.info.distribution_type.lower() == 'mac':
@@ -110,7 +110,7 @@ class cbcollectRunner(object):
             status = remote_client.get_file(remote_path, file_name,
                                         "%s/%s" % (self.path, file_name))
             if status:
-                print "Downloading zipped logs from %s" % self.server.ip
+                print("Downloading zipped logs from %s" % self.server.ip)
             else:
                 raise Exception("Fail to download zipped logs from %s"
                                                      % self.server.ip)
@@ -126,10 +126,10 @@ def main():
                 usage()
             elif o == "-l":
                 if platform.system() == "Windows":
-                    print "*** windows os ***"
+                    print("*** windows os ***")
                     local = True
                 else:
-                    print "This option '-l' only works for local windows."
+                    print("This option '-l' only works for local windows.")
                     sys.exit()
         if not local:
             input = TestInput.TestInputParser.get_test_input(sys.argv)
@@ -137,7 +137,7 @@ def main():
                 usage("ERROR: no servers specified. Please use the -i parameter.")
     except IndexError:
         usage()
-    except getopt.GetoptError, error:
+    except getopt.GetoptError as error:
         usage("ERROR: " + str(error))
 
     if not local:
@@ -152,10 +152,10 @@ def main():
             while remote_thread.isAlive() and run_time < 1200:
                 time.sleep(15)
                 run_time += 15
-                print "Waiting for another 15 seconds (time-out after 20 min)"
+                print("Waiting for another 15 seconds (time-out after 20 min)")
             if run_time == 1200:
-                print "cbcollect_info hung on this node. Jumping to next node"
-            print "collect info done"
+                print("cbcollect_info hung on this node. Jumping to next node")
+            print("collect info done")
 
         for remote_thread in remote_threads:
             remote_thread.join(120)
@@ -166,9 +166,9 @@ def main():
         cbcollect_command = WIN_COUCHBASE_BIN_PATH_RAW + "cbcollect_info.exe"
         result = subprocess.check_call([cbcollect_command, file_name])
         if result == 0:
-            print "Log file name is \n %s" % file_name
+            print("Log file name is \n %s" % file_name)
         else:
-            print "Failed to collect log"
+            print("Failed to collect log")
 
 if __name__ == "__main__":
     main()

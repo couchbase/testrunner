@@ -47,8 +47,14 @@ class SpatialViewsTests(BaseTestCase):
                                      self.non_spatial_views_per_ddoc)
             self.create_ddocs(ddocs)
 
+    def suite_setUp(self):
+        pass
+
     def tearDown(self):
         super(SpatialViewsTests, self).tearDown()
+
+    def suite_tearDown(self):
+        pass
 
     def test_add_spatial_views(self):
         ddocs =  self.make_ddocs(self.num_ddoc, self.views_per_ddoc, self.non_spatial_views_per_ddoc)
@@ -66,7 +72,7 @@ class SpatialViewsTests(BaseTestCase):
         name_lenght = self.input.param('name_lenght', None)
         view_name = self.input.param('view_name', self.default_view_name)
         if name_lenght:
-            view_name = ''.join(random.choice(string.lowercase) for x in xrange(name_lenght))
+            view_name = ''.join(random.choice(string.ascii_lowercase) for x in range(name_lenght))
         not_compilable = self.input.param('not_compilable', False)
         error = self.input.param('error', None)
         map_fn = (self.default_map, 'function (doc) {emit(doc.geometry, doc.age);')[not_compilable]
@@ -91,7 +97,7 @@ class SpatialViewsTests(BaseTestCase):
         num_views_per_ddoc = 10
         create_threads = []
         try:
-            for i in xrange(num_views_per_ddoc):
+            for i in range(num_views_per_ddoc):
                 ddoc = DesignDocument(self.default_ddoc_name, [], spatial_views=[
                                       View(self.default_view_name + (str(i), "")[same_names],
                                            self.default_map,
@@ -117,7 +123,7 @@ class SpatialViewsTests(BaseTestCase):
         num_views_per_ddoc = 10
         create_threads = []
         ddocs = []
-        for i in xrange(num_views_per_ddoc):
+        for i in range(num_views_per_ddoc):
             ddoc = DesignDocument(self.default_ddoc_name + str(i), [], spatial_views=[
                                   View(self.default_view_name + (str(i), "")[same_names],
                                        self.default_map,
@@ -260,14 +266,14 @@ class SpatialViewsTests(BaseTestCase):
 
     def make_ddocs(self, ddocs_num, views_per_ddoc, non_spatial_views_per_ddoc):
         ddocs = []
-        for i in xrange(ddocs_num):
+        for i in range(ddocs_num):
             views = []
-            for k in xrange(views_per_ddoc):
+            for k in range(views_per_ddoc):
                 views.append(View(self.default_view_name + str(k), self.default_map,
                                   dev_view=self.use_dev_views, is_spatial=True))
             non_spatial_views = []
             if non_spatial_views_per_ddoc:
-                for k in xrange(non_spatial_views_per_ddoc):
+                for k in range(non_spatial_views_per_ddoc):
                     non_spatial_views.append(View(self.default_view_name + str(k), 'function (doc) { emit(null, doc);}',
                                       dev_view=self.use_dev_views))
             ddocs.append(DesignDocument(self.default_ddoc_name + str(i), non_spatial_views, spatial_views=views))
@@ -341,8 +347,14 @@ class SpatialViewQueriesTests(BaseTestCase):
         self.ddocs = self.helper.create_default_views(
                                         is_one_ddoc=self.all_view_one_ddoc)
 
+    def suite_setUp(self):
+        pass
+
     def tearDown(self):
         super(SpatialViewQueriesTests, self).tearDown()
+
+    def suite_tearDown(self):
+        pass
 
     def test_spatial_view_queries(self):
         error = self.input.param('error', None)
@@ -360,7 +372,7 @@ class SpatialViewQueriesTests(BaseTestCase):
     def test_add_spatial_view_queries_threads(self):
         diff_nodes = self.input.param("diff-nodes", False)
         query_threads = []
-        for i in xrange(len(self.servers)):
+        for i in range(len(self.servers)):
             node = (self.master, self.servers[i])[diff_nodes]
             self.query_and_verify_result(self.docs, self.params, node=node)
             q_thread = Thread(target=self.query_and_verify_result,
@@ -489,10 +501,14 @@ class SpatialViewTests(BaseTestCase):
 
         self.helper.setup_cluster()
 
+    def suite_setUp(self):
+        pass
 
     def tearDown(self):
         super(SpatialViewTests, self).tearDown()
 
+    def suite_tearDown(self):
+        pass
 
     def test_create_x_design_docs(self):
         num_design_docs = self.helper.input.param("num-design-docs")
@@ -528,13 +544,9 @@ class SpatialViewTests(BaseTestCase):
             # Verify that the function was really stored
             response, meta = rest.get_spatial(bucket, design_name)
             self.assertTrue(response)
-            self.assertEquals(meta["id"],
+            self.assertEqual(meta["id"],
                               "_design/{0}".format(design_name))
-            self.assertEquals(
-                response["spatial"][design_name].encode("ascii",
-                                                                "ignore"),
-                fun)
-
+            self.assertEqual(response["spatial"][design_name], fun)
 
     def test_insert_x_docs(self):
         num_docs = self.helper.input.param("num-docs")
@@ -713,7 +725,7 @@ class SpatialViewTests(BaseTestCase):
             rows = results["rows"]
             for row in rows:
                 if "updated" in row["value"]:
-                    keys.append(row["id"].encode("ascii", "ignore"))
+                    keys.append(row["id"])
             self.log.info("{0} documents to updated".format(len(keys)))
         return keys
 
@@ -745,8 +757,8 @@ class SpatialViewTests(BaseTestCase):
 
         # Create an index that emits all documents
         self.helper.create_index_fun(design_name)
-        keys_b = self.helper.insert_docs(num_docs / 3, "bbb")
-        keys_c = self.helper.insert_docs(num_docs - (num_docs / 3), "ccc")
+        keys_b = self.helper.insert_docs(num_docs // 3, "bbb")
+        keys_c = self.helper.insert_docs(num_docs - (num_docs // 3), "ccc")
         self.helper.query_index_for_verification(design_name, keys_b + keys_c)
 
         # Update index to only a subset of the documents

@@ -6,7 +6,7 @@ memcached tasks
 
 """
 
-from __future__ import absolute_import
+
 from app.celery import celery
 from celery import Task
 import random
@@ -52,7 +52,7 @@ class PersistedCB(Task):
     def couchbaseClient(self, bucket = "default", password = ""):
         #if bucket not in self.clientMap or self._stale_count >= 100:
         if bucket not in self.clientMap:
-            addr = self._hosts[random.randint(0,len(self._hosts) - 1)].split(':')
+            addr = self._hosts[random.randint(0, len(self._hosts) - 1)].split(':')
             host = addr[0]
             port = 8091
             if len(addr) > 1:
@@ -211,7 +211,7 @@ def getDirectMC(key, ip, port = 8091, bucket = "default", password = ""):
     # get vbucket map
     rest = create_rest(ip, port)
     vbuckets = rest.get_vbuckets(bucket)
-    vbId = (((zlib.crc32(key)) >> 16) & 0x7fff) & (len(vbuckets) - 1)
+    vbId = (((zlib.crc32(key.encode())) >> 16) & 0x7fff) & (len(vbuckets) - 1)
 
     # find vbucket responsible to this key and mapping host
     if vbuckets is not None:
@@ -229,8 +229,8 @@ def decodeMajgicStrings(template):
 
     kv = template["kv"]
 
-    for key, value in kv.iteritems():
-        if type(value)==str and value.startswith("@"):
+    for key, value in kv.items():
+        if isinstance(value, str) and value.startswith("@"):
             #If string starts with "@", assume that it is a function call to self written generator
             value = value[1:]
             _c1_=0
@@ -239,7 +239,7 @@ def decodeMajgicStrings(template):
             _name_module = value_array[0]
             _name_class = value_array[1]
             j = len(value_array[2])
-            for i in range(0,len(value_array[2])): #0: module name, 1: class name, 2: function name + argument if any
+            for i in range(0, len(value_array[2])): #0: module name, 1: class name, 2: function name + argument if any
                 if value_array[2][i] == "(":
                     j = i
                     break
@@ -258,13 +258,13 @@ def decodeMajgicStrings(template):
             else:
                 _a_ = getattr(the_class, _name_method)(_name_arg)
         else:
-            if type(value)==list:
+            if isinstance(value, list):
                 _a_ = value
-                for i in range(0,len(_a_)):
+                for i in range(0, len(_a_)):
                     _a_[i] = _int_float_str_gen(_a_[i])
-            elif type(value)==dict:
+            elif isinstance(value, dict):
                 _a_ = value
-                for _k,_v in _a_.iteritems():
+                for _k, _v in _a_.items():
                     _a_[_k] = _int_float_str_gen(_v)
             elif value.startswith("$lis"):
                 _val = value[4:]
@@ -272,34 +272,34 @@ def decodeMajgicStrings(template):
                 if _val=="":
                    _n_ = 5
                 else:
-                    for i in range(0,len(_val)):
+                    for i in range(0, len(_val)):
                         if _val[i].isdigit():
                             _n_ = _n_*10 + int(_val[i])
                         else:
                             break
                 _a_ = []
-                for i in range(0,_n_):
-                    _a_.append(random.randint(0,100))
+                for i in range(0, _n_):
+                    _a_.append(random.randint(0, 100))
             elif value.startswith("$int"):
                 _val = value[4:]
                 _n_ = 0
                 if _val=="":
                    _n_ = 5
                 else:
-                    for i in range(0,len(_val)):
+                    for i in range(0, len(_val)):
                         if _val[i].isdigit():
                             _n_ = _n_*10 + int(_val[i])
                         else:
                             break
                 _x_ = pow(10, _n_)
-                _a_ = random.randint(0,1000000) % _x_
+                _a_ = random.randint(0, 1000000) % _x_
             elif value.startswith("$flo"):
                 _val = value[4:]
                 _n_ = 0
                 if _val=="":
                    _n_ = 5
                 else:
-                    for i in range(0,len(_val)):
+                    for i in range(0, len(_val)):
                         if _val[i].isdigit():
                             _n_ = _n_*10 + int(_val[i])
                         else:
@@ -307,7 +307,7 @@ def decodeMajgicStrings(template):
                 _x_ = pow(10, _n_)
                 _a_ = random.random() % _x_
             elif value.startswith("$boo"):
-                _n_ = random.randint(0,10000)
+                _n_ = random.randint(0, 10000)
                 if _n_%2 == 0:
                     _a_ = True
                 else:
@@ -318,15 +318,15 @@ def decodeMajgicStrings(template):
                 if _val=="":
                    _n_ = 5
                 else:
-                    for i in range(0,len(_val)):
+                    for i in range(0, len(_val)):
                         if _val[i].isdigit():
                             _n_ = _n_*10 + int(_val[i])
                         else:
                             break
                 _a_ = {}
-                for i in range(0,_n_):
+                for i in range(0, _n_):
                     _j_ = "a{0}".format(i)
-                    _a_[_j_] = random.randint(0,1000)
+                    _a_[_j_] = random.randint(0, 1000)
             elif "$str" in value:
                 _x_ = value.find("$str")
                 _val = value[_x_+4:]
@@ -335,22 +335,22 @@ def decodeMajgicStrings(template):
                 if _val=="":
                     _n_ = 5
                 else:
-                    for i in range(0,len(_val)):
+                    for i in range(0, len(_val)):
                         if _val[i].isdigit():
                             _n_ = _n_*10 + int(_val[i])
                         else:
                             break
                     if _val[0].isdigit():
-                        value = value.replace(str(_n_),'')
+                        value = value.replace(str(_n_), '')
                 _out_ = _random_string(_n_)
-                _a_ = value.replace("$str".format(_n_),_out_)
+                _a_ = value.replace("$str".format(_n_), _out_)
             else:
                 _a_ = value
 
         kv.update({key : _a_})
 
     if template["size"] is not None:
-        size_idx = random.randint(0,len(template["size"]) - 1)
+        size_idx = random.randint(0, len(template["size"]) - 1)
         size = int(template['size'][size_idx])
 
         kv_size = sys.getsizeof(kv)/8
@@ -364,44 +364,44 @@ def _random_string(length):
     return ''.join(random.choice(string.ascii_uppercase + string.digits) for x in range(length))
 
 def _int_float_str_gen(_str):
-    if type(_str)==unicode:
+    if isinstance(_str, str):
         _str = str(_str)
-    if type(_str)==str and _str.startswith("$int"):
+    if isinstance(_str, str) and _str.startswith("$int"):
         _val = _str[4:]
         _n_ = 0
         if _val=="":
             _n_ = 5
         else:
-            for k in range(0,len(_val)):
+            for k in range(0, len(_val)):
                 if _val[k].isdigit():
                     _n_ = _n_*10 + int(_val[k])
                 else:
                     break
         _x_ = pow(10, _n_)
-        _temp_ = _str.replace("$int{0}".format(_n_),str(random.randint(0,1000000) % _x_))
+        _temp_ = _str.replace("$int{0}".format(_n_), str(random.randint(0, 1000000) % _x_))
         return int(_temp_)
-    elif type(_str)==str and _str.startswith("$flo"):
+    elif isinstance(_str, str) and _str.startswith("$flo"):
         _val = _str[4:]
         _n_ = 0
         if _val=="":
             _n_ = 5
         else:
-            for k in range(0,len(_val)):
+            for k in range(0, len(_val)):
                 if _val[k].isdigit():
                     _n_ = _n_*10 + int(_val[k])
                 else:
                     break
         _x_ = pow(10, _n_)
-        _temp_ = _str.replace("$flo{0}".format(_n_),str((random.random()*1000000) % _x_))
+        _temp_ = _str.replace("$flo{0}".format(_n_), str((random.random()*1000000) % _x_))
         return float(_temp_)
-    elif type(_str)==str and _str.startswith("$str"):
+    elif isinstance(_str, str) and _str.startswith("$str"):
         _val = _str[4:]
         _n_ = 0
         j = 0
         if _val=="":
             _n_ = 5
         else:
-            for k in range(0,len(_val)):
+            for k in range(0, len(_val)):
                 if _val[k].isdigit():
                     _n_ = _n_*10 + int(_val[k])
                 else:

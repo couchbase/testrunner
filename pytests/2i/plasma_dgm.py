@@ -5,7 +5,7 @@ from couchbase_helper.query_definitions import QueryDefinition
 from couchbase_helper.tuq_generators import TuqGenerators
 from membase.api.rest_client import RestConnection
 from membase.helper.bucket_helper import BucketOperationHelper
-from base_2i import BaseSecondaryIndexingTests
+from .base_2i import BaseSecondaryIndexingTests
 
 log = logging.getLogger(__name__)
 
@@ -258,8 +258,8 @@ class SecondaryIndexDGMTests(BaseSecondaryIndexingTests):
             for node in indexer_nodes:
                 indexer_rest = RestConnection(node)
                 content = indexer_rest.get_index_storage_stats()
-                for index in content.values():
-                    for stats in index.values():
+                for index in list(content.values()):
+                    for stats in list(index.values()):
                         if stats["MainStore"]["resident_ratio"] <= (resident_ratio+.05) \
                             and stats["MainStore"]["resident_ratio"] >= (resident_ratio-.05):
                             return True
@@ -321,11 +321,11 @@ class SecondaryIndexDGMTests(BaseSecondaryIndexingTests):
             index_where_clause=" join_yr IS NOT NULL "))
         cache_misses = {}
         for bucket in self.buckets:
-            if bucket.name not in cache_misses.keys():
+            if bucket.name not in list(cache_misses.keys()):
                 cache_misses[bucket.name] = {}
             for query_definition in self.query_definitions:
                 content = self.rest.get_index_storage_stats()
-                if query_definition.index_name not in cache_misses[bucket.name].keys():
+                if query_definition.index_name not in list(cache_misses[bucket.name].keys()):
                     cache_misses[bucket.name][query_definition.index_name] = \
                         content[bucket.name][query_definition.index_name]["MainStore"]["cache_misses"]
         self.multi_query_using_index(query_definitions=query_definitions)
@@ -360,8 +360,8 @@ class SecondaryIndexDGMTests(BaseSecondaryIndexingTests):
         for node in indexer_nodes:
             indexer_rest = RestConnection(node)
             content = indexer_rest.get_index_storage_stats()
-            for index in content.values():
-                for stats in index.values():
+            for index in list(content.values()):
+                for stats in list(index.values()):
                     if stats["MainStore"]["resident_ratio"] >= 1.0:
                         return False
         return True

@@ -4,7 +4,7 @@ from membase.api.rest_client import RestConnection, RestHelper
 from membase.helper.rebalance_helper import RebalanceHelper
 from remote.remote_util import RemoteMachineShellConnection
 from remote.remote_util import RemoteUtilHelper
-from failoverbasetests import FailoverBaseTest
+from .failoverbasetests import FailoverBaseTest
 
 GRACEFUL = "graceful"
 
@@ -122,7 +122,7 @@ class FailoverTests(FailoverBaseTest):
             # Validate seq_no snap_start/stop values
             self.check_snap_start_corruption()
 
-        # Add back + rebalance / only rebalance with verification
+        # Add back + rebalance // only rebalance with verification
         if not self.gracefulFailoverFail and self.runRebalanceAfterFailover:
             if self.add_back_flag:
                 self.run_add_back_operation_and_verify(
@@ -369,7 +369,7 @@ class FailoverTests(FailoverBaseTest):
                     msg = "graceful failover failed for nodes {0}".format(node.id)
                     self.log.info("chosen: {0} get_failover_count: {1}".format(len(chosen),
                                                                                self.get_failover_count()))
-                    self.assertEquals(len(chosen), self.get_failover_count(), msg=msg)
+                    self.assertEqual(len(chosen), self.get_failover_count(), msg=msg)
                 else:
                     msg = "rebalance failed while removing failover nodes {0}".format(node.id)
                     self.assertTrue(self.rest.monitorRebalance(stop_if_loop=True), msg=msg)
@@ -486,7 +486,7 @@ class FailoverTests(FailoverBaseTest):
         try:
             for task in mutation_ops_tasks:
                 task.result()
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(ex)
 
     def run_mutation_operations_after_failover(self):
@@ -503,7 +503,7 @@ class FailoverTests(FailoverBaseTest):
         try:
             for task in mutation_ops_tasks:
                 task.result()
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(ex)
 
     def define_maps_during_failover(self, recoveryType=[]):
@@ -576,7 +576,7 @@ class FailoverTests(FailoverBaseTest):
             views += temp
             tasks += temp_tasks
 
-        timeout = max(self.wait_timeout * 4, len(self.buckets) * self.wait_timeout * self.num_items / 50000)
+        timeout = max(self.wait_timeout * 4, len(self.buckets) * self.wait_timeout * self.num_items // 50000)
 
         for task in tasks:
             task.result(self.wait_timeout * 20)
@@ -679,7 +679,7 @@ class FailoverTests(FailoverBaseTest):
     def victim_node_operations(self, node=None):
         if self.stopGracefulFailover:
             self.log.info(" Stopping Graceful Failover ")
-            stopped = self.rest.stop_rebalance(wait_timeout=self.wait_timeout / 3)
+            stopped = self.rest.stop_rebalance(wait_timeout=self.wait_timeout // 3)
             self.assertTrue(stopped, msg="unable to stop rebalance")
         if self.killNodes:
             self.log.info(" Killing Memcached ")

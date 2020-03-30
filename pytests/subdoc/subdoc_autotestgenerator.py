@@ -1,4 +1,4 @@
-import Queue
+import queue
 import copy
 import json
 import threading
@@ -10,7 +10,7 @@ from memcached.helper.data_helper import VBucketAwareMemcached
 
 from lib.couchbase_helper.random_gen import RandomDataGenerator
 from lib.couchbase_helper.subdoc_helper import SubdocHelper
-from subdoc_base import SubdocBaseTest
+from .subdoc_base import SubdocBaseTest
 
 
 class SubdocAutoTestGenerator(SubdocBaseTest):
@@ -52,7 +52,7 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
         self.set(self.client, data_key, json_document)
         pairs = {}
         self.subdoc_gen_helper.find_pairs(json_document, "", pairs)
-        for path in pairs.keys():
+        for path in list(pairs.keys()):
             data = self.get(self.client, key=data_key, path=path)
             if data != pairs[path]:
                 error_result[path] = "expected {0}, actual = {1}".format(pairs[path], data)
@@ -68,7 +68,7 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
         self.set(self.client, data_key, json_document)
         pairs = {}
         self.subdoc_gen_helper.find_pairs(json_document, "", pairs)
-        for path in pairs.keys():
+        for path in list(pairs.keys()):
             try:
                 self.exists(self.client, data_key, path, xattr=self.xattr)
             except Exception as ex:
@@ -85,8 +85,8 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
 
     def test_multi_seq_mutations(self):
         self.verify_result = self.input.param("verify_result", False)
-        queue = Queue.Queue()
-        number_of_times = (self.number_of_documents / self.concurrent_threads)
+        queue = queue.Queue()
+        number_of_times = (self.number_of_documents // self.concurrent_threads)
         process_list = []
         number_of_buckets = len(self.buckets)
         for x in range(self.concurrent_threads):
@@ -125,7 +125,7 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
                     if not self.use_sdk_client:
                         data_value = json.dumps(data_value)
                     function(client, data_key, operation["new_path_impacted_after_mutation_operation"], data_value)
-                except Exception, ex:
+                except Exception as ex:
                     queue.put("bucket {0}, error {1}".format(bucket.name, str(ex)))
             data = self.get_all(client, data_key)
             error_result = None
@@ -163,7 +163,7 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
             force_operation_type=self.force_operation_type)
         # RUN CONCURRENT THREADS
         thread_list = []
-        result_queue = Queue.Queue()
+        result_queue = queue.Queue()
         self.log.info(" number of operations {0}".format(len(operations)))
         for operation in operations:
             client = self.direct_client(self.master, bucket)
@@ -181,7 +181,7 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
         pairs = {}
         error_result = {}
         self.subdoc_gen_helper.find_pairs(json_document, "", pairs)
-        for path in pairs.keys():
+        for path in list(pairs.keys()):
             data = self.get(client, document_key, path)
             if data != pairs[path]:
                 error_result[path] = "expected {0}, actual = {1}".format(pairs[path], data)
@@ -194,7 +194,7 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
             if not self.use_sdk_client:
                 data_value = json.dumps(data_value)
             function(client, document_key, operation["new_path_impacted_after_mutation_operation"], data_value)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             result_queue.put({"error": str(ex), "operation_type": operation["subdoc_api_function_applied"]})
 
@@ -205,8 +205,8 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
         self.number_of_documents = self.input.param("number_of_documents", 10)
         self.number_of_operations = self.input.param("number_of_operations", 10)
         self.concurrent_threads = self.input.param("concurrent_threads", 10)
-        error_queue = Queue.Queue()
-        document_info_queue = Queue.Queue()
+        error_queue = queue.Queue()
+        document_info_queue = queue.Queue()
         thread_list = []
         # RUN INPUT FILE READ THREAD
         document_push = threading.Thread(target=self.push_document_info,
@@ -241,8 +241,8 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
         self.number_of_documents = self.input.param("number_of_documents", 10)
         self.number_of_operations = self.input.param("number_of_operations", 10)
         self.concurrent_threads = self.input.param("concurrent_threads", 10)
-        error_queue = Queue.Queue()
-        document_info_queue = Queue.Queue()
+        error_queue = queue.Queue()
+        document_info_queue = queue.Queue()
         thread_list = []
         # RUN INPUT FILE READ THREAD
         document_push = threading.Thread(target=self.push_document_info,
@@ -342,7 +342,7 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
                         data_value = json.dumps(operation["data_value"])
                     function(client, document_key, operation["new_path_impacted_after_mutation_operation"], data_value)
                     operation_index += 1
-                except Exception, ex:
+                except Exception as ex:
                     return False, operation
         else:
             logic, result = self.run_concurrent_mutation_operations(document_key, bucket, seed, json_document,
@@ -364,12 +364,12 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
             else:
                 pairs = {}
                 self.subdoc_gen_helper.find_pairs(json_document, "", pairs)
-                for path in pairs.keys():
+                for path in list(pairs.keys()):
                     # self.log.info(" Analyzing path {0}".format(path))
                     check_data = True
                     try:
                         data = self.get(client, document_key, path)
-                    except Exception, ex:
+                    except Exception as ex:
                         check_data = False
                         error_result[path] = "expected {0}, actual = {1}".format(pairs[path], str(ex))
                         self.print_operations(operations)
@@ -391,12 +391,12 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
         for operation in operations:
             index += 1
             self.log.info(" +++++++++++++++++++++++++ mutation # {0} +++++++++++++++++++++++++ ".format(index))
-            for k, v in operation.iteritems():
+            for k, v in operation.items():
                 self.log.info("{0} :: {1}".format(k, v))
 
     def run_concurrent_mutation_operations(self, document_key, bucket, seed, json_document, number_of_operations,
                                            mutation_operation_type, force_operation_type):
-        result_queue = Queue.Queue()
+        result_queue = queue.Queue()
         operations = self.subdoc_gen_helper.build_concurrent_operations(
             json_document,
             max_number_operations=number_of_operations,
@@ -429,7 +429,7 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
                 for x in range(self.total_writer_threads):
                     client = VBucketAwareMemcached(RestConnection(self.master), bucket)
                     t = Process(target=self.run_populate_data_per_bucket, args=(
-                    client, bucket, json_document, (self.prepopulate_item_count / self.total_writer_threads), x))
+                    client, bucket, json_document, (self.prepopulate_item_count // self.total_writer_threads), x))
                     t.start()
                     self.load_thread_list.append(t)
         for t in self.load_thread_list:
@@ -448,7 +448,7 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
                 for x in range(self.total_writer_threads):
                     client = VBucketAwareMemcached(RestConnection(self.master), bucket)
                     t = Process(target=self.run_populate_data_per_bucket, args=(
-                    client, bucket, json_document, (self.prepopulate_item_count / self.total_writer_threads), x))
+                    client, bucket, json_document, (self.prepopulate_item_count // self.total_writer_threads), x))
                     t.start()
                     self.load_thread_list.append(t)
 
@@ -457,7 +457,7 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
             key = str(prefix) + "_subdoc_" + str(x)
             try:
                 client.set(key, 0, 0, json.dumps(json_document))
-            except Exception, ex:
+            except Exception as ex:
                 self.log.info(ex)
 
     def _dump_data(self, filename, queue):
@@ -472,11 +472,11 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
     def run_verification(self, bucket, kv_store={}):
         client = self.direct_client(self.master, bucket)
         error_result = {}
-        for document_key in kv_store.keys():
+        for document_key in list(kv_store.keys()):
             pairs = {}
             json_document = kv_store[document_key]
             self.subdoc_gen_helper.find_pairs(json_document, "", pairs)
-            for path in pairs.keys():
+            for path in list(pairs.keys()):
                 opaque, cas, data = client.get_sd(document_key, path)
                 data = json.loads(data)
                 if data != pairs[path]:
@@ -539,7 +539,7 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
             if self.verbose_func_usage:
                 self.log.info(" get ----> {0} :: {1}".format(key, path))
             if self.use_sdk_client:
-                d = client.cb.retrieve_in(key, path).get(0)[1]
+                d = client.retrieve_in(key, path).get(0)[1]
                 return d
             else:
                 r, v, d = client.get_sd(key, path)
@@ -561,7 +561,7 @@ class SubdocAutoTestGenerator(SubdocBaseTest):
             if self.verbose_func_usage:
                 self.log.info(" counter ----> {0} :: {1} + {2}".format(key, path, value))
             if self.use_sdk_client:
-                client.cb.mutate_in(key, SD.counter(path, int(value), xattr=self.xattr))
+                client.mutate_in(key, SD.counter(path, int(value), xattr=self.xattr))
             else:
                 client.counter_sd(key, path, value)
         except Exception:

@@ -46,7 +46,7 @@ class CompactionViewTests(BaseTestCase):
         # load initial documents
         self._load_all_buckets(self.master, self.gen_load, "create", 0)
 
-        for i in xrange(cycles_num):
+        for i in range(cycles_num):
 
             for ddoc in self.ddocs:
                 # start fragmentation monitor
@@ -71,7 +71,7 @@ class CompactionViewTests(BaseTestCase):
     def make_ddocs(self, ddocs_num, views_per_ddoc):
         ddoc_name = "compaction_ddoc"
         view_name = "compaction_view"
-        for i in xrange(ddocs_num):
+        for i in range(ddocs_num):
             views = self.make_default_views(view_name, views_per_ddoc, different_map=True)
             self.ddocs.append(DesignDocument(ddoc_name + str(i), views))
 
@@ -290,7 +290,7 @@ class CompactionViewTests(BaseTestCase):
             compact_run = remote_client.wait_till_compaction_end(rest, self.default_bucket_name,
                                                                      timeout_in_seconds=(self.wait_timeout * 5))
             self.assertTrue(compact_run, "Compaction didn't finished correctly. Please check diags")
-        except Exception, ex:
+        except Exception as ex:
             self.thread_crashed.set()
             raise ex
         finally:
@@ -313,7 +313,7 @@ class CompactionViewTests(BaseTestCase):
             try:
                 compaction_task = self.cluster.async_monitor_compact_view(self.master, ddoc.name, frag_value=self.fragmentation_value)
                 compaction_task.result(self.wait_timeout * 5)
-            except Exception, ex:
+            except Exception as ex:
                 self.thread_crashed.set()
                 raise ex
             finally:
@@ -378,7 +378,7 @@ class CompactionViewTests(BaseTestCase):
                 try:
                     compaction_task = self.cluster.async_monitor_compact_view(self.master, ddoc.name, frag_value=percent_threshold)
                     compaction_task.result()
-                except Exception, ex:
+                except Exception as ex:
                     self.fail(ex)
 
     def _get_compaction_details(self, rest, bucket, design_doc_name):

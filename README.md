@@ -1,37 +1,65 @@
-*** Test Runner: Readme ***
+*** Test Runner Python3: Readme ***
 
 Prerequisites
 -------------
 
-* Python 2.6 or 2.7
-* pip or easy_install
+* Python 3.x or 3.6 or 3.7
+* pip3 or easy_install
+
+See the setup steps in the Py2 to Py3 porting guide: https://docs.google.com/document/d/1fxJjmgEnRKsq7l7h-nJbs9piZhqmvjNAUnXPSjrz-TA/edit?usp=sharing
+
 
 Dependencies
 ------------
 
+Use pip3 or pip3.6 or pip3.7 based on the platform.
 General:
 
-    pip install paramiko
+	pip3 install couchbase
 
-    pip install boto
+	pip3 install sgmllib3k
+
+	pip3 install paramiko
+
+	pip3 install httplib2
+
+	pip3 install pyyaml
+
+	pip3 install Geohash
+
+	pip3 install python-geohash
+
+	pip3 install deepdiff
+
+	pip3 install pyes
+        
+    pip3 install beautifulsoup4
+
+Other:
+
+    pip3 install boto
+    
+    pip3 install boto3
+	
+	pip3 install botocore
 
 Performance tests:
 
-    pip install btrc
+    pip3 install btrc
 
 PDF reports:
 
-    pip install couchdbkit
+    pip3 install couchdbkit
 
 Documentation:
 
-    pip install sphinx
+    pip3 install sphinx
 
-    pip install sphinx-pypi-upload
+    pip3 install sphinx-pypi-upload
 
 Buildout:
 
-    pip install zc.buildout
+    pip3 install zc.buildout
 
 Usage
 -----
@@ -127,7 +155,7 @@ xunit reports in the newly generated folder.
 
 for instance if you run
 
-    $ python testrunner.py -i resources/jenkins/single-node-centos-32.ini -t setgettests.MembaseBucket.value_100b -p your_first_parameter=x,your_second_parameter=y
+    $ python3 testrunner.py -i resources/jenkins/single-node-centos-32.ini -t setgettests.MembaseBucket.value_100b -p your_first_parameter=x,your_second_parameter=y
 
 you will see this summary after each test is ran:
 

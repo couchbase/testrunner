@@ -11,7 +11,7 @@ import os
 
 
 def usage(error=None):
-    print """\
+    print("""\
 Syntax: measure_sched_delays.py [options]
 
 Options
@@ -24,7 +24,7 @@ Available keys:
 
 Example:
  measure_sched_delays.py -i cluster.ini -p path=/tmp/measure-sched-delays,task=start
-"""
+""")
     sys.exit(error)
 
 
@@ -75,7 +75,7 @@ class SchedDelays():
             files = [file for file in files if file["file"].startswith("sched-delay")]
             for file in files:
                 shell.copy_file_remote_to_local(file["path"] + file["file"], os.getcwd() + "/" + file["file"])
-            self.log.info("copied {0} from {1}".format([file["file"] for file in files] , server.ip))
+            self.log.info("copied {0} from {1}".format([file["file"] for file in files], server.ip))
             shell.disconnect()
 
 def create_log_file(log_config_file_name, log_file_name, level):
@@ -102,7 +102,7 @@ def main():
             usage("ERROR: no servers specified. Please use the -i parameter.")
     except IndexError:
         usage()
-    except getopt.GetoptError, error:
+    except getopt.GetoptError as error:
         usage("ERROR: " + str(error))
 
     tool_path = input.param("path", "/tmp/measure-sched-delays")
@@ -119,8 +119,8 @@ def main():
             delays.fetch_logs()
         else:
             usage("ERROR: task was not specified correctly")
-    except BaseException, e:
-        print e
+    except BaseException as e:
+        print(e)
 
 if __name__ == "__main__":
     main()

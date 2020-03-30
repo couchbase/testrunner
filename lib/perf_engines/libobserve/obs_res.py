@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 import struct
-from obs_def import ObserveKeyState, ObservePktFmt, OBS_OPCODE
+from .obs_def import ObserveKeyState, ObservePktFmt, OBS_OPCODE
 from memcacheConstants import RES_MAGIC_BYTE
 
 class ObserveResponseKey:
@@ -67,7 +67,7 @@ class ObserveResponse:
         try:
             self._check_hdr()
         except AssertionError as e:
-            print "<%s> AsseritionError: %s" % (self.__class__.__name__, e)
+            print("<%s> AsseritionError: %s" % (self.__class__.__name__, e))
             return False
 
         if self.status:
@@ -75,7 +75,7 @@ class ObserveResponse:
             #       for backward compatibility, we are supposed to receive
             #       ERR_UNKNOWN_CMD = 0x81 if we send OBSERVE to a 1.8 server
             #       http://www.couchbase.com/issues/browse/MB-5805
-            print "<%s> server error: %d " % (self.__class__.__name__, self.status)
+            print("<%s> server error: %d " % (self.__class__.__name__, self.status))
             return False
 
         return True

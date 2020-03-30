@@ -1,5 +1,5 @@
 import logging
-from base_2i import BaseSecondaryIndexingTests
+from .base_2i import BaseSecondaryIndexingTests
 from remote.remote_util import RemoteMachineShellConnection
 from couchbase_helper.query_definitions import QueryDefinition
 from membase.api.rest_client import RestConnection
@@ -95,17 +95,17 @@ class SecondaryIndexingLoadBalancingTests(BaseSecondaryIndexingTests):
             self.run_multi_operations(buckets = self.buckets, query_definitions = self.query_definitions, create_index = True, drop_index = False)
             indexList = [query_definition.index_name for query_definition in self.query_definitions]
             #Verify that the indexes are equally distributed
-            expected_index_count_per_node =  len(indexList)/len(servers)
+            expected_index_count_per_node =  len(indexList)//len(servers)
             index_map = self.get_index_stats(perNode=True)
-            for node in index_map.keys():
+            for node in list(index_map.keys()):
                 total_indexes_per_node=0
                 self.log.info(" verifying node {0}".format(node))
-                for bucket_name in index_map[node].keys():
-                    total_indexes_per_node+=len(index_map[node][bucket_name].keys())
+                for bucket_name in list(index_map[node].keys()):
+                    total_indexes_per_node+=len(list(index_map[node][bucket_name].keys()))
                 self.assertTrue(expected_index_count_per_node == total_indexes_per_node,
                  " Index not correctly distributed || expected :: {0} != actual :: {1} \n with index map is {2} ".format(
-                    expected_index_count_per_node,total_indexes_per_node,index_map))
-        except Exception, ex:
+                    expected_index_count_per_node, total_indexes_per_node, index_map))
+        except Exception as ex:
             raise
         finally:
             self.run_multi_operations(buckets = self.buckets, query_definitions = self.query_definitions, create_index = False, drop_index = True)
@@ -124,17 +124,17 @@ class SecondaryIndexingLoadBalancingTests(BaseSecondaryIndexingTests):
                 task.result()
             indexList = [query_definition.index_name for query_definition in self.query_definitions]
             #Verify that the indexes are equally distributed
-            expected_index_count_per_node =  len(indexList)/len(servers)
+            expected_index_count_per_node =  len(indexList)//len(servers)
             index_map = self.get_index_stats(perNode=True)
-            for node in index_map.keys():
+            for node in list(index_map.keys()):
                 total_indexes_per_node=0
                 self.log.info(" verifying node {0}".format(node))
-                for bucket_name in index_map[node].keys():
-                    total_indexes_per_node+=len(index_map[node][bucket_name].keys())
+                for bucket_name in list(index_map[node].keys()):
+                    total_indexes_per_node+=len(list(index_map[node][bucket_name].keys()))
                 self.assertTrue(expected_index_count_per_node == total_indexes_per_node,
                  " Index not correctly distributed || expected :: {0} != actual :: {1} \n with index map is {2} ".format(
-                    expected_index_count_per_node, total_indexes_per_node,index_map))
-        except Exception, ex:
+                    expected_index_count_per_node, total_indexes_per_node, index_map))
+        except Exception as ex:
             raise
         finally:
             self.run_multi_operations(buckets = self.buckets, query_definitions = self.query_definitions, create_index = False, drop_index = True)
@@ -149,23 +149,23 @@ class SecondaryIndexingLoadBalancingTests(BaseSecondaryIndexingTests):
             self.run_multi_operations(buckets = self.buckets, query_definitions = self.query_definitions, create_index = True, drop_index = False)
             indexList = [query_definition.index_name for query_definition in self.query_definitions]
             #Verify that the indexes are equally distributed
-            expected_index_count_per_node =  len(indexList)/len(servers)
+            expected_index_count_per_node =  len(indexList)//len(servers)
             #drop the indexes
-            query_definitions = [self.query_definitions[x] for x in range(0,num_indexes/2)]
-            delete_query_definitions = [self.query_definitions[x] for x in range(num_indexes/2,num_indexes)]
+            query_definitions = [self.query_definitions[x] for x in range(0, num_indexes//2)]
+            delete_query_definitions = [self.query_definitions[x] for x in range(num_indexes//2, num_indexes)]
             self.run_multi_operations(buckets = self.buckets, query_definitions = query_definitions, create_index = False, drop_index = True)
-            query_definitions = self._create_query_definitions(start= num_indexes, index_count=num_indexes/2)
+            query_definitions = self._create_query_definitions(start= num_indexes, index_count=num_indexes//2)
             self.run_multi_operations(buckets = self.buckets, query_definitions = query_definitions, create_index = True, drop_index = False)
             index_map = self.get_index_stats(perNode=True)
-            for node in index_map.keys():
+            for node in list(index_map.keys()):
                 total_indexes_per_node=0
                 self.log.info(" verifying node {0}".format(node))
-                for bucket_name in index_map[node].keys():
-                    total_indexes_per_node+=len(index_map[node][bucket_name].keys())
+                for bucket_name in list(index_map[node].keys()):
+                    total_indexes_per_node+=len(list(index_map[node][bucket_name].keys()))
                 self.assertTrue(expected_index_count_per_node == total_indexes_per_node,
                  " Index not correctly distributed || expected :: {0} != actual :: {1} \n with index map is {2} ".format(
-                    expected_index_count_per_node,total_indexes_per_node,index_map))
-        except Exception, ex:
+                    expected_index_count_per_node, total_indexes_per_node, index_map))
+        except Exception as ex:
             raise
         finally:
             self.run_multi_operations(buckets = self.buckets, query_definitions = delete_query_definitions, create_index = False, drop_index = True)
@@ -185,8 +185,8 @@ class SecondaryIndexingLoadBalancingTests(BaseSecondaryIndexingTests):
         self.run_multi_operations(buckets=self.buckets, query_definitions=self.query_definitions,
                                   create_index=True, drop_index=False)
         #drop fewindexes
-        query_definitions = [self.query_definitions[x] for x in range(num_indexes/2)]
-        delete_query_definitions = [self.query_definitions[x] for x in range(num_indexes/2, num_indexes)]
+        query_definitions = [self.query_definitions[x] for x in range(num_indexes//2)]
+        delete_query_definitions = [self.query_definitions[x] for x in range(num_indexes//2, num_indexes)]
         self.run_multi_operations(buckets=self.buckets, query_definitions=query_definitions,
                                   create_index=False, drop_index=True)
         #Run Queries
@@ -206,10 +206,10 @@ class SecondaryIndexingLoadBalancingTests(BaseSecondaryIndexingTests):
                                          query_definitions=self.query_definitions)
             index_map = self.get_index_stats(perNode=True)
             self.log.info(index_map)
-            for node in index_map.keys():
+            for node in list(index_map.keys()):
                 self.log.info(" verifying node {0}".format(node))
-                for bucket_name in index_map[node].keys():
-                    for index_name in index_map[node][bucket_name].keys():
+                for bucket_name in list(index_map[node].keys()):
+                    for index_name in list(index_map[node][bucket_name].keys()):
                         count = 0
                         scan_duration = index_map[node][bucket_name][index_name]['total_scan_duration']
                         while not scan_duration and count < 5:
@@ -220,7 +220,7 @@ class SecondaryIndexingLoadBalancingTests(BaseSecondaryIndexingTests):
                             count += 1
                         self.assertTrue(index_map[node][bucket_name][index_name]['total_scan_duration']  > 0,
                                         " scan did not happen at node {0}".format(node))
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             raise
         finally:
@@ -255,7 +255,7 @@ class SecondaryIndexingLoadBalancingTests(BaseSecondaryIndexingTests):
 
     def _create_query_definitions(self, start= 0, index_count=2):
         query_definitions = []
-        for ctr in range(start,start+index_count):
+        for ctr in range(start, start+index_count):
             index_name = "index_name_{0}".format(ctr)
             query_definition = QueryDefinition(index_name=index_name,
                                                index_fields=["join_yr"],

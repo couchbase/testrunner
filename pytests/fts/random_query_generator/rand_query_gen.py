@@ -1,9 +1,9 @@
 import random
 import json
-# import sys
-# sys.path.append("/Users/apiravi/testrunner")
-from emp_querables import EmployeeQuerables
-from wiki_queryables import WikiQuerables
+#import sys
+#sys.path.append("/Users/apiravi/testrunner")
+from .emp_querables import EmployeeQuerables
+from .wiki_queryables import WikiQuerables
 import Geohash
 import math
 import random
@@ -29,7 +29,7 @@ class DATASET:
 class QUERY_TYPE:
     VALUES = ["match", "bool", "match_phrase",
               "prefix", "fuzzy", "conjunction", "disjunction"
-                                                "wildcard", "regexp", "query_string",
+              "wildcard", "regexp",  "query_string",
               "numeric_range", "date_range", "term_range",
               "match_all", "match_none"]
 
@@ -76,8 +76,8 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
         if self.query_types:
             self.construct_queries()
         else:
-            print "No string/number/date fields indexed for smart" \
-                  " query generation "
+            print("No string/number/date fields indexed for smart" \
+                  " query generation ")
 
     def construct_fields(self):
         all_fields = {}
@@ -87,11 +87,11 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
             all_fields = DATASET.FIELDS['wiki']
         elif self.dataset == "all":
             fields_set = set()
-            for _, fields in DATASET.FIELDS.iteritems():
+            for _, fields in DATASET.FIELDS.items():
                 fields_set |= set(fields.keys())
             for v in fields_set:
                 all_fields[v] = []
-            for _, fields in DATASET.FIELDS.iteritems():
+            for _, fields in DATASET.FIELDS.items():
                 all_fields['str'] += fields['str']
                 all_fields['date'] += fields['date']
                 all_fields['num'] += fields['num']
@@ -104,7 +104,7 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
         Passed field types could be specified as  "num"/"number"/"integer".
         Standardize it to work with RQG
         """
-        for field_type, field_list in fields.iteritems():
+        for field_type, field_list in fields.items():
             if field_type == "str" or field_type == "text":
                 self.fields["str"] = field_list
                 self.fields["text"] = field_list
@@ -112,24 +112,24 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
                 self.fields["num"] = field_list
             if field_type == "datetime":
                 self.fields["date"] = field_list
-        print "Smart queries will be generated on fields: %s" % self.fields
+        print("Smart queries will be generated on fields: %s" % self.fields)
 
     def get_custom_query_types(self):
         query_types = []
-        for field_type in self.fields.keys():
+        for field_type in list(self.fields.keys()):
             query_types += QUERY_TYPE.CUSTOM_QUERY_TYPES[field_type]
         return list(set(query_types))
 
     def replace_underscores(self, query):
         replace_dict = {
             "manages_": "manages.",
-            "revision_text_text": "revision.text.#text",
+            "revision_text_text":  "revision.text.#text",
             "revision_contributor_username": "revision.contributor.username",
             "revision_contributor_id": "revision.contributor.id",
             "revision_date": "revision.date"
         }
         query_str = json.dumps(query, ensure_ascii=False)
-        for key, val in replace_dict.iteritems():
+        for key, val in replace_dict.items():
             query_str = query_str.replace(key, val)
         return json.loads(query_str, encoding='utf-8')
 
@@ -261,10 +261,10 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
 
     def construct_prefix_query(self):
         fts_prefix_query = {}
-        es_prefix_query = {'prefix': {}}
+        es_prefix_query = {'prefix':{}}
         fts_match_query, _ = self.construct_match_query()
         prefix_search = fts_match_query["match"][:random.randint(1, 4)]
-        fts_prefix_query["prefix"] = prefix_search
+        fts_prefix_query["prefix"] =  prefix_search
         fts_prefix_query["field"] = fts_match_query["field"]
         es_prefix_query['prefix'][fts_match_query["field"]] = prefix_search
         return fts_prefix_query, es_prefix_query
@@ -320,14 +320,14 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
             fts_numeric_query['inclusive_max'] = True
             es_numeric_query['filtered']['filter']['range'][fieldname]['gte'] = \
                 low
-            es_numeric_query['filtered']['filter']['range'][fieldname]['lte'] = \
+            es_numeric_query['filtered']['filter']['range'][fieldname]['lte'] =\
                 high
         else:
             fts_numeric_query['inclusive_min'] = False
             fts_numeric_query['inclusive_max'] = False
             es_numeric_query['filtered']['filter']['range'][fieldname]['gt'] = \
                 low
-            es_numeric_query['filtered']['filter']['range'][fieldname]['lt'] = \
+            es_numeric_query['filtered']['filter']['range'][fieldname]['lt'] =\
                 high
         return fts_numeric_query, es_numeric_query
 
@@ -653,7 +653,7 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
     @staticmethod
     def get_self_intersect_vertices(verts):
         mod_verts = []
-        mid_vert = (len(verts) - 1) / 2
+        mid_vert = int((len(verts) - 1) / 2)
 
         mod_verts.append(verts[0])
         mod_verts.append(verts[mid_vert])
@@ -874,7 +874,7 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
         return fts_compound_query, es_compound_query
 
     def get_queryable_type(self):
-        doc_types = DATASET.FIELDS.keys()
+        doc_types = list(DATASET.FIELDS.keys())
         return self.get_random_value(doc_types)
 
 

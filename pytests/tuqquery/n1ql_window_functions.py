@@ -1,4 +1,4 @@
-from tuq import QueryTests
+from .tuq import QueryTests
 import random
 import string
 from random import randint
@@ -218,7 +218,7 @@ class WindowFunctionsTest(QueryTests):
 
         self.indexes = [self.primary_idx, self.idx_1, self.idx_2, self.idx_3]
 
-        self.alphabet = ['A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P','Q','R','S','T','U','V','W','X','Y','Z']
+        self.alphabet = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z']
 
 
         self.log.info("==============  WindowFunctionsTest setup has completed ==============")
@@ -322,7 +322,7 @@ class WindowFunctionsTest(QueryTests):
         test_dict = dict()
         count = 0
 
-        for k, v in self.window_functions.iteritems():
+        for k, v in self.window_functions.items():
             query = "select decimal_field, "+self._construct_window_function_call(v)+"  as wf_result from test_bucket order by decimal_field"
             lambda1 = lambda x: self.assertTrue(x['q_res'][0]['status'] == 'success')
             test_dict["%d-default" % (count)] = {"indexes": self.indexes,
@@ -334,7 +334,7 @@ class WindowFunctionsTest(QueryTests):
                                                  }
             count += 1
 
-        for k, v in self.aggregate_functions.iteritems():
+        for k, v in self.aggregate_functions.items():
             query = "select decimal_field, "+self._construct_window_function_call(v)+"  as wf_result from test_bucket order by decimal_field"
             lambda1 = lambda x: self.assertTrue(x['q_res'][0]['status'] == 'success')
             test_dict["%d-default" % (count)] = {"indexes": self.indexes,
@@ -357,7 +357,7 @@ class WindowFunctionsTest(QueryTests):
         test_dict = dict()
         count = 0
 
-        for k, v in self.window_functions.iteritems():
+        for k, v in self.window_functions.items():
             query = "select decimal_field, "+self._construct_window_function_call(v)+" as summa, char_field from test_bucket order by summa"
             lambda1 = lambda x: self.assertTrue(x['q_res'][0]['status'] == 'success')
             test_dict["%d-default" % (count)] = {"indexes": self.indexes,
@@ -369,7 +369,7 @@ class WindowFunctionsTest(QueryTests):
                                                  }
             count += 1
 
-        for k, v in self.aggregate_functions.iteritems():
+        for k, v in self.aggregate_functions.items():
             query = "select decimal_field, "+self._construct_window_function_call(v)+" as summa, char_field from test_bucket order by summa"
             lambda1 = lambda x: self.assertTrue(x['q_res'][0]['status'] == 'success')
             test_dict["%d-default" % (count)] = {"indexes": self.indexes,
@@ -392,7 +392,7 @@ class WindowFunctionsTest(QueryTests):
         test_dict = dict()
         count = 0
 
-        for k, v in self.window_functions.iteritems():
+        for k, v in self.window_functions.items():
             query = "select decimal_field, "+self._construct_window_function_call(v)+" as summa, char_field from test_bucket order by summa limit 5"
             lambda1 = lambda x: self.assertTrue(x['q_res'][0]['status'] == 'success')
             test_dict["%d-default" % (count)] = {"indexes": self.indexes,
@@ -404,7 +404,7 @@ class WindowFunctionsTest(QueryTests):
                                                  }
             count += 1
 
-        for k, v in self.aggregate_functions.iteritems():
+        for k, v in self.aggregate_functions.items():
             query = "select decimal_field, "+self._construct_window_function_call(v)+" as summa, char_field from test_bucket order by summa limit 5"
             lambda1 = lambda x: self.assertTrue(x['q_res'][0]['status'] == 'success')
             test_dict["%d-default" % (count)] = {"indexes": self.indexes,
@@ -427,7 +427,7 @@ class WindowFunctionsTest(QueryTests):
         test_dict = dict()
         count = 0
 
-        for k, v in self.window_functions.iteritems():
+        for k, v in self.window_functions.items():
             query = "select decimal_field, "+self._construct_window_function_call(v)+" as summa, char_field from test_bucket order by summa limit 5 offset 100"
             lambda1 = lambda x: self.assertTrue(x['q_res'][0]['status'] == 'success')
             test_dict["%d-default" % (count)] = {"indexes": self.indexes,
@@ -439,7 +439,7 @@ class WindowFunctionsTest(QueryTests):
                                                  }
             count += 1
 
-        for k, v in self.aggregate_functions.iteritems():
+        for k, v in self.aggregate_functions.items():
             query = "select decimal_field, "+self._construct_window_function_call(v)+" as summa, char_field from test_bucket order by summa limit 5 offset 100"
             lambda1 = lambda x: self.assertTrue(x['q_res'][0]['status'] == 'success')
             test_dict["%d-default" % (count)] = {"indexes": self.indexes,
@@ -462,7 +462,7 @@ class WindowFunctionsTest(QueryTests):
         test_dict = dict()
         count = 0
 
-        for k, v in self.window_functions.iteritems():
+        for k, v in self.window_functions.items():
             query = "select decimal_field, (select "+self._construct_window_function_call(v)+" from test_bucket t1) as subselect, " \
                                             +self._construct_window_function_call(v)+" as summa, char_field from test_bucket order by summa"
             lambda1 = lambda x: self.assertTrue(x['q_res'][0]['status'] == 'success')
@@ -475,7 +475,7 @@ class WindowFunctionsTest(QueryTests):
                                                  }
             count += 1
 
-        for k, v in self.aggregate_functions.iteritems():
+        for k, v in self.aggregate_functions.items():
             query = "select decimal_field, (select "+self._construct_window_function_call(v)+" from test_bucket t1) as subselect, " \
                                             +self._construct_window_function_call(v)+" as summa, char_field from test_bucket order by summa"
             lambda1 = lambda x: self.assertTrue(x['q_res'][0]['status'] == 'success')
@@ -499,7 +499,7 @@ class WindowFunctionsTest(QueryTests):
         test_dict = dict()
         count = 0
 
-        for k, v in self.window_functions.iteritems():
+        for k, v in self.window_functions.items():
             query = "select decimal_field, "+self._construct_window_function_call(v)+" as summa, char_field from test_bucket where decimal_field > 1000 order by summa"
             lambda1 = lambda x: self.assertTrue(x['q_res'][0]['status'] == 'success')
             test_dict["%d-default" % (count)] = {"indexes": self.indexes,
@@ -511,7 +511,7 @@ class WindowFunctionsTest(QueryTests):
                                                  }
             count += 1
 
-        for k, v in self.aggregate_functions.iteritems():
+        for k, v in self.aggregate_functions.items():
             query = "select decimal_field, "+self._construct_window_function_call(v)+" as summa, char_field from test_bucket where decimal_field > 1000 order by summa"
             lambda1 = lambda x: self.assertTrue(x['q_res'][0]['status'] == 'success')
             test_dict["%d-default" % (count)] = {"indexes": self.indexes,
@@ -534,7 +534,7 @@ class WindowFunctionsTest(QueryTests):
         test_dict = dict()
         count = 0
 
-        for k, v in self.window_functions.iteritems():
+        for k, v in self.window_functions.items():
             query = "select decimal_field, "+self._construct_window_function_call(v)+" as summa, char_field from test_bucket let cval=1000 where decimal_field > cval order by summa"
             lambda1 = lambda x: self.assertTrue(x['q_res'][0]['status'] == 'success')
             test_dict["%d-default" % (count)] = {"indexes": self.indexes,
@@ -546,7 +546,7 @@ class WindowFunctionsTest(QueryTests):
                                                  }
             count += 1
 
-        for k, v in self.aggregate_functions.iteritems():
+        for k, v in self.aggregate_functions.items():
             query = "select decimal_field, "+self._construct_window_function_call(v)+" as summa, char_field from test_bucket let cval=1000 where decimal_field > cval order by summa"
             lambda1 = lambda x: self.assertTrue(x['q_res'][0]['status'] == 'success')
             test_dict["%d-default" % (count)] = {"indexes": self.indexes,
@@ -569,7 +569,7 @@ class WindowFunctionsTest(QueryTests):
         test_dict = dict()
         count = 0
 
-        for k, v in self.window_functions.iteritems():
+        for k, v in self.window_functions.items():
             query = "select decimal_field, "+self._construct_window_function_call(v)+", char_field from test_bucket group by char_field, decimal_field"
             lambda1 = lambda x: self.assertTrue(x['q_res'][0]['status'] == 'success')
             test_dict["%d-default" % (count)] = {"indexes": self.indexes,
@@ -581,7 +581,7 @@ class WindowFunctionsTest(QueryTests):
                                                  }
             count += 1
 
-        for k, v in self.aggregate_functions.iteritems():
+        for k, v in self.aggregate_functions.items():
             query = "select decimal_field, "+self._construct_window_function_call(v)+", char_field from test_bucket group by char_field, decimal_field"
             lambda1 = lambda x: self.assertTrue(x['q_res'][0]['status'] == 'success')
             test_dict["%d-default" % (count)] = {"indexes": self.indexes,
@@ -604,7 +604,7 @@ class WindowFunctionsTest(QueryTests):
         test_dict = dict()
         count = 0
 
-        for k, v in self.window_functions.iteritems():
+        for k, v in self.window_functions.items():
             if v['name'] in['NTH_VALUE', 'CUME_DIST', 'RANK', 'ROW_NUMBER', 'DENSE_RANK', 'LEAD', 'LAG', 'PERCENT_RANK', 'NTILE']:
                 continue
             query = "from (select decimal_field as f1, "+self._construct_window_function_call(v)+" as f2, char_field as f3 from test_bucket group by char_field, decimal_field) a " \
@@ -641,7 +641,7 @@ class WindowFunctionsTest(QueryTests):
                                                  }
             count += 1
 
-        for k, v in self.aggregate_functions.iteritems():
+        for k, v in self.aggregate_functions.items():
             query = "from (select decimal_field as f1, "+self._construct_window_function_call(v)+" as f2, char_field as f3 from test_bucket group by char_field, decimal_field) a " \
                                                                                                  "select a.f1 , a.f2, "+v['name']+"(a.f2) over (partition by a.f2), a.f3"
             lambda1 = lambda x: self.assertTrue(x['q_res'][0]['status'] == 'success')
@@ -665,7 +665,7 @@ class WindowFunctionsTest(QueryTests):
         test_dict = dict()
         count = 0
 
-        for k, v in self.window_functions.iteritems():
+        for k, v in self.window_functions.items():
             if v['name'] in ['NTH_VALUE', 'CUME_DIST', 'RANK', 'ROW_NUMBER', 'DENSE_RANK', 'LEAD', 'LAG', 'PERCENT_RANK', 'NTILE']:
                 continue
             query = "from (select decimal_field as f1, "+self._construct_window_function_call(v)+" as f2, char_field as f3 from test_bucket group by char_field, decimal_field) a " \
@@ -702,7 +702,7 @@ class WindowFunctionsTest(QueryTests):
                                                  }
             count += 1
 
-        for k, v in self.aggregate_functions.iteritems():
+        for k, v in self.aggregate_functions.items():
             query = "from (select decimal_field as f1, "+self._construct_window_function_call(v)+" as f2, char_field as f3 from test_bucket group by char_field, decimal_field) a " \
                                                                                                  "where a.f2 in [157331,165546] select a.f1 , a.f2, "+v['name']+"(a.f2) over (partition by a.f2), a.f3"
             lambda1 = lambda x: self.assertTrue(x['q_res'][0]['status'] == 'success')
@@ -726,7 +726,7 @@ class WindowFunctionsTest(QueryTests):
         test_dict = dict()
         count = 0
 
-        for k, v in self.window_functions.iteritems():
+        for k, v in self.window_functions.items():
             if v['name'] in ['NTH_VALUE', 'CUME_DIST', 'RANK', 'ROW_NUMBER', 'DENSE_RANK', 'LEAD', 'LAG', 'PERCENT_RANK', 'NTILE']:
                 continue
             query = "from (select decimal_field as f1, "+self._construct_window_function_call(v)+" as f2, char_field as f3 from test_bucket group by char_field, decimal_field) a let cond = [157331,165546] " \
@@ -763,7 +763,7 @@ class WindowFunctionsTest(QueryTests):
                                                  }
             count += 1
 
-        for k, v in self.aggregate_functions.iteritems():
+        for k, v in self.aggregate_functions.items():
             query = "from (select decimal_field as f1, "+self._construct_window_function_call(v)+" as f2, char_field as f3 from test_bucket group by char_field, decimal_field) a let cond = [157331,165546] " \
                                                                                                  "where a.f2 in cond select a.f1 , a.f2, "+v['name']+"(a.f2) over (partition by a.f2), a.f3"
             lambda1 = lambda x: self.assertTrue(x['q_res'][0]['status'] == 'success')
@@ -787,7 +787,7 @@ class WindowFunctionsTest(QueryTests):
         test_dict = dict()
         count = 0
 
-        for k, v in self.window_functions.iteritems():
+        for k, v in self.window_functions.items():
             if v['name'] in ['NTH_VALUE', 'CUME_DIST', 'RANK', 'ROW_NUMBER', 'DENSE_RANK', 'LEAD', 'LAG', 'PERCENT_RANK', 'NTILE']:
                 continue
             query = "from (select decimal_field as f1, "+self._construct_window_function_call(v)+" as f2, char_field as f3 from test_bucket group by char_field, decimal_field) a let cond = [157331,165546] " \
@@ -828,7 +828,7 @@ class WindowFunctionsTest(QueryTests):
                                                      }
             count += 1
 
-        for k, v in self.aggregate_functions.iteritems():
+        for k, v in self.aggregate_functions.items():
             query = "from (select decimal_field as f1, "+self._construct_window_function_call(v)+" as f2, char_field as f3 from test_bucket group by char_field, decimal_field) a let cond = [157331,165546] " \
                                                                                                  "where a.f2 in cond group by a.f2, a.f1, a.f3 select a.f1 as res1, a.f2 as res2, " \
                                                                                                  +v['name']+"(a.f2) over (partition by a.f2) as summa, a.f3 as res3"
@@ -859,7 +859,7 @@ class WindowFunctionsTest(QueryTests):
         test_dict = dict()
         count = 0
 
-        for k, v in self.window_functions.iteritems():
+        for k, v in self.window_functions.items():
             for operand in self.union_intersect_except:
                 for option in options:
                     query = "select decimal_field, "+self._construct_window_function_call(v)+"  as summa from test_bucket "+operand+" "+option+" select int_field, int_field as summa from test_bucket"
@@ -873,7 +873,7 @@ class WindowFunctionsTest(QueryTests):
                                                          }
                     count += 1
 
-        for k, v in self.aggregate_functions.iteritems():
+        for k, v in self.aggregate_functions.items():
             for operand in self.union_intersect_except:
                 for option in options:
                     query = "select decimal_field, "+self._construct_window_function_call(v)+"  as summa from test_bucket "+operand+" "+option+" select int_field, int_field as summa from test_bucket"
@@ -899,7 +899,7 @@ class WindowFunctionsTest(QueryTests):
         test_dict = dict()
         count = 0
 
-        for k, v in self.window_functions.iteritems():
+        for k, v in self.window_functions.items():
             for operand in self.union_intersect_except:
                 for option in options:
                     query = "select decimal_field, decimal_field as summa from test_bucket "+operand+" "+option+" select int_field, "+self._construct_window_function_call(v)+" as summa from test_bucket"
@@ -913,7 +913,7 @@ class WindowFunctionsTest(QueryTests):
                                                          }
                     count += 1
 
-        for k, v in self.aggregate_functions.iteritems():
+        for k, v in self.aggregate_functions.items():
             for operand in self.union_intersect_except:
                 for option in options:
                     query = "select decimal_field, decimal_field as summa from test_bucket "+operand+" "+option+" select int_field, "+self._construct_window_function_call(v)+" as summa from test_bucket"
@@ -939,7 +939,7 @@ class WindowFunctionsTest(QueryTests):
         test_dict = dict()
         count = 0
 
-        for k, v in self.window_functions.iteritems():
+        for k, v in self.window_functions.items():
             for operand in self.union_intersect_except:
                 for option in options:
                     query = "select decimal_field, "+self._construct_window_function_call(v)+" as summa from test_bucket "+operand+" "+option+" select int_field, "+self._construct_window_function_call(v)+" as summa from test_bucket"
@@ -953,7 +953,7 @@ class WindowFunctionsTest(QueryTests):
                                                          }
                     count += 1
 
-        for k, v in self.aggregate_functions.iteritems():
+        for k, v in self.aggregate_functions.items():
             for operand in self.union_intersect_except:
                 for option in options:
                     query = "select decimal_field, "+self._construct_window_function_call(v)+" as summa from test_bucket "+operand+" "+option+" select int_field, "+self._construct_window_function_call(v)+" as summa from test_bucket"
@@ -981,7 +981,7 @@ class WindowFunctionsTest(QueryTests):
         test_dict = dict()
         count = 0
 
-        for k, v in self.window_functions.iteritems():
+        for k, v in self.window_functions.items():
             for typ in self.raw_element_value:
                 for howmany in self.all_distinct:
                     query = "select "+howmany+" "+typ+" "+self._construct_window_function_call(v)+" as summa from test_bucket"
@@ -995,7 +995,7 @@ class WindowFunctionsTest(QueryTests):
                                                          }
                     count += 1
 
-        for k, v in self.aggregate_functions.iteritems():
+        for k, v in self.aggregate_functions.items():
             for typ in self.raw_element_value:
                 for howmany in self.all_distinct:
                     query = "select "+howmany+" "+typ+" "+self._construct_window_function_call(v)+" as summa from test_bucket"
@@ -1023,7 +1023,7 @@ class WindowFunctionsTest(QueryTests):
         test_dict = dict()
         count = 0
 
-        for k, v in self.window_functions.iteritems():
+        for k, v in self.window_functions.items():
             query = "select decimal_field, "+self._construct_window_function_call(v)+" as summa, char_field from test_bucket let char_val='A' where char_field=char_val"
             lambda1 = lambda x: self.assertTrue(x['q_res'][0]['status'] == 'success')
             test_dict["%d-default" % (count)] = {"indexes": self.indexes,
@@ -1035,7 +1035,7 @@ class WindowFunctionsTest(QueryTests):
                                                  }
             count += 1
 
-        for k, v in self.aggregate_functions.iteritems():
+        for k, v in self.aggregate_functions.items():
             query = "select decimal_field, "+self._construct_window_function_call(v)+" as summa, char_field from test_bucket let char_val='A' where char_field=char_val"
             lambda1 = lambda x: self.assertTrue(x['q_res'][0]['status'] == 'success')
             test_dict["%d-default" % (count)] = {"indexes": self.indexes,
@@ -1058,7 +1058,7 @@ class WindowFunctionsTest(QueryTests):
         test_dict = dict()
         count = 0
 
-        for k, v in self.window_functions.iteritems():
+        for k, v in self.window_functions.items():
             query = "select decimal_field, "+self._construct_window_function_call(v)+" as summa, char_field from test_bucket where char_field='A'"
             lambda1 = lambda x: self.assertTrue(x['q_res'][0]['status'] == 'success')
             test_dict["%d-default" % (count)] = {"indexes": self.indexes,
@@ -1070,7 +1070,7 @@ class WindowFunctionsTest(QueryTests):
                                                  }
             count += 1
 
-        for k, v in self.aggregate_functions.iteritems():
+        for k, v in self.aggregate_functions.items():
             query = "select decimal_field, "+self._construct_window_function_call(v)+" as summa, char_field from test_bucket where char_field='A'"
             lambda1 = lambda x: self.assertTrue(x['q_res'][0]['status'] == 'success')
             test_dict["%d-default" % (count)] = {"indexes": self.indexes,
@@ -1093,7 +1093,7 @@ class WindowFunctionsTest(QueryTests):
         test_dict = dict()
         count = 0
 
-        for k, v in self.window_functions.iteritems():
+        for k, v in self.window_functions.items():
             query = "select decimal_field, "+self._construct_window_function_call(v)+", char_field from test_bucket group by char_field, decimal_field letting char_val='A' having char_field=char_val"
             lambda1 = lambda x: self.assertTrue(x['q_res'][0]['status'] == 'success')
             test_dict["%d-default" % (count)] = {"indexes": self.indexes,
@@ -1105,7 +1105,7 @@ class WindowFunctionsTest(QueryTests):
                                                  }
             count += 1
 
-        for k, v in self.aggregate_functions.iteritems():
+        for k, v in self.aggregate_functions.items():
             query = "select decimal_field, "+self._construct_window_function_call(v)+", char_field from test_bucket group by char_field, decimal_field letting char_val='A' having char_field=char_val"
             lambda1 = lambda x: self.assertTrue(x['q_res'][0]['status'] == 'success')
             test_dict["%d-default" % (count)] = {"indexes": self.indexes,
@@ -1128,7 +1128,7 @@ class WindowFunctionsTest(QueryTests):
         test_dict = dict()
         count = 0
 
-        for k, v in self.window_functions.iteritems():
+        for k, v in self.window_functions.items():
             query = "select decimal_field, "+self._construct_window_function_call(v)+", char_field from test_bucket group by char_field, decimal_field having char_field='A'"
             lambda1 = lambda x: self.assertTrue(x['q_res'][0]['status'] == 'success')
             test_dict["%d-default" % (count)] = {"indexes": self.indexes,
@@ -1140,7 +1140,7 @@ class WindowFunctionsTest(QueryTests):
                                                  }
             count += 1
 
-        for k, v in self.aggregate_functions.iteritems():
+        for k, v in self.aggregate_functions.items():
             query = "select decimal_field, "+self._construct_window_function_call(v)+", char_field from test_bucket group by char_field, decimal_field having char_field='A'"
             lambda1 = lambda x: self.assertTrue(x['q_res'][0]['status'] == 'success')
             test_dict["%d-default" % (count)] = {"indexes": self.indexes,
@@ -1163,7 +1163,7 @@ class WindowFunctionsTest(QueryTests):
         test_dict = dict()
         count = 0
 
-        for k, v in self.window_functions.iteritems():
+        for k, v in self.window_functions.items():
             query = "select decimal_field, "+self._construct_window_function_call(v)+", char_field from test_bucket group by char_field, decimal_field letting char_val='A'"
             lambda1 = lambda x: self.assertTrue(x['q_res'][0]['status'] == 'success')
             test_dict["%d-default" % (count)] = {"indexes": self.indexes,
@@ -1175,7 +1175,7 @@ class WindowFunctionsTest(QueryTests):
                                                  }
             count += 1
 
-        for k, v in self.aggregate_functions.iteritems():
+        for k, v in self.aggregate_functions.items():
             query = "select decimal_field, "+self._construct_window_function_call(v)+", char_field from test_bucket group by char_field, decimal_field letting char_val='A'"
             lambda1 = lambda x: self.assertTrue(x['q_res'][0]['status'] == 'success')
             test_dict["%d-default" % (count)] = {"indexes": self.indexes,
@@ -1204,7 +1204,7 @@ class WindowFunctionsTest(QueryTests):
         test_dict = dict()
         count = 0
 
-        for k, v in self.window_functions.iteritems():
+        for k, v in self.window_functions.items():
             for op in asc_desc:
                 for lim in limit:
                     for off in offset:
@@ -1219,7 +1219,7 @@ class WindowFunctionsTest(QueryTests):
                                                              }
                         count += 1
 
-        for k, v in self.aggregate_functions.iteritems():
+        for k, v in self.aggregate_functions.items():
             for op in asc_desc:
                 for lim in limit:
                     for off in offset:
@@ -1248,7 +1248,7 @@ class WindowFunctionsTest(QueryTests):
         query = "SELECT char_field ,sum(decimal_field) AS itemrevenue , sum(decimal_field)*100/Sum(Sum(decimal_field)) OVER (partition BY char_field) AS revenueratio " \
                 "FROM test_bucket GROUP BY char_field ORDER BY char_field,revenueratio LIMIT 100;"
         result = self.run_cbq_query(query)
-        self.assertEquals(result['status'], 'success')
+        self.assertEqual(result['status'], 'success')
 
     '''
         Test idea - check syntax correctness of tpcds test suite query 
@@ -1259,7 +1259,7 @@ class WindowFunctionsTest(QueryTests):
         query = "SELECT char_field, Sum(decimal_field) AS itemrevenue , Sum(decimal_field)*100/Sum(Sum(decimal_field)) OVER (partition BY char_field) AS revenueratio FROM test_bucket GROUP BY char_field " \
                 "ORDER BY char_field , revenueratio LIMIT 100;"
         result = self.run_cbq_query(query)
-        self.assertEquals(result['status'], 'success')
+        self.assertEqual(result['status'], 'success')
 
     '''
         Test idea - check syntax correctness of tpcds test suite query 
@@ -1288,7 +1288,7 @@ class WindowFunctionsTest(QueryTests):
                 "FROM test_bucket sts GROUP BY sts.char_field) in_store) store " \
                 "WHERE ( store.return_rank <= 10 OR store.currency_rank <= 10 ) ORDER BY 1,4,5 LIMIT 100"
         result = self.run_cbq_query(query)
-        self.assertEquals(result['status'], 'success')
+        self.assertEqual(result['status'], 'success')
 
     '''
         Test idea - check syntax correctness of tpcds test suite query 
@@ -1301,7 +1301,7 @@ class WindowFunctionsTest(QueryTests):
                 "GROUP BY char_field) tmp1 WHERE CASE WHEN avg_quarterly_sales > 0 THEN ABS (sum_sales - avg_quarterly_sales) / avg_quarterly_sales ELSE NULL END > 0.1 " \
                 "ORDER BY avg_quarterly_sales,sum_sales,char_field LIMIT 100"
         result = self.run_cbq_query(query)
-        self.assertEquals(result['status'], 'success')
+        self.assertEqual(result['status'], 'success')
 
     '''
         Test idea - check syntax correctness of tpcds test suite query 
@@ -1313,7 +1313,7 @@ class WindowFunctionsTest(QueryTests):
                 "FROM test_bucket GROUP BY char_field) tmp1 WHERE CASE WHEN avg_monthly_sales > 0 THEN ABS (sum_sales - avg_monthly_sales) / avg_monthly_sales ELSE NULL END > 0.1 " \
                 "ORDER BY char_field,avg_monthly_sales,sum_sales LIMIT 100"
         result = self.run_cbq_query(query)
-        self.assertEquals(result['status'], 'success')
+        self.assertEqual(result['status'], 'success')
 
     '''
         Test idea - check syntax correctness of tpcds test suite query 
@@ -1326,7 +1326,7 @@ class WindowFunctionsTest(QueryTests):
                 "FROM test_bucket b GROUP BY char_field) tmp1 WHERE ranking <= 5) GROUP BY char_field ORDER BY lochierarchy DESC, " \
                 "CASE WHEN lochierarchy = 0 THEN s_state END, rank_within_parent LIMIT 100"
         result = self.run_cbq_query(query)
-        self.assertEquals(result['status'], 'success')
+        self.assertEqual(result['status'], 'success')
 
     '''
         Test idea - check syntax correctness of tpcds test suite query 
@@ -1337,7 +1337,7 @@ class WindowFunctionsTest(QueryTests):
         query = "SELECT SUM(decimal_field) AS total_sum,char_field,Rank() OVER ( PARTITION BY char_field ORDER BY SUM(decimal_field) DESC) AS rank_within_parent " \
                 "FROM test_bucket GROUP BY char_field ORDER BY total_sum DESC,CASE WHEN total_sum = 0 THEN char_field END,rank_within_parent LIMIT 100"
         result = self.run_cbq_query(query)
-        self.assertEquals(result['status'], 'success')
+        self.assertEqual(result['status'], 'success')
 
     '''
         Test idea - check syntax correctness of tpcds test suite query 
@@ -1348,7 +1348,7 @@ class WindowFunctionsTest(QueryTests):
         query = "SELECT * FROM (SELECT char_field, SUM(decimal_field) sum_sales,AVG(SUM(decimal_field)) OVER ( PARTITION BY char_field, int_field ) avg_monthly_sales " \
                 "FROM test_bucket GROUP BY char_field, sum_sales, int_field) tmp1 LIMIT 100"
         result = self.run_cbq_query(query)
-        self.assertEquals(result['status'], 'success')
+        self.assertEqual(result['status'], 'success')
 
     '''
         Test idea - check syntax correctness of tpcds test suite query 
@@ -1360,7 +1360,7 @@ class WindowFunctionsTest(QueryTests):
                 "FROM test_bucket WHERE char_field IN ['A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P','Q','R','S','T','U','V','W','Z','Y','Z'] " \
                 "GROUP BY char_field ORDER BY char_field, revenueratio;"
         result = self.run_cbq_query(query)
-        self.assertEquals(result['status'], 'success')
+        self.assertEqual(result['status'], 'success')
 
 
     '''
@@ -1389,7 +1389,7 @@ class WindowFunctionsTest(QueryTests):
                 db_val = res['fv']
 
             if db_val != test_dict[ch]:
-                self.assertEquals('True', 'False', "Values are: db - "+str(db_val)+", test - "+str(test_dict[ch])+", letter - "+str(ch))
+                self.assertEqual('True', 'False', "Values are: db - "+str(db_val)+", test - "+str(test_dict[ch])+", letter - "+str(ch))
 
 
     '''
@@ -1411,7 +1411,7 @@ class WindowFunctionsTest(QueryTests):
                     alpha = res['char_field']
                     checksum = float(res['decimal_field'])/float(test_dict[alpha])
                     if res['ratio_to_report']!=checksum:
-                        self.assertEquals('True', 'False', 'Test is failed: char_field - '+str(alpha)+", decimal_field - "+str(res['decimal_field'])+
+                        self.assertEqual('True', 'False', 'Test is failed: char_field - '+str(alpha)+", decimal_field - "+str(res['decimal_field'])+
                                           ", ratio_to_report - "+str(res['ratio_to_report'])+", checksum - "+str(checksum)+", test_dict - "+str(test_dict[alpha]))
 
     '''
@@ -1439,7 +1439,7 @@ class WindowFunctionsTest(QueryTests):
             else:
                 db_val = None
             if test_val != db_val:
-                self.assertEquals('True', 'False', 'Test is failed: char - '+str(res['char_field'])+", decimal - "+str(res['decimal_field'])+
+                self.assertEqual('True', 'False', 'Test is failed: char - '+str(res['char_field'])+", decimal - "+str(res['decimal_field'])+
                                   ", test_val - "+str(test_val)+", last_value - "+str(db_val))
 
     '''
@@ -1470,7 +1470,7 @@ class WindowFunctionsTest(QueryTests):
                 db_val = None
             if char_val in test_dict:
                 if db_val!=test_dict[char_val]:
-                    self.assertEquals('True', 'False', 'Test is failed: char - '+str(char_val)+", db_val - "+str(db_val)+", test_val - "+str(test_dict[char_val]))
+                    self.assertEqual('True', 'False', 'Test is failed: char - '+str(char_val)+", db_val - "+str(db_val)+", test_val - "+str(test_dict[char_val]))
 
 
 
@@ -1496,7 +1496,7 @@ class WindowFunctionsTest(QueryTests):
         for alpha in self.alphabet:
             db_value = db_dict[alpha]
             test_value = test_dict[alpha]['$1']
-            self.assertEquals(db_value, test_value, 'Test failed: window value ::'+str(db_value)+':: test_value ::'+str(test_value)+':: char - '+str(alpha))
+            self.assertEqual(db_value, test_value, 'Test failed: window value ::'+str(db_value)+':: test_value ::'+str(test_value)+':: char - '+str(alpha))
 
     '''
         Test idea - check AVG window function call against appropriate non window function queries 
@@ -1518,7 +1518,7 @@ class WindowFunctionsTest(QueryTests):
         for alpha in self.alphabet:
             db_value = db_dict[alpha]
             test_value = test_dict[alpha]['$1']
-            self.assertEquals(db_value, test_value, 'Test failed: window value ::'+str(db_value)+':: test_value ::'+str(test_value)+':: char - '+str(alpha))
+            self.assertEqual(db_value, test_value, 'Test failed: window value ::'+str(db_value)+':: test_value ::'+str(test_value)+':: char - '+str(alpha))
 
     '''
         Test idea - check COUNT window function call against appropriate non window function queries 
@@ -1540,7 +1540,7 @@ class WindowFunctionsTest(QueryTests):
         for alpha in self.alphabet:
             db_value = db_dict[alpha]
             test_value = test_dict[alpha]['$1']
-            self.assertEquals(db_value, test_value, 'Test failed: window value ::'+str(db_value)+':: test_value ::'+str(test_value)+':: char - '+str(alpha))
+            self.assertEqual(db_value, test_value, 'Test failed: window value ::'+str(db_value)+':: test_value ::'+str(test_value)+':: char - '+str(alpha))
 
     '''
         Test idea - check COUNTN window function call against appropriate non window function queries 
@@ -1562,7 +1562,7 @@ class WindowFunctionsTest(QueryTests):
         for alpha in self.alphabet:
             db_value = db_dict[alpha]
             test_value = test_dict[alpha]['$1']
-            self.assertEquals(db_value, test_value, 'Test failed: window value ::'+str(db_value)+':: test_value ::'+str(test_value)+':: char - '+str(alpha))
+            self.assertEqual(db_value, test_value, 'Test failed: window value ::'+str(db_value)+':: test_value ::'+str(test_value)+':: char - '+str(alpha))
 
     '''
         Test idea - check MAX window function call against appropriate non window function queries 
@@ -1584,7 +1584,7 @@ class WindowFunctionsTest(QueryTests):
         for alpha in self.alphabet:
             db_value = db_dict[alpha]
             test_value = test_dict[alpha]['$1']
-            self.assertEquals(db_value, test_value, 'Test failed: window value ::'+str(db_value)+':: test_value ::'+str(test_value)+':: char - '+str(alpha))
+            self.assertEqual(db_value, test_value, 'Test failed: window value ::'+str(db_value)+':: test_value ::'+str(test_value)+':: char - '+str(alpha))
 
     '''
         Test idea - check MEAN window function call against appropriate non window function queries 
@@ -1606,7 +1606,7 @@ class WindowFunctionsTest(QueryTests):
         for alpha in self.alphabet:
             db_value = db_dict[alpha]
             test_value = test_dict[alpha]['$1']
-            self.assertEquals(db_value, test_value, 'Test failed: window value ::'+str(db_value)+':: test_value ::'+str(test_value)+':: char - '+str(alpha))
+            self.assertEqual(db_value, test_value, 'Test failed: window value ::'+str(db_value)+':: test_value ::'+str(test_value)+':: char - '+str(alpha))
 
     '''
         Test idea - check MEDIAN window function call against appropriate non window function queries 
@@ -1628,7 +1628,7 @@ class WindowFunctionsTest(QueryTests):
         for alpha in self.alphabet:
             db_value = db_dict[alpha]
             test_value = test_dict[alpha]['$1']
-            self.assertEquals(db_value, test_value, 'Test failed: window value ::'+str(db_value)+':: test_value ::'+str(test_value)+':: char - '+str(alpha))
+            self.assertEqual(db_value, test_value, 'Test failed: window value ::'+str(db_value)+':: test_value ::'+str(test_value)+':: char - '+str(alpha))
 
     '''
         Test idea - check MIN window function call against appropriate non window function queries 
@@ -1650,7 +1650,7 @@ class WindowFunctionsTest(QueryTests):
         for alpha in self.alphabet:
             db_value = db_dict[alpha]
             test_value = test_dict[alpha]['$1']
-            self.assertEquals(db_value, test_value, 'Test failed: window value ::'+str(db_value)+':: test_value ::'+str(test_value)+':: char - '+str(alpha))
+            self.assertEqual(db_value, test_value, 'Test failed: window value ::'+str(db_value)+':: test_value ::'+str(test_value)+':: char - '+str(alpha))
 
     '''
         Test idea - check SUM window function call against appropriate non window function queries 
@@ -1672,7 +1672,7 @@ class WindowFunctionsTest(QueryTests):
         for alpha in self.alphabet:
             db_value = db_dict[alpha]
             test_value = test_dict[alpha]['$1']
-            self.assertEquals(db_value, test_value, 'Test failed: window value ::'+str(db_value)+':: test_value ::'+str(test_value)+':: char - '+str(alpha))
+            self.assertEqual(db_value, test_value, 'Test failed: window value ::'+str(db_value)+':: test_value ::'+str(test_value)+':: char - '+str(alpha))
 
     '''
         Test idea - check STDDEV window function call against appropriate non window function queries 
@@ -1694,7 +1694,7 @@ class WindowFunctionsTest(QueryTests):
         for alpha in self.alphabet:
             db_value = str(db_dict[alpha])
             test_value = str(test_dict[alpha]['$1'])
-            self.assertEquals(db_value, test_value, 'Test failed: window value ::'+str(db_value)+':: test_value ::'+str(test_value)+':: char - '+str(alpha))
+            self.assertEqual(db_value, test_value, 'Test failed: window value ::'+str(db_value)+':: test_value ::'+str(test_value)+':: char - '+str(alpha))
 
     '''
         Test idea - check STDDEV_SAMP window function call against appropriate non window function queries 
@@ -1716,7 +1716,7 @@ class WindowFunctionsTest(QueryTests):
         for alpha in self.alphabet:
             db_value = str(db_dict[alpha])
             test_value = str(test_dict[alpha]['$1'])
-            self.assertEquals(db_value, test_value, 'Test failed: window value ::'+str(db_value)+':: test_value ::'+str(test_value)+':: char - '+str(alpha))
+            self.assertEqual(db_value, test_value, 'Test failed: window value ::'+str(db_value)+':: test_value ::'+str(test_value)+':: char - '+str(alpha))
 
     '''
         Test idea - check STDDEV_POP window function call against appropriate non window function queries 
@@ -1738,7 +1738,7 @@ class WindowFunctionsTest(QueryTests):
         for alpha in self.alphabet:
             db_value = str(db_dict[alpha])
             test_value = str(test_dict[alpha]['$1'])
-            self.assertEquals(db_value, test_value, 'Test failed: window value ::'+str(db_value)+':: test_value ::'+str(test_value)+':: char - '+str(alpha))
+            self.assertEqual(db_value, test_value, 'Test failed: window value ::'+str(db_value)+':: test_value ::'+str(test_value)+':: char - '+str(alpha))
 
     '''
         Test idea - check VARIANCE window function call against appropriate non window function queries 
@@ -1760,7 +1760,7 @@ class WindowFunctionsTest(QueryTests):
         for alpha in self.alphabet:
             db_value = str(db_dict[alpha])
             test_value = str(test_dict[alpha]['$1'])
-            self.assertEquals(db_value, test_value, 'Test failed: window value ::'+str(db_value)+':: test_value ::'+str(test_value)+':: char - '+str(alpha))
+            self.assertEqual(db_value, test_value, 'Test failed: window value ::'+str(db_value)+':: test_value ::'+str(test_value)+':: char - '+str(alpha))
 
     '''
         Test idea - check VAR_SAMP window function call against appropriate non window function queries 
@@ -1782,7 +1782,7 @@ class WindowFunctionsTest(QueryTests):
         for alpha in self.alphabet:
             db_value = str(db_dict[alpha])
             test_value = str(test_dict[alpha]['$1'])
-            self.assertEquals(db_value, test_value, 'Test failed: window value ::'+str(db_value)+':: test_value ::'+str(test_value)+':: char - '+str(alpha))
+            self.assertEqual(db_value, test_value, 'Test failed: window value ::'+str(db_value)+':: test_value ::'+str(test_value)+':: char - '+str(alpha))
 
     '''
         Test idea - check VAR_POP window function call against appropriate non window function queries 
@@ -1804,7 +1804,7 @@ class WindowFunctionsTest(QueryTests):
         for alpha in self.alphabet:
             db_value = str(db_dict[alpha])
             test_value = str(test_dict[alpha]['$1'])
-            self.assertEquals(db_value, test_value, 'Test failed: window value ::'+str(db_value)+':: test_value ::'+str(test_value)+':: char - '+str(alpha))
+            self.assertEqual(db_value, test_value, 'Test failed: window value ::'+str(db_value)+':: test_value ::'+str(test_value)+':: char - '+str(alpha))
 
 
     '''
@@ -1815,13 +1815,13 @@ class WindowFunctionsTest(QueryTests):
         shell = RemoteMachineShellConnection(self.master)
 
         # ------------------ create prepareds -----------------------
-        for k, v in self.window_functions.iteritems():
+        for k, v in self.window_functions.items():
             cmd = ("{3} -u {0}:{1} http://{2}:8093/query/service -d " \
                   "statement='prepare prepared_"+v['name']+" from select decimal_field, "+self._construct_window_function_call(v)+"  as wf_result from test_bucket where char_field in $1 order by char_field'").\
                   format('Administrator', 'password', self.master.ip, self.curl_path)
             shell.execute_command(cmd)
 
-        for k, v in self.aggregate_functions.iteritems():
+        for k, v in self.aggregate_functions.items():
             cmd = ("{3} -u {0}:{1} http://{2}:8093/query/service -d " \
                   "statement='prepare prepared_"+v['name']+" from select decimal_field, "+self._construct_window_function_call(v)+"  as wf_result from test_bucket where char_field in $1 order by char_field'").\
                   format('Administrator', 'password', self.master.ip, self.curl_path)
@@ -1829,7 +1829,7 @@ class WindowFunctionsTest(QueryTests):
 
 
         # -------------- execute prepareds -----------------------
-        for k, v in self.window_functions.iteritems():
+        for k, v in self.window_functions.items():
             cmd = ("{3} -u {0}:{1} http://{2}:8093/query/service -d " \
                   "statement='execute prepared_"+v['name']+"&args=[[\"A\",\"B\",\"C\",\"D\",\"E\"]]'" \
                    ).\
@@ -1842,9 +1842,9 @@ class WindowFunctionsTest(QueryTests):
             json_output = json.loads(json_output_str)
             results_count = int(json_output['metrics']['resultCount'])
             status = str(json_output['status'])
-            self.assertEquals(results_count > 0 and status=='success', True, "Test is failed. Function name is "+v['name'])
+            self.assertEqual(results_count > 0 and status=='success', True, "Test is failed. Function name is "+v['name'])
 
-        for k, v in self.aggregate_functions.iteritems():
+        for k, v in self.aggregate_functions.items():
             cmd = ("{3} -u {0}:{1} http://{2}:8093/query/service -d " \
                   "statement='execute prepared_"+v['name']+"&args=[[\"A\",\"B\",\"C\",\"D\",\"E\"]]'" \
                    ).\
@@ -1857,7 +1857,7 @@ class WindowFunctionsTest(QueryTests):
             json_output = json.loads(json_output_str)
             results_count = int(json_output['metrics']['resultCount'])
             status = str(json_output['status'])
-            self.assertEquals(results_count > 0 and status=='success', True, "Test is failed. Function name is "+v['name'])
+            self.assertEqual(results_count > 0 and status=='success', True, "Test is failed. Function name is "+v['name'])
 
 
     '''
@@ -1870,50 +1870,50 @@ class WindowFunctionsTest(QueryTests):
                ). \
             format('Administrator', 'password', self.master.ip, self.curl_path)
         res = self._execute_and_check_shell_query(cmd)
-        self.assertEquals(res, True, "Test is failed. Function name is simple test")
+        self.assertEqual(res, True, "Test is failed. Function name is simple test")
 
         cmd = ("{3} -u {0}:{1} http://{2}:8093/query/service -d " \
                "statement='select decimal_field, ntile($1) over(partition by char_field order by char_field) as wf_result from test_bucket&args=[2]'" \
                ). \
             format('Administrator', 'password', self.master.ip, self.curl_path)
         res = self._execute_and_check_shell_query(cmd)
-        self.assertEquals(res, True, "Test is failed. Function name is NTILE")
+        self.assertEqual(res, True, "Test is failed. Function name is NTILE")
 
         cmd = ("{3} -u {0}:{1} http://{2}:8093/query/service -d " \
                "statement='select decimal_field, first_value(decimal_field) over(partition by char_field  order by char_field groups between unbounded preceding and $1 following) as wf_result from test_bucket&args=[2]'" \
                ). \
             format('Administrator', 'password', self.master.ip, self.curl_path)
         res = self._execute_and_check_shell_query(cmd)
-        self.assertEquals(res, True, "Test is failed. Function name is FIRST_VALUE")
+        self.assertEqual(res, True, "Test is failed. Function name is FIRST_VALUE")
 
         cmd = ("{3} -u {0}:{1} http://{2}:8093/query/service -d " \
                "statement='select decimal_field, ratio_to_report(decimal_field) over(partition by char_field  order by char_field groups between unbounded preceding and $1 following) as wf_result from test_bucket&args=[2]'" \
                ). \
             format('Administrator', 'password', self.master.ip, self.curl_path)
         res = self._execute_and_check_shell_query(cmd)
-        self.assertEquals(res, True, "Test is failed. Function name is RATIO_TO_REPORT")
+        self.assertEqual(res, True, "Test is failed. Function name is RATIO_TO_REPORT")
 
         cmd = ("{3} -u {0}:{1} http://{2}:8093/query/service -d " \
                "statement='select decimal_field, last_value(decimal_field) over(partition by char_field  order by char_field groups between unbounded preceding and $1 following) as wf_result from test_bucket&args=[2]'" \
                ). \
             format('Administrator', 'password', self.master.ip, self.curl_path)
         res = self._execute_and_check_shell_query(cmd)
-        self.assertEquals(res, True, "Test is failed. Function name is LAST_VALUE")
+        self.assertEqual(res, True, "Test is failed. Function name is LAST_VALUE")
 
         cmd = ("{3} -u {0}:{1} http://{2}:8093/query/service -d " \
                "statement='select decimal_field, nth_value(decimal_field, $1) over(partition by char_field  order by char_field groups between unbounded preceding and $2 following) as wf_result from test_bucket&args=[2,3]'" \
                ). \
             format('Administrator', 'password', self.master.ip, self.curl_path)
         res = self._execute_and_check_shell_query(cmd)
-        self.assertEquals(res, True, "Test is failed. Function name is NTH_VALUE")
+        self.assertEqual(res, True, "Test is failed. Function name is NTH_VALUE")
 
-        for k, v in self.aggregate_functions.iteritems():
+        for k, v in self.aggregate_functions.items():
             cmd = ("{3} -u {0}:{1} http://{2}:8093/query/service -d " \
                    "statement='select decimal_field, "+v['name']+"(decimal_field) over(partition by char_field  order by char_field groups between unbounded preceding and $1 following) as wf_result from test_bucket&args=[2]'" \
                    ). \
                 format('Administrator', 'password', self.master.ip, self.curl_path)
             res = self._execute_and_check_shell_query(cmd)
-            self.assertEquals(res, True, "Test is failed. Function name is "+v['name'])
+            self.assertEqual(res, True, "Test is failed. Function name is "+v['name'])
 
     '''
         Test idea - check parameterized queries calls with the use of named parameters 
@@ -1925,50 +1925,50 @@ class WindowFunctionsTest(QueryTests):
                ). \
             format('Administrator', 'password', self.master.ip, self.curl_path)
         res = self._execute_and_check_shell_query(cmd)
-        self.assertEquals(res, True, "Test is failed. Function name is simple test")
+        self.assertEqual(res, True, "Test is failed. Function name is simple test")
 
         cmd = ("{3} -u {0}:{1} http://{2}:8093/query/service -d " \
                "statement='select decimal_field, ntile($param) over(partition by char_field order by char_field) as wf_result from test_bucket&$param=2'" \
                ). \
             format('Administrator', 'password', self.master.ip, self.curl_path)
         res = self._execute_and_check_shell_query(cmd)
-        self.assertEquals(res, True, "Test is failed. Function name is NTILE")
+        self.assertEqual(res, True, "Test is failed. Function name is NTILE")
 
         cmd = ("{3} -u {0}:{1} http://{2}:8093/query/service -d " \
                "statement='select decimal_field, first_value(decimal_field) over(partition by char_field  order by char_field groups between unbounded preceding and $param following) as wf_result from test_bucket&$param=2'" \
                ). \
             format('Administrator', 'password', self.master.ip, self.curl_path)
         res = self._execute_and_check_shell_query(cmd)
-        self.assertEquals(res, True, "Test is failed. Function name is FIRST_VALUE")
+        self.assertEqual(res, True, "Test is failed. Function name is FIRST_VALUE")
 
         cmd = ("{3} -u {0}:{1} http://{2}:8093/query/service -d " \
                "statement='select decimal_field, ratio_to_report(decimal_field) over(partition by char_field  order by char_field groups between unbounded preceding and $param following) as wf_result from test_bucket&$param=2'" \
                ). \
             format('Administrator', 'password', self.master.ip, self.curl_path)
         res = self._execute_and_check_shell_query(cmd)
-        self.assertEquals(res, True, "Test is failed. Function name is RATIO_TO_REPORT")
+        self.assertEqual(res, True, "Test is failed. Function name is RATIO_TO_REPORT")
 
         cmd = ("{3} -u {0}:{1} http://{2}:8093/query/service -d " \
                "statement='select decimal_field, last_value(decimal_field) over(partition by char_field  order by char_field groups between unbounded preceding and $param following) as wf_result from test_bucket&$param=2'" \
                ). \
             format('Administrator', 'password', self.master.ip, self.curl_path)
         res = self._execute_and_check_shell_query(cmd)
-        self.assertEquals(res, True, "Test is failed. Function name is LAST_VALUE")
+        self.assertEqual(res, True, "Test is failed. Function name is LAST_VALUE")
 
         cmd = ("{3} -u {0}:{1} http://{2}:8093/query/service -d " \
                "statement='select decimal_field, nth_value(decimal_field, $param1) over(partition by char_field  order by char_field groups between unbounded preceding and $param2 following) as wf_result from test_bucket&$param1=2&$param2=3'" \
                ). \
             format('Administrator', 'password', self.master.ip, self.curl_path)
         res = self._execute_and_check_shell_query(cmd)
-        self.assertEquals(res, True, "Test is failed. Function name is NTH_VALUE")
+        self.assertEqual(res, True, "Test is failed. Function name is NTH_VALUE")
 
-        for k, v in self.aggregate_functions.iteritems():
+        for k, v in self.aggregate_functions.items():
             cmd = ("{3} -u {0}:{1} http://{2}:8093/query/service -d " \
                    "statement='select decimal_field, "+v['name']+"(decimal_field) over(partition by char_field  order by char_field groups between unbounded preceding and $param following) as wf_result from test_bucket&$param=2'" \
                    ). \
                 format('Administrator', 'password', self.master.ip, self.curl_path)
             res = self._execute_and_check_shell_query(cmd)
-            self.assertEquals(res, True, "Test is failed. Function name is "+v['name'])
+            self.assertEqual(res, True, "Test is failed. Function name is "+v['name'])
 
 
 
@@ -1981,7 +1981,7 @@ class WindowFunctionsTest(QueryTests):
         count = 0
 
         meta_fields = [' meta().cas ', ' meta().expiration ', ' meta().flags ', ' meta().id ', ' meta().type ']
-        for k, v in self.window_functions.iteritems():
+        for k, v in self.window_functions.items():
             for meta in meta_fields:
                 query = "select decimal_field, "+v['name']+v['params']+" over(partition by "+meta+" "+v['order']+" "+v['range']+") as wf_result from test_bucket order by decimal_field"
                 lambda1 = lambda x: self.assertTrue(x['q_res'][0]['status'] == 'success')
@@ -1994,7 +1994,7 @@ class WindowFunctionsTest(QueryTests):
                                                      }
                 count += 1
 
-        for k, v in self.aggregate_functions.iteritems():
+        for k, v in self.aggregate_functions.items():
             for meta in meta_fields:
                 query = "select decimal_field, " + v['name'] + v['params'] + " over(partition by " + meta + " " + v['order'] + " " + v['range'] + ") as wf_result from test_bucket order by decimal_field"
                 lambda1 = lambda x: self.assertTrue(x['q_res'][0]['status'] == 'success')

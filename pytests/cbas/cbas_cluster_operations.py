@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-from cbas_base import *
+from .cbas_base import *
 from lib.memcached.helper.data_helper import MemcachedClientHelper
 from lib.remote.remote_util import RemoteMachineShellConnection
 
@@ -39,7 +39,7 @@ class CBASClusterOperations(CBASBaseTest):
         # Create bucket on CBAS
         self.assertTrue(self.create_bucket_on_cbas(cbas_bucket_name=self.cbas_bucket_name,
                                    cb_bucket_name=self.cb_bucket_name,
-                                   cb_server_ip=self.cb_server_ip),"bucket creation failed on cbas")
+                                   cb_server_ip=self.cb_server_ip), "bucket creation failed on cbas")
 
         # Create dataset on the CBAS bucket
         self.create_dataset_on_bucket(cbas_bucket_name=self.cbas_bucket_name,
@@ -81,7 +81,7 @@ class CBASClusterOperations(CBASBaseTest):
                                                self.num_items * 2)
         
         self.log.info("Rebalance state:%s"%self.rest._rebalance_progress_status())
-        self._run_concurrent_queries(query,"immediate",2000)
+        self._run_concurrent_queries(query, "immediate", 2000)
         
         self.log.info("Rebalance state:%s"%self.rest._rebalance_progress_status())
         
@@ -120,7 +120,7 @@ class CBASClusterOperations(CBASBaseTest):
                                                self.num_items,
                                                self.num_items * 2)
 
-        self._run_concurrent_queries(query,"immediate",2000)
+        self._run_concurrent_queries(query, "immediate", 2000)
 
         if not self.validate_cbas_dataset_items_count(self.cbas_dataset_name,
                                                       self.num_items * 2, 0):
@@ -151,14 +151,14 @@ class CBASClusterOperations(CBASBaseTest):
         else:
             service = ["cbas"]
         otpnodes.append(self.add_node(node=self.servers[1], services=service))
-        self.add_node(node=self.servers[3], services=service,rebalance=False)
+        self.add_node(node=self.servers[3], services=service, rebalance=False)
         self.remove_node(otpnodes, wait_for_rebalance=self.wait_for_rebalance)
         
         self.perform_doc_ops_in_all_cb_buckets(self.num_items, "create",
                                                self.num_items,
                                                self.num_items * 2)
 
-        self._run_concurrent_queries(query,"immediate",2000)
+        self._run_concurrent_queries(query, "immediate", 2000)
 
         if not self.validate_cbas_dataset_items_count(self.cbas_dataset_name,
                                                       self.num_items * 2, 0):
@@ -196,12 +196,12 @@ class CBASClusterOperations(CBASBaseTest):
         self.rebalance()
         self.perform_doc_ops_in_all_cb_buckets(self.num_items, "create",
                                                self.num_items,
-                                               self.num_items * 3 / 2)
+                                               self.num_items * 3 // 2)
 
-        self._run_concurrent_queries(query,"immediate",2000)
+        self._run_concurrent_queries(query, "immediate", 2000)
 
         if not self.validate_cbas_dataset_items_count(self.cbas_dataset_name,
-                                                      self.num_items * 3 / 2,
+                                                      self.num_items * 3 // 2,
                                                       0):
             self.fail(
                 "No. of items in CBAS dataset do not match that in the CB bucket")

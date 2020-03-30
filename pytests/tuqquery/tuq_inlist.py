@@ -1,4 +1,4 @@
-from tuq import QueryTests
+from .tuq import QueryTests
 from membase.api.exception import CBQError
 from remote.remote_util import RemoteMachineShellConnection
 import pdb
@@ -134,7 +134,7 @@ class InListOperatorTests(QueryTests):
         query+="]"
         results_in = self.run_cbq_query(query)
         try:
-            self.assertEquals(results_in['status'], 'success')
+            self.assertEqual(results_in['status'], 'success')
         finally:
             self._unload_test_data()
 
@@ -149,7 +149,7 @@ class InListOperatorTests(QueryTests):
         query+="]"
         results_in = self.run_cbq_query(query)
         try:
-            self.assertEquals(results_in['status'], 'success')
+            self.assertEqual(results_in['status'], 'success')
         finally:
             self._unload_test_data()
 
@@ -161,7 +161,7 @@ class InListOperatorTests(QueryTests):
         count = 0
         test_dict = dict()
         primary_idx = {'name': '#primary', 'bucket': "temp_bucket", 'fields': (), 'state': 'online', 'using': self.index_type.lower(), 'is_primary': True}
-        idx_1 = {'name': "ix1", 'bucket': "temp_bucket", 'fields': [("int_field",0)], 'state': "online", 'using': self.index_type.lower(), 'is_primary':False}
+        idx_1 = {'name': "ix1", 'bucket': "temp_bucket", 'fields': [("int_field", 0)], 'state': "online", 'using': self.index_type.lower(), 'is_primary':False}
 
         for innotin in self.in_not_in:
             #for wherecond in (self.constant_list+self.subquery):
@@ -184,7 +184,7 @@ class InListOperatorTests(QueryTests):
 
                 expected_result = self.run_cbq_query(query_or)
 
-                lambda1 = lambda x, y = expected_result['results']: self.assertEquals(x['q_res'][0]['results'], y)
+                lambda1 = lambda x, y = expected_result['results']: self.assertEqual(x['q_res'][0]['results'], y)
                 test_dict["%d-default" % (count)] = {"indexes": [primary_idx, idx_1],
                                                      "pre_queries": [],
                                                      "queries": [query_in],
@@ -206,7 +206,7 @@ class InListOperatorTests(QueryTests):
         count = 0
         test_dict = dict()
         primary_idx = {'name': '#primary', 'bucket': "temp_bucket", 'fields': [], 'state': 'online', 'using': self.index_type.lower(), 'is_primary': True}
-        idx_1 = {'name': "ix1", 'bucket': "temp_bucket", 'fields': [("int_field",0)], 'state': "online", 'using': self.index_type.lower(), 'is_primary':False}
+        idx_1 = {'name': "ix1", 'bucket': "temp_bucket", 'fields': [("int_field", 0)], 'state': "online", 'using': self.index_type.lower(), 'is_primary':False}
 
         for innotin1 in self.in_not_in:
             for wherecond1 in self.constant_list+self.subquery:
@@ -241,7 +241,7 @@ class InListOperatorTests(QueryTests):
                         query_or+=" order by varchar_field"
                         expected_result = self.run_cbq_query(query_or)
 
-                        lambda1 = lambda x, y=expected_result['results']: self.assertEquals(x['q_res'][0]['results'], y)
+                        lambda1 = lambda x, y=expected_result['results']: self.assertEqual(x['q_res'][0]['results'], y)
                         test_dict["%d-default" % (count)] = {"indexes": [primary_idx, idx_1],
                                              "pre_queries": [],
                                              "queries": [query_in],
@@ -263,7 +263,7 @@ class InListOperatorTests(QueryTests):
         count = 0
         test_dict = dict()
         primary_idx = {'name': '#primary', 'bucket': "temp_bucket", 'fields': [], 'state': 'online', 'using': self.index_type.lower(), 'is_primary': True}
-        idx_1 = {'name': "ix1", 'bucket': "temp_bucket", 'fields': [("int_field",0)], 'state': "online", 'using': self.index_type.lower(), 'is_primary':False}
+        idx_1 = {'name': "ix1", 'bucket': "temp_bucket", 'fields': [("int_field", 0)], 'state': "online", 'using': self.index_type.lower(), 'is_primary':False}
 
         for innotin1 in self.in_not_in:
             for wherecond1 in self.constant_list + self.subquery:
@@ -299,7 +299,7 @@ class InListOperatorTests(QueryTests):
                         query_or += " order by varchar_field"
                         expected_result = self.run_cbq_query(query_or)
 
-                        lambda1 = lambda x, y=expected_result['results']: self.assertEquals(x['q_res'][0]['results'], y)
+                        lambda1 = lambda x, y=expected_result['results']: self.assertEqual(x['q_res'][0]['results'], y)
                         test_dict["%d-default" % (count)] = {"indexes": [primary_idx, idx_1],
                                              "pre_queries": [],
                                              "queries": [query_in],
@@ -356,7 +356,7 @@ class InListOperatorTests(QueryTests):
         output, error = shell.execute_command(cmd)
         query_or = "select varchar_field from temp_bucket where int_field=1 or int_field=%d or int_field=3 or int_field=%d or int_field=%d or int_field=6"\
                    " or int_field=%d or int_field=8 or int_field=%d or int_field=10 or int_field=%d or int_field=12 or int_field=13 or int_field=%d or int_field=15"\
-                   " or int_field=16 or int_field=17 or int_field=18 or int_field=19 order by varchar_field" % (2,4,5,7,9,11,14)
+                   " or int_field=16 or int_field=17 or int_field=18 or int_field=19 order by varchar_field" % (2, 4, 5, 7, 9, 11, 14)
         result_or = self.run_cbq_query(query_or)
         json_output_str = ''
         for s in output:
@@ -364,7 +364,7 @@ class InListOperatorTests(QueryTests):
         json_output = json.loads(json_output_str)
         normalized_output = json_output['results']
         try:
-            self.assertEquals(normalized_output, result_or['results'])
+            self.assertEqual(normalized_output, result_or['results'])
         finally:
             self._unload_test_data()
 
@@ -390,7 +390,7 @@ class InListOperatorTests(QueryTests):
         json_output = json.loads(json_output_str)
         normalized_output = json_output['results']
         try:
-            self.assertEquals(normalized_output, result_or['results'])
+            self.assertEqual(normalized_output, result_or['results'])
         finally:
             self._unload_test_data()
 
@@ -401,7 +401,7 @@ class InListOperatorTests(QueryTests):
         result = self.run_cbq_query(query)
         index_in_use = result['results'][0]['plan']['~children'][0]['index']
         try:
-            self.assertEquals(index_in_use, "ix1")
+            self.assertEqual(index_in_use, "ix1")
         finally:
             self._unload_test_data()
 
@@ -412,7 +412,7 @@ class InListOperatorTests(QueryTests):
         result = self.run_cbq_query(query)
         index_in_use = result['results'][0]['plan']['~children'][0]['index']
         try:
-            self.assertEquals(index_in_use, "ix1")
+            self.assertEqual(index_in_use, "ix1")
         finally:
             self._unload_test_data()
 

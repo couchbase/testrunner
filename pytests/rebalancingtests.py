@@ -161,7 +161,7 @@ class RebalanceTestsUnderLoad(unittest.TestCase):
                 load_set_ops = {"ops": "set", "bucket": bucket.name}
                 load_set_ops.update(params)
                 load_delete_ops = {"ops": "delete", "bucket": bucket.name,
-                                   "sizes": [size], "count": add_items_count / 5, "seed": add_items_seed}
+                                   "sizes": [size], "count": add_items_count // 5, "seed": add_items_seed}
                 thread = RebalanceDataGenerator.start_load(rest, bucket.name,
                     RebalanceDataGenerator.create_loading_tasks(load_set_ops), kv_store)
                 generators["set"] = {"thread": thread}
@@ -212,7 +212,7 @@ class RebalanceTestsUnderLoad(unittest.TestCase):
                 load_set_ops = {"ops": "set", "bucket": bucket.name}
                 load_set_ops.update(params)
                 load_delete_ops = {"ops": "delete", "bucket": bucket.name,
-                                   "sizes": [size], "count": add_items_count / 5, "seed": add_items_seed}
+                                   "sizes": [size], "count": add_items_count // 5, "seed": add_items_seed}
                 thread = RebalanceDataGenerator.start_load(rest, bucket.name,
                     RebalanceDataGenerator.create_loading_tasks(load_set_ops), kv_store)
                 generators["set"] = {"thread": thread}
@@ -266,7 +266,7 @@ class RebalanceDataGenerator(object):
             options = {"size": size, "seed": params["seed"]}
             if "padding" in params:
                 options["padding"] = params["padding"]
-            docs = DocumentGenerator.make_docs(params["count"] / len(params["sizes"]), kv_template, options)
+            docs = DocumentGenerator.make_docs(params["count"] // len(params["sizes"]), kv_template, options)
             task["docs"].append(docs)
         return task
 
@@ -294,7 +294,7 @@ class RebalanceDataGenerator(object):
 
     @staticmethod
     def do_verification(kv_store, rest, bucket):
-        keys = kv_store.keys()
+        keys = list(kv_store.keys())
         smart = VBucketAwareMemcached(rest, bucket)
         validation_failures = {}
         for k in keys:

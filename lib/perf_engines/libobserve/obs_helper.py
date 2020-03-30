@@ -57,8 +57,8 @@ class SyncDict:
             try:
                 return self.dict[key]
             except KeyError as e:
-                print "<%s> failed to get key %s : %s"\
-                    % (self.__class__.__name__, key, e)
+                print("<%s> failed to get key %s : %s"\
+                    % (self.__class__.__name__, key, e))
         return None
 
     def pop(self, key):
@@ -66,8 +66,8 @@ class SyncDict:
             try:
                 return self.dict.pop(key)
             except KeyError as e:
-                print "<%s> failed to pop key %s : %s"\
-                    % (self.__class__.__name__, key, e)
+                print("<%s> failed to pop key %s : %s"\
+                    % (self.__class__.__name__, key, e))
         return None
 
     def remove(self, key):
@@ -75,8 +75,8 @@ class SyncDict:
             try:
                 del self.dict[key]
             except KeyError as e:
-                print "<%s> failed to delete key %s : %s"\
-                    % (self.__class__.__name__, key, e)
+                print("<%s> failed to delete key %s : %s"\
+                    % (self.__class__.__name__, key, e))
                 return False
         return True
 

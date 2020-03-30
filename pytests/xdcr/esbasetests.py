@@ -32,7 +32,7 @@ class ESReplicationBaseTest(object):
     def verify_es_results(self, verification_count=0, doc_type=None):
         xd_ref = self.xd_ref
         # Checking replication at destination clusters
-        self.verify_es_stats(self.xd_ref.src_nodes,self.xd_ref.dest_nodes, verification_count, doc_type)
+        self.verify_es_stats(self.xd_ref.src_nodes, self.xd_ref.dest_nodes, verification_count, doc_type)
 
 
     def verify_es_stats(self, src_nodes, dest_nodes, verification_count=0, doc_type=None):
@@ -46,7 +46,7 @@ class ESReplicationBaseTest(object):
         xd_ref._expiry_pager(src_master)
         self.sleep(20)
         self._log.info("Verifing couchbase to elasticsearch replication")
-        self.verify_es_num_docs(src_master, dest_master,1, 10, verification_count, doc_type)
+        self.verify_es_num_docs(src_master, dest_master, 1, 10, verification_count, doc_type)
 
 
 

@@ -1,5 +1,5 @@
 import sys
-import urllib2
+import urllib.request, urllib.error, urllib.parse
 
 sys.path.append('lib')
 
@@ -13,10 +13,10 @@ if __name__ == "__main__":
         build = BuildQuery().find_membase_build_with_version(builds, version)
         if build.change and build.change.url:
             try:
-                print "downloading {0}".format(build.change.url)
-                page = urllib2.urlopen(build.change.url)
+                print("downloading {0}".format(build.change.url))
+                page = urllib.request.urlopen(build.change.url)
                 changes = open('changes.txt', 'w')
                 changes.write('{0}'.format(page.read()))
                 changes.close()
-            except urllib2.HTTPError as error:
-                print 'unable to download {0}'.format(build.change.url)
+            except urllib.error.HTTPError as error:
+                print('unable to download {0}'.format(build.change.url))

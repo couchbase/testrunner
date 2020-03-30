@@ -5,7 +5,7 @@ Ascii memcached test client.
 
 import socket
 import select
-import exceptions
+import builtins as exceptions
 
 import memcacheConstants
 
@@ -13,7 +13,7 @@ class MemcachedError(exceptions.Exception):
     """Error raised when a command fails."""
 
     def __init__(self, status, msg):
-        supermsg='Memcached error #' + `status`
+        supermsg='Memcached error #' + repr(status)
         if msg: supermsg += ":  " + msg
         exceptions.Exception.__init__(self, supermsg)
 
@@ -89,7 +89,7 @@ class MemcachedAsciiClient(object):
             length = int(msg.split(" ")[3])
             cas = int(msg.split(" ")[4])
             data = self._recvData(length)
-            result[key] = (flags,cas,data)
+            result[key] = (flags, cas, data)
             msg = self._recvMsg()
         if msg != "END":
             error = msg
@@ -103,7 +103,7 @@ class MemcachedAsciiClient(object):
         error = ""
         while msg.split(" ")[0] == "STAT" or \
                 msg.split(" ")[0] == "VERSION":
-            print "msg:",msg
+            print("msg:", msg)
             kind = msg.split(" ")[0]
             key = msg.split(" ")[1]
             if kind == "VERSION":
@@ -172,14 +172,14 @@ class MemcachedAsciiClient(object):
         response, error = self._doRetrieve("gets {0}\r\n".format(key))
         if error:
             raise MemcachedError(-1, error)
-        return response.items()[0][1]
+        return list(response.items())[0][1]
 
     def getl(self, key, exp=15):
         """Get the value for a given key within the memcached server."""
         response, error = self._doRetrieve("getl {0} {1}\r\n".format(key, exp))
         if error:
             raise MemcachedError(-1, error)
-        return response.items()[0][1]
+        return list(response.items())[0][1]
 
     def cas(self, key, exp, flags, oldVal, val):
         """CAS in a new value for the given key and comparison value."""
@@ -198,7 +198,7 @@ class MemcachedAsciiClient(object):
         response, error = self._doRetrieve("gat {0} {1}\r\n".format(key, exp))
         if error:
             raise MemcachedError(-1, error)
-        return response.items()[0][1]
+        return list(response.items())[0][1]
 
     def version(self):
         """Get the value for a given key within the memcached server."""

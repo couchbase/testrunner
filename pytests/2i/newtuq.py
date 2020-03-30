@@ -67,7 +67,7 @@ class QueryTests(BaseTestCase):
         self.load(self.gens_load, flag=self.item_flag, verify_data=verify_data, batch_size=self.batch_size)
         if self.doc_ops:
             self.ops_dist_map = self.calculate_data_change_distribution(
-                create_per=self.create_ops_per , update_per=self.update_ops_per ,
+                create_per=self.create_ops_per, update_per=self.update_ops_per,
                 delete_per=self.delete_ops_per, expiry_per=self.expiry_ops_per,
                 start=0, end=self.docs_per_day)
             self.log.info(self.ops_dist_map)
@@ -87,7 +87,7 @@ class QueryTests(BaseTestCase):
             try:
                 self.n1ql_helper.create_primary_index(using_gsi=self.use_gsi_for_primary,
                  server=self.n1ql_node)
-            except Exception, ex:
+            except Exception as ex:
                 self.log.info(ex)
                 raise ex
 
@@ -117,7 +117,7 @@ class QueryTests(BaseTestCase):
             if self.dataset == "array":
                 return self.generate_docs_array(num_items, start)
             return getattr(self, 'generate_docs_' + self.dataset)(num_items, start)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             self.fail("There is no dataset %s, please enter a valid one" % self.dataset)
 
@@ -136,7 +136,7 @@ class QueryTests(BaseTestCase):
                 return self.generate_ops(num_items, start, json_generator.generate_docs_bigdata)
             if self.dataset == "array":
                 return self.generate_ops(num_items, start, json_generator.generate_all_type_documents_for_gsi)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(ex)
             self.fail("There is no dataset %s, please enter a valid one" % self.dataset)
 
@@ -172,7 +172,7 @@ class QueryTests(BaseTestCase):
 
     def generate_ops(self, docs_per_day, start=0, method=None):
         gen_docs_map = {}
-        for key in self.ops_dist_map.keys():
+        for key in list(self.ops_dist_map.keys()):
             isShuffle = False
             if key == "update":
                 isShuffle = True
@@ -187,7 +187,7 @@ class QueryTests(BaseTestCase):
 
     def generate_full_docs_list_after_ops(self, gen_docs_map):
         docs = []
-        for key in gen_docs_map.keys():
+        for key in list(gen_docs_map.keys()):
             if key != "delete" and key != "expiry":
                 update = False
                 if key == "update":

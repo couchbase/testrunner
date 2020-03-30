@@ -12,7 +12,7 @@ sys.path.append("../lib")
 import TestInput
 
 def usage(error=None):
-    print """\
+    print("""\
 Syntax: vbucket_move_capture.py [options]
 
 Options
@@ -25,7 +25,7 @@ Available keys:
 
 Example:
 python tools/vbucket_move_capture.py -i cluster.ini -p interval=200,bucket=default
-"""
+""")
     sys.exit(error)
 
 if __name__ == "__main__":
@@ -40,7 +40,7 @@ if __name__ == "__main__":
             usage("ERROR: no servers specified. Please use the -i parameter.")
     except IndexError:
         usage()
-    except getopt.GetoptError, error:
+    except getopt.GetoptError as error:
         usage("ERROR: " + str(error))
 
     bucket = input.param("bucket", "default")
@@ -54,8 +54,8 @@ if __name__ == "__main__":
         server_list = []
         while (count - i > 0):
             cmd = "curl -s http://%s:8091/pools/%s/buckets/%s " % (input.servers[i].ip, bucket, bucket)
-            p = subprocess.Popen(cmd,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
-            stdoutdata,stderrdata=p.communicate()
+            p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            stdoutdata, stderrdata=p.communicate()
             bucket_info = "" + stdoutdata
             if bucket_info.find("Requested resource not found") > -1:
                 raise Exception ("Node %s doesn't have bucket %s" % (vm_ip, bucket))
@@ -82,14 +82,14 @@ if __name__ == "__main__":
             for m in range(num_nodes):
                 if i[0] == m:
                     k[m] += 1
-        print "#################################################"
-        print "TIME NOW: "
-        print datetime.datetime.now()
-        print "*************************************************"
-        print " "
+        print("#################################################")
+        print("TIME NOW: ")
+        print(datetime.datetime.now())
+        print("*************************************************")
+        print(" ")
         for i in range(num_nodes):
-            print "node %s have %d vbuckets" % (server_list[i], k[i])
-        print " "
-        print "******************** Sleep in %s seconds ************" % time_sleep
-        print " "
+            print("node %s have %d vbuckets" % (server_list[i], k[i]))
+        print(" ")
+        print("******************** Sleep in %s seconds ************" % time_sleep)
+        print(" ")
         time.sleep(time_sleep)

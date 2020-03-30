@@ -1,4 +1,4 @@
-from __future__ import absolute_import
+
 from app.celery import celery
 import json
 import time
@@ -69,7 +69,7 @@ def loadTestFromFile(name, suffix="js"):
     testMsg = None
 
     try:
-        fname = "tests/%s.%s" % (name,suffix)
+        fname = "tests/%s.%s" % (name, suffix)
         json_data = open(fname)
         testMsg = json.load(json_data)
     except Exception as ex:
@@ -120,9 +120,8 @@ def launchSystest(testMsg, loop=False):
     # retrieve phase keys and make sure they are ordered
     phases = testMsg['phases']
     # convert key type to int to be sorted correctly
-    keys = phases.keys()
-    keys = [int(k) for k in keys]
-    keys.sort()
+    keys = list(phases.keys())
+    keys = sorted([int(k) for k in keys])
 
     loop_start, loop_end = parsePhaseRangeInfo(phases_to_loop)
     if loop:
@@ -370,7 +369,7 @@ def runPhase(phase, rcq = None):
             cluster = cluster[0] # there can only be one cluster task-per-site
 
         clusterMsg = parseClusterReq(cluster)
-	logger.error("{0}".format(clusterMsg))
+        logger.error("{0}".format(clusterMsg))
         perform_admin_tasks(clusterMsg)
         rebalance_required = clusterMsg['rebalance_required']
 
@@ -645,7 +644,7 @@ def createWorkload(workload):
 
 
     for op in params:
-        key,val = op.split(':')
+        key, val = op.split(':')
         if key == 's':
             workloadSpec['create_perc'] = int(val)
         if key == 'b':
@@ -731,7 +730,7 @@ def get_phase_status(taskId, rcq = None):
                         running = True  # phase running
 
     except Exception as ex:
-        print ex
+        print(ex)
         logger.error(ex)
 
     # put result into response queue for any remote client requesting this status

@@ -15,6 +15,12 @@ class RecreateMembaseBuckets(unittest.TestCase):
     servers = None
     log = None
     input = TestInput.TestInput
+    
+    def suite_setUp(self):
+       pass
+
+    def suite_tearDown(self):
+       pass
 
     #as part of the setup let's delete all the existing buckets
     def setUp(self):

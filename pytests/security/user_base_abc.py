@@ -1,9 +1,7 @@
 from abc import ABCMeta, abstractmethod
 
 
-class UserBase():
-
-    __metaclass__ = ABCMeta
+class UserBase(metaclass=ABCMeta):
 
     @abstractmethod
     def create_user(self):

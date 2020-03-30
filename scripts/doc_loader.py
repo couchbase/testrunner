@@ -20,7 +20,7 @@ import copy
 
 
 def usage(error=None):
-    print """\
+    print("""\
 Syntax: doc_loader.py [options]
 will create documents like:
 {
@@ -74,7 +74,7 @@ Example:
  doc_loader.py -i cluster.ini -p bucket_name=default,doc_per_day=1
  doc_loader.py -i cluster.ini -p doc_per_day=1,bucket_name=sasl,bucket_sasl_pass=pass
  doc_loader.py -i cluster.ini -p doc_per_day=1,to_dir=/tmp/my_bucket
-"""
+""")
     sys.exit(error)
 
 class DocLoader(object):
@@ -85,8 +85,8 @@ class DocLoader(object):
         generators = []
         types = ["Engineer", "Sales", "Support"]
         join_yr = [2010, 2011]
-        join_mo = xrange(1, 12 + 1)
-        join_day = xrange(1, 28 + 1)
+        join_mo = range(1, 12 + 1)
+        join_day = range(1, 28 + 1)
         template = '{{ "name":"{0}", "join_yr":{1}, "join_mo":{2}, "join_day":{3},'
         template += ' "email":"{4}", "job_title":"{5}", "test_rate":{8}, "skills":{9},'
         template += '"VMs": {10},'
@@ -105,7 +105,7 @@ class DocLoader(object):
                         generators.append(DocumentGenerator("query-test" + prefix,
                                                template,
                                                name, [year], [month], [day],
-                                               email, [info], range(1,10), range(1,10),
+                                               email, [info], list(range(1, 10)), list(range(1, 10)),
                                                [float("%s.%s" % (month, month))],
                                                [["skill%s" % y for y in join_yr]], [vms],
                                                start=0, end=docs_per_day))
@@ -150,8 +150,8 @@ class JoinDocLoader(DocLoaderCouchbase):
         start = 0
         types = ['Engineer', 'Sales', 'Support']
         join_yr = [2010, 2011]
-        join_mo = xrange(1, 12 + 1)
-        join_day = xrange(1, 28 + 1)
+        join_mo = range(1, 12 + 1)
+        join_day = range(1, 28 + 1)
         template = '{{ "name":"{0}", "join_yr":{1}, "join_mo":{2}, "join_day":{3},'
         template += ' "job_title":"{4}", "tasks_ids":{5}}}'
         for info in types:
@@ -168,15 +168,15 @@ class JoinDocLoader(DocLoaderCouchbase):
         start, end = 0, (28 + 1)
         template = '{{ "task_name":"{0}", "project": "{1}"}}'
         generators.append(DocumentGenerator("test_task", template,
-                                            ["test_task-%s" % i for i in xrange(0,10)],
+                                            ["test_task-%s" % i for i in range(0, 10)],
                                             ["CB"],
                                             start=start, end=10))
         generators.append(DocumentGenerator("test_task", template,
-                                            ["test_task-%s" % i for i in xrange(10,20)],
+                                            ["test_task-%s" % i for i in range(10, 20)],
                                             ["MB"],
                                             start=10, end=20))
         generators.append(DocumentGenerator("test_task", template,
-                                            ["test_task-%s" % i for i in xrange(20,end)],
+                                            ["test_task-%s" % i for i in range(20, end)],
                                             ["IT"],
                                             start=20, end=end))
         return generators
@@ -205,7 +205,7 @@ class NonDocLoader(DocLoaderCouchbase):
 
     def generate_docs(self, docs_per_day, years):
         values = ['Engineer', 'Sales', 'Support']
-        generators = [JSONNonDocGenerator('nondoc-', values, start=0,end=docs_per_day)]
+        generators = [JSONNonDocGenerator('nondoc-', values, start=0, end=docs_per_day)]
         return generators
 
 
@@ -239,8 +239,8 @@ class DocLoaderDirectory(DocLoader):
             shell.execute_command('mkdir -p %s/data/default/%s' % (self.directory, self.bucket_name))
             self.log.info("Load %s documents to %s/data/default/%s..." % (items, self.directory, self.bucket_name))
             for gen_load in gens_load:
-                for i in xrange(gen_load.end):
-                    key, value = gen_load.next()
+                for i in range(gen_load.end):
+                    key, value = next(gen_load)
                     out = shell.execute_command("echo '%s' > %s/data/default/%s/%s.json" % (value, self.directory,
                                                                                             self.bucket_name, key))
             self.log.info("LOAD IS FINISHED")
@@ -259,7 +259,7 @@ def main():
             usage("ERROR: no servers specified. Please use the -i parameter.")
     except IndexError:
         usage()
-    except getopt.GetoptError, error:
+    except getopt.GetoptError as error:
         usage("ERROR: " + str(error))
 
     docs_per_day = input.param("doc_per_day", 49)

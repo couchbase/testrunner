@@ -1,7 +1,7 @@
 from couchbase_helper.documentgenerator import BlobGenerator, DocumentGenerator, JSONNonDocGenerator
 from membase.helper.rebalance_helper import RebalanceHelper
-from xdcrbasetests import XDCRReplicationBaseTest
-from esbasetests import ESReplicationBaseTest
+from .xdcrbasetests import XDCRReplicationBaseTest
+from .esbasetests import ESReplicationBaseTest
 from remote.remote_util import RemoteMachineShellConnection
 from random import randrange
 
@@ -21,7 +21,7 @@ class ESTests(XDCRReplicationBaseTest, ESReplicationBaseTest):
 
     def setup_doc_gens(self, template=None):
         # create json doc generators
-        ordering = range(self.num_items/4)
+        ordering = list(range(self.num_items/4))
         sites1 = ['google', 'bing', 'yahoo', 'wiki']
         sites2 = ['mashable', 'techcrunch', 'hackernews', 'slashdot']
         template = '{{ "ordering": {0}, "site_name": "{1}" }}'
@@ -40,7 +40,7 @@ class ESTests(XDCRReplicationBaseTest, ESReplicationBaseTest):
         self.gen_blob = BlobGenerator('loadOne', 'loadOne', self._value_size, end=self.num_items)
 
         self.gen_with_typedelimiter =\
-            DocumentGenerator('es_xdcr_docs{0}{1}'.format(self.delimiter,self.default_type), template, ordering,
+            DocumentGenerator('es_xdcr_docs{0}{1}'.format(self.delimiter, self.default_type), template, ordering,
                                sites1, start=0, end=self.num_items)
 
         values = ['1', '10']
@@ -208,7 +208,7 @@ class ESTests(XDCRReplicationBaseTest, ESReplicationBaseTest):
         config_commands.append('couchbase.typeSelector: org.elasticsearch.transport.couchbase.capi.DelimiterTypeSelector')
         config_commands.append('couchbase.typeSelector.documentTypeDelimiter: {0}'.format(self.delimiter))
         self.update_configurations(config_commands)
-        self._load_all_buckets(self.src_master, self.gen_with_typedelimiter , "create", 0)
+        self._load_all_buckets(self.src_master, self.gen_with_typedelimiter, "create", 0)
         self.verify_results(verification_count=self.num_items, doc_type=self.default_type)
 
 
@@ -217,7 +217,7 @@ class ESTests(XDCRReplicationBaseTest, ESReplicationBaseTest):
         config_commands.append('couchbase.typeSelector: org.elasticsearch.transport.couchbase.capi.RegexTypeSelector')
         config_commands.append('couchbase.typeSelector.{0}: {1}'.format(self.default_type, self.regex))
         self.update_configurations(config_commands)
-        self._load_all_buckets(self.src_master, self.gen_create , "create", 0)
+        self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
         self.verify_results(verification_count=self.num_items, doc_type=self.default_type)
         self.reset_configurations()
 
@@ -232,7 +232,7 @@ class ESTests(XDCRReplicationBaseTest, ESReplicationBaseTest):
         config_commands.append('couchbase.documentTypeRoutingFields.{0}: {1}'.format(self.default_type, 'site_name'))
 
         self.update_configurations(config_commands)
-        self._load_all_buckets(self.src_master, self.gen_create , "create", 0)
+        self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
         self.verify_results(verification_count=self.num_items, doc_type=self.default_type)
         self.reset_configurations()
 
@@ -243,7 +243,7 @@ class ESTests(XDCRReplicationBaseTest, ESReplicationBaseTest):
         config_commands.append('couchbase.keyFilter.keyFiltersRegex.*: {0}'.format(self.regex))
 
         self.update_configurations(config_commands)
-        self._load_all_buckets(self.src_master, self.gen_create , "create", 0)
+        self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
         self.verify_results(verification_count=self.num_items)
         self.reset_configurations()
 
@@ -252,9 +252,9 @@ class ESTests(XDCRReplicationBaseTest, ESReplicationBaseTest):
         config_commands.append('couchbase.keyFilter: org.elasticsearch.transport.couchbase.capi.RegexKeyFilter')
         config_commands.append('couchbase.keyFilter.type: Exclude')
         config_commands.append('couchbase.keyFilter.keyFiltersRegex.*: {0}'.format(self.regex))
-        self._load_all_buckets(self.src_master, self.gen_create , "create", 0)
+        self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
         self.update_configurations(config_commands)
-        self._load_all_buckets(self.src_master, self.gen_create , "delete", 0)
+        self._load_all_buckets(self.src_master, self.gen_create, "delete", 0)
         self.verify_results(verification_count=self.num_items)
         self.reset_configurations()
 
@@ -272,28 +272,28 @@ class ESTests(XDCRReplicationBaseTest, ESReplicationBaseTest):
     def test_low_replication_streams(self):
         self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
         self.replication_setting('maxConcurrentReps', 2)
-        self._load_all_buckets(self.src_master, self.gen_delete, "delete",0)
+        self._load_all_buckets(self.src_master, self.gen_delete, "delete", 0)
         self.verify_results(verification_count=0)
 
     def test_high_replication_streams(self):
         self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
         self.replication_setting('maxConcurrentReps', 256)
         self.verify_results(verification_count=self.num_items)
-        self._load_all_buckets(self.src_master, self.gen_delete, "delete",0)
+        self._load_all_buckets(self.src_master, self.gen_delete, "delete", 0)
         self.verify_results(verification_count=0)
 
     def test_limit_connection(self):
         self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
         self.verify_results(verification_count=self.num_items)
         self.replication_setting('httpConnections', 1)
-        self._load_all_buckets(self.src_master, self.gen_delete, "delete",0)
+        self._load_all_buckets(self.src_master, self.gen_delete, "delete", 0)
         self.verify_results(verification_count=0)
 
     def test_low_checkpoint_interval(self):
         self._load_all_buckets(self.src_master, self.gen_create, "create", 0)
         self.verify_results(verification_count=self.num_items)
         self.replication_setting('checkpointInterval', 10)
-        self._load_all_buckets(self.src_master, self.gen_delete, "delete",0)
+        self._load_all_buckets(self.src_master, self.gen_delete, "delete", 0)
         self.verify_results(verification_count=0)
 
     def test_longevity(self):

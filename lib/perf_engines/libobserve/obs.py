@@ -2,8 +2,8 @@
 
 import time
 
-from obs_def import ObserveKeyState, ObserveStatus
-from obs_helper import SyncDict
+from .obs_def import ObserveKeyState, ObserveStatus
+from .obs_helper import SyncDict
 
 class Observable:
 
@@ -46,7 +46,7 @@ class Observable:
                "persist_count = %d, persist_servers = %s, "\
                "repl_count: %d, repl_servers: %s\n" %\
                (self.__class__.__name__, self.key, self.cas, self.status,
-                self.start_time, self.persist_end_time,self.repl_end_time,
+                self.start_time, self.persist_end_time, self.repl_end_time,
                 self.persist_count, self.persist_servers,
                 self.repl_count, self.repl_servers)
 
@@ -62,7 +62,7 @@ class Observer:
     def _observe_blocking(self):
         self._observables.wait_not_empty()
 
-        print "<%s> self._observables %s" % (self.__class__.__name__, self._observables)
+        print("<%s> self._observables %s" % (self.__class__.__name__, self._observables))
 
         if not self._send():
             return False
@@ -84,17 +84,17 @@ class Observer:
         @param observables must be a iterable collections of Observable
         """
         if not observables:
-            print "<%s> invalid argument observables: %s" \
-                    % (self.__class__.__name__, observables)
+            print("<%s> invalid argument observables: %s" \
+                    % (self.__class__.__name__, observables))
             return
 
         if self._observables.empty():
-            print "<%s> load observables = %s" % (self.__class__.__name__, observables)
+            print("<%s> load observables = %s" % (self.__class__.__name__, observables))
             for obs in observables:
                 self._observables.put(obs.key, obs)
 
     def clear_observables(self):
-        print "clear observables : %s" % self._observables
+        print("clear observables : %s" % self._observables)
         self._observables.clear()
 
     def update_observables(self, responses):
@@ -103,7 +103,7 @@ class Observer:
         using key_state as filter
         """
         if not responses:
-            print "<%s> empty responses" % self.__class__.__name__
+            print("<%s> empty responses" % self.__class__.__name__)
             return True
 
         if self._observables.empty():
@@ -129,12 +129,12 @@ class Observer:
                         obs.remove_server(server, repl=True,
                                           stats=(obs.cas == res_key.cas))
                 elif res_key.key_state == ObserveKeyState.OBS_IMPOSSIBLE:
-                    print "<%s> invalid key_state %x from repl sever" \
-                        % (self.__class__.__name__, server)
+                    print("<%s> invalid key_state %x from repl sever" \
+                        % (self.__class__.__name__, server))
                     obs.remove_server(server, repl=True, stats=False)
             else:
-                print "<%s> invalid server: %s" \
-                    % (self.__class__.__name__, server)
+                print("<%s> invalid server: %s" \
+                    % (self.__class__.__name__, server))
                 obs.status = ObserveStatus.OBS_ERROR
 
             if obs.persist_count <= 0 and \
@@ -148,7 +148,7 @@ class Observer:
         return self._observables.size()
 
     def reskey_generator(self, responses):
-        for server, reses in responses.iteritems():
+        for server, reses in responses.items():
             for res in reses:
                 if res.__class__.__name__ == "ObserveResponse":
                     for res_key in res.keys:
@@ -159,7 +159,7 @@ class Observer:
         Generate observables, using status as filter
         not thread safe.
         """
-        for obs in self._observables.dict.itervalues():
+        for obs in self._observables.dict.values():
             if obs.status == status:
                 yield obs
 

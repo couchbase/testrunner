@@ -50,7 +50,7 @@ class CouchbaseCliTestWithMeta(CliBaseTest):
             mc.setWithMeta('test_with_meta', 'value', 0, 0, 0x1234000000000001, 1)
             success_set_exist_item = True
         except MemcachedError as e:
-            print "\nMemcached exception: ", e
+            print("\nMemcached exception: ", e)
             if "#2" not in str(e):
                 self.fail("ep engine failed to check existed key")
                 """error #2 is ErrorKeyEexists"""

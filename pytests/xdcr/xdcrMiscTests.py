@@ -2,8 +2,8 @@ from couchbase_helper.stats_tools import StatsCommon
 from membase.api.rest_client import RestConnection, Bucket
 from couchbase_helper.documentgenerator import BlobGenerator
 
-from xdcrbasetests import XDCRReplicationBaseTest
-from xdcrbasetests import XDCRConstants
+from .xdcrbasetests import XDCRReplicationBaseTest
+from .xdcrbasetests import XDCRConstants
 
 
 class XdcrMiscTests(XDCRReplicationBaseTest):
@@ -148,7 +148,7 @@ class XdcrMiscTests(XDCRReplicationBaseTest):
         rest_conn_src.create_bucket(bucket='default', ramQuotaMB=256)
         master_id = rest_conn_src.get_nodes_self().id
         #if not cluster run use ip addresses instead of localhost
-        if len(set([server.ip for server in self._servers])) != 1:
+        if len({server.ip for server in self._servers}) != 1:
             master_id = master_id.replace("127.0.0.1", self.src_master.ip).replace("localhost", self.src_master.ip)
         self.buckets.append(Bucket(name="default", authType="sasl", saslPassword="",
                                        num_replicas=self._num_replicas, bucket_size=256, master_id=master_id,
@@ -158,7 +158,7 @@ class XdcrMiscTests(XDCRReplicationBaseTest):
         rest_conn_dest.create_bucket(bucket='default', ramQuotaMB=256, bucketType='memcached')
         master_id = rest_conn_dest.get_nodes_self().id
         #if not cluster run use ip addresses instead of localhost
-        if len(set([server.ip for server in self._servers])) != 1:
+        if len({server.ip for server in self._servers}) != 1:
             master_id = master_id.replace("127.0.0.1", self.dest_master.ip).replace("localhost", self.dest_master.ip)
         self.buckets.append(Bucket(name="default", authType="sasl", saslPassword="",
                                        num_replicas=self._num_replicas, bucket_size=256, master_id=master_id,

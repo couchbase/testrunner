@@ -20,7 +20,7 @@ class HostnameBaseTests(BaseTestCase):
         self.sleep(3, "Sleep to wait deinitialize")
 
     def rename_nodes(self, servers, names={}):
-        print '\n\nrename names servers:', servers, ' names', names
+        print('\n\nrename names servers:', servers, ' names', names)
         hostnames={}
         for server in servers:
             shell = RemoteMachineShellConnection(server)
@@ -39,7 +39,7 @@ class HostnameBaseTests(BaseTestCase):
         return hostnames
 
     def _set_hostames_to_servers_objs(self, hostnames, server=None):
-        for i in xrange(len(self.servers)):
+        for i in range(len(self.servers)):
             if self.servers[i] in hostnames:
                 if server and server.ip != self.servers[i].ip:
                     continue

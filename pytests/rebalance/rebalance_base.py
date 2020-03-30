@@ -10,7 +10,7 @@ class RebalanceBaseTest(BaseTestCase):
         super(RebalanceBaseTest, self).setUp()
         self.value_size = self.input.param("value_size", 256)
         self.doc_ops = self.input.param("doc_ops", None)
-        self.withMutationOps = self.input.param("withMutationOps", True)
+        self.withMutationOps = self.input.param("withMutationOps", False)
         self.total_vbuckets = self.input.param("total_vbuckets", 1024)
         if self.doc_ops is not None:
             self.doc_ops = self.doc_ops.split(":")
@@ -39,7 +39,7 @@ class RebalanceBaseTest(BaseTestCase):
                                           end=self.num_items)
             # gen_update is used for doing mutation for 1/2th of uploaded data
             self.gen_update = BlobGenerator('mike', 'mike-', self.value_size,
-                                            end=(self.num_items / 2 - 1))
+                                            end=(self.num_items // 2 - 1))
             # upload data before each test
             self._load_all_buckets(self.servers[0], self.gen_load, "create",
                                    0, flag=2, batch_size=20000)
@@ -96,7 +96,7 @@ class RebalanceBaseTest(BaseTestCase):
             # Shuffle the nodesS
             for i in range(1, self.zone):
                 node_in_zone = list(set(nodes_in_zone[zones[i]]) -
-                                    set([node for node in rest.get_nodes_in_zone(zones[i])]))
+                                    {node for node in rest.get_nodes_in_zone(zones[i])})
                 rest.shuffle_nodes_in_zones(node_in_zone, zones[0], zones[i])
         otpnodes = [node.id for node in rest.node_statuses()]
         nodes_to_remove = [node.id for node in rest.node_statuses()

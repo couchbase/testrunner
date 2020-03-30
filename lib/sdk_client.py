@@ -36,7 +36,7 @@ class SDKClient(object):
 
     def _createString(self, scheme ="couchbase", bucket = None, hosts = ["localhost"], certpath = None,
                       uhm_options = "", ipv6=False, compression=True):
-        connection_string = "{0}://{1}".format(scheme, ", ".join(hosts).replace(" ",""))
+        connection_string = "{0}://{1}".format(scheme, ", ".join(hosts).replace(" ", ""))
         # if bucket != None:
         #     connection_string = "{0}/{1}".format(connection_string, bucket)
         if uhm_options != None:
@@ -228,7 +228,7 @@ class SDKClient(object):
                 raise
 
     def cas(self, key, value, cas=0, ttl=0, format=None, collection=None):
-        return self.cb.replace(key, value, cas=cas,format=format)
+        return self.cb.replace(key, value, cas=cas, format=format)
 
     def delete(self,key, cas=0, quiet=True, persist_to=0, replicate_to=0, collection=None):
         self.remove(key, cas=cas, quiet=quiet, persist_to=persist_to, replicate_to=replicate_to)
@@ -525,7 +525,7 @@ class SDKClient(object):
         map = {}
         if data == None:
             return map
-        for key, result in data.items():
+        for key, result in list(data.items()):
             map[key] = [result.flags, result.cas, result.value]
         return map
 
@@ -542,7 +542,7 @@ class SDKClient(object):
         map = {}
         if data == None:
             return map
-        for key, result in data.items():
+        for key, result in list(data.items()):
             map[key] = result.value
         return map
 
@@ -550,7 +550,7 @@ class SDKClient(object):
         map = {}
         if data == None:
             return map
-        for key, result in data.items():
+        for key, result in list(data.items()):
             map[key] = result
         return map
 
@@ -575,7 +575,7 @@ class SDKSmartClient(object):
 
 
         if rest.ip == "127.0.0.1":
-            self.host = "{0}:{1}".format(rest.ip,rest.port)
+            self.host = "{0}:{1}".format(rest.ip, rest.port)
             self.scheme = "http"
         else:
             self.host = rest.ip
@@ -603,7 +603,7 @@ class SDKSmartClient(object):
         return self.client.get(key)
 
       def getr(self, key, replica_index=0, collection=None):
-        return self.client.rget(key,replica_index=replica_index)
+        return self.client.rget(key, replica_index=replica_index)
 
       def setMulti(self, exp, flags, key_val_dic, pause = None, timeout = 5.0, parallel=None, format = FMT_AUTO, collection=None):
           try:
@@ -690,7 +690,7 @@ class SDKBasedKVStoreAwareSmartClient(SDKSmartClient):
                 raise MemcachedError(7, "Invalid cas value")
         except Exception as e:
             self._rlock.release()
-            raise MemcachedError(7, e.message)
+            raise MemcachedError(7, str(e))
 
     def get_valid_key(self, key):
         return self.get_key_check_status(key, "valid")
@@ -702,7 +702,7 @@ class SDKBasedKVStoreAwareSmartClient(SDKSmartClient):
         return self.get_key_check_status(key, "expired")
 
     def get_all_keys(self):
-        return self.kv_store.keys()
+        return list(self.kv_store.keys())
 
     def get_all_valid_items(self):
         return self.kv_store.valid_items()

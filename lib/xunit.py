@@ -111,11 +111,11 @@ class XUnitTestResult(object):
                 else:
                     oks.append(test.name)
             msg = "summary so far suite {0} , pass {1} , fail {2}"
-            print msg.format(suite.name, len(oks), len(errors))
+            print(msg.format(suite.name, len(oks), len(errors)))
             if errors:
-                print "failures so far..."
+                print("failures so far...")
                 for error in errors:
-                    print error
+                    print(error)
 
 
 class XUnitTestSuite(object):

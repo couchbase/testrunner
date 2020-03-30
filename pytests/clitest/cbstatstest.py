@@ -43,7 +43,7 @@ class cbstatsTests(CliBaseTest):
                     output, error = self.shell.execute_cbstats(bucket, self.command)
                     self.verify_results(output, error)
                     if self.command in ["allocator", "kvtimings", "timings"]:
-                        self.log.warn("We will not verify exact values for this stat")
+                        self.log.warning("We will not verify exact values for this stat")
                     else:
                         self._verify_direct_client_stats(bucket, self.command, output)
         else:
@@ -51,10 +51,10 @@ class cbstatsTests(CliBaseTest):
             bucket_info = RestConnection(self.master).get_bucket(self.buckets[0])
             keys_map = {}
             for i in range(self.num_items):
-                vb_id = i - len(bucket_info.vbuckets) * int(i / len(bucket_info.vbuckets))
+                vb_id = i - len(bucket_info.vbuckets) * int(i // len(bucket_info.vbuckets))
                 mc_conn.set("test_docs-%s" % i, 0, 0, json.dumps('{ "test" : "test"}').encode("ascii", "ignore"), vb_id)
                 keys_map["test_docs-%s" % i] = vb_id
-            for key, vb_id in keys_map.iteritems():
+            for key, vb_id in keys_map.items():
                 output, error = self.shell.execute_cbstats(self.buckets[0], self.command, key, vb_id)
                 self.verify_results(output, error)
 
@@ -173,7 +173,7 @@ class cbstatsTests(CliBaseTest):
             else:
                 if stats[0].find('tcmalloc') != -1 or stats[0].find('bytes') != -1 or\
                 stats[0].find('mem_used') != -1:
-                    self.log.warn("Stat didn't match, but it can be changed, not a bug")
+                    self.log.warning("Stat didn't match, but it can be changed, not a bug")
                     continue
                 raise Exception("Command does not throw out error message \
                                  but cbstats does not match.")

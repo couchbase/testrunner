@@ -59,9 +59,9 @@ class PerfWrapper(object):
                 executors = list()
 
                 if is_bi_xperf:
-                    prefix_range = xrange(total_clients / 2)
+                    prefix_range = range(total_clients // 2)
                 else:
-                    prefix_range = xrange(total_clients)
+                    prefix_range = range(total_clients)
 
                 for prefix in prefix_range:
                     self.input.test_params['prefix'] = prefix
@@ -166,8 +166,8 @@ class PerfWrapper(object):
                     slave = self.input.clusters[1][0]
                     try:
                         self.start_replication(master, slave, bidir=bidir)
-                    except Exception, error:
-                        self.log.warn(error)
+                    except Exception as error:
+                        self.log.warning(error)
                     self.wait_for_xdc_replication()
                 return xdc_test
             return wrapper
@@ -328,9 +328,9 @@ class XPerfTests(EPerfClient):
         stats = {'slave': defaultdict(list), 'master': defaultdict(list)}
 
         # Calculate approximate number of relicated items per node
-        num_nodes = self.parami('num_nodes', 1) / 2
+        num_nodes = self.parami('num_nodes', 1) // 2
         total_items = self.parami('items', 1000000)
-        items = 0.99 * total_items / num_nodes
+        items = 0.99 * total_items // num_nodes
 
         # Get number of relicated items
         curr_items = self.get_samples(slave_rest_conn)['curr_items']
@@ -356,20 +356,20 @@ class XPerfTests(EPerfClient):
         # Aggregate and display stats
         vb_active_ops_create = sum(stats['slave']['vb_active_ops_create']) /\
             len(stats['slave']['vb_active_ops_create'])
-        print "slave> AVG vb_active_ops_create: {0}, items/sec"\
-            .format(vb_active_ops_create)
+        print("slave> AVG vb_active_ops_create: {0}, items/sec"\
+            .format(vb_active_ops_create))
 
         ep_bg_fetched = sum(stats['slave']['ep_bg_fetched']) /\
             len(stats['slave']['ep_bg_fetched'])
-        print "slave> AVG ep_bg_fetched: {0}, reads/sec".format(ep_bg_fetched)
+        print("slave> AVG ep_bg_fetched: {0}, reads/sec".format(ep_bg_fetched))
 
         for server in stats:
             mem_used = max(stats[server]['mem_used'])
-            print "{0}> MAX memory used: {1}, MB".format(server,
-                                                         mem_used / 1024 ** 2)
+            print("{0}> MAX memory used: {1}, MB".format(server,
+                                                         mem_used // 1024 ** 2))
             cpu_rate = sum(stats[server]['cpu_utilization_rate']) /\
                 len(stats[server]['cpu_utilization_rate'])
-            print "{0}> AVG CPU rate: {1}, %".format(server, cpu_rate)
+            print("{0}> AVG CPU rate: {1}, %".format(server, cpu_rate))
 
     @PerfWrapper.xperf()
     def test_mixed_unidir(self):
@@ -550,8 +550,8 @@ class RebalanceTests(EVPerfClient):
         t0 = time.time()
         query = {'stale': 'false', 'limit': 100,
                  'connection_timeout': 14400000}
-        for ddoc_name, ddoc in ddocs.iteritems():
-            for view_name in ddoc['views'].iterkeys():
+        for ddoc_name, ddoc in ddocs.items():
+            for view_name in ddoc['views'].keys():
                 rc.query_view(design_doc_name=ddoc_name,
                               view_name=view_name,
                               bucket=self.params('bucket', 'default'),

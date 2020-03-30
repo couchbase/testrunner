@@ -21,9 +21,9 @@ def get_ssh_client(ip, username=None, password=None, timeout=10):
         username = username or cfg.SSH_USER
         password = password or cfg.SSH_PASSWORD
         client.connect(ip, username=username, password=password, timeout=timeout)
-        print("Successfully SSHed to {0}".format(ip))
+        print(("Successfully SSHed to {0}".format(ip)))
     except Exception as ex:
-        print ex
+        print(ex)
         sys.exit(1)
     return client
 
@@ -35,33 +35,33 @@ def get_sftp_client(ip, username=None, password=None,):
         username = username or cfg.SSH_USER
         password = password or cfg.SSH_PASSWORD
         trans.connect(username=username, password=password)
-        print ("SFTPing to {0}".format(ip))
+        print(("SFTPing to {0}".format(ip)))
         sftp_client = paramiko.SFTPClient.from_transport(trans)
         return sftp_client
     except Exception as ex:
-        print ex
+        print(ex)
         sys.exit(1)
 
 
 def kill_process(ssh_client, process_name):
-    print "Killing {0}".format(process_name)
+    print("Killing {0}".format(process_name))
     _, stdout, _ = ssh_client.exec_command("pgrep -f {0}".format(process_name))
     for pid in stdout.readlines():
         ssh_client.exec_command("kill -9 {0}".format(pid.split()[0]))
 
 
 def start_process(ssh_client, process_name, cmd):
-    print ("Starting {0}...".format(process_name))
+    print(("Starting {0}...".format(process_name)))
     ssh_client.exec_command(cmd)
     time.sleep(5)
     _, stdout, _ = ssh_client.exec_command("pgrep {0}".format(process_name))
-    print ("{0} is running with pid {1}".format(process_name, stdout.readlines()[0]))
+    print(("{0} is running with pid {1}".format(process_name, stdout.readlines()[0])))
 
 
 def start_rabbitmq():
     vhost_present = False
     tries = 1
-    print("\n##### Setting up RabbitMQ @ {0} #####".format(cfg.RABBITMQ_IP))
+    print(("\n##### Setting up RabbitMQ @ {0} #####".format(cfg.RABBITMQ_IP)))
     rabbitmq_client = get_ssh_client(cfg.RABBITMQ_IP)
 
     _, stdout, _ = rabbitmq_client.exec_command("ps aux|grep rabbitmq|grep -v grep|awk \'{print $2}\'")
@@ -71,7 +71,7 @@ def start_rabbitmq():
             continue
         rabbitmq_client.exec_command("sudo kill -9 {0}".format(pid))
     if cfg.RABBITMQ_LOG_LOCATION is not "":
-        print("Deleting RabbitMQ logs from {0}".format(cfg.RABBITMQ_LOG_LOCATION))
+        print(("Deleting RabbitMQ logs from {0}".format(cfg.RABBITMQ_LOG_LOCATION)))
         rabbitmq_client.exec_command("rm -rf {0}/*.*".format(cfg.RABBITMQ_LOG_LOCATION))
     print ("Starting RabbitMQ ...")
     rabbitmq_client.exec_command("screen -dmS rabbitmq sh -c \'sudo rabbitmq-server start; exec bash;\'")
@@ -87,7 +87,7 @@ def start_rabbitmq():
                 vhost_present = True
         sys.stdout.write(line)
     if not vhost_present :
-        print ("Adding vhost {0} and setting permissions".format(cfg.CB_CLUSTER_TAG))
+        print(("Adding vhost {0} and setting permissions".format(cfg.CB_CLUSTER_TAG)))
         rabbitmq_client.exec_command("sudo rabbitmqctl add_vhost {0}".format(cfg.CB_CLUSTER_TAG))
         rabbitmq_client.exec_command("sudo rabbitmqctl set_permissions -p {0} guest '.*' '.*' '.*'".format(cfg.CB_CLUSTER_TAG))
         _, stdout, _ = rabbitmq_client.exec_command("sudo rabbitmqctl list_vhosts")
@@ -101,9 +101,9 @@ def start_rabbitmq():
             print("Connected to RabbitMQ vhost")
             break
         except Exception as e:
-            print e
+            print(e)
             if tries <= 5:
-                print("Retrying connection {0}/5 ...".format(tries))
+                print(("Retrying connection {0}/5 ...".format(tries)))
                 rabbitmq_client.exec_command("sudo rabbitmqctl delete_vhost {0}".format(cfg.CB_CLUSTER_TAG))
                 rabbitmq_client.exec_command("sudo rabbitmqctl add_vhost {0}".format(cfg.CB_CLUSTER_TAG))
                 rabbitmq_client.exec_command("sudo rabbitmqctl set_permissions -p {0} guest '.*' '.*' '.*'".format(cfg.CB_CLUSTER_TAG))
@@ -114,7 +114,7 @@ def start_rabbitmq():
 
 
 def start_worker(worker_ip):
-    print("##### Setting up Celery Worker @ {0} #####".format(worker_ip))
+    print(("##### Setting up Celery Worker @ {0} #####".format(worker_ip)))
     worker_client = get_ssh_client(worker_ip)
 
 #    # Update Worker's testrunner repository
@@ -143,7 +143,7 @@ def start_worker(worker_ip):
     for line in out:
         if "3.1.16" in line:
             celery_param = "-Ofair"
-            print "Celery version: {0} is installed, running it with {1} param".format(line, celery_param)
+            print("Celery version: {0} is installed, running it with {1} param".format(line, celery_param))
             break
 
     if worker_ip == cfg.WORKERS[0]:
@@ -158,12 +158,12 @@ def start_worker(worker_ip):
 
 
 def start_seriesly():
-    print("##### Setting up Seriesly @ {0} #####".format(cfg.SERIESLY_IP))
+    print(("##### Setting up Seriesly @ {0} #####".format(cfg.SERIESLY_IP)))
     cbmonitor_client = get_ssh_client(cfg.SERIESLY_IP)
 
     kill_process(cbmonitor_client, "seriesly")
     if cfg.SERIESLY_DB_LOCATION is not "":
-        print("Deleting old Seriesly db files from {0}".format(cfg.SERIESLY_DB_LOCATION))
+        print(("Deleting old Seriesly db files from {0}".format(cfg.SERIESLY_DB_LOCATION)))
         cbmonitor_client.exec_command("rm -rf {0}/*.*".format(cfg.SERIESLY_DB_LOCATION))
     # kill all existing screens
     cbmonitor_client.exec_command("screen -ls | grep \'seriesly\' | awk \'{print $1}\' | xargs -i screen -X -S {} quit")
@@ -189,7 +189,7 @@ def fix_sample_cfg(ssh_client):
 
 
 def start_cbmonitor():
-    print("\n##### Setting up CBMonitor @ {0} #####".format(cfg.SERIESLY_IP))
+    print(("\n##### Setting up CBMonitor @ {0} #####".format(cfg.SERIESLY_IP)))
     cbmonitor_client = get_ssh_client(cfg.SERIESLY_IP)
     # screen 2 - start webserver
     kill_process(cbmonitor_client, "webapp")
@@ -236,17 +236,17 @@ def read_screenlog(ip, screenlog_dir, retry=10, stop_if_EOF=False, lines_to_read
 
 def run_setup():
     # kick off the setup test
-    print("\n##### Starting cluster setup from {0} #####".format(cfg.SETUP_JSON))
+    print(("\n##### Starting cluster setup from {0} #####".format(cfg.SETUP_JSON)))
     worker_client = get_ssh_client(cfg.WORKERS[0])
     # Import templates if needed
     for template in cfg.SETUP_TEMPLATES:
-        print ("Importing document template {0}...".format(template.split('--')[1].split('--')[0]))
+        print(("Importing document template {0}...".format(template.split('--')[1].split('--')[0])))
         temp = "{0} cbsystest.py import template {1}".format(python_exe, template)
-        print temp
+        print(temp)
         _, stdout, _ = worker_client.exec_command("cd {0}; {1} cbsystest.py import template {2} --cluster {3}".
                                                   format(cfg.WORKER_PYSYSTESTS_PATH, python_exe, template, cfg.CB_CLUSTER_TAG))
         for line in stdout.readlines():
-            print line
+            print(line)
     print ("Running test ...")
     _, stdout, _ = worker_client.exec_command("cd {0}; {1} cbsystest.py run test --cluster \'{2}\' --fromfile \'{3}\'".
                                               format(cfg.WORKER_PYSYSTESTS_PATH, python_exe, cfg.CB_CLUSTER_TAG, cfg.SETUP_JSON))
@@ -254,20 +254,20 @@ def run_setup():
     worker_client.close()
 
 def run_test():
-    print "\n##### Starting system test #####"
+    print("\n##### Starting system test #####")
     start_worker(cfg.WORKERS[0])
     # import doc template in worker
     worker_client = get_ssh_client(cfg.WORKERS[0])
     for template in cfg.TEST_TEMPLATES:
-        print ("Importing document template {0}...".format(template.split('--')[1].split('--')[0]))
+        print(("Importing document template {0}...".format(template.split('--')[1].split('--')[0])))
         temp = "{0} cbsystest.py import template {1}".format(python_exe, template)
-        print temp
+        print(temp)
         _, stdout, _ = worker_client.exec_command("cd {0}; {1} cbsystest.py import template {2} --cluster {3}".
                                                   format(cfg.WORKER_PYSYSTESTS_PATH, python_exe, template, cfg.CB_CLUSTER_TAG))
         for line in stdout.readlines():
-            print line
+            print(line)
     # Start sys test
-    print ("Starting system test from {0}...".format(cfg.TEST_JSON))
+    print(("Starting system test from {0}...".format(cfg.TEST_JSON)))
     _, stdout, _ = worker_client.exec_command("cd {0}; {1} cbsystest.py run test --cluster \'{2}\' --fromfile \'{3}\'".
                                               format(cfg.WORKER_PYSYSTESTS_PATH, python_exe, cfg.CB_CLUSTER_TAG, cfg.TEST_JSON))
     time.sleep(5)
@@ -297,27 +297,27 @@ def pre_install_check():
         cbmonitor.close()
         print("Inspection complete!")
     except Exception as e:
-        print e
+        print(e)
         sys.exit()
 
 def upload_stats():
-    print "\n##### Uploading stats to CBFS #####"
+    print("\n##### Uploading stats to CBFS #####")
     worker_client = get_ssh_client(cfg.WORKERS[0])
     push_stats_cmd = "cd {0}; {1} tools/push_stats.py  --version {2} --build {3} --spec {4} \
     --name {5} --cluster {6}".format(cfg.WORKER_PYSYSTESTS_PATH, python_exe, args['build'].split('-')[0], args['build'].split('-')[1],
-    cfg.TEST_JSON, cfg.TEST_JSON[cfg.TEST_JSON.rfind('/') + 1 : cfg.TEST_JSON.find('.')] , cfg.CB_CLUSTER_TAG)
-    print ("Executing {0}".format(push_stats_cmd))
+    cfg.TEST_JSON, cfg.TEST_JSON[cfg.TEST_JSON.rfind('/') + 1 : cfg.TEST_JSON.find('.')], cfg.CB_CLUSTER_TAG)
+    print(("Executing {0}".format(push_stats_cmd)))
     _, stdout, _ = worker_client.exec_command(push_stats_cmd)
     time.sleep(30)
     for line in stdout.readlines():
-        print line
+        print(line)
     worker_client.close()
 
 def install_couchbase():
-    print("Installing version {0} Couchbase on servers ...".format(args['build']))
+    print(("Installing version {0} Couchbase on servers ...".format(args['build'])))
     install_cmd = "cd ..; {0} scripts/install.py -i {1} -p product=cb,version={2},parallel=true,{3}".\
                     format(python_exe, cfg.CLUSTER_INI, args['build'], args['params'])
-    print("Executing : {0}".format(install_cmd))
+    print(("Executing : {0}".format(install_cmd)))
     os.system(install_cmd)
     if cfg.CLUSTER_RAM_QUOTA != "":
         os.system("curl -d memoryQuota={0} \"http://{1}:{2}@{3}:8091/pools/default\"".
@@ -328,7 +328,7 @@ def install_couchbase():
     time.sleep(60)
 
 def warn_skip(task):
-    print("\nWARNING : Skipping {0}\n".format(task))
+    print(("\nWARNING : Skipping {0}\n".format(task)))
     return True
 
 def run(args):
@@ -387,9 +387,9 @@ if __name__ == "__main__":
         if os.path.basename(os.path.abspath(os.getcwd())) != 'pysystests':
             raise Exception("Run script from testrunner/pysystests folder, current folder is: %s" % os.getcwd())
         shutil.copy(testcfg, "./testcfg.py")
-        print "Copied {0} to {1}/testcfg.py".format(testcfg, os.getcwd())
+        print("Copied {0} to {1}/testcfg.py".format(testcfg, os.getcwd()))
         cfg = __import__("testcfg")
         run(args)
     except Exception as e:
-        print e
+        print(e)
         raise

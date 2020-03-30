@@ -1,4 +1,4 @@
-from base_query_helper import BaseRQGQueryHelper
+from .base_query_helper import BaseRQGQueryHelper
 
 
 class RQGQueryHelper(BaseRQGQueryHelper):
@@ -8,4 +8,4 @@ class RQGQueryHelper(BaseRQGQueryHelper):
 
 if __name__ == "__main__":
     helper = RQGQueryHelper()
-    print helper._convert_sql_template_to_value_nested_subqueries("CRAP1 TABLE_ALIAS.* CRAP2 TABLE_ALIAS.* FROM TABLE_ALIAS TABLE_ALIAS")
+    print(helper._convert_sql_template_to_value_nested_subqueries("CRAP1 TABLE_ALIAS.* CRAP2 TABLE_ALIAS.* FROM TABLE_ALIAS TABLE_ALIAS"))

@@ -1,7 +1,7 @@
 import logging
 import threading
 import json
-from tuq_monitoring import QueryMonitoringTests
+from .tuq_monitoring import QueryMonitoringTests
 
 class QueryProfilingTests(QueryMonitoringTests):
     def setUp(self):
@@ -73,7 +73,7 @@ class QueryProfilingTests(QueryMonitoringTests):
         -Check that you can change profile to phases in the middle of a query.'''
     def test_profiling_phases(self):
         # Test 1: Check to see if profiling = off is effective
-        self.rest.set_profiling(self.master,"off")
+        self.rest.set_profiling(self.master, "off")
         e = threading.Event()
         thread1 = threading.Thread(name='run_parallel_query', target=self.run_parallel_query,
                                    args=[self.servers[0]])
@@ -246,7 +246,7 @@ class QueryProfilingTests(QueryMonitoringTests):
         query = 'select * from default union select * from default'
         self.run_cbq_query(query, server=server)
 
-    def run_controlled_query(self,server):
+    def run_controlled_query(self, server):
         logging.info('parallel query is active')
         query = 'select * from default where a=$a&$a=1'
         self.run_cbq_query(query, server=server)

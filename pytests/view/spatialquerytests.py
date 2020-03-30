@@ -559,7 +559,7 @@ class SpatialQueryTests(BaseTestCase):
             rebalance.result()
 
         elif self.helper.num_nodes_to_remove >= 1:
-            rebalance = self.cluster.async_rebalance(self.servers[:1],[],
+            rebalance = self.cluster.async_rebalance(self.servers[:1], [],
                 self.servers[1:self.helper.num_nodes_to_add + 1])
             self._query_test_init(data_set)
             rebalance.result()
@@ -814,13 +814,13 @@ class MultidimDataSet:
                 QueryHelper(
                     {"start_range": [0, 0, 0],
                      "end_range": [1001, 13001, 13],
-                     "limit": self.num_docs / 2},
-                     self.num_docs / 2),
+                     "limit": self.num_docs // 2},
+                     self.num_docs // 2),
                 QueryHelper(
                     {"start_range": [None, 0, None],
                      "end_range": [1001, None, None],
-                     "limit": self.num_docs / 2},
-                    self.num_docs / 2),
+                     "limit": self.num_docs // 2},
+                    self.num_docs // 2),
                 QueryHelper(
                     {"start_range": [500, 2000, 3],
                      "end_range": [800, 11111, 9],
@@ -947,7 +947,7 @@ class RunQueriesThread(threading.Thread):
                 error = "Query failed: {0} Documents Retrieved, "\
                     "expected {1}".format(num_keys, expected_num_docs)
                 try:
-                    self.helper.testcase.assertEquals(num_keys,
+                    self.helper.testcase.assertEqual(num_keys,
                                                       expected_num_docs,
                                                       error)
                 except Exception:

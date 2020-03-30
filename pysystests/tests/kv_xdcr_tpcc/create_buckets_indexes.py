@@ -66,7 +66,7 @@ if __name__ == "__main__":
 
     # drop and recreate buckets
     for i, bucket_name in enumerate(buckets_ram.keys()):
-        print "Creating bucket {0}".format(bucket_name)
+        print("Creating bucket {0}".format(bucket_name))
         cluster_rest.delete_bucket(bucket_name)
         cluster_rest.create_bucket(bucket=bucket_name,
                                    ramQuotaMB=int(buckets_ram[bucket_name]),
@@ -75,6 +75,6 @@ if __name__ == "__main__":
 
     # index drop/create
     for query in index_n1ql:
-        print query
+        print(query)
         result = cluster_rest.query_tool(query)
-        print result
+        print(result)

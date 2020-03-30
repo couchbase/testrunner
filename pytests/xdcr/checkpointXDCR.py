@@ -9,8 +9,8 @@ from membase.api.exception import XDCRCheckpointException
 from memcached.helper.data_helper import MemcachedClientHelper, VBucketAwareMemcached
 from remote.remote_util import RemoteMachineShellConnection
 
-from xdcrnewbasetests import NodeHelper
-from xdcrnewbasetests import XDCRNewBaseTest, REPLICATION_TYPE
+from .xdcrnewbasetests import NodeHelper
+from .xdcrnewbasetests import XDCRNewBaseTest, REPLICATION_TYPE
 
 
 class XDCRCheckpointUnitTest(XDCRNewBaseTest):
@@ -41,7 +41,7 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
         self.keys_loaded = []
         self.key_counter = 0
         # some keys that will always hash to vb0
-        self.vb0_keys = ['pymc1098', 'pymc1108', 'pymc2329', 'pymc4019', 'pymc4189', 'pymc7238','pymc10031', 'pymc10743',
+        self.vb0_keys = ['pymc1098', 'pymc1108', 'pymc2329', 'pymc4019', 'pymc4189', 'pymc7238', 'pymc10031', 'pymc10743',
                          'pymc11935', 'pymc13210', 'pymc13380', 'pymc13562', 'pymc14824', 'pymc15120', 'pymc15652',
                          'pymc16291', 'pymc16301', 'pymc16473', 'pymc18254', 'pymc18526']
         self.chkpt_records = []
@@ -78,7 +78,7 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
         self.num_successful_prereps_beginning = self.get_pre_replicate_call_history(node)
         self.log.info("From previous runs on {0} : Num of commit calls : {1} ; num of successful commits : {2} \
         num of failed commits : {3}".format(node.ip, self.num_commit_for_chkpt_beginning, \
-        self.num_successful_chkpts_beginning,self.num_failed_chkpts_beginning))
+        self.num_successful_chkpts_beginning, self.num_failed_chkpts_beginning))
         self.log.info("From previous runs on {0} : num of successful pre_replicates : {1}".format(node.ip, self.num_successful_prereps_beginning))
 
         self.num_commit_for_chkpt_calls_so_far = self.num_commit_for_chkpt_beginning
@@ -89,7 +89,7 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
     """ Returns node containing active vb0 """
     def get_active_vb0_node(self, master):
         nodes = self.src_nodes
-        ip = VBucketAwareMemcached(RestConnection(master),'default').vBucketMap[0].split(':')[0]
+        ip = VBucketAwareMemcached(RestConnection(master), 'default').vBucketMap[0].split(':')[0]
         if master == self.dest_master:
             nodes = self.dest_nodes
         for node in nodes:
@@ -139,7 +139,7 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
             self.assertTrue((int(failover_uuid) == int(local_vb_uuid)) or
                             (int(failover_uuid) == 0),
                         "local failover_uuid is wrong in checkpoint record! Expected: {0} seen: {1}".
-                        format(local_vb_uuid,failover_uuid))
+                        format(local_vb_uuid, failover_uuid))
             self.log.info("Checkpoint record verified")
         else:
             self.log.info("Skipping checkpoint record checks for checkpoint-0")
@@ -164,8 +164,7 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
     def get_checkpoint_call_history(self, node):
         stats_count = []
         shell = RemoteMachineShellConnection(node)
-        output, error = shell.execute_cbstats(self.dest_cluster.get_bucket_by_name('default'), "checkpoint",
-                                              print_results=False)
+        output, error = shell.execute_cbstats(self.dest_cluster.get_bucket_by_name('default'), "checkpoint", print_results=False)
         for stat in output:
             if re.search("num_checkpoint_items:", stat):
                 stats_count.append(int(stat.split(": ")[1]))
@@ -238,7 +237,7 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
     def load_one_mutation_into_source_vb0(self, vb0_active_src_node):
         key = self.vb0_keys[self.key_counter]
         memc_client = MemcachedClient(vb0_active_src_node.ip, 11210)
-        memc_client.sasl_auth_plain("cbadminbucket","password")
+        memc_client.sasl_auth_plain("cbadminbucket", "password")
         memc_client.bucket_select("default")
         try:
             memc_client.set(key, exp=0, flags=0, val="dummy val")
@@ -294,8 +293,7 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
                 count += 1
                 continue
             stats_count = []
-            output, error = shell.execute_cbstats(self.src_cluster.get_bucket_by_name('default'), "checkpoint",
-                                                  print_results=False)
+            output, error = shell.execute_cbstats(self.src_cluster.get_bucket_by_name('default'), "checkpoint", print_results=False)
             for stat in output:
                 if re.search("num_checkpoint_items:", stat):
                     stats_count.append(int(stat.split(": ")[1]))
@@ -410,7 +408,7 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
         else:
             post_failover_uuid, _= self.get_failover_log(self.get_active_vb0_node(self.dest_master))
         self.log.info("Remote uuid before failover :{0}, after failover : {1}".format(pre_failover_uuid, post_failover_uuid))
-        self.assertTrue(int(pre_failover_uuid) != int(post_failover_uuid),"Remote vb_uuid is same before and after failover")
+        self.assertTrue(int(pre_failover_uuid) != int(post_failover_uuid), "Remote vb_uuid is same before and after failover")
 
     """ Crash node, check uuid before and after crash """
     def crash_node(self, master):
@@ -419,7 +417,7 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
         node = self.get_active_vb0_node(master)
         self.log.info("Crashing node {0} containing vb0 ...".format(node))
         shell = RemoteMachineShellConnection(node)
-        shell.terminate_process(process_name='memcached',force=True)
+        shell.terminate_process(process_name='memcached', force=True)
         shell.disconnect()
         # If we are killing dest node, try to mutate key at source to cause xdcr activity
         if master == self.dest_master:
@@ -555,9 +553,9 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
         dest_node = self.get_active_vb0_node(self.dest_master)
         src_client = MemcachedClient(src_node.ip, 11210)
         dest_client = MemcachedClient(dest_node.ip, 11210)
-        src_client.sasl_auth_plain("cbadminbucket","password")
+        src_client.sasl_auth_plain("cbadminbucket", "password")
         src_client.bucket_select("default")
-        dest_client.sasl_auth_plain("cbadminbucket","password")
+        dest_client.sasl_auth_plain("cbadminbucket", "password")
         dest_client.bucket_select("default")
         for key in self.keys_loaded:
             try:

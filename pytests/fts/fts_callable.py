@@ -2,13 +2,13 @@ import logger
 import time
 import copy
 import json
-from fts_base import FTSIndex, CouchbaseCluster
+from .fts_base import FTSIndex, CouchbaseCluster
 from lib.membase.api.exception import FTSException
-from es_base import ElasticSearchBase
+from .es_base import ElasticSearchBase
 from TestInput import TestInputSingleton
 from lib.couchbase_helper.documentgenerator import JsonDocGenerator
 from lib.membase.api.rest_client import RestConnection
-from random_query_generator.rand_query_gen import FTSESQueryGenerator
+from .random_query_generator.rand_query_gen import FTSESQueryGenerator
 
 class FTSCallable:
 
@@ -46,9 +46,7 @@ class FTSCallable:
                       "wildcard", "regexp", "query_string",
                       "numeric_range", "date_range"]
         if self.compare_es and not self.elastic_node:
-            raise ("For ES result validation, pls add in the"
-                      " [elastic] section in your ini file,"
-                      " else set \"compare_es\" as False")
+            raise "For ES result validation, pls add in the"
         elif self.compare_es:
             self.es = ElasticSearchBase(self.elastic_node, self.log)
             if es_reset:

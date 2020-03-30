@@ -116,7 +116,7 @@ class BucketCreateTask(Task):
         rest = RestConnection(self.server)
         if self.size <= 0:
             info = rest.get_nodes_self()
-            self.size = info.memoryQuota * 2 / 3
+            self.size = info.memoryQuota * 2 // 3
 
         authType = 'none' if self.password is None else 'sasl'
 
@@ -417,7 +417,7 @@ class GenericLoadingTask(Thread, Task):
             except Exception:
                 retry_count += 1
                 self.client.reset_vbuckets(self.rest,
-                                           set([self.client._get_vBucket_id(key)]))
+                                           {self.client._get_vBucket_id(key)})
         return value
 
 

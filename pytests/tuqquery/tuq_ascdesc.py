@@ -1,4 +1,4 @@
-from tuq import QueryTests
+from .tuq import QueryTests
 
 class AscDescTests(QueryTests):
     def setUp(self):
@@ -17,7 +17,7 @@ class AscDescTests(QueryTests):
 
         # extra defs
         static_res_2 = ['query-testemployee96373.2660745-3', 'query-testemployee96373.2660745-2', 'query-testemployee96373.2660745-1',
-                        'query-testemployee96373.2660745-0','query-testemployee92486.5251626-5']
+                        'query-testemployee96373.2660745-0', 'query-testemployee92486.5251626-5']
         static_res_4 = ['query-testemployee10153.1877827-0', 'query-testemployee10153.1877827-1', 'query-testemployee10153.1877827-2',
                         'query-testemployee10153.1877827-3', 'query-testemployee10153.1877827-4']
         static_res_6 = ['query-testemployee10153.1877827-2', 'query-testemployee10153.1877827-3', 'query-testemployee10153.1877827-4',
@@ -116,44 +116,44 @@ class AscDescTests(QueryTests):
                 created_indexes.append(idx)
 
                 self.query = "EXPLAIN select * from %s WHERE department[0] = 'Support' and ( ANY i IN %s.hobbies.hobby SATISFIES  i = 'art' END) order by hobbies.hobby asc" % (
-                bucket.name,bucket.name)
+                bucket.name, bucket.name)
                 actual_result = self.run_cbq_query()
                 plan = self.ExplainPlanHelper(actual_result)
                 self.assertEqual(plan['~children'][0]['~children'][0]['scan']['index'], idx)
 
                 self.query = "EXPLAIN select * from %s WHERE department[0] = 'Support' and ( ANY i IN %s.hobbies.hobby SATISFIES  i = 'art' END) order by hobbies.hobby desc" % (
-                bucket.name,bucket.name)
+                bucket.name, bucket.name)
                 actual_result = self.run_cbq_query()
                 plan = self.ExplainPlanHelper(actual_result)
                 self.assertEqual(plan['~children'][0]['~children'][0]['scan']['index'], idx)
 
                 self.query = "EXPLAIN select * from %s WHERE department[0] = 'Support' and ( ANY i IN %s.hobbies.hobby SATISFIES  i = 'art' END) order by hobbies.hobby desc,_id asc" % (
-                bucket.name,bucket.name)
+                bucket.name, bucket.name)
                 actual_result = self.run_cbq_query()
                 plan = self.ExplainPlanHelper(actual_result)
                 self.assertEqual(plan['~children'][0]['~children'][0]['scan']['index'], idx)
 
                 self.query = "EXPLAIN select * from %s WHERE department[0] = 'Support' and ( ANY i IN %s.hobbies.hobby SATISFIES  i = 'art' END) order by hobbies.hobby asc,_id desc" % (
-                bucket.name,bucket.name)
+                bucket.name, bucket.name)
                 actual_result = self.run_cbq_query()
                 plan = self.ExplainPlanHelper(actual_result)
                 self.assertEqual(plan['~children'][0]['~children'][0]['scan']['index'], idx)
 
                 self.query = "select * from %s WHERE department = 'Support' and (ANY i IN %s.hobbies.hobby SATISFIES  i = 'art' END) order by hobbies.hobby asc,_id desc limit 10" % (
-                bucket.name,bucket.name)
+                bucket.name, bucket.name)
                 static_expected_results_list = ['query-testemployee28748.5695367-5', 'query-testemployee28748.5695367-4',
                                                 'query-testemployee28748.5695367-3', 'query-testemployee28748.5695367-2',
                                                 'query-testemployee28748.5695367-1']
 
-                self.compare("test_asc_desc_array_index",self.query,static_expected_results_list)
+                self.compare("test_asc_desc_array_index", self.query, static_expected_results_list)
 
                 self.query = "select * from %s WHERE department = 'Support' and (ANY i IN %s.hobbies.hobby SATISFIES  i = 'art' END) order by hobbies.hobby desc,_id asc" % (
-                bucket.name,bucket.name) + \
+                bucket.name, bucket.name) + \
                              " limit 10"
                 static_expected_results_list = ['query-testemployee78599.6934121-0', 'query-testemployee78599.6934121-1',
                                                 'query-testemployee78599.6934121-2', 'query-testemployee78599.6934121-3',
                                                 'query-testemployee78599.6934121-4']
-                self.compare("test_asc_desc_array_index",self.query,static_expected_results_list)
+                self.compare("test_asc_desc_array_index", self.query, static_expected_results_list)
             finally:
                 for idx in created_indexes:
                     self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx, self.index_type)
@@ -187,14 +187,14 @@ class AscDescTests(QueryTests):
                 static_expected_results_list =['query-testemployee10153.1877827-0', 'query-testemployee10153.1877827-1',
                                                'query-testemployee10153.1877827-2', 'query-testemployee10153.1877827-3',
                                                'query-testemployee10153.1877827-4']
-                self.compare("test_desc_isReverse_ascOrder",self.query,static_expected_results_list)
+                self.compare("test_desc_isReverse_ascOrder", self.query, static_expected_results_list)
 
                 self.query = "select meta().id from %s where VMs[0].memory > 0 order by meta().id, VMs[0].memory desc limit 10" %(bucket.name)
                 static_expected_results_list =['query-testemployee10153.1877827-0', 'query-testemployee10153.1877827-1',
                                                'query-testemployee10153.1877827-2', 'query-testemployee10153.1877827-3',
                                                'query-testemployee10153.1877827-4']
 
-                self.compare("test_desc_isReverse_ascOrder",self.query,static_expected_results_list)
+                self.compare("test_desc_isReverse_ascOrder", self.query, static_expected_results_list)
                 idx2 = "idx2"
                 self.query = "create index %s on %s(email,_id)"% (idx2, bucket.name)
                 actual_result = self.run_cbq_query()
@@ -207,16 +207,16 @@ class AscDescTests(QueryTests):
                 self._wait_for_index_online(bucket, idx3)
                 self._verify_results(actual_result['results'], [])
                 created_indexes.append(idx3)
-                self.query = 'select _id from %s where email like "%s" order by _id limit 2' %(bucket.name,'24-mail%')
+                self.query = 'select _id from %s where email like "%s" order by _id limit 2' %(bucket.name, '24-mail%')
                 actual_result_asc = self.run_cbq_query()
-                static_expected_results_list = ["query-testemployee12264.589461-0","query-testemployee12264.589461-1"]
-                actual_result_asc = [actual_result_asc['results'][0]['_id'],actual_result_asc['results'][1]['_id']]
+                static_expected_results_list = ["query-testemployee12264.589461-0", "query-testemployee12264.589461-1"]
+                actual_result_asc = [actual_result_asc['results'][0]['_id'], actual_result_asc['results'][1]['_id']]
                 self.assertEqual(static_expected_results_list, actual_result_asc)
 
-                self.query = 'select _id from %s where email like "%s" order by _id desc limit 2' %(bucket.name,'24-mail%')
+                self.query = 'select _id from %s where email like "%s" order by _id desc limit 2' %(bucket.name, '24-mail%')
                 actual_result_desc = self.run_cbq_query()
-                static_expected_results_list =["query-testemployee9987.55838821-5","query-testemployee9987.55838821-4"]
-                actual_result_desc = [actual_result_desc['results'][0]['_id'],actual_result_desc['results'][1]['_id']]
+                static_expected_results_list =["query-testemployee9987.55838821-5", "query-testemployee9987.55838821-4"]
+                actual_result_desc = [actual_result_desc['results'][0]['_id'], actual_result_desc['results'][1]['_id']]
                 self.assertEqual(static_expected_results_list, actual_result_desc)
             finally:
               for idx in created_indexes:
@@ -235,7 +235,7 @@ class AscDescTests(QueryTests):
                 res = self.run_cbq_query()
                 self.assertTrue("idx_cover_asc" in str(res['results'][0]))
                 actual_result = self.run_cbq_query(query='ascdescquery1', is_prepared=True)
-                self.assertEqual(actual_result['results'][0][bucket.name]['name'], [{u'FirstName': u'employeefirstname-9'}, {u'MiddleName': u'employeemiddlename-9'}, {u'LastName': u'employeelastname-9'}])
+                self.assertEqual(actual_result['results'][0][bucket.name]['name'], [{'FirstName': 'employeefirstname-9'}, {'MiddleName': 'employeemiddlename-9'}, {'LastName': 'employeelastname-9'}])
                 self.query = "drop index %s.idx_cover_asc" % bucket.name
                 self.run_cbq_query()
                 created_indexes.remove('idx_cover_asc')
@@ -249,7 +249,7 @@ class AscDescTests(QueryTests):
                 res = self.run_cbq_query()
                 self.assertTrue("idx_cover_desc" in str(res['results'][0]))
                 actual_result = self.run_cbq_query(query='ascdescquery2', is_prepared=True)
-                self.assertEqual(actual_result['results'][0][bucket.name]['name'], [{u'FirstName': u'employeefirstname-24'}, {u'MiddleName': u'employeemiddlename-24'}, {u'LastName': u'employeelastname-24'}])
+                self.assertEqual(actual_result['results'][0][bucket.name]['name'], [{'FirstName': 'employeefirstname-24'}, {'MiddleName': 'employeemiddlename-24'}, {'LastName': 'employeelastname-24'}])
                 self.query = "drop index %s.idx_cover_desc" % bucket.name
                 self.run_cbq_query()
                 created_indexes.remove('idx_cover_desc')
@@ -258,7 +258,7 @@ class AscDescTests(QueryTests):
                     self.run_cbq_query()
                 try:
                     self.run_cbq_query(query='ascdescquery1', is_prepared=True)
-                except Exception, ex:
+                except Exception as ex:
                     msg = "Error message is %s." % str(ex)
                     self.fail("query should not fail")
             finally:
@@ -348,7 +348,7 @@ class AscDescTests(QueryTests):
                 created_indexes.append(idx2)
                 self.query ='select max(join_yr[0]) from default where _id is not missing and join_yr[0] is not null'
                 res = self.run_cbq_query()
-                self.assertEqual(res['results'], [{u'$1': 2016}])
+                self.assertEqual(res['results'], [{'$1': 2016}])
                 self.query = "drop index default.idx2"
                 self.run_cbq_query()
                 created_indexes.remove(idx2)
@@ -361,7 +361,7 @@ class AscDescTests(QueryTests):
                 created_indexes.append(idx)
                 self.query = 'select min(_id) from default where _id is not missing'
                 res = self.run_cbq_query()
-                self.assertEqual(res['results'], [{u'$1': u'query-testemployee10153.1877827-0'}])
+                self.assertEqual(res['results'], [{'$1': 'query-testemployee10153.1877827-0'}])
             finally:
                   for idx in created_indexes:
                     self.query = "DROP INDEX %s.%s USING %s" % (bucket.name, idx, self.index_type)

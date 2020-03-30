@@ -29,7 +29,7 @@ class ObserveTests(BaseTestCase):
         try:
             self.log.info("Observe Rebalance Started")
             self.cluster.rebalance(self.servers[:1], self.servs_in, [])
-        except Exception, e:
+        except Exception as e:
             pass
             #self.tearDown()
             #self.fail(e)
@@ -96,9 +96,9 @@ class ObserveTests(BaseTestCase):
 
     def _get_node(self, server_ip_port):
         server_ip = server_ip_port.split(":")
-        print server_ip[0]
+        print(server_ip[0])
         for server in self.servers:
-            print server.ip
+            print(server.ip)
             if server.ip == server_ip[0]:
                 return server
             else:
@@ -107,7 +107,7 @@ class ObserveTests(BaseTestCase):
 
     def _create_multi_set_batch(self):
         key_val = {}
-        keys = ["observe%s" % (i) for i in xrange(self.num_items)]
+        keys = ["observe%s" % (i) for i in range(self.num_items)]
         for key in keys:
             key_val[key] = "multiset"
         return key_val
@@ -121,13 +121,13 @@ class ObserveTests(BaseTestCase):
         count = 0
         for bucket in self.buckets:
             self.cluster.create_view(self.master, self.default_design_doc,
-                                      self.default_view, bucket , self.wait_timeout * 2)
+                                      self.default_view, bucket, self.wait_timeout * 2)
             client = VBucketAwareMemcached(RestConnection(self.master), bucket)
             self.max_time = timedelta(microseconds=0)
             if self.mutate_by == "multi_set":
                 key_val = self._create_multi_set_batch()
                 client.setMulti(0, 0, key_val)
-            keys = ["observe%s" % (i) for i in xrange(self.num_items)]
+            keys = ["observe%s" % (i) for i in range(self.num_items)]
             for key in keys:
                 mutated = False
                 while not mutated and count < 60:
@@ -168,12 +168,12 @@ class ObserveTests(BaseTestCase):
             # check whether observe has to run with delete and delete parallel with observe or not
             if len (self.observe_with) > 0 :
                 if self.observe_with == "delete" :
-                    self.log.info("Deleting 0- %s number of items" % (self.num_items / 2))
-                    self._load_doc_data_all_buckets('delete', 0, self.num_items / 2)
+                    self.log.info("Deleting 0- %s number of items" % (self.num_items // 2))
+                    self._load_doc_data_all_buckets('delete', 0, self.num_items // 2)
                     query_set = "true"
                 elif self.observe_with == "delete_parallel":
-                    self.log.info("Deleting Parallel 0- %s number of items" % (self.num_items / 2))
-                    tasks = self._async_load_doc_data_all_buckets('delete', 0, self.num_items / 2)
+                    self.log.info("Deleting Parallel 0- %s number of items" % (self.num_items // 2))
+                    tasks = self._async_load_doc_data_all_buckets('delete', 0, self.num_items // 2)
                     query_set = "false"
                 for key in keys:
                     opaque, rep_time, persist_time, persisted, cas = client.memcached(key).observe(key)
@@ -184,7 +184,7 @@ class ObserveTests(BaseTestCase):
                         task.result()
 
                 query = {"stale" : "false", "full_set" : query_set, "connection_timeout" : 600000}
-                self.cluster.query_view(self.master, "dev_Doc1", self.default_view.name, query, self.num_items / 2, bucket, timeout=self.wait_timeout)
+                self.cluster.query_view(self.master, "dev_Doc1", self.default_view.name, query, self.num_items // 2, bucket, timeout=self.wait_timeout)
                 self.log.info("Observe Validation:- view: %s in design doc dev_Doc1 and in bucket %s" % (self.default_view, self.default_bucket_name))
 
         """test_observe_basic_data_load_delete will test observer basic scenario
@@ -200,12 +200,12 @@ class ObserveTests(BaseTestCase):
         rebalance = self.input.param("rebalance", "no")
         if rebalance == "in":
             self.servs_in = [self.servers[len(self.servers) - 1]]
-            rebalance = self.cluster.async_rebalance(self.servers[:1], self.servs_in , [])
+            rebalance = self.cluster.async_rebalance(self.servers[:1], self.servs_in, [])
             self._run_observe(self)
             rebalance.result()
         elif rebalance == "out":
             self.servs_out = [self.servers[self.nodes_init - 1]]
-            rebalance = self.cluster.async_rebalance(self.servers[:1], [] , self.servs_out)
+            rebalance = self.cluster.async_rebalance(self.servers[:1], [], self.servs_out)
             self._run_observe(self)
             rebalance.result()
         else:
@@ -215,14 +215,14 @@ class ObserveTests(BaseTestCase):
     def test_observe_with_replication(self):
         self._load_doc_data_all_buckets('create', 0, self.num_items)
         if self.observe_with == "delete" :
-            self.log.info("Deleting 0- %s number of items" % (self.num_items / 2))
-            self._load_doc_data_all_buckets('delete', 0, self.num_items / 2)
+            self.log.info("Deleting 0- %s number of items" % (self.num_items // 2))
+            self._load_doc_data_all_buckets('delete', 0, self.num_items // 2)
             query_set = "true"
         elif self.observe_with == "delete_parallel":
-            self.log.info("Deleting Parallel 0- %s number of items" % (self.num_items / 2))
-            tasks = self._async_load_doc_data_all_buckets('delete', 0, self.num_items / 2)
+            self.log.info("Deleting Parallel 0- %s number of items" % (self.num_items // 2))
+            tasks = self._async_load_doc_data_all_buckets('delete', 0, self.num_items // 2)
             query_set = "false"
-        keys = ["observe%s" % (i) for i in xrange(self.num_items)]
+        keys = ["observe%s" % (i) for i in range(self.num_items)]
         self.key_count = 0
         self.max_time = 0
         self.client = VBucketAwareMemcached(RestConnection(self.master), self.default_bucket_name)

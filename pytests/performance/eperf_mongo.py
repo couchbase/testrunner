@@ -1,7 +1,7 @@
 # EPerf tests with mongoDB.
 
 import pymongo
-import eperf
+from . import eperf
 from perf_engines import mcsoda
 from perf_engines import mcsoda_mongo
 

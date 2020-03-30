@@ -48,10 +48,10 @@ class SGConfigTests(GatewayConfigBaseTest):
             self.cluster = Cluster()
             shared_params=self._create_bucket_params(server=self.master, size=150)
             self.cluster.create_default_bucket(shared_params)
-            task = self.cluster.async_create_sasl_bucket(name='test_%E-.5',password='password',
+            task = self.cluster.async_create_sasl_bucket(name='test_%E-.5', password='password',
                                                          bucket_params=shared_params)
             task.result()
-            task = self.cluster.async_create_standard_bucket(name='db',port=11219,bucket_params=shared_params)
+            task = self.cluster.async_create_standard_bucket(name='db', port=11219, bucket_params=shared_params)
 
             task.result()
 

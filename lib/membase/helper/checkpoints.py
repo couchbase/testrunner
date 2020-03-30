@@ -1,7 +1,7 @@
 # this class will implement a service that starts monitoring
 # checkpoints in a cluster and then let you get the detail for
 # active vbucket
-import Queue
+import queue
 from membase.api.rest_client import RestConnection, RestHelper
 from memcached.helper.data_helper import MemcachedClientHelper
 import time
@@ -12,7 +12,7 @@ class CheckpointStatParser(object):
 
     def parse_output(self, output, node):
         result = {"node": node}
-        for k, v in output.items():
+        for k, v in list(output.items()):
             #which vbucket ?
             vb_pos_start = k.find("_")
             vb_pos_end = k.find(":")
@@ -26,7 +26,7 @@ class CheckpointStatParser(object):
     def merge_results(self, total_results, per_node_result):
         node = per_node_result["node"]
         del per_node_result["node"]
-        for vb, attributes in per_node_result.items():
+        for vb, attributes in list(per_node_result.items()):
             if vb not in total_results:
                 total_results[vb] = {}
             total_results[vb][node] = attributes
@@ -51,7 +51,7 @@ class GetCheckpointsHelper(object):
             mc.close()
         return merged
 
-    def monitor_checkpoints(self, master, bucket,state,
+    def monitor_checkpoints(self, master, bucket, state,
                                    interval, max_allowed, command_queue):
         #monitor all checkpoints and if num_checkpoints is greater than max_allowed
         #it alerts
@@ -61,19 +61,19 @@ class GetCheckpointsHelper(object):
                 command = command_queue.get_nowait()
                 if command and command == "stop":
                     break
-            except Queue.Empty:
+            except queue.Empty:
                 pass
             merged = self.get_checkpoints_from_cluster(master, bucket)
             alarms = []
-            for vb, checkpoints in merged.items():
-                for node, checkpoint_attributes in checkpoints.items():
+            for vb, checkpoints in list(merged.items()):
+                for node, checkpoint_attributes in list(checkpoints.items()):
                     if checkpoint_attributes["state"] == state:
                         if int(checkpoint_attributes["num_checkpoints"]) > max_allowed:
                             alarms.append("active vbucket {0} num_checkpoints is {1}".format(vb,
                                                                                              checkpoint_attributes[
                                                                                              "num_checkpoints"]))
             for alarm in alarms:
-                print alarm
+                print(alarm)
             time.sleep(interval)
 
 

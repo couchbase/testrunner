@@ -2,7 +2,7 @@ from membase.api.rest_client import RestConnection
 from membase.helper.cluster_helper import ClusterOperationHelper
 from remote.remote_util import RemoteMachineShellConnection
 
-from subdoc_autotestgenerator import SubdocAutoTestGenerator
+from .subdoc_autotestgenerator import SubdocAutoTestGenerator
 
 
 class SubdocScenarioTests(SubdocAutoTestGenerator):
@@ -57,7 +57,7 @@ class SubdocScenarioTests(SubdocAutoTestGenerator):
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
                                                  self.nodes_in_list,
                                                  self.nodes_out_list, services=self.services_in)
-        stopped = RestConnection(self.master).stop_rebalance(wait_timeout=self.wait_timeout / 3)
+        stopped = RestConnection(self.master).stop_rebalance(wait_timeout=self.wait_timeout // 3)
         self.assertTrue(stopped, msg="unable to stop rebalance")
         rebalance.result()
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],

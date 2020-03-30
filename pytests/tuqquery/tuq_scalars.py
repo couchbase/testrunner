@@ -1,4 +1,4 @@
-from tuq import QueryTests
+from .tuq import QueryTests
 from membase.api.exception import CBQError
 
 class ScalarFunctionsTests(QueryTests):
@@ -24,7 +24,7 @@ class ScalarFunctionsTests(QueryTests):
                          self.scalars_test_data['not_null_1']['value'] + "'") % (param2[i]['key'], param3[j]['key'])
 
                 lambda1 = lambda x: self.assertTrue(x['q_res'][0]['status'] == 'success')
-                lambda2 = lambda x, y = self.null_to_none(param2[i]['value']): self.assertEquals(self.normalize_result(x['q_res'][0]), y)
+                lambda2 = lambda x, y = self.null_to_none(param2[i]['value']): self.assertEqual(self.normalize_result(x['q_res'][0]), y)
 
                 test_dict["%d-default" % (count)] = {"indexes": [],
                                                "pre_queries": [],
@@ -102,8 +102,8 @@ class ScalarFunctionsTests(QueryTests):
             count += 1
         self.query_runner(test_dict)
 
-    coalesce_function_names = ['coalesce','COALESCE','CoaLesCe']
-    nvl2_function_names = ['nvl2','NVL2','NvL2']
+    coalesce_function_names = ['coalesce', 'COALESCE', 'CoaLesCe']
+    nvl2_function_names = ['nvl2', 'NVL2', 'NvL2']
     nvl_function_names = ['nvl', 'NVL', 'NvL']
 
     def test_scalars(self):
@@ -176,9 +176,9 @@ class ScalarFunctionsTests(QueryTests):
                     expected_result = self.null_to_none(params[j]['value'])
 
                 lambda1 = lambda x: self.assertTrue(x['q_res'][0]['status'] == 'success')
-                lambda2 = lambda x, y = self.null_to_none(params[i]['value']): self.assertEquals(self.normalize_result(x['q_res'][0]), y)
+                lambda2 = lambda x, y = self.null_to_none(params[i]['value']): self.assertEqual(self.normalize_result(x['q_res'][0]), y)
                 if params[i]['value'] != 'val1':
-                    lambda2 = lambda x, y=self.null_to_none(params[j]['value']): self.assertEquals(self.normalize_result(x['q_res'][0]), y)
+                    lambda2 = lambda x, y=self.null_to_none(params[j]['value']): self.assertEqual(self.normalize_result(x['q_res'][0]), y)
 
                 test_dict["%d-default" % (count)] = {"indexes": [],
                                                "pre_queries": [],
@@ -207,12 +207,12 @@ class ScalarFunctionsTests(QueryTests):
                         expected_result = self.null_to_none(params[k]['value'])
 
                     lambda1 = lambda x: self.assertTrue(x['q_res'][0]['status'] == 'success')
-                    lambda2 = lambda x, y=self.null_to_none(params[i]['value']): self.assertEquals(self.normalize_result(x['q_res'][0]), y)
+                    lambda2 = lambda x, y=self.null_to_none(params[i]['value']): self.assertEqual(self.normalize_result(x['q_res'][0]), y)
                     if params[i]['value'] != 'val1':
-                        lambda2 = lambda x, y=self.null_to_none(params[j]['value']): self.assertEquals(
+                        lambda2 = lambda x, y=self.null_to_none(params[j]['value']): self.assertEqual(
                             self.normalize_result(x['q_res'][0]), y)
                     if params[i]['key'] != 'key1' and params[j]['key'] != 'key1':
-                        lambda2 = lambda x, y=self.null_to_none(params[k]['value']): self.assertEquals(
+                        lambda2 = lambda x, y=self.null_to_none(params[k]['value']): self.assertEqual(
                             self.normalize_result(x['q_res'][0]), y)
 
 
@@ -295,7 +295,7 @@ class ScalarFunctionsTests(QueryTests):
                             (param1[i]['key'], param2[j]['key'], param3[k]['key'])
 
                     lambda1 = lambda x: self.assertTrue(x['q_res'][0]['status'] == 'success')
-                    lambda2 = lambda x, y=self.null_to_none(param3[k]['value']): self.assertEquals(self.normalize_result(x['q_res'][0]), y)
+                    lambda2 = lambda x, y=self.null_to_none(param3[k]['value']): self.assertEqual(self.normalize_result(x['q_res'][0]), y)
 
                     test_dict["%d-default" % (count)] = {"indexes": [],
                                                          "pre_queries": [],
@@ -387,7 +387,7 @@ class ScalarFunctionsTests(QueryTests):
                                                  "pre_queries": [],
                                                  "queries": [query],
                                                  "post_queries": [],
-                                                 "asserts": [lambda1,lambda2],
+                                                 "asserts": [lambda1, lambda2],
                                                  "cleanups": []}
             count += 1
         self.query_runner(test_dict)
@@ -527,7 +527,7 @@ class ScalarFunctionsTests(QueryTests):
 
         try:
             self.run_cbq_query('select coalesce() from system:dual')
-        except CBQError, e:
+        except CBQError as e:
             is_err_detected = True
             is_err_message_correct = str(e).lower().find('Number of arguments to function coalesce must be between 2 and 32767. - at'.lower()) > -1
 
@@ -540,7 +540,7 @@ class ScalarFunctionsTests(QueryTests):
 
         try:
             self.run_cbq_query("select coalesce('param1') from system:dual")
-        except CBQError, e:
+        except CBQError as e:
             is_err_detected = True
             is_err_message_correct = str(e).lower().find('Number of arguments to function coalesce must be between 2 and 32767. - at'.lower()) > -1
 
@@ -554,7 +554,7 @@ class ScalarFunctionsTests(QueryTests):
 
         try:
             self.run_cbq_query("select nvl2() from system:dual")
-        except CBQError, e:
+        except CBQError as e:
             is_err_detected = True;
             is_err_message_correct = str(e).lower().find('Number of arguments to function nvl2 must be 3. - at'.lower()) > -1
 
@@ -568,7 +568,7 @@ class ScalarFunctionsTests(QueryTests):
 
         try:
             self.run_cbq_query("select nvl() from system:dual")
-        except CBQError, e:
+        except CBQError as e:
             is_err_detected = True
             is_err_message_correct = str(e).lower().find('Number of arguments to function nvl must be 2. - at'.lower()) > -1
 
@@ -582,7 +582,7 @@ class ScalarFunctionsTests(QueryTests):
 
         try:
             self.run_cbq_query("select nvl2('param1') from system:dual")
-        except CBQError, e:
+        except CBQError as e:
             is_err_detected = True
             is_err_message_correct = str(e).lower().find('Number of arguments to function nvl2 must be 3. - at'.lower()) > -1
 
@@ -595,7 +595,7 @@ class ScalarFunctionsTests(QueryTests):
 
         try:
             self.run_cbq_query("select nvl('param1') from system:dual")
-        except CBQError, e:
+        except CBQError as e:
             is_err_detected = True
             is_err_message_correct = str(e).lower().find('Number of arguments to function nvl must be 2. - at'.lower()) > -1
 
@@ -608,7 +608,7 @@ class ScalarFunctionsTests(QueryTests):
 
         try:
             self.run_cbq_query("select nvl2('param1', 'param2') from system:dual")
-        except CBQError, e:
+        except CBQError as e:
             is_err_detected = True
             is_err_message_correct = str(e).lower().find('Number of arguments to function nvl2 must be 3. - at'.lower()) > -1
 
@@ -621,7 +621,7 @@ class ScalarFunctionsTests(QueryTests):
 
         try:
             self.run_cbq_query("select nvl('param1','param2','param3') from system:dual")
-        except CBQError, e:
+        except CBQError as e:
             is_err_detected = True
             is_err_message_correct = str(e).lower().find('Number of arguments to function nvl must be 2. - at'.lower()) > -1
 
@@ -634,7 +634,7 @@ class ScalarFunctionsTests(QueryTests):
 
         try:
             self.run_cbq_query("select nvl2('param1','param2','param3','param4') from system:dual")
-        except CBQError, e:
+        except CBQError as e:
             is_err_detected = True
             is_err_message_correct = str(e).lower().find('Number of arguments to function nvl2 must be 3. - at'.lower()) > -1
 
@@ -656,7 +656,7 @@ class ScalarFunctionsTests(QueryTests):
         #query = "insert into default values ('plain',{'key1':'val1','key2':'val2','key3':null,...})"
         counter = 0
         query = "insert into default values('plain',{"
-        for key, value in self.scalars_test_data.iteritems():
+        for key, value in self.scalars_test_data.items():
             if key == 'missing':
                 continue
             query+="'"+value['key']+"':"

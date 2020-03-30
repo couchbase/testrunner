@@ -4,7 +4,7 @@ import random
 from couchbase_helper.tuq_generators import TuqGenerators, JsonGenerator
 from couchbase_helper.query_definitions import QueryDefinition, SQLDefinitionGenerator
 from membase.api.rest_client import RestConnection
-from tuq import QueryTests
+from .tuq import QueryTests
 
 log = logging.getLogger(__name__)
 ARRAY_FIELDS = ["transactions", "travel_history", "credit_cards", "password"]

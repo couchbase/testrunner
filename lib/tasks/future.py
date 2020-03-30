@@ -52,7 +52,7 @@ class Future(object):
             try:
                 callback(self)
             except Exception:
-                print "exception calling callback for %s" % self
+                print("exception calling callback for %s" % self)
                 LOGGER.exception('exception calling callback for %r', self)
 
     def __repr__(self):
@@ -108,7 +108,7 @@ class Future(object):
 
     def __get_result(self):
         if self._exception:
-            print traceback.extract_stack()
+            print(traceback.extract_stack())
             raise self._exception
         else:
             return self._result
@@ -159,6 +159,7 @@ class Future(object):
             elif self._state == FINISHED:
                 return self.__get_result()
             else:
+                print("debuging hanging issue" + str(self._state))
                 self.set_exception(TimeoutError())
                 raise TimeoutError()
 
@@ -261,8 +262,8 @@ class Future(object):
             for waiter in self._waiters:
                 waiter.add_exception(self)
             self._condition.notify_all()
-        print traceback.extract_stack()
-        print time.ctime()
+        print(traceback.extract_stack())
+        print(time.ctime())
         self._invoke_callbacks()
 
     @staticmethod

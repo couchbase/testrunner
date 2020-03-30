@@ -17,23 +17,27 @@ from membase.api.rest_client import RestConnection, Bucket
 from membase.api.exception import ServerUnavailableException
 from remote.remote_util import RemoteMachineShellConnection
 from remote.remote_util import RemoteUtilHelper
-from testconstants import STANDARD_BUCKET_PORT,LINUX_COUCHBASE_BIN_PATH, WIN_COUCHBASE_BIN_PATH, \
+from testconstants import STANDARD_BUCKET_PORT, LINUX_COUCHBASE_BIN_PATH, WIN_COUCHBASE_BIN_PATH, \
     MAC_COUCHBASE_BIN_PATH
 from membase.helper.cluster_helper import ClusterOperationHelper
 from couchbase_helper.stats_tools import StatsCommon
 from membase.helper.bucket_helper import BucketOperationHelper
 from memcached.helper.data_helper import MemcachedClientHelper
 from TestInput import TestInputSingleton
+from lib.couchbase_helper.documentgenerator import GeoSpatialDataLoader, WikiJSONGenerator
+from lib.memcached.helper.data_helper import KVStoreAwareSmartClient
 from scripts.collect_server_info import cbcollectRunner
 from couchbase_helper.documentgenerator import *
 
 from couchbase_helper.documentgenerator import JsonDocGenerator
 from lib.membase.api.exception import FTSException
-from es_base import ElasticSearchBase
+from .es_base import ElasticSearchBase
 from security.rbac_base import RbacBase
 from lib.couchbase_helper.tuq_helper import N1QLHelper
-from random_query_generator.rand_query_gen import FTSESQueryGenerator
+from .random_query_generator.rand_query_gen import FTSESQueryGenerator
 from security.ntonencryptionBase import ntonencryptionBase
+from lib.ep_mc_bin_client import MemcachedClient
+from lib.mc_bin_client import MemcachedClient as MC_MemcachedClient
 from security.SecretsMasterBase import SecretsMasterBase
 
 
@@ -238,14 +242,14 @@ class NodeHelper:
         if shell.extract_remote_info().type.lower() == OS.WINDOWS:
             time.sleep(wait_timeout * 5)
         else:
-            time.sleep(wait_timeout/6)
+            time.sleep(wait_timeout // 6)
         while True:
             try:
                 # disable firewall on these nodes
                 NodeHelper.disable_firewall(server)
                 break
             except BaseException:
-                print "Node not reachable yet, will try after 10 secs"
+                print("Node not reachable yet, will try after 10 secs")
                 time.sleep(10)
         # wait till server is ready after warmup
         ClusterOperationHelper.wait_for_ns_servers_or_assert(
@@ -368,7 +372,7 @@ class NodeHelper:
             NodeHelper.wait_service_started(server, wait_time)
             wait_time = now + wait_time - time.time()
         num = 0
-        while num < wait_time / 10:
+        while num < wait_time // 10:
             try:
                 ClusterOperationHelper.wait_for_ns_servers_or_assert(
                     [server], test_case, wait_time=wait_time - num * 10,
@@ -420,7 +424,7 @@ class NodeHelper:
         _, dir = RestConnection(node).diag_eval(
             'filename:absname(element(2, application:get_env(ns_server,path_config_datadir))).')
 
-        return str(dir).replace('\"','')
+        return str(dir).replace('\"', '')
 
     @staticmethod
     def rename_nodes(servers):
@@ -462,7 +466,7 @@ class NodeHelper:
         """Collect cbcollectinfo logs for all the servers in the cluster.
         """
         path = TestInputSingleton.input.param("logs_folder", "/tmp")
-        print "grabbing cbcollect from {0}".format(server.ip)
+        print(("grabbing cbcollect from {0}".format(server.ip)))
         path = path or "."
         try:
             cbcollectRunner(server, path).run()
@@ -564,7 +568,8 @@ class FTSIndex:
 
         # Support for custom map
         self.custom_map = TestInputSingleton.input.param("custom_map", False)
-        self.custom_map_add_non_indexed_fields = TestInputSingleton.input.param("custom_map_add_non_indexed_fields", True)
+        self.custom_map_add_non_indexed_fields = TestInputSingleton.input.param("custom_map_add_non_indexed_fields",
+                                                                                True)
         self.num_custom_analyzers = TestInputSingleton.input.param("num_custom_analyzers", 0)
         self.multiple_filters = TestInputSingleton.input.param("multiple_filters", False)
         self.cm_id = TestInputSingleton.input.param("cm_id", 0)
@@ -593,30 +598,30 @@ class FTSIndex:
             "mossStoreOptions": {}
         }
 
-        if self.index_storage_type :
-            self.index_definition['params']['store']['indexType'] =  self.index_storage_type
+        if self.index_storage_type:
+            self.index_definition['params']['store']['indexType'] = self.index_storage_type
 
         if TestInputSingleton.input.param("num_snapshots_to_keep", None):
             self.index_definition['params']['store']['numSnapshotsToKeep'] = int(
-                    TestInputSingleton.input.param(
-                        "num_snapshots_to_keep",
-                        None)
-                    )
+                TestInputSingleton.input.param(
+                    "num_snapshots_to_keep",
+                    None)
+            )
 
         if TestInputSingleton.input.param("level_compaction", None):
-            self.index_definition['params']['store']['mossStoreOptions']= {
+            self.index_definition['params']['store']['mossStoreOptions'] = {
                 "CompactionLevelMaxSegments": 9,
                 "CompactionPercentage": 0.6,
                 "CompactionLevelMultiplier": 3
             }
 
         if TestInputSingleton.input.param("moss_compact_threshold", None):
-            self.index_definition['params']['store']\
+            self.index_definition['params']['store'] \
                 ['mossStoreOptions']['CompactionPercentage'] = int(
-                    TestInputSingleton.input.param(
-                        "moss_compact_threshold",
-                        None)
-                    )
+                TestInputSingleton.input.param(
+                    "moss_compact_threshold",
+                    None)
+            )
 
         if TestInputSingleton.input.param("memory_only", None):
             self.index_definition['params']['store'] = \
@@ -625,7 +630,7 @@ class FTSIndex:
 
         self.moss_enabled = TestInputSingleton.input.param("moss", True)
         if not self.moss_enabled:
-            if 'store' not in self.index_definition['params'].keys():
+            if 'store' not in list(self.index_definition['params'].keys()):
                 self.index_definition['params']['store'] = {}
             self.index_definition['params']['store']['kvStoreMossAllow'] = False
 
@@ -636,34 +641,35 @@ class FTSIndex:
         return self.get_index_type() == "upside_down"
 
     def is_type_unspecified(self):
-        return self.get_index_type() ==  None
+        return self.get_index_type() == None
 
     def get_index_type(self):
         try:
             _, defn = self.get_index_defn()
             index_type = defn['indexDef']['params']['store']['indexType']
             self.__log.info("Index type of {0} is {1}".
-                          format(self.name,
-                                 defn['indexDef']['params']['store']['indexType']))
+                            format(self.name,
+                                   defn['indexDef']['params']['store']['indexType']))
             return index_type
         except Exception:
             self.__log.error("No 'indexType' present in index definition")
             return None
 
     def generate_new_custom_map(self, seed):
-        from custom_map_generator.map_generator import CustomMapGenerator
+        from .custom_map_generator.map_generator import CustomMapGenerator
         cm_gen = CustomMapGenerator(seed=seed, dataset=self.dataset,
-                                num_custom_analyzers=self.num_custom_analyzers,
-                                multiple_filters=self.multiple_filters, custom_map_add_non_indexed_fields=self.custom_map_add_non_indexed_fields)
+                                    num_custom_analyzers=self.num_custom_analyzers,
+                                    multiple_filters=self.multiple_filters,
+                                    custom_map_add_non_indexed_fields=self.custom_map_add_non_indexed_fields)
         fts_map, self.es_custom_map = cm_gen.get_map()
         self.smart_query_fields = cm_gen.get_smart_query_fields()
-        print self.smart_query_fields
+        print((self.smart_query_fields))
         self.index_definition['params'] = self.build_custom_index_params(
             fts_map)
         if self.num_custom_analyzers > 0:
             custom_analyzer_def = cm_gen.build_custom_analyzer()
             self.index_definition["params"]["mapping"]["analysis"] = \
-                                                    custom_analyzer_def
+                custom_analyzer_def
         self.__log.info(json.dumps(self.index_definition["params"],
                                    indent=3))
 
@@ -692,10 +698,10 @@ class FTSIndex:
                     del self.index_definition['params']['mapping']['analysis'] \
                         ['token_filters'][custom_filter]
             else:
-                from custom_map_generator.map_generator import CustomMapGenerator
+                from .custom_map_generator.map_generator import CustomMapGenerator
                 cm_gen = CustomMapGenerator(seed=seed, dataset=self.dataset,
-                                    num_custom_analyzers=self.num_custom_analyzers,
-                                    multiple_filters=self.multiple_filters)
+                                            num_custom_analyzers=self.num_custom_analyzers,
+                                            multiple_filters=self.multiple_filters)
                 if self.num_custom_analyzers > 0:
                     custom_analyzer_def = cm_gen.build_custom_analyzer()
                     self.index_definition["params"]["mapping"]["analysis"] = \
@@ -753,7 +759,7 @@ class FTSIndex:
         field_maps.append(child_field)
 
         if nesting_level > 1:
-            for x in xrange(0, nesting_level - 1):
+            for x in range(0, nesting_level - 1):
                 field = fields.pop()
                 # Do a deepcopy of child_map into field_map since we dont
                 # want to have child_map altered because of changes on field_map
@@ -762,7 +768,7 @@ class FTSIndex:
                 field_maps.append(field_map)
 
         map = {}
-        if not self.index_definition['params'].has_key('mapping'):
+        if 'mapping' not in self.index_definition['params']:
             map['default_mapping'] = {}
             map['default_mapping']['properties'] = {}
             map['default_mapping']['dynamic'] = False
@@ -796,30 +802,30 @@ class FTSIndex:
         }
 
         map = copy.deepcopy(self.index_definition['params']['mapping']
-                                    ['default_mapping']['properties'])
+                            ['default_mapping']['properties'])
 
         map = self.update_nested_field_mapping(fields[len(fields) - 1],
-                                                        child_field, map)
+                                               child_field, map)
         self.index_definition['params']['mapping']['default_mapping'] \
-                                                    ['properties'] = map
+            ['properties'] = map
 
     def update_nested_field_mapping(self, key, value, map):
         """
         Recurse through a given nested field mapping, and append the leaf node with the specified value.
         Can be enhanced to update the current value as well if required.
         """
-        for k, v in map.iteritems():
+        for k, v in list(map.items()):
             if k == key:
                 map[k]['fields'].append(value)
                 return map
             else:
-                if map[k].has_key('properties'):
+                if 'properties' in map[k]:
                     map[k]['properties'] = \
                         self.update_nested_field_mapping(key, value,
                                                          map[k]['properties'])
         return map
 
-    def add_type_mapping_to_index_definition(self,type,analyzer):
+    def add_type_mapping_to_index_definition(self, type, analyzer):
         """
         Add Type Mapping to Index Definition (and disable default mapping)
         """
@@ -830,22 +836,21 @@ class FTSIndex:
         type_map[type]['dynamic'] = True
         type_map[type]['enabled'] = True
 
-        if not self.index_definition['params'].has_key('mapping'):
+        if 'mapping' not in self.index_definition['params']:
             self.index_definition['params']['mapping'] = {}
             self.index_definition['params']['mapping']['default_mapping'] = {}
             self.index_definition['params']['mapping']['default_mapping'] \
-                                                        ['properties'] = {}
+                ['properties'] = {}
             self.index_definition['params']['mapping']['default_mapping'] \
-                                                        ['dynamic'] = False
+                ['dynamic'] = False
 
         self.index_definition['params']['mapping']['default_mapping'] \
-                                                        ['enabled'] = False
-        if not self.index_definition['params']['mapping'].has_key('types'):
+            ['enabled'] = False
+        if 'types' not in self.index_definition['params']['mapping']:
             self.index_definition['params']['mapping']['types'] = {}
             self.index_definition['params']['mapping']['types'] = type_map
         else:
             self.index_definition['params']['mapping']['types'][type] = type_map[type]
-
 
     def add_doc_config_to_index_definition(self, mode):
         """
@@ -968,7 +973,8 @@ class FTSIndex:
     def update_docvalues_email_custom_index(self, new):
         status, index_def = self.get_index_defn()
         self.index_definition = index_def["indexDef"]
-        self.index_definition['params']['mapping']['types']['emp']['properties']['email']['fields'][0]['docvalues'] = new
+        self.index_definition['params']['mapping']['types']['emp']['properties']['email']['fields'][0][
+            'docvalues'] = new
         self.index_definition['uuid'] = self.get_uuid()
         self.update()
 
@@ -1029,16 +1035,16 @@ class FTSIndex:
         return rest.get_fts_index_uuid(self.name)
 
     def construct_cbft_query_json(self, query, fields=None, timeout=60000,
-                                                          facets=False,
-                                                          sort_fields=None,
-                                                          explain=False,
-                                                          show_results_from_item=0,
-                                                          highlight=False,
-                                                          highlight_style=None,
-                                                          highlight_fields=None,
-                                                          consistency_level='',
-                                                          consistency_vectors={},
-                                                          score=''):
+                                  facets=False,
+                                  sort_fields=None,
+                                  explain=False,
+                                  show_results_from_item=0,
+                                  highlight=False,
+                                  highlight_style=None,
+                                  highlight_fields=None,
+                                  consistency_level='',
+                                  consistency_vectors={},
+                                  score=''):
         max_matches = TestInputSingleton.input.param("query_max_matches", 10000000)
         max_limit_matches = TestInputSingleton.input.param("query_limit_matches", None)
         query_json = copy.deepcopy(QUERY.JSON)
@@ -1048,8 +1054,8 @@ class FTSIndex:
         query_json['explain'] = explain
         if max_matches is not None and max_matches != 'None':
             query_json['size'] = int(max_matches)
-	else:
-	    del query_json['size']
+        else:
+            del query_json['size']
         if max_limit_matches is not None:
             query_json['limit'] = int(max_limit_matches)
         if show_results_from_item:
@@ -1116,22 +1122,22 @@ class FTSIndex:
             if facet == 'numeric_ranges':
                 facet_definition[numeric_range_facet_name] = {}
                 facet_definition[numeric_range_facet_name]['field'] = \
-                                                    numeric_range_field
+                    numeric_range_field
                 facet_definition[numeric_range_facet_name]['size'] = size
                 facet_definition[numeric_range_facet_name]['numeric_ranges'] = []
                 for bucket in numeric_range_buckets:
                     facet_definition[numeric_range_facet_name] \
-                                  ['numeric_ranges'].append(bucket)
+                        ['numeric_ranges'].append(bucket)
 
             if facet == 'date_ranges':
                 facet_definition[date_range_facet_name] = {}
                 facet_definition[date_range_facet_name]['field'] = \
-                                                date_range_field
+                    date_range_field
                 facet_definition[date_range_facet_name]['size'] = size
                 facet_definition[date_range_facet_name]['date_ranges'] = []
                 for bucket in date_range_buckets:
                     facet_definition[date_range_facet_name] \
-                                    ['date_ranges'].append(bucket)
+                        ['date_ranges'].append(bucket)
 
         return facet_definition
 
@@ -1165,7 +1171,7 @@ class FTSIndex:
                 # force limit in 10 min in case timeout=0(no timeout)
                 rest_timeout = 600
             else:
-                rest_timeout = timeout/1000 + 10
+                rest_timeout = timeout // 1000 + 10
             hits, matches, time_taken, status = \
                 self.__cluster.run_fts_query(self.name, query_dict, timeout=rest_timeout)
         except ServerUnavailableException:
@@ -1181,7 +1187,7 @@ class FTSIndex:
             raise FTSException("No docs returned for query : %s" % query_dict)
         if expected_hits and expected_hits != hits:
             self.__log.info("ERROR: Expected hits: %s, fts returned: %s"
-                           % (expected_hits, hits))
+                            % (expected_hits, hits))
             raise FTSException("Expected hits: %s, fts returned: %s"
                                % (expected_hits, hits))
         if expected_hits and expected_hits == hits:
@@ -1190,11 +1196,11 @@ class FTSIndex:
         if expected_no_of_results is not None:
             if expected_no_of_results == doc_ids.__len__():
                 self.__log.info("SUCCESS! Expected number of results: %s, fts returned: %s"
-                            % (expected_no_of_results, doc_ids.__len__()))
+                                % (expected_no_of_results, doc_ids.__len__()))
             else:
                 self.__log.info("ERROR! Expected number of results: %s, fts returned: %s"
                                 % (expected_no_of_results, doc_ids.__len__()))
-                print doc_ids
+                print(doc_ids)
                 raise FTSException("Expected number of results: %s, fts returned: %s"
                                    % (expected_no_of_results, doc_ids.__len__()))
 
@@ -1257,7 +1263,7 @@ class FTSIndex:
                 facet_name = date_range_facet_name
 
             # Validate Facet name
-            if not facets_returned.has_key(facet_name):
+            if facet_name not in facets_returned:
                 raise FTSException(facet_name + " not present in the "
                                                 "search results")
 
@@ -1269,9 +1275,9 @@ class FTSIndex:
             if not total_count == no_of_hits:
                 if field_indexed:
                     raise FTSException("Total count of results in " + facet_name
-                                   + " Facet (" + str(total_count) +
-                                   ") is not equal to total hits in search "
-                                   "results (" + str(no_of_hits) + ")")
+                                       + " Facet (" + str(total_count) +
+                                       ") is not equal to total hits in search "
+                                       "results (" + str(no_of_hits) + ")")
                 else:
                     if not ((missing_count == no_of_hits) and (total_count == 0)):
                         raise FTSException("Field not indexed, but counts "
@@ -1281,7 +1287,7 @@ class FTSIndex:
             if not total_count == 0:
                 # Validate no. of terms returned, and it should be <= size
                 no_of_buckets_in_facet = len(facets_returned[facet_name] \
-                                                                [facet])
+                                                 [facet])
                 if no_of_buckets_in_facet > size:
                     raise FTSException("Total no. of buckets in facets (" +
                                        no_of_buckets_in_facet +
@@ -1296,11 +1302,11 @@ class FTSIndex:
                     total_count_in_buckets += bucket['count']
 
                 if not total_count_in_buckets == (total_count - missing_count -
-                                                      others_count):
+                                                  others_count):
                     raise FTSException("Total count (%d) in buckets not correct"
                                        % total_count_in_buckets)
 
-                if not self.validate_query_run_with_facet_data\
+                if not self.validate_query_run_with_facet_data \
                             (query=TestInputSingleton.input.param("query", ""),
                              facets_returned=facets_returned, facet_type=facet):
                     raise FTSException("Requerying returns different results "
@@ -1430,14 +1436,14 @@ class FTSIndex:
                     self.__log.info("Actual docs returned : %s", docs)
                     self.__log.info("Expected docs : %s", expected_docs)
                     return False
-        else :
+        else:
             self.__log.info("Expected doc order not specified. It is a negative"
                             " test, so skipping order validation")
             result = True
 
         # Validate the sort fields in the result
         for doc in raw_hits:
-            if 'sort' in doc.keys():
+            if 'sort' in list(doc.keys()):
                 if not sort_fields and len(doc['sort']) == 1:
                     result &= True
                 elif len(doc['sort']) == len(sort_fields):
@@ -1501,8 +1507,8 @@ class FTSIndex:
         return validation
 
     def validate_snippet_highlighting_in_result_content_n1ql(self, contents, doc_id,
-                                                        field_names, terms,
-                                                        highlight_style=None):
+                                                             field_names, terms,
+                                                             highlight_style=None):
         '''
         Validate the snippets and highlighting in the result content for a given
         doc id
@@ -1537,7 +1543,7 @@ class FTSIndex:
                     found = snippet.find(search_term)
                     if found < 0:
                         self.__log.info("Search term not highlighted")
-                    validation &= (found>=0)
+                    validation &= (found >= 0)
                 else:
                     self.__log.info(
                         "Fragments not present in the search result")
@@ -1547,7 +1553,6 @@ class FTSIndex:
         if TestInputSingleton.input.param("negative_test", False):
             validation = ~validation
         return validation
-
 
     def get_score_from_query_result_content(self, contents, doc_id):
         for content in contents:
@@ -1577,22 +1582,22 @@ class FTSIndex:
         query_norm_score = 0
         for doc in search_results:
             if doc['id'] == doc_id:
-                if doc['explanation'].has_key('children'):
+                if 'children' in doc['explanation']:
                     tree = self.find_node_in_score_tree(
                         doc['explanation']['children'], weight, searchTerm)
-                    if tree.has_key('children'):
+                    if 'children' in tree:
                         tf_score, field_norm_score, idf_score, query_norm_score, \
-                            coord_score = self.extract_detailed_score_from_node(
+                        coord_score = self.extract_detailed_score_from_node(
                             tree['children'])
                     else:
                         nodes = []
                         nodes.append(tree)
                         tf_score, field_norm_score, idf_score, query_norm_score, \
-                            coord_score = self.extract_detailed_score_from_node(
+                        coord_score = self.extract_detailed_score_from_node(
                             nodes)
                 else:
                     tf_score, field_norm_score, idf_score, query_norm_score, \
-                        coord_score = self.extract_detailed_score_from_node(
+                    coord_score = self.extract_detailed_score_from_node(
                         doc['explanation'])
 
         return tf_score, field_norm_score, idf_score, query_norm_score, coord_score
@@ -1602,23 +1607,23 @@ class FTSIndex:
         Finds the node that contains the desired score component in the tree
         structure containing the score explanation
         """
-        while 1:
+        while True:
             newSubnodes = []
             for node in tree:
                 if (weight in node['message']) and (
-                            searchTerm in node['message']):
+                        searchTerm in node['message']):
                     self.__log.info("Found it")
                     return node
-                if node.has_key('children'):
+                if 'children' in node:
                     if len(node['children']) == 0:
                         break
                     for subnode in node['children']:
                         if (weight in subnode['message']) and (
-                                    searchTerm in subnode['message']):
+                                searchTerm in subnode['message']):
                             self.__log.info("Found it")
                             return subnode
                         else:
-                            if subnode.has_key('children'):
+                            if 'children' in subnode:
                                 for subsubnode in subnode['children']:
                                     newSubnodes.append(subsubnode)
             tree = copy.deepcopy(newSubnodes)
@@ -1709,7 +1714,7 @@ class CouchbaseCluster:
         self.__n1ql_nodes = []
         self.__non_fts_nodes = []
         service_map = RestConnection(self.__master_node).get_nodes_services()
-        for node_ip, services in service_map.iteritems():
+        for node_ip, services in list(service_map.items()):
             if self.is_cluster_run():
                 # if cluster-run and ip not 127.0.0.1
                 ip = "127.0.0.1"
@@ -1890,7 +1895,7 @@ class CouchbaseCluster:
         self.__separate_nodes_on_services()
         if not self.is_cluster_run() and \
                 (TestInputSingleton.input.param("fdb_compact_interval", None) or \
-                         TestInputSingleton.input.param("fdb_compact_threshold", None)):
+                 TestInputSingleton.input.param("fdb_compact_threshold", None)):
             for node in self.__fts_nodes:
                 NodeHelper.set_cbft_env_fdb_options(node)
 
@@ -1942,8 +1947,8 @@ class CouchbaseCluster:
             self.__log.info(e)
 
     def _create_bucket_params(self, server, replicas=1, size=0, port=11211, password=None,
-                             bucket_type='membase', enable_replica_index=1, eviction_policy='valueOnly',
-                             bucket_priority=None, flush_enabled=1, lww=False, maxttl=None):
+                              bucket_type='membase', enable_replica_index=1, eviction_policy='valueOnly',
+                              bucket_priority=None, flush_enabled=1, lww=False, maxttl=None):
         """Create a set of bucket_parameters to be sent to all of the bucket_creation methods
         Parameters:
             server - The server to create the bucket on. (TestInputServer)
@@ -2002,7 +2007,7 @@ class CouchbaseCluster:
                 bucket_type=bucket_type,
                 maxttl=maxttl)
 
-            bucket_tasks.append(self.__clusterop.async_create_sasl_bucket(name=name,password='password',
+            bucket_tasks.append(self.__clusterop.async_create_sasl_bucket(name=name, password='password',
                                                                           bucket_params=sasl_params))
             self.__buckets.append(
                 Bucket(
@@ -2051,7 +2056,7 @@ class CouchbaseCluster:
 
             bucket_tasks.append(
                 self.__clusterop.async_create_standard_bucket(
-                    name=name, port=STANDARD_BUCKET_PORT+i,
+                    name=name, port=STANDARD_BUCKET_PORT + i,
                     bucket_params=standard_params))
 
             self.__buckets.append(
@@ -2081,7 +2086,7 @@ class CouchbaseCluster:
         @param eviction_policy: valueOnly etc.
         @param bucket_priority: high/low etc.
         """
-        bucket_params=self._create_bucket_params(
+        bucket_params = self._create_bucket_params(
             server=self.__master_node,
             size=bucket_size,
             replicas=num_replicas,
@@ -2148,11 +2153,10 @@ class CouchbaseCluster:
             try:
                 time.sleep(10)
                 indexed_doc_count = fts_idx.get_indexed_doc_count()
-            except KeyError, k:
+            except KeyError as k:
                 continue
 
         return fts_idx
-
 
     def get_fts_index_by_name(self, name):
         """ Returns an FTSIndex object with the given name """
@@ -2528,8 +2532,8 @@ class CouchbaseCluster:
 
             if es:
                 tasks.append(es.async_bulk_load_ES(index_name='default_es_index',
-                                                       gen=kv_gen,
-                                                       op_type='create'))
+                                                   gen=kv_gen,
+                                                   op_type='create'))
 
             for task in tasks:
                 task.result(timeout=2000)
@@ -2769,7 +2773,7 @@ class CouchbaseCluster:
         rest.set_retry_rebalance_settings(body)
         result = rest.get_retry_rebalance_settings()
         self.__log.info("Retry Rebalance settings changed to : {0}"
-                      .format(json.loads(result)))
+                        .format(json.loads(result)))
 
     def disable_retry_rebalance(self):
         rest = RestConnection(self.get_master_node())
@@ -2885,7 +2889,7 @@ class CouchbaseCluster:
         return tasks
 
     def failover(self, master=False, num_nodes=1,
-                                     graceful=False):
+                 graceful=False):
         """synchronously failover nodes from Cluster
         @param master: True if failover master node only.
         @param num_nodes: number of nodes to rebalance-out from cluster.
@@ -2925,8 +2929,8 @@ class CouchbaseCluster:
 
         return task
 
-    def async_failover(self, master=False, num_nodes=1, graceful=False,node=None):
-        return self.__async_failover(master=master, num_nodes=num_nodes, graceful=graceful,node=node)
+    def async_failover(self, master=False, num_nodes=1, graceful=False, node=None):
+        return self.__async_failover(master=master, num_nodes=num_nodes, graceful=graceful, node=node)
 
     def failover_and_rebalance_master(self, graceful=False, rebalance=True):
         """Failover master node
@@ -3201,14 +3205,14 @@ class FTSBaseTest(unittest.TestCase):
         #        self.__is_test_failed():
         # To reproduce MB-20494, temporarily remove condition to
         # backup_pindex_data only if test has failed.
-        if self._input.param('backup_pindex_data', False) :
+        if self._input.param('backup_pindex_data', False):
             for server in self._input.servers:
                 self.log.info("Backing up pindex data @ {0}".format(server.ip))
                 self.backup_pindex_data(server)
 
         try:
             if self.__is_cleanup_not_needed():
-                self.log.warn("CLEANUP WAS SKIPPED")
+                self.log.warning("CLEANUP WAS SKIPPED")
                 return
             self.log.info(
                 "====  FTSbasetests cleanup is started for test #{0} {1} ===="
@@ -3217,13 +3221,25 @@ class FTSBaseTest(unittest.TestCase):
             ntonencryptionBase().disable_nton_cluster(self._input.servers)
             if self.compare_es:
                 self.teardown_es()
+
             self.log.info(
                 "====  FTSbasetests cleanup is finished for test #{0} {1} ==="
                     .format(self.__case_number, self._testMethodName))
         finally:
+            self.log.info("closing all ssh connections")
+            for ins in RemoteMachineShellConnection.get_instances():
+                #self.log.info(str(ins))
+                ins.disconnect()
+            self.log.info("closing all memcached connections")
+            for ins in MemcachedClient.get_instances():
+                #self.log.info(str(ins))
+                ins.close()
+
+            for ins in MC_MemcachedClient.get_instances():
+                #self.log.info(str(ins))
+                ins.close()
             self.__cluster_op.shutdown(force=True)
             unittest.TestCase.tearDown(self)
-
 
     def __init_logger(self):
         if self._input.param("log_level", None):
@@ -3267,13 +3283,13 @@ class FTSBaseTest(unittest.TestCase):
         # Add built-in user
         testuser = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'password': 'password'}]
         RbacBase().create_user_source(testuser, 'builtin', master)
-        
+
         # Assign user to role
         role_list = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'roles': 'admin'}]
         RbacBase().add_user_role(role_list, RestConnection(master), 'builtin')
 
         self._set_bleve_max_result_window()
-        
+
         self.__set_free_servers()
         if not no_buckets:
             self.__create_buckets()
@@ -3314,7 +3330,7 @@ class FTSBaseTest(unittest.TestCase):
     def setup_nton_encryption(self):
         self.log.info('Setting up node to node encyrption from ')
         ntonencryptionBase().setup_nton_cluster(self._input.servers,clusterEncryptionLevel=self.ntonencrypt_level)
-    
+
     def construct_serv_list(self, serv_str):
         """
             Constructs a list of node services
@@ -3324,7 +3340,7 @@ class FTSBaseTest(unittest.TestCase):
             @return services_list: like ['kv', 'kv,fts', 'index,n1ql','index']
         """
         serv_dict = {'D': 'kv', 'F': 'fts', 'I': 'index', 'Q': 'n1ql'}
-        for letter, serv in serv_dict.iteritems():
+        for letter, serv in list(serv_dict.items()):
             serv_str = serv_str.replace(letter, serv)
         services_list = re.split('[-,:]', serv_str)
         for index, serv in enumerate(services_list):
@@ -3398,8 +3414,8 @@ class FTSBaseTest(unittest.TestCase):
         self.run_via_n1ql = self._input.param("run_via_n1ql", False)
         if self.run_via_n1ql:
             self.n1ql = N1QLHelper(version="sherlock", shell=None,
-                                    item_flag=None, n1ql_port=8903,
-                                      full_docs_list=[], log=self.log)
+                                   item_flag=None, n1ql_port=8903,
+                                   full_docs_list=[], log=self.log)
         else:
             self.n1ql = None
         self.create_gen = None
@@ -3423,8 +3439,8 @@ class FTSBaseTest(unittest.TestCase):
         else:
             self.expected_docs_list.append(self.expected_docs)
         self.expected_results = self._input.param("expected_results", None)
-        self.highlight_style = self._input.param("highlight_style",None)
-        self.highlight_fields = self._input.param("highlight_fields",None)
+        self.highlight_style = self._input.param("highlight_style", None)
+        self.highlight_fields = self._input.param("highlight_fields", None)
         self.highlight_fields_list = []
         if (self.highlight_fields):
             if (',' in self.highlight_fields):
@@ -3438,7 +3454,7 @@ class FTSBaseTest(unittest.TestCase):
         if self.consistency_vectors != {}:
             self.consistency_vectors = eval(self.consistency_vectors)
             if self.consistency_vectors is not None and self.consistency_vectors != '':
-                if type(self.consistency_vectors) != dict:
+                if not isinstance(self.consistency_vectors, dict):
                     self.consistency_vectors = json.loads(self.consistency_vectors)
         self.ntonencrypt = self._input.param('ntonencrypt','disable')
         self.ntonencrypt_level = self._input.param('ntonencrypt_level','control')
@@ -3462,7 +3478,7 @@ class FTSBaseTest(unittest.TestCase):
         for server in total_servers:
             for cluster_node in cluster_nodes:
                 if server.ip == cluster_node.ip and \
-                                server.port == cluster_node.port:
+                        server.port == cluster_node.port:
                     break
                 else:
                     continue
@@ -3481,9 +3497,9 @@ class FTSBaseTest(unittest.TestCase):
             # buckets cannot be created if size<100MB
             bucket_size = 256
         elif quota_percent is not None:
-             bucket_size = int( float(cluster_quota - 500) * float(quota_percent/100.0 ) /float(num_buckets) )
+            bucket_size = int(float(cluster_quota - 500) * float(quota_percent / 100.0) / float(num_buckets))
         else:
-            bucket_size = int((float(cluster_quota) - 500)/float(num_buckets))
+            bucket_size = int((float(cluster_quota) - 500) / float(num_buckets))
         return bucket_size
 
     def __create_buckets(self):
@@ -3595,8 +3611,8 @@ class FTSBaseTest(unittest.TestCase):
             num_keys = self._num_items
 
         gen = GeoSpatialDataLoader("earthquake",
-                                    start=0,
-                                    end=num_keys)
+                                   start=0,
+                                   end=num_keys)
         self._cb_cluster.load_all_buckets_from_generator(gen)
 
     def perform_update_delete(self, fields_to_update=None):
@@ -3737,7 +3753,7 @@ class FTSBaseTest(unittest.TestCase):
                                          node.ip,
                                          self.__error_count_dict[node.ip][error],
                                          count))
-                    if node.ip in self.__error_count_dict.keys():
+                    if node.ip in list(self.__error_count_dict.keys()):
                         if (count > self.__error_count_dict[node.ip][error]):
                             error_found_logger.append("{0} found on {1}".format(error,
                                                                                 node.ip))
@@ -3785,7 +3801,7 @@ class FTSBaseTest(unittest.TestCase):
                     if bucket_doc_count == 0:
                         if item_count and item_count != 0:
                             self.sleep(5,
-                                "looks like docs haven't been loaded yet...")
+                                       "looks like docs haven't been loaded yet...")
                             retry_count -= 1
                             continue
 
@@ -3844,10 +3860,10 @@ class FTSBaseTest(unittest.TestCase):
             _, defn = index.get_index_defn()
 
         for pindex in defn['planPIndexes']:
-            for node, attr in pindex['nodes'].iteritems():
+            for node, attr in list(pindex['nodes'].items()):
                 if attr['priority'] == 0:
                     break
-            if node not in nodes_partitions.keys():
+            if node not in list(nodes_partitions.keys()):
                 nodes_partitions[node] = {'pindex_count': 0, 'pindexes': {}}
             nodes_partitions[node]['pindex_count'] += 1
             nodes_partitions[node]['pindexes'][pindex['uuid']] = []
@@ -3870,13 +3886,13 @@ class FTSBaseTest(unittest.TestCase):
 
         # check 1 - test number of pindexes
         partitions_per_pindex = index.get_max_partitions_pindex()
-        exp_num_pindexes = self._num_vbuckets / partitions_per_pindex
+        exp_num_pindexes = self._num_vbuckets // partitions_per_pindex
         if self._num_vbuckets % partitions_per_pindex:
             import math
             exp_num_pindexes = math.ceil(
-                self._num_vbuckets / partitions_per_pindex + 0.5)
+                self._num_vbuckets // partitions_per_pindex + 0.5)
         total_pindexes = 0
-        for node in nodes_partitions.keys():
+        for node in list(nodes_partitions.keys()):
             total_pindexes += nodes_partitions[node]['pindex_count']
         if total_pindexes != exp_num_pindexes:
             self.fail("Number of pindexes for %s is %s while"
@@ -3888,8 +3904,8 @@ class FTSBaseTest(unittest.TestCase):
 
         # check 2 - each pindex servicing "partitions_per_pindex" vbs
         num_fts_nodes = len(self._cb_cluster.get_fts_nodes())
-        for node in nodes_partitions.keys():
-            for uuid, partitions in nodes_partitions[node]['pindexes'].iteritems():
+        for node in list(nodes_partitions.keys()):
+            for uuid, partitions in list(nodes_partitions[node]['pindexes'].items()):
                 if len(partitions) > partitions_per_pindex:
                     self.fail("sourcePartitions for pindex %s more than "
                               "max_partitions_per_pindex %s" %
@@ -3899,32 +3915,32 @@ class FTSBaseTest(unittest.TestCase):
 
         # check 3 - distributed - pindex present on all fts nodes?
         count = 0
-        nodes_with_pindexes = len(nodes_partitions.keys())
+        nodes_with_pindexes = len(list(nodes_partitions.keys()))
         if nodes_with_pindexes > 1:
             while nodes_with_pindexes != num_fts_nodes:
                 count += 10
                 if count == 60:
                     self.fail("Even after 60s of waiting, index is not properly"
                               " distributed,pindexes spread across %s while "
-                              "fts nodes are %s" % (nodes_partitions.keys(),
+                              "fts nodes are %s" % (list(nodes_partitions.keys()),
                                                     self._cb_cluster.get_fts_nodes()))
                 self.sleep(10, "pIndexes not distributed across %s nodes yet"
                            % num_fts_nodes)
                 nodes_partitions = self.populate_node_partition_map(index)
-                nodes_with_pindexes = len(nodes_partitions.keys())
+                nodes_with_pindexes = len(list(nodes_partitions.keys()))
             else:
                 self.log.info("Validated: pIndexes are distributed across %s "
-                              % nodes_partitions.keys())
+                              % list(nodes_partitions.keys()))
 
         # check 4 - balance check(almost equal no of pindexes on all fts nodes)
-        exp_partitions_per_node = self._num_vbuckets / num_fts_nodes
+        exp_partitions_per_node = self._num_vbuckets // num_fts_nodes
         self.log.info("Expecting num of partitions in each node in range %s-%s"
                       % (exp_partitions_per_node - partitions_per_pindex,
                          min(1024, exp_partitions_per_node + partitions_per_pindex)))
 
-        for node in nodes_partitions.keys():
+        for node in list(nodes_partitions.keys()):
             num_node_partitions = 0
-            for uuid, partitions in nodes_partitions[node]['pindexes'].iteritems():
+            for uuid, partitions in list(nodes_partitions[node]['pindexes'].items()):
                 num_node_partitions += len(partitions)
             if abs(num_node_partitions - exp_partitions_per_node) > \
                     partitions_per_pindex:
@@ -3947,7 +3963,7 @@ class FTSBaseTest(unittest.TestCase):
                       like: query_type=["match", "match_phrase","bool",
                                         "conjunction", "disjunction"]
         """
-        from random_query_generator.rand_query_gen import FTSESQueryGenerator
+        from .random_query_generator.rand_query_gen import FTSESQueryGenerator
         query_gen = FTSESQueryGenerator(num_queries, query_type=query_type,
                                         seed=seed, dataset=self.dataset,
                                         fields=index.smart_query_fields)
@@ -3975,12 +3991,12 @@ class FTSBaseTest(unittest.TestCase):
         :return: fts or fts and es queries
         """
         import random
-        from random_query_generator.rand_query_gen import FTSESQueryGenerator
+        from .random_query_generator.rand_query_gen import FTSESQueryGenerator
         gen_queries = 0
 
         while gen_queries < num_queries:
             if bool(random.getrandbits(1)):
-                fts_query, es_query = FTSESQueryGenerator.\
+                fts_query, es_query = FTSESQueryGenerator. \
                     construct_geo_location_query()
             else:
                 fts_query, es_query = FTSESQueryGenerator. \
@@ -3991,7 +4007,7 @@ class FTSBaseTest(unittest.TestCase):
 
             if self.compare_es:
                 self.es.es_queries.append(
-                        json.loads(json.dumps(es_query, ensure_ascii=False)))
+                    json.loads(json.dumps(es_query, ensure_ascii=False)))
             gen_queries += 1
 
         if self.es:
@@ -4013,7 +4029,9 @@ class FTSBaseTest(unittest.TestCase):
         from lib.couchbase_helper.data import LON_LAT
         while gen_queries < num_queries:
             center = random.choice(LON_LAT)
-            fts_query, es_query, ave_radius, num_verts, format = FTSESQueryGenerator.construct_geo_polygon_query(center, polygon_feature, num_vertices)
+            fts_query, es_query, ave_radius, num_verts, format = FTSESQueryGenerator.construct_geo_polygon_query(center,
+                                                                                                                 polygon_feature,
+                                                                                                                 num_vertices)
 
             index.fts_queries.append(
                 json.loads(json.dumps(fts_query, ensure_ascii=False)))
@@ -4024,10 +4042,11 @@ class FTSBaseTest(unittest.TestCase):
 
             gen_queries += 1
 
-            self.log.info("query " + str(gen_queries) + " generated for the polygon with center: " + str(center) + ", num_vertices: " + str(num_verts) +
+            self.log.info("query " + str(gen_queries) + " generated for the polygon with center: " + str(
+                center) + ", num_vertices: " + str(num_verts) +
                           ", ave_radius: " + str(ave_radius) + " and format: " + str(format))
-
         if self.es:
+
             return index.fts_queries, self.es.es_queries
         else:
             return index.fts_queries
@@ -4115,7 +4134,7 @@ class FTSBaseTest(unittest.TestCase):
                     index.source_bucket)
 
                 self.log.info("Docs in index {0}={1}, bucket docs={2}".
-                          format(index.name, docs_indexed, bucket_count))
+                              format(index.name, docs_indexed, bucket_count))
                 if docs_indexed != bucket_count:
                     return False
                 else:
@@ -4154,13 +4173,14 @@ class FTSBaseTest(unittest.TestCase):
 
     def get_zap_docvalue_disksize(self):
         shell = RemoteMachineShellConnection(self._cb_cluster.get_random_fts_node())
-        command = "cd /opt/couchbase/var/lib/couchbase/data/\@fts; find . -name \"*.zap\"|  sort -n | tail -1 | xargs -I {} sh -c \"/opt/couchbase/bin/cbft-bleve zap docvalue {} | tail -1\""
+        command = 'cd /opt/couchbase/var/lib/couchbase/data/\\@fts; find . -name "*.zap"|  sort -n | ' \
+                  'tail -1 | xargs -I {} sh -c "/opt/couchbase/bin/cbft-bleve zap docvalue {} | tail -1"'
         output, error = shell.execute_command(command)
         if error and "remoteClients registered for tls config updates" not in error[0]:
             self.fail("error running command : {0} , error : {1}".format(command, error))
         self.log.info(output)
-        self.log.info(re.findall("\d+\.\d+", output[0]))
-        return re.findall("\d+\.\d+", output[0])[0]
+        self.log.info(re.findall(r"\d+\.\d+", output[0]))
+        return re.findall(r"\d+\.\d+", output[0])[0]
 
     def create_geo_index_and_load(self):
         """
@@ -4174,18 +4194,18 @@ class FTSBaseTest(unittest.TestCase):
             self.log.info("Creating a geo-index on Elasticsearch...")
             self.es.delete_indices()
             es_mapping = {
-                 "earthquake": {
-                     "properties": {
-                         "geo": {
-                             "type": "geo_point"
-                             }
-                         }
-                     }
-                 }
+                "earthquake": {
+                    "properties": {
+                        "geo": {
+                            "type": "geo_point"
+                        }
+                    }
+                }
+            }
             self.create_es_index_mapping(es_mapping=es_mapping)
 
         self.log.info("Creating geo-index ...")
-        from fts_base import FTSIndex
+        from .fts_base import FTSIndex
         geo_index = FTSIndex(
             cluster=self._cb_cluster,
             name="geo-index",
@@ -4253,21 +4273,20 @@ class FTSBaseTest(unittest.TestCase):
                                      end=start + num_items)
         elif dataset == "earthquakes":
             return GeoSpatialDataLoader(name="earthquake",
-                                     start=start,
-                                     end=start + num_items)
+                                        start=start,
+                                        end=start + num_items)
 
     def populate_create_gen(self):
         if self.dataset == "all":
             # only emp and wiki
             self.create_gen = []
             self.create_gen.append(self.get_generator(
-                "emp", num_items=self._num_items / 2))
+                "emp", num_items=self._num_items // 2))
             self.create_gen.append(self.get_generator(
-                "wiki", num_items=self._num_items / 2))
+                "wiki", num_items=self._num_items // 2))
         else:
             self.create_gen = self.get_generator(
                 self.dataset, num_items=self._num_items)
-
 
     def populate_update_gen(self, fields_to_update=None):
         if self.dataset == "emp":
@@ -4395,9 +4414,9 @@ class FTSBaseTest(unittest.TestCase):
         """
          Grab fts diag until it is handled by cbcollect info
         """
-        from httplib import BadStatusLine
+        from http.client import BadStatusLine
         import os
-        import urllib2
+        import urllib.request, urllib.error, urllib.parse
         import gzip
         import base64
         path = TestInputSingleton.input.param("logs_folder", "/tmp")
@@ -4409,8 +4428,8 @@ class FTSBaseTest(unittest.TestCase):
                                                         serverInfo.fts_port)
             self.log.info(diag_url)
             try:
-                req = urllib2.Request(diag_url)
-                authorization = base64.encodestring('%s:%s' % (
+                req = urllib.request.Request(diag_url)
+                authorization = base64.encodebytes('%s:%s' % (
                     self._input.membase_settings.rest_username,
                     self._input.membase_settings.rest_password))
                 req.headers = {
@@ -4418,7 +4437,7 @@ class FTSBaseTest(unittest.TestCase):
                     'Authorization': 'Basic %s' % authorization,
                     'Accept': '*/*'}
                 filename = "{0}_fts_diag.json".format(serverInfo.ip)
-                page = urllib2.urlopen(req)
+                page = urllib.request.urlopen(req)
                 with open(path + '/' + filename, 'wb') as output:
                     os.write(1, "downloading {0} ...".format(serverInfo.ip))
                     while True:
@@ -4433,14 +4452,14 @@ class FTSBaseTest(unittest.TestCase):
                 file_input.close()
                 zipped.close()
                 os.remove(path + '/' + filename)
-                print "downloaded and zipped diags @ : {0}/{1}".format(path,
-                                                                       filename)
-            except urllib2.URLError as error:
-                print "unable to obtain fts diags from {0}".format(diag_url)
+                print(("downloaded and zipped diags @ : {0}/{1}".format(path,
+                                                                       filename)))
+            except urllib.error.URLError as error:
+                print(("unable to obtain fts diags from {0}".format(diag_url)))
             except BadStatusLine:
-                print "unable to obtain fts diags from {0}".format(diag_url)
+                print(("unable to obtain fts diags from {0}".format(diag_url)))
             except Exception as e:
-                print "unable to obtain fts diags from {0} :{1}".format(diag_url, e)
+                print(("unable to obtain fts diags from {0} :{1}".format(diag_url, e)))
 
     def backup_pindex_data(self, server):
         remote = RemoteMachineShellConnection(server)
@@ -4458,12 +4477,13 @@ class FTSBaseTest(unittest.TestCase):
                 remote.execute_command(command)
                 output, error = remote.execute_command("ls -la /tmp/backup_pindex_data/{0}".format(stamp))
                 for o in output:
-                    print o
-                self.log.info("***pindex files for {0} are copied to /tmp/backup_pindex_data/{1} on {0}".format(server.ip,stamp))
+                    print(o)
+                self.log.info(
+                    "***pindex files for {0} are copied to /tmp/backup_pindex_data/{1} on {0}".format(server.ip, stamp))
                 remote.disconnect()
                 return True
         except Exception as ex:
-            print ex
+            print(ex)
             return False
 
     def build_sort_params(self):
@@ -4502,14 +4522,13 @@ class FTSBaseTest(unittest.TestCase):
         :param docs: List of json data
         :return: None
         """
-        from memcached.helper.data_helper import KVStoreAwareSmartClient
-        memc_client  = KVStoreAwareSmartClient(RestConnection(server),
-                                               'default')
+        memc_client = KVStoreAwareSmartClient(RestConnection(server),
+                                              'default')
         count = 1
         for i, doc in enumerate(docs):
             while True:
                 try:
-                    memc_client.set(key=str(i+1),
+                    memc_client.set(key=str(i + 1),
                                     value=json.dumps(doc))
                     break
                 except Exception as e:
@@ -4529,7 +4548,7 @@ class FTSBaseTest(unittest.TestCase):
         if not self._dgm_run:
             counter = 0
             if not items:
-                items = self._num_items/2
+                items = self._num_items // 2
             while True:
                 try:
                     doc_count = self._cb_cluster.get_doc_count_in_bucket(
@@ -4543,9 +4562,9 @@ class FTSBaseTest(unittest.TestCase):
                         bucket):
                     self.log.info("Docs in bucket {0} = {1}".
                         format(
-                            bucket.name,
-                            self._cb_cluster.get_doc_count_in_bucket(
-                                bucket)))
+                        bucket.name,
+                        self._cb_cluster.get_doc_count_in_bucket(
+                            bucket)))
                     self.sleep(1, "sleeping 1s to allow for item loading")
                     counter += 1
                     if counter > 20:

@@ -5,7 +5,7 @@ import threading
 from couchbase_helper.tuq_helper import N1QLHelper
 from membase.api.rest_client import RestConnection
 from remote.remote_util import RemoteMachineShellConnection
-from tuq import QueryTests
+from .tuq import QueryTests
 
 
 log = logging.getLogger(__name__)
@@ -40,7 +40,7 @@ class AggregatePushdownRecoveryClass(QueryTests):
             log.info("==== Cluster in healthy state ====")
             self.sleep(60)
             self._aggregate_query_using_index(index_names_defn)
-        except Exception, ex:
+        except Exception as ex:
             log.info(str(ex))
             raise
 
@@ -59,7 +59,7 @@ class AggregatePushdownRecoveryClass(QueryTests):
             log.info("==== Cluster in healthy state ====")
             self.sleep(60)
             self._aggregate_query_using_index(index_names_defn)
-        except Exception, ex:
+        except Exception as ex:
             log.info(str(ex))
             raise
 
@@ -79,7 +79,7 @@ class AggregatePushdownRecoveryClass(QueryTests):
             self.assertTrue(self._wait_until_cluster_is_healthy(), msg)
             log.info("==== Cluster in healthy state ====")
             self.sleep(60)
-        except Exception, ex:
+        except Exception as ex:
             log.info(str(ex))
             raise
 
@@ -104,7 +104,7 @@ class AggregatePushdownRecoveryClass(QueryTests):
             self.assertTrue(self._wait_until_cluster_is_healthy(), msg)
             log.info("==== Cluster in healthy state ====")
             self.sleep(60)
-        except Exception, ex:
+        except Exception as ex:
             log.info(str(ex))
             raise
 
@@ -142,7 +142,7 @@ class AggregatePushdownRecoveryClass(QueryTests):
             self.assertTrue(self._wait_until_cluster_is_healthy(), msg)
             log.info("==== Cluster in healthy state ====")
             self.sleep(60)
-        except Exception, ex:
+        except Exception as ex:
             log.info(str(ex))
             raise
 
@@ -218,7 +218,7 @@ class AggregatePushdownRecoveryClass(QueryTests):
             result_set = []
             if res is not None and len(res) > 0:
                 for val in res:
-                    for key in val.keys():
+                    for key in list(val.keys()):
                         result_set.append(val[key])
             return result_set
 

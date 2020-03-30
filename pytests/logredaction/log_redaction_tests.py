@@ -56,9 +56,9 @@ class LogRedactionTests(LogRedactionBase):
         gen_create = BlobGenerator('logredac', 'logredac-', self.value_size, end=self.num_items)
         self._load_all_buckets(self.master, gen_create, "create", 0)
 
-        gen_delete = BlobGenerator('logredac', 'logredac-', self.value_size, start=self.num_items / 2, end=self.num_items)
+        gen_delete = BlobGenerator('logredac', 'logredac-', self.value_size, start=self.num_items // 2, end=self.num_items)
         gen_update = BlobGenerator('logredac', 'logredac-', self.value_size, start=self.num_items + 1,
-                                   end=self.num_items * 3 / 2)
+                                   end=self.num_items * 3 // 2)
 
         self._load_all_buckets(self.master, gen_delete, "create", 0)
         self._load_all_buckets(self.master, gen_update, "create", 0)
@@ -88,10 +88,10 @@ class LogRedactionTests(LogRedactionBase):
         # load bucket and do some ops
         gen_create = BlobGenerator('logredac', 'logredac-', self.value_size, end=self.num_items)
         self._load_all_buckets(self.master, gen_create, "create", 0)
-        gen_delete = BlobGenerator('logredac', 'logredac-', self.value_size, start=self.num_items / 2,
+        gen_delete = BlobGenerator('logredac', 'logredac-', self.value_size, start=self.num_items // 2,
                                    end=self.num_items)
         gen_update = BlobGenerator('logredac', 'logredac-', self.value_size, start=self.num_items + 1,
-                                   end=self.num_items * 3 / 2)
+                                   end=self.num_items * 3 // 2)
         self._load_all_buckets(self.master, gen_delete, "create", 0)
         self._load_all_buckets(self.master, gen_update, "create", 0)
         # set log redaction level, collect logs, verify log files exist and verify them for redaction
@@ -553,7 +553,7 @@ class LogRedactionTests(LogRedactionBase):
 
     '''Convert output of remote_util.execute_command to json
        (stripping all white space to match execute_command_inside output)'''
-    def convert_list_to_json(self,output_of_curl):
+    def convert_list_to_json(self, output_of_curl):
         new_list = [string.replace(" ", "") for string in output_of_curl]
         concat_string = ''.join(new_list)
         json_output=json.loads(concat_string)

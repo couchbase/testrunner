@@ -1,4 +1,4 @@
-from tuq import QueryTests
+from .tuq import QueryTests
 from membase.api.exception import CBQError, ReadDocumentException
 
 
@@ -38,7 +38,7 @@ class QueryANSIJOINSTests(QueryTests):
         idx_list = []
         queries_to_run = []
         index = "CREATE INDEX idx1 on `travel-sample`(id)"
-        idx_list.append((index,("`travel-sample`", "idx1")))
+        idx_list.append((index, ("`travel-sample`", "idx1")))
 
         query = "select * from default d1 INNER JOIN `travel-sample` t on (d1.join_day == t.id)"
         queries_to_run.append((query, 1728))
@@ -57,7 +57,7 @@ class QueryANSIJOINSTests(QueryTests):
         idx_list.append((idx2, ("default", "join_day")))
 
         query = "select * from `travel-sample` t INNER JOIN default d1 on (d1.join_day == t.id OR t.name == d1.name)"
-        queries_to_run.append((query,1728))
+        queries_to_run.append((query, 1728))
         self.run_common_body(index_list=idx_list, queries_to_run=queries_to_run)
 
     ''' Test the features of RIGHT OUTER JOIN, it will only work as the front of the join, the fields on the lhs bucket
@@ -416,7 +416,7 @@ class QueryANSIJOINSTests(QueryTests):
         idx = "CREATE INDEX array_index on default(join_day,join_mo,DISTINCT ARRAY v.RAM for v in VMs END )"
         idx2 = "CREATE INDEX id on `travel-sample`(id)"
 
-        idx_list.append((idx,("default", "array_index")))
+        idx_list.append((idx, ("default", "array_index")))
         idx_list.append((idx2, ("`travel-sample`", "id")))
 
         query = "select * from `travel-sample` t INNER JOIN default d ON (t.id == d.join_mo AND t.id == d.join_day " \

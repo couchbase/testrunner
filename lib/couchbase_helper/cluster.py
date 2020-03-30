@@ -24,7 +24,8 @@ class Cluster(object):
             bucket_params - a dictionary containing bucket creation parameters. (Dict)
         Returns:
             BucketCreateTask - A task future that is a handle to the scheduled task."""
-        bucket_params['bucket_name'] = 'default'
+        if 'bucket_name' not in bucket_params.keys():
+            bucket_params['bucket_name'] = 'default'
         _task = BucketCreateTask(bucket_params)
         self.task_manager.schedule(_task)
         return _task
@@ -84,6 +85,8 @@ class Cluster(object):
         self.task_manager.schedule(_task)
         return _task
 
+
+
     def async_failover(self, servers=[], failover_nodes=[], graceful=False,
                        use_hostnames=False, wait_for_pending=0):
         """Asynchronously failover a set of nodes
@@ -101,6 +104,35 @@ class Cluster(object):
         self.task_manager.schedule(_task)
         return _task
 
+    def async_create_scope(self, server, bucket_name, scope_name):
+        _task = ScopeCreateTask(server, bucket_name, scope_name)
+        self.task_manager.schedule(_task)
+        return _task
+
+    def async_create_collection(self, server, bucket_name, scope_name, collection_name, collection_params):
+        _task = CollectionCreateTask(server, bucket_name, scope_name, collection_name, collection_params)
+        self.task_manager.schedule(_task)
+        return _task
+
+    def async_create_scope_collection(self, server, bucket_name, scope_name, collection_name, collection_params):
+        _task = ScopeCollectionCreateTask(server, bucket_name, scope_name, collection_name, collection_params)
+        self.task_manager.schedule(_task)
+        return _task
+
+    def async_delete_scope(self, server, bucket_name, scope_name):
+        _task = ScopeDeleteTask(server, bucket_name, scope_name)
+        self.task_manager.schedule(_task)
+        return _task
+
+    def async_delete_collection(self, server, bucket_name, scope_name, collection_name):
+        _task = CollectionDeleteTask(server, bucket_name, scope_name, collection_name)
+        self.task_manager.schedule(_task)
+        return _task
+
+    def async_delete_scope_collection(self, server, bucket_name, scope_name, collection_name):
+        _task = ScopeCollectionDeleteTask(server, bucket_name, scope_name, collection_name)
+        self.task_manager.schedule(_task)
+        return _task
 
     def async_init_node(self, server, disabled_consistent_view=None,
                         rebalanceIndexWaitingDisabled=None, rebalanceIndexPausingDisabled=None,
@@ -306,6 +338,30 @@ class Cluster(object):
         _task = self.async_bucket_delete(server, bucket)
         return _task.result(timeout)
 
+    def create_scope(self, server, bucket_name, scope_name):
+        _task = self.async_create_scope(server, bucket_name, scope_name)
+        return _task
+
+    def create_collection(self, server, bucket_name, scope_name, collection_name, collection_params):
+        _task = self.async_create_collection(server, bucket_name, scope_name, collection_name, collection_params)
+        return _task
+
+    def create_scope_collection(self, server, bucket_name, scope_name, collection_name, collection_params):
+        _task = self.async_create_scope_collection(server, bucket_name, scope_name, collection_name, collection_params)
+        return _task
+
+    def delete_scope(self, server, bucket_name, scope_name):
+        _task = self.async_delete_scope(server, bucket_name, scope_name)
+        return _task
+
+    def delete_collection(self, server, bucket_name, scope_name, collection_name):
+        _task = self.async_delete_collection(server, bucket_name, scope_name, collection_name)
+        return _task
+
+    def delete_scope_collection(self, server, bucket_name, scope_name, collection_name):
+        _task = self.async_delete_scope_collection(server, bucket_name, scope_name, collection_name)
+        return _task
+
     def init_node(self, server, async_init_node=True, disabled_consistent_view=None, services = None, index_quota_percent = None):
         """Synchronously initializes a node
 
@@ -347,20 +403,20 @@ class Cluster(object):
         import subprocess
         from lib.membase.api.rest_client import RestConnection
 
-        cmd_format = "python scripts/high_ops_doc_gen.py  --node {0} --bucket {1} --user {2} --password {3} " \
+        cmd_format = "python3 scripts/high_ops_doc_gen.py  --node {0} --bucket {1} --user {2} --password {3} " \
                      "--count {4} --batch_size {5} --threads {6} --start_document {7} --cb_version {8} --instances {9} --ttl {10}"
         cb_version = RestConnection(server).get_nodes_version()[:3]
         cmd = cmd_format.format(server.ip, bucket.name, server.rest_username,
                                 server.rest_password,
                                 items, batch, threads, start_document,
                                 cb_version, instances, ttl)
-        print "Running {}".format(cmd)
+        print("Running {}".format(cmd))
         result = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE,
                                   stderr=subprocess.PIPE)
         output = result.stdout.read()
         error = result.stderr.read()
         if error:
-            print error
+            print(error)
             raise Exception("Failed to run the loadgen.")
         if output:
             loaded = output.split('\n')[:-1]
@@ -380,7 +436,7 @@ class Cluster(object):
         from lib.memcached.helper.data_helper import VBucketAwareMemcached
         from lib.membase.api.rest_client import RestConnection
 
-        cmd_format = "python scripts/high_ops_doc_gen.py  --node {0} --bucket {1} --user {2} --password {3} " \
+        cmd_format = "python3 scripts/high_ops_doc_gen.py  --node {0} --bucket {1} --user {2} --password {3} " \
                      "--count {4} " \
                      "--batch_size {5} --threads {6} --start_document {7} --cb_version {8} --validate"
         cb_version = RestConnection(server).get_nodes_version()[:3]
@@ -393,7 +449,7 @@ class Cluster(object):
         cmd = cmd_format.format(server.ip, bucket.name, server.rest_username,
                                 server.rest_password,
                                 int(items), batch, threads, start_document, cb_version)
-        print "Running {}".format(cmd)
+        print("Running {}".format(cmd))
         result = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE,
                                   stderr=subprocess.PIPE)
         output = result.stdout.read()
@@ -403,7 +459,7 @@ class Cluster(object):
         VBucketAware = VBucketAwareMemcached(rest, bucket.name)
         _, _, _ = VBucketAware.request_map(rest, bucket.name)
         if error:
-            print error
+            print(error)
             raise Exception("Failed to run the loadgen validator.")
         if output:
             loaded = output.split('\n')[:-1]
@@ -471,7 +527,7 @@ class Cluster(object):
     def shutdown(self, force=False):
         self.task_manager.shutdown(force)
         if force:
-            print "Cluster instance shutdown with force"
+            print("Cluster instance shutdown with force")
 
     def async_create_view(self, server, design_doc_name, view, bucket="default", with_query=True,
                           check_replication=False, ddoc_options=None):
@@ -609,7 +665,7 @@ class Cluster(object):
         Returns:
             list of MonitorActiveTask - A task future that is a handle to the scheduled task."""
         _tasks = []
-        if type(servers) != types.ListType:
+        if type(servers) != list:
             servers = [servers, ]
         for server in servers:
             _task = MonitorActiveTask(server, type_task, target_value, wait_progress, num_iteration, wait_task)

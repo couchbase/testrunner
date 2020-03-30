@@ -9,7 +9,7 @@ try:
     import requests
     from requests.exceptions import ConnectionError
 except ImportError as e:
-    print 'please install required modules:', e
+    print('please install required modules:', e)
     raise
 
 
@@ -78,7 +78,7 @@ class GatewayBaseTest(unittest.TestCase):
         elif self.info.type.lower() == 'windows':
             file_ext = 'exe'
 
-        for location, patterns in self.BUILDS.items():
+        for location, patterns in list(self.BUILDS.items()):
             for pattern in patterns:
                 url = '{0}/{1}'.format(location, pattern.format(self.version, self.info.architecture_type, file_ext))
                 filename = url.split('/')[-1]

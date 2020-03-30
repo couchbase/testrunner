@@ -69,7 +69,7 @@ class CreateBucketTests(BaseTestCase):
     def test_win_specific_names(self):
         version = self._get_cb_version()
         if self._get_cb_os() != 'windows':
-            self.log.warn('This test is windows specific')
+            self.log.warning('This test is windows specific')
             return
         try:
             self.test_banned_bucket_name()
@@ -89,7 +89,7 @@ class CreateBucketTests(BaseTestCase):
             shared_params = self._create_bucket_params(server=self.server, size=self.bucket_size,
                                                               replicas=self.num_replicas)
             if self.bucket_type == 'sasl':
-                self.cluster.create_sasl_bucket(name=self.bucket_name, password=password,bucket_params=shared_params)
+                self.cluster.create_sasl_bucket(name=self.bucket_name, password=password, bucket_params=shared_params)
                 self.buckets.append(Bucket(name=self.bucket_name, authType="sasl", saslPassword=password, num_replicas=self.num_replicas,
                                            bucket_size=self.bucket_size, master_id=self.server))
             elif self.bucket_type == 'standard':
@@ -104,7 +104,7 @@ class CreateBucketTests(BaseTestCase):
 
                 self.buckets.append(Bucket(name=self.bucket_name, authType=None, saslPassword=None,
                                            num_replicas=self.num_replicas, bucket_size=self.bucket_size,
-                                           port=STANDARD_BUCKET_PORT + 1 , master_id=self.server, type='memcached'))
+                                           port=STANDARD_BUCKET_PORT + 1, master_id=self.server, type='memcached'))
                 for task in tasks:
                     task.result()
             else:
@@ -147,9 +147,9 @@ class CreateBucketTests(BaseTestCase):
                                         services= ["index,kv,n1ql"])
             init_node = self.cluster.async_init_node(self.master,
                                             services = ["index,kv,n1ql"])
-        except Exception, e:
+        except Exception as e:
             if e:
-                print e
+                print(e)
         self.sleep(10)
         self.log.info("Add new user after reset node! ")
         self.add_built_in_server_user(node=self.master)
@@ -171,7 +171,7 @@ class CreateBucketTests(BaseTestCase):
         end_time = time.time() + 120
         while time.time() < end_time:
             self.sleep(10)
-            num_actual = self.get_item_count(self.master,"travel-sample")
+            num_actual = self.get_item_count(self.master, "travel-sample")
             if int(num_actual) == self.total_items_travel_sample:
                 break
         self.assertTrue(int(num_actual) == self.total_items_travel_sample,
@@ -264,7 +264,7 @@ class CreateBucketTests(BaseTestCase):
         end_time = time.time() + 120
         while time.time() < end_time:
             self.sleep(10)
-            num_actual = self.get_item_count(self.master,"travel-sample")
+            num_actual = self.get_item_count(self.master, "travel-sample")
             if int(num_actual) == self.total_items_travel_sample:
                 break
         self.assertTrue(int(num_actual) == self.total_items_travel_sample,
@@ -353,7 +353,7 @@ class CreateBucketTests(BaseTestCase):
             end_time = time.time() + 120
             while time.time() < end_time:
                 self.sleep(10)
-                num_actual = self.get_item_count(self.master,"default")
+                num_actual = self.get_item_count(self.master, "default")
                 if int(num_actual) == self.total_items_travel_sample:
                     break
                 self.assertTrue(int(num_actual) == self.total_items_travel_sample,

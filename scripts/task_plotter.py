@@ -45,9 +45,9 @@ def plot_metric(metric, keys, values, outdir):
 def generate_pdf(outdir):
     try:
         subprocess.call(['convert', '{0}/*'.format(outdir), 'report.pdf'])
-        print "PDF report was successfully generated!"
+        print("PDF report was successfully generated!")
     except OSError:
-        print "All images saved to: {0}".format(outdir)
+        print("All images saved to: {0}".format(outdir))
 
 
 def main():
@@ -60,7 +60,7 @@ def main():
     cdata = dict()
     metrics = set()
     for sample in data:
-        for metric, value in sample.iteritems():
+        for metric, value in sample.items():
             if metric not in cdata:
                 cdata[metric] = {'keys': [], 'values': []}
             cdata[metric]['keys'].append(sample['timestamp'])

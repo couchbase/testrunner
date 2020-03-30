@@ -1,4 +1,4 @@
-from tuq import QueryTests
+from .tuq import QueryTests
 from membase.api.exception import CBQError
 from lib.membase.api.rest_client import RestConnection
 from pytests.fts.fts_base import CouchbaseCluster
@@ -36,7 +36,7 @@ class N1qlFTSIntegrationPhase2ClusteropsTest(QueryTests):
         super(N1qlFTSIntegrationPhase2ClusteropsTest, self).suite_tearDown()
 
 
-    def get_rest_client(self, user , password):
+    def get_rest_client(self, user, password):
         rest = RestConnection(self.cbcluster.get_random_fts_node())
         rest.username = user
         rest.password = password
@@ -70,10 +70,10 @@ class N1qlFTSIntegrationPhase2ClusteropsTest(QueryTests):
         for hit in hits:
             fts_doc_ids.append(hit['id'])
 
-        self.assertEquals(len(n1ql_doc_ids), len(fts_doc_ids),
+        self.assertEqual(len(n1ql_doc_ids), len(fts_doc_ids),
                           "Results count does not match for test . FTS - " + str(
                               len(fts_doc_ids)) + ", N1QL - " + str(len(n1ql_doc_ids)))
-        self.assertEquals(sorted(fts_doc_ids), sorted(n1ql_doc_ids),
+        self.assertEqual(sorted(fts_doc_ids), sorted(n1ql_doc_ids),
                           "Found mismatch in results for test .")
 
         self.remove_all_fts_indexes()
@@ -93,13 +93,13 @@ class N1qlFTSIntegrationPhase2ClusteropsTest(QueryTests):
 
         self.cluster.failover(servers=self.servers, failover_nodes=[self.servers[2]], graceful=False)
         rebalance = self.cluster.rebalance(self.servers, [], [self.servers[2]])
-        self.assertEquals(rebalance, True, "Rebalance is failed.")
+        self.assertEqual(rebalance, True, "Rebalance is failed.")
         n1ql_results = self.run_cbq_query(n1ql_query)['results']
         n1ql_doc_ids_after_rebalance = []
         for result in n1ql_results:
             n1ql_doc_ids_after_rebalance.append(result['id'])
 
-        self.assertEquals(sorted(n1ql_doc_ids_before_failover), sorted(n1ql_doc_ids_after_rebalance), "Results after rebalance does not match.")
+        self.assertEqual(sorted(n1ql_doc_ids_before_failover), sorted(n1ql_doc_ids_after_rebalance), "Results after rebalance does not match.")
 
     def test_fts_node_failover_partial_results(self):
         self.load_test_buckets()
@@ -112,14 +112,15 @@ class N1qlFTSIntegrationPhase2ClusteropsTest(QueryTests):
         n1ql_doc_ids_before_failover = []
         for result in n1ql_results_before_failover:
             n1ql_doc_ids_before_failover.append(result['id'])
+
         self.cluster.failover(servers=self.servers, failover_nodes=[self.servers[2]], graceful=False)
         error_found = False
         try:
             n1ql_result_after_failover = self.run_cbq_query(n1ql_query)
-        except CBQError, err:
+        except CBQError as err:
             self.assertTrue("pindex not available" in str(err), "Partial results error message is not graceful.")
             error_found = True
-        self.assertEquals(error_found, True, "Partial result set is not allowed for SEARCH() queries.")
+        self.assertEqual(error_found, True, "Partial result set is not allowed for SEARCH() queries.")
 
 
     def test_cluster_add_new_fts_node(self):
@@ -142,7 +143,7 @@ class N1qlFTSIntegrationPhase2ClusteropsTest(QueryTests):
         for result in n1ql_results:
             n1ql_doc_ids_after_rebalance.append(result['id'])
 
-        self.assertEquals(sorted(n1ql_doc_ids_before_rebalance), sorted(n1ql_doc_ids_after_rebalance), "Results after rebalance does not match.")
+        self.assertEqual(sorted(n1ql_doc_ids_before_rebalance), sorted(n1ql_doc_ids_after_rebalance), "Results after rebalance does not match.")
 
     def test_partitioning(self):
         partitions_number = self.input.param("partitions_num")
@@ -163,7 +164,7 @@ class N1qlFTSIntegrationPhase2ClusteropsTest(QueryTests):
         for result in new_partitioning_result['results']:
             n1ql_doc_ids_after_partitioning.append(result['id'])
 
-        self.assertEquals(sorted(n1ql_doc_ids_before_partitioning), sorted(n1ql_doc_ids_after_partitioning), "Results after partitioning do not match.")
+        self.assertEqual(sorted(n1ql_doc_ids_before_partitioning), sorted(n1ql_doc_ids_after_partitioning), "Results after partitioning do not match.")
 
 
     def _update_replica_for_fts_index(self, idx, replicas):
@@ -180,7 +181,7 @@ class N1qlFTSIntegrationPhase2ClusteropsTest(QueryTests):
 
     def find_child_node_with_service(self, service=""):
         services_map = self._get_services_map()
-        for node in services_map.keys():
+        for node in list(services_map.keys()):
             if node == (str(self.servers[0].ip)+":"+str(self.servers[0].port)):
                 continue
             if service in services_map[node]:
@@ -204,7 +205,7 @@ class N1qlFTSIntegrationPhase2ClusteropsTest(QueryTests):
             try:
                 indexed_doc_count = fts_index.get_indexed_doc_count(rest)
                 #indexed_doc_count = rest.get_fts_stats(index_name, source_name, "doc_count")
-            except KeyError, k:
+            except KeyError as k:
                 continue
 
         return fts_index

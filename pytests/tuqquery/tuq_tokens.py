@@ -67,7 +67,7 @@ class TokenTests(QueryTests):
         self.query = 'create index idx22 on `beer-sample`( DISTINCT ARRAY v FOR v in tokens(description,{"specials":"random"}) END  )'
         self.run_cbq_query()
 
-        for i in xrange(1,22):
+        for i in range(1, 22):
             index = 'idx{0}'.format(i)
             created_indexes.append(index)
 

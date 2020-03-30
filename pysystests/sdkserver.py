@@ -23,10 +23,10 @@ class SysCouchClient(CouchbaseClient):
         self.accport = accport
         try:
             super(SysCouchClient, self).__init__(url, bucket, cred)
-            print "sdk_%s: connected to %s => %s" % (accport, url, bucket)
+            print("sdk_%s: connected to %s => %s" % (accport, url, bucket))
         except Exception as ex:
-            print "sdk_%s: unable to establish connection to %s => %s, %s " %\
-                (accport, url, bucket, ex)
+            print("sdk_%s: unable to establish connection to %s => %s, %s " %\
+                (accport, url, bucket, ex))
             self.ready = False
 
     def incr_pending_get_msgs(self, val):
@@ -94,11 +94,11 @@ class CouchClientManager():
             res = self.exec_request(data)
             return res
         except ValueError as ex:
-            print ex
-            print "unable to decode json: %s" % c
+            print(ex)
+            print("unable to decode json: %s" % c)
         except Exception as ex:
             processMap[self.accport]["connected"] = False
-            print "Error: %s" % ex
+            print("Error: %s" % ex)
 
     def exec_request(self, data):
         if data['command'] == 'set':
@@ -162,7 +162,7 @@ class CouchClientManager():
                        ts = time.localtime()
                        ts_string = "%s/%s/%s %s:%s:%s" %\
                            (ts.tm_year, ts.tm_mon, ts.tm_mday, ts.tm_hour, ts.tm_min, ts.tm_sec)
-                       print "%s:set MemcachedError%d: %s" % (ts_string, msg["error"], msg["rv"])
+                       print("%s:set MemcachedError%d: %s" % (ts_string, msg["error"], msg["rv"]))
 
         return True
 
@@ -177,7 +177,7 @@ class CouchClientManager():
 
     def do_setq(self, args, client):
         key, exp, flags, value = self._get_set_args(args)
-        client.setq(key,exp, flags, value)
+        client.setq(key, exp, flags, value)
         return True
 
     def get_op_latency(self, data):
@@ -211,7 +211,7 @@ class CouchClientManager():
     def do_set(self, data):
         key, exp, flags, value = self._get_set_args(data)
         client = self.client_from_req(data)
-        return client.set(key,exp, flags, value)
+        return client.set(key, exp, flags, value)
 
     def do_get(self, data):
         key = str(data['args'][0])
@@ -242,7 +242,7 @@ class CouchClientManager():
                             ts = time.localtime()
                             ts_string = "%s/%s/%s %s:%s:%s" %\
                                 (ts.tm_year, ts.tm_mon, ts.tm_mday, ts.tm_hour, ts.tm_min, ts.tm_sec)
-                            print "%s:get MemcachedError%d: %s" % (ts_string, msg["error"], msg["rv"])
+                            print("%s:get MemcachedError%d: %s" % (ts_string, msg["error"], msg["rv"]))
 
 
             client.pending_get_msgs = 0
@@ -294,10 +294,10 @@ def restart_listener(port):
 def stop_listener(port):
     process = processMap[port]["process"]
     try:
-        print "sdk_%s: exiting" % (port)
+        print("sdk_%s: exiting" % (port))
         process.terminate()
     except Exception as ex:
-        print "sdk_%s: error occured termination %s" % (port, ex)
+        print("sdk_%s: error occured termination %s" % (port, ex))
 
 def start_listener(port):
     p = Process(target=_run, args=(port,))
@@ -305,7 +305,7 @@ def start_listener(port):
                         "connected" : True,
                         "alt_nodes" : []}
 
-    print "sdk_%s: starting" % port
+    print("sdk_%s: starting" % port)
     p.start()
 
 def _run(port):
@@ -316,6 +316,6 @@ def _run(port):
         pool.spawn_n(client_mgr.requestHandler, new_sock)
 
 if __name__ == '__main__':
-    for port in xrange(50008, 50012):
+    for port in range(50008, 50012):
         start_listener(port)
     monitorSubprocesses()

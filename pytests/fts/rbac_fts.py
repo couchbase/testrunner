@@ -1,4 +1,4 @@
-from fts_base import FTSBaseTest, FTSIndex
+from .fts_base import FTSBaseTest, FTSIndex
 from TestInput import TestInputSingleton
 from security.rbac_base import RbacBase
 from lib.membase.api.rest_client import RestConnection
@@ -21,6 +21,15 @@ class RbacFTS(FTSBaseTest):
         self.delete_role()
         super(RbacFTS, self).tearDown()
 
+    def suite_setUp(self):
+        self.log.info("==============   RbacFTS suite_setup has started ==============")
+        self.log.info("==============   RbacFTS suite_setup has finished ==============")
+
+    def suite_tearDown(self):
+        self.log.info("==============   RbacFTS suite_tearDown has started ==============")
+        self.log.info("==============   RbacFTS suite_tearDown has finished ==============")
+
+
     def create_users(self, users=None):
         """
         :param user: takes a list of {'id': 'xxx', 'name': 'some_name ,
@@ -29,7 +38,7 @@ class RbacFTS(FTSBaseTest):
         """
         if not users:
             users = self.users
-        RbacBase().create_user_source(users,'builtin',self.master)
+        RbacBase().create_user_source(users, 'builtin', self.master)
         self.log.info("SUCCESS: User(s) %s created"
                       % ','.join([user['name'] for user in users]))
 
@@ -39,7 +48,7 @@ class RbacFTS(FTSBaseTest):
         #Assign roles to users
         if not roles:
             roles = self.roles
-        RbacBase().add_user_role(roles, rest,'builtin')
+        RbacBase().add_user_role(roles, rest, 'builtin')
         for user_role in roles:
             self.log.info("SUCCESS: Role(s) %s assigned to %s"
                           %(user_role['roles'], user_role['id']))
@@ -78,7 +87,7 @@ class RbacFTS(FTSBaseTest):
                                                               'password')})
         return user_role_list
 
-    def get_rest_handle_for_credentials(self, user , password):
+    def get_rest_handle_for_credentials(self, user, password):
         rest = RestConnection(self._cb_cluster.get_random_fts_node())
         rest.username = user
         rest.password = password
@@ -86,7 +95,7 @@ class RbacFTS(FTSBaseTest):
 
     def create_index_with_no_credentials(self):
         server = self._cb_cluster.get_random_fts_node()
-        self.load_sample_buckets(server=server,bucketName="travel-sample")
+        self.load_sample_buckets(server=server, bucketName="travel-sample")
 
         api = "http://{0}:8094/api/index/travel?sourceType=couchbase&" \
               "indexType=fulltext-index&sourceName=travel-sample".\
@@ -94,6 +103,10 @@ class RbacFTS(FTSBaseTest):
         response, content = httplib2.Http(timeout=120).request(api,
                                                                "PUT",
                                                                headers=None)
+        try:
+            content = content.decode()
+        except AttributeError:
+            pass
         self.log.info("Creating index returned : {0}".format(str(response)+ content))
         if response['status'] in ['200', '201', '202']:
             self.log.error(content)
@@ -114,6 +127,10 @@ class RbacFTS(FTSBaseTest):
         response, content = httplib2.Http(timeout=120).request(api,
                                                               "DELETE",
                                                               headers=None)
+        try:
+            content = content.decode()
+        except AttributeError:
+            pass
         self.log.info("Deleting index definition returned : {0}".format(str(response)+content))
         if response['status'] in ['200', '201', '202']:
             self.log.error(content)
@@ -134,6 +151,10 @@ class RbacFTS(FTSBaseTest):
         response, content = httplib2.Http(timeout=120).request(api,
                                                                "GET",
                                                                headers=None)
+        try:
+            content = content.decode()
+        except AttributeError:
+            pass
         self.log.info("Getting index definition returned : {0}".format(str(response)+content))
         if response['status'] in ['200', '201', '202']:
             self.log.error(content)
@@ -153,11 +174,15 @@ class RbacFTS(FTSBaseTest):
 
         api = "http://{0}:8094/api/index/travel/query?".format(server.ip)
         query = {"match": "Wick", "field": "city"}
-        import urllib
-        api = api + urllib.urlencode(query)
+        import urllib.request, urllib.parse, urllib.error
+        api = api + urllib.parse.urlencode(query)
         response, content = httplib2.Http(timeout=120).request(api,
                                                                "POST",
                                                                headers=None)
+        try:
+            content = content.decode()
+        except AttributeError:
+            pass
         self.log.info("Querying returned : {0}".format(str(response) + content))
         if response['status'] in ['200', '201', '202']:
             self.log.error(content)
@@ -169,7 +194,7 @@ class RbacFTS(FTSBaseTest):
                                       bucket_name="default"):
         index = FTSIndex(self._cb_cluster, name=index_name,
                          source_name=bucket_name)
-        rest = self.get_rest_handle_for_credentials(username,password)
+        rest = self.get_rest_handle_for_credentials(username, password)
         index.create(rest)
         return index
 
@@ -180,7 +205,7 @@ class RbacFTS(FTSBaseTest):
             alias_def['targets'][index.name] = {}
             alias_def['targets'][index.name]['indexUUID'] = index.get_uuid()
         alias = FTSIndex(self._cb_cluster, name=alias_name,
-                         index_type='fulltext-alias',index_params=alias_def)
+                         index_type='fulltext-alias', index_params=alias_def)
         rest = self.get_rest_handle_for_credentials(username, password)
         alias.create(rest)
         return alias
@@ -235,7 +260,7 @@ class RbacFTS(FTSBaseTest):
                         %(bucket.name, bucket.name, bucket.name, bucket.name),
                         rest)
                 self.log.info("Permissions for user: %s on bucket %s is: %s"
-                              %(user['id'], bucket.name,perm))
+                              %(user['id'], bucket.name, perm))
 
     def test_fts_admin_permissions(self):
         """
@@ -255,7 +280,7 @@ class RbacFTS(FTSBaseTest):
                     index = self.create_index_with_credentials(
                         username= user['id'],
                         password=user['password'],
-                        index_name="%s_%s_idx" %(user['id'],bucket.name),
+                        index_name="%s_%s_idx" %(user['id'], bucket.name),
                         bucket_name=bucket.name)
 
                     self.wait_for_indexing_complete()
@@ -263,7 +288,7 @@ class RbacFTS(FTSBaseTest):
                         username= user['id'],
                         password=user['password'],
                         target_indexes=[index],
-                        alias_name="%s_%s_alias" %(user['id'],bucket.name))
+                        alias_name="%s_%s_alias" %(user['id'], bucket.name))
                     try:
                         self.edit_index_with_credentials(
                             index=index,
@@ -288,7 +313,7 @@ class RbacFTS(FTSBaseTest):
                                   "index %s : %s" % (user['id'], e))
                 except Exception as e:
                         self.fail("The user failed to create fts index/alias"
-                                  " %s : %s" % (user['id'],e))
+                                  " %s : %s" % (user['id'], e))
 
     def test_grant_revoke_permissions(self):
         """
@@ -307,7 +332,7 @@ class RbacFTS(FTSBaseTest):
                 index = self.create_index_with_credentials(
                     username= user['id'],
                     password=user['password'],
-                    index_name="%s_%s_idx" %(user['id'],bucket.name),
+                    index_name="%s_%s_idx" %(user['id'], bucket.name),
                     bucket_name=bucket.name)
                 self.delete_role(user_ids=[user['id']])
                 # Temporary work around for deleting role now also deletes user
@@ -366,7 +391,7 @@ class RbacFTS(FTSBaseTest):
                     self.create_index_with_credentials(
                         username= user['id'],
                         password=user['password'],
-                        index_name="%s_%s_idx" %(user['id'],bucket.name),
+                        index_name="%s_%s_idx" %(user['id'], bucket.name),
                         bucket_name=bucket.name)
                 except Exception as e:
                     self.log.info("Expected exception: %s" %e)

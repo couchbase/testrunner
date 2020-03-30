@@ -97,7 +97,7 @@ class EventingBucket(EventingBaseTest):
         for bucket in self.buckets:
             if bucket.name != "metadata":
                 query="CREATE PRIMARY INDEX ON %s " % bucket.name
-                n1ql_helper.run_cbq_query(query=query,server=n1ql_node)
+                n1ql_helper.run_cbq_query(query=query, server=n1ql_node)
         try:
             # load data
             self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
@@ -256,7 +256,7 @@ class EventingBucket(EventingBaseTest):
         # wait for bucket to come out of warm up state
         self.sleep(60)
         # print the stats couple of times to get the latest data
-        for i in xrange(0, 5):
+        for i in range(0, 5):
             self.print_execution_and_failure_stats(self.function_name)
             self.sleep(30)
         # delete the function
@@ -497,7 +497,7 @@ class EventingBucket(EventingBaseTest):
             n1ql_helper.create_primary_index(using_gsi=True, server=n1ql_node)
             query1="select meta().id from metadata where meta().id not like 'eventing::%::vb::%'" \
                   " and meta().id not like 'eventing::%:rt:%' and meta().id not like 'eventing::%:sp'"
-            result1=n1ql_helper.run_cbq_query(query=query1,server=n1ql_node)
+            result1=n1ql_helper.run_cbq_query(query=query1, server=n1ql_node)
             print(result1)
             query2="select meta().id from metadata where meta().id like 'eventing::%:sp' and sta != stp"
             result2 = n1ql_helper.run_cbq_query(query=query2, server=n1ql_node)
@@ -505,7 +505,7 @@ class EventingBucket(EventingBaseTest):
             query3="select meta().id from meta where meta().id like 'eventing::%:rt:%'"
             result3=n1ql_helper.run_cbq_query(query=query3, server=n1ql_node)
             print(result3)
-            self.fail("initial doc in metadata {} is not equals to final doc in metadata {}".format(initalDoc,finalDoc))
+            self.fail("initial doc in metadata {} is not equals to final doc in metadata {}".format(initalDoc, finalDoc))
         self.undeploy_and_delete_function(body)
 
     #MB-30973

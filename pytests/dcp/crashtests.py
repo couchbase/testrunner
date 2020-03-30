@@ -1,7 +1,7 @@
 import time
 import logger
 from dcp.constants import *
-from dcpbase import DCPBase
+from .dcpbase import DCPBase
 from membase.api.rest_client import RestConnection, RestHelper
 from couchbase_helper.documentgenerator import BlobGenerator
 from remote.remote_util import RemoteMachineShellConnection
@@ -20,7 +20,7 @@ class DCPCrashTests(DCPBase):
         # load some data
         nodeA = self.servers[0]
         rest = RestHelper(RestConnection(nodeA))
-        for i in xrange(crashes):
+        for i in range(crashes):
             self.load_docs(nodeA, vbucket, self.num_items)
             assert self.stop_node(0)
             time.sleep(5)
@@ -76,7 +76,7 @@ class DCPCrashTests(DCPBase):
         self.load_docs(nodeA, vbucket, n)
 
         # stop all nodes
-        node_range = range(len(self.servers))
+        node_range = list(range(len(self.servers)))
         for i in node_range:
             assert self.stop_node(i)
         time.sleep(2)

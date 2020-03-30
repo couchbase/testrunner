@@ -47,7 +47,7 @@ class ConcurrentTests(QuerySanityTests, QueryTests):
             task_ops = self.cluster.async_rebalance(self.servers[:self.nodes_init],
                                [], servr_out)
         query_threads = []
-        for n in xrange(self.num_threads):
+        for n in range(self.num_threads):
             t = StoppableThread(target=self.query_thread,
                 name="query-{0}".format(n),
                 args=(self.test_to_run,))
@@ -106,7 +106,7 @@ class ConcurrentTests(QuerySanityTests, QueryTests):
             for ind in created_indexes:
                 self.hint_index = ind
                 query_threads = []
-                for n in xrange(self.num_threads):
+                for n in range(self.num_threads):
                     t = StoppableThread(target=self.query_thread,
                         name="query-{0}".format(n),
                         args=(self.test_to_run,))

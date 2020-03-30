@@ -31,9 +31,9 @@ def get_run_info(desc):
 
     all_event_docs = db_event.get_all()
     phases_info = {}
-    for doc in all_event_docs.itervalues():
-        phases_info[int(doc.keys()[0])] = doc.values()[0]
-    phases_info.keys().sort()
+    for doc in all_event_docs.values():
+        phases_info[int(list(doc.keys())[0])] = list(doc.values())[0]
+    list(phases_info.keys()).sort()
 
     run_info = ''
     #will take the first name/desc value; but we assume that their values are the same for all phases
@@ -64,7 +64,7 @@ def store_report_cbfs(release_number, platform, test_name='', test_build=''):
 
     os.system('cp -rf %s system-test-results/%s/%s/%s/' % (test_build, release_number, platform, test_name))
 
-    print "Upload test report to system-test-results/%s/%s/%s/%s folder on CBFS" % (release_number, platform, test_name, test_build)
+    print("Upload test report to system-test-results/%s/%s/%s/%s folder on CBFS" % (release_number, platform, test_name, test_build))
 
     #spaces are very important here. Example: find . -type f \( -name "*.txt" -o -name "*.html" -o -name "*.json" \)
     os.system('find system-test-results/%s/%s/%s/%s -type f \( -name "*.txt" -o -name "*.html" -o -name "*.json" \) -print0 | xargs -0 -I file curl -X PUT -H \"Content-Type:text/plain\" -v --data-binary @file %s/file' % (release_number, platform, test_name, test_build, CBFS_HOST))

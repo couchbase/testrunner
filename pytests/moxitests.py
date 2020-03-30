@@ -22,7 +22,7 @@ class MoxiTests(BaseTestCase):
         try:
             self.assertTrue(self.master != self.moxi_server, 'There are not enough vms!')
             self._stop_moxi()
-        except Exception, ex:
+        except Exception as ex:
             self.tearDown()
             raise ex
 
@@ -70,7 +70,7 @@ class MoxiTests(BaseTestCase):
                                                                            moxi_port=self.moxi_port)
                 self.sleep(30)
                 self.cluster.load_gen_docs(self.master, bucket.name, self.gen_load,
-                                           bucket.kvs[1],"create", proxy_client=moxi_client,
+                                           bucket.kvs[1], "create", proxy_client=moxi_client,
                                            compression=self.sdk_compression)
                 if self.ops in ['update', 'delete', 'read']:
                     self.cluster.load_gen_docs(self.master, bucket.name, self.gen_load,
@@ -126,11 +126,11 @@ class MoxiTests(BaseTestCase):
         check on body length
         """
         OPCODE_PREPEND_Q = "\x1a"
-        keylen = struct.pack("!H",0xfa)
+        keylen = struct.pack("!H", 0xfa)
         extlen = "\x00"
-        bodylen = struct.pack("!I",0)
-        opaque = struct.pack("!I",0)
-        CAS = struct.pack("!Q",0)
+        bodylen = struct.pack("!I", 0)
+        opaque = struct.pack("!I", 0)
+        CAS = struct.pack("!Q", 0)
         body = "A"*1024
 
         packet = MEMCACHED_REQUEST_MAGIC + OPCODE_PREPEND_Q + keylen + extlen
@@ -187,13 +187,13 @@ class MoxiTests(BaseTestCase):
         """
 
         OPCODE_ADD = "\x02"
-        keylen = struct.pack("!H",0xfa)
+        keylen = struct.pack("!H", 0xfa)
         extlen = "\x08"
-        bodylen = struct.pack("!I",0xffffffd0)
-        opaque = struct.pack("!I",0)
-        CAS = struct.pack("!Q",0)
+        bodylen = struct.pack("!I", 0xffffffd0)
+        opaque = struct.pack("!I", 0)
+        CAS = struct.pack("!Q", 0)
         extras_flags = 0xdeadbeef
-        extras_expiry = struct.pack("!I",0xe10)
+        extras_expiry = struct.pack("!I", 0xe10)
         body = "A"*1024
 
         packet = MEMCACHED_REQUEST_MAGIC + OPCODE_ADD + keylen + extlen

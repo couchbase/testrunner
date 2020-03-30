@@ -8,18 +8,18 @@ import couchbase.subdocument as SD
 class TestMemcachedClient():
 
     def connection(self, client_ip, bucket_name, user,password, port=11210):
-        log.info("Bucket name for connection is ---- {0}, username -- {1}, ----- password -- {2}".format(bucket_name,user, \
+        log.info("Bucket name for connection is ---- {0}, username -- {1}, ----- password -- {2}".format(bucket_name, user, \
                                                                                                          password))
         try:
             mc = MemcachedClient(host=client_ip, port=port)
-            mc.sasl_auth_plain(user,password)
+            mc.sasl_auth_plain(user, password)
             mc.bucket_select(bucket_name)
             return mc, True
         except Exception as e:
             log.info( "Exception is from connection function {0}".format(e))
             return False, False
 
-    def write_data(self,mc):
+    def write_data(self, mc):
         try:
             prefix = "test-"
             number_of_items = 10
@@ -31,9 +31,9 @@ class TestMemcachedClient():
             log.info( "Exception is from write_data function {0}".format(e))
             return False
 
-    def read_data(self,client_ip, mc,bucket_name):
+    def read_data(self, client_ip, mc, bucket_name):
         try:
-            mc_temp, status = self.connection(client_ip, bucket_name,'Administrator','password')
+            mc_temp, status = self.connection(client_ip, bucket_name, 'Administrator', 'password')
             self.write_data(mc_temp)
             test = mc.get("test--0")
             return True
@@ -87,7 +87,7 @@ class TestSDK():
             if cb is not None:
                 result = True
                 return cb, result
-        except Exception, ex:
+        except Exception as ex:
             return result
 
     def set_xattr(self, sdk_conn):

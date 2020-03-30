@@ -9,7 +9,7 @@ class QueryWorkbenchTests(BaseTestCase):
     _input = TestInputSingleton.input
     num_items = _input.param("items", 100)
     _value_size = _input.param("value_size", 256)
-    gen_create = BlobGenerator('loadOne', 'loadOne',_value_size, end=num_items)
+    gen_create = BlobGenerator('loadOne', 'loadOne', _value_size, end=num_items)
     #bucket and ram quota
     buckets_ram = {
         "CUSTOMER": 100,
@@ -42,7 +42,7 @@ class QueryWorkbenchTests(BaseTestCase):
                                    #ramQuotaMB=int(self.buckets_ram["default"]),
                                    #replicaNumber=0,
                                    #proxyPort=11218)
-        self._load_all_buckets(self,self.servers[0], self.gen_create, "create", 0)
+        self._load_all_buckets(self, self.servers[0], self.gen_create, "create", 0)
         #time.sleep(20)
 
     def tearDown(self):

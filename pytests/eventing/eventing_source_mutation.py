@@ -121,7 +121,7 @@ class EventingSourceMutation(EventingBaseTest):
 
 
     def test_pause_resume_with_source_bucket_mutation(self):
-        body = self.create_save_function_body(self.function_name,HANDLER_CODE.BUCKET_OP_WITH_SOURCE_BUCKET_MUTATION, worker_count=3)
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OP_WITH_SOURCE_BUCKET_MUTATION, worker_count=3)
         self.deploy_function(body)
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
@@ -135,7 +135,7 @@ class EventingSourceMutation(EventingBaseTest):
                   batch_size=self.batch_size*2)
         self.resume_function(body)
         # Wait for eventing to catch up with all the create mutations and verify results
-        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016*5,skip_stats_validation=True)
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016*4, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
 
     #MB-32516

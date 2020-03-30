@@ -12,7 +12,7 @@ from mc_bin_client import MemcachedClient
 
 
 def info(msg):
-    print msg
+    print(msg)
 
 if __name__ == "__main__":
     parser = OptionParser()

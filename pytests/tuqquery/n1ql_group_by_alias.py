@@ -1,4 +1,4 @@
-from tuq import QueryTests
+from .tuq import QueryTests
 from membase.api.exception import CBQError
 import pdb
 
@@ -39,7 +39,7 @@ class GroupByAliasTests(QueryTests):
         simple_query = "SELECT count(*) as employee_count from default group by DATE_PART_STR(join_mo, 'month') as month"
         alias_result = self.run_cbq_query(alias_query)
         simple_result = self.run_cbq_query(simple_query)
-        self.assertEquals(alias_result['results'][0], simple_result['results'][0], "Alias in group by function call is failed.")
+        self.assertEqual(alias_result['results'][0], simple_result['results'][0], "Alias in group by function call is failed.")
 
     def test_alias_grooup_by_field_alias(self):
         alias_query = "select job_title as jt from default where email like '%couchbase.com' group by job_title as jt order by jt asc"
@@ -49,10 +49,10 @@ class GroupByAliasTests(QueryTests):
         alias_results = []
         simple_results = []
         for res in alias_result['results']:
-            alias_results.append(res.values()[0])
+            alias_results.append(list(res.values())[0])
         for res in simple_result['results']:
-            simple_results.append(res.values()[0])
-        self.assertEquals(alias_results, simple_results, "Alias in group by is failed.")
+            simple_results.append(list(res.values())[0])
+        self.assertEqual(alias_results, simple_results, "Alias in group by is failed.")
 
     def test_field_alias_group_by_not_in_select(self):
         alias_query = "select job_title from default where email like '%couchbase.com' group by job_title as jt order by jt asc"
@@ -62,10 +62,10 @@ class GroupByAliasTests(QueryTests):
         alias_results = []
         simple_results = []
         for res in alias_result['results']:
-            alias_results.append(res.values()[0])
+            alias_results.append(list(res.values())[0])
         for res in simple_result['results']:
-            simple_results.append(res.values()[0])
-        self.assertEquals(alias_results, simple_results, "Alias in group by is failed.")
+            simple_results.append(list(res.values())[0])
+        self.assertEqual(alias_results, simple_results, "Alias in group by is failed.")
 
     def test_alias_mixed_field_aliases_usage(self):
         alias_query = "select jd,jm,join_yr from default where email like '%couchbase.com' group by join_day as jd, join_mo as jm, join_yr order by jd,jm,join_yr asc"
@@ -89,7 +89,7 @@ class GroupByAliasTests(QueryTests):
             simple_results[counter].append(res['join_yr'])
             counter = counter + 1
 
-        self.assertEquals(alias_results, simple_results, "Alias in group by is failed.")
+        self.assertEqual(alias_results, simple_results, "Alias in group by is failed.")
 
     def test_alias_mixed_usage_including_order_by(self):
         alias_query = "select join_day,jm,join_yr from default where email like '%couchbase.com' group by join_day as jd, join_mo as jm, join_yr order by jd,jm,join_yr asc"
@@ -113,7 +113,7 @@ class GroupByAliasTests(QueryTests):
             simple_results[counter].append(res['join_yr'])
             counter = counter + 1
 
-        self.assertEquals(alias_results, simple_results, "Alias in group by is failed.")
+        self.assertEqual(alias_results, simple_results, "Alias in group by is failed.")
 
     def test_alias_mixed_usage_order_by_not_select(self):
         alias_query = "select join_day,join_mo,join_yr from default where email like '%couchbase.com' group by join_day as jd, join_mo as jm, join_yr order by jd,jm,join_yr asc"
@@ -137,7 +137,7 @@ class GroupByAliasTests(QueryTests):
             simple_results[counter].append(res['join_yr'])
             counter = counter + 1
 
-        self.assertEquals(alias_results, simple_results, "Alias in group by is failed.")
+        self.assertEqual(alias_results, simple_results, "Alias in group by is failed.")
 
     def test_alias_mixed_usage_select_group_by_2(self):
         alias_query = "select jd,join_mo,join_yr from default where email like '%couchbase.com' group by join_day as jd, join_mo as jm, join_yr order by jd,jm,join_yr asc"
@@ -161,7 +161,7 @@ class GroupByAliasTests(QueryTests):
             simple_results[counter].append(res['join_yr'])
             counter = counter + 1
 
-        self.assertEquals(alias_results, simple_results, "Alias in group by is failed.")
+        self.assertEqual(alias_results, simple_results, "Alias in group by is failed.")
 
     def test_alias_select_function_argument(self):
         alias_query = "SELECT s, ARRAY_CONTAINS(s, 'skill2010') AS array_contains_value FROM default group by skills s"
@@ -183,7 +183,7 @@ class GroupByAliasTests(QueryTests):
             simple_results[counter].append(res['skills'])
             counter = counter + 1
 
-        self.assertEquals(alias_results, simple_results, "Alias in group by is failed.")
+        self.assertEqual(alias_results, simple_results, "Alias in group by is failed.")
 
     def test_alias_select_function_not_using(self):
         alias_query = "SELECT s, ARRAY_CONTAINS(skills, 'skill2010') AS array_contains_value FROM default group by skills s"
@@ -205,7 +205,7 @@ class GroupByAliasTests(QueryTests):
             simple_results[counter].append(res['skills'])
             counter = counter + 1
 
-        self.assertEquals(alias_results, simple_results, "Alias in group by is failed.")
+        self.assertEqual(alias_results, simple_results, "Alias in group by is failed.")
 
     def test_alias_not_select_function_argument(self):
         alias_query = "SELECT skills, ARRAY_CONTAINS(s, 'skill2010') AS array_contains_value FROM default group by skills s"
@@ -227,7 +227,7 @@ class GroupByAliasTests(QueryTests):
             simple_results[counter].append(res['skills'])
             counter = counter + 1
 
-        self.assertEquals(alias_results, simple_results, "Alias in group by is failed.")
+        self.assertEqual(alias_results, simple_results, "Alias in group by is failed.")
 
     def test_alias_not_select_not_function(self):
         alias_query = "SELECT skills, ARRAY_CONTAINS(skills, 'skill2010') AS array_contains_value FROM default group by skills s"
@@ -249,7 +249,7 @@ class GroupByAliasTests(QueryTests):
             simple_results[counter].append(res['skills'])
             counter = counter + 1
 
-        self.assertEquals(alias_results, simple_results, "Alias in group by is failed.")
+        self.assertEqual(alias_results, simple_results, "Alias in group by is failed.")
 
     def test_index_pushdown_1(self):
         self.create_indexes()
@@ -292,10 +292,10 @@ class GroupByAliasTests(QueryTests):
         error_detected = False
         try:
             self.run_cbq_query(query)
-        except CBQError, e:
+        except CBQError as e:
             error_detected = True
 
-        self.assertEquals(error_detected, True, query)
+        self.assertEqual(error_detected, True, query)
 
 
     def create_indexes(self):

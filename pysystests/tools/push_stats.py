@@ -59,8 +59,8 @@ def getDBData(db):
     data = db.get_all()
     data = stripData(data)
   except exceptions.NotExistingDatabase:
-    print "DB Not found: %s" % db
-    print "cbmonitor running?"
+    print("DB Not found: %s" % db)
+    print("cbmonitor running?")
     sys.exit(-1)
 
   return (data, None)[len(data) == 0]
@@ -95,9 +95,9 @@ def getSortedEventData():
     if(len(data) > 0):
       keys, data = sortDBData(data)
     else:
-      print "warning: eventdb exists but is empty"
+      print("warning: eventdb exists but is empty")
   else:
-    print "warning: eventdb not found in seriesly db"
+    print("warning: eventdb not found in seriesly db")
 
   return keys, data
 
@@ -119,7 +119,7 @@ def sortDBData(data):
   sorted_data = []
   keys = []
   if(data):
-    keys = sorted(data.iterkeys())
+    keys = sorted(data.keys())
 
   for ts in keys:
     sorted_data.append(data[ts])
@@ -143,7 +143,7 @@ def _createDataframe(index, data):
       df.index = index
 
   except ValueError as ex:
-    print "unable to create dataframe: has incorrect format"
+    print("unable to create dataframe: has incorrect format")
     raise Exception(ex)
 
   return df
@@ -159,7 +159,7 @@ def createDataframe(db):
     index, data = getSortedDBData(db)
     df = _createDataframe(index, data)
   else:
-    print "WARNING: stat db %s is empty!" % db
+    print("WARNING: stat db %s is empty!" % db)
 
   return df
 
@@ -170,18 +170,18 @@ def createDataframe(db):
 def storePhase(ns_dataframe, version, test, build, bucket):
 
   path = "system-test-results/%s/%s/%s/%s" % (version, test, build, bucket)
-  print "Generating stats: %s" % path
+  print("Generating stats: %s" % path)
 
   phase_dataframe = None
   columns = ns_dataframe.columns
   event_idx, _ = getSortedEventData()
   if event_idx is None:
-    print "storing all data in single phase"
+    print("storing all data in single phase")
     dataframeToCsv(ns_dataframe, path, test, 0)
 
   else:
     # plot each phase
-    for i in xrange(len(event_idx)):
+    for i in range(len(event_idx)):
       if i == 0:
         phase_dataframe = ns_dataframe[ns_dataframe.index < event_idx[i+1]]
       elif i == len(event_idx) - 1:
@@ -215,16 +215,16 @@ def pushStats():
 
   for data_file in archives:
     url = '%s/%s' % (CBFS_HOST, data_file)
-    print "Uploading: " + url
+    print("Uploading: " + url)
     suffix = data_file.split('.')[-1]
 
     if(suffix == 'js'):
       headers = {'content-type': 'text/javascript'}
     else:
       headers = {'content-type': 'application/x-gzip'}
-    data = open(data_file,'rb')
+    data = open(data_file, 'rb')
     r = requests.put(url, data=data, headers=headers)
-    print r.text
+    print(r.text)
 
 def mkdir(path):
   if not os.path.exists(path):
@@ -247,7 +247,7 @@ def loadSpec(spec):
     specJS = json.loads(f.read())
     return specJS
   except Exception as ex:
-    print "Invalid test spec: "+ str(ex)
+    print("Invalid test spec: "+ str(ex))
     sys.exit(-1)
 
 def setName(name, spec):
@@ -256,11 +256,11 @@ def setName(name, spec):
     if 'name' in spec:
       name = str(spec['name'])
     else:
-      print "test name missing from spec"
+      print("test name missing from spec")
       sys.exit(-1)
 
   # remove spaces
-  name = name.replace(' ','_')
+  name = name.replace(' ', '_')
   return name
 
 def getDBs(cluster = 'default'):
@@ -268,7 +268,7 @@ def getDBs(cluster = 'default'):
   dbs = []
 
   if len(conn.list_dbs()) == 0:
-    print "seriesly database is empty, check SERIESLY_IP in your testcfg.py"
+    print("seriesly database is empty, check SERIESLY_IP in your testcfg.py")
     sys.exit(-1)
 
   bucket_dbs = [db_name for db_name in conn.list_dbs() if db_name.find('ns_server'+cluster)==0 ]
@@ -282,15 +282,15 @@ def getDBs(cluster = 'default'):
 
   atop_dbs = [db_name for db_name in conn.list_dbs() if db_name.find('atop'+cluster)==0]
   for db in atop_dbs:
-    dbs.append(DB('atop'+cluster,db))
+    dbs.append(DB('atop'+cluster, db))
 
   latency_dbs = [db_name for db_name in conn.list_dbs() if db_name.find('latency') > 0]
   for db in latency_dbs:
-    dbs.append(DB('',db))
+    dbs.append(DB('', db))
 
   if(len(dbs) == 0):
-    print "no bucket data in seriesly db"
-    print "did you try with '--cluster %s' ?" % cfg.CB_CLUSTER_TAG
+    print("no bucket data in seriesly db")
+    print("did you try with '--cluster %s' ?" % cfg.CB_CLUSTER_TAG)
     sys.exit(-1)
 
   return dbs

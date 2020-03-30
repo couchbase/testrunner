@@ -165,7 +165,7 @@ class EventingRebalance(EventingBaseTest):
                 !=HANDLER_CODE.BUCKET_OP_SOURCE_BUCKET_MUTATION_TIMERS_DELETE):
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         else:
-            self.verify_eventing_results(self.function_name,0, skip_stats_validation=True)
+            self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
         # Get all eventing nodes
         nodes_out_list = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
@@ -214,7 +214,7 @@ class EventingRebalance(EventingBaseTest):
                 self.handler_code != HANDLER_CODE.BUCKET_OP_SOURCE_BUCKET_MUTATION_TIMERS_DELETE):
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         else:
-            self.verify_eventing_results(self.function_name,0, skip_stats_validation=True)
+            self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
         # Get all eventing nodes
         nodes_out_list = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
@@ -266,7 +266,7 @@ class EventingRebalance(EventingBaseTest):
                 self.handler_code != HANDLER_CODE.BUCKET_OP_SOURCE_BUCKET_MUTATION_TIMERS_DELETE):
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         else:
-            self.verify_eventing_results(self.function_name,0, skip_stats_validation=True)
+            self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
         # Get all eventing nodes
         nodes_out_list = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
@@ -316,7 +316,7 @@ class EventingRebalance(EventingBaseTest):
                             self.handler_code != HANDLER_CODE.BUCKET_OP_SOURCE_BUCKET_MUTATION_TIMERS_DELETE):
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         else:
-            self.verify_eventing_results(self.function_name,0, skip_stats_validation=True)
+            self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
 
     def test_kv_rebalance_out_when_existing_eventing_node_is_processing_mutations(self):
@@ -358,7 +358,7 @@ class EventingRebalance(EventingBaseTest):
                             self.handler_code != HANDLER_CODE.BUCKET_OP_SOURCE_BUCKET_MUTATION_TIMERS_DELETE):
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         else:
-            self.verify_eventing_results(self.function_name,0, skip_stats_validation=True)
+            self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
 
     def test_kv_swap_rebalance_when_existing_eventing_node_is_processing_mutations(self):
@@ -526,7 +526,7 @@ class EventingRebalance(EventingBaseTest):
                             self.handler_code != HANDLER_CODE.BUCKET_OP_SOURCE_BUCKET_MUTATION_TIMERS_DELETE):
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         else:
-            self.verify_eventing_results(self.function_name,0, skip_stats_validation=True)
+            self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
 
     def test_autofailover_with_eventing_rebalance(self):
@@ -566,7 +566,7 @@ class EventingRebalance(EventingBaseTest):
         try:
             self.verify_eventing_results(self.function_name, stats_src["curr_items"], skip_stats_validation=True,
                                          timeout=240)
-        except Exception, ex:
+        except Exception as ex:
             log.info(str(ex))
             # data mismatch is expected in case of a failover
             pass
@@ -576,7 +576,7 @@ class EventingRebalance(EventingBaseTest):
             # delete json documents
             self.load(gen_load_del, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                       batch_size=self.batch_size, op_type='delete')
-        except Exception, ex:
+        except Exception as ex:
             log.info(str(ex))
             pass
         if self.pause_resume:
@@ -585,7 +585,7 @@ class EventingRebalance(EventingBaseTest):
             # Wait for eventing to catch up with all the delete mutations and verify results
             # This is required to ensure eventing works after failover/recovery/rebalance goes through successfully
             self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True, timeout=240)
-        except Exception, ex:
+        except Exception as ex:
             log.info(str(ex))
             # data mismatch is expected in case of a delete as Onupdate would have extra mutations in destination
             pass
@@ -628,7 +628,7 @@ class EventingRebalance(EventingBaseTest):
             if not self.is_sbm:
                 self.verify_eventing_results(self.function_name, stats_src["curr_items"], skip_stats_validation=True,
                                          timeout=240)
-        except Exception, ex:
+        except Exception as ex:
             log.info(str(ex))
             # data mismatch is expected in case of a failover
             pass
@@ -647,7 +647,7 @@ class EventingRebalance(EventingBaseTest):
             # This is required to ensure eventing works after failover/recovery/rebalance goes through successfully
             if not self.is_sbm:
                 self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True, timeout=240)
-        except Exception, ex:
+        except Exception as ex:
             log.info(str(ex))
             # data mismatch is expected in case of a delete as Onupdate would have extra mutations in destination
             pass
@@ -687,7 +687,7 @@ class EventingRebalance(EventingBaseTest):
             if not self.is_sbm:
                 self.verify_eventing_results(self.function_name, stats_src["curr_items"], skip_stats_validation=True,
                                          timeout=240)
-        except Exception, ex:
+        except Exception as ex:
             log.info(str(ex))
             # data mismatch is expected in case of a failover
             pass
@@ -706,7 +706,7 @@ class EventingRebalance(EventingBaseTest):
             # This is required to ensure eventing works after failover/recovery/rebalance goes through successfully
             if not self.is_sbm:
                 self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True, timeout=240)
-        except Exception, ex:
+        except Exception as ex:
             log.info(str(ex))
             # data mismatch is expected in case of a delete as Onupdate would have extra mutations in destination
             pass
@@ -726,7 +726,7 @@ class EventingRebalance(EventingBaseTest):
         nodes_out_ev = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
         if enable_failover:
             self.cluster.failover([self.master], failover_nodes=[nodes_out_ev])
-        for i in xrange(5):
+        for i in range(5):
             # start eventing node rebalance
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [nodes_out_ev])
             # This sleep is intentional, if this is not present, rebalance_reached reports 100% (rebalance completed)
@@ -762,7 +762,7 @@ class EventingRebalance(EventingBaseTest):
             if self.is_sbm:
                 self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
             else:
-                self.verify_eventing_results(self.function_name,0, skip_stats_validation=True)
+                self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         self.refresh_rest_server()
         self.undeploy_and_delete_function(body)
 
@@ -780,7 +780,7 @@ class EventingRebalance(EventingBaseTest):
         nodes_out_kv = self.servers[1]
         if enable_failover:
             self.cluster.failover([self.master], failover_nodes=[nodes_out_kv])
-        for i in xrange(5):
+        for i in range(5):
             # start eventing node rebalance
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [nodes_out_kv])
             # This sleep is intentional, if this is not present, rebalance_reached reports 100% (rebalance completed)
@@ -817,7 +817,7 @@ class EventingRebalance(EventingBaseTest):
                 self.verify_eventing_results(self.function_name, self.docs_per_day * 2016,
                                              skip_stats_validation=True)
             else:
-                self.verify_eventing_results(self.function_name,0, skip_stats_validation=True)
+                self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
 
     def test_eventing_rebalance_with_multiple_eventing_nodes(self):
@@ -1055,7 +1055,7 @@ class EventingRebalance(EventingBaseTest):
             self.assertTrue(reached, "rebalance failed, stuck or did not complete")
             rebalance.result()
             task.result()
-        except Exception, ex:
+        except Exception as ex:
             self.fail("Rebalance failed or hung after memcached crash")
         # delete json documents
         self.load(gen_load_del, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
@@ -1092,7 +1092,7 @@ class EventingRebalance(EventingBaseTest):
             self.assertTrue(reached, "rebalance failed, stuck or did not complete")
             rebalance.result()
             task.result()
-        except Exception, ex:
+        except Exception as ex:
             log.info(ex)
             log.info("Rebalance failed as expected after erlang got killed: {0}".format(str(ex)))
         else:
@@ -1143,7 +1143,7 @@ class EventingRebalance(EventingBaseTest):
             self.assertTrue(reached, "rebalance failed, stuck or did not complete")
             rebalance.result()
             task.result()
-        except Exception, ex:
+        except Exception as ex:
             if "Rebalance completed before killing" in str(ex):
                 exit(1)
             log.info(ex)
@@ -1171,7 +1171,7 @@ class EventingRebalance(EventingBaseTest):
         try:
             if not self.is_sbm:
                 self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True, timeout=240)
-        except Exception, ex:
+        except Exception as ex:
             log.info(str(ex))
             # data mismatch is expected in case of a failover
             pass
@@ -1208,7 +1208,7 @@ class EventingRebalance(EventingBaseTest):
             self.assertTrue(reached, "rebalance failed, stuck or did not complete")
             rebalance.result()
             task.result()
-        except Exception, ex:
+        except Exception as ex:
             log.info("Rebalance failed as expected after eventing got killed: {0}".format(str(ex)))
         else:
             self.fail("Rebalance succeeded even after killing eventing processes")
@@ -1268,7 +1268,7 @@ class EventingRebalance(EventingBaseTest):
         if self.is_sbm:
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         else:
-            self.verify_eventing_results(self.function_name,0, skip_stats_validation=True)
+            self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
 
     def test_kv_eventing_failover_and_kv_eventing_rebalance_simultaneously(self):
@@ -1315,7 +1315,7 @@ class EventingRebalance(EventingBaseTest):
             if not self.is_sbm:
                 self.verify_eventing_results(self.function_name, stats_src["curr_items"], skip_stats_validation=True,
                                          timeout=240)
-        except Exception, ex:
+        except Exception as ex:
             log.info(str(ex))
             # data mismatch is expected in case of a failover
             pass
@@ -1330,7 +1330,7 @@ class EventingRebalance(EventingBaseTest):
             # This is required to ensure eventing works after rebalance goes through successfully
             if not self.is_sbm:
                 self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True, timeout=240)
-        except Exception, ex:
+        except Exception as ex:
             log.info(str(ex))
             # data mismatch is expected in case of a delete as Onupdate would have extra mutations in destination
             pass
@@ -1520,7 +1520,7 @@ class EventingRebalance(EventingBaseTest):
             log.info("No of items in metadata bucket after undeploy/delete of all the functions : {0}".
                      format(item_count_metadata))
             if item_count_metadata != 0:
-                log.warn("metadata bucket still has some documents after undeploying the function : {0} docs are "
+                log.warning("metadata bucket still has some documents after undeploying the function : {0} docs are "
                          "remaining".format(item_count_metadata))
         except:
             pass
@@ -1559,7 +1559,7 @@ class EventingRebalance(EventingBaseTest):
             self.assertTrue(reached, "rebalance failed, stuck or did not complete")
             rebalance.result()
             task.result()
-        except Exception, ex:
+        except Exception as ex:
             log.info("Rebalance failed as expected after eventing got killed: {0}".format(str(ex)))
             # auto retry the failed rebalance
             self.check_retry_rebalance_succeeded()
@@ -1603,7 +1603,7 @@ class EventingRebalance(EventingBaseTest):
             self.assertTrue(reached, "rebalance failed, stuck or did not complete")
             rebalance.result()
             task.result()
-        except Exception, ex:
+        except Exception as ex:
             log.info("Rebalance failed as expected after erlang got killed: {0}".format(str(ex)))
             # auto retry failed rebalance
             self.check_retry_rebalance_succeeded()
@@ -1646,7 +1646,7 @@ class EventingRebalance(EventingBaseTest):
             self.assertTrue(reached, "rebalance failed, stuck or did not complete")
             rebalance.result()
             task.result()
-        except Exception, ex:
+        except Exception as ex:
             log.info("Rebalance failed as expected after reboot of kv and eventing: {0}".format(str(ex)))
             # auto retry for failed rebalance
             self.check_retry_rebalance_succeeded()
@@ -1662,7 +1662,7 @@ class EventingRebalance(EventingBaseTest):
         try:
             if not self.is_sbm:
                 self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True, timeout=240)
-        except Exception, ex:
+        except Exception as ex:
             log.info(str(ex))
             # data mismatch is expected in case of a failover
             pass

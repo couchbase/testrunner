@@ -1,10 +1,11 @@
-from base_test_rqg import BaseRQGTests
-from new_rqg_mysql_client import RQGMySQLClientNew
-from new_rqg_query_helper import RQGQueryHelperNew
+from .base_test_rqg import BaseRQGTests
+from .new_rqg_mysql_client import RQGMySQLClientNew
+from .new_rqg_query_helper import RQGQueryHelperNew
 import threading
-from rqg_mysql_client import RQGMySQLClient
-from rqg_postgres_client import RQGPostgresClient
+from .rqg_mysql_client import RQGMySQLClient
+from .rqg_postgres_client import RQGPostgresClient
 import traceback
+from deepdiff import DeepDiff
 
 class RQGTestsNew(BaseRQGTests):
 
@@ -134,12 +135,12 @@ class RQGTestsNew(BaseRQGTests):
 
             try:
                 self._verify_results_rqg_new(sql_result=sql_result, n1ql_result=n1ql_result)
-            except Exception, ex:
+            except Exception as ex:
                 self.log.info(ex)
                 traceback.print_exc()
                 return {"success": False, "result": str(ex)}
             return {"success": True, "result": "Pass"}
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(ex)
             traceback.print_exc()
             return {"success": False, "result": str(ex)}
@@ -187,7 +188,7 @@ class RQGTestsNew(BaseRQGTests):
             else:
                 return int(round(value, 0))
         else:
-            return unicode(value)
+            return str(value)
 
     def _verify_results_rqg_new(self, n1ql_result=[], sql_result=[]):
         new_n1ql_result = []
@@ -204,11 +205,15 @@ class RQGTestsNew(BaseRQGTests):
             extra_msg = self._get_failure_message(expected_result, actual_result)
             raise Exception("Results are incorrect. Actual num %s. Expected num: %s. :: %s \n" % (len(actual_result), len(expected_result), extra_msg))
 
+        diffs = DeepDiff(actual_result, expected_result, ignore_order=True)
+        if diffs:
+            raise Exception("Results are incorrect. " + diffs)
+
         msg = "The number of rows match but the results mismatch, please check"
         sorted_actual = self._sort_data(actual_result)
         sorted_expected = self._sort_data(expected_result)
 
-        combined_results = zip(sorted_expected, sorted_actual)
+        combined_results = list(zip(sorted_expected, sorted_actual))
         for item in combined_results:
             expected = item[0]
             actual = item[1]
@@ -315,12 +320,12 @@ class RQGTestsNew(BaseRQGTests):
                 return {"success": False, "result": str("different results")}
             try:
                 self.n1ql_helper._verify_results_rqg(subquery, aggregate, sql_result=sql_result, n1ql_result=n1ql_result, hints=hints, aggregate_pushdown=self.aggregate_pushdown)
-            except Exception, ex:
+            except Exception as ex:
                 self.log.info(ex)
                 traceback.print_exc()
                 return {"success": False, "result": str(ex)}
             return {"success": True, "result": "Pass"}
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(ex)
             traceback.print_exc()
             return {"success": False, "result": str(ex)}

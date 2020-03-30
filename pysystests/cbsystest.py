@@ -10,10 +10,10 @@ subparser = parser.add_subparsers(dest="subparsers")
 
 def add_modifier_args(parser):
     parser.add_argument("--cc_queues",    nargs='+', help="queues to copy created keys into")
-    parser.add_argument("--consume_queue",help="queue with keys to get/update/delete")
+    parser.add_argument("--consume_queue", help="queue with keys to get/update/delete")
     parser.add_argument("--precondition", help="required stat or cluster state required before running workload")
-    parser.add_argument("--postcondition",help="required stat or cluster state required to complete workload")
-    parser.add_argument("--wait",  nargs=3,  help="time to wait before starting workload: <hour> <min> <sec>", metavar = ('HOUR','MIN','SEC'), type=int)
+    parser.add_argument("--postcondition", help="required stat or cluster state required to complete workload")
+    parser.add_argument("--wait",  nargs=3,  help="time to wait before starting workload: <hour> <min> <sec>", metavar = ('HOUR', 'MIN', 'SEC'), type=int)
 #depreciated
 #parser.add_argument("--expires",nargs=3,  help="time to wait before terminating workload: <hour> <min> <sec>", metavar = ('HOUR','MIN','SEC'), type=int)
 
@@ -28,7 +28,7 @@ def add_template_parser(parent):
     parser.add_argument("--name",     help="template name", required = True)
     parser.add_argument("--ttl",      default=0, help="document expires time")
     parser.add_argument("--flags",    default=0, help="document create flags")
-    parser.add_argument("--cc_queues",nargs='+', help="queues to copy created keys into")
+    parser.add_argument("--cc_queues", nargs='+', help="queues to copy created keys into")
     parser.add_argument("--kvpairs",   nargs='+', help="list of kv items i.e=> state:ca,age:28,company:cb")
     parser.add_argument("--type",    help="json/non-json default is json", default="json")
     parser.add_argument("--size", nargs='+',    help="size of documents. padding is used if necessary")
@@ -55,8 +55,8 @@ def add_workload_parser(parent):
     parser.add_argument("--expire",  help="percentage of expirations 0-100", default=0, type=int)
     parser.add_argument("--ttl",      default=15, help="document expires time to use when expirations set")
     parser.add_argument("--delete",  help="percentage of deletes 0-100", default=0, type=int)
-    parser.add_argument("--template",help="predefined template to use", default="default")
-    parser.add_argument("--standalone",help="run without broker",action='store_true')
+    parser.add_argument("--template", help="predefined template to use", default="default")
+    parser.add_argument("--standalone", help="run without broker", action='store_true')
     parser.add_argument("--hosts",  default=["127.0.0.1"],  nargs='+', help="couchbase hosts for use with standalone")
     parser.add_argument("--padding",  default="", help="you can put a custom string here when using standalone loader")
     add_modifier_args(parser)
@@ -150,12 +150,12 @@ def receiveResponse(handle, rc_queue, tries = 5):
     while tries > 0:
         rc = handle.getMsg(rc_queue)
         if rc is not None:
-            print rc
+            print(rc)
             handle.delete(rc_queue)
             return
         tries = tries - 1
         time.sleep(1)
-    print "no response received from broker"
+    print("no response received from broker")
     handle.delete(rc_queue)
 
 def run_workload(args):
@@ -206,7 +206,7 @@ def argsToTask(args):
     ops_sec = args.ops
     num_consumers = 1
 
-    ops_sec = int(ops_sec)/num_consumers
+    ops_sec = int(ops_sec)//num_consumers
     create_count = int(ops_sec *  args.create/100)
     update_count = int(ops_sec *  args.update/100)
     get_count = int(ops_sec *  args.get/100)
@@ -254,8 +254,8 @@ def import_template(args):
                 pair = json.loads(pair)
                 json_val.update(pair)
             except ValueError as ex:
-                print "ERROR: Unable to encode as valid json: %s " % kv
-                print "make sure strings surrounded by double quotes"
+                print("ERROR: Unable to encode as valid json: %s " % kv)
+                print("make sure strings surrounded by double quotes")
                 return
         val = json_val
 
@@ -302,7 +302,7 @@ def perform_xdcr_tasks(args):
     cluster = args.cluster
 
     #TODO: Validate the user inputs, before passing to rabbit
-    print xdcrMsg
+    print(xdcrMsg)
     rabbitHelper = RabbitHelper(args.broker, cluster)
     xdcrMsg['rcq'] = getResponseQueue(rabbitHelper)
     rabbitHelper.putMsg("xdcr_"+cluster, json.dumps(xdcrMsg))

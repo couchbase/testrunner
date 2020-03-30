@@ -68,7 +68,7 @@ class QueryHelperTests(BaseTestCase):
             if self.dataset == "array":
                 return self.generate_docs_array(num_items, start)
             return getattr(self, 'generate_docs_' + self.dataset)(num_items, start)
-        except Exception, ex:
+        except Exception as ex:
             log.info(str(ex))
             self.fail("There is no dataset %s, please enter a valid one" % self.dataset)
 
@@ -79,7 +79,7 @@ class QueryHelperTests(BaseTestCase):
                 return self.generate_ops(num_items, start, json_generator.generate_docs_simple)
             if self.dataset == "array":
                 return self.generate_ops(num_items, start, json_generator.generate_all_type_documents_for_gsi)
-        except Exception, ex:
+        except Exception as ex:
             log.info(ex)
             self.fail("There is no dataset %s, please enter a valid one" % self.dataset)
 
@@ -97,7 +97,7 @@ class QueryHelperTests(BaseTestCase):
 
     def generate_ops(self, docs_per_day, start=0, method=None):
         gen_docs_map = {}
-        for key in self.ops_dist_map.keys():
+        for key in list(self.ops_dist_map.keys()):
             isShuffle = False
             if key == "update":
                 isShuffle = True
@@ -112,7 +112,7 @@ class QueryHelperTests(BaseTestCase):
 
     def generate_full_docs_list_after_ops(self, gen_docs_map):
         docs = []
-        for key in gen_docs_map.keys():
+        for key in list(gen_docs_map.keys()):
             if key != "delete" and key != "expiry":
                 update = False
                 if key == "update":
@@ -235,7 +235,7 @@ class QueryHelperTests(BaseTestCase):
                                                            server=self.n1ql_server)
                 self.assertFalse(check, "index {0} failed to be "
                                         "deleted".format(query_definition.index_name))
-        except Exception, ex:
+        except Exception as ex:
                 log.info(ex)
                 query = "select * from system:indexes"
                 actual_result = self.n1ql_helper.run_cbq_query(query=query,
@@ -260,4 +260,4 @@ class QueryHelperTests(BaseTestCase):
                                query_definition=query_definition)
         if operation_type == "generate_docs":
             for bucket in self.buckets:
-                    self.generate_docs(self.docs_per_day,start=randint(0,1000000000))
+                    self.generate_docs(self.docs_per_day, start=randint(0, 1000000000))

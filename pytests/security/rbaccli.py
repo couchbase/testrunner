@@ -1,9 +1,9 @@
 import httplib2
-import httplib
+import http.client
 import base64
 import json
-import urllib
-import urllib2
+import urllib.request, urllib.parse, urllib.error
+import urllib.request, urllib.error, urllib.parse
 import ssl
 import socket
 import paramiko
@@ -88,7 +88,7 @@ class rbacclitest(rbacTest):
         options = "--set " + "--rbac-username " + users[0][0] + " --rbac-password " + users[0][1] +  \
                   " --auth-domain " + self.auth_type
         output, error = self.execute_admin_role_manage(options)
-        self.assertTrue("ERROR: --roles is required with the --set option" in output[0],"Issue with command without role")
+        self.assertTrue("ERROR: --roles is required with the --set option" in output[0], "Issue with command without role")
 
     def test_create_user(self):
         users, roles = self._get_user_role()
@@ -133,7 +133,7 @@ class rbacclitest(rbacTest):
             final_out = final_out + out
         test = json.loads(final_out)
         for role in test['roles']:
-            self.assertTrue(role['role'] in roles,"Issue with --my-roles")
+            self.assertTrue(role['role'] in roles, "Issue with --my-roles")
 
     def test_list_roles(self):
         final_out = ''
@@ -147,7 +147,7 @@ class rbacclitest(rbacTest):
             final_out = final_out + out
         test = json.loads(final_out)
         for role in test['roles']:
-            self.assertTrue(role['role'] in roles,"Issue with --my-roles")
+            self.assertTrue(role['role'] in roles, "Issue with --my-roles")
 
 
     def test_create_user_without_rbac_pass_value(self):
@@ -160,9 +160,9 @@ class rbacclitest(rbacTest):
 
     def test_create_user_invalid_character(self):
         self.auth_type='local'
-        final_users = [["\"r;itam\"",'password'],["\"r(itam\"",'password'],["\"r)itam\"",'password'], ["\"r<itam\"",'password'], \
-            ["\"r>itam\"", 'password'], ["\"r@itam\"",'password'], ["\"r,itam\"",'password'], ["\"r;itam\"",'password'], \
-                       ["\"r:itam\"", 'password'], ["\"r\itam\"",'password'], ["\"r[itam\"",'password'], \
+        final_users = [["\"r;itam\"", 'password'], ["\"r(itam\"", 'password'], ["\"r)itam\"", 'password'], ["\"r<itam\"", 'password'], \
+            ["\"r>itam\"", 'password'], ["\"r@itam\"", 'password'], ["\"r,itam\"", 'password'], ["\"r;itam\"", 'password'], \
+                       ["\"r:itam\"", 'password'], ["\"r\itam\"", 'password'], ["\"r[itam\"", 'password'], \
                        ["\"r]itam\"", 'password'],  ["\"r[itam\"", 'password'], ["\"r]itam\"", 'password'], \
                        ["\"r=itam\"", 'password'], ["\"r{itam\"", 'password'], ["\"r}itam\"", 'password']]
         #["\"r/itam\"",'password'], ["\"r?itam\"", 'password'],
@@ -210,7 +210,7 @@ class rbacclitest(rbacTest):
     def test_invalid_passwords(self):
         final_policy = ""
         users, roles = self._get_user_role()
-        correct_pass = self.input.param("correctpass",False)
+        correct_pass = self.input.param("correctpass", False)
         policy_type = self.input.param("policy_type")
         if ":" in policy_type:
             policy_type = policy_type.split(":")

@@ -1,7 +1,7 @@
 
 import sys
-import urllib2
-import urllib
+import urllib.request, urllib.error, urllib.parse
+import urllib.request, urllib.parse, urllib.error
 import httplib2
 import json
 import string
@@ -35,20 +35,20 @@ def main():
 
     usage = '%prog -s suitefile -v version -o OS'
     parser = OptionParser(usage)
-    parser.add_option('-v','--version', dest='version')
-    parser.add_option('-s','--suiteFile', dest='suiteFile')
-    parser.add_option('-o','--os', dest='os')
-    parser.add_option('-n','--noLaunch', action="store_true", dest='noLaunch', default=False)
+    parser.add_option('-v', '--version', dest='version')
+    parser.add_option('-s', '--suiteFile', dest='suiteFile')
+    parser.add_option('-o', '--os', dest='os')
+    parser.add_option('-n', '--noLaunch', action="store_true", dest='noLaunch', default=False)
 
     options, args = parser.parse_args()
 
 
 
-    print 'the suiteFile is', options.suiteFile
-    print 'the  version is', options.version
+    print('the suiteFile is', options.suiteFile)
+    print('the  version is', options.version)
 
-    print 'nolaunch', options.noLaunch
-    print 'os', options.os
+    print('nolaunch', options.noLaunch)
+    print('os', options.os)
 
 
 
@@ -74,16 +74,16 @@ def main():
                 data = row['QE-Test-Suites']
 
                 if 'os' not in data or (data['os'] == options.os) or \
-                    (data['os'] == 'linux' and options.os in set(['centos','ubuntu']) ):
+                    (data['os'] == 'linux' and options.os in {'centos', 'ubuntu'} ):
                     testsToLaunch.append( {'component':data['component'], 'subcomponent':data['subcomponent'],'confFile':data['confFile'],
                                        'iniFile':data['config'],
                                      'serverCount':getNumberOfServers(data['config']), 'timeLimit':data['timeOut'],
                                      'parameters':data['parameters']})
                 else:
-                    print 'OS does not apply to', data['component'], data['subcomponent']
+                    print('OS does not apply to', data['component'], data['subcomponent'])
         #endfor results
     #endfor lines in the file
-    print 'testsToLaunch', testsToLaunch
+    print('testsToLaunch', testsToLaunch)
 
 
 
@@ -96,15 +96,15 @@ def main():
     while len(testsToLaunch) > 0:
         response, content = httplib2.Http(timeout=60).request('http://172.23.105.177:8081/getavailablecount/{0}'.format(options.os), 'GET')
         if response.status != 200:
-           print time.asctime( time.localtime(time.time()) ), 'invalid server response', content
+           print(time.asctime( time.localtime(time.time()) ), 'invalid server response', content)
            time.sleep(POLL_INTERVAL)
         elif int(content) == 0:
-            print time.asctime( time.localtime(time.time()) ), 'no VMs'
+            print(time.asctime( time.localtime(time.time()) ), 'no VMs')
             time.sleep(POLL_INTERVAL)
         else:
             #see if we can match a test
             serverCount = int(content)
-            print time.asctime( time.localtime(time.time()) ), 'there are', serverCount, ' servers available'
+            print(time.asctime( time.localtime(time.time()) ), 'there are', serverCount, ' servers available')
 
             haveTestToLaunch = False
             i = 0
@@ -120,7 +120,7 @@ def main():
                 # get the VMs, they should be there
                 response, content = httplib2.Http(timeout=60).request('http://' + SERVER_MANAGER +
                         '/getservers/{0}?count={1}&expiresin={2}&os={3}'.
-                   format(descriptor, testsToLaunch[i]['serverCount'],testsToLaunch[i]['timeLimit'],options.os), 'GET')
+                   format(descriptor, testsToLaunch[i]['serverCount'], testsToLaunch[i]['timeLimit'], options.os), 'GET')
 
                 if response.status == 499:
                     time.sleep(POLL_INTERVAL) # some error checking here at some point
@@ -129,10 +129,10 @@ def main():
                     url = launchString.format(options.version, testsToLaunch[i]['confFile'],
                                          descriptor, testsToLaunch[i]['component'],
                                          testsToLaunch[i]['subcomponent'], testsToLaunch[i]['iniFile'],
-                                         urllib.quote(json.dumps(r2).replace(' ','')),
-                                         urllib.quote(testsToLaunch[i]['parameters']), options.os)
-                    print 'launching', url
-                    print time.asctime( time.localtime(time.time()) ), 'launching ', descriptor
+                                         urllib.parse.quote(json.dumps(r2).replace(' ', '')),
+                                         urllib.parse.quote(testsToLaunch[i]['parameters']), options.os)
+                    print('launching', url)
+                    print(time.asctime( time.localtime(time.time()) ), 'launching ', descriptor)
 
 
                     if not options.noLaunch:  # sorry for the double negative
@@ -140,15 +140,15 @@ def main():
                     testsToLaunch.pop(i)
                     summary.append( {'test':descriptor, 'time':time.asctime( time.localtime(time.time()) ) } )
             else:
-                print 'no VMs at this time'
+                print('no VMs at this time')
                 time.sleep(POLL_INTERVAL)
         #endif checking for servers
     #endwhile
 
 
-    print '\n\n\ndone, everything is launched'
+    print('\n\n\ndone, everything is launched')
     for i in summary:
-        print i['test'], 'was launched at', i['time']
+        print(i['test'], 'was launched at', i['time'])
     return
 
 

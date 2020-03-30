@@ -1,4 +1,4 @@
-from cbas_base import *
+from .cbas_base import *
 import datetime
 
 class CBASAsyncResultDeliveryTests(CBASBaseTest):
@@ -79,7 +79,7 @@ class CBASAsyncResultDeliveryTests(CBASBaseTest):
 
             # Validate if the results with mode and without mode are the same
             if not (results == immediate_results):
-                self.log.info("Results with mode = %s : %s",(self.mode, results))
+                self.log.info("Results with mode = %s : %s", (self.mode, results))
                 self.log.info("Results with legacy mode : %s", immediate_results)
 
                 self.fail("Results not correct")
@@ -354,7 +354,7 @@ class CBASAsyncResultDeliveryTests(CBASBaseTest):
                     self.fail("Status is not RUNNING")
                 else:
                     # Allow the request to be processed, and then check status
-                    self.sleep((delay / 1000) + 5)
+                    self.sleep((delay // 1000) + 5)
                     status, result_handle = self.retrieve_request_status_using_handle(
                         self.master, handle)
                     if status.lower() != "success":

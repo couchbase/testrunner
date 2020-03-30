@@ -4,7 +4,7 @@ from couchbase.cluster import Cluster
 from couchbase.cluster import PasswordAuthenticator
 from membase.api.rest_client import RestConnection
 from remote.remote_util import RemoteMachineShellConnection
-from tuq import QueryTests
+from .tuq import QueryTests
 
 
 class QueryExpirationTests(QueryTests):
@@ -219,8 +219,8 @@ class QueryExpirationTests(QueryTests):
         self.run_cbq_query(primary_index_query)
 
         # Insert query with invalid ttl values
-        invalid_expiration_time_list = [-1, '"ten"', [10, 10], sys.float_info.max, sys.maxint + 1]
-        for expiration_time, num in zip(invalid_expiration_time_list, range(len(invalid_expiration_time_list))):
+        invalid_expiration_time_list = [-1, '"ten"', [10, 10], sys.float_info.max, sys.maxsize + 1]
+        for expiration_time, num in zip(invalid_expiration_time_list, list(range(len(invalid_expiration_time_list)))):
             doc_id = "K{0}".format(num)
             doc_body = '"{0}", {{"id":"{0}"}}'.format(doc_id)
             insert_query = 'INSERT INTO {0} (KEY, VALUE) VALUES ({1},' \
@@ -243,8 +243,8 @@ class QueryExpirationTests(QueryTests):
         self.assertEqual(doc_value, None, "Insert doc with expiration epoch value is still available in db")
 
         # Insert Queries with some valid values
-        valid_expiration_time_list = [100000.4, sys.maxint, int(time.time() + 120)]
-        for expiration_time, num in zip(valid_expiration_time_list, range(len(valid_expiration_time_list))):
+        valid_expiration_time_list = [100000.4, sys.maxsize, int(time.time() + 120)]
+        for expiration_time, num in zip(valid_expiration_time_list, list(range(len(valid_expiration_time_list)))):
             doc_id = "M{0}".format(num)
             doc_body = '"{0}", {{"id":"{0}"}}'.format(doc_id)
             insert_query = 'INSERT INTO {0} (KEY, VALUE) VALUES ({1},' \
@@ -459,8 +459,8 @@ class QueryExpirationTests(QueryTests):
         self.run_cbq_query(primary_index_query)
 
         # Upsert query with invalid ttl values
-        invalid_expiration_time_list = [-1, '"ten"', [10, 10], sys.float_info.max, sys.maxint + 1]
-        for expiration_time, num in zip(invalid_expiration_time_list, range(len(invalid_expiration_time_list))):
+        invalid_expiration_time_list = [-1, '"ten"', [10, 10], sys.float_info.max, sys.maxsize + 1]
+        for expiration_time, num in zip(invalid_expiration_time_list, list(range(len(invalid_expiration_time_list)))):
             doc_id = "K{0}".format(num)
             doc_body = '"{0}", {{"id":"{0}"}}'.format(doc_id)
             insert_query = 'UPSERT INTO {0} (KEY, VALUE) VALUES ({1},' \
@@ -483,8 +483,8 @@ class QueryExpirationTests(QueryTests):
         self.assertEqual(doc_value, None, "Upsert doc with expiration epoch value is still available in db")
 
         # Insert Queries with some valid values
-        valid_expiration_time_list = [100000.4, sys.maxint, int(time.time() + 120)]
-        for expiration_time, num in zip(valid_expiration_time_list, range(len(valid_expiration_time_list))):
+        valid_expiration_time_list = [100000.4, sys.maxsize, int(time.time() + 120)]
+        for expiration_time, num in zip(valid_expiration_time_list, list(range(len(valid_expiration_time_list)))):
             doc_id = "K{0}".format(num)
             doc_body = '"{0}", {{"id":"{0}"}}'.format(doc_id)
             insert_query = 'UPSERT INTO {0} (KEY, VALUE) VALUES ({1},' \
@@ -927,7 +927,7 @@ class QueryExpirationTests(QueryTests):
         delete_query = "DELETE FROM `{0}`".format(self.sample_bucket)
         try:
             self.run_cbq_query(delete_query, username="test", password="password")
-        except Exception, err:
+        except Exception as err:
             result = "User does not have credentials to run DELETE queries" in str(err)
             self.assertTrue(result, "DELETE Query failed for non-credential reasons. Check error msg.")
             self.log.info(str(err))

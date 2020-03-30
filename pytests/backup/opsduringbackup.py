@@ -75,9 +75,9 @@ class OpsDuringBackupTests(BackupBaseTest):
         We first load amount of items. After that, when we start backup, we begin do mutations on these existing items."""
 
         gen_load = BlobGenerator('mysql', 'mysql-', self.value_size, end=self.num_items)
-        gen_update = BlobGenerator('mysql', 'mysql-', self.value_size, end=(self.num_items / 2 - 1))
-        gen_expire = BlobGenerator('mysql', 'mysql-', self.value_size, start=self.num_items / 2, end=(self.num_items * 3 / 4 - 1))
-        gen_delete = BlobGenerator('mysql', 'mysql-', self.value_size, start=self.num_items * 3 / 4, end=self.num_items)
+        gen_update = BlobGenerator('mysql', 'mysql-', self.value_size, end=(self.num_items // 2 - 1))
+        gen_expire = BlobGenerator('mysql', 'mysql-', self.value_size, start=self.num_items // 2, end=(self.num_items * 3 // 4 - 1))
+        gen_delete = BlobGenerator('mysql', 'mysql-', self.value_size, start=self.num_items * 3 // 4, end=self.num_items)
         self._load_all_buckets(self.master, gen_load, "create", 0, 1, 0, True, batch_size=20000, pause_secs=5, timeout_secs=180)
         self._wait_for_stats_all_buckets(self.servers[:self.num_servers])
 

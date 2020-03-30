@@ -3,8 +3,8 @@ import logger
 import time
 import unittest
 import copy
-from uibasetest import *
-from uisampletests import NavigationHelper, BucketHelper, ServerTestControls, ServerHelper
+from .uibasetest import *
+from .uisampletests import NavigationHelper, BucketHelper, ServerTestControls, ServerHelper
 from TestInput import TestInputSingleton
 from couchbase_helper.cluster import Cluster
 from membase.api.rest_client import RestConnection, Bucket
@@ -19,7 +19,7 @@ class  NodeServiceTests(BaseUITestCase):
         self.helper = ServerHelper(self)
         num_buckets = self.input.param("num_buckets", 1)
         compression = self.input.param("sdk_compression", True)
-        for i in xrange(num_buckets):
+        for i in range(num_buckets):
             RestConnection(self.servers[0]).create_bucket(bucket='bucket%s' % i, ramQuotaMB=100, proxyPort=STANDARD_BUCKET_PORT + i + 1)
             gen_load = BlobGenerator('ui', 'ui-', 256, start=0, end=10)
             cluster = Cluster()
@@ -110,7 +110,7 @@ class  NodeServiceTests(BaseUITestCase):
         self.helper.start_rebalancing()
         self.sleep(3, 'Wait some progress')
         self.helper.wait_for_rebalance_stops()
-        self.assertTrue(self.helper.get_number_server_rows() == 2,'Node was not added')
+        self.assertTrue(self.helper.get_number_server_rows() == 2, 'Node was not added')
 
     def test_failover(self):
         service = self.input.param("services", '').split(';')

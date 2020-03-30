@@ -1,5 +1,5 @@
 import copy
-import exceptions
+import builtins as exceptions
 import time
 import uuid
 import zlib
@@ -13,11 +13,13 @@ import memcacheConstants
 from memcached.helper.data_helper import MemcachedClientHelper, VBucketAwareMemcached
 from mc_bin_client import MemcachedClient
 from threading import Thread
-import Queue
+import queue
 from collections import defaultdict
 from couchbase_helper.stats_tools import StatsCommon
 from remote.remote_util import RemoteMachineShellConnection
 from subprocess import call
+from membase.api.exception import ServerUnavailableException
+from queue import Queue
 
 class BucketOperationHelper():
 
@@ -52,7 +54,7 @@ class BucketOperationHelper():
             success = False
         else:
             available_ram = info.memoryQuota * bucket_ram_ratio
-            if available_ram / howmany > 100:
+            if available_ram // howmany > 100:
                 bucket_ram = int(available_ram / howmany)
             else:
                 bucket_ram = 100
@@ -105,7 +107,7 @@ class BucketOperationHelper():
         rest = RestConnection(serverInfo)
         if bucket_ram < 0:
             info = rest.get_nodes_self()
-            bucket_ram = info.memoryQuota * 2 / 3
+            bucket_ram = info.memoryQuota * 2 // 3
 
         if password == None:
             authType = "sasl"
@@ -212,7 +214,7 @@ class BucketOperationHelper():
 
         for serverInfo in servers:
             node = RestConnection(serverInfo).get_nodes_self()
-            paths = set([node.storage[0].path, node.storage[0].index_path])
+            paths = {node.storage[0].path, node.storage[0].index_path}
             for path in paths:
                 if "c:/Program Files" in path:
                     path = path.replace("c:/Program Files", "/cygdrive/c/Program Files")
@@ -300,7 +302,11 @@ class BucketOperationHelper():
                     bucket_info.saslPassword.encode('ascii'))
                 else:
                     client.sasl_auth_plain(admin_user, admin_pass)
-                    bucket = bucket.encode('ascii')
+                    try:
+                        bucket = bucket.encode('ascii')
+                    except AttributeError:
+                        pass
+
                     client.bucket_select(bucket)
                 for i in server_dict[every_ip_port]:
                     try:
@@ -327,7 +333,7 @@ class BucketOperationHelper():
                                                bucket_info.saslPassword.encode('ascii'))
                         continue
 
-                    if c.find("\x01") > 0 or c.find("\x02") > 0:
+                    if c.find(b"\x01") > 0 or c.find(b"\x02") > 0:
                         ready_vbuckets[i] = True
                     elif i in ready_vbuckets:
                         log.warning("vbucket state changed from active to {0}".format(c))
@@ -365,11 +371,11 @@ class BucketOperationHelper():
                 client.vbucketId = vbucketId
                 flag, keyx, value = client.get(key=key, collection=collection)
                 if value_equal_to_key:
-                    test.assertEquals(value, key, msg='values dont match')
+                    test.assertEqual(value.decode(), key, msg='values dont match')
                 if verify_flags:
                     actual_flag = socket.ntohl(flag)
                     expected_flag = ctypes.c_uint32(zlib.adler32(value)).value
-                    test.assertEquals(actual_flag, expected_flag, msg='flags dont match')
+                    test.assertEqual(actual_flag, expected_flag, msg='flags dont match')
                 if debug:
                     log.info("verified key #{0} : {1}".format(index, key))
             except mc_bin_client.MemcachedError as error:
@@ -420,9 +426,9 @@ class BucketOperationHelper():
     def keys_exist_or_assert_in_parallel(keys, server, bucket_name, test, concurrency=2, collection=None):
         log = logger.Logger.get_logger()
         verification_threads = []
-        queue = Queue.Queue()
+        queue = Queue()
         for i in range(concurrency):
-            keys_chunk = BucketOperationHelper.chunks(keys, len(keys) / concurrency)
+            keys_chunk = BucketOperationHelper.chunks(keys, len(keys) // concurrency)
             t = Thread(target=BucketOperationHelper.keys_exist_or_assert,
                        name="verification-thread-{0}".format(i),
                        args=(keys_chunk.get(i), server, bucket_name, test, queue, collection))
@@ -506,7 +512,7 @@ class BucketOperationHelper():
         log.info("fill_space {0}".format(fill_space))
         # each packet can be 10 KB
         packetSize = int(10 * 1024)
-        number_of_buckets = int(fill_space) / packetSize
+        number_of_buckets = int(fill_space) // packetSize
         log.info('packetSize: {0}'.format(packetSize))
         log.info('memory usage before key insertion : {0}'.format(info.stats.memUsed))
         log.info('inserting {0} new keys to memcached @ {0}'.format(number_of_buckets, serverInfo.ip))
@@ -516,7 +522,7 @@ class BucketOperationHelper():
             vbucketId = crc32.crc32_hash(key) & (vbucket_count - 1)
             client.vbucketId = vbucketId
             try:
-                client.set(key, 0, 0, key,collection=collection)
+                client.set(key, 0, 0, key, collection=collection)
                 inserted_keys.append(key)
             except mc_bin_client.MemcachedError as error:
                 log.error(error)

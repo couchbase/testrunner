@@ -17,7 +17,7 @@ class JSONGenerator:
         :param template_json: json
         """
         if isinstance(template_json, dict):
-            for key in template_json.keys():
+            for key in list(template_json.keys()):
                 if not isinstance(template_json[key], list) and not isinstance(template_json[key], dict):
                     if key in self.input and self.input[key] != "":
                         obj[key] = self.input[key]

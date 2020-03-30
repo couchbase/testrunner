@@ -88,7 +88,7 @@ class BackupRestoreValidations(BackupRestoreValidationBase):
                 try:
                     with open(kv_file_path, 'r') as f:
                         backedup_kv = json.load(f)
-                except Exception, e:
+                except Exception as e:
                     raise e
             data_collector = DataCollector()
             info, restored_data = data_collector.collect_data(self.restore_cluster,
@@ -131,7 +131,7 @@ class BackupRestoreValidations(BackupRestoreValidationBase):
         :param output: list command output
         :return: status and message
 
-        TODO: this function validates list command output for 1 backup / 1 bucket only
+        TODO: this function validates list command output for 1 backup // 1 bucket only
          - need to be enhanced for multiple backups
         """
         backup_name = False
@@ -238,7 +238,7 @@ class BackupRestoreValidations(BackupRestoreValidationBase):
                     with open(start_file_path, 'r') as f:
                         start_json = json.load(f)
                         start_json = json.loads(start_json)
-                except Exception, e:
+                except Exception as e:
                     raise e
             end_file_name = "{0}-{1}-{2}.json".format(bucket.name, "range", self.backupset.end)
             end_file_path = os.path.join(self.backup_validation_path, end_file_name)
@@ -248,7 +248,7 @@ class BackupRestoreValidations(BackupRestoreValidationBase):
                     with open(end_file_path, 'r') as f:
                         end_json = json.load(f)
                         end_json = json.loads(end_json)
-                except Exception, e:
+                except Exception as e:
                     raise e
             merge_file_name = "{0}-{1}-{2}.json".format(bucket.name, "range", "merge")
             merge_file_path = os.path.join(self.backup_validation_path, merge_file_name)
@@ -258,7 +258,7 @@ class BackupRestoreValidations(BackupRestoreValidationBase):
                     with open(merge_file_path, 'r') as f:
                         merge_json_str = json.load(f)
                         merge_json = json.loads(merge_json_str)
-                except Exception, e:
+                except Exception as e:
                     raise e
 
             if not start_json or not end_json or not merge_json:

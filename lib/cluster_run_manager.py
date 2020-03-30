@@ -43,6 +43,8 @@ import threading
 import logging as log
 import subprocess
 import platform
+from collections import defaultdict
+import weakref
 
 log.basicConfig(level=log.INFO)
 
@@ -51,20 +53,32 @@ CTXDIR = os.path.dirname(os.path.abspath(__file__))
 NSDIR = "{0}{1}..{1}..{1}ns_server".format(CTXDIR, os.sep)
 
 
+class KeepRefs(object):
+    __refs__ = defaultdict(list)
+
+    def __init__(self):
+        self.__refs__[self.__class__].append(weakref.ref(self)())
+
+    @classmethod
+    def get_instances(cls):
+        for ins in cls.__refs__[cls]:
+            yield ins
+
+
 class CRManager:
     """ cluster run management api """
 
     def __init__(self, num_nodes, start_index=0):
-        self.num_nodes = num_nodes
+        self._num_nodes = num_nodes
         self.nodes = {}
-        for i in xrange(num_nodes):
+        for i in range(num_nodes):
             self.nodes[start_index] = None
             start_index += 1
 
     def start_nodes(self):
 
         status = False
-        keys = self.nodes.keys()
+        keys = list(self.nodes.keys())
         for index in keys:
             status = self.start(index)
             if not status:
@@ -87,7 +101,7 @@ class CRManager:
         return status
 
     def get_nodes(self):
-        return self.nodes.values()
+        return list(self.nodes.values())
 
     def start(self, index):
 
@@ -163,7 +177,7 @@ class CRManager:
 
     @property
     def num_nodes(self):
-        return len(self.nodes.keys())
+        return len(list(self.nodes.keys()))
 
     @staticmethod
     def connect(index):

@@ -161,8 +161,8 @@ class ldaptest(BaseTestCase):
     '''
     def _parseRestResponse(self, response):
         admin_roles = {'roAdmins': [], 'admins': []}
-        for key, value in response.items():
-            if key in admin_roles.keys():
+        for key, value in list(response.items()):
+            if key in list(admin_roles.keys()):
                 for tempValue in value:
                     admin_roles[key].append(tempValue.encode('utf-8'))
         return admin_roles['roAdmins'], admin_roles['admins']
@@ -628,7 +628,7 @@ class ldaptest(BaseTestCase):
         rest = RestConnection(self.master)
         self._setupLDAPAuth(rest, self.authRole, self.authState, self.fullAdmin, self.ROAdmin)
 
-        for i, j in zip(range(len(self.fullAdmin)), range(len(self.ROAdmin))):
+        for i, j in zip(list(range(len(self.fullAdmin))), list(range(len(self.ROAdmin)))):
             self.fullAdmin[i][1] = 'password1'
             self._changeLdapPassRemote(self.fullAdmin[i][0], 'password1')
             self.ROAdmin[j][1] = 'password1'
@@ -735,8 +735,8 @@ class ldapCLITest(CliBaseTest):
 
     def _parseRestResponse(self, response):
         admin_roles = {'roAdmins': [], 'admins': []}
-        for key, value in response.items():
-            if key in admin_roles.keys():
+        for key, value in list(response.items()):
+            if key in list(admin_roles.keys()):
                 for tempValue in value:
                     admin_roles[key].append(tempValue.encode('utf-8'))
         return admin_roles['roAdmins'], admin_roles['admins']
@@ -788,10 +788,10 @@ class ldapCLITest(CliBaseTest):
     def validateSettings(self, status, admin, roAdmin, default):
         rest = RestConnection(self.master)
         temproAdmins, tempAdmins = self._parseRestResponse(rest.ldapRestOperationGetResponse())
-        print temproAdmins
-        print tempAdmins
+        print(temproAdmins)
+        print(tempAdmins)
         tempStatus = rest.ldapRestOperationGetResponse()['enabled']
-        print rest.ldapRestOperationGetResponse()
+        print(rest.ldapRestOperationGetResponse())
         flag = True
 
         if (status is not self.returnBool(tempStatus)):
@@ -801,9 +801,9 @@ class ldapCLITest(CliBaseTest):
         if (default == 'admins'):
             tempAdmins = "".join(tempAdmins)
             if (tempAdmins == 'asterisk'):
-                print "Admins is Default"
+                print("Admins is Default")
             else:
-                print "Admin is not Default"
+                print("Admin is not Default")
                 flag = False
         else:
             if (tempAdmins != admin):
@@ -813,13 +813,13 @@ class ldapCLITest(CliBaseTest):
         if (default == 'roadmins'):
             temproAdmins = "".join(temproAdmins)
             if (temproAdmins == 'asterisk'):
-                print "Admins is Default"
+                print("Admins is Default")
             else:
-                print "Admin is not Default"
+                print("Admin is not Default")
                 flag = False
         else:
             if (temproAdmins != roAdmin):
-                print roAdmin
+                print(roAdmin)
                 self.log.info ("Mismatch with ROAdmin - Expected - {0} -- Actual - {1}".format(roAdmin, temproAdmins))
                 flag = False
 

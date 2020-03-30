@@ -1,5 +1,5 @@
-from base_rqg_mysql_client import BaseRQGMySQLClient
-from new_rqg_query_helper import RQGQueryHelperNew
+from .base_rqg_mysql_client import BaseRQGMySQLClient
+from .new_rqg_query_helper import RQGQueryHelperNew
 
 class RQGMySQLClientNew(BaseRQGMySQLClient):
 
@@ -19,8 +19,8 @@ class RQGMySQLClientNew(BaseRQGMySQLClient):
                 try:
                     sql_result = self._query_and_convert_to_json(sql_query)
                     sql_n1ql_index_map["expected_result"] = sql_result
-                except Exception, ex:
-                    print ex
+                except Exception as ex:
+                    print(ex)
 
 
             sql_n1ql_index_map = self._translate_function_names(sql_n1ql_index_map)

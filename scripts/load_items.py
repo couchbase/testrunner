@@ -20,16 +20,16 @@ def usage(err=None):
     err_code = 0
     if err:
         err_code = 1
-        print "Error:", err
-        print
-    print "./load_items.py -m <master> -p <prefix> -o <# of sets>:<# of mutations>:<# of deletes> -f <file>"
-    print ""
-    print " master             the master node rest interface"
-    print " prefix             prefix to use for key names"
-    print " operations         number of sets, mutations and deletes to do"
-    print " file               file to write out the kvstore to"
-    print ""
-    print "./load_items -m Administrator:password@10.1.2.99:8091 -p \"1-\" -o 1000:100:10 -f kvstore"
+        print("Error:", err)
+        print()
+    print("./load_items.py -m <master> -p <prefix> -o <# of sets>:<# of mutations>:<# of deletes> -f <file>")
+    print("")
+    print(" master             the master node rest interface")
+    print(" prefix             prefix to use for key names")
+    print(" operations         number of sets, mutations and deletes to do")
+    print(" file               file to write out the kvstore to")
+    print("")
+    print("./load_items -m Administrator:password@10.1.2.99:8091 -p \"1-\" -o 1000:100:10 -f kvstore")
     sys.exit(err_code)
 
 class KVStore(object):
@@ -64,7 +64,7 @@ class KVStore(object):
         return self.data.__iter__()
 
     def iteritems(self):
-        return self.data.iteritems()
+        return iter(self.data.items())
 
 
 class Config(object):
@@ -82,7 +82,7 @@ class Config(object):
             (opts, args) = getopt.getopt(argv, 'hm:p:o:f:b:', ['help', 'master=', 'prefix=', 'operations=', 'file=', 'bucket='])
         except IndexError:
             usage()
-        except getopt.GetoptError, err:
+        except getopt.GetoptError as err:
             usage(err)
 
         for o, a in opts:
