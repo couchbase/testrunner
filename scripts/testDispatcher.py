@@ -55,7 +55,6 @@ def main():
     parser.add_option('-p', '--poolId', dest='poolId', default='12hour')
     parser.add_option('-a', '--addPoolId', dest='addPoolId', default=None)
     parser.add_option('-t', '--test', dest='test', default=False, action='store_true')  # use the test Jenkins
-    parser.add_option('-x', '--python3', dest='python3', default=False)  # use the py3 executor
     parser.add_option('-s', '--subcomponent', dest='subcomponent', default=None)
     parser.add_option('-e', '--extraParameters', dest='extraParameters', default=None)
     parser.add_option('-y', '--serverType', dest='serverType', default='VM')  # or could be Docker
@@ -195,8 +194,6 @@ def main():
                             installParameters = 'None'
                         if 'slave' in data:
                             slave = data['slave']
-                        elif options.python3:
-                            slave = 'PY3P0'
                         else:
                             slave = 'P0'
                         if 'owner' in data:
@@ -259,8 +256,6 @@ def main():
         launchStringBase = launchStringBase + '-docker'
     if options.test:
         launchStringBase = launchStringBase + '-test'
-    if options.python3:
-        launchStringBase = launchStringBase + '-py3'
     #     if options.framework.lower() == "jython":
     if framework == "jython":
         launchStringBase = launchStringBase + '-jython'
