@@ -1,4 +1,4 @@
-from .user_base_abc import UserBase
+from user_base_abc import UserBase
 from remote.remote_util import RemoteMachineShellConnection
 
 class LdapUser(UserBase):

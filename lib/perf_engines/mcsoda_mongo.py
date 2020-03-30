@@ -3,7 +3,7 @@
 import sys
 import copy
 import time
-from . import mcsoda
+import mcsoda
 
 from pymongo import Connection # Use: pip install pymongo==2.0
 

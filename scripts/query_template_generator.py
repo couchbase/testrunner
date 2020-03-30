@@ -3,7 +3,7 @@ import sys
 import re
 
 def usage(err=None):
-    print("""\
+    print """\
 Syntax: query_template_generator.py [options]
 
 Options
@@ -14,8 +14,8 @@ Options
     --help Show this help
 
 Examples:
-  python3 scripts/query_template_generator.py --grammar grammar.yy --queries 1000
-""")
+  python scripts/query_template_generator.py --grammar grammar.yy --queries 1000
+"""
     sys.exit(0)
 
 
@@ -38,7 +38,7 @@ def generate_template(grammar_file, queries_amount, output):
         out.write(query+";"+"\n")
         counter = counter+1
     out.close()
-    print(("Total number of queries - "+str(counter)))
+    print("Total number of queries - "+str(counter))
 
 
 def has_more_patterns(parsed_tokens):
@@ -47,7 +47,7 @@ def has_more_patterns(parsed_tokens):
 
 
 def fill_patterns(filled_tokens):
-    for token in list(filled_tokens.keys()):
+    for token in filled_tokens.keys():
         token_vals = filled_tokens.get(token)
         for token_val in token_vals:
             if '::start::' in token_val:
@@ -64,7 +64,7 @@ def fill_pattern(token_val, filled_tokens):
     substitution_array = []
     substitution_vals = filled_tokens.get(found_token)
     for substitution_val in substitution_vals:
-        if len(token_val) > token_val.find("!!end!!")+8 and token_val[token_val.find("!!end!!")+8] not in ['(', ')']:
+        if len(token_val) > token_val.find("!!end!!")+8 and token_val[token_val.find("!!end!!")+8] not in ['(',')']:
             substitution_array.append(token_val[0:token_val.find("::start::")] + substitution_val+ " " + token_val[token_val.find("!!end!!")+7:])
         else:
             substitution_array.append(token_val[0:token_val.find("::start::")] + substitution_val + token_val[token_val.find("!!end!!") + 7:])
@@ -72,17 +72,17 @@ def fill_pattern(token_val, filled_tokens):
     return substitution_array
 
 def is_special_char(ch):
-    return ch in [' ', '(', ')', '*', '-', '+', '=', '/', '<', '>']
+    return ch in [' ', '(',')','*','-','+','=','/','<','>']
 
 def is_pattern(word, prepared_tokens):
-    return word in list(prepared_tokens.keys())
+    return word in prepared_tokens.keys()
 
 def find_patterns(prepared_tokens):
-    for token in list(prepared_tokens.keys()):
+    for token in prepared_tokens.keys():
         token_values = prepared_tokens.get(token)
         for ii in range(len(token_values)):
             token_value = token_values[ii]
-            if token_value.strip() in list(prepared_tokens.keys()):
+            if token_value.strip() in prepared_tokens.keys():
                 token_values[ii] = "::start::"+token_value+"!!end!!"
             else:
                 if token_value!='':
@@ -108,7 +108,7 @@ def find_patterns(prepared_tokens):
 
 
 def check_and_substitute(word, prepared_tokens):
-    if word in list(prepared_tokens.keys()):
+    if word in prepared_tokens.keys():
         token_values = prepared_tokens.get(word)
 
 
@@ -128,8 +128,8 @@ def parse_tokens(f, ):
                 tokens[current_token] = current_token_value
 
             token = line[0:len(line) - 1]
-            if token in list(tokens.keys()):
-                print("Duplicate token found - " + token)
+            if token in tokens.keys():
+                print "Duplicate token found - " + token
                 sys.exit(1)
             tokens[token] = ''
             current_token = token
@@ -142,9 +142,9 @@ def parse_tokens(f, ):
 
 def prepare_tokens(tokens):
     prepared_tokens = {}
-    for token in list(tokens.keys()):
+    for token in tokens.keys():
         token_value = tokens[token]
-        token_value = token_value.replace(";", "")
+        token_value = token_value.replace(";","")
         vals = []
         for v in token_value.split("|"):
             v = v.strip()

@@ -76,7 +76,7 @@ class NodeHelper:
                 if self.connect_ok:
                     break
             except Exception as e:
-                log.warning("{0} unreachable, {1}, retrying..".format(self.ip, e))
+                log.warn("{0} unreachable, {1}, retrying..".format(self.ip, e.message))
                 time.sleep(20)
 
     def get_os(self):
@@ -125,7 +125,7 @@ class NodeHelper:
                             break
                         self.wait_for_completion(duration, event)
                     except Exception as e:
-                        log.warning("Exception {0} occurred on {1}, retrying..".format(e, self.ip))
+                        log.warn("Exception {0} occurred on {1}, retrying..".format(e.message, self.ip))
                         self.wait_for_completion(duration, event)
             self.shell.terminate_processes(self.info, install_constants.PROCESSES_TO_TERMINATE)
 
@@ -147,7 +147,7 @@ class NodeHelper:
                             break
                         self.wait_for_completion(duration, event)
                     except Exception as e:
-                        log.warning("Exception {0} occurred on {1}, retrying..".format(e, self.ip))
+                        log.warn("Exception {0} occurred on {1}, retrying..".format(e.message, self.ip))
                         self.wait_for_completion(duration, event)
 
 
@@ -170,7 +170,7 @@ class NodeHelper:
                         break
                     self.wait_for_completion(duration, event)
                 except Exception as e:
-                    log.warning("Exception {0} occurred on {1}, retrying..".format(e, self.ip))
+                    log.warn("Exception {0} occurred on {1}, retrying..".format(e.message, self.ip))
                     self.wait_for_completion(duration, event)
         self.post_install_cb()
 
@@ -191,14 +191,14 @@ class NodeHelper:
                                     "cd " + install_constants.DOWNLOAD_DIR["WINDOWS_SERVER"] +
                                     "; vi +\"set nobomb | set fenc=ascii | x\" install_status.txt; "
                                     "grep 'Adding WIX_DOWNGRADE_DETECTED property' install_status.txt")
-                                print((check_if_downgrade * 10))
+                                print(check_if_downgrade * 10)
                             else:
                                 self.shell.execute_command(
                                     self.actions_dict[self.info.deliverable_type]["post_install_retry"],
                                     debug=self.params["debug_logs"])
                         self.wait_for_completion(duration, event)
             except Exception as e:
-                log.warning("Exception {0} occurred on {1}, retrying..".format(e, self.ip))
+                log.warn("Exception {0} occurred on {1}, retrying..".format(e.message, self.ip))
                 self.wait_for_completion(duration, event)
 
     def set_cbft_env_options(self, name, value, retries=3):
@@ -208,7 +208,6 @@ class NodeHelper:
                     ret, _ = self.shell.execute_command(install_constants.CBFT_ENV_OPTIONS[name].format(value))
                     self.shell.stop_server()
                     self.shell.start_server()
-                    time.sleep(10)
                     if ret == ['1']:
                         log.info("{0} set to {1} on {2}".format(name, value, self.ip))
                         break
@@ -255,7 +254,7 @@ class NodeHelper:
 
 
         except Exception as e:
-            log.warning("Exception {0} occurred during pre-init".format(e))
+            log.warn("Exception {0} occurred during pre-init".format(e.message))
 
     def post_init_cb(self):
         # Optionally change node name and restart server
@@ -316,7 +315,7 @@ class NodeHelper:
 
                 self.rest = RestConnection(self.node)
                 # Make sure that data_path and index_path are writable by couchbase user
-                for path in set([_f for _f in [self.node.data_path, self.node.index_path] if _f]):
+                for path in set(filter(None, [self.node.data_path, self.node.index_path])):
                     for cmd in ("rm -rf {0}/*".format(path),
                                 "chown -R couchbase:couchbase {0}".format(path)):
                         self.shell.execute_command(cmd)
@@ -337,7 +336,7 @@ class NodeHelper:
                     break
                 self.wait_for_completion(duration, event)
             except Exception as e:
-                log.warning("Exception {0} occurred on {1}, retrying..".format(e, self.ip))
+                log.warn("Exception {0} occurred on {1}, retrying..".format(e.message, self.ip))
                 self.wait_for_completion(duration, event)
         self.post_init_cb()
 
@@ -419,7 +418,7 @@ def _parse_user_input():
         userinput = TestInput.TestInputParser.get_test_input(sys.argv)
     except IndexError:
         print_result_and_exit(install_constants.USAGE)
-    except getopt.GetoptError as err:
+    except getopt.GetoptError, err:
         print_result_and_exit(str(err))
 
     # Mandatory params
@@ -429,7 +428,7 @@ def _parse_user_input():
         params["servers"] = userinput.servers
 
     # Validate and extract remaining params
-    for key, value in list(userinput.test_params.items()):
+    for key, value in userinput.test_params.items():
         if key == "debug_logs":
             params["debug_logs"] = True if value.lower() == "true" else False
         if key == "install_tasks":
@@ -449,7 +448,7 @@ def _parse_user_input():
             if value.startswith("http"):
                 params["url"] = value
             else:
-                log.warning('URL:{0} is not valid, will use version to locate build'.format(value))
+                log.warn("URL:{0} is not valid, will use version to locate build".format(value))
         if key == "type" or key == "edition" and value.lower() in install_constants.CB_EDITIONS:
             params["cb_edition"] = value.lower()
         if key == "timeout" and int(value) > 60:
@@ -487,7 +486,7 @@ def __check_servers_reachable():
             RemoteMachineShellConnection(server, exit_on_failure=False)
             reachable.append(server.ip)
         except Exception as e:
-            log.error(e)
+            log.error(e.message)
             unreachable.append(server.ip)
 
     if len(unreachable) > 0:
@@ -662,7 +661,7 @@ def check_and_retry_download_binary(cmd, node):
                 break
             time.sleep(duration)
         except Exception as e:
-            log.warning("Unable to download build: {0}, retrying..".format(e))
+            log.warn("Unable to download build: {0}, retrying..".format(e.message))
             time.sleep(duration)
     else:
         print_result_and_exit("Unable to download build in {0}s on {1}, exiting".format(timeout, node.ip))

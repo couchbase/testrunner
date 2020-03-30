@@ -99,10 +99,11 @@ class NULLTests(QueryTests):
             self.query = "select compare from %s let compare = (coverage_tests.P0 is null)" % (bucket.name)
 
             actual_list = self.run_cbq_query()
-            actual_result = actual_list['results']
+            actual_result = sorted(actual_list['results'])
             expected_result = [{"compare" : None if 'P0' not in doc["coverage_tests"] else doc["coverage_tests"]['P0'] is None}
                                for doc in self.full_list]
             expected_result = [{} if doc['compare'] is None else doc for doc in expected_result]
+            expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
     def test_let_not_null(self):
@@ -110,10 +111,11 @@ class NULLTests(QueryTests):
             self.query = "select compare from %s let compare = (coverage_tests.P0 is not null)" % (bucket.name)
 
             actual_list = self.run_cbq_query()
-            actual_result = actual_list['results']
+            actual_result = sorted(actual_list['results'])
             expected_result = [{"compare" : None if 'P0' not in doc["coverage_tests"] else doc["coverage_tests"]['P0'] is not None}
                                for doc in self.full_list]
             expected_result = [{} if doc['compare'] is None else doc for doc in expected_result]
+            expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
     def test_missing_query(self):
@@ -175,9 +177,10 @@ class NULLTests(QueryTests):
             self.query = "select compare from %s let compare = (coverage_tests.P0 is missing)" % (bucket.name)
 
             actual_list = self.run_cbq_query()
-            actual_result = actual_list['results']
+            actual_result = sorted(actual_list['results'])
             expected_result = [{"compare" : 'P0' not in doc["coverage_tests"]}
                                for doc in self.full_list]
+            expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
     def test_let_not_missing(self):
@@ -185,9 +188,10 @@ class NULLTests(QueryTests):
             self.query = "select compare from %s let compare = (coverage_tests.P0 is not missing)" % (bucket.name)
 
             actual_list = self.run_cbq_query()
-            actual_result = actual_list['results']
+            actual_result = sorted(actual_list['results'])
             expected_result = [{"compare" : 'P0' in doc["coverage_tests"]}
                                for doc in self.full_list]
+            expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
     def test_not_missing_query(self):
@@ -277,9 +281,10 @@ class NULLTests(QueryTests):
             self.query = "select compare from %s let compare = (coverage_tests.P0 is valued)" % (bucket.name)
 
             actual_list = self.run_cbq_query()
-            actual_result = actual_list['results']
+            actual_result = sorted(actual_list['results'])
             expected_result = [{"compare" : 'P0' in doc["coverage_tests"] and doc['coverage_tests']['P0'] is not None}
                                for doc in self.full_list]
+            expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
     def test_let_not_valued(self):
@@ -287,9 +292,10 @@ class NULLTests(QueryTests):
             self.query = "select compare from %s let compare = (coverage_tests.P0 is not valued)" % (bucket.name)
 
             actual_list = self.run_cbq_query()
-            actual_result = actual_list['results']
+            actual_result = sorted(actual_list['results'])
             expected_result = [{"compare" : 'P0' not in doc["coverage_tests"] or doc['coverage_tests']['P0'] is None}
                                for doc in self.full_list]
+            expected_result = sorted(expected_result)
             self._verify_results(actual_result, expected_result)
 
     def test_precedense(self):
@@ -303,7 +309,8 @@ class NULLTests(QueryTests):
                                for doc in self.full_list
                                if "P0" in doc['coverage_tests'] and\
                                 doc['coverage_tests']['P0'] is not None]
-            actual_result = actual_result['results']
+            expected_result = sorted(expected_result)
+            actual_result = sorted(actual_result['results'])
             self._verify_results(actual_result, expected_result)
 
     def test_nulls_over(self):

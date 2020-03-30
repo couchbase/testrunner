@@ -9,8 +9,8 @@ from couchbase_helper.tuq_generators import TuqGenerators
 from couchbase_helper.query_definitions import QueryDefinition, SQLDefinitionGenerator
 from remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection, RestHelper
-from .upgrade_2i import UpgradeSecondaryIndex
-from .base_2i import BaseSecondaryIndexingTests
+from upgrade_2i import UpgradeSecondaryIndex
+from base_2i import BaseSecondaryIndexingTests
 
 log = logging.getLogger(__name__)
 INT64_VALUES = [-9223372036854775808, 9223372036854775807, 9223372036854770000, 9000000000000000000,
@@ -149,7 +149,7 @@ class UpgradeSecondaryIndexInt64(UpgradeSecondaryIndex):
             node_services_list = node_rest.get_nodes_services()[node_info]
             node_services = [",".join(node_services_list)]
             log.info("Rebalancing the node out...")
-            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [node])
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],[], [node])
             rebalance.result()
             self.sleep(100)
             active_nodes = [srvr for srvr in self.servers if srvr.ip != node.ip]
@@ -212,7 +212,7 @@ class UpgradeSecondaryIndexInt64(UpgradeSecondaryIndex):
         for node in upgrade_nodes_list:
             self._install([swap_server], version=self.upgrade_to)
             service_on_node = service_map[node.ip]
-            log.info("Swapping %s with %s with %s services" % (node, swap_server, service_on_node))
+            log.info("Swapping %s with %s with %s services" % (node,swap_server,service_on_node))
             servers = old_servers
             rebalance = self.cluster.async_rebalance(servers,
                                                      [swap_server], [node],
@@ -226,8 +226,8 @@ class UpgradeSecondaryIndexInt64(UpgradeSecondaryIndex):
                 self.master = swap_server
             swap_server = node
             self.n1ql_node = self.get_nodes_from_services_map(
-                service_type="n1ql", master=old_servers[0])
-            log.info("Master : %s", self.master)
+                service_type="n1ql",master=old_servers[0])
+            log.info("Master : %s",self.master)
 
         log.info("===== Nodes Swapped with Upgraded versions =====")
         self.upgrade_servers = self.nodes_in_list
@@ -286,7 +286,7 @@ class UpgradeSecondaryIndexInt64(UpgradeSecondaryIndex):
 
     def test_online_upgrade_with_rebalance_stats(self):
         upgrade_nodes = self.servers[:self.nodes_init]
-        create_index_query1 = "CREATE INDEX idx ON default(name) USING GSI  WITH {'nodes': ['%s:%s']}" % (self.servers[1].ip, self.servers[1].port)
+        create_index_query1 = "CREATE INDEX idx ON default(name) USING GSI  WITH {'nodes': ['%s:%s']}" % (self.servers[1].ip,self.servers[1].port)
         self.n1ql_helper.run_cbq_query(query=create_index_query1,
                                        server=self.n1ql_node)
         if self.disable_plasma_upgrade:
@@ -304,7 +304,7 @@ class UpgradeSecondaryIndexInt64(UpgradeSecondaryIndex):
             node_services_list = node_rest.get_nodes_services()[node_info]
             node_services = [",".join(node_services_list)]
             log.info("Rebalancing the node out...")
-            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [node])
+            rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],[], [node])
             rebalance.result()
             self.sleep(30)
             active_nodes = [srvr for srvr in self.servers if srvr.ip != node.ip]
@@ -434,11 +434,11 @@ class UpgradeSecondaryIndexInt64(UpgradeSecondaryIndex):
                 self.create_index(bucket.name, query_def)
 
     def _query_index(self, phase):
-        if phase not in list(self.query_results.keys()):
+        if phase not in self.query_results.keys():
             self.query_results[phase] = {}
         query_results = {}
         for query_def in self.query_definitions:
-            if query_def.index_name not in list(query_results.keys()):
+            if query_def.index_name not in query_results.keys():
                 query_results[query_def.index_name] = []
                 for query in query_def.query_template:
                     query = query.format(query_def.index_name)
@@ -455,7 +455,7 @@ class UpgradeSecondaryIndexInt64(UpgradeSecondaryIndex):
             elif not index_name.endswith("_long_num_name"):
                 for i in range(len(self.query_results["pre_upgrade"][index_name])):
                     if sorted(self.query_results["pre_upgrade"][index_name][i]) != sorted(self.query_results["post_upgrade"][index_name][i]):
-                        if index_name not in list(wrong_results.keys()):
+                        if index_name not in wrong_results.keys():
                             wrong_results[index_name] = query_def.query_template
                         else:
                             wrong_results[index_name].extend(query_def.query_template)
@@ -491,7 +491,7 @@ class SecondaryIndexIndexInt64(BaseSecondaryIndexingTests):
         if "long_num" in index_name or "long_arr" in index_name or not index_name.endswith("_long_num_name"):
             return
         if sorted(query_results) != sorted(primary_results):
-                if index_name not in list(wrong_results.keys()):
+                if index_name not in wrong_results.keys():
                     wrong_results[index_name] = [query]
                 else:
                     wrong_results[index_name].append(query)

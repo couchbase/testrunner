@@ -1,11 +1,10 @@
-import io
 import random
 import string
 import sys
 from datetime import datetime
 import pytz
 import collections
-from .constants import Constants as constants
+import constants
 
 
 class ValueGenerator(object):
@@ -25,8 +24,8 @@ class ValueGenerator(object):
                 0o310,  # Octal
                 0x12c,  # Hex
                 3.14e8,  # Exponential
-                2147483648,  # Long int
-                "\u00dcnic\u00f6de",  # Unicode
+                2147483648L,  # Long int
+                u"\u00dcnic\u00f6de",  # Unicode
                 True + 5,  # Boolean
                 False - 5,
                 None,  # Special
@@ -44,8 +43,8 @@ class ValueGenerator(object):
 
     def array_mix(self):
         ret = []
-        for val in list(self.sub_doc().values()):
-            ret.append(list(val.values()))
+        for val in self.sub_doc().values():
+            ret.append(val.values())
         return ret
 
     def array_numbers(self, num_min=0, num_max=10):
@@ -116,12 +115,13 @@ class ValueGenerator(object):
             # Insurance against maximum recursion depth exceeded exception
             return {{{}}}
 
-    def rand_float(self, min=sys.float_info.min, max=sys.float_info.max, operations=[], relations=[], operands=[], generate_filter=False, negative=False):
+    def rand_float(self, min=sys.float_info.min, max=sys.float_info.max, operations=[], relations=[], operands=[],
+                   generate_filter=False, negative=False):
         filter_exp = []
         rand_float = 1
-        if bool(negative):
-            self.float_min= 1 if min == 0 else min
-            rand_float=-1
+        if negative:
+            self.float_min = 1 if min == 0 else min
+            rand_float = -1
         else:
             self.float_min = 0 if min < 0 else min
         self.float_max = sys.float_info.max if self.float_min >= max else max
@@ -146,7 +146,7 @@ class ValueGenerator(object):
 
     def __generate_expressions(self, keys, operations, relations, operands):
         exps = []
-        for _ in range(constants.NUM_OPS):
+        for _ in xrange(constants.NUM_OPS):
             if "ARITHMETIC_BINARIES" in operations:
                 ex = random.choice(constants.ARITHMETIC_BINARIES) % (
                     random.choice(keys), random.choice(operands)) + random.choice(relations) + str(
@@ -165,10 +165,11 @@ class ValueGenerator(object):
                 exps.append(ex)
         return exps
 
-    def rand_int(self, min=0, max=sys.maxsize, operations=[], relations=[], operands=[], negative=False, generate_filter=False):
+    def rand_int(self, min=0, max=sys.maxsize, operations=[], relations=[], operands=[], negative=False,
+                 generate_filter=False):
         filter_exp = []
         rand_int = 1
-        if bool(negative):
+        if negative:
             self.int_min = 1 if min == 0 else min
             rand_int = -1
         else:
@@ -193,7 +194,7 @@ class ValueGenerator(object):
             string.ascii_letters * 40 + \
             string.digits * 10 + \
             string.whitespace * 40 + \
-            string.punctuation * 10) for _ in range(random.randint(self.len_min, self.len_max)))
+            string.punctuation * 10) for _ in xrange(random.randint(self.len_min, self.len_max)))
         if generate_filter:
             string_types = [key for key in constants.generator_methods.keys() if key.startswith("string")]
             operand_values = self.__generate_operand_values(string_types)
@@ -207,7 +208,7 @@ class ValueGenerator(object):
         self.len_max = int(len_max)
         return ''.join(random.choice(
             string.digits
-        ) for _ in range(random.randint(self.len_min, self.len_max)))
+        ) for _ in xrange(random.randint(self.len_min, self.len_max)))
 
     def rand_reserved(self):
         return random.choice(constants.niql_reserved_keywords)

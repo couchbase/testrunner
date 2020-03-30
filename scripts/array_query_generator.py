@@ -293,7 +293,7 @@ class ArrayGenerator(object):
 	def generate_query_pairs(self):
 		global cnt
 		query_array = []
-		for i in range(0, len(cfg["sql1name"])):
+		for i in xrange(0, len(cfg["sql1name"])):
 			t1 = cfg["sql1name"][i]
 			for t2 in cfg[t1]:
 				joinconds = self.common_field(i, t2)
@@ -326,7 +326,7 @@ class ArrayGenerator(object):
 						cond_less_array = self.less_array(t2, idxfield, idxfield2, alias)
 						array_condition.append(cond_larger_array)
 						array_condition.append(cond_less_array)
-					for j in range(0, len(array_condition)):
+					for j in xrange(0, len(array_condition)):
 						s1, s2 = self.generate_statement(i, t2, cond, array_condition[j])
 						query_array.append(s2)
 						cnt = cnt + 1
@@ -336,7 +336,7 @@ cnt = 0
 def main():
 	print("Here")
 	final_list = []
-	for i in range(cfg["nqueries"]):
+	for i in xrange(cfg["nqueries"]):
 		query_array = ArrayGenerator().generate_query_pairs()
 		final_list += query_array
 	global cnt

@@ -38,11 +38,11 @@ class AutoReprovisionBaseTest(unittest.TestCase):
         # Add built-in user
         testuser = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'password': 'password'}]
         RbacBase().create_user_source(testuser, 'builtin', servers[0])
-   
+
         # Assign user to role
         role_list = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'roles': 'admin'}]
         RbacBase().add_user_role(role_list, RestConnection(servers[0]), 'builtin')
-   
+
         log.info("==============  common_setup was finished for test #{0} {1} ==============" \
                  .format(testcase.case_number, testcase._testMethodName))
 
@@ -86,7 +86,7 @@ class AutoReprovisionBaseTest(unittest.TestCase):
 
         rest = RestConnection(master)
         rest.print_UI_logs()
-        testcase.log.warning("pools/default from {0} : {1}".format(master.ip, rest.cluster_status()))
+        testcase.log.warn("pools/default from {0} : {1}".format(master.ip, rest.cluster_status()))
         testcase.fail("{0} nodes failed over, expected {1} in {2} seconds".
                       format(failover_count, autofailover_count, time.time() - time_start))
 
@@ -110,7 +110,7 @@ class AutoReprovisionBaseTest(unittest.TestCase):
 
         rest = RestConnection(master)
         rest.print_UI_logs()
-        testcase.log.warning("pools/default from {0} : {1}".format(master.ip, rest.cluster_status()))
+        testcase.log.warn("pools/default from {0} : {1}".format(master.ip, rest.cluster_status()))
         testcase.fail("{0} nodes warmup, expected {1} in {2} seconds".
                       format(num_nodes_with_warmup, warmup_count, time.time() - time_start))
 
@@ -182,9 +182,9 @@ class AutoReprovisionTests(unittest.TestCase):
     def test_default_values(self):
         # read settings and verify
         settings = self.rest.get_autoreprovision_settings()
-        self.assertEqual(settings.enabled, True)
-        self.assertEqual(settings.max_nodes, 1)
-        self.assertEqual(settings.count, 0)
+        self.assertEquals(settings.enabled, True)
+        self.assertEquals(settings.max_nodes, 1)
+        self.assertEquals(settings.count, 0)
 
     def test_enable(self):
         status = self.rest.update_autoreprovision_settings(True, 2)
@@ -192,9 +192,9 @@ class AutoReprovisionTests(unittest.TestCase):
             self.fail('failed to change autoreprovision_settings!')
         # read settings and verify
         settings = self.rest.get_autoreprovision_settings()
-        self.assertEqual(settings.enabled, True)
-        self.assertEqual(settings.max_nodes, 2)
-        self.assertEqual(settings.count, 0)
+        self.assertEquals(settings.enabled, True)
+        self.assertEquals(settings.max_nodes, 2)
+        self.assertEquals(settings.count, 0)
 
     def test_disable(self):
         status = self.rest.update_autoreprovision_settings(False, 2)
@@ -202,9 +202,9 @@ class AutoReprovisionTests(unittest.TestCase):
             self.fail('failed to change autoreprovision_settings!')
         # read settings and verify
         settings = self.rest.get_autoreprovision_settings()
-        self.assertEqual(settings.enabled, False)
-        self.assertEqual(settings.max_nodes, 1)
-        self.assertEqual(settings.count, 0)
+        self.assertEquals(settings.enabled, False)
+        self.assertEquals(settings.max_nodes, 1)
+        self.assertEquals(settings.count, 0)
 
     def test_valid_max_nodes(self):
         max_nodes = [1, 2, 5, 10, 100]  # 0?
@@ -214,10 +214,10 @@ class AutoReprovisionTests(unittest.TestCase):
                 self.fail('failed to change autoreprovision_settings!')
             # read settings and verify
             settings = self.rest.get_autoreprovision_settings()
-            self.assertEqual(settings.max_nodes, max_node)
+            self.assertEquals(settings.max_nodes, max_node)
 
     def test_node_firewall_enabled(self):
-        timeout = self.timeout // 2
+        timeout = self.timeout / 2
 
         status = self.rest.update_autoreprovision_settings(True, 1)
         if not status:
@@ -240,7 +240,7 @@ class AutoReprovisionTests(unittest.TestCase):
             self.verify_loaded_data(self.master, bucket.name, self.loaded_items[bucket.name])
 
     def test_node_stop(self):
-        timeout = self.timeout // 2
+        timeout = self.timeout / 2
         status = self.rest.update_autoreprovision_settings(True, 1)
         if not status:
             self.fail('failed to change autoreprovision_settings!')
@@ -265,7 +265,7 @@ class AutoReprovisionTests(unittest.TestCase):
             self.verify_loaded_data(self.master, bucket.name, self.loaded_items[bucket.name])
 
     def test_node_cb_restart(self):
-        timeout = self.timeout // 2
+        timeout = self.timeout / 2
         status = self.rest.update_autoreprovision_settings(True, 1)
         if not status:
             self.fail('failed to change autoreprovision_settings!')
@@ -290,7 +290,7 @@ class AutoReprovisionTests(unittest.TestCase):
 
     def test_node_reboot(self):
         wait_timeout = 120
-        timeout = self.timeout // 2
+        timeout = self.timeout / 2
         status = self.rest.update_autoreprovision_settings(True, 1)
         if not status:
             self.fail('failed to change autoreprovision_settings!')
@@ -320,7 +320,7 @@ class AutoReprovisionTests(unittest.TestCase):
     def test_firewall_node_when_autoreprovisioning(self):
         wait_timeout = 120
         before = self.input.param("before", True)
-        timeout = self.timeout // 2
+        timeout = self.timeout / 2
         status = self.rest.update_autoreprovision_settings(True, 1)
         if not status:
             self.fail('failed to change autoreprovision_settings!')
@@ -366,7 +366,7 @@ class AutoReprovisionTests(unittest.TestCase):
             self.verify_loaded_data(self.master, bucket.name, self.loaded_items[bucket.name])
 
     def test_node_memcached_failure(self):
-        timeout = self.timeout // 2
+        timeout = self.timeout / 2
         status = self.rest.update_autoreprovision_settings(True, 1)
         if not status:
             self.fail('failed to change autoreprovision_settings!')
@@ -388,7 +388,7 @@ class AutoReprovisionTests(unittest.TestCase):
             self.verify_loaded_data(self.master, bucket.name, self.loaded_items[bucket.name])
 
     def test_two_failed_nodes(self):
-        timeout = self.timeout // 2
+        timeout = self.timeout / 2
         server_fail1 = self.servers[1]
         server_fail2 = self.servers[2]
         status = self.rest.update_autoreprovision_settings(True, 1)
@@ -427,7 +427,7 @@ class AutoReprovisionTests(unittest.TestCase):
         self.assertTrue(self.rest.monitorRebalance())
 
     def test_reset_count(self):
-        timeout = self.timeout // 2
+        timeout = self.timeout / 2
         server_fail1 = self.servers[1]
         server_fail2 = self.servers[2]
         status = self.rest.update_autoreprovision_settings(True, 2)
@@ -451,24 +451,24 @@ class AutoReprovisionTests(unittest.TestCase):
                                                             self)
 
         settings = self.rest.get_autoreprovision_settings()
-        self.assertEqual(settings.enabled, True)
-        self.assertEqual(settings.max_nodes, 2)
-        self.assertEqual(settings.count, 0)
+        self.assertEquals(settings.enabled, True)
+        self.assertEquals(settings.max_nodes, 2)
+        self.assertEquals(settings.count, 0)
 
         self._start_couchbase(server_fail2)
         self._start_couchbase(server_fail1)
         self.sleep(30)
         settings = self.rest.get_autoreprovision_settings()
-        self.assertEqual(settings.enabled, True)
-        self.assertEqual(settings.max_nodes, 2)
-        self.assertEqual(settings.count, 2)
+        self.assertEquals(settings.enabled, True)
+        self.assertEquals(settings.max_nodes, 2)
+        self.assertEquals(settings.count, 2)
         self.log.info("resetting the autoreprovision count")
         if not self.rest.reset_autoreprovision():
             self.fail('failed to reset autoreprovision count!')
         settings = self.rest.get_autoreprovision_settings()
-        self.assertEqual(settings.enabled, True)
-        self.assertEqual(settings.max_nodes, 2)
-        self.assertEqual(settings.count, 0)
+        self.assertEquals(settings.enabled, True)
+        self.assertEquals(settings.max_nodes, 2)
+        self.assertEquals(settings.count, 0)
 
         helper = RestHelper(self.rest)
         self.assertTrue(helper.is_cluster_healthy(), "cluster status is not healthy")
@@ -484,20 +484,20 @@ class AutoReprovisionTests(unittest.TestCase):
                 self.fail('autoreprovision_settings have been changed incorrectly!')
             # read settings and verify
             settings = self.rest.get_autoreprovision_settings()
-            self.assertEqual(settings.max_nodes, 1)
+            self.assertEquals(settings.max_nodes, 1)
 
     def test_node_memcached_failure_in_series(self):
-        timeout = self.timeout // 2
+        timeout = self.timeout / 2
         status = self.rest.update_autoreprovision_settings(True, 1)
         if not status:
             self.fail('failed to change autoreprovision_settings!')
         self.sleep(5)
         data_lost = False
-        for i in reversed(range(len(self.servers))):
-            print(self.servers[i])
+        for i in reversed(xrange(len(self.servers))):
+            print self.servers[i]
             operation = random.choice(['stop', 'memcached_failure', 'restart', 'failover', 'reboot'])
             shell = RemoteMachineShellConnection(self.servers[i])
-            print("operation", operation)
+            print "operation", operation
             if i == 0:
                 self.master = self.servers[1]
             if operation == 'stop':
@@ -550,7 +550,7 @@ class AutoReprovisionTests(unittest.TestCase):
                     self.verify_loaded_data(self.master, bucket.name, self.loaded_items[bucket.name])
 
     def test_ui_logs(self):
-        timeout = self.timeout // 2
+        timeout = self.timeout / 2
         server_fail1 = self.servers[1]
         server_fail2 = self.servers[2]
         status = self.rest.update_autoreprovision_settings(True, 2)
@@ -558,7 +558,7 @@ class AutoReprovisionTests(unittest.TestCase):
             self.fail('failed to change autoreprovision_settings!')
         self.sleep(5)
         logs = self.rest.get_logs(5)
-        self.assertTrue('Enabled auto-reprovision config with max_nodes set to 2' in [l['text'] for l in logs])
+        self.assertTrue(u'Enabled auto-reprovision config with max_nodes set to 2' in [l['text'] for l in logs])
 
         self.log.info("stopping the first server")
         self._stop_couchbase(server_fail1)
@@ -570,7 +570,7 @@ class AutoReprovisionTests(unittest.TestCase):
         if not self.rest.reset_autoreprovision():
             self.fail('failed to reset autoreprovision count!')
         logs = self.rest.get_logs(5)
-        self.assertTrue('auto-reprovision count reset from 0' in [l['text'] for l in logs])
+        self.assertTrue(u'auto-reprovision count reset from 0' in [l['text'] for l in logs])
 
         self.log.info("stopping the second server")
         self._stop_couchbase(server_fail2)
@@ -578,29 +578,29 @@ class AutoReprovisionTests(unittest.TestCase):
                                                             timeout + AutoReprovisionBaseTest.MAX_FAIL_DETECT_TIME,
                                                             self)
         settings = self.rest.get_autoreprovision_settings()
-        self.assertEqual(settings.enabled, True)
-        self.assertEqual(settings.max_nodes, 2)
-        self.assertEqual(settings.count, 0)
+        self.assertEquals(settings.enabled, True)
+        self.assertEquals(settings.max_nodes, 2)
+        self.assertEquals(settings.count, 0)
         self._start_couchbase(server_fail2)
         self._start_couchbase(server_fail1)
         self.sleep(30)
         settings = self.rest.get_autoreprovision_settings()
-        self.assertEqual(settings.enabled, True)
-        self.assertEqual(settings.max_nodes, 2)
-        self.assertEqual(settings.count, 2)
+        self.assertEquals(settings.enabled, True)
+        self.assertEquals(settings.max_nodes, 2)
+        self.assertEquals(settings.count, 2)
         logs = self.rest.get_logs(5)
-        self.assertTrue('auto-reprovision is disabled as maximum number of nodes (2) '
-                        'that can be auto-reprovisioned has been reached.' in [l['text'] for l in logs])
+        self.assertTrue(u'auto-reprovision is disabled as maximum number of nodes (2) '
+                        u'that can be auto-reprovisioned has been reached.' in [l['text'] for l in logs])
 
         self.log.info("resetting the autoreprovision count")
         if not self.rest.reset_autoreprovision():
             self.fail('failed to reset autoreprovision count!')
         settings = self.rest.get_autoreprovision_settings()
-        self.assertEqual(settings.enabled, True)
-        self.assertEqual(settings.max_nodes, 2)
-        self.assertEqual(settings.count, 0)
+        self.assertEquals(settings.enabled, True)
+        self.assertEquals(settings.max_nodes, 2)
+        self.assertEquals(settings.count, 0)
         logs = self.rest.get_logs(5)
-        self.assertTrue('auto-reprovision count reset from 2' in [l['text'] for l in logs])
+        self.assertTrue(u'auto-reprovision count reset from 2' in [l['text'] for l in logs])
 
         helper = RestHelper(self.rest)
         self.assertTrue(helper.is_cluster_healthy(), "cluster status is not healthy")
@@ -609,8 +609,8 @@ class AutoReprovisionTests(unittest.TestCase):
         self.assertTrue(self.rest.monitorRebalance())
         logs = self.rest.get_logs(5)
         # https://issues.couchbase.com/browse/MB-24520
-        self.assertFalse('Reset auto-failover count' in [l['text'] for l in logs])
-        self.assertTrue('Rebalance completed successfully.' in [l['text'] for l in logs])
+        self.assertFalse(u'Reset auto-failover count' in [l['text'] for l in logs])
+        self.assertTrue(u'Rebalance completed successfully.' in [l['text'] for l in logs])
 
     def _stop_couchbase(self, server):
         shell = RemoteMachineShellConnection(server)
@@ -700,7 +700,7 @@ class AutoReprovisionTests(unittest.TestCase):
         bucket_count_map = rest.get_buckets_itemCount()
         msg = "Before count : {0} , After count : {1}"
         log.info(msg.format(inserted_count, bucket_count_map[bucket]))
-        self.assertEqual(bucket_count_map[bucket], inserted_count,
+        self.assertEquals(bucket_count_map[bucket], inserted_count,
                           msg="unable to verify keys after restore")
 
     def _cluster_setup(self):
@@ -722,7 +722,7 @@ class AutoReprovisionTests(unittest.TestCase):
 
         if num_buckets == 1:
             bucket_name = "default"
-            bucket_ram = info.memoryQuota * 2 // 3
+            bucket_ram = 200
             rest.create_bucket(bucket=bucket_name,
                                ramQuotaMB=bucket_ram,
                                replicaNumber=self.replicas,

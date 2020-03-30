@@ -19,7 +19,7 @@ class UTF_16_Generator(KVGenerator):
         self.value_size = value_size
         self.itr = self.start
 
-    def __next__(self):
+    def next(self):
         if self.itr >= self.end:
             raise StopIteration
 

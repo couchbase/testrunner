@@ -27,7 +27,7 @@ class SwapRebalanceBase(unittest.TestCase):
         self.servers = self.input.servers
         serverInfo = self.servers[0]
         rest = RestConnection(serverInfo)
-        if len({server.ip for server in self.servers}) == 1:
+        if len(set([server.ip for server in self.servers])) == 1:
             ip = rest.get_nodes_self().ip
             for server in self.servers:
                 server.ip = ip
@@ -79,7 +79,7 @@ class SwapRebalanceBase(unittest.TestCase):
             self.log.info("==============  SwapRebalanceBase setup was finished for test #{0} {1} =============="
                       .format(self.case_number, self._testMethodName))
             SwapRebalanceBase._log_start(self)
-        except Exception as e:
+        except Exception, e:
             self.cluster_helper.shutdown()
             self.fail(e)
 
@@ -91,7 +91,7 @@ class SwapRebalanceBase(unittest.TestCase):
                    or (hasattr(self, '_exc_info') and self._exc_info()[1] is not None)
         if test_failed and TestInputSingleton.input.param("stop-on-failure", False)\
                         or self.input.param("skip_cleanup", False):
-                    self.log.warning("CLEANUP WAS SKIPPED")
+                    self.log.warn("CLEANUP WAS SKIPPED")
         else:
             SwapRebalanceBase.reset(self)
             SwapRebalanceBase._log_finish(self)
@@ -223,7 +223,7 @@ class SwapRebalanceBase(unittest.TestCase):
         rest = RestConnection(master)
         for bucket in rest.get_buckets():
             loader = dict()
-            loader["mcsoda"] = LoadWithMcsoda(master, self.keys_count // 2, bucket=bucket.name,
+            loader["mcsoda"] = LoadWithMcsoda(master, self.keys_count / 2, bucket=bucket.name,
                     rest_password=master.rest_password, prefix=str(bucket.name), port=8091)
             loader["mcsoda"].cfg["ratio-sets"] = 0.8
             loader["mcsoda"].cfg["ratio-hot"] = 0.2
@@ -344,7 +344,7 @@ class SwapRebalanceBase(unittest.TestCase):
                         self.log.error("rebalance progress code : {0}".format(progress))
                         break
                     elif progress == 100:
-                        self.log.warning("Rebalance has already reached 100%")
+                        self.log.warn("Rebalance has already reached 100%")
                         break
                     elif progress >= expected_progress:
                         self.log.info("Rebalance will be stopped with {0}%".format(progress))
@@ -439,7 +439,7 @@ class SwapRebalanceBase(unittest.TestCase):
             times = 2
             if self.cluster_run:
                 times = 20
-            for i in range(times):
+            for i in xrange(times):
                 try:
                     _mc = MemcachedClientHelper.direct_client(master, bucket)
                     pid = _mc.stats()["pid"]
@@ -469,12 +469,12 @@ class SwapRebalanceBase(unittest.TestCase):
             rest.monitorRebalance()
         except RebalanceFailedException:
             # retry rebalance if it failed
-            self.log.warning("Rebalance failed but it's expected")
+            self.log.warn("Rebalance failed but it's expected")
             SwapRebalanceBase.sleep(self, 30)
             self.assertFalse(RestHelper(rest).is_cluster_rebalanced(), msg="cluster need rebalance")
             knownNodes = rest.node_statuses();
             self.log.info("nodes are still in cluster: {0}".format([(node.ip, node.port) for node in knownNodes]))
-            ejectedNodes = list(set(optNodesIds) & {node.id for node in knownNodes})
+            ejectedNodes = list(set(optNodesIds) & set([node.id for node in knownNodes]))
             rest.rebalance(otpNodes=[node.id for node in knownNodes], ejectedNodes=ejectedNodes)
             SwapRebalanceBase.sleep(self, 10, "Wait for rebalance to start")
             self.assertTrue(rest.monitorRebalance(),
@@ -561,7 +561,7 @@ class SwapRebalanceBase(unittest.TestCase):
         add_back_servers = []
         nodes = rest.get_nodes()
         for server in nodes:
-            if isinstance(server.ip, str):
+            if isinstance(server.ip, unicode):
                 add_back_servers.append(server)
         final_add_back_servers = []
         for server in self.servers:

@@ -119,7 +119,7 @@ class RebalanceInTests(RebalanceBaseTest):
         self.data_analysis_active_replica_all(disk_active_dataset, disk_replica_dataset, self.servers[:self.nodes_in + self.nodes_init], self.buckets, path=None)
         self.verify_unacked_bytes_all_buckets()
         nodes = self.get_nodes_in_cluster(self.master)
-        self.vb_distribution_analysis(servers = nodes, buckets = self.buckets, std = 1.0, total_vbuckets = self.total_vbuckets)
+        self.vb_distribution_analysis(servers = nodes, buckets = self.buckets, std = 1.0 , total_vbuckets = self.total_vbuckets)
 
     """Rebalances  after we do add node and graceful failover
 
@@ -173,14 +173,14 @@ class RebalanceInTests(RebalanceBaseTest):
         if fail_over:
             self.assertTrue(self.rest.monitorRebalance(stop_if_loop=True), msg="Graceful Failover Failed")
         self.nodes = self.rest.node_statuses()
-        self.rest.rebalance(otpNodes=[node.id for node in self.nodes], ejectedNodes=[chosen[0].id])
+        self.rest.rebalance(otpNodes=[node.id for node in self.nodes],ejectedNodes=[chosen[0].id])
         self.assertTrue(self.rest.monitorRebalance(stop_if_loop=True), msg="Rebalance Failed")
 
         # Validate seq_no snap_start/stop values after rebalance
         self.check_snap_start_corruption()
 
         # Verification
-        new_server_list = self.add_remove_servers(self.servers, self.servers[:self.nodes_init], [chosen[0]], [self.servers[self.nodes_init]])
+        new_server_list = self.add_remove_servers(self.servers,self.servers[:self.nodes_init],[chosen[0]],[self.servers[self.nodes_init]])
         self._verify_stats_all_buckets(new_server_list, timeout=120)
         self.verify_cluster_stats(new_server_list, check_ep_items_remaining = True)
         self.compare_failovers_logs(prev_failover_stats, new_server_list, self.buckets)
@@ -188,7 +188,7 @@ class RebalanceInTests(RebalanceBaseTest):
         self.data_analysis_active_replica_all(disk_active_dataset, disk_replica_dataset, new_server_list, self.buckets, path=None)
         self.verify_unacked_bytes_all_buckets()
         nodes = self.get_nodes_in_cluster(self.master)
-        self.vb_distribution_analysis(servers = nodes, buckets = self.buckets, std = 1.0, total_vbuckets = self.total_vbuckets)
+        self.vb_distribution_analysis(servers = nodes, buckets = self.buckets, std = 1.0 , total_vbuckets = self.total_vbuckets)
 
     """Rebalances nodes into a cluster while doing docs ops:create, delete, update.
 
@@ -201,8 +201,8 @@ class RebalanceInTests(RebalanceBaseTest):
     Once all nodes have been rebalanced in the test is finished."""
     def rebalance_in_with_ops(self):
         tasks = list()
-        gen_delete = BlobGenerator('mike', 'mike-', self.value_size, start=self.num_items // 2, end=self.num_items)
-        gen_create = BlobGenerator('mike', 'mike-', self.value_size, start=self.num_items + 1, end=self.num_items * 3//2)
+        gen_delete = BlobGenerator('mike', 'mike-', self.value_size, start=self.num_items / 2, end=self.num_items)
+        gen_create = BlobGenerator('mike', 'mike-', self.value_size, start=self.num_items + 1, end=self.num_items * 3/2)
         servs_in = [self.servers[i + self.nodes_init] for i in range(self.nodes_in)]
         if self.doc_ops is not None:
             # define which doc's ops will be performed during rebalancing
@@ -252,8 +252,8 @@ class RebalanceInTests(RebalanceBaseTest):
                 # 1/2th of initial data will be added in each iteration
                 gen_create = BlobGenerator(
                     'mike', 'mike-', self.value_size,
-                    start=self.num_items * (1 + i) // 2.0,
-                    end=self.num_items * (1 + i // 2.0))
+                    start=self.num_items * (1 + i) / 2.0,
+                    end=self.num_items * (1 + i / 2.0))
                 tasks += self._async_load_all_buckets(
                     self.master, gen_create, "create", 0,
                     batch_size=20000, pause_secs=5, timeout_secs=180)
@@ -261,8 +261,8 @@ class RebalanceInTests(RebalanceBaseTest):
                  # 1/(num_servers) of initial data will be removed after each iteration
                 # at the end we should get empty base( or couple items)
                 gen_delete = BlobGenerator('mike', 'mike-', self.value_size,
-                                           start=int(self.num_items * (1 - i // (self.num_servers - 1.0))) + 1,
-                                           end=int(self.num_items * (1 - (i - 1) // (self.num_servers - 1.0))))
+                                           start=int(self.num_items * (1 - i / (self.num_servers - 1.0))) + 1,
+                                           end=int(self.num_items * (1 - (i - 1) / (self.num_servers - 1.0))))
                 tasks += self._async_load_all_buckets(
                     self.master, gen_delete, "delete", 0,
                     batch_size=20000, pause_secs=5, timeout_secs=180)
@@ -292,14 +292,14 @@ class RebalanceInTests(RebalanceBaseTest):
             RestConnection(self.master).set_auto_compaction(dbFragmentThreshold=100, bucket = bucket.name)
         num_items = self.expiry_items
         expiry_range = self.max_expiry
-        for x in range(1, self.total_loader_threads):
+        for x in range(1,self.total_loader_threads):
             t = threading.Thread(target=self.run_mc_bin_client, args = (num_items, expiry_range))
             t.daemon = True
             t.start()
             thread_list.append(t)
         for t in thread_list:
             t.join()
-        for x in range(1, self.total_loader_threads):
+        for x in range(1,self.total_loader_threads):
             num_items = 1000000
             t = threading.Thread(target=self.run_mc_bin_client, args = (num_items, expiry_range))
             t.daemon = True
@@ -307,7 +307,7 @@ class RebalanceInTests(RebalanceBaseTest):
             thread_list.append(t)
         self.sleep(20)
         tasks = []
-        for x in range(1, self.rebalance_attempts):
+        for x in range(1,self.rebalance_attempts):
             servs_in = [self.servers[i + self.nodes_init] for i in range(self.nodes_in)]
             rebalance = self.cluster.async_rebalance(
                 self.servers[:self.nodes_init], servs_in, [],
@@ -327,8 +327,8 @@ class RebalanceInTests(RebalanceBaseTest):
             task.result()
 
     def rebalance_in_with_ops_batch(self):
-        gen_delete = BlobGenerator('mike', 'mike-', self.value_size, start=(self.num_items // 2 - 1), end=self.num_items)
-        gen_create = BlobGenerator('mike', 'mike-', self.value_size, start=self.num_items + 1, end=self.num_items * 3 // 2)
+        gen_delete = BlobGenerator('mike', 'mike-', self.value_size, start=(self.num_items / 2 - 1), end=self.num_items)
+        gen_create = BlobGenerator('mike', 'mike-', self.value_size, start=self.num_items + 1, end=self.num_items * 3 / 2)
         servs_in = [self.servers[i + 1] for i in range(self.nodes_in)]
         rebalance = self.cluster.async_rebalance(
             self.servers[:1], servs_in, [],
@@ -366,7 +366,7 @@ class RebalanceInTests(RebalanceBaseTest):
             self.servers[:1], servs_in, [])
         self.sleep(5)
         rest_cons = [RestConnection(self.servers[i])
-                     for i in range(self.nodes_init)]
+                     for i in xrange(self.nodes_init)]
         result = []
         num_iter = 0
         # get random keys for each node during rebalancing
@@ -393,7 +393,7 @@ class RebalanceInTests(RebalanceBaseTest):
         rebalance.result()
         # get random keys for new added nodes
         rest_cons = [RestConnection(self.servers[i])
-                     for i in range(self.nodes_init + self.nodes_in)]
+                     for i in xrange(self.nodes_init + self.nodes_in)]
         list_threads = []
         for rest in rest_cons:
             t = Thread(target=rest.get_random_key,
@@ -427,12 +427,12 @@ class RebalanceInTests(RebalanceBaseTest):
                     tasks += self._async_load_all_buckets(self.master, self.gen_update, "update", 0, batch_size=20000, pause_secs=5, timeout_secs=180)
                 elif "create" in self.doc_ops:
                     # 1/2th of initial data will be added in each iteration
-                    gen_create = BlobGenerator('mike', 'mike-', self.value_size, start=self.num_items * (1 + i) // 2.0, end=self.num_items * (1 + i / 2.0))
+                    gen_create = BlobGenerator('mike', 'mike-', self.value_size, start=self.num_items * (1 + i) / 2.0 , end=self.num_items * (1 + i / 2.0))
                     tasks += self._async_load_all_buckets(self.master, gen_create, "create", 0, batch_size=20000, pause_secs=5, timeout_secs=180)
                 elif "delete" in self.doc_ops:
                     # 1/(num_servers) of initial data will be removed after each iteration
                     # at the end we should get empty base( or couple items)
-                    gen_delete = BlobGenerator('mike', 'mike-', self.value_size, start=int(self.num_items * (1 - i // (self.num_servers - 1.0))) + 1, end=int(self.num_items * (1 - (i - 1) // (self.num_servers - 1.0))))
+                    gen_delete = BlobGenerator('mike', 'mike-', self.value_size, start=int(self.num_items * (1 - i / (self.num_servers - 1.0))) + 1, end=int(self.num_items * (1 - (i - 1) / (self.num_servers - 1.0))))
                     tasks += self._async_load_all_buckets(self.master, gen_delete, "delete", 0, batch_size=20000, pause_secs=5, timeout_secs=180)
 
             rebalance_task = self.cluster.async_rebalance(
@@ -490,7 +490,7 @@ class RebalanceInTests(RebalanceBaseTest):
 
         timeout = None
         if self.active_resident_threshold == 0:
-            timeout = max(self.wait_timeout * 4, len(self.buckets) * self.wait_timeout * self.num_items // 50000)
+            timeout = max(self.wait_timeout * 4, len(self.buckets) * self.wait_timeout * self.num_items / 50000)
 
         for task in tasks:
             task.result(self.wait_timeout * 20)
@@ -514,12 +514,12 @@ class RebalanceInTests(RebalanceBaseTest):
 
         for bucket in self.buckets:
             self.perform_verify_queries(num_views, prefix, ddoc_name, query, bucket=bucket, wait_time=timeout, expected_rows=expected_rows)
-        for i in range(iterations_to_try):
+        for i in xrange(iterations_to_try):
             servs_in = self.servers[self.nodes_init:self.nodes_init + self.nodes_in]
             rebalance = self.cluster.async_rebalance(
                 [self.master], servs_in, [],
                 sleep_before_rebalance=self.sleep_before_rebalance)
-            self.sleep(self.wait_timeout // 5)
+            self.sleep(self.wait_timeout / 5)
 
             # see that the result of view queries are the same as expected during the test
             for bucket in self.buckets:
@@ -557,7 +557,7 @@ class RebalanceInTests(RebalanceBaseTest):
         ddoc_name = "ddoc1"
         prefix = ("", "dev_")[is_dev_ddoc]
         # increase timeout for big data
-        timeout = max(self.wait_timeout * 4, self.wait_timeout * self.num_items // 25000)
+        timeout = max(self.wait_timeout * 4, self.wait_timeout * self.num_items / 25000)
         query = {}
         query["connectionTimeout"] = 60000
         query["full_set"] = "true"
@@ -586,7 +586,7 @@ class RebalanceInTests(RebalanceBaseTest):
             rebalance = self.cluster.async_rebalance(
                 self.servers[:i], self.servers[i:i + 2], [],
                 sleep_before_rebalance=self.sleep_before_rebalance)
-            self.sleep(self.wait_timeout // 5)
+            self.sleep(self.wait_timeout / 5)
             # see that the result of view queries are the same as expected during the test
             self.perform_verify_queries(num_views, prefix, ddoc_name, query, wait_time=timeout, expected_rows=expected_rows)
             # verify view queries results after rebalancing
@@ -615,7 +615,6 @@ class RebalanceInTests(RebalanceBaseTest):
         self.sleep(20)
         shell.start_couchbase()
         shell.disconnect()
-        self.sleep(20)
         try:
             rebalance = self.cluster.async_rebalance(
                 servs_init, servs_in, [],
@@ -685,7 +684,7 @@ class RebalanceInTests(RebalanceBaseTest):
 
         fragmentation_monitor.result()
 
-        for i in range(3):
+        for i in xrange(3):
             active_tasks = self.cluster.async_monitor_active_task(self.master, "indexer", "_design/" + ddoc_name, wait_task=False)
             for active_task in active_tasks:
                 result = active_task.result()
@@ -717,7 +716,7 @@ class RebalanceInTests(RebalanceBaseTest):
     sum(curr_items) match the curr_items_total.
     Once all nodes have been rebalanced in the test is finished."""
     def incremental_rebalance_in_with_mutation_and_deletion(self):
-        gen_delete = BlobGenerator('mike', 'mike-', self.value_size, start=self.num_items // 2,
+        gen_delete = BlobGenerator('mike', 'mike-', self.value_size, start=self.num_items / 2,
                               end=self.num_items)
 
         for i in range(self.num_servers)[1:]:
@@ -741,7 +740,7 @@ class RebalanceInTests(RebalanceBaseTest):
     that there has been no data loss, sum(curr_items) match the curr_items_total.
     Once all nodes have been rebalanced in the test is finished."""
     def incremental_rebalance_in_with_mutation_and_expiration(self):
-        gen_2 = BlobGenerator('mike', 'mike-', self.value_size, start=self.num_items // 2,
+        gen_2 = BlobGenerator('mike', 'mike-', self.value_size, start=self.num_items / 2,
                               end=self.num_items)
         for i in range(self.num_servers)[1:]:
             rebalance = self.cluster.async_rebalance(
@@ -864,7 +863,7 @@ class RebalanceWithPillowFight(BaseTestCase):
         while self.num_items > batch_end:
             batch_end = batch_start + batch_size
             keys = []
-            for i in range(batch_start, batch_end, 1):
+            for i in xrange(batch_start, batch_end, 1):
                 keys.append(str(i).rjust(20, '0'))
             try:
                 bkt.get_multi(keys)
@@ -902,7 +901,7 @@ class RebalanceWithPillowFight(BaseTestCase):
         if errors:
             self.log.info("Printing missing keys:")
         for error in errors:
-            print(error)
+            print error
         if self.num_items != rest.get_active_key_count(bucket):
             self.fail("FATAL: Data loss detected!! Docs loaded : {0}, docs present: {1}".
                           format(self.num_items, rest.get_active_key_count(bucket) ))

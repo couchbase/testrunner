@@ -1,7 +1,7 @@
 from couchbase.cluster import Cluster
 from couchbase.cluster import PasswordAuthenticator
 from couchbase.n1ql import N1QLQuery
-import urllib.request, urllib.parse, urllib.error
+import urllib
 import json
 import argparse
 import sys
@@ -14,7 +14,7 @@ import paramiko
 
 
 def usage(err=None):
-    print("""\
+    print """\
 Syntax: triage.py [options]
 
 Options
@@ -31,8 +31,8 @@ Options
     --help Show this help
 
 Examples:
-  python3 scripts/triage.py --os CENTOS --build 6.5.0-1351 --component QUERY --user username --password password
-""")
+  python scripts/triage.py --os CENTOS --build 6.5.0-1351 --component QUERY --user username --password password
+"""
     sys.exit(0)
 
 
@@ -131,12 +131,12 @@ def triage(os, build, component, username, password, job_list, format, ignore_li
 
         '''Load json logs for last job call'''
         logs_url = "http://qa.sc.couchbase.com/job/test_suite_executor/"+str(build_id)+"/testReport/api/json"
-        response = urllib.request.urlopen(logs_url)
+        response = urllib.urlopen(logs_url)
 
         logs_data = {}
         try:
             logs_data = json.loads(response.read())
-        except ValueError as ve:
+        except ValueError, ve:
             a=1
 
         if (str(logs_data)) == '{}':
@@ -218,10 +218,10 @@ def execute_restart(restart_list, dispatcher_token, os, build, component, server
     restart_url = "http://qa.sc.couchbase.com/job/test_suite_dispatcher/buildWithParameters?token="+dispatcher_token+"" \
                   "&OS="+os.lower()+"&version_number="+build+"&suite=12hour&component="+component.lower()+"" \
                   "&subcomponent="+restart_list+"&serverPoolId="+server_pool_id+"&addPoolId="+add_pool_id+"&branch=master"
-    print(("#### URL ::"+restart_url+"::"))
+    print("#### URL ::"+restart_url+"::")
 
-    response = urllib.request.urlopen(restart_url)
-    print(("Restart response - "+str(response)))
+    response = urllib.urlopen(restart_url)
+    print("Restart response - "+str(response))
 
 
 def collect_json_params(case_attrs):
@@ -268,7 +268,7 @@ def download_core_dump(vm_ip, logs_folder):
 def download_job_logs(build_id):
     logs = []
     console_page_url = "http://qa.sc.couchbase.com/job/test_suite_executor/" + str(build_id) + "/consoleText"
-    console_response = urllib.request.urlopen(console_page_url)
+    console_response = urllib.urlopen(console_page_url)
     for line in console_response.readlines():
         logs.append(line)
     return logs
@@ -292,10 +292,10 @@ def extract_cmd(case_name, json_params, lines):
     for line in lines:
         if line.find(case_name) > -1:
             rest_of_line = line[line.find(case_name)+len(case_name):]
-            if len(rest_of_line) == 0 or rest_of_line[:1] in [' ', ',']:
+            if len(rest_of_line) == 0 or rest_of_line[:1] in [' ',',']:
                 params_line = copy.copy(line)
                 params_line = params_line[params_line.find(' -p '):]
-                params_line = params_line.replace(' -p ', '').replace(' -t ', ',').replace('\n', '')
+                params_line = params_line.replace(' -p ', '').replace(' -t ', ',').replace('\n','')
                 params = params_line.split(',')
                 params_dict = {}
                 for param in params:
@@ -310,8 +310,8 @@ def extract_cmd(case_name, json_params, lines):
 def compare_json_and_cmd_params(json_params={}, cmd_params={}):
     #print("JSON ::"+str(json_params)+"::")
     #print("CMD ::"+str(cmd_params)+"::")
-    for cmd_key in list(cmd_params.keys()):
-        if cmd_key in list(json_params.keys()):
+    for cmd_key in cmd_params.keys():
+        if cmd_key in json_params.keys():
             if cmd_params[cmd_key] != json_params[cmd_key]:
                 if cmd_key!='doc-per-day':
                     return False
@@ -319,23 +319,24 @@ def compare_json_and_cmd_params(json_params={}, cmd_params={}):
 
 
 def print_report(failers, os, build, component, fmt):
-    print(("########################## GREEN BOARD REPORT FOR "+os+"   BUILD "+build+"   COMPONENT - "+component+" #################################"))
+    print("########################## GREEN BOARD REPORT FOR "+os+"   BUILD "+build+"   COMPONENT - "+component+" #################################")
     connection_failers = []
     no_logs_failers = []
     all_the_rest_failers = []
     n=1
     connection_jobs_container = ""
 
-    print(str(n) + ". Total list of failed jobs. ")
+    print str(n) + ". Total list of failed jobs. "
     for job in failers:
-        print((job['name']))
+        print(job['name'])
+
         if len(job['fail_reasons']['connection']['cases']) > 0:
             connection_failers.append(job['name'])
         if len(job['fail_reasons']['no_logs']['cases']) > 0:
             no_logs_failers.append(job['name'])
         if len(job['fail_reasons']['all_the_rest']['cases']) > 0:
             job_data = {}
-            if 'ini_file' in list(job.keys()):
+            if 'ini_file' in job.keys():
                 job_data['ini_file'] = job['ini_file']
 
             job_data['name'] = job['name']
@@ -346,60 +347,61 @@ def print_report(failers, os, build, component, fmt):
             all_the_rest_failers.append(job_data)
 
     n+=1
-    print()
+    print
 
     if len(connection_failers) > 0:
-        print(str(n)+". There are some connection issues. ")
+        print str(n)+". There are some connection issues. "
         connection_jobs_container = ""
         for job in connection_failers:
             connection_jobs_container = connection_jobs_container + job[job.find('_')+1:] + ','
         print("Jobs list to be restarted:")
-        print((connection_jobs_container[:len(connection_jobs_container)-1]))
+        print(connection_jobs_container[:len(connection_jobs_container)-1])
         n = n+1
-        print()
+        print
 
     if len(no_logs_failers) > 0:
-        print(str(n)+". There are failed jobs without logs.")
+        print str(n)+". There are failed jobs without logs."
         no_logs_jobs_container = ""
         for job in no_logs_failers:
             no_logs_jobs_container = no_logs_jobs_container + job[job.find('_')+1:] + ','
         print("Jobs list to be restarted:")
-        print((no_logs_jobs_container[:len(no_logs_jobs_container)-1]))
+        print(no_logs_jobs_container[:len(no_logs_jobs_container)-1])
         n = n+1
-        print()
+        print
 
     if len(all_the_rest_failers) > 0:
-        print(str(n)+". There are failed jobs because of different errors.")
+        print str(n)+". There are failed jobs because of different errors."
         for job in all_the_rest_failers:
-            print(("="*100))
-            print("JOB - "+str(job['name']))
-            if 'ini_file' in list(job.keys()):
-                print((".ini file - "+str(job['ini_file'])))
-            print()
+            print("="*100)
+            print "JOB - "+str(job['name'])
+            if 'ini_file' in job.keys():
+                print(".ini file - "+str(job['ini_file']))
+            print
             for case in job['cases']:
-                print(("     CASE NAME - "+str(case['name'])))
-                print()
+                print("     CASE NAME - "+str(case['name']))
+                print
                 if 'c' in fmt:
-                    print(("         config file - "+str(case['conf_file'])))
-                    print()
+                    print("         config file - "+str(case['conf_file']))
+                    print
                 if 's' in fmt:
                     print("         stack trace - ")
-                    print((""+str(case['stack_trace'])))
-                    print(("-"*100))
+                    print(""+str(case['stack_trace']))
+                    print("-"*100)
                 if 'd' in fmt:
-                    print()
+                    print
                     if str(case['cmd_line']) == 'None':
                         print('         cmd line - None. If you see this, I could not identify cmd line for this test case.')
                         print('         Please send email to evgeny.makarenko@couchbase.com with subject \'Triage script - cmd error\',')
                         print('         containing component name, job name, build version, and test case name. I\'ll fix it immediately.')
                     else:
-                        print(("         cmd line - "+str(case['cmd_line'])))
-                    if 'dump_file' in list(case.keys()):
-                        print(("         dump file - "+str(case['dump_file'])))
-                print()
-            print(("=" * 100))
+                        print("         cmd line - "+str(case['cmd_line']))
+                    if 'dump_file' in case.keys():
+                        print("         dump file - "+str(case['dump_file']))
+                print
+            print("=" * 100)
         n = n+1
-        print()
+        print
+
 
 def format_stack_trace(raw_stack_trace):
     new_stack_trace = ''
@@ -427,7 +429,7 @@ if __name__ == "__main__":
     parser.add_argument('--job', '-j', help='Job names list (optional)', type=str)
     parser.add_argument('--format', '-f', help='Output format (optional)\n c - config file\n s - stack trace\n d - cmd line, ini file, core panic dump file (pretty long operation)', type=str)
     parser.add_argument('--ignore', '-i', help='Igrore jobs, comma-separated list (optional)\n ', type=str)
-    parser.add_argument('--restart', '-r', help='Restart jobs automatically, comma-separated list (optional).', type=str)
+    parser.add_argument('--restart' ,'-r', help='Restart jobs automatically, comma-separated list (optional).', type=str)
     parser.add_argument('--dispatcher_token', '-t', help='Test suite dispatcher security token.', type=str)
     parser.add_argument('--server_pool_id', '-l', help='Test suite dispatcher server pool id (optional). Default value is \'regression\'', type=str)
     parser.add_argument('--add_pool_id', '-a', help='Test suite dispatcher additional pool id (optional). Default value is \'None\'', type=str)

@@ -25,7 +25,7 @@ class VBucketToolTests(CliBaseTest):
         try:
             prefix = 'curl -g http://localhost:%s/pools/default/buckets/%s |' % (
                       self.master.port or '8091', self.buckets[0].name)
-            for vb, items in self.keys_per_vbuckets_dict.items():
+            for vb, items in self.keys_per_vbuckets_dict.iteritems():
                 o, _ = shell.execute_vbuckettool(items, prefix)
                 result = self._parse_vbuckets(o)
                 for item in items:
@@ -44,15 +44,15 @@ class VBucketToolTests(CliBaseTest):
         try:
             prefix = 'curl -g http://localhost:%s/pools/default/buckets/%s |' % (
                       self.master.port or '8091', bucket.name)
-            for vb, items in self.keys_per_vbuckets_dict.items():
+            for vb, items in self.keys_per_vbuckets_dict.iteritems():
                 o, _ = shell.execute_vbuckettool(items, prefix)
                 result = self._parse_vbuckets(o)
                 for item in items:
                     self.assertTrue(result[item][1].startswith(bucket.vbuckets[vb].master),
                                     'Key: %s. Vbucket master expected is %s. Actual: %s' % (
                                      item, bucket.vbuckets[vb].master, result[item]))
-                    self.assertFalse({replica[:replica.index(':')]
-                                          for replica in result[item][2]} -
+                    self.assertFalse(set([replica[:replica.index(':')]
+                                          for replica in result[item][2]]) -
                                      set(bucket.vbuckets[vb].replica),
                                     'Key: %s. Vbucket master expected is %s. Actual: %s' % (
                                      item, bucket.vbuckets[vb].replica, result[item]))
@@ -64,19 +64,19 @@ class VBucketToolTests(CliBaseTest):
         self.num_items = self.num_items - (self.num_items % len(bucket.vbuckets))
         num_items_per_vb = self.num_items/len(bucket.vbuckets)
         template = '{{ "mutated" : 0, "age": {0}, "first_name": "{1}" }}'
-        gen_load = DocumentGenerator('vbuckettool', template, list(range(5)), ['james', 'john'],
+        gen_load = DocumentGenerator('vbuckettool', template, range(5), ['james', 'john'],
                                      start=0, end=self.num_items)
         self._get_clients(bucket)
         for vb in bucket.vbuckets:
             self.keys_per_vbuckets_dict[vb] = []
-        for i in range(gen_load.end):
-            key, value = next(gen_load)
+        for i in xrange(gen_load.end):
+            key, value = gen_load.next()
             vb_id = self._get_vBucket_id(key)
             self.clients[vb.master].set(key, 0, 0, value, vb_id)
             self.keys_per_vbuckets_dict[vb_id].append(key)
 
     def _get_vBucket_id(self, key):
-        return (zlib.crc32(key.encode()) >> 16) & (len(self.vBucketMap) - 1)
+        return (zlib.crc32(key) >> 16) & (len(self.vBucketMap) - 1)
 
     def _get_clients(self, bucket):
         for vbucket in bucket.vbuckets:

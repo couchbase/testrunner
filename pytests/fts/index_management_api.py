@@ -1,7 +1,7 @@
 # coding=utf-8
 
 import json
-from .fts_base import FTSBaseTest
+from fts_base import FTSBaseTest
 from lib.membase.api.rest_client import RestConnection
 
 
@@ -60,7 +60,7 @@ class IndexManagementAPI(FTSBaseTest):
         try:
             fts_index.update_index_partitions(1)
             self.sleep(5)
-        except Exception as e:
+        except Exception, e:
             if "cannot update partition or replica count for a planFrozen index" in str(e):
                 self.log.info("Error expected :   {0}".format(e))
             else:

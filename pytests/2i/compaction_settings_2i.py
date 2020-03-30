@@ -1,6 +1,6 @@
 import logging
 from datetime import datetime
-from .base_2i import BaseSecondaryIndexingTests
+from base_2i import BaseSecondaryIndexingTests
 from couchbase_helper.query_definitions import QueryDefinition
 from membase.api.rest_client import RestConnection
 from remote.remote_util import RemoteMachineShellConnection
@@ -17,7 +17,7 @@ class SecondaryIndexingCompactionTests(BaseSecondaryIndexingTests):
         self.initial_index_number = self.input.param("initial_index_number", 2)
         query_template = QUERY_TEMPLATE
         self.query_template = query_template.format("job_title")
-        self.whereCondition= self.input.param("whereCondition", " job_title != \"Sales\" ")
+        self.whereCondition= self.input.param("whereCondition"," job_title != \"Sales\" ")
         self.query_template += " WHERE {0}".format(self.whereCondition)
         self.load_query_definitions = []
         for x in range(self.initial_index_number):
@@ -51,7 +51,7 @@ class SecondaryIndexingCompactionTests(BaseSecondaryIndexingTests):
             while not check and count < 10:
                 final_index_map = rest.get_index_stats()
                 for bucket in self.buckets:
-                    for index in list(final_index_map[bucket.name].keys()):
+                    for index in final_index_map[bucket.name].keys():
                         initial_compaction = initial_index_map[bucket.name][index]["num_compactions"]
                         final_compaction = final_index_map[bucket.name][index]["num_compactions"]
                         check = initial_compaction < final_compaction
@@ -75,9 +75,9 @@ class SecondaryIndexingCompactionTests(BaseSecondaryIndexingTests):
         rest = RestConnection(servers[0])
         initial_index_map = rest.get_index_stats()
         #Trust Me this works
-        dayOfWeek = (date.weekday() + (date.hour+((date.minute+5)//60))//24)%7
+        dayOfWeek = (date.weekday() + (date.hour+((date.minute+5)/60))/24)%7
         status, content, header = rest.set_indexer_compaction(indexDayOfWeek=DAYS[dayOfWeek],
-                                              indexFromHour=date.hour+((date.minute+1)//60),
+                                              indexFromHour=date.hour+((date.minute+1)/60),
                                               indexFromMinute=(date.minute+1)%60)
         self.assertTrue(status, "Error in setting Circular Compaction... {0}".format(content))
         self.sleep(120)
@@ -92,15 +92,15 @@ class SecondaryIndexingCompactionTests(BaseSecondaryIndexingTests):
         rest = RestConnection(servers[0])
         initial_index_map = rest.get_index_stats()
         #Trust Me this works
-        dayOfWeek = (date.weekday() + (date.hour+((date.minute+5)//60))//24)%7
+        dayOfWeek = (date.weekday() + (date.hour+((date.minute+5)/60))/24)%7
         status, content, header = rest.set_indexer_compaction(indexDayOfWeek=DAYS[dayOfWeek],
-                                              indexFromHour=date.hour+((date.minute+2)//60),
+                                              indexFromHour=date.hour+((date.minute+2)/60),
                                               indexFromMinute=(date.minute+2)%60)
         self.assertTrue(status, "Error in setting Circular Compaction... {0}".format(content))
         self.sleep(140)
         dayOfWeek = (dayOfWeek+1)%7
         status, content, header = rest.set_indexer_compaction(indexDayOfWeek=DAYS[dayOfWeek],
-                                              indexFromHour=date.hour+((date.minute+5)//60),
+                                              indexFromHour=date.hour+((date.minute+5)/60),
                                               indexFromMinute=(date.minute+5)%60)
         self.assertTrue(status, "Error in setting Circular Compaction during compaction... {0}".format(content))
         final_index_map = rest.get_index_stats()
@@ -114,11 +114,11 @@ class SecondaryIndexingCompactionTests(BaseSecondaryIndexingTests):
         kv_ops = self._run_kvops_tasks()
         date = datetime.now()
         #Trust Me this works
-        dayOfWeek = (date.weekday() + (date.hour+((date.minute+5)//60))//24)%7
+        dayOfWeek = (date.weekday() + (date.hour+((date.minute+5)/60))/24)%7
         status, content, header = rest.set_indexer_compaction(indexDayOfWeek=DAYS[dayOfWeek],
-                                              indexFromHour=date.hour+((date.minute+2)//60),
+                                              indexFromHour=date.hour+((date.minute+2)/60),
                                               indexFromMinute=(date.minute+2)%60,
-                                              indexToHour=date.hour+((date.minute+3)//60),
+                                              indexToHour=date.hour+((date.minute+3)/60),
                                               indexToMinute=(date.minute+3)%60,
                                               abortOutside=True)
         self.assertTrue(status, "Error in setting Circular Compaction... {0}".format(content))
@@ -135,11 +135,11 @@ class SecondaryIndexingCompactionTests(BaseSecondaryIndexingTests):
         rest = RestConnection(servers[0])
         initial_index_map = rest.get_index_stats()
         #Trust Me this works
-        dayOfWeek = (date.weekday() + (date.hour+((date.minute+5)//60))//24)%7
+        dayOfWeek = (date.weekday() + (date.hour+((date.minute+5)/60))/24)%7
         status, content, header = rest.set_indexer_compaction(indexDayOfWeek=DAYS[dayOfWeek],
-                                              indexFromHour=date.hour+((date.minute+2)//60),
+                                              indexFromHour=date.hour+((date.minute+2)/60),
                                               indexFromMinute=(date.minute+2)%60,
-                                              indexToHour=date.hour+((date.minute+1)//60),
+                                              indexToHour=date.hour+((date.minute+1)/60),
                                               indexToMinute=(date.minute+1)%60,
                                               abortOutside=True)
         self.assertTrue(status, "Error in setting Circular Compaction... {0}".format(content))
@@ -156,16 +156,16 @@ class SecondaryIndexingCompactionTests(BaseSecondaryIndexingTests):
         rest = RestConnection(servers[0])
         initial_index_map = rest.get_index_stats()
         #Trust Me this works
-        dayOfWeek = (date.weekday() + (date.hour+((date.minute+5)//60))//24)%7
+        dayOfWeek = (date.weekday() + (date.hour+((date.minute+5)/60))/24)%7
         status, content, header = rest.set_indexer_compaction(indexDayOfWeek=DAYS[dayOfWeek],
-                                              indexFromHour=date.hour+((date.minute+2)//60),
+                                              indexFromHour=date.hour+((date.minute+2)/60),
                                               indexFromMinute=(date.minute+2)%60)
         self.assertTrue(status, "Error in setting Circular Compaction... {0}".format(content))
         self.sleep(140)
         status, content, header = rest.set_indexer_compaction(indexDayOfWeek=DAYS[dayOfWeek],
-                                              indexFromHour=date.hour+((date.minute+2)//60),
+                                              indexFromHour=date.hour+((date.minute+2)/60),
                                               indexFromMinute=(date.minute+2)%60,
-                                              indexToHour=date.hour+(date.minute+4)//60,
+                                              indexToHour=date.hour+(date.minute+4)/60,
                                               indexToMinute=(date.minute+4)%60,
                                               abortOutside=True)
         self.assertTrue(status, "Error in setting Circular Compaction during compaction... {0}".format(content))
@@ -182,19 +182,19 @@ class SecondaryIndexingCompactionTests(BaseSecondaryIndexingTests):
         rest = RestConnection(servers[0])
         initial_index_map = rest.get_index_stats()
         #Trust Me this works
-        dayOfWeek = (date.weekday() + (date.hour+((date.minute+5)//60))//24)%7
+        dayOfWeek = (date.weekday() + (date.hour+((date.minute+5)/60))/24)%7
         status, content, header = rest.set_indexer_compaction(indexDayOfWeek=DAYS[dayOfWeek],
-                                              indexFromHour=date.hour+((date.minute+2)//60),
+                                              indexFromHour=date.hour+((date.minute+2)/60),
                                               indexFromMinute=(date.minute+2)%60,
-                                              indexToHour=date.hour+(date.minute+3)//60,
+                                              indexToHour=date.hour+(date.minute+3)/60,
                                               indexToMinute=(date.minute+3)%60,
                                               abortOutside=False)
         self.assertTrue(status, "Error in setting Circular Compaction... {0}".format(content))
         self.sleep(140)
         status, content, header = rest.set_indexer_compaction(indexDayOfWeek=DAYS[dayOfWeek],
-                                              indexFromHour=date.hour+((date.minute+2)//60),
+                                              indexFromHour=date.hour+((date.minute+2)/60),
                                               indexFromMinute=(date.minute+2)%60,
-                                              indexToHour=date.hour+(date.minute+3)//60,
+                                              indexToHour=date.hour+(date.minute+3)/60,
                                               indexToMinute=(date.minute+3)%60,
                                               abortOutside=True)
         self.assertTrue(status, "Error in setting Circular Compaction during compaction... {0}".format(content))
@@ -211,9 +211,9 @@ class SecondaryIndexingCompactionTests(BaseSecondaryIndexingTests):
         rest = RestConnection(servers[0])
         initial_index_map = rest.get_index_stats()
         #Trust Me this works
-        dayOfWeek = (date.weekday() + (date.hour+((date.minute+5)//60))//24)%7
+        dayOfWeek = (date.weekday() + (date.hour+((date.minute+5)/60))/24)%7
         status, content, header = rest.set_indexer_compaction(indexDayOfWeek=DAYS[dayOfWeek],
-                                              indexFromHour=date.hour+((date.minute+2)//60),
+                                              indexFromHour=date.hour+((date.minute+2)/60),
                                               indexFromMinute=(date.minute+2)%60,
                                               abortOutside=True)
         self.assertTrue(status, "Error in setting Circular Compaction... {0}".format(content))
@@ -233,9 +233,9 @@ class SecondaryIndexingCompactionTests(BaseSecondaryIndexingTests):
         rest = RestConnection(servers[0])
         initial_index_map = rest.get_index_stats()
         #Trust Me this works
-        dayOfWeek = (date.weekday() + (date.hour+((date.minute+5)//60))//24)%7
+        dayOfWeek = (date.weekday() + (date.hour+((date.minute+5)/60))/24)%7
         status, content, header = rest.set_indexer_compaction(indexDayOfWeek=DAYS[dayOfWeek],
-                                              indexFromHour=date.hour+((date.minute+2)//60),
+                                              indexFromHour=date.hour+((date.minute+2)/60),
                                               indexFromMinute=(date.minute+2)%60,
                                               abortOutside=False)
         self.assertTrue(status, "Error in setting Circular Compaction... {0}".format(content))
@@ -255,16 +255,16 @@ class SecondaryIndexingCompactionTests(BaseSecondaryIndexingTests):
         rest = RestConnection(servers[0])
         initial_index_map = rest.get_index_stats()
         #Trust Me this works
-        dayOfWeek = (date.weekday() + (date.hour+((date.minute+5)//60))//24)%7
+        dayOfWeek = (date.weekday() + (date.hour+((date.minute+5)/60))/24)%7
         status, content, header = rest.set_indexer_compaction(indexDayOfWeek=DAYS[dayOfWeek],
-                                              indexFromHour=date.hour+((date.minute+2)//60),
+                                              indexFromHour=date.hour+((date.minute+2)/60),
                                               indexFromMinute=(date.minute+2)%60)
         self.assertTrue(status, "Error in setting Circular Compaction... {0}".format(content))
         self.sleep(200)
         first_index_map = rest.get_index_stats()
         self.check_compaction_number(initial_index_map, first_index_map)
         status, content, header = rest.set_indexer_compaction(indexDayOfWeek=DAYS[dayOfWeek],
-                                              indexFromHour=date.hour+((date.minute+5)//60),
+                                              indexFromHour=date.hour+((date.minute+5)/60),
                                               indexFromMinute=(date.minute+5)%60)
         self.assertTrue(status, "Error in setting Circular Compaction during compaction... {0}".format(content))
         self.sleep(300)
@@ -286,7 +286,7 @@ class SecondaryIndexingCompactionTests(BaseSecondaryIndexingTests):
         if not buckets:
             buckets = self.buckets
         for bucket in buckets:
-            for index in list(final_map[bucket.name].keys()):
+            for index in final_map[bucket.name].keys():
                 initial_compaction = initial_map[bucket.name][index]["num_compactions"]
                 final_compaction = final_map[bucket.name][index]["num_compactions"]
                 self.assertTrue((initial_compaction<final_compaction),

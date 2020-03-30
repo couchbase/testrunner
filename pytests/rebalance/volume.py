@@ -24,9 +24,9 @@ class VolumeTests(BaseTestCase):
         self.instances = self.input.param("instances", 1)
         self.node_out = self.input.param("node_out", 0)
         self.threads = self.input.param("threads", 5)
-        self.use_replica_to = self.input.param("use_replica_to", False)
-        self.reload_size = self.input.param("reload_size", 50000)
-        self.initial_load= self.input.param("initial_load", 10000)
+        self.use_replica_to = self.input.param("use_replica_to",False)
+        self.reload_size = self.input.param("reload_size",50000)
+        self.initial_load= self.input.param("initial_load",10000)
 
     def tearDown(self):
         super(VolumeTests, self).tearDown()
@@ -35,8 +35,8 @@ class VolumeTests(BaseTestCase):
         import subprocess
         from lib.testconstants import COUCHBASE_FROM_SPOCK
         rest = RestConnection(server)
-        num_cycles = int((items // batch )) // 5
-        cmd = "cbc-pillowfight -U couchbase://{0}/{3} -I {1} -m 10 -M 100 -B {2} --populate-only --start-at {4} --json".format(server.ip, items, batch, bucket, start_at)
+        num_cycles = int((items / batch )) / 5
+        cmd = "cbc-pillowfight -U couchbase://{0}/{3} -I {1} -m 10 -M 100 -B {2} --populate-only --start-at {4} --json".format(server.ip, items, batch,bucket,start_at)
         if rest.get_nodes_version()[:5] in COUCHBASE_FROM_SPOCK:
             cmd += " -u Administrator -P password"
         self.log.info("Executing '{0}'...".format(cmd))
@@ -46,15 +46,15 @@ class VolumeTests(BaseTestCase):
 
     def check_dataloss(self, server, bucket, num_items):
         from couchbase.bucket import Bucket
-        from couchbase.exceptions import NotFoundError, CouchbaseError
+        from couchbase.exceptions import NotFoundError,CouchbaseError
         from lib.memcached.helper.data_helper import VBucketAwareMemcached
         self.log.info("########## validating data for bucket : {} ###########".format(bucket))
         cb_version= cb_version = RestConnection(server).get_nodes_version()[:3]
         if cb_version < "5":
-            bkt = Bucket('couchbase://{0}/{1}'.format(server.ip, bucket.name), timeout=5000)
+            bkt = Bucket('couchbase://{0}/{1}'.format(server.ip, bucket.name),timeout=5000)
         else:
-            bkt = Bucket('couchbase://{0}/{1}'.format(server.ip, bucket.name), username=server.rest_username,
-                         password=server.rest_password, timeout=5000)
+            bkt = Bucket('couchbase://{0}/{1}'.format(server.ip, bucket.name),username=server.rest_username,
+                         password=server.rest_password,timeout=5000)
         rest = RestConnection(self.master)
         VBucketAware = VBucketAwareMemcached(rest, bucket.name)
         _, _, _ = VBucketAware.request_map(rest, bucket.name)
@@ -65,7 +65,7 @@ class VolumeTests(BaseTestCase):
         while num_items > batch_end:
             batch_end = batch_start + batch_size
             keys = []
-            for i in range(batch_start, batch_end, 1):
+            for i in xrange(batch_start, batch_end, 1):
                 keys.append(str(i).rjust(20, '0'))
             try:
                 bkt.get_multi(keys)
@@ -89,7 +89,7 @@ class VolumeTests(BaseTestCase):
     def create_ddocs_and_views(self):
         self.default_view = View(self.default_view_name, None, None)
         for bucket in self.buckets:
-            for i in range(int(self.ddocs_num)):
+            for i in xrange(int(self.ddocs_num)):
                 views = self.make_default_views(self.default_view_name, self.view_num,
                                                self.is_dev_ddoc, different_map=True)
                 ddoc = DesignDocument(self.default_view_name + str(i), views)
@@ -105,7 +105,7 @@ class VolumeTests(BaseTestCase):
         self.create_ddocs_and_views()
         load_thread=[]
         for b in bucket:
-            load_thread.append(Thread(target=self.load, args=(self.master, self.num_items, b)))
+            load_thread.append(Thread(target=self.load, args=(self.master, self.num_items,b)))
         for t in load_thread:
             t.start()
         servers_init = self.servers[:self.nodes_init]
@@ -116,7 +116,7 @@ class VolumeTests(BaseTestCase):
         #Reload more data for mutations
         load_thread=[]
         for b in bucket:
-            load_thread.append(Thread(target=self.load, args=(self.master, self.num_items, b, self.num_items)))
+            load_thread.append(Thread(target=self.load, args=(self.master, self.num_items,b,self.num_items)))
         for t in load_thread:
             t.start()
         # #Rebalance in 1 node
@@ -129,24 +129,24 @@ class VolumeTests(BaseTestCase):
         for t in load_thread:
             t.join()
         for b in bucket:
-         self.check_dataloss(self.master, b, self.num_items*2)
+         self.check_dataloss(self.master, b,self.num_items*2)
         # load more document
         load_thread = []
         for b in bucket:
-            load_thread.append(Thread(target=self.load, args=(self.master, self.num_items, b, self.num_items*2)))
+            load_thread.append(Thread(target=self.load, args=(self.master, self.num_items, b,self.num_items*2)))
         for t in load_thread:
             t.start()
         #rebalance out 1 node
         new_server_list = self.servers[0:self.nodes_init]+ servers_in
         self.log.info("==========rebalance out 1 node=========")
         servers_out=[self.servers[self.nodes_init]]
-        rebalance = self.cluster.async_rebalance(servers_init, [],
+        rebalance = self.cluster.async_rebalance(servers_init,[],
                                                  servers_out)
         rebalance.result()
         for t in load_thread:
             t.join()
         for b in bucket:
-         self.check_dataloss(self.master, b, self.num_items*3)
+         self.check_dataloss(self.master, b,self.num_items*3)
         self.sleep(30)
          # load more document
         load_thread = []
@@ -167,7 +167,7 @@ class VolumeTests(BaseTestCase):
             t.join()
         self.sleep(30)
         for b in bucket:
-         self.check_dataloss(self.master, b, self.num_items*4)
+         self.check_dataloss(self.master, b,self.num_items*4)
         # load more document
         load_thread = []
         for b in bucket:
@@ -178,13 +178,13 @@ class VolumeTests(BaseTestCase):
         self.log.info("==========Rebalance out of 2 nodes and Rebalance In 1 node=========")
         # Rebalance out of 2 nodes and Rebalance In 1 node
         servers_in = [list(set(self.servers) - set(new_server_list))[0]]
-        servers_out = list(set(new_server_list) - {self.master})[-2:]
+        servers_out = list(set(new_server_list) - set([self.master]))[-2:]
         rebalance = self.cluster.async_rebalance(servers_init, servers_in, servers_out)
         rebalance.result()
         for t in load_thread:
             t.join()
         for b in bucket:
-         self.check_dataloss(self.master, b, self.num_items*5)
+         self.check_dataloss(self.master, b,self.num_items*5)
         self.sleep(30)
         # load more document
         load_thread = []
@@ -196,13 +196,13 @@ class VolumeTests(BaseTestCase):
         self.log.info("==========Rebalance out of 1 nodes and Rebalance In 2 nodes=========")
         #Rebalance out of 1 nodes and Rebalance In 2 nodes
         servers_in = list(set(self.servers) - set(new_server_list))[0:2]
-        servers_out = list(set(new_server_list) - {self.master})[0:1]
+        servers_out = list(set(new_server_list) - set([self.master]))[0:1]
         rebalance = self.cluster.async_rebalance(servers_init, servers_in, servers_out)
         rebalance.result()
         for t in load_thread:
             t.join()
         for b in bucket:
-         self.check_dataloss(self.master, b, self.num_items*6)
+         self.check_dataloss(self.master, b,self.num_items*6)
         self.sleep(30)
         # load more document
         load_thread = []
@@ -219,7 +219,7 @@ class VolumeTests(BaseTestCase):
         for t in load_thread:
             t.join()
         for b in bucket:
-         self.check_dataloss(self.master, b, self.num_items*7)
+         self.check_dataloss(self.master, b,self.num_items*7)
         self.sleep(30)
         # load more document
         load_thread = []
@@ -230,13 +230,13 @@ class VolumeTests(BaseTestCase):
         new_server_list=list(set(new_server_list + servers_in))
         self.log.info("==========Rebalance out 4 nodes =========")
         #Rebalance out 4 nodes
-        servers_out = list(set(new_server_list) - {self.master})[0:4]
+        servers_out = list(set(new_server_list) - set([self.master]))[0:4]
         rebalance = self.cluster.async_rebalance(servers_init, [], servers_out)
         rebalance.result()
         for t in load_thread:
             t.join()
         for b in bucket:
-         self.check_dataloss(self.master, b, self.num_items*8)
+         self.check_dataloss(self.master, b,self.num_items*8)
         self.sleep(30)
         # load more document
         load_thread = []
@@ -253,7 +253,7 @@ class VolumeTests(BaseTestCase):
         for t in load_thread:
             t.join()
         for b in bucket:
-         self.check_dataloss(self.master, b, self.num_items*9)
+         self.check_dataloss(self.master, b,self.num_items*9)
         self.sleep(30)
         load_thread = []
         for b in bucket:
@@ -264,7 +264,7 @@ class VolumeTests(BaseTestCase):
         for t in load_thread:
             t.join()
         for b in bucket:
-         self.check_dataloss(self.master, b, self.num_items*10)
+         self.check_dataloss(self.master, b,self.num_items*10)
         self.sleep(30)
         load_thread = []
         for b in bucket:
@@ -285,7 +285,7 @@ class VolumeTests(BaseTestCase):
         for t in load_thread:
             t.join()
         for b in bucket:
-         self.check_dataloss(self.master, b, self.num_items*11)
+         self.check_dataloss(self.master, b,self.num_items*11)
         self.sleep(30)
 
     def test_volume_with_high_ops(self):
@@ -298,22 +298,22 @@ class VolumeTests(BaseTestCase):
         self.create_ddocs_and_views()
         load_thread=[]
         for bk in bucket:
-            load_thread.append(Thread(target=self.load_buckets_with_high_ops, args=(self.master, bk, self.num_items,
-                                                                                    self.batch_size, self.threads, start_at, self.instances)))
+            load_thread.append(Thread(target=self.load_buckets_with_high_ops, args=(self.master,bk, self.num_items,
+                                                                                    self.batch_size, self.threads, start_at,self.instances)))
         for t in load_thread:
             t.start()
         for t in load_thread:
             t.join()
         for b in bucket:
-         self.check_dataloss_for_high_ops_loader(self.master, b, total_doc, batch=self.batch_size, instances=self.instances)
+         self.check_dataloss_for_high_ops_loader(self.master, b,total_doc,batch=self.batch_size,instances=self.instances)
         self.sleep(30)
         start_at=total_doc
         #Reload more data for mutations
         load_thread=[]
         for b in bucket:
             load_thread.append(Thread(target=self.load_buckets_with_high_ops,
-                                      args=(self.master, b, self.num_items,
-                                                       self.batch_size, self.threads, start_at, self.instances)))
+                                      args=(self.master,b, self.num_items,
+                                                       self.batch_size, self.threads, start_at,self.instances)))
         for t in load_thread:
             t.start()
         total_doc +=self.num_items
@@ -329,10 +329,10 @@ class VolumeTests(BaseTestCase):
         for b in bucket:
             num_keys=rest.get_active_key_count(b)
             self.log.info("****** Number of doc in bucket : {}".format(num_keys))
-        total_doc, start_at=self.load_till_rebalance_progress(rest, bucket, total_doc, start_at)
+        total_doc,start_at=self.load_till_rebalance_progress(rest,bucket,total_doc,start_at)
         rebalance.result()
         for b in bucket:
-         self.check_dataloss_for_high_ops_loader(self.master, b, total_doc, batch=self.batch_size, instances=self.instances)
+         self.check_dataloss_for_high_ops_loader(self.master, b,total_doc,batch=self.batch_size,instances=self.instances)
         # Reload more data for mutations
         load_thread = []
         for b in bucket:
@@ -352,10 +352,10 @@ class VolumeTests(BaseTestCase):
         for b in bucket:
             num_keys=rest.get_active_key_count(b)
             self.log.info("****** Number of doc in bucket : {}".format(num_keys))
-        total_doc, start_at=self.load_till_rebalance_progress(rest, bucket, total_doc, start_at)
+        total_doc,start_at=self.load_till_rebalance_progress(rest,bucket,total_doc,start_at)
         rebalance.result()
         for b in bucket:
-         self.check_dataloss_for_high_ops_loader(self.master, b, total_doc, batch=self.batch_size, instances=self.instances)
+         self.check_dataloss_for_high_ops_loader(self.master, b,total_doc,batch=self.batch_size,instances=self.instances)
         self.sleep(30)
         # Reload more data for mutations
         load_thread = []
@@ -378,10 +378,10 @@ class VolumeTests(BaseTestCase):
         for b in bucket:
             num_keys=rest.get_active_key_count(b)
             self.log.info("****** Number of doc in bucket : {}".format(num_keys))
-        total_doc, start_at=self.load_till_rebalance_progress(rest, bucket, total_doc, start_at)
+        total_doc,start_at=self.load_till_rebalance_progress(rest,bucket,total_doc,start_at)
         rebalance.result()
         for b in bucket:
-            self.check_dataloss_for_high_ops_loader(self.master, b, total_doc, batch=self.batch_size, instances=self.instances)
+            self.check_dataloss_for_high_ops_loader(self.master, b, total_doc, batch=self.batch_size,instances=self.instances)
         self.sleep(30)
         # load more document
         load_thread = []
@@ -396,17 +396,17 @@ class VolumeTests(BaseTestCase):
         self.log.info("==========Rebalance out of 2 nodes and Rebalance In 1 node=========")
         # Rebalance out of 2 nodes and Rebalance In 1 node
         servers_in = [list(set(self.servers) - set(new_server_list))[0]]
-        servers_out = list(set(new_server_list) - {self.master})[-2:]
+        servers_out = list(set(new_server_list) - set([self.master]))[-2:]
         rebalance = self.cluster.async_rebalance(servers_init, servers_in, servers_out)
         for t in load_thread:
             t.join()
         for b in bucket:
             num_keys=rest.get_active_key_count(b)
             self.log.info("****** Number of doc in bucket : {}".format(num_keys))
-        total_doc, start_at=self.load_till_rebalance_progress(rest, bucket, total_doc, start_at)
+        total_doc,start_at=self.load_till_rebalance_progress(rest,bucket,total_doc,start_at)
         rebalance.result()
         for b in bucket:
-            self.check_dataloss_for_high_ops_loader(self.master, b, total_doc, batch=self.batch_size, instances=self.instances)
+            self.check_dataloss_for_high_ops_loader(self.master, b, total_doc,batch=self.batch_size,instances=self.instances)
         self.sleep(30)
         # load more document
         load_thread = []
@@ -421,17 +421,17 @@ class VolumeTests(BaseTestCase):
         self.log.info("==========Rebalance out of 1 nodes and Rebalance In 2 nodes=========")
         # Rebalance out of 1 nodes and Rebalance In 2 nodes
         servers_in = list(set(self.servers) - set(new_server_list))[0:2]
-        servers_out = list(set(new_server_list) - {self.master})[0:1]
+        servers_out = list(set(new_server_list) - set([self.master]))[0:1]
         rebalance = self.cluster.async_rebalance(servers_init, servers_in, servers_out)
         for t in load_thread:
             t.join()
         for b in bucket:
             num_keys=rest.get_active_key_count(b)
             self.log.info("****** Number of doc in bucket : {}".format(num_keys))
-        total_doc, start_at=self.load_till_rebalance_progress(rest, bucket, total_doc, start_at)
+        total_doc,start_at=self.load_till_rebalance_progress(rest,bucket,total_doc,start_at)
         rebalance.result()
         for b in bucket:
-            self.check_dataloss_for_high_ops_loader(self.master, b, total_doc, batch=self.batch_size, instances=self.instances)
+            self.check_dataloss_for_high_ops_loader(self.master, b, total_doc,batch=self.batch_size,instances=self.instances)
         self.sleep(30)
         # load more document
         load_thread = []
@@ -452,10 +452,10 @@ class VolumeTests(BaseTestCase):
         for b in bucket:
             num_keys=rest.get_active_key_count(b)
             self.log.info("****** Number of doc in bucket : {}".format(num_keys))
-        total_doc, start_at=self.load_till_rebalance_progress(rest, bucket, total_doc, start_at)
+        total_doc,start_at=self.load_till_rebalance_progress(rest,bucket,total_doc,start_at)
         rebalance.result()
         for b in bucket:
-            self.check_dataloss_for_high_ops_loader(self.master, b, total_doc, batch=self.batch_size, instances=self.instances)
+            self.check_dataloss_for_high_ops_loader(self.master, b, total_doc,batch=self.batch_size,instances=self.instances)
         self.sleep(30)
         # load more document
         load_thread = []
@@ -469,17 +469,17 @@ class VolumeTests(BaseTestCase):
         new_server_list = list(set(new_server_list + servers_in))
         self.log.info("==========Rebalance out 4 nodes =========")
         # Rebalance out 4 nodes
-        servers_out = list(set(new_server_list) - {self.master})[0:4]
+        servers_out = list(set(new_server_list) - set([self.master]))[0:4]
         rebalance = self.cluster.async_rebalance(servers_init, [], servers_out)
         for t in load_thread:
             t.join()
         for b in bucket:
             num_keys=rest.get_active_key_count(b)
             self.log.info("****** Number of doc in bucket : {}".format(num_keys))
-        total_doc, start_at=self.load_till_rebalance_progress(rest, bucket, total_doc, start_at)
+        total_doc,start_at=self.load_till_rebalance_progress(rest,bucket,total_doc,start_at)
         rebalance.result()
         for b in bucket:
-            self.check_dataloss_for_high_ops_loader(self.master, b, total_doc, batch=self.batch_size, instances=self.instances)
+            self.check_dataloss_for_high_ops_loader(self.master, b, total_doc,batch=self.batch_size,instances=self.instances)
         self.sleep(30)
         # load more document
         load_thread = []
@@ -501,10 +501,10 @@ class VolumeTests(BaseTestCase):
         for b in bucket:
             num_keys=rest.get_active_key_count(b)
             self.log.info("****** Number of doc in bucket : {}".format(num_keys))
-        total_doc, start_at=self.load_till_rebalance_progress(rest, bucket, total_doc, start_at)
+        total_doc,start_at=self.load_till_rebalance_progress(rest,bucket,total_doc,start_at)
         rebalance.result()
         for b in bucket:
-            self.check_dataloss_for_high_ops_loader(self.master, b, total_doc, batch=self.batch_size, instances=self.instances)
+            self.check_dataloss_for_high_ops_loader(self.master, b, total_doc,batch=self.batch_size,instances=self.instances)
         self.sleep(30)
         # load more document
         load_thread = []
@@ -524,7 +524,7 @@ class VolumeTests(BaseTestCase):
             self.log.info("****** Number of doc in bucket : {}".format(num_keys))
         total_doc, start_at = self.load_till_rebalance_progress(rest, bucket, total_doc, start_at)
         for b in bucket:
-            self.check_dataloss_for_high_ops_loader(self.master, b, total_doc, batch=self.batch_size, instances=self.instances)
+            self.check_dataloss_for_high_ops_loader(self.master, b, total_doc,batch=self.batch_size,instances=self.instances)
         self.sleep(30)
         # load more document
         load_thread = []
@@ -553,7 +553,7 @@ class VolumeTests(BaseTestCase):
         total_doc, start_at = self.load_till_rebalance_progress(rest, bucket, total_doc, start_at)
         rebalance.result()
         for b in bucket:
-            errors=self.check_dataloss_for_high_ops_loader(self.master, b, total_doc, batch=self.batch_size, instances=self.instances)
+            errors=self.check_dataloss_for_high_ops_loader(self.master, b, total_doc,batch=self.batch_size,instances=self.instances)
             if len(errors) > 0:
                 self.fail("data is missing");
         self.sleep(30)
@@ -576,14 +576,14 @@ class VolumeTests(BaseTestCase):
         for t in load_thread:
             t.join()
         for b in bucket:
-            self.check_dataloss_for_high_ops_loader(self.master, b, total_doc, batch=self.batch_size, instances=self.instances)
+            self.check_dataloss_for_high_ops_loader(self.master, b, total_doc,batch=self.batch_size,instances=self.instances)
         self.sleep(30)
         #Update all data
         load_thread=[]
         for b in bucket:
             load_thread.append(Thread(target=self.update_buckets_with_high_ops,
-                                      args=(self.master, b, total_doc, total_doc,
-                                                       self.batch_size, self.threads, start_at, self.instances, updated)))
+                                      args=(self.master,b, total_doc,total_doc,
+                                                       self.batch_size, self.threads, start_at,self.instances,updated)))
         for t in load_thread:
             t.start()
         servers_init = self.servers[:self.nodes_init]
@@ -597,14 +597,14 @@ class VolumeTests(BaseTestCase):
         #total_doc,start_at=self.load_till_rebalance_progress(rest,bucket,total_doc,start_at)
         rebalance.result()
         for b in bucket:
-            self.check_dataloss_for_high_ops_loader(self.master, b, total_doc, updated=True, ops=total_doc,
+            self.check_dataloss_for_high_ops_loader(self.master, b,total_doc,updated=True,ops=total_doc,
                                                     batch=self.batch_size, instances=self.instances)
         updated +=1
         #Update all data
         load_thread = []
         for b in bucket:
          load_thread.append(Thread(target=self.update_buckets_with_high_ops, args=(
-         self.master, b, total_doc, total_doc, self.batch_size, self.threads, start_at, self.instances, updated)))
+         self.master, b, total_doc, total_doc, self.batch_size, self.threads, start_at, self.instances,updated)))
         for t in load_thread:
          t.start()
         # rebalance out 1 node
@@ -617,13 +617,13 @@ class VolumeTests(BaseTestCase):
          t.join()
         for b in bucket:
          self.check_dataloss_for_high_ops_loader(self.master, b, total_doc, updated=True,
-                                                 ops=total_doc*updated, batch=self.batch_size, instances=self.instances)
+                                                 ops=total_doc*updated,batch=self.batch_size,instances=self.instances)
         updated +=1
         #Update all data
         load_thread = []
         for b in bucket:
          load_thread.append(Thread(target=self.update_buckets_with_high_ops, args=(
-         self.master, b, total_doc, total_doc, self.batch_size, self.threads, start_at, self.instances, updated)))
+         self.master, b, total_doc, total_doc, self.batch_size, self.threads, start_at, self.instances,updated)))
         for t in load_thread:
          t.start()
         new_server_list = list(set(new_server_list) - set(servers_out))
@@ -638,7 +638,7 @@ class VolumeTests(BaseTestCase):
             t.join()
         for b in bucket:
          self.check_dataloss_for_high_ops_loader(self.master, b, total_doc, updated=True,
-                                                 ops=total_doc*updated, batch=self.batch_size, instances=self.instances)
+                                                 ops=total_doc*updated,batch=self.batch_size,instances=self.instances)
         updated += 1
         # Update all data
         load_thread = []
@@ -652,14 +652,14 @@ class VolumeTests(BaseTestCase):
         self.log.info("==========Rebalance out of 2 nodes and Rebalance In 1 node=========")
         # Rebalance out of 2 nodes and Rebalance In 1 node
         servers_in = [list(set(self.servers) - set(new_server_list))[0]]
-        servers_out = list(set(new_server_list) - {self.master})[-2:]
+        servers_out = list(set(new_server_list) - set([self.master]))[-2:]
         rebalance = self.cluster.async_rebalance(servers_init, servers_in, servers_out)
         rebalance.result()
         for t in load_thread:
             t.join()
         for b in bucket:
             self.check_dataloss_for_high_ops_loader(self.master, b, total_doc, updated=True,
-                                                    ops=total_doc * updated, batch=self.batch_size, instances=self.instances)
+                                                    ops=total_doc * updated,batch=self.batch_size,instances=self.instances)
         updated += 1
         # Update all data
         load_thread = []
@@ -673,14 +673,14 @@ class VolumeTests(BaseTestCase):
         new_server_list = list(set(new_server_list + servers_in) - set(servers_out))
         # Rebalance out of 1 nodes and Rebalance In 2 nodes
         servers_in = list(set(self.servers) - set(new_server_list))[0:2]
-        servers_out = list(set(new_server_list) - {self.master})[0:1]
+        servers_out = list(set(new_server_list) - set([self.master]))[0:1]
         rebalance = self.cluster.async_rebalance(servers_init, servers_in, servers_out)
         rebalance.result()
         for t in load_thread:
             t.join()
         for b in bucket:
             self.check_dataloss_for_high_ops_loader(self.master, b, total_doc, updated=True,
-                                                    ops=total_doc * updated, batch=self.batch_size, instances=self.instances)
+                                                    ops=total_doc * updated,batch=self.batch_size,instances=self.instances)
         updated += 1
         # Update all data
         load_thread = []
@@ -700,7 +700,7 @@ class VolumeTests(BaseTestCase):
             t.join()
         for b in bucket:
             self.check_dataloss_for_high_ops_loader(self.master, b, total_doc, updated=True,
-                                                    ops=total_doc * updated, batch=self.batch_size, instances=self.instances)
+                                                    ops=total_doc * updated,batch=self.batch_size,instances=self.instances)
         updated += 1
         # Update all data
         load_thread = []
@@ -713,7 +713,7 @@ class VolumeTests(BaseTestCase):
         new_server_list = list(set(new_server_list + servers_in))
         self.log.info("==========Rebalance out 4 nodes =========")
         # Rebalance out 4 nodes
-        servers_out = list(set(new_server_list) - {self.master})[0:4]
+        servers_out = list(set(new_server_list) - set([self.master]))[0:4]
         rebalance = self.cluster.async_rebalance(servers_init, [], servers_out)
         rebalance.result()
         for t in load_thread:
@@ -806,7 +806,7 @@ class VolumeTests(BaseTestCase):
         for t in load_thread:
             t.join()
         for b in bucket:
-            self.check_dataloss_for_high_ops_loader(self.master, b, self.initial_load, batch=self.batch_size, instances=self.instances)
+            self.check_dataloss_for_high_ops_loader(self.master, b, self.initial_load,batch=self.batch_size,instances=self.instances)
         self.sleep(30)
         total_doc = self.initial_load
         start_at=total_doc
@@ -816,8 +816,8 @@ class VolumeTests(BaseTestCase):
         updated=1
         for b in bucket:
             load_thread.append(Thread(target=self.update_buckets_with_high_ops,
-                                      args=(self.master, b, self.initial_load, self.initial_load,
-                                                       self.batch_size, self.threads, 0, self.instances, updated)))
+                                      args=(self.master,b, self.initial_load,self.initial_load,
+                                                       self.batch_size, self.threads, 0,self.instances,updated)))
             create_thread.append(Thread(target=self.load_buckets_with_high_ops, args=(
             self.master, b, self.num_items, self.batch_size, self.threads, start_at, self.instances)))
         for t in load_thread:
@@ -838,13 +838,13 @@ class VolumeTests(BaseTestCase):
             t.join()
         for th in create_thread:
             th.join()
-        total_doc, start_at, updated=self.create_update_till_rebalance_progress(rest, bucket, total_doc, start_at, updated)
+        total_doc,start_at,updated=self.create_update_till_rebalance_progress(rest,bucket,total_doc,start_at,updated)
         rebalance.result()
         for b in bucket:
-            self.check_dataloss_for_high_ops_loader(self.master, b, self.initial_load, start_document=0, updated=True,
-                                                    ops=self.initial_load*(updated-1), batch=self.batch_size, instances=self.instances)
-            self.check_dataloss_for_high_ops_loader(self.master, b, total_doc-self.initial_load,
-                                                    start_document=self.initial_load, batch=self.batch_size, instances=self.instances)
+            self.check_dataloss_for_high_ops_loader(self.master, b,self.initial_load,start_document=0,updated=True,
+                                                    ops=self.initial_load*(updated-1),batch=self.batch_size,instances=self.instances)
+            self.check_dataloss_for_high_ops_loader(self.master,b,total_doc-self.initial_load,
+                                                    start_document=self.initial_load,batch=self.batch_size,instances=self.instances)
         # Update initial doc and create more doc
         load_thread = []
         create_thread = []
@@ -871,13 +871,13 @@ class VolumeTests(BaseTestCase):
             t.join()
         for th in create_thread:
             th.join()
-        total_doc, start_at, updated=self.create_update_till_rebalance_progress(rest, bucket, total_doc, start_at, updated)
+        total_doc,start_at,updated=self.create_update_till_rebalance_progress(rest,bucket,total_doc,start_at,updated)
         rebalance.result()
         for b in bucket:
-            self.check_dataloss_for_high_ops_loader(self.master, b, self.initial_load, start_document=0, updated=True,
+            self.check_dataloss_for_high_ops_loader(self.master, b,self.initial_load,start_document=0,updated=True,
                                                     ops=self.initial_load*(updated-1),
-                                                    batch=self.batch_size, instances=self.instances)
-            self.check_dataloss_for_high_ops_loader(self.master, b, total_doc-self.initial_load,
+                                                    batch=self.batch_size,instances=self.instances)
+            self.check_dataloss_for_high_ops_loader(self.master,b,total_doc-self.initial_load,
                                                     start_document=self.initial_load, batch=self.batch_size,
                                                     instances=self.instances)
         # Update initial doc and create more doc
@@ -912,7 +912,7 @@ class VolumeTests(BaseTestCase):
                                                                                   updated)
         rebalance.result()
         for b in bucket:
-            self.check_dataloss_for_high_ops_loader(self.master, b, self.initial_load, start_document=0, updated=True,
+            self.check_dataloss_for_high_ops_loader(self.master, b,self.initial_load,start_document=0,updated=True,
                                                     ops=self.initial_load*(updated-1), batch=self.batch_size,
                                                     instances=self.instances)
             self.check_dataloss_for_high_ops_loader(self.master, b, total_doc - self.initial_load,
@@ -938,7 +938,7 @@ class VolumeTests(BaseTestCase):
         self.log.info("==========Rebalance out of 2 nodes and Rebalance In 1 node=========")
         # Rebalance out of 2 nodes and Rebalance In 1 node
         servers_in = [list(set(self.servers) - set(new_server_list))[0]]
-        servers_out = list(set(new_server_list) - {self.master})[-2:]
+        servers_out = list(set(new_server_list) - set([self.master]))[-2:]
         rebalance = self.cluster.async_rebalance(servers_init, servers_in, servers_out)
         self.sleep(10)
         for t in load_thread:
@@ -951,7 +951,7 @@ class VolumeTests(BaseTestCase):
         for b in bucket:
             self.check_dataloss_for_high_ops_loader(self.master, b, self.initial_load, start_document=0, updated=True,
                                                     ops=self.initial_load * (updated - 1),
-                                                    batch=self.batch_size, instances=self.instances)
+                                                    batch=self.batch_size,instances=self.instances)
             self.check_dataloss_for_high_ops_loader(self.master, b, total_doc - self.initial_load,
                                                     start_document=self.initial_load, batch=self.batch_size,
                                                     instances=self.instances)
@@ -975,7 +975,7 @@ class VolumeTests(BaseTestCase):
         self.log.info("==========Rebalance out of 1 nodes and Rebalance In 2 nodes=========")
         # Rebalance out of 1 nodes and Rebalance In 2 nodes
         servers_in = list(set(self.servers) - set(new_server_list))[0:2]
-        servers_out = list(set(new_server_list) - {self.master})[0:1]
+        servers_out = list(set(new_server_list) - set([self.master]))[0:1]
         rebalance = self.cluster.async_rebalance(servers_init, servers_in, servers_out)
         self.sleep(10)
         for t in load_thread:
@@ -1047,7 +1047,7 @@ class VolumeTests(BaseTestCase):
         new_server_list = list(set(new_server_list + servers_in))
         self.log.info("==========Rebalance out 4 nodes =========")
         # Rebalance out 4 nodes
-        servers_out = list(set(new_server_list) - {self.master})[0:4]
+        servers_out = list(set(new_server_list) - set([self.master]))[0:4]
         rebalance = self.cluster.async_rebalance(servers_init, [], servers_out)
         self.sleep(10)
         for t in load_thread:
@@ -1146,7 +1146,7 @@ class VolumeTests(BaseTestCase):
                 self.fail("data is missing");
 
 
-    def load_till_rebalance_progress(self, rest, bucket, total_doc, start_at):
+    def load_till_rebalance_progress(self,rest,bucket,total_doc,start_at):
         rebalance_status = rest._rebalance_progress_status()
         self.log.info("###### Rebalance Status:{} ######".format(rebalance_status))
         self.sleep(10)
@@ -1154,8 +1154,8 @@ class VolumeTests(BaseTestCase):
             self.log.info("===== Loading {} as rebalance is going on =====".format(self.reload_size))
             load_thread = []
             for b in bucket:
-                load_thread.append(Thread(target=self.load_buckets_with_high_ops, args=(self.master, b, self.reload_size,
-                                                                                    self.batch_size, self.threads, start_at, self.instances)))
+                load_thread.append(Thread(target=self.load_buckets_with_high_ops, args=(self.master,b, self.reload_size,
+                                                                                    self.batch_size, self.threads, start_at,self.instances)))
             for t in load_thread:
                 t.start()
             for t in load_thread:
@@ -1164,9 +1164,9 @@ class VolumeTests(BaseTestCase):
             self.log.info("###### Rebalance Status:{} ######".format(rebalance_status))
             total_doc += self.reload_size
             start_at = total_doc
-        return total_doc, start_at
+        return total_doc,start_at
 
-    def create_update_till_rebalance_progress(self, rest, bucket, total_doc, start_at, updated):
+    def create_update_till_rebalance_progress(self,rest,bucket,total_doc,start_at,updated):
         rebalance_status = rest._rebalance_progress_status()
         self.log.info("###### Rebalance Status:{} ######".format(rebalance_status))
         self.sleep(10)
@@ -1175,12 +1175,12 @@ class VolumeTests(BaseTestCase):
             load_thread = []
             update_thread = []
             for b in bucket:
-                load_thread.append(Thread(target=self.load_buckets_with_high_ops, args=(self.master, b, self.reload_size,
+                load_thread.append(Thread(target=self.load_buckets_with_high_ops, args=(self.master,b, self.reload_size,
                                                                                     self.batch_size, self.threads,
-                                                                                        start_at, self.threads)))
+                                                                                        start_at,self.threads)))
                 update_thread.append(Thread(target=self.update_buckets_with_high_ops,
-                                      args=(self.master, b, self.initial_load, self.initial_load,
-                                                       self.batch_size, self.threads, 0, self.instances, updated)))
+                                      args=(self.master,b, self.initial_load,self.initial_load,
+                                                       self.batch_size, self.threads, 0,self.instances,updated)))
             for t in load_thread:
                 t.start()
             for th in update_thread:
@@ -1194,7 +1194,7 @@ class VolumeTests(BaseTestCase):
             total_doc += self.reload_size
             start_at = total_doc
             updated += 1
-        return total_doc, start_at, updated
+        return total_doc,start_at,updated
 
     def shuffle_nodes_between_zones_and_rebalance(self, to_remove=None):
         """
@@ -1228,7 +1228,7 @@ class VolumeTests(BaseTestCase):
             # Shuffle the nodesS
             for i in range(1, self.zone):
                 node_in_zone = list(set(nodes_in_zone[zones[i]]) -
-                                    {node for node in rest.get_nodes_in_zone(zones[i])})
+                                    set([node for node in rest.get_nodes_in_zone(zones[i])]))
                 rest.shuffle_nodes_in_zones(node_in_zone, zones[0], zones[i])
         otpnodes = [node.id for node in rest.node_statuses()]
         nodes_to_remove = [node.id for node in rest.node_statuses() if node.ip in [t.ip for t in to_remove]]
@@ -1246,10 +1246,10 @@ class VolumeTests(BaseTestCase):
                                      batch=20000, threads=5, start_document=0,
                                      instances=1,update_counter=1):
         import subprocess
-        #cmd_format = "python3 scripts/high_ops_doc_loader.py  --node {0} --bucket {1} --user {2} --password {3} " \
+        #cmd_format = "python scripts/high_ops_doc_loader.py  --node {0} --bucket {1} --user {2} --password {3} " \
         #             "--count {4} --batch_size {5} --threads {6} --start_document {7} --cb_version {8} --instances {" \
         #             "9} --ops {10} --updates --update_counter {11}"
-        cmd_format = "python3 scripts/thanosied.py  --spec couchbase://{0} --bucket {1} --user {2} --password {3} " \
+        cmd_format = "python scripts/thanosied.py  --spec couchbase://{0} --bucket {1} --user {2} --password {3} " \
                      "--count {4} --batch_size {5} --threads {6} --start_document {7} --cb_version {8} --workers {9} --rate_limit {10} " \
                      "--passes 1  --update_counter {11}"
         cb_version = RestConnection(server).get_nodes_version()[:3]
@@ -1258,7 +1258,7 @@ class VolumeTests(BaseTestCase):
         cmd = cmd_format.format(server.ip, bucket.name, server.rest_username,
                                 server.rest_password,
                                 items, batch, threads, start_document,
-                                cb_version, instances, int(ops), update_counter)
+                                cb_version, instances, int(ops),update_counter)
         self.log.info("Running {}".format(cmd))
         result = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE,
                                   stderr=subprocess.PIPE)
@@ -1280,9 +1280,9 @@ class VolumeTests(BaseTestCase):
     def load_buckets_with_high_ops(self, server, bucket, items, batch=20000, threads=10, start_document=0, instances=1
                                    ,ttl=0):
         import subprocess
-        #cmd_format = "python3 scripts/high_ops_doc_loader.py  --node {0} --bucket {1} --user {2} --password {3} " \
+        #cmd_format = "python scripts/high_ops_doc_loader.py  --node {0} --bucket {1} --user {2} --password {3} " \
         #             "--count {4} --batch_size {5} --threads {6} --start_document {7} --cb_version {8} --instances {9} --ttl {10}"
-        cmd_format = "python3 scripts/thanosied.py  --spec couchbase://{0} --bucket {1} --user {2} --password {3} " \
+        cmd_format = "python scripts/thanosied.py  --spec couchbase://{0} --bucket {1} --user {2} --password {3} " \
                      "--count {4} --batch_size {5} --threads {6} --start_document {7} --cb_version {8} --workers {9} --ttl {10}" \
                      "--passes 1"
         cb_version = RestConnection(server).get_nodes_version()[:3]
@@ -1322,7 +1322,7 @@ class VolumeTests(BaseTestCase):
 
     def check_data(self, server, bucket, num_items=0):
         if self.loader == "pillowfight":
-            return self.check_dataloss(server, bucket, num_items)
+            return self.check_dataloss(server, bucket,num_items)
         elif self.loader == "high_ops":
             return self.check_dataloss_for_high_ops_loader(server, bucket, num_items)
 
@@ -1332,10 +1332,10 @@ class VolumeTests(BaseTestCase):
                                            updated=False, ops=0,instances=1):
         import subprocess
         from lib.memcached.helper.data_helper import VBucketAwareMemcached
-        #cmd_format = "python3 scripts/high_ops_doc_loader.py  --node {0} --bucket {1} --user {2} --password {3} " \
+        #cmd_format = "python scripts/high_ops_doc_loader.py  --node {0} --bucket {1} --user {2} --password {3} " \
         #             "--count {4} " \
         #             "--batch_size {5} --instances {9} --threads {6} --start_document {7} --cb_version {8} --validate"
-        cmd_format = "python3 scripts/thanosied.py  --spec couchbase://{0} --bucket {1} --user {2} --password {3} " \
+        cmd_format = "python scripts/thanosied.py  --spec couchbase://{0} --bucket {1} --user {2} --password {3} " \
                      "--count {4} --batch_size {5} --threads {6} --start_document {7} --cb_version {8} --workers {9} --validation 1 " \
                      "--passes 1"
         cb_version = RestConnection(server).get_nodes_version()[:3]
@@ -1343,7 +1343,7 @@ class VolumeTests(BaseTestCase):
             cmd_format = "{} --updated --ops {}".format(cmd_format, int(ops))
         cmd = cmd_format.format(server.ip, bucket.name, server.rest_username,
                                 server.rest_password,
-                                int(items), batch, threads, start_document, cb_version, instances)
+                                int(items), batch, threads, start_document, cb_version,instances)
         self.log.info("Running {}".format(cmd))
         result = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE,
                                   stderr=subprocess.PIPE)
@@ -1408,6 +1408,6 @@ class VolumeTests(BaseTestCase):
         for t in load_thread:
             t.join()
         for b in bucket:
-            errors=self.check_dataloss_for_high_ops_loader(self.master, b, self.num_items, instances=self.instances)
+            errors=self.check_dataloss_for_high_ops_loader(self.master, b, self.num_items,instances=self.instances)
             if len(errors) > 0:
                 self.fail("data is missing");

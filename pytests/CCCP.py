@@ -76,10 +76,10 @@ class CCCP(BaseTestCase):
         not_my_vbucket = False
         for bucket in self.buckets:
             while self.gen_load.has_next() and not not_my_vbucket:
-                key, _ = next(self.gen_load)
+                key, _ = self.gen_load.next()
                 try:
                     self.clients[bucket.name].get(key)
-                except Exception as ex:
+                except Exception, ex:
                     self.log.info("Config in exception is correct. Bucket %s, key %s"\
                                                                  % (bucket.name, key))
                     config = str(ex)[str(ex).find("Not my vbucket':") \

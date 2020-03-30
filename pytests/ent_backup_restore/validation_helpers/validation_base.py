@@ -74,12 +74,12 @@ class BackupRestoreValidationBase:
                 extra[key].append(actual[key])
         """ from 7.0, there are 2 keys with value None """
         keys_with_value_none = ["exclude_buckets", "include_buckets"]
-        for expected_key in list(expected.keys()):
+        for expected_key in expected.keys():
             if expected_key in actual:
                 if expected_key in keys_with_value_none:
                     continue
                 if not isinstance(expected[expected_key], dict) and not isinstance(expected[expected_key], list):
-                    if str(expected[expected_key]) != str(actual[expected_key]):
+                    if unicode(expected[expected_key]) != unicode(actual[expected_key]):
                         is_equal = False
                         if expected_key not in not_equal:
                             not_equal[expected_key] = {"expected": [], "actual": []}
@@ -145,7 +145,7 @@ class BackupRestoreValidationBase:
         info, complete_map = data_collector.collect_data(servers, buckets, userId=servers[0].rest_username,
                                                          password=servers[0].rest_password, perNode=False,
                                                          getReplica=get_replica, mode=mode)
-        for bucket in list(complete_map.keys()):
+        for bucket in complete_map.keys():
             file_name = "{0}-{1}-{2}-{3}.json".format(bucket, "key_value", backup_type, backup_num)
             file_path = os.path.join(backup_validation_path, file_name)
             data = complete_map[bucket]
@@ -179,10 +179,10 @@ class BackupRestoreValidationBase:
         info, complete_map = data_collector.collect_data(servers, buckets, userId=servers[0].rest_username,
                                                          password=servers[0].rest_password, perNode=False,
                                                          mode=mode)
-        for bucket in list(complete_map.keys()):
+        for bucket in complete_map.keys():
             file_name = "{0}-{1}-{2}.json".format(bucket, "keys", backup_num)
             file_path = os.path.join(backup_validation_path, file_name)
-            keys = list(complete_map[bucket].keys())
+            keys = complete_map[bucket].keys()
             with open(file_path, 'w') as f:
                 json.dump({"keys": keys}, f)
 

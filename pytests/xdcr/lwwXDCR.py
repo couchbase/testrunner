@@ -2,9 +2,9 @@ import ntplib
 
 from couchbase_helper.documentgenerator import BlobGenerator
 
-from .xdcrnewbasetests import XDCRNewBaseTest
-from .xdcrnewbasetests import NodeHelper
-from .xdcrnewbasetests import Utility, BUCKET_NAME, OPS
+from xdcrnewbasetests import XDCRNewBaseTest
+from xdcrnewbasetests import NodeHelper
+from xdcrnewbasetests import Utility, BUCKET_NAME, OPS
 
 
 # Assumption that at least 2 nodes on every cluster

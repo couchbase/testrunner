@@ -1,17 +1,17 @@
 from membase.api.rest_client import RestConnection, RestHelper
-import urllib.request, urllib.parse, urllib.error
+import urllib
 import json
 from remote.remote_util import RemoteMachineShellConnection, RemoteMachineHelper
 from newupgradebasetest import NewUpgradeBaseTest
 from security.auditmain import audit
-import subprocess
+import commands
 import socket
 import fileinput
 import sys
 from subprocess import Popen, PIPE
-from .SecretsMasterBase import SecretsMasterBase
+from SecretsMasterBase import SecretsMasterBase
 from basetestcase import BaseTestCase
-import _thread
+import thread
 from testconstants import STANDARD_BUCKET_PORT
 from membase.api.rest_client import RestConnection, Bucket, RestHelper
 from membase.api.exception import BucketCreationException
@@ -77,7 +77,7 @@ class SecretsMgmtTests(BaseTestCase):
             for server in self.servers:
                 shell = RemoteMachineShellConnection(server)
                 if (RemoteMachineHelper(shell).is_process_running('memcached') is None):
-                    print('Process Memcached is not running')
+                    print 'Process Memcached is not running'
                     # shell.set_environment_variable("CB_MASTER_PASSWORD", self.password)
                     shell.execute_command(
                         "export CB_MASTER_PASSWORD=" + self.password + "; /opt/couchbase/etc/couchbase_init.d start")
@@ -288,10 +288,10 @@ class SecretsMgmtTests(BaseTestCase):
             self.secretmgmt_base_obj.setup_pass_node(servers, self.password)
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], self.nodes_in_list, [],
                                                  services=self.services_in)
-        print(("result of rebalance is {0}".format(rebalance.result())))
+        print "result of rebalance is {0}".format(rebalance.result())
         servers_out = self.servers[2:]
         rebalance = self.cluster.async_rebalance(self.servers, [], servers_out)
-        print(("result of rebalance is {0}".format(rebalance.result())))
+        print "result of rebalance is {0}".format(rebalance.result())
         self.assertTrue(rebalance.result(), "Rebalance out with different service")
 
     # services_in=kv-index-n1ql,nodes_init=1,nodes_in=3
@@ -312,7 +312,7 @@ class SecretsMgmtTests(BaseTestCase):
         rebalance.result()
         servers_out = self.servers[1:]
         rebalance = self.cluster.async_rebalance(self.servers, [], servers_out)
-        print((rebalance.result()))
+        print rebalance.result()
         self.assertTrue(rebalance.result(), "Rebalance in  and out with different servers")
 
     # services_init = kv - kv:n1ql - index - kv:index, nodes_init = 4, nodes_out = 1, nodes_out_dist = kv:1, graceful = False
@@ -350,7 +350,7 @@ class SecretsMgmtTests(BaseTestCase):
                 rest.set_recovery_type(otpNode=node.id, recoveryType=recoveryType)
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [])
             self.assertTrue(rebalance.result(), "Failover with different servers")
-        except Exception as ex:
+        except Exception, ex:
             raise
 
     # services_init=kv-kv-index-index:n1ql,nodes_init=4,nodes_out=1,nodes_out_dist=kv:1,graceful=True
@@ -364,7 +364,7 @@ class SecretsMgmtTests(BaseTestCase):
             self.find_nodes_in_list()
             self.generate_map_nodes_out_dist()
             servr_out = self.nodes_out_list
-            print(servr_out)
+            print servr_out
             self.graceful = self.input.param('graceful', False)
             failover_task = self.cluster.async_failover([self.master],
                                                         failover_nodes=servr_out, graceful=self.graceful)
@@ -373,7 +373,7 @@ class SecretsMgmtTests(BaseTestCase):
             rebalance = self.cluster.rebalance(self.servers[:self.nodes_init], [], [])
             self.log.info("Rebalance Second time")
             rebalance = self.cluster.rebalance(self.servers[:self.nodes_init], [], [])
-        except Exception as ex:
+        except Exception, ex:
             raise
 
     # services_init=kv-kv-index-index:n1ql,nodes_init=4,targetProcess=memcached

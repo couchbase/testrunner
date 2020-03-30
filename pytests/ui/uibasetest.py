@@ -2,7 +2,7 @@ import logger
 import time
 import unittest
 import os
-import subprocess
+import commands
 import types
 import datetime
 from selenium import webdriver
@@ -12,7 +12,7 @@ from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
 from selenium.webdriver.support.ui import WebDriverWait, Select
 from selenium.common.exceptions import NoSuchElementException, StaleElementReferenceException
 from threading import Thread
-import configparser
+import ConfigParser
 from TestInput import TestInputSingleton
 from security.rbac_base import RbacBase
 from remote.remote_util import RemoteMachineShellConnection
@@ -101,7 +101,7 @@ class BaseUITestCase(unittest.TestCase):
         host = self.machine.ip
         if host in ['localhost', '127.0.0.1']:
             cmd = 'ps -ef|grep selenium-server'
-            output = subprocess.getstatusoutput(cmd)
+            output = commands.getstatusoutput(cmd)
             if str(output).find('selenium-server-standalone') > -1:
                 self.log.info("selenium is running")
                 return True
@@ -227,14 +227,14 @@ class BaseUITestCase(unittest.TestCase):
             if self.driver:
                 self.driver.close()
             if test_failed and TestInputSingleton.input.param("stop-on-failure", False):
-                print("test fails, teardown will be skipped!!!")
+                print "test fails, teardown will be skipped!!!"
                 return
             rest = RestConnection(self.servers[0])
             try:
                 reb_status = rest._rebalance_progress_status()
             except ValueError as e:
-                if str(e) == 'No JSON object could be decoded':
-                    print("cluster not initialized!!!")
+                if e.message == 'No JSON object could be decoded':
+                    print "cluster not initialized!!!"
                     return
             if reb_status == 'running':
                 stopped = rest.stop_rebalance()
@@ -272,7 +272,7 @@ class Control:
 
     def highlightElement(self):
         if self.by:
-            print(("document.evaluate(\"{0}\", document, null, XPathResult.ANY_TYPE, null).iterateNext().setAttribute('style','background-color:yellow');".format(self.by)))
+            print("document.evaluate(\"{0}\", document, null, XPathResult.ANY_TYPE, null).iterateNext().setAttribute('style','background-color:yellow');".format(self.by))
             self.selenium.execute_script("document.evaluate(\"{0}\",document, null, XPathResult.ANY_TYPE, null).iterateNext().setAttribute('style','background-color:yellow');".format(self.by))
 
     def type_native(self, text):
@@ -307,7 +307,7 @@ class Control:
             self.highlightElement()
             if not is_pwd:
                 self.web_element.clear()
-            if isinstance(message, bytes) and message.find('\\') > -1:
+            if type(message) == types.StringType and message.find('\\') > -1:
                 for symb in list(message):
                     if symb == '\\':
                         self.web_element.send_keys(Keys.DIVIDE)
@@ -358,7 +358,7 @@ class ControlsHelper():
     def __init__(self, driver):
         self.driver = driver
         file = "pytests/ui/uilocators-spock.conf"
-        config = configparser.ConfigParser()
+        config = ConfigParser.ConfigParser()
         config.read(file)
         self.locators = config
 

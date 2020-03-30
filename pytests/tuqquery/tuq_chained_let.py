@@ -1,4 +1,4 @@
-from .tuq import QueryTests
+from tuq import QueryTests
 
 
 class QueryChainedLetTests(QueryTests):
@@ -96,7 +96,6 @@ class QueryChainedLetTests(QueryTests):
         queries["k"] = {"queries": [query_11], "asserts": [self.verifier(verify_11)]}
         queries["l"] = {"queries": [query_12], "asserts": [self.verifier(verify_12)]}
         queries["m"] = {"queries": [query_13], "asserts": [self.verifier(verify_13)]}
-
         self.query_runner(queries)
 
     def test_basic_chained_letting(self):

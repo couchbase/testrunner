@@ -193,8 +193,8 @@ class EventingDataset(EventingBaseTest):
         # delete a doc using n1ql query
         try:
             self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
-        except Exception as ex:
-            if "Primary Index Already present, This looks like a bug" in str(ex):
+        except Exception,ex:
+            if "Primary Index Already present, This looks like a bug" in ex.message:
                 pass
             else:
                 raise ex
@@ -338,13 +338,13 @@ class EventingDataset(EventingBaseTest):
             crc = bucket.lookup_in(docid, SD.exists('_eventing.crc', xattr=True))
             self.log.info(crc.exists('_eventing.crc'))
             if not fiid.exists('_eventing.fiid') and not crc.exists('_eventing.crc'):
-                self.fail("No fiid : {} or crc : {} found:".format(fiid, crc))
+                self.fail("No fiid : {} or crc : {} found:".format(fiid,crc))
         self.undeploy_function(body)
         for docid in ['customer123', 'customer1234', 'customer12345']:
             fiid = bucket.lookup_in(docid, SD.exists('_eventing.fiid', xattr=True))
             crc = bucket.lookup_in(docid, SD.exists('_eventing.crc', xattr=True))
             if not fiid.exists('_eventing.fiid') and not crc.exists('_eventing.crc'):
-                self.fail("No fiid : {} or crc : {} found after undeployment:".format(fiid, crc))
+                self.fail("No fiid : {} or crc : {} found after undeployment:".format(fiid,crc))
 
     def test_fiid_crc_with_pause_resume(self):
         body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OP_SOURCE_DOC_MUTATION,
@@ -359,20 +359,20 @@ class EventingDataset(EventingBaseTest):
         #get fiid and crc
         fiid_value = bucket.lookup_in('customer123', SD.exists('_eventing.fiid', xattr=True))['_eventing.fiid']
         crc_value = bucket.lookup_in('customer123', SD.exists('_eventing.crc', xattr=True))['_eventing.crc']
-        self.log.info("Fiid: {} and CRC: {}".format(fiid_value, crc_value))
+        self.log.info("Fiid: {} and CRC: {}".format(fiid_value,crc_value))
         # check for fiid and crc
         for docid in ['customer1234', 'customer12345']:
             fiid = bucket.lookup_in(docid, SD.exists('_eventing.fiid', xattr=True))
             crc = bucket.lookup_in(docid, SD.exists('_eventing.crc', xattr=True))
             if fiid_value != fiid['_eventing.fiid'] or crc_value !=crc['_eventing.crc']:
-                self.fail("fiid {} or crc {} values are not same:".format(fiid, crc))
+                self.fail("fiid {} or crc {} values are not same:".format(fiid,crc))
         self.pause_function(body)
         for docid in ['customer12553', 'customer1253', 'customer12531']:
             bucket.upsert(docid, {'a': 1})
         self.resume_function(body)
         self.verify_eventing_results(self.function_name, 6, skip_stats_validation=True)
-        for docid in ['customer12553', 'customer1253', 'customer12531', 'customer123', 'customer1234', 'customer12345']:
+        for docid in ['customer12553','customer1253','customer12531','customer123', 'customer1234', 'customer12345']:
             fiid = bucket.lookup_in(docid, SD.exists('_eventing.fiid', xattr=True))
             crc = bucket.lookup_in(docid, SD.exists('_eventing.crc', xattr=True))
             if fiid_value != fiid['_eventing.fiid'] or crc_value !=crc['_eventing.crc']:
-                self.fail("fiid {} or crc {} values are not same:".format(fiid, crc))
+                self.fail("fiid {} or crc {} values are not same:".format(fiid,crc))

@@ -28,7 +28,8 @@ def histo_percentile(histo, percentiles):
     """The histo dict is returned by add_timing_sample(). The percentiles must
     be sorted, ascending, like [0.90, 0.99]."""
     v_sum = 0
-    bins = sorted(list(histo.keys()))
+    bins = histo.keys()
+    bins.sort()
     for bin in bins:
         v_sum += histo[bin]
     v_sum = float(v_sum)
@@ -38,7 +39,7 @@ def histo_percentile(histo, percentiles):
         if not percentiles:
             return rv
         v_cur += histo[bin]
-        while percentiles and (v_cur // v_sum) >= percentiles[0]:
+        while percentiles and (v_cur / v_sum) >= percentiles[0]:
             rv.append((percentiles[0], bin))
             percentiles.pop(0)
     return rv
@@ -140,7 +141,7 @@ class StatsCollector(object):
                 sum(1 for _ in self.get_ns_servers_samples(metric))
 
     def export(self, name, test_params):
-        for latency in list(self._task["latency"].keys()):
+        for latency in self._task["latency"].keys():
             # save the last histogram snapshot
             per_90th_tot = 0
             histos = self._task["latency"].get(latency, [])
@@ -171,7 +172,7 @@ class StatsCollector(object):
                 self._task["latency"][key].append(temp)
             if per_90th_tot:
                 self._lat_avg_stats["%s-90th-avg" % latency] \
-                    = per_90th_tot // len(histos) * 1000000
+                    = per_90th_tot / len(histos) * 1000000
 
         # XDCR stats
         try:
@@ -240,9 +241,9 @@ class StatsCollector(object):
         if self.client_id:
             patterns = ('reload$', 'load$', 'warmup$', 'index$')
             phases = ('.reload', '.load', '.warmup', '.index')
-            name_picker = lambda pattern_phase: re.search(pattern_phase[0], self._task["name"])
+            name_picker = lambda (pattern, phase): re.search(pattern, self._task["name"])
             try:
-                phase = list(filter(name_picker, list(zip(patterns, phases))))[0][1]
+                phase = filter(name_picker, zip(patterns, phases))[0][1]
             except IndexError:
                 phase = '.loop'
             name = str(self.client_id) + phase
@@ -255,7 +256,7 @@ class StatsCollector(object):
         self._task["bucket_size"] = []
         retries = 0
         nodes_iterator = (node for node in self.nodes)
-        node = next(nodes_iterator)
+        node = nodes_iterator.next()
         rest = RestConnection(node)
         while not self._aborted():
             time.sleep(interval)
@@ -264,14 +265,14 @@ class StatsCollector(object):
                 status, db_size = rest.get_database_disk_size(self.bucket)
                 if status:
                     self._task["bucket_size"].append(db_size)
-            except IndexError as e:
+            except IndexError, e:
                 retries += 1
                 log.error("unable to get bucket size {0}: {1}"
                           .format(self.bucket, e))
                 log.warning("retries: {0} of {1}".format(retries, RETRIES))
                 if retries == RETRIES:
                     try:
-                        node = next(nodes_iterator)
+                        node = nodes_iterator.next()
                         rest = RestConnection(node)
                         retries = 0
                     except StopIteration:
@@ -403,7 +404,7 @@ class StatsCollector(object):
             'nswap', 'cnswap', 'exit_signal', 'processor', 'rt_priority',
             'policy', 'delayacct_blkio_ticks', 'guest_time', 'cguest_time')
 
-        return {} if error else dict(list(zip(fields, output[0].split(' '))))
+        return {} if error else dict(zip(fields, output[0].split(' ')))
 
     def _extract_io_info(self, shell):
         """
@@ -437,7 +438,7 @@ class StatsCollector(object):
         for node in self.nodes:
             try:
                 shells.append(RemoteMachineShellConnection(node))
-            except Exception as error:
+            except Exception, error:
                 log.error(error)
         d = {"snapshots": []}
         #        "pname":"x","pid":"y","snapshots":[{"time":time,"value":value}]
@@ -469,7 +470,7 @@ class StatsCollector(object):
         for node in self.nodes:
             try:
                 shells.append(RemoteMachineShellConnection(node))
-            except Exception as error:
+            except Exception, error:
                 log.error(error)
 
         self._task["iostats"] = []
@@ -505,14 +506,14 @@ class StatsCollector(object):
             mc = MemcachedClientHelper.direct_client(node, bucket)
             stats = mc.stats()
             stats.update(mc.stats("warmup"))
-        except Exception as e:
+        except Exception, e:
             log.error(e)
             return False
         finally:
             stats["time"] = time.time()
             stats["ip"] = node.ip
             self._mb_stats["snapshots"].append(stats)
-            print(stats)
+            print stats
 
         log.info("memcache stats snapshot captured")
         return True
@@ -524,7 +525,7 @@ class StatsCollector(object):
                 bucket = RestConnection(node).get_buckets()[0].name
                 mc = MemcachedClientHelper.direct_client(node, bucket)
                 mcs.append(mc)
-            except Exception as error:
+            except Exception, error:
                 log.error(error)
         self._task["membasestats"] = []
         self._task["timings"] = []
@@ -537,11 +538,11 @@ class StatsCollector(object):
             time.sleep(interval)
             log.info("collecting membase stats")
             for mc in mcs:
-                for rerty in range(RETRIES):
+                for rerty in xrange(RETRIES):
                     try:
                         stats = mc.stats()
                     except Exception as e:
-                        log.warning("{0}, retries = {1}".format(str(e), rerty))
+                        log.warn("{0}, retries = {1}".format(str(e), rerty))
                         time.sleep(2)
                         mc.reconnect()
                     else:
@@ -554,7 +555,7 @@ class StatsCollector(object):
                     try:
                         stats = mc.stats(arg)
                         data[mc.host][arg].append(stats)
-                    except EOFError as e:
+                    except EOFError, e:
                         log.error("unable to get {0} stats {1}: {2}"
                                   .format(arg, mc.host, e))
 
@@ -586,9 +587,9 @@ class StatsCollector(object):
             if data[host]["timings"]:
                 log.info("dumping disk timing stats: {0}".format(host))
                 latests_timings = data[host]["timings"][-1]
-                for key, value in sorted(latests_timings.items()):
+                for key, value in sorted(latests_timings.iteritems()):
                     if key.startswith("disk"):
-                        print("{0:50s}: {1}".format(key, value))
+                        print "{0:50s}: {1}".format(key, value)
 
         log.info("finished membase_stats")
 
@@ -596,7 +597,7 @@ class StatsCollector(object):
         self._task["ns_server_stats"] = []
         self._task["ns_server_stats_system"] = []
         nodes_iterator = (node for node in self.nodes)
-        node = next(nodes_iterator)
+        node = nodes_iterator.next()
         retries = 0
         not_null = lambda v: v if v is not None else 0
 
@@ -607,15 +608,15 @@ class StatsCollector(object):
             try:
                 # Bucket stats
                 ns_server_stats = rest.fetch_bucket_stats(bucket=self.bucket)
-                for key, value in ns_server_stats["op"]["samples"].items():
+                for key, value in ns_server_stats["op"]["samples"].iteritems():
                     ns_server_stats["op"]["samples"][key] = not_null(value)
                 self._task["ns_server_stats"].append(ns_server_stats)
                 # System stats
                 ns_server_stats_system = rest.fetch_system_stats()
                 self._task["ns_server_stats_system"].append(ns_server_stats_system)
-            except ServerUnavailableException as e:
+            except ServerUnavailableException, e:
                 log.error(e)
-            except (ValueError, TypeError) as e:
+            except (ValueError, TypeError), e:
                 log.error("unable to parse json object {0}: {1}".format(node, e))
             else:
                 continue
@@ -624,7 +625,7 @@ class StatsCollector(object):
                 log.warning("retries: {0} of {1}".format(retries, RETRIES))
             else:
                 try:
-                    node = next(nodes_iterator)
+                    node = nodes_iterator.next()
                     rest = RestConnection(node)
                     retries = 0
                 except StopIteration:
@@ -644,14 +645,14 @@ class StatsCollector(object):
             for rest in rests:
                 try:
                     data = rest.set_view_info(self.bucket, ddoc)
-                except (SetViewInfoNotFound, ServerUnavailableException) as error:
+                except (SetViewInfoNotFound, ServerUnavailableException), error:
                     log.error(error)
                     continue
                 try:
                     update_history = data[1]['stats']['update_history']
                     indexing_time = \
                         [event['indexing_time'] for event in update_history]
-                    avg_time = sum(indexing_time) // len(indexing_time)
+                    avg_time = sum(indexing_time) / len(indexing_time)
                 except (IndexError, KeyError, ValueError):
                     avg_time = 0
                 finally:
@@ -673,10 +674,11 @@ class StatsCollector(object):
             for rest in rests:
                 try:
                     active_tasks = rest.active_tasks()
-                except ServerUnavailableException as error:
+                except ServerUnavailableException, error:
                     log.error(error)
                     continue
-                indexer_tasks = [t for t in active_tasks if t['type'] == 'indexer']
+                indexer_tasks = filter(lambda t: t['type'] == 'indexer',
+                                       active_tasks)
                 tasks.extend(indexer_tasks)
 
             # Calculate throughput for every unique PID
@@ -690,7 +692,7 @@ class StatsCollector(object):
                     task['updated_on'] - indexers[uiid].get('updated_on',
                                                             task['started_on'])
                 if time_delta:
-                    thr += changes_delta // time_delta
+                    thr += changes_delta / time_delta
                 indexers[uiid]['changes_done'] = task['changes_done']
                 indexers[uiid]['updated_on'] = task['updated_on']
 
@@ -702,7 +704,7 @@ class StatsCollector(object):
 
     def _get_xdcr_latency(self, src_client, dst_client, multi=False):
         PREFIX = "xdcr_track_"
-        kvs = dict((PREFIX + hex(), hex()) for _ in range(10))
+        kvs = dict((PREFIX + hex(), hex()) for _ in xrange(10))
         key = PREFIX + hex()
         persisted = False
 
@@ -711,7 +713,7 @@ class StatsCollector(object):
             src_client.setMulti(0, 0, kvs)
             while True:
                 try:
-                    dst_client.getMulti(list(kvs.keys()), timeout_sec=120,
+                    dst_client.getMulti(kvs.keys(), timeout_sec=120,
                                         parallel=False)
                     break
                 except ValueError:
@@ -765,13 +767,13 @@ class StatsCollector(object):
     def rebalance_progress(self, interval=15):
         self._task["rebalance_progress"] = list()
         nodes = cycle(self.nodes)
-        rest = RestConnection(next(nodes))
+        rest = RestConnection(nodes.next())
         while not self._aborted():
             try:
                 tasks = rest.ns_server_tasks()
-            except ServerUnavailableException as error:
+            except ServerUnavailableException, error:
                 log.error(error)
-                rest = RestConnection(next(nodes))
+                rest = RestConnection(nodes.next())
                 continue
             for task in tasks:
                 if task["type"] == "rebalance":

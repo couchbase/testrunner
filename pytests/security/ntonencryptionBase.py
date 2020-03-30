@@ -4,7 +4,7 @@ log = logger.Logger.get_logger()
 import time
 from subprocess import Popen, PIPE
 import json
-import urllib.request, urllib.error, urllib.parse
+import urllib2
 import os
 import stat
 import subprocess
@@ -48,13 +48,11 @@ class ntonencryptionBase:
             remote_client = RemoteMachineShellConnection(servers[0])
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
                         options=options, cluster_host="localhost", user='Administrator', password='password')
-            remote_client.disconnect()
         else:
             for server in servers:
                 remote_client = RemoteMachineShellConnection(server)
                 output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
                             options=options, cluster_host="localhost", user='Administrator', password='password')
-                remote_client.disconnect()
         log.info("Output of node-to-node-encryption command is {0}".format(output))
         log.info("Error of node-to-node-encryption command is {0}".format(error))
         #To check for wildcard dns - Unable to switch on n2n if retries exceeded error occurs
@@ -85,13 +83,11 @@ class ntonencryptionBase:
             remote_client = RemoteMachineShellConnection(servers[0])
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
                         options=options, cluster_host="localhost", user='Administrator', password='password')
-            remote_client.disconnect()
         else:
             for server in servers:
                 remote_client = RemoteMachineShellConnection(server)
                 output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
                             options=options, cluster_host="localhost", user='Administrator', password='password')
-                remote_client.disconnect()
         log.info("Output of setting-security command is {0}".format(output))
         log.info("Error of setting-security command is {0}".format(error))
 
@@ -123,8 +119,7 @@ class ntonencryptionBase:
                 options = '--node-init-hostname ' + sever.ip
                 remote_client = RemoteMachineShellConnection(server)
                 output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
-                        options=options, cluster_host="localhost", user='Administrator', password='password')
-                remote_client.disconnect()
+                        options=options, cluster_host="localhost", user='Administrator', password='password') 
             
     
     def check_server_ports(self,servers):
@@ -167,13 +162,13 @@ class ntonencryptionBase:
 
         while attempts < 1:
             try:
-                response = urllib.request.urlopen("http://testssl.sh/testssl.sh", timeout = 5)
+                response = urllib2.urlopen("http://testssl.sh/testssl.sh", timeout = 5)
                 content = response.read()
                 f = open(testssl_file_name, 'w' )
                 f.write( content )
                 f.close()
                 break
-            except urllib.error.URLError as e:
+            except urllib2.URLError as e:
                 attempts += 1
                 log.info("have an exception getting testssl {0}".format(e))
 

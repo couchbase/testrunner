@@ -1,7 +1,7 @@
 
 import sys
-import urllib.request, urllib.error, urllib.parse
-import urllib.request, urllib.parse, urllib.error
+import urllib2
+import urllib
 import httplib2
 import json
 import string
@@ -16,30 +16,30 @@ from optparse import OptionParser
 # need a timeout param
 
 def main():
-    print('in main')
+    print 'in main'
     usage = '%prog -i inifile -o outputfile -s servers'
     parser = OptionParser(usage)
-    parser.add_option('-s', '--servers', dest='servers')
-    parser.add_option('-d', '--addPoolServerId', dest='addPoolServerId', default=None)
-    parser.add_option('-a', '--addPoolServers', dest='addPoolServers', default=None)
-    parser.add_option('-i', '--inifile', dest='inifile')
-    parser.add_option('-o', '--outputFile', dest='outputFile')
-    parser.add_option('-p', '--os', dest='os')
+    parser.add_option('-s','--servers', dest='servers')
+    parser.add_option('-d','--addPoolServerId', dest='addPoolServerId', default=None)
+    parser.add_option('-a','--addPoolServers', dest='addPoolServers', default=None)
+    parser.add_option('-i','--inifile', dest='inifile')
+    parser.add_option('-o','--outputFile', dest='outputFile')
+    parser.add_option('-p','--os', dest='os')
     options, args = parser.parse_args()
 
 
-    print('the ini file is', options.inifile)
+    print 'the ini file is', options.inifile
 
     if not options.servers.startswith('['):
         options.servers='['+options.servers+']'
-    print('the server info is', options.servers)
+    print 'the server info is', options.servers
 
     addPoolServers = []
 
     if options.addPoolServers != None and options.addPoolServers != "None":
         if not options.addPoolServers.startswith('['):
             options.addPoolServers = '[' + options.addPoolServers + ']'
-        print('the additional server pool info is', options.addPoolServers)
+        print 'the additional server pool info is', options.addPoolServers
         addPoolServers = json.loads(options.addPoolServers)
 
     servers = json.loads(options.servers)
@@ -49,20 +49,20 @@ def main():
 
     for i in range( len(data) ):
           if 'dynamic' in data[i]:
-             data[i] = data[i].replace('dynamic', servers[0])
+             data[i] = string.replace(data[i], 'dynamic', servers[0])
              servers.pop(0)
           elif addPoolServers and options.addPoolServerId in data[i]:
-             data[i] = data[i].replace(options.addPoolServerId, addPoolServers[0])
+             data[i] = string.replace(data[i], options.addPoolServerId, addPoolServers[0])
              addPoolServers.pop(0)
 
           if options.os == 'windows':
               if 'root' in data[i]:
-                  data[i] = data[i].replace('root', 'Administrator')
+                  data[i] = string.replace(data[i], 'root', 'Administrator')
               if 'password:couchbase' in data[i]:
-                  data[i] = data[i].replace('couchbase', 'Membase123')
+                  data[i] = string.replace(data[i], 'couchbase', 'Membase123')
 
     for d in data:
-          print(d, end=' ')
+          print d,
 
     f = open(options.outputFile, 'w')
     f.writelines(data)

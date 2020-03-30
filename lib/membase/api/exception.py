@@ -1,4 +1,4 @@
-import traceback
+
 
 class MembaseHttpExceptionTypes(object):
 
@@ -53,7 +53,6 @@ class BucketCreationException(MembaseHttpException):
         self.type = MembaseHttpExceptionTypes.BUCKET_CREATION_ERROR
         self._message = 'unable to create bucket {0} on the host @ {1}'.\
             format(bucket_name, ip)
-        traceback.print_exc()
 
 class N1QLQueryException(MembaseHttpException):
     def __init__(self, query):

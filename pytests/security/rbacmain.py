@@ -6,8 +6,8 @@ log = logger.Logger.get_logger()
 import base64
 from security.rbacPermissionList import rbacPermissionList
 from remote.remote_util import RemoteMachineShellConnection
-import subprocess
-import urllib.request, urllib.parse, urllib.error
+import commands
+import urllib
 import time
 
 class rbacmain:
@@ -33,8 +33,8 @@ class rbacmain:
         self.cluster = cluster
         self.auth_type = auth_type
 
-    roles_admin = {'admin', 'ro_admin', 'cluster_admin'}
-    roles_bucket = {'bucket_admin', 'views_admin', 'replication_admin'}
+    roles_admin = {'admin','ro_admin','cluster_admin'}
+    roles_bucket = {'bucket_admin','views_admin','replication_admin'}
 
     def setUp(self):
         super(rbacmain, self).setUp()
@@ -60,7 +60,7 @@ class rbacmain:
         log.info(" Retrieve User Roles - Status - {0} -- Content - {1} -- Header - {2}".format(status, content, header))
         return status, content, header
 
-    def _set_user_roles(self, user_name, payload):
+    def _set_user_roles(self,user_name,payload):
         rest = RestConnection(self.master_ip)
         if self.auth_type == "ldap" or self.auth_type == "pam":
             url = "settings/rbac/users/external/" + user_name
@@ -71,7 +71,7 @@ class rbacmain:
         log.info(" Set User Roles - Status - {0} -- Content - {1} -- Header - {2}".format(status, content, header))
         return status, content, header
 
-    def _delete_user(self, user_name):
+    def _delete_user(self,user_name):
         rest = RestConnection(self.master_ip)
         if self.auth_type == 'ldap' or self.auth_type == "pam":
             url = "/settings/rbac/users/external/" + user_name
@@ -82,20 +82,20 @@ class rbacmain:
         log.info (" Deleting User - Status - {0} -- Content - {1} -- Header - {2}".format(status, content, header))
         return status, content, header
 
-    def _check_user_permission(self, username, password, permission_set):
+    def _check_user_permission(self,user_name,password,permission_set):
         rest = RestConnection(self.master_ip)
         url = "pools/default/checkPermissions/"
         param = permission_set
         api = rest.baseUrl + url
-        authorization = base64.encodebytes(('%s:%s' % (username, password)).encode()).decode()
+        authorization = base64.encodestring('%s:%s' % (user_name, password))
         header =  {'Content-Type': 'application/x-www-form-urlencoded',
                 'Authorization': 'Basic %s' % authorization,
                 'Accept': '*/*'}
         time.sleep(10)
-        status, content, header = rest._http_request(api, 'POST', params=param, headers=header)
+        status, content, header = rest._http_request(api, 'POST', params=param,headers=header)
         return status, content, header
 
-    def _return_roles(self, user_role):
+    def _return_roles(self,user_role):
         final_roles = ""
         user_role_param = user_role.split(":")
         if len(user_role_param) == 1:
@@ -105,7 +105,7 @@ class rbacmain:
                 final_roles = role + "," + final_roles
         return final_roles
 
-    def _delete_user_from_roles(self, server):
+    def _delete_user_from_roles(self,server):
         rest = RestConnection(server)
         status, content, header = rbacmain(server)._retrieve_user_roles()
         content = json.loads(content)
@@ -122,7 +122,7 @@ class rbacmain:
         user_details = user_id.split(":")
         final_roles = self._return_roles(user_role)
         payload = "name=" + user_details[0] + "&roles=" + final_roles
-        rbacmain(self.master_ip, self.auth_type)._set_user_roles(user_name=user_details[0], payload=payload)
+        rbacmain(self.master_ip,self.auth_type)._set_user_roles(user_name=user_details[0],payload=payload)
 
         master, expected, expected_neg = rbacRoles()._return_permission_set(final_user_role)        
 
@@ -132,26 +132,26 @@ class rbacmain:
         else:
             temp_dict =  expected['permissionSet']
 
-        for permission in temp_dict.keys():
+        for permission in temp_dict.iterkeys():
             if "[<bucket_name>]" in permission:
-                new_key = permission.replace("<bucket_name>", bucket_name)
+                new_key = permission.replace("<bucket_name>",bucket_name)
                 temp_dict[new_key] = temp_dict.pop(permission)
         permission_set = master['permissionSet'].split(',')
         for idx, permission in enumerate(permission_set):
             if "[<bucket_name>]" in permission:
-                permission = permission.replace("<bucket_name>", bucket_name)
+                permission = permission.replace("<bucket_name>",bucket_name)
                 permission_set[idx] = permission
         permission_str = ','.join(permission_set)
-        status, content, header = rbacmain(self.master_ip)._check_user_permission(user_details[0], user_details[1], permission_str)
+        status, content, header = rbacmain(self.master_ip)._check_user_permission(user_details[0],user_details[1],permission_str)
         content = json.loads(content)   
         log.info ("Value of content is {0}".format(content))
-        for item in temp_dict.keys():
+        for item in temp_dict.iterkeys():
             if temp_dict[item] != content[item]:
-                log.info ("Item is {0} -- Expected Value is - {1} and Actual Value is {2}".format(item, temp_dict[item], content[item]))
+                log.info ("Item is {0} -- Expected Value is - {1} and Actual Value is {2}".format(item,temp_dict[item],content[item]))
                 result = False
         return result
 
-    def _parse_set_user_respone(self, response):
+    def _parse_set_user_respone(self,response):
         id = None
         name = None
         roles = {}
@@ -166,7 +166,7 @@ class rbacmain:
                     id = value[item]
         return id, name, roles
 
-    def _parse_get_user_response(self, response, user_id, user_name, roles):
+    def _parse_get_user_response(self,response,user_id,user_name,roles):
         role_return = self._convert_user_roles_format(roles)
         result = False
         for user in response:
@@ -180,7 +180,7 @@ class rbacmain:
                     log.info ("This might be an upgrade, There is not username is response")
                 return result
 
-    def _convert_user_roles_format(self, roles):
+    def _convert_user_roles_format(self,roles):
         role_return = []
         temp_roles = roles.split(":")
         for temp in temp_roles:
@@ -196,7 +196,7 @@ class rbacmain:
         return list(Admin)
 
 
-    def get_role_permission(self, permission_set):
+    def get_role_permission(self,permission_set):
         permission_fun_map = {
         'cluster.admin.diag!read':"cluster_admin_diag_read",
         'cluster.admin.diag!write':'cluster_admin_diag_write',
@@ -241,16 +241,16 @@ class rbacmain:
         permission = permission_set.split(":")
         perm_fun_map = permission_fun_map[permission[0]]
         if permission[1] == 'True':
-            http_code = [200, 201]
+            http_code = [200,201]
         else:
-            http_code = [401, 403]
+            http_code = [401,403]
         return perm_fun_map, http_code
 
-    def test_perm_rest_api(self, permission, user, password, user_role):
-        func_name, http_code = self.get_role_permission(permission)
+    def test_perm_rest_api(self,permission,user,password,user_role):
+        func_name,http_code = self.get_role_permission(permission)
         rest = RestConnection(self.master_ip)
         try:
-            rest.create_bucket(bucket='default', ramQuotaMB=100)
+            rest.create_bucket(bucket='default',ramQuotaMB=100)
         except:
             log.info("Default Bucket already exists")
         final_func = "rbacPermissionList()."+ func_name + "('" + user + "','" + password + "',host=self.master_ip,servers=self.servers,cluster=self.cluster,httpCode=" + str(http_code) +",user_role="+"'" + str(user_role)+"'" + ")"
@@ -263,7 +263,7 @@ class rbacmain:
         user_details = user_id.split(":")
         final_roles = self._return_roles(user_role)
         payload = "name=" + user_details[0] + "&roles=" + final_roles
-        status, content, header =  rbacmain(self.master_ip, self.auth_type)._set_user_roles(user_name=user_details[0], payload=payload)
+        status, content, header =  rbacmain(self.master_ip, self.auth_type)._set_user_roles(user_name=user_details[0],payload=payload)
         master, expected, expected_neg = rbacRoles()._return_permission_set(final_user_role)
 
 
@@ -273,12 +273,12 @@ class rbacmain:
         else:
             temp_dict =  expected['permissionSet']
 
-        f = open(user_role, 'w')
+        f = open(user_role,'w')
         f.close()
 
-        for key, value in temp_dict.items():
+        for key,value in temp_dict.iteritems():
             temp_str = str(key) + ":" + str(value)
-            result = self.test_perm_rest_api(temp_str, user_details[0], 'password', user_role)
+            result = self.test_perm_rest_api(temp_str,user_details[0],'password',user_role)
 
         with open(user_role, "r") as ins:
             log.info(" -------- FINAL RESULT for role - {0} ---------".format(user_role))
@@ -298,7 +298,7 @@ class rbacmain:
 
 
     def getRemoteFile(self, host):
-        subprocess.getstatusoutput(' rm -rf ' + self.PATH_SASLAUTHD_LOCAL + self.FILE_SASLAUTHD)
+        commands.getstatusoutput(' rm -rf ' + self.PATH_SASLAUTHD_LOCAL + self.FILE_SASLAUTHD)
         shell = RemoteMachineShellConnection(host)
         try:
             sftp = shell._ssh_client.open_sftp()
@@ -306,7 +306,7 @@ class rbacmain:
             tmpfile = self.PATH_SASLAUTHD_LOCAL + self.FILE_SASLAUTHD
             sftp.get('{0}'.format(tempfile), '{0}'.format(tmpfile))
             sftp.close()
-        except Exception as e:
+        except Exception, e:
             log.info (" Value of e is {0}".format(e))
         finally:
             shell.disconnect()
@@ -330,9 +330,9 @@ class rbacmain:
     '''
 
     def update_file_inline(self,mech_value='ldap'):
-        subprocess.getstatusoutput(' rm -rf ' + self.PATH_SASLAUTHD_LOCAL + self.FILE_SASLAUTHD_LOCAL)
-        f1 = open (self.PATH_SASLAUTHD_LOCAL + self.FILE_SASLAUTHD, 'r')
-        f2 = open (self.PATH_SASLAUTHD_LOCAL + self.FILE_SASLAUTHD_LOCAL, 'w')
+        commands.getstatusoutput(' rm -rf ' + self.PATH_SASLAUTHD_LOCAL + self.FILE_SASLAUTHD_LOCAL)
+        f1 = open (self.PATH_SASLAUTHD_LOCAL + self.FILE_SASLAUTHD,'r')
+        f2 = open (self.PATH_SASLAUTHD_LOCAL + self.FILE_SASLAUTHD_LOCAL,'w')
         for line in f1:
             line = line.rstrip('\n')
             if line=='MECH=ldap' and mech_value == 'pam':
@@ -347,10 +347,10 @@ class rbacmain:
                 f2.write(line + "\n")
         f1.close()
         f2.close()
-        subprocess.getstatusoutput("mv " + self.PATH_SASLAUTHD_LOCAL + self.FILE_SASLAUTHD_LOCAL + " " + self.PATH_SASLAUTHD_LOCAL + self.FILE_SASLAUTHD)
+        commands.getstatusoutput("mv " + self.PATH_SASLAUTHD_LOCAL + self.FILE_SASLAUTHD_LOCAL + " " + self.PATH_SASLAUTHD_LOCAL + self.FILE_SASLAUTHD)
 
 
-    def restart_saslauth(self, host):
+    def restart_saslauth(self,host):
         shell = RemoteMachineShellConnection(host)
         shell.execute_command('service saslauthd restart')
         shell.disconnect()
@@ -372,7 +372,7 @@ class rbacmain:
             self.writeFile(server)
             self.restart_saslauth(server)
         api = rest.baseUrl + 'settings/saslauthdAuth'
-        params = urllib.parse.urlencode({"enabled": 'true', "admins": [], "roAdmins": []})
+        params = urllib.urlencode({"enabled": 'true', "admins": [], "roAdmins": []})
         status, content, header = rest._http_request(api, 'POST', params)
         return status, content, header
 
@@ -384,7 +384,7 @@ class rbacmain:
 
     Returns - None
     '''
-    def add_remove_local_user(self, servers, user_list, operation):
+    def add_remove_local_user(self,servers,user_list,operation):
         for server in servers:
             shell = RemoteMachineShellConnection(server)
             try:

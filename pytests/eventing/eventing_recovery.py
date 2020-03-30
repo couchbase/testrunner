@@ -104,13 +104,13 @@ class EventingRecovery(EventingBaseTest):
             self.resume_function(body)
         # kill eventing consumer when eventing is processing mutations
         self.kill_consumer(eventing_node)
-        self.wait_for_handler_state(body['appname'], "deployed")
+        self.wait_for_handler_state(body['appname'],"deployed")
         self.sleep(30)
         # Wait for eventing to catch up with all the update mutations and verify results
         if self.is_sbm:
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2, skip_stats_validation=True)
         else:
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+            self.verify_eventing_results(self.function_name,self.docs_per_day * 2016, skip_stats_validation=True)
         if self.pause_resume:
             self.pause_function(body)
         # delete all documents
@@ -123,9 +123,9 @@ class EventingRecovery(EventingBaseTest):
         self.wait_for_handler_state(body['appname'], "deployed")
         # Wait for eventing to catch up with all the delete mutations and verify results
         if self.is_sbm:
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 , skip_stats_validation=True)
         else:
-            self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+            self.verify_eventing_results(self.function_name,0, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
         # intentionally added , as it requires some time for eventing-consumers to shutdown
         self.sleep(60)
@@ -157,7 +157,7 @@ class EventingRecovery(EventingBaseTest):
         if self.is_sbm:
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2, skip_stats_validation=True)
         else:
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+            self.verify_eventing_results(self.function_name,self.docs_per_day * 2016, skip_stats_validation=True)
         if self.pause_resume:
             self.pause_function(body)
         # delete all documents
@@ -175,7 +175,7 @@ class EventingRecovery(EventingBaseTest):
         if self.is_sbm:
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         else:
-            self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+            self.verify_eventing_results(self.function_name,0, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
         # intentionally added , as it requires some time for eventing-consumers to shutdown
         self.sleep(60)
@@ -306,7 +306,7 @@ class EventingRecovery(EventingBaseTest):
         if self.is_sbm:
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2, skip_stats_validation=True)
         else:
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+            self.verify_eventing_results(self.function_name,self.docs_per_day * 2016, skip_stats_validation=True)
         # pause handler
         if self.pause_resume:
             self.pause_function(body)
@@ -324,7 +324,7 @@ class EventingRecovery(EventingBaseTest):
         if self.is_sbm:
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         else:
-            self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+            self.verify_eventing_results(self.function_name,0, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
         # intentionally added , as it requires some time for eventing-consumers to shutdown
         self.sleep(60)
@@ -356,7 +356,7 @@ class EventingRecovery(EventingBaseTest):
         if self.is_sbm:
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2, skip_stats_validation=True)
         else:
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+            self.verify_eventing_results(self.function_name,self.docs_per_day * 2016, skip_stats_validation=True)
         # delete all documents
         task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, gen_load_non_json_del,
                                                 self.buckets[0].kvs[1], 'delete', compression=self.sdk_compression)
@@ -373,7 +373,7 @@ class EventingRecovery(EventingBaseTest):
         if self.is_sbm:
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         else:
-            self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+            self.verify_eventing_results(self.function_name,0, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
         # intentionally added , as it requires some time for eventing-consumers to shutdown
         self.sleep(60)
@@ -390,7 +390,7 @@ class EventingRecovery(EventingBaseTest):
         self.deploy_function(body)
         try:
             # partition the eventing node when its processing mutations
-            for i in range(5):
+            for i in xrange(5):
                 self.start_firewall_on_node(eventing_node)
             # load some data
             self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
@@ -418,7 +418,7 @@ class EventingRecovery(EventingBaseTest):
         if self.is_sbm:
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         else:
-            self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+            self.verify_eventing_results(self.function_name,0, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
 
     def test_reboot_n1ql_node_when_eventing_node_is_querying(self):
@@ -518,7 +518,7 @@ class EventingRecovery(EventingBaseTest):
         self.deploy_function(body)
         try:
             # partition the eventing node when its processing mutations
-            for i in range(5):
+            for i in xrange(5):
                 self.start_firewall_on_node(eventing_node)
             # load some data
             self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
@@ -599,7 +599,7 @@ class EventingRecovery(EventingBaseTest):
                 self.verify_eventing_results(self.function_name, self.docs_per_day * 2016,
                                              skip_stats_validation=True)
             else:
-                self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+                self.verify_eventing_results(self.function_name,0, skip_stats_validation=True)
             self.undeploy_and_delete_function(body)
         finally:
             self.change_time_zone(kv_node, timezone="America/Los_Angeles")
@@ -621,7 +621,7 @@ class EventingRecovery(EventingBaseTest):
                                                     self.buckets[0].kvs[1], 'create', compression=self.sdk_compression)
         except Exception as e:
             log.info("error while loading data")
-        self.deploy_function(body, wait_for_bootstrap=False)
+        self.deploy_function(body,wait_for_bootstrap=False)
         # Kill memcached on Node A
         self.log.info("Killing memcached on {0}".format(kv_node[1]))
         shell = RemoteMachineShellConnection(kv_node[1])
@@ -831,7 +831,7 @@ class EventingRecovery(EventingBaseTest):
             else:
                 self.wait_for_handler_state(body['appname'], "deployed")
             rebalance.result()
-        except Exception as ex:
+        except Exception, ex:
             log.info("Rebalance failed as expected after eventing got killed: {0}".format(str(ex)))
         else:
             self.fail("Rebalance succeeded even after killing eventing processes")
@@ -915,7 +915,7 @@ class EventingRecovery(EventingBaseTest):
             else:
                 self.wait_for_handler_state(body['appname'], "deployed")
             rebalance.result()
-        except Exception as ex:
+        except Exception, ex:
             log.info("Rebalance failed as expected after eventing got killed: {0}".format(str(ex)))
             # auto retry the failed rebalance
             self.check_retry_rebalance_succeeded()

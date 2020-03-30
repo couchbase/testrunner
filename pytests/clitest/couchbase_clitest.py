@@ -458,7 +458,7 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
         remote_client = RemoteMachineShellConnection(self.master)
         cli_command = "server-add"
         if int(nodes_add) < len(self.servers):
-            for num in range(nodes_add):
+            for num in xrange(nodes_add):
                 self.log.info("add node {0} to cluster".format(
                     self.servers[num + 1].ip))
                 options = "--server-add={0} \
@@ -488,7 +488,7 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
                                                          " vms in ini file")
 
         cli_command = "rebalance"
-        for num in range(nodes_rem):
+        for num in xrange(nodes_rem):
             options = "--server-remove={0}:8091".format(self.servers[nodes_add - num].ip)
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command, \
                             options=options, cluster_host="localhost", cluster_port=8091,\
@@ -509,7 +509,7 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
             to detect no graceful failover if no bucket """
         self._create_bucket(remote_client, bucket_replica=self.num_replicas)
         cli_command = "failover"
-        for num in range(nodes_failover):
+        for num in xrange(nodes_failover):
             self.log.info("failover node {0}" \
                           .format(self.servers[nodes_add - nodes_rem - num].ip))
             options = "--server-failover={0}:8091" \
@@ -538,7 +538,7 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
                         raise Exception("No printout with command: {0}".format(cli_command))
 
         cli_command = "server-readd"
-        for num in range(nodes_readd):
+        for num in xrange(nodes_readd):
             self.log.info("add back node {0} to cluster" \
                     .format(self.servers[nodes_add - nodes_rem - num ].ip))
             options = "--server-add={0}:{1}".format(self.servers[nodes_add - nodes_rem - num].ip,
@@ -569,7 +569,7 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
         cluster_pwd = self.master.rest_password
         cli_command = "server-add"
         if int(nodes_add) < len(self.servers):
-            for num in range(nodes_add):
+            for num in xrange(nodes_add):
                 self.log.info("add node {0} to cluster".format(self.servers[num + 1].ip))
                 options = "--server-add={0} \
                            --server-add-username=Administrator \
@@ -586,7 +586,7 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
              raise Exception("Node add should be smaller total number vms in ini file")
 
         cli_command = "rebalance"
-        for num in range(nodes_rem):
+        for num in xrange(nodes_rem):
             options = "--server-remove={0}:8091".format(self.servers[nodes_add - num].ip)
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command,
                                                                 options=options,
@@ -606,7 +606,7 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
         self._create_bucket(remote_client)
 
         cli_command = "failover"
-        for num in range(nodes_failover):
+        for num in xrange(nodes_failover):
             force_failover = False
             self.log.info("failover node {0}"\
                                 .format(self.servers[nodes_add - nodes_rem - num].ip))
@@ -624,7 +624,7 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
                 RestConnection(self.master).monitorRebalance()
 
         cli_command = "recovery"
-        for num in range(nodes_failover):
+        for num in xrange(nodes_failover):
             # try to set recovery when nodes failovered (MB-11230)
             options = "--server-recovery={0} --recovery-type=delta"\
                                   .format(self.servers[nodes_add - nodes_rem - num].ip)
@@ -636,7 +636,7 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
                                                                 password=cluster_pwd)
             self.assertTrue("SUCCESS: Servers recovered" in output)
 
-        for num in range(nodes_recovery):
+        for num in xrange(nodes_recovery):
             cli_command = "server-readd"
             self.log.info("add node {0} back to cluster"\
                           .format(self.servers[nodes_add - nodes_rem - num].ip))
@@ -664,7 +664,7 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
             self.assertTrue("SUCCESS: Servers recovered" in output)
 
         cli_command = "server-readd"
-        for num in range(nodes_failover):
+        for num in xrange(nodes_failover):
             self.log.info("add back node {0} to cluster"\
                                   .format(self.servers[nodes_add - nodes_rem - num ].ip))
             options = "--server-add={0}:{1}".format(self.servers[nodes_add - nodes_rem - num ].ip,
@@ -684,7 +684,7 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
         """
         if int(nodes_readd) > int(nodes_failover):
             cli_command = "server-add"
-            for num in range(nodes_readd - nodes_failover):
+            for num in xrange(nodes_readd - nodes_failover):
                 self.log.info("add node {0} to cluster".format(self.servers[nodes_add - num ].ip))
                 options = "--server-add={0} \
                            --server-add-username=Administrator \
@@ -717,7 +717,7 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
         self.assertTrue(self._check_output(self.REBALANCE_NOT_RUN, output))
 
         cli_command = "server-add"
-        for num in range(nodes_add):
+        for num in xrange(nodes_add):
             options = "--server-add={0} --server-add-username=Administrator \
                        --server-add-password=password"\
                              .format(self._convert_server_to_url(self.servers[num + 1]))
@@ -748,7 +748,7 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
         t.join()
 
         cli_command = "rebalance"
-        for num in range(nodes_rem):
+        for num in xrange(nodes_rem):
             options = "--server-remove={0}:8091".format(self.servers[nodes_add - num].ip)
             t = Thread(target=remote_client.execute_couchbase_cli, name="rebalance_after_add",
                        args=(cli_command, "localhost", options, None, "Administrator", "password"))
@@ -922,7 +922,7 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
                 else:
                     self.fail("Fail sto stop rebalance")
             else:
-                print("Fail to rebalance using rest call")
+                print "Fail to rebalance using rest call"
         if output:
             reb_result = output[-1]
             """ remove ANSI code """
@@ -933,7 +933,7 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
             if "100.0%" not in reb_bar:
                 self.fail("Rebalance failed.  It not reach 100%")
             reb_bar = reb_bar.replace(" 100.0%", "").strip(" ")
-            print("rebalance bar: %s" % reb_bar)
+            print "rebalance bar: %s" % reb_bar
             if " " in reb_bar:
                 self.fail("rebalance bar did not display correctly")
         else:
@@ -1158,7 +1158,7 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
             if enabled == 0:
                 # WARNING: --max-servers will not take affect because auto-reprovision is being disabled
                 max_nodes = 1
-                self.assertEqual(stdout[0], 'WARNING: --max-servers will not take affect because auto-reprovision is being disabled')
+                self.assertEquals(stdout[0], 'WARNING: --max-servers will not take affect because auto-reprovision is being disabled')
             self.assertTrue(self.verifyCommandOutput(stdout, expect_error, "Auto-reprovision settings modified"),
                             "Expected command to succeed")
             self.assertTrue(self.verifyAutoreprovisionSettings(server, enabled, max_nodes),
@@ -2064,7 +2064,7 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
             bucket_names.append(bucket.name)
         if permission == "all":
             role = '*'
-            bucket_name = bucket_names[random.randint(0, 1)]
+            bucket_name = bucket_names[random.randint(0,1)]
         elif permission == "self_bucket":
             role = "{0}".format(bucket_names[0])
             bucket_name = bucket_names[0]
@@ -2098,7 +2098,7 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
                 else:
                     self.log.info("Alright, user bucket A has no permission to check bucket B")
         except Exception as e:
-            print(e)
+            print e
         finally:
             shell.disconnect()
             if status:
@@ -2677,7 +2677,7 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
         try:
             options = '--regenerate'
             outputs = []
-            for i in range(10):
+            for i in xrange(10):
                 output, error = remote_client.execute_command("{0} {1}".format(cli_command,
                                                                                options))
                 new_password = ""
@@ -2691,7 +2691,7 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
             old_password = "password"
             apis = ["get_zone_and_nodes", "get_pools_info", "get_notifications", "get_pools",
                     "_rebalance_progress_status", "get_nodes_version", "get_alerts_settings"]
-            for i in range(10):
+            for i in xrange(10):
                 server = copy.deepcopy(self.servers[0])
                 chars = string.letters + string.digits
                 new_password = ''.join((random.choice(chars)) for x in range(random.randint(6, 30)))
@@ -2710,7 +2710,7 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
                         getattr(rest_new, m)()
                 for m in apis:
                         self.assertRaises(Exception, getattr(rest, m))
-            for i in range(5):
+            for i in xrange(5):
                 server = copy.deepcopy(self.servers[0])
                 options = '--regenerate'
                 output, _ = remote_client.execute_command("{0} {1}".format(cli_command,
@@ -2772,10 +2772,10 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
         self.log.info("Check OS if it is supported in old cb version")
         if "centos 7" in self.os_version:
             if self.initial_version[:5] not in COUCHBASE_FROM_SHERLOCK:
-                print("\n%s is not supported in %s\n"\
+                print "\n%s is not supported in %s\n"\
                       "you need to get server with os supported!\n"\
                                                  % (self.initial_version,
-                                                    self.os_version))
+                                                    self.os_version)
                 raise Exception("Not support OS")
 
         """
@@ -2824,10 +2824,10 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
                 cb_version = rest.get_nodes_version()
                 if cb_version[:5] in COUCHBASE_FROM_WATSON:
                     if self.debug_logs:
-                        print("output from exe command  ", output)
+                        print "output from exe command  ", output
             except Exception as e:
                 if e:
-                    print("Exception error:   ", e)
+                    print "Exception error:   ", e
 
             self.log.info("Operation after upgrade")
             if ops_after_upgrade == "bucket-ops":
@@ -2847,10 +2847,10 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
         output, _ = shell.execute_command(cmd)
         shell.disconnect()
 
-        output = [x.strip() for x in output]
-        output = [x.strip(",") for x in output]
+        output = map(lambda x: x.strip(), output)
+        output = map(lambda x: x.strip(","), output)
         if self.debug_logs:
-            print("output from verify rbac users:\n", output)
+            print "output from verify rbac users:\n", output
         for x in output:
             if users in x:
                 users_found = True
@@ -2886,9 +2886,9 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
             if not bucket_found:
                 self.fail("Failed to create bucket by user {0} with roles: {1}"\
                                                                .format(user, roles))
-        except Exception as e:
+        except Exception, e:
             if e and roles not in bucket_create_roles:
-                print("\nBucket permission of roles '{0}' is enforced\n".format(roles))
+                print "\nBucket permission of roles '{0}' is enforced\n".format(roles)
                 self.log.info("Create bucket with admin roles for next test")
                 cli = CouchbaseCLI(server, "Administrator", password)
                 cli.bucket_create("bucket1", self.bucket_type, self.bucket_ram,
@@ -2907,7 +2907,7 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
                 self.fail("Failed to edit bucket with roles {0} ".format(roles))
             else:
                 self.log.info("{0} has no permision to edit bucket".format(roles))
-                print("\nEnable flush with admin roles for next test\n")
+                print "\nEnable flush with admin roles for next test\n"
                 cli = CouchbaseCLI(server, "Administrator", password)
                 cli.bucket_edit("bucket1", self.bucket_ram,
                                 self.eviction_policy, 1,
@@ -2950,9 +2950,9 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
                         self.fail("Roles {0} failed to delete bucket.".format(roles))
                     else:
                         self.log.info("{0} has no permision to delete bucket".format(roles))
-        except Exception as e:
+        except Exception, e:
             if e:
-                print("\n{0}\n".format(str(e)))
+                print "\n{0}\n".format(str(e))
 
 
 class XdcrCLITest(CliBaseTest):
@@ -2978,7 +2978,7 @@ class XdcrCLITest(CliBaseTest):
         self.__password = "password"
         self.log.info("===== Setup destination cluster =====")
         if self.dest_nodes and len(self.dest_nodes) > 1:
-            self.cluster.async_rebalance(self.dest_nodes, self.dest_nodes[1:],
+            self.cluster.async_rebalance(self.dest_nodes,self.dest_nodes[1:],
                                                                  []).result()
 
         if self.cb_version[:5] in COUCHBASE_FROM_SPOCK:

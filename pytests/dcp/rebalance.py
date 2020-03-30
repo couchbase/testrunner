@@ -1,7 +1,7 @@
 import time
 import logger
 from dcp.constants import VBSEQNO_STAT, PRODUCER
-from .dcpbase import DCPBase
+from dcpbase import DCPBase
 from membase.api.rest_client import RestConnection, RestHelper
 from mc_bin_client import MemcachedClient, MemcachedError
 from couchbase_helper.documentgenerator import BlobGenerator
@@ -26,7 +26,7 @@ class DCPRebalanceTests(DCPBase):
         # stream
         log.info("streaming vb {0} to seqno {1}".format(
             vbucket, high_seqno))
-        self.assertEqual(high_seqno, self.num_items)
+        self.assertEquals(high_seqno, self.num_items)
 
         dcp_client = self.dcp_client(self.master, PRODUCER, vbucket)
         stream = dcp_client.stream_req(
@@ -108,7 +108,8 @@ class DCPRebalanceTests(DCPBase):
         rest = RestConnection(self.master)
         index = self.vbucket_host_index(rest, vbucket)
         fail_n = self.servers[index]
-        ready_n = [n for n in self.servers if n.ip != fail_n.ip or n.port != fail_n.port]
+        ready_n = filter(lambda n: n.ip != fail_n.ip or n.port != fail_n.port,
+                         self.servers)
 
         assert self.stop_node(index)
         self.stopped_nodes.append(index)
@@ -214,7 +215,7 @@ class DCPRebalanceTests(DCPBase):
         stats = mcd_client.stats('failovers')
         for vb_info in vbuckets[0:4]:
             vb = vb_info.id
-            assert int(stats['vb_'+str(vb)+':num_entries']) == 2
+            assert long(stats['vb_'+str(vb)+':num_entries']) == 2
 
             vb_uuid, _, _= self.vb_info(nodeA,
                                                       vb)

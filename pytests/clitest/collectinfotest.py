@@ -46,12 +46,12 @@ class CollectinfoTests(CliBaseTest):
         gen_load = BlobGenerator('nosql', 'nosql-', self.value_size,
                                                   end=self.num_items)
         gen_update = BlobGenerator('nosql', 'nosql-', self.value_size,
-                                          end=(self.num_items // 2 - 1))
+                                          end=(self.num_items / 2 - 1))
         gen_expire = BlobGenerator('nosql', 'nosql-', self.value_size,
-                                             start=self.num_items // 2,
-                                             end=(self.num_items * 3 // 4 - 1))
+                                             start=self.num_items / 2,
+                                             end=(self.num_items * 3 / 4 - 1))
         gen_delete = BlobGenerator('nosql', 'nosql-', self.value_size,
-                                                 start=self.num_items * 3 // 4,
+                                                 start=self.num_items * 3 / 4,
                                                           end=self.num_items)
         self._load_all_buckets(self.master, gen_load, "create", 0)
 
@@ -179,7 +179,7 @@ class CollectinfoTests(CliBaseTest):
                     raise Exception("unable to list the files. Check ls command output for help")
                 missing_logs = False
                 nodes_services = RestConnection(self.master).get_nodes_services()
-                for node, services in nodes_services.items():
+                for node, services in nodes_services.iteritems():
                     for service in services:
                         if service.encode("ascii") == "fts" and \
                                      self.master.ip in node and \
@@ -234,7 +234,7 @@ class CollectinfoTests(CliBaseTest):
                     output_line = output_line.split()
                     file_size = int(output_line[0])
                     if self.debug_logs:
-                        print("File size: ", file_size)
+                        print "File size: ", file_size
                     if file_size == 0:
                         if "kv_trace" in output_line[1] and self.node_down:
                             continue
@@ -276,7 +276,7 @@ class CollectinfoTests(CliBaseTest):
         try:
             self.cluster.query_view(self.master, self.default_design_doc_name, self.view_name, query,
                                 expected_num_items, 'default', timeout=self.wait_timeout)
-        except Exception as ex:
+        except Exception, ex:
             if not self.generate_map_reduce_error:
                 raise ex
         self.shell.execute_cbcollect_info("%s.zip" % (self.log_filename))

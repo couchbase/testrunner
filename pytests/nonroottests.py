@@ -16,7 +16,7 @@ class NonRootTests(unittest.TestCase):
     def setUp(self):
         self.log = logger.Logger.get_logger()
         self.input = TestInputSingleton.input
-        self._os = self.input.param("os", "null");     #To allow centos, ubuntu, windows
+        self._os = self.input.param("os","null");     #To allow centos, ubuntu, windows
         self.build = self.input.param("build", "couchbase-server-enterprise_2.2.0-817-rel_x86_64.rpm")
         self.num_items = self.input.param("items", 100000)
         self.servers = self.input.servers
@@ -418,8 +418,8 @@ class NonRootTests(unittest.TestCase):
             rest2 = RestConnection(_dest_master)
             curr_count_on_src = rest1.fetch_bucket_stats(bucket="testbucket")["op"]["samples"]["curr_items"][-1]
             curr_count_on_dest = rest2.fetch_bucket_stats(bucket="testbucket")["op"]["samples"]["curr_items"][-1]
-            assert curr_count_on_src == (src_item_count + dest_item_count), "ItemCount on source not what's expected"
-            assert curr_count_on_dest == (src_item_count + dest_item_count), "ItemCount on destination not what's expected"
+            assert(curr_count_on_src==(src_item_count + dest_item_count), "ItemCount on source not what's expected")
+            assert(curr_count_on_dest==(src_item_count + dest_item_count), "ItemCount on destination not what's expected")
         elif self._os == "windows":
             # TODO: Windows support
             self.log.info("Yet to add support for windows!")

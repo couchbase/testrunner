@@ -3,10 +3,10 @@
 # map a version # -> rpm url
 from datetime import datetime
 import time
-import urllib.request, urllib.error, urllib.parse
+import urllib2
 import re
 import socket
-from bs4 import BeautifulSoup
+import BeautifulSoup
 import testconstants
 import logger
 import traceback
@@ -389,7 +389,7 @@ class BuildQuery(object):
                         build.url = "{6}{0}/{1}-{4}-{5}.{2}.{3}"\
                                 .format(build_version[:build_version.find('-')],
                                 product, os_architecture, deliverable_type,
-                                build_details[:5], os_name, CB_RELEASE_REPO)
+                                build_details[:5],os_name, CB_RELEASE_REPO)
                     elif "deb" in deliverable_type:
                         os_architecture = "amd64"
                         os_name = "ubuntu12.04"
@@ -462,7 +462,7 @@ class BuildQuery(object):
                         build.url = "{6}{0}/{1}-{4}-{5}.{2}.{3}"\
                                 .format(build_version[:build_version.find('-')],
                                 product, os_architecture, deliverable_type,
-                                build_details[:5], os_name, CB_RELEASE_REPO)
+                                build_details[:5],os_name, CB_RELEASE_REPO)
                     elif "deb" in deliverable_type:
                         os_architecture = "amd64"
                         os_name = "ubuntu12.04"
@@ -538,7 +538,7 @@ class BuildQuery(object):
                 self._get_and_parse_builds('http://builds.hq.northscale.net/latestbuilds', version=version, \
                                            timeout=timeout, direct_build_url=direct_build_url, \
                                            deliverable_type=deliverable_type, architecture_type=architecture_type, \
-                                           edition_type=edition_type, repo=repo, toy=toy, \
+                                           edition_type=edition_type,repo=repo, toy=toy, \
                                            distribution_version=distribution_version, \
                                            distribution_type=distribution_type)
         except Exception as e:
@@ -582,7 +582,7 @@ class BuildQuery(object):
                     self.log.info("Try collecting build information from url: %s" % (build_page + index_url))
                     if timeout:
                         socket.setdefaulttimeout(timeout)
-                    page = urllib.request.urlopen(build_page + index_url)
+                    page = urllib2.urlopen(build_page + index_url)
                     soup = BeautifulSoup.BeautifulSoup(page)
                     break
                 except:
@@ -609,8 +609,8 @@ class BuildQuery(object):
                         build.url = '%s/%s' % (build_page, build_id)
                         builds.append(build)
                 except Exception as e:
-                    print("ERROR in creating build/change info for: Build_id: %s , Build_Description: %s" % (build_id, build_description))
-                    print(traceback.print_exc(file=sys.stderr))
+                    print "ERROR in creating build/change info for: Build_id: %s , Build_Description: %s" % (build_id, build_description)
+                    print traceback.print_exc(file=sys.stderr)
                     #raise e : Skipping parsing for this build information,
                     #Eventually, It will fail with build not found error at install.py:240
             for build in builds:
@@ -644,8 +644,8 @@ class BuildQuery(object):
             """ Remove the code below when cb name is standardlized (MB-11372) """
             if "windows" in direct_build_url and build.deliverable_type == "exe" \
                 and build_info not in SHERLOCK_VERSION:
-                build_info = build_info.replace("-windows-amd64-", "_x86_64_")
-                build_info = build_info.replace("couchbase_server", "couchbase-server")
+                build_info = build_info.replace("-windows-amd64-","_x86_64_")
+                build_info = build_info.replace("couchbase_server","couchbase-server")
             """ End remove here """
 
             """ sherlock build name
@@ -674,9 +674,9 @@ class BuildQuery(object):
                 if product_version[:5] in testconstants.COUCHBASE_VERSIONS:
                     build.product_version = product_version
                     if "centos" not in build_info and "suse" not in build_info:
-                        build_info = build_info.replace("_" + product_version, "")
+                        build_info = build_info.replace("_" + product_version,"")
                     else:
-                        build_info = build_info.replace("-" + product_version, "")
+                        build_info = build_info.replace("-" + product_version,"")
                 if "x86_64" in build_info:
                     build.architecture_type = "x86_64"
                     if "centos" in build_info or "suse" in build_info:
@@ -704,7 +704,7 @@ class BuildQuery(object):
             product_version = product_version[len(product_version)-1]
             if product_version[:5] in testconstants.COUCHBASE_VERSIONS:
                 build.product_version = product_version
-                build_info = build_info.replace("_" + product_version, "")
+                build_info = build_info.replace("_" + product_version,"")
             else:
                 raise Exception("Check your url. Couchbase server does not have "
                                        "version %s yet " % (product_version[:5]))
@@ -834,7 +834,7 @@ class BuildQuery(object):
             /952/couchbase-server-enterprise_3.5.0-952-windows_amd64.exe
             /1390/couchbase-server-enterprise_3.5.0-1390-windows_x86.exe
             /1120/couchbase-server-enterprise_3.5.0-1120-macos_x86_64.zip"""
-            build_number = build.product_version.replace(version[:6], "")
+            build_number = build.product_version.replace(version[:6],"")
             """ distribution version:    centos linux release 7.0.1406 (core)
                 distribution version:    centos release 6.5 (final)  """
             rpm_version = "centos6"

@@ -7,7 +7,6 @@ from couchbase_helper.documentgenerator import BlobGenerator
 from couchbase_helper.document import View
 from remote.remote_util import RemoteMachineShellConnection, RemoteUtilHelper
 
-
 class FailoverBaseTest(BaseTestCase):
 
     def setUp(self):
@@ -51,9 +50,9 @@ class FailoverBaseTest(BaseTestCase):
         self.during_ops = self.input.param("during_ops", None)
         self.graceful = self.input.param("graceful", True)
         if self.recoveryType:
-            self.recoveryType = self.recoveryType.split(":")
+            self.recoveryType=self.recoveryType.split(":")
         if self.deltaRecoveryBuckets:
-            self.deltaRecoveryBuckets = self.deltaRecoveryBuckets.split(":")
+            self.deltaRecoveryBuckets=self.deltaRecoveryBuckets.split(":")
 
         # To validate MB-34173
         self.sleep_before_rebalance = \
@@ -67,34 +66,28 @@ class FailoverBaseTest(BaseTestCase):
 
         # Defintions of Blod Generator used in tests
         self.gen_initial_create = BlobGenerator('failover', 'failover', self.value_size, end=self.num_items)
-        self.gen_create = BlobGenerator('failover', 'failover', self.value_size, start=self.num_items + 1,
-                                        end=self.num_items * 1.5)
-        self.gen_update = BlobGenerator('failover', 'failover', self.value_size, start=self.num_items // 2,
-                                        end=self.num_items)
-        self.gen_delete = BlobGenerator('failover', 'failover', self.value_size, start=self.num_items // 4,
-                                        end=self.num_items // 2 - 1)
-        self.afterfailover_gen_create = BlobGenerator('failover', 'failover', self.value_size,
-                                                      start=self.num_items * 1.6, end=self.num_items * 2)
-        self.afterfailover_gen_update = BlobGenerator('failover', 'failover', self.value_size, start=1,
-                                                      end=self.num_items / 4)
-        self.afterfailover_gen_delete = BlobGenerator('failover', 'failover', self.value_size,
-                                                      start=self.num_items * .5, end=self.num_items * 0.75)
+        self.gen_create = BlobGenerator('failover', 'failover', self.value_size, start=self.num_items + 1 , end=self.num_items * 1.5)
+        self.gen_update = BlobGenerator('failover', 'failover', self.value_size, start=self.num_items / 2, end=self.num_items)
+        self.gen_delete = BlobGenerator('failover', 'failover', self.value_size, start=self.num_items / 4, end=self.num_items / 2 - 1)
+        self.afterfailover_gen_create = BlobGenerator('failover', 'failover', self.value_size, start=self.num_items * 1.6 , end=self.num_items * 2)
+        self.afterfailover_gen_update = BlobGenerator('failover', 'failover', self.value_size, start=1 , end=self.num_items/4)
+        self.afterfailover_gen_delete = BlobGenerator('failover', 'failover', self.value_size, start=self.num_items * .5 , end=self.num_items* 0.75)
         if self.vbuckets != None and self.vbuckets != self.total_vbuckets:
-            self.total_vbuckets = self.vbuckets
-        self.log.info("==============  FailoverBaseTest setup was finished for test #{0} {1} ==============" \
+            self.total_vbuckets  = self.vbuckets
+        self.log.info("==============  FailoverBaseTest setup was finished for test #{0} {1} =============="\
                       .format(self.case_number, self._testMethodName))
 
     def tearDown(self):
         if hasattr(self, '_resultForDoCleanups') and len(self._resultForDoCleanups.failures) > 0 \
-                and 'stop-on-failure' in TestInputSingleton.input.test_params and \
-                str(TestInputSingleton.input.test_params['stop-on-failure']).lower() == 'true':
-            # supported starting with python2.7
-            self.log.warning("CLEANUP WAS SKIPPED")
-            self.cluster.shutdown(force=True)
-            self._log_finish(self)
+                    and 'stop-on-failure' in TestInputSingleton.input.test_params and \
+                    str(TestInputSingleton.input.test_params['stop-on-failure']).lower() == 'true':
+                    # supported starting with python2.7
+                    log.warn("CLEANUP WAS SKIPPED")
+                    self.cluster.shutdown(force=True)
+                    self._log_finish(self)
         else:
             try:
-                self.log.info("==============  tearDown was started for test #{0} {1} ==============" \
+                self.log.info("==============  tearDown was started for test #{0} {1} =============="\
                               .format(self.case_number, self._testMethodName))
                 RemoteUtilHelper.common_basic_setup(self.servers)
                 BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
@@ -105,7 +98,7 @@ class FailoverBaseTest(BaseTestCase):
                                                                master=master)
                     except:
                         continue
-                self.log.info("==============  tearDown was finished for test #{0} {1} ==============" \
+                self.log.info("==============  tearDown was finished for test #{0} {1} =============="\
                               .format(self.case_number, self._testMethodName))
             finally:
                 super(FailoverBaseTest, self).tearDown()

@@ -214,7 +214,7 @@ class ElasticSearchBase(object):
                     api,
                     response['status'],
                     reason,
-                    content.rstrip(b'\n')))
+                    content.rstrip('\n')))
                 return False, content, response
         except socket.error as e:
             self.__log.error("socket error while connecting to {0} error {1} ".
@@ -349,7 +349,7 @@ class ElasticSearchBase(object):
         n = 1
         analyzer_map = {}
         while n <= num_custom_analyzers:
-            customAnalyzerName = list(fts_custom_analyzers_def.keys())[n-1]
+            customAnalyzerName = fts_custom_analyzers_def.keys()[n-1]
             fts_char_filters = fts_custom_analyzers_def[customAnalyzerName]["char_filters"]
             fts_tokenizer = fts_custom_analyzers_def[customAnalyzerName]["tokenizer"]
             fts_token_filters = fts_custom_analyzers_def[customAnalyzerName]["token_filters"]

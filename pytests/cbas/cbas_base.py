@@ -4,7 +4,7 @@ from remote.remote_util import RemoteMachineShellConnection
 from basetestcase import BaseTestCase
 from lib.couchbase_helper.analytics_helper import AnalyticsHelper
 from couchbase_helper.documentgenerator import DocumentGenerator
-import urllib.request, urllib.parse, urllib.error
+import urllib
 from lib.membase.api.rest_client import RestConnection, RestHelper, Bucket
 from lib.couchbase_helper.cluster import *
 from lib.membase.helper.bucket_helper import BucketOperationHelper
@@ -18,7 +18,7 @@ class CBASBaseTest(BaseTestCase):
     def setUp(self, add_defualt_cbas_node = True):
         self.log = logger.Logger.get_logger()
         if self._testMethodDoc:
-            self.log.info("\n\nStarting Test: %s \n%s"%(self._testMethodName, self._testMethodDoc))
+            self.log.info("\n\nStarting Test: %s \n%s"%(self._testMethodName,self._testMethodDoc))
         else:
             self.log.info("\n\nStarting Test: %s"%(self._testMethodName))
         super(CBASBaseTest, self).setUp()
@@ -42,20 +42,20 @@ class CBASBaseTest(BaseTestCase):
         self.cb_bucket_password = self.input.param('cb_bucket_password', None)
         self.expected_error = self.input.param("error", None)
         if self.expected_error:
-            self.expected_error = self.expected_error.replace("INVALID_IP", invalid_ip)
-            self.expected_error = self.expected_error.replace("PORT", self.master.port)
+            self.expected_error = self.expected_error.replace("INVALID_IP",invalid_ip)
+            self.expected_error = self.expected_error.replace("PORT",self.master.port)
         self.cb_server_ip = self.input.param("cb_server_ip", None)
-        self.cb_server_ip = self.cb_server_ip.replace('INVALID_IP', invalid_ip) if self.cb_server_ip is not None else None
+        self.cb_server_ip = self.cb_server_ip.replace('INVALID_IP',invalid_ip) if self.cb_server_ip is not None else None
         self.cbas_dataset_name = self.input.param("cbas_dataset_name", 'travel_ds')
         self.cbas_bucket_name_invalid = self.input.param('cbas_bucket_name_invalid', self.cbas_bucket_name)
         self.cbas_dataset2_name = self.input.param('cbas_dataset2_name', None)
         self.skip_create_dataset = self.input.param('skip_create_dataset', False)
         self.disconnect_if_connected = self.input.param('disconnect_if_connected', False)
         self.cbas_dataset_name_invalid = self.input.param('cbas_dataset_name_invalid', self.cbas_dataset_name)
-        self.skip_drop_connection = self.input.param('skip_drop_connection', False)
+        self.skip_drop_connection = self.input.param('skip_drop_connection',False)
         self.skip_drop_dataset = self.input.param('skip_drop_dataset', False)
-        self.query_id = self.input.param('query_id', None)
-        self.mode = self.input.param('mode', None)
+        self.query_id = self.input.param('query_id',None)
+        self.mode = self.input.param('mode',None)
         self.num_concurrent_queries = self.input.param('num_queries', 5000)
         self.concurrent_batch_size = self.input.param('concurrent_batch_size', 100)
         self.compiler_param = self.input.param('compiler_param', None)
@@ -144,7 +144,7 @@ class CBASBaseTest(BaseTestCase):
             self.assertTrue(started, "Rebalance operation started and in progress,"%self.cbas_servers)
         
     def remove_all_cbas_node_then_rebalance(self,cbas_otpnodes=None, rebalance=True ):
-        return self.remove_node(cbas_otpnodes, rebalance) 
+        return self.remove_node(cbas_otpnodes,rebalance) 
         
     def add_node(self, node=None, services=None, rebalance=True, wait_for_rebalance_completion=True):
         if not node:
@@ -173,7 +173,7 @@ class CBASBaseTest(BaseTestCase):
                                               ejectedNodes=[node.id for node in otpnode],
                                               wait_for_rebalance=wait_for_rebalance)
         except Exception as e:
-            self.sleep(5, "First time rebalance failed on Removal. Wait and try again. THIS IS A BUG.")
+            self.sleep(5,"First time rebalance failed on Removal. Wait and try again. THIS IS A BUG.")
             removed = helper.remove_nodes(knownNodes=[node.id for node in nodes],
                                               ejectedNodes=[node.id for node in otpnode],
                                               wait_for_rebalance=wait_for_rebalance)
@@ -182,7 +182,7 @@ class CBASBaseTest(BaseTestCase):
         
     def load_sample_buckets(self, servers=None, bucketName=None, total_items=None):
         """ Load the specified sample bucket in Couchbase """
-        self.assertTrue(self.rest.load_sample(bucketName), "Failure while loading sample bucket: %s"%bucketName)
+        self.assertTrue(self.rest.load_sample(bucketName),"Failure while loading sample bucket: %s"%bucketName)
         
         """ check for load data into travel-sample bucket """
         if total_items:
@@ -192,15 +192,15 @@ class CBASBaseTest(BaseTestCase):
                 self.sleep(10)
                 num_actual = 0
                 if not servers:
-                    num_actual = self.get_item_count(self.master, bucketName)
+                    num_actual = self.get_item_count(self.master,bucketName)
                 else:
                     for server in servers:
                         if "kv" in server.services:
-                            num_actual += self.get_item_count(server, bucketName)
+                            num_actual += self.get_item_count(server,bucketName)
                 if int(num_actual) == total_items:
-                    self.log.info("%s items are loaded in the %s bucket" %(num_actual, bucketName))
+                    self.log.info("%s items are loaded in the %s bucket" %(num_actual,bucketName))
                     break
-                self.log.info("%s items are loaded in the %s bucket" %(num_actual, bucketName))
+                self.log.info("%s items are loaded in the %s bucket" %(num_actual,bucketName))
             if int(num_actual) != total_items:
                 return False
         else:
@@ -434,7 +434,7 @@ class CBASBaseTest(BaseTestCase):
         if 'handle' in response:
             handle = response['handle']
 
-        self.log.info("status=%s, handle=%s"%(status, handle))
+        self.log.info("status=%s, handle=%s"%(status,handle))
         return status, handle
 
     def validate_error_in_response(self, status, errors):
@@ -488,7 +488,7 @@ class CBASBaseTest(BaseTestCase):
             else:
                 self.log.info("********* No buckets to drop *********")
         except Exception as e:
-            self.log.info(str(e))
+            self.log.info(e.message)
 
     def perform_doc_ops_in_all_cb_buckets(self, num_items, operation, start_key=0, end_key=1000):
         """
@@ -499,7 +499,7 @@ class CBASBaseTest(BaseTestCase):
         :param end_key: Doc Key to end the operation with
         :return:
         """
-        age = list(range(70))
+        age = range(70)
         first = ['james', 'sharon', 'dave', 'bill', 'mike', 'steve']
         template = '{{ "number": {0}, "first_name": "{1}" , "mutated":0}}'
         gen_load = DocumentGenerator('test_docs', template, age, first,
@@ -509,7 +509,7 @@ class CBASBaseTest(BaseTestCase):
             self._load_all_buckets(self.master, gen_load, operation, 0)
             self._verify_stats_all_buckets(self.input.servers)
         except Exception as e:
-            self.log.info(str(e))
+            self.log.info(e.message)
 
     def get_num_items_in_cbas_dataset(self, dataset_name):
         """
@@ -525,7 +525,7 @@ class CBASBaseTest(BaseTestCase):
         if status != "success":
             self.log.error("Query failed")
         else:
-            self.log.info("No. of items in CBAS dataset {0} : {1}".format(dataset_name, results[0]['$1']))
+            self.log.info("No. of items in CBAS dataset {0} : {1}".format(dataset_name,results[0]['$1']))
             total_items = results[0]['$1']
 
         status, metrics, errors, results, _ = self.execute_statement_on_cbas_via_rest(
@@ -615,14 +615,14 @@ class CBASBaseTest(BaseTestCase):
             return response["status"], response[
                 "metrics"], errors, results, handle
 
-        except Exception as e:
+        except Exception,e:
             raise Exception(str(e))
 
     def async_query_execute(self, statement, mode, num_queries):
         """
         Asynchronously run queries
         """
-        self.log.info("Executing %s queries concurrently", num_queries)
+        self.log.info("Executing %s queries concurrently",num_queries)
 
         cbas_base_url = "http://{0}:8095/analytics/service".format(
             self.cbas_node.ip)
@@ -658,7 +658,7 @@ class CBASBaseTest(BaseTestCase):
             status = rest.delete_active_request_on_cbas(client_context_id)
             self.log.info (status)
             return status
-        except Exception as e:
+        except Exception, e:
             raise Exception(str(e))
 
     def _run_concurrent_queries(self, query, mode, num_queries, rest=None):
@@ -671,7 +671,7 @@ class CBASBaseTest(BaseTestCase):
         threads = []
         for i in range(0, num_queries):
             threads.append(Thread(target=self._run_query,
-                                  name="query_thread_{0}".format(i), args=(query, mode, rest)))
+                                  name="query_thread_{0}".format(i), args=(query,mode,rest)))
         i = 0
         for thread in threads:
             # Send requests in batches, and sleep for 5 seconds before sending another batch of queries.
@@ -687,7 +687,7 @@ class CBASBaseTest(BaseTestCase):
                 num_queries, self.failed_count,
                 self.success_count, self.rejected_count))
         self.assertTrue(self.failed_count+self.error_count == 0,
-                        "Queries Failed:%s , Queries Error Out:%s"%(self.failed_count, self.error_count))
+                        "Queries Failed:%s , Queries Error Out:%s"%(self.failed_count,self.error_count))
 
     def _run_query(self, query, mode, rest=None, validate_item_count=False, expected_count=0):
         # Execute query (with sleep induced)
@@ -747,7 +747,7 @@ class CBASBaseTest(BaseTestCase):
                         self.log.info("Status = %s", status)
                         self.log.info("********Thread %s : failure**********", name)
                     self.failed_count += 1
-        except Exception as e:
+        except Exception, e:
             if str(e) == "Request Rejected":
                 self.log.info("Error 503 : Request Rejected")
                 self.rejected_count += 1
@@ -785,7 +785,7 @@ class CBASBaseTest(BaseTestCase):
                     self.log.info(field_names)
                     actual_field_names = []
                     for index_field in index["Index"]["SearchKey"]:
-                        if isinstance(index_field, list):
+                        if type(index_field) is list:
                             index_field = ".".join(index_field)
                         actual_field_names.append(str(index_field))
                         actual_field_names.sort()
@@ -801,12 +801,12 @@ class CBASBaseTest(BaseTestCase):
 
     def _create_user_and_grant_role(self, username, role, source='builtin'):
         user = [{'id':username,'password':'password','name':'Some Name'}]
-        response = RbacBase().create_user_source(user, source, self.master)
+        response = RbacBase().create_user_source(user,source,self.master)
         user_role_list = [{'id':username,'name':'Some Name','roles':role}]
         response = RbacBase().add_user_role(user_role_list, self.rest, source)
 
     def _drop_user(self, username):
         user = [username]
-        response = RbacBase().remove_user_role(user, self.rest)
+        response = RbacBase().remove_user_role(user,self.rest)
 
 

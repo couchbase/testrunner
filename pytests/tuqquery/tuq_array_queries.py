@@ -87,7 +87,7 @@ class QueryArrayQueryTests(QueryTests):
                     self.run_cbq_query(query = "drop index `travel-sample`.`%s`" % index)
 
         # Generate final list of queries, total number of queries is the number * ~190
-        for i in range(self.num_queries):
+        for i in xrange(self.num_queries):
             query_list = ArrayGenerator().generate_query_pairs()
             final_query_list += query_list
         x = 1
@@ -221,7 +221,7 @@ class QueryArrayQueryTests(QueryTests):
                     self.run_cbq_query(query = "drop index `default`.`%s`" % index)
 
         # Generate final list of queries, total number of queries is the number * ~190
-        for i in range(self.num_queries):
+        for i in xrange(self.num_queries):
             query_list = ArrayGeneratorLinks().generate_query_pairs()
             final_query_list += query_list
         x = 1

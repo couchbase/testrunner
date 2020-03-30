@@ -105,12 +105,12 @@ class MemorySanity(BaseTestCase):
                            int(mc.stats()["vb_active_perc_mem_resident"]) > resident_ratio) and \
                         time.time() < end_time:
             self.log.info("Resident ratio is %s" % mc.stats()["vb_active_perc_mem_resident"])
-            gen = DocumentGenerator('test_docs', '{{"age": {0}}}', range(5),
+            gen = DocumentGenerator('test_docs', '{{"age": {0}}}', xrange(5),
                                     start=self.num_items, end=(self.num_items + delta_items))
             self._load_all_buckets(self.master, gen, 'create', 0)
             self.num_items += delta_items
             self.log.info("Resident ratio is %s" % mc.stats()["vb_active_perc_mem_resident"])
-        memory_mb = int(mc.stats("memory")["mem_used"]) // (1024 * 1024)
+        memory_mb = int(mc.stats("memory")["mem_used"]) / (1024 * 1024)
         self.log.info("Memory Used is %s" % memory_mb)
         self.assertTrue(memory_mb <= self.quota, "Memory Used %s should be within %s" % (
             memory_mb, self.quota))
@@ -239,7 +239,6 @@ class MemorySanity(BaseTestCase):
         self.log.info("***   Load data to buckets   ***")
         self._load_all_buckets(self.master, self.gen_create, "create", 0,
                                batch_size=5000, pause_secs=2, timeout_secs=100)
-        self.sleep(10)
         self._wait_for_stats_all_buckets(self.servers)
         mem_stats_load = {}
         self.log.info("***   Check mem_used and mem_total after load data   ***")

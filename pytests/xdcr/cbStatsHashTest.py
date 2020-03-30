@@ -1,4 +1,4 @@
-from .xdcrbasetests import XDCRReplicationBaseTest
+from xdcrbasetests import XDCRReplicationBaseTest
 from threading import Thread
 from time import sleep
 from remote.remote_util import RemoteMachineShellConnection

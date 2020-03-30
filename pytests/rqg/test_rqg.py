@@ -1,4 +1,4 @@
-from .base_test_rqg import BaseRQGTests
+from base_test_rqg import BaseRQGTests
 
 class RQGTests(BaseRQGTests):
     """ Class for defining tests for RQG base testing """

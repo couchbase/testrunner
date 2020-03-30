@@ -16,12 +16,9 @@ from membase.api.rest_client import RestConnection
 from membase.helper.bucket_helper import BucketOperationHelper
 from newupgradebasetest import NewUpgradeBaseTest
 from remote.remote_util import RemoteMachineShellConnection
-try:
-    from sdk_client import SDKClient
-except:
-    from sdk_client3 import SDKClient
+from sdk_client import SDKClient
 
-from .subdoc_base import SubdocBaseTest
+from subdoc_base import SubdocBaseTest
 
 
 class SubdocXattrSdkTest(SubdocBaseTest):
@@ -48,15 +45,15 @@ class SubdocXattrSdkTest(SubdocBaseTest):
         "json": {"not_to_bes_tested_string_field1": "not_to_bes_tested_string"}
     }
 
-    EXPECTED_VALUE = {'u_c': 'ABCDEFGHIJKLMNOPQRSTUVWXZYZ', 'low_case': 'abcdefghijklmnoprestuvxyz',
-                      'int_big': 1.0383838392939393e+24, 'double_z': 0, 'arr_ints': [1, 2, 3, 4, 5], 'int_posit': 1,
-                      'int_zero': 0, 'arr_floa': [299792458, 299792458, 299792458], 'float': 299792458,
-                      'float_neg': -299792458, 'double_s': 1.1, 'arr_mixed': [0, 299792458, 1.1], 'double_n': -1.1,
-                      'str_empty': '', 'a_doubles': [1.1, 2.2, 3.3, 4.4, 5.5],
-                      'd_time': '2012-10-03 15:35:46.461491',
-                      'arr_arrs': [[299792458, 299792458, 299792458], [0, 299792458, 1.1], [], [0, 0, 0]],
-                      'int_neg': -1, 'spec_chrs': '_-+!#@$%&*(){}\\][;.,<>?/',
-                      'json': {'not_to_bes_tested_string_field1': 'not_to_bes_tested_string'}}
+    EXPECTED_VALUE = {u'u_c': u'ABCDEFGHIJKLMNOPQRSTUVWXZYZ', u'low_case': u'abcdefghijklmnoprestuvxyz',
+                      u'int_big': 1.0383838392939393e+24, u'double_z': 0, u'arr_ints': [1, 2, 3, 4, 5], u'int_posit': 1,
+                      u'int_zero': 0, u'arr_floa': [299792458, 299792458, 299792458], u'float': 299792458,
+                      u'float_neg': -299792458, u'double_s': 1.1, u'arr_mixed': [0, 299792458, 1.1], u'double_n': -1.1,
+                      u'str_empty': u'', u'a_doubles': [1.1, 2.2, 3.3, 4.4, 5.5],
+                      u'd_time': u'2012-10-03 15:35:46.461491',
+                      u'arr_arrs': [[299792458, 299792458, 299792458], [0, 299792458, 1.1], [], [0, 0, 0]],
+                      u'int_neg': -1, u'spec_chrs': u'_-+!#@$%&*(){}\\][;.,<>?/',
+                      u'json': {u'not_to_bes_tested_string_field1': u'not_to_bes_tested_string'}}
 
     def setUp(self):
         super(SubdocXattrSdkTest, self).setUp()
@@ -155,11 +152,11 @@ class SubdocXattrSdkTest(SubdocBaseTest):
 
         rv = self.client.lookup_in(k, SD.get('my.inner', xattr=True))
         self.assertTrue(rv.exists('my.inner'))
-        self.assertEqual({'value_inner': 2}, rv['my.inner'])
+        self.assertEqual({u'value_inner': 2}, rv['my.inner'])
 
         rv = self.client.lookup_in(k, SD.get('my', xattr=True))
         self.assertTrue(rv.exists('my'))
-        self.assertEqual({'inner': {'value_inner': 2}, 'value': 1}, rv['my'])
+        self.assertEqual({u'inner': {u'value_inner': 2}, u'value': 1}, rv['my'])
 
     # https://issues.couchbase.com/browse/PYCBC-378
     def test_key_length_big(self):
@@ -172,8 +169,8 @@ class SubdocXattrSdkTest(SubdocBaseTest):
             self.client.mutate_in(k, SD.upsert('f' * 16, 2, create_parents=True, xattr=True))
             self.fail("xattr with the key in 16 chars should not be able to create")
         except Exception as e:
-            self.assertEqual("Operational Error", str(e))
-            self.assertEqual("The server replied with an unrecognized status code. "
+            self.assertEquals("Operational Error", e.message)
+            self.assertEquals("The server replied with an unrecognized status code. "
                               "A newer version of this library may be able to decode it",
                               e.result.errstr)
 
@@ -215,7 +212,7 @@ class SubdocXattrSdkTest(SubdocBaseTest):
                 self.log.error("xattr %s value: %s" % (key, rv[key]))
                 self.fail("key shouldn't start from " + ch)
             except Exception as e:
-                self.assertEqual("Operational Error", str(e))
+                self.assertEquals("Operational Error", e.message)
 
     def test_key_inside_characters_negative(self):
         k = 'xattrs'
@@ -231,8 +228,8 @@ class SubdocXattrSdkTest(SubdocBaseTest):
                 self.log.error("xattr %s value: %s" % (key, rv[key]))
                 self.fail("key must not contain a character: " + ch)
             except Exception as e:
-                print(str(e))
-                self.assertTrue(str(e) in ['Subcommand failure',
+                print e.message
+                self.assertTrue(e.message in ['Subcommand failure',
                                               'key must not contain a character: ;'])
 
     def test_key_inside_characters_positive(self):
@@ -256,7 +253,7 @@ class SubdocXattrSdkTest(SubdocBaseTest):
             self.client.mutate_in(k, SD.upsert(key, key, xattr=True))
             rv = self.client.lookup_in(k, SD.get(key, xattr=True))
             self.assertTrue(rv.exists(key))
-            self.assertEqual(key, rv[key])
+            self.assertEquals(key, rv[key])
 
     def test_deep_nested(self):
         k = 'xattrs'
@@ -268,7 +265,7 @@ class SubdocXattrSdkTest(SubdocBaseTest):
         rv = self.client.lookup_in(k, SD.get(key, xattr=True))
         self.log.info("xattr %s exists? %s" % (key, rv.exists(key)))
         self.log.info("xattr %s value: %s" % (key, rv[key]))
-        self.assertEqual(key, rv[key])
+        self.assertEquals(key, rv[key])
 
     def test_delete_doc_with_xattr(self):
         k = 'xattrs'
@@ -287,14 +284,14 @@ class SubdocXattrSdkTest(SubdocBaseTest):
         # trying get before delete
         rv = self.client.get(k)
         self.assertTrue(rv.success)
-        self.assertEqual({}, rv.value)
-        self.assertEqual(0, rv.rc)
+        self.assertEquals({}, rv.value)
+        self.assertEquals(0, rv.rc)
         self.assertTrue(rv.cas != 0)
         self.assertTrue(rv.flags != 0)
 
         # delete
         body = self.client.delete(k)
-        self.assertEqual(None, body.value)
+        self.assertEquals(None, body.value)
 
         # trying get after delete
         try:
@@ -326,7 +323,7 @@ class SubdocXattrSdkTest(SubdocBaseTest):
                                                     xattr=True,
                                                     create_parents=True), _access_deleted=True)
         except Exception as e:
-            self.assertEqual("couldn't parse arguments", str(e))
+            self.assertEquals("couldn't parse arguments", e.message)
 
     def test_delete_doc_without_xattr(self):
         k = 'xattrs'
@@ -343,14 +340,14 @@ class SubdocXattrSdkTest(SubdocBaseTest):
         # trying get before delete
         rv = self.client.get(k)
         self.assertTrue(rv.success)
-        self.assertEqual({'my_attr': 'value'}, rv.value)
-        self.assertEqual(0, rv.rc)
+        self.assertEquals({u'my_attr': u'value'}, rv.value)
+        self.assertEquals(0, rv.rc)
         self.assertTrue(rv.cas != 0)
         self.assertTrue(rv.flags != 0)
 
         # delete
         body = self.client.delete(k)
-        self.assertEqual(None, body.value)
+        self.assertEquals(None, body.value)
 
         # trying get after delete
         try:
@@ -379,8 +376,8 @@ class SubdocXattrSdkTest(SubdocBaseTest):
         # trying get non-existing xattr
         rv = self.client.lookup_in(k, SD.get('my_attr', xattr=True))
         self.assertFalse(rv.success)
-        self.assertEqual('Could not execute one or more multi lookups or mutations', rv.errstr)
-        self.assertEqual(73, rv.rc)
+        self.assertEquals('Could not execute one or more multi lookups or mutations', rv.errstr)
+        self.assertEquals(73, rv.rc)
 
         # Try to upsert a single xattr
         rv = self.client.mutate_in(k, SD.upsert('my_attr', 'value',
@@ -393,31 +390,31 @@ class SubdocXattrSdkTest(SubdocBaseTest):
 
         rv = self.client.get(k)
         self.assertTrue(rv.success)
-        self.assertEqual({}, rv.value)
-        self.assertEqual(0, rv.rc)
+        self.assertEquals({}, rv.value)
+        self.assertEquals(0, rv.rc)
         cas_before = rv.cas
         flags_before = rv.flags
 
         # delete xattr
         rv = self.client.lookup_in(k, SD.remove('my_attr', xattr=True))
         self.assertTrue(rv.success)
-        self.assertEqual(1, rv.result_count)
+        self.assertEquals(1, rv.result_count)
         self.assertTrue(rv.exists('my_attr'))
 
         # trying get doc after xattr deleted
         rv = self.client.get(k)
         self.assertTrue(rv.success)
-        self.assertEqual({}, rv.value)
-        self.assertEqual(0, rv.rc)
+        self.assertEquals({}, rv.value)
+        self.assertEquals(0, rv.rc)
         self.assertTrue(rv.cas != 0)
         self.assertTrue(rv.cas != cas_before)
         self.assertTrue(rv.flags != 0)
-        self.assertEqual(flags_before, rv.flags)
+        self.assertEquals(flags_before, rv.flags)
 
         rv = self.client.lookup_in(k, SD.get('my_attr', xattr=True))
         self.assertFalse(rv.success)
-        self.assertEqual('Could not execute one or more multi lookups or mutations', rv.errstr)
-        self.assertEqual(73, rv.rc)
+        self.assertEquals('Could not execute one or more multi lookups or mutations', rv.errstr)
+        self.assertEquals(73, rv.rc)
 
     def test_delete_xattr(self):
         k = 'xattrs'
@@ -427,8 +424,8 @@ class SubdocXattrSdkTest(SubdocBaseTest):
         # trying get non-existing xattr
         rv = self.client.lookup_in(k, SD.get('my_attr', xattr=True))
         self.assertFalse(rv.success)
-        self.assertEqual('Could not execute one or more multi lookups or mutations', rv.errstr)
-        self.assertEqual(73, rv.rc)
+        self.assertEquals('Could not execute one or more multi lookups or mutations', rv.errstr)
+        self.assertEquals(73, rv.rc)
 
         # Try to upsert a single xattr
         rv = self.client.mutate_in(k, SD.upsert('my_attr', 'value',
@@ -441,31 +438,31 @@ class SubdocXattrSdkTest(SubdocBaseTest):
 
         rv = self.client.get(k)
         self.assertTrue(rv.success)
-        self.assertEqual({}, rv.value)
-        self.assertEqual(0, rv.rc)
+        self.assertEquals({}, rv.value)
+        self.assertEquals(0, rv.rc)
         cas_before = rv.cas
         flags_before = rv.flags
 
         # delete xattr
         rv = self.client.lookup_in(k, SD.remove('my_attr', xattr=True))
         self.assertTrue(rv.success)
-        self.assertEqual(1, rv.result_count)
+        self.assertEquals(1, rv.result_count)
         self.assertTrue(rv.exists('my_attr'))
 
         # trying get doc after xattr deleted
         rv = self.client.get(k)
         self.assertTrue(rv.success)
-        self.assertEqual({}, rv.value)
-        self.assertEqual(0, rv.rc)
+        self.assertEquals({}, rv.value)
+        self.assertEquals(0, rv.rc)
         self.assertTrue(rv.cas != 0)
         self.assertTrue(rv.cas != cas_before)
         self.assertTrue(rv.flags != 0)
-        self.assertEqual(flags_before, rv.flags)
+        self.assertEquals(flags_before, rv.flags)
 
         rv = self.client.lookup_in(k, SD.get('my_attr', xattr=True))
         self.assertFalse(rv.success)
-        self.assertEqual('Could not execute one or more multi lookups or mutations', rv.errstr)
-        self.assertEqual(73, rv.rc)
+        self.assertEquals('Could not execute one or more multi lookups or mutations', rv.errstr)
+        self.assertEquals(73, rv.rc)
 
     def test_cas_changed_upsert(self):
         k = 'non_xattrs'
@@ -557,7 +554,7 @@ class SubdocXattrSdkTest(SubdocBaseTest):
 
         self.client.upsert(k, {})
 
-        for i in range(5):
+        for i in xrange(5):
             # Try to upsert a single xattr
             rv = self.client.mutate_in(k, SD.upsert('my_attr', 'value',
                                                     xattr=True,
@@ -571,20 +568,20 @@ class SubdocXattrSdkTest(SubdocBaseTest):
             # delete xattr
             rv = self.client.lookup_in(k, SD.remove('my_attr', xattr=True))
             self.assertTrue(rv.success)
-            self.assertEqual(1, rv.result_count)
+            self.assertEquals(1, rv.result_count)
             self.assertTrue(rv.exists('my_attr'))
 
             rv = self.client.lookup_in(k, SD.get('my_attr', xattr=True))
             self.assertFalse(rv.success)
-            self.assertEqual('Could not execute one or more multi lookups or mutations', rv.errstr)
-            self.assertEqual(73, rv.rc)
+            self.assertEquals('Could not execute one or more multi lookups or mutations', rv.errstr)
+            self.assertEquals(73, rv.rc)
 
     def test_update_xattr(self):
         k = 'xattrs'
 
         self.client.upsert(k, {})
         # use xattr like a counters
-        for i in range(5):
+        for i in xrange(5):
             rv = self.client.mutate_in(k, SD.upsert('my_attr', i,
                                                     xattr=True,
                                                     create_parents=True))
@@ -612,7 +609,7 @@ class SubdocXattrSdkTest(SubdocBaseTest):
 
         rv = self.client.lookup_in(k, SD.get('my', xattr=True))
         self.assertTrue(rv.exists('my'))
-        self.assertEqual({}, rv['my'])
+        self.assertEquals({}, rv['my'])
 
     def test_delete_xattr_key_from_parent(self):
         k = 'xattrs'
@@ -627,7 +624,7 @@ class SubdocXattrSdkTest(SubdocBaseTest):
 
         rv = self.client.lookup_in(k, SD.get('my', xattr=True))
         self.assertTrue(rv.exists('my'))
-        self.assertEqual({'inner': {'value_inner': 2}, 'value': 1}, rv['my'])
+        self.assertEqual({u'inner': {u'value_inner': 2}, u'value': 1}, rv['my'])
 
         rv = self.client.mutate_in(k, SD.remove('my.inner', xattr=True))
         self.assertTrue(rv.success)
@@ -637,7 +634,7 @@ class SubdocXattrSdkTest(SubdocBaseTest):
 
         rv = self.client.lookup_in(k, SD.get('my', xattr=True))
         self.assertTrue(rv.exists('my'))
-        self.assertEqual({'value': 1}, rv['my'])
+        self.assertEqual({u'value': 1}, rv['my'])
 
     def test_delete_xattr_parent(self):
         k = 'xattrs'
@@ -652,7 +649,7 @@ class SubdocXattrSdkTest(SubdocBaseTest):
 
         rv = self.client.lookup_in(k, SD.get('my', xattr=True))
         self.assertTrue(rv.exists('my'))
-        self.assertEqual({'inner': {'value_inner': 2}, 'value': 1}, rv['my'])
+        self.assertEqual({u'inner': {u'value_inner': 2}, u'value': 1}, rv['my'])
 
         rv = self.client.mutate_in(k, SD.remove('my', xattr=True))
         self.assertTrue(rv.success)
@@ -674,7 +671,7 @@ class SubdocXattrSdkTest(SubdocBaseTest):
         self.assertTrue(rv.success)
 
         body = self.client.get(k)
-        self.assertEqual(None, body.value)
+        self.assertEquals(None, body.value)
 
         rv = self.client.lookup_in(k, SD.get('my_attr', xattr=True))
         self.assertTrue(rv.exists('my_attr'))
@@ -799,7 +796,7 @@ class SubdocXattrSdkTest(SubdocBaseTest):
         }
 
         size = 0
-        for k, v in values.items():
+        for k, v in values.iteritems():
             self.log.info("adding xattr '%s': %s" % (k, v))
             rv = self.client.mutate_in(key, SD.upsert(k, v,
                                                       xattr=True))
@@ -823,7 +820,7 @@ class SubdocXattrSdkTest(SubdocBaseTest):
         self.client.upsert(key, {})
 
         size = 0
-        for k, v in SubdocXattrSdkTest.VALUES.items():
+        for k, v in SubdocXattrSdkTest.VALUES.iteritems():
             self.log.info("adding xattr '%s': %s" % (k, v))
             rv = self.client.mutate_in(key, SD.upsert(k, v,
                                                       xattr=True))
@@ -854,26 +851,26 @@ class SubdocXattrSdkTest(SubdocBaseTest):
                 self.log.info("using key %s" % key)
                 rv = self.client.mutate_in(k, SD.upsert(key, 1,
                                                         xattr=True))
-                print(rv)
+                print rv
                 self.assertTrue(rv.success)
                 rv = self.client.lookup_in(k, SD.get(key, xattr=True))
-                print(rv)
+                print rv
                 self.assertTrue(rv.exists(key))
                 self.assertEqual(1, rv[key])
                 self.log.info("successfully set xattr with key %s" % key)
             except Exception as e:
                 ok = False
                 self.log.info("unable to set xattr with key %s" % key)
-                print(e)
+                print e
         self.assertTrue(ok, "unable to set xattr with some name. See logs above")
 
     def test_upsert_nums(self):
         k = 'xattr'
         self.client.upsert(k, {})
-        for i in range(100):
+        for i in xrange(100):
             rv = self.client.mutate_in(k, SD.upsert('n' + str(i), i, xattr=True))
             self.assertTrue(rv.success)
-        for i in range(100):
+        for i in xrange(100):
             rv = self.client.lookup_in(k, SD.get('n' + str(i), xattr=True))
             self.assertTrue(rv.exists('n' + str(i)))
             self.assertEqual(i, rv['n' + str(i)])
@@ -941,9 +938,9 @@ class SubdocXattrSdkTest(SubdocBaseTest):
         try:
             self.client.mutate_in(k, SD.upsert('my', '${Mutation.CAS}', _expand_macros=False))
         except Exception as e:
-            self.assertEqual(e.all_results['xattrs'].errstr,
+            self.assertEquals(e.all_results['xattrs'].errstr,
                               'Could not execute one or more multi lookups or mutations')
-            self.assertEqual(e.rc, 64)
+            self.assertEquals(e.rc, 64)
 
         rv1 = self.client.get(k)
         self.assertTrue(rv1.success)
@@ -962,9 +959,9 @@ class SubdocXattrSdkTest(SubdocBaseTest):
         try:
             self.client.lookup_in(k, SD.exists('$document', xattr=False))
         except Exception as e:
-            self.assertEqual(e.all_results['xattrs'].errstr,
+            self.assertEquals(e.all_results['xattrs'].errstr,
                               'Could not execute one or more multi lookups or mutations')
-            self.assertEqual(e.rc, 64)
+            self.assertEquals(e.rc, 64)
         else:
             self.fail("was able to lookup_in $document with xattr=False")
 
@@ -1009,10 +1006,10 @@ class SubdocXattrSdkTest(SubdocBaseTest):
         try:
             self.client.mutate_in(k, SD.upsert('$document', {'value': 1}, xattr=True))
         except Exception as e:
-            self.assertEqual(str(e), 'Operational Error')
-            self.assertEqual(e.result.errstr,
-                             'The server replied with an unrecognized status code. '
-                             'A newer version of this library may be able to decode it')
+            self.assertEqual(e.message, 'Subcommand failure')
+            # self.assertEqual(e.result.errstr,
+            #                  'The server replied with an unrecognized status code. '
+            #                  'A newer version of this library may be able to decode it')
         else:
             self.fail("was able to modify $document vxattr?")
 
@@ -1026,10 +1023,10 @@ class SubdocXattrSdkTest(SubdocBaseTest):
         try:
             self.client.lookup_in(k, SD.remove('$document', xattr=True))
         except Exception as e:
-            self.assertEqual(str(e), 'Operational Error')
-            self.assertEqual(e.result.errstr,
-                             'The server replied with an unrecognized status code. '
-                             'A newer version of this library may be able to decode it')
+            self.assertEqual(e.message, 'Subcommand failure')
+            # self.assertEqual(e.result.errstr,
+            #                  'The server replied with an unrecognized status code. '
+            #                  'A newer version of this library may be able to decode it')
         else:
             self.fail("was able to delete $document vxattr?")
 
@@ -1056,8 +1053,8 @@ class SubdocXattrSdkTest(SubdocBaseTest):
 
         result = rest.query_view(ddoc_name, view.name, self.buckets[0].name, query)
         self.assertEqual(result['total_rows'], 2, "2 document should be returned")
-        self.assertEqual(result['rows'][0], {'value': None, 'id': 'not_xattr', 'key': 'not_xattr'})
-        self.assertEqual(result['rows'][1], {'value': None, 'id': 'xattr', 'key': 'xattr'})
+        self.assertEqual(result['rows'][0], {u'value': None, u'id': u'not_xattr', u'key': u'not_xattr'})
+        self.assertEqual(result['rows'][1], {u'value': None, u'id': u'xattr', u'key': u'xattr'})
 
     # https://issues.couchbase.com/browse/MB-23085
     def test_default_view_mixed_docs(self):
@@ -1082,8 +1079,8 @@ class SubdocXattrSdkTest(SubdocBaseTest):
 
         result = rest.query_view(ddoc_name, view.name, self.buckets[0].name, query)
         self.assertEqual(result['total_rows'], 2, "2 document should be returned")
-        self.assertEqual(result['rows'][0], {'value': 'not_xattr', 'id': 'not_xattr', 'key': {'xattr': False}})
-        self.assertEqual(result['rows'][1], {'value': 'xattr', 'id': 'xattr', 'key': {'xattr': True}})
+        self.assertEqual(result['rows'][0], {u'value': u'not_xattr', u'id': u'not_xattr', u'key': {u'xattr': False}})
+        self.assertEqual(result['rows'][1], {u'value': u'xattr', u'id': u'xattr', u'key': {u'xattr': True}})
 
     def test_view_one_xattr(self):
         k = 'xattr'
@@ -1104,7 +1101,7 @@ class SubdocXattrSdkTest(SubdocBaseTest):
 
         result = rest.query_view(ddoc_name, view.name, self.buckets[0].name, query)
         self.assertEqual(result['total_rows'], 1, "1 document should be returned")
-        self.assertEqual(result['rows'][0], {'value': 2, 'id': 'xattr', 'key': {'xattr': True}})
+        self.assertEqual(result['rows'][0], {u'value': 2, u'id': u'xattr', u'key': {u'xattr': True}})
 
     def test_view_one_xattr_index_xattr_on_deleted_docs(self):
         k = 'xattr'
@@ -1129,7 +1126,7 @@ class SubdocXattrSdkTest(SubdocBaseTest):
 
         result = rest.query_view('ddoc1', 'view1', self.buckets[0].name, query)
         self.assertEqual(result['total_rows'], 1, "1 document should be returned")
-        self.assertEqual(result['rows'][0], {'value': 2, 'id': 'xattr', 'key': {'xattr': True}})
+        self.assertEqual(result['rows'][0], {u'value': 2, u'id': u'xattr', u'key': {u'xattr': True}})
 
     def test_view_all_xattrs(self):
         k = 'xattr'
@@ -1150,7 +1147,7 @@ class SubdocXattrSdkTest(SubdocBaseTest):
 
         result = rest.query_view(ddoc_name, view.name, self.buckets[0].name, query)
         self.assertEqual(result['total_rows'], 1, "1 document should be returned")
-        self.assertEqual(result['rows'][0], {'value': {'integer': 2}, 'id': 'xattr', 'key': {'xattr': True}})
+        self.assertEqual(result['rows'][0], {u'value': {u'integer': 2}, u'id': u'xattr', u'key': {u'xattr': True}})
 
     def test_view_all_docs_only_meta(self):
         k = 'xattr'
@@ -1170,7 +1167,7 @@ class SubdocXattrSdkTest(SubdocBaseTest):
 
         result = rest.query_view(ddoc_name, view.name, self.buckets[0].name, query)
         self.assertEqual(result['total_rows'], 1, "1 document should be returned")
-        self.assertEqual(result['rows'][0], {'value': None, 'id': 'xattr', 'key': {}})
+        self.assertEqual(result['rows'][0], {u'value': None, u'id': u'xattr', u'key': {}})
 
     def test_view_all_docs_without_xattrs(self):
         k = 'xattr'
@@ -1190,7 +1187,7 @@ class SubdocXattrSdkTest(SubdocBaseTest):
 
         result = rest.query_view(ddoc_name, view.name, self.buckets[0].name, query)
         self.assertEqual(result['total_rows'], 1, "1 document should be returned")
-        self.assertEqual(result['rows'][0], {'value': {}, 'id': 'xattr', 'key': {'xattr': True}})
+        self.assertEqual(result['rows'][0], {u'value': {}, u'id': u'xattr', u'key': {u'xattr': True}})
 
     def test_view_all_docs_without_xattrs_only_meta(self):
         k = 'xattr'
@@ -1210,7 +1207,7 @@ class SubdocXattrSdkTest(SubdocBaseTest):
 
         result = rest.query_view(ddoc_name, view.name, self.buckets[0].name, query)
         self.assertEqual(result['total_rows'], 1, "1 document should be returned")
-        self.assertEqual(result['rows'][0], {'value': {}, 'id': 'xattr', 'key': {'xattr': True}})
+        self.assertEqual(result['rows'][0], {u'value': {}, u'id': u'xattr', u'key': {u'xattr': True}})
 
     def test_view_xattr_not_exist(self):
         k = 'xattr'
@@ -1231,7 +1228,7 @@ class SubdocXattrSdkTest(SubdocBaseTest):
 
         result = rest.query_view(ddoc_name, view.name, self.buckets[0].name, query)
         self.assertEqual(result['total_rows'], 1, "1 document should be returned")
-        self.assertEqual(result['rows'][0], {'value': None, 'id': 'xattr', 'key': {'xattr': True}})
+        self.assertEqual(result['rows'][0], {u'value': None, u'id': u'xattr', u'key': {u'xattr': True}})
 
     def test_view_all_xattrs_inner_json(self):
         k = 'xattr'
@@ -1253,24 +1250,24 @@ class SubdocXattrSdkTest(SubdocBaseTest):
         result = rest.query_view(ddoc_name, view.name, self.buckets[0].name, query)
         self.assertEqual(result['total_rows'], 1, "1 document should be returned")
         self.assertEqual(result['rows'][0],
-                         {'value': {
-                             'big': {'u_c': 'ABCDEFGHIJKLMNOPQRSTUVWXZYZ', 'low_case': 'abcdefghijklmnoprestuvxyz',
-                                      'int_big': 1.0383838392939393e+24, 'double_z': 0, 'arr_ints': [1, 2, 3, 4, 5],
-                                      'int_posit': 1, 'int_zero': 0, 'arr_floa': [299792458, 299792458, 299792458],
-                                      'float': 299792458, 'float_neg': -299792458, 'double_s': 1.1,
-                                      'arr_mixed': [0, 299792458, 1.1], 'double_n': -1.1, 'str_empty': '',
-                                      'a_doubles': [1.1, 2.2, 3.3, 4.4, 5.5], 'd_time': '2012-10-03 15:35:46.461491',
-                                      'arr_arrs': [[299792458, 299792458, 299792458], [0, 299792458, 1.1], [],
-                                                    [0, 0, 0]], 'int_neg': -1,
-                                      'spec_chrs': '_-+!#@$%&*(){}\\][;.,<>?/',
-                                      'json': {'not_to_bes_tested_string_field1': 'not_to_bes_tested_string'}}},
-                             'id': 'xattr', 'key': {'xattr': True}})
+                         {u'value': {
+                             u'big': {u'u_c': u'ABCDEFGHIJKLMNOPQRSTUVWXZYZ', u'low_case': u'abcdefghijklmnoprestuvxyz',
+                                      u'int_big': 1.0383838392939393e+24, u'double_z': 0, u'arr_ints': [1, 2, 3, 4, 5],
+                                      u'int_posit': 1, u'int_zero': 0, u'arr_floa': [299792458, 299792458, 299792458],
+                                      u'float': 299792458, u'float_neg': -299792458, u'double_s': 1.1,
+                                      u'arr_mixed': [0, 299792458, 1.1], u'double_n': -1.1, u'str_empty': u'',
+                                      u'a_doubles': [1.1, 2.2, 3.3, 4.4, 5.5], u'd_time': u'2012-10-03 15:35:46.461491',
+                                      u'arr_arrs': [[299792458, 299792458, 299792458], [0, 299792458, 1.1], [],
+                                                    [0, 0, 0]], u'int_neg': -1,
+                                      u'spec_chrs': u'_-+!#@$%&*(){}\\][;.,<>?/',
+                                      u'json': {u'not_to_bes_tested_string_field1': u'not_to_bes_tested_string'}}},
+                             u'id': u'xattr', u'key': {u'xattr': True}})
 
     def test_view_all_xattrs_many_items(self):
         key = 'xattr'
 
         self.client.upsert(key, {"xattr": True})
-        for k, v in SubdocXattrSdkTest.VALUES.items():
+        for k, v in SubdocXattrSdkTest.VALUES.iteritems():
             self.client.mutate_in(key, SD.upsert(k, v, xattr=True))
 
         default_map_func = "function (doc, meta) {emit(doc, meta.xattrs);}"
@@ -1293,27 +1290,27 @@ class SubdocXattrSdkTest(SubdocBaseTest):
 
         result = rest.query_view(ddoc_name, view.name, self.buckets[0].name, query)
         self.assertEqual(result['total_rows'], 1, "1 document should be returned")
-        self.assertEqual(result['rows'][0], {'value': {'u_c': 'ABCDEFGHIJKLMNOPQRSTUVWXZYZ',
-                                                        'low_case': 'abcdefghijklmnoprestuvxyz',
-                                                        'int_big': 1.0383838392939393e+24, 'double_z': 0,
-                                                        'arr_ints': [1, 2, 3, 4, 5], 'int_posit': 1,
-                                                        'int_zero': 0, 'arr_floa': [299792458, 299792458, 299792458],
-                                                        'float': 299792458, 'float_neg': -299792458, 'double_s': 1.1,
-                                                        'arr_mixed': [0, 299792458, 1.1], 'double_n': -1.1,
-                                                        'str_empty': '', 'a_doubles': [1.1, 2.2, 3.3, 4.4, 5.5],
-                                                        'd_time': '2012-10-03 15:35:46.461491',
-                                                        'arr_arrs': [[299792458, 299792458, 299792458],
+        self.assertEqual(result['rows'][0], {u'value': {u'u_c': u'ABCDEFGHIJKLMNOPQRSTUVWXZYZ',
+                                                        u'low_case': u'abcdefghijklmnoprestuvxyz',
+                                                        u'int_big': 1.0383838392939393e+24, u'double_z': 0,
+                                                        u'arr_ints': [1, 2, 3, 4, 5], u'int_posit': 1,
+                                                        u'int_zero': 0, u'arr_floa': [299792458, 299792458, 299792458],
+                                                        u'float': 299792458, u'float_neg': -299792458, u'double_s': 1.1,
+                                                        u'arr_mixed': [0, 299792458, 1.1], u'double_n': -1.1,
+                                                        u'str_empty': u'', u'a_doubles': [1.1, 2.2, 3.3, 4.4, 5.5],
+                                                        u'd_time': u'2012-10-03 15:35:46.461491',
+                                                        u'arr_arrs': [[299792458, 299792458, 299792458],
                                                                       [0, 299792458, 1.1], [], [0, 0, 0]],
-                                                        'int_neg': -1, 'spec_chrs': '_-+!#@$%&*(){}\\][;.,<>?/',
-                                                        'json': {'not_to_bes_tested_string_field1':
-                                                                      'not_to_bes_tested_string'}},
-                                             'id': 'xattr', 'key': {'xattr': True}})
+                                                        u'int_neg': -1, u'spec_chrs': u'_-+!#@$%&*(){}\\][;.,<>?/',
+                                                        u'json': {u'not_to_bes_tested_string_field1':
+                                                                      u'not_to_bes_tested_string'}},
+                                             u'id': u'xattr', u'key': {u'xattr': True}})
 
     def test_view_all_xattrs_many_items_index_xattr_on_deleted_docs(self):
         key = 'xattr'
 
         self.client.upsert(key, {"xattr": True})
-        for k, v in SubdocXattrSdkTest.VALUES.items():
+        for k, v in SubdocXattrSdkTest.VALUES.iteritems():
             self.client.mutate_in(key, SD.upsert(k, v, xattr=True))
 
         shell = RemoteMachineShellConnection(self.master)
@@ -1335,28 +1332,28 @@ class SubdocXattrSdkTest(SubdocBaseTest):
 
         result = rest.query_view(ddoc_name, "view1", self.buckets[0].name, query)
         self.assertEqual(result['total_rows'], 1, "1 document should be returned")
-        self.assertEqual(result['rows'][0], {'value': {'u_c': 'ABCDEFGHIJKLMNOPQRSTUVWXZYZ',
-                                                        'low_case': 'abcdefghijklmnoprestuvxyz',
-                                                        'int_big': 1.0383838392939393e+24, 'double_z': 0,
-                                                        'arr_ints': [1, 2, 3, 4, 5], 'int_posit': 1,
-                                                        'int_zero': 0, 'arr_floa': [299792458, 299792458, 299792458],
-                                                        'float': 299792458, 'float_neg': -299792458, 'double_s': 1.1,
-                                                        'arr_mixed': [0, 299792458, 1.1], 'double_n': -1.1,
-                                                        'str_empty': '', 'a_doubles': [1.1, 2.2, 3.3, 4.4, 5.5],
-                                                        'd_time': '2012-10-03 15:35:46.461491',
-                                                        'arr_arrs': [[299792458, 299792458, 299792458],
+        self.assertEqual(result['rows'][0], {u'value': {u'u_c': u'ABCDEFGHIJKLMNOPQRSTUVWXZYZ',
+                                                        u'low_case': u'abcdefghijklmnoprestuvxyz',
+                                                        u'int_big': 1.0383838392939393e+24, u'double_z': 0,
+                                                        u'arr_ints': [1, 2, 3, 4, 5], u'int_posit': 1,
+                                                        u'int_zero': 0, u'arr_floa': [299792458, 299792458, 299792458],
+                                                        u'float': 299792458, u'float_neg': -299792458, u'double_s': 1.1,
+                                                        u'arr_mixed': [0, 299792458, 1.1], u'double_n': -1.1,
+                                                        u'str_empty': u'', u'a_doubles': [1.1, 2.2, 3.3, 4.4, 5.5],
+                                                        u'd_time': u'2012-10-03 15:35:46.461491',
+                                                        u'arr_arrs': [[299792458, 299792458, 299792458],
                                                                       [0, 299792458, 1.1], [], [0, 0, 0]],
-                                                        'int_neg': -1, 'spec_chrs': '_-+!#@$%&*(){}\\][;.,<>?/',
-                                                        'json': {'not_to_bes_tested_string_field1':
-                                                                      'not_to_bes_tested_string'}},
-                                             'id': 'xattr', 'key': {'xattr': True}})
+                                                        u'int_neg': -1, u'spec_chrs': u'_-+!#@$%&*(){}\\][;.,<>?/',
+                                                        u'json': {u'not_to_bes_tested_string_field1':
+                                                                      u'not_to_bes_tested_string'}},
+                                             u'id': u'xattr', u'key': {u'xattr': True}})
 
     def test_reboot_node(self):
         key = 'xattr'
 
         self.client.upsert(key, {})
 
-        for k, v in SubdocXattrSdkTest.VALUES.items():
+        for k, v in SubdocXattrSdkTest.VALUES.iteritems():
             self.log.info("adding xattr '%s': %s" % (k, v))
             rv = self.client.mutate_in(key, SD.upsert(k, v,
                                                       xattr=True))
@@ -1380,7 +1377,7 @@ class SubdocXattrSdkTest(SubdocBaseTest):
             except NotFoundError:
                 pass
         else:
-            for k, v in SubdocXattrSdkTest.VALUES.items():
+            for k, v in SubdocXattrSdkTest.VALUES.iteritems():
                 rv = self.client.lookup_in(key, SD.get(k, xattr=True))
                 self.assertTrue(rv.exists(k))
                 self.assertEqual(v, rv[k])
@@ -1440,7 +1437,7 @@ class XattrImportExportTests(ImportExportTests, SubdocBaseTest):
         for bucket in self.buckets:
             self.client = SDKClient(scheme="couchbase", hosts=[self.master.ip],
                                     bucket=bucket.name, uhm_options='timeout=3').cb
-            for i in range(self._num_items):
+            for i in xrange(self._num_items):
                 key = 'k_%s_%s' % (i, str(self.master.ip))
                 value = {'xattr_%s' % i: 'value%s' % i}
                 self.client.upsert(key, value)
@@ -1489,11 +1486,11 @@ class XattrImportExportTests(ImportExportTests, SubdocBaseTest):
                     # in build 5.0.0-2759 I see duplicates of records
                     # https://issues.couchbase.com/browse/MB-24187
                     # https://issues.couchbase.com/browse/MB-24188
-                    self.assertEqual(len(samples), len(exports))
+                    self.assertEquals(len(samples), len(exports))
                     if sorted(samples) == sorted(exports):
                         self.log.info("export and sample json match")
                     else:
-                        self.log.warning(sorted(exports))
+                        self.log.warn(sorted(exports))
                         self.fail("export and sample json does not match")
                     sample_file.close()
                     export_file.close()
@@ -1504,8 +1501,8 @@ class XattrImportExportTests(ImportExportTests, SubdocBaseTest):
                     export_file = open("/tmp/export/" + export_file_name)
                     exports = export_file.read()
                     exports = ast.literal_eval(exports)
-                    r = list(itertools.filterfalse(lambda x: x in exports, samples)) + list(
-                        itertools.filterfalse(lambda x: x in samples, exports))
+                    r = list(itertools.ifilterfalse(lambda x: x in exports, samples)) + list(
+                        itertools.ifilterfalse(lambda x: x in samples, exports))
                     if len(r) == 0:
                         self.log.info("export and sample json files are matched")
                     else:
@@ -1672,7 +1669,7 @@ class XattrEnterpriseBackupRestoreTest(SubdocBaseTest):
         for bucket in self.buckets:
             self.client = SDKClient(scheme="couchbase", hosts=[self.master.ip],
                                     bucket=bucket.name).cb
-            for i in range(self._num_items):
+            for i in xrange(self._num_items):
                 key = 'k_%s_%s' % (i, str(self.master.ip))
                 value = {'xattr_%s' % i: 'value%s' % i}
                 self.client.upsert(key, value)
@@ -1690,7 +1687,7 @@ class XattrEnterpriseBackupRestoreTest(SubdocBaseTest):
         for bucket in self.buckets:
             self.client = SDKClient(scheme="couchbase", hosts=[self.master.ip],
                                     bucket=bucket.name).cb
-            for i in range(self._num_items):
+            for i in xrange(self._num_items):
                 key = 'k_%s_%s' % (i, str(self.master.ip))
                 rv = self.client.lookup_in(key, SD.get('xattr_%s%s' % (postfix_xattr_value, i), xattr=True))
                 self.assertTrue(rv.exists('xattr_%s' % i))
@@ -1705,12 +1702,12 @@ class XattrEnterpriseBackupRestoreTest(SubdocBaseTest):
         output, error = self.shell.execute_command("/opt/couchbase/bin/cbbackupmgr config "
                                                    "--archive /tmp/backups --repo example")
         self.log.info(output)
-        self.assertEqual('Backup repository `example` created successfully in archive `/tmp/backups`', output[0])
+        self.assertEquals('Backup repository `example` created successfully in archive `/tmp/backups`', output[0])
         output, error = self.shell.execute_command(
             "/opt/couchbase/bin/cbbackupmgr backup --archive /tmp/backups --repo example "
             "--cluster couchbase://127.0.0.1 --username Administrator --password password %s" % self.backup_extra_params)
         self.log.info(output)
-        self.assertEqual('Backup successfully completed', output[1])
+        self.assertEquals('Backup successfully completed', output[1])
         BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
         imp_rest = RestConnection(self.master)
         info = imp_rest.get_nodes_self()
@@ -1731,7 +1728,7 @@ class XattrEnterpriseBackupRestoreTest(SubdocBaseTest):
                                                        output[
                                                            0], self.restore_extra_params))
         self.log.info(output)
-        self.assertEqual('Restore completed successfully', output[1])
+        self.assertEquals('Restore bucket "default" succeeded', output[1])
         # https://issues.couchbase.com/browse/MB-23864
         if self.override_data and '--force-updates' not in self.restore_extra_params:
             self._verify_all_buckets(postfix_xattr_value='updated')
@@ -1770,7 +1767,7 @@ class XattrUpgradeTests(NewUpgradeBaseTest, SubdocBaseTest):
         self.assertEqual('new_value', rv['new_my.new_attr'])
 
         body = self.client.delete(self.key)
-        self.assertEqual(None, body.value)
+        self.assertEquals(None, body.value)
 
     def online_upgrade_rebalance_in_with_ops(self):
         self._install(self.servers[:self.nodes_init])
@@ -1788,7 +1785,7 @@ class XattrUpgradeTests(NewUpgradeBaseTest, SubdocBaseTest):
         try:
             self._check_insert()
         except Exception as e:
-            self.assertEqual('Operational Error', str(e))
+            self.assertEqual('Operational Error', e.message)
             self.assertEqual(61, e.rc)
 
         self.initial_version = self.upgrade_versions[0]
@@ -1810,7 +1807,7 @@ class XattrUpgradeTests(NewUpgradeBaseTest, SubdocBaseTest):
         try:
             self._check_insert()
         except Exception as e:
-            self.assertEqual('Operational Error', str(e))
+            self.assertEqual('Operational Error', e.message)
             self.assertEqual(19, e.rc)
 
         servers_result = list((set(self.servers[:self.nodes_init]) | set(servs_in)) - set(servs_out))
@@ -1830,7 +1827,7 @@ class XattrUpgradeTests(NewUpgradeBaseTest, SubdocBaseTest):
         self.master = servs_in[0]
 
         self.assertTrue(
-            'Hot-reloaded memcached.json for config change of the following keys: [<<"xattr_enabled">>] (repeated 1 times)'
+            u'Hot-reloaded memcached.json for config change of the following keys: [<<"xattr_enabled">>] (repeated 1 times)'
             in [log['text'] for log in RestConnection(self.master).get_logs()])
 
         self.host = "{0}:{1}".format(self.master.ip, self.master.port)

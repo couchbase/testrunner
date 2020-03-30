@@ -1,6 +1,6 @@
-from .xdcrnewbasetests import XDCRNewBaseTest
-from .xdcrnewbasetests import Utility
-from .xdcrnewbasetests import BUCKET_NAME
+from xdcrnewbasetests import XDCRNewBaseTest
+from xdcrnewbasetests import Utility
+from xdcrnewbasetests import BUCKET_NAME
 from hostname.hostnamemgmt_base import HostnameBaseTests
 
 

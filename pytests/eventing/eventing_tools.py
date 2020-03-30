@@ -315,7 +315,7 @@ class EventingTools(EventingBaseTest, EnterpriseBackupRestoreBase, NewUpgradeBas
         command = "{0}/{1}".format(self.cli_command_location, cmd)
         log.info(command)
         output, error = remote_client.execute_command(command)
-        if error or not [x for x in output if result in x]:
+        if error or not filter(lambda x: result in x, output):
             self.fail("couchbase-cli event-setup function {0} failed: {1}".format(operation, output))
         else:
             log.info("couchbase-cli event-setup function {0} succeeded : {1}".format(operation, output))

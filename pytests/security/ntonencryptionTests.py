@@ -1,8 +1,8 @@
 from membase.api.rest_client import RestConnection, RestHelper
-import urllib.request, urllib.parse, urllib.error
+import urllib
 import json
 from remote.remote_util import RemoteMachineShellConnection
-import subprocess
+import commands
 import socket
 import fileinput
 import sys
@@ -17,7 +17,7 @@ from lib.couchbase_helper.tuq_helper import N1QLHelper
 from cbas.cbas_base import *
 # from fts.fts_callable import *
 import logger
-from .x509main import x509main
+from x509main import x509main
 from remote.remote_util import RemoteMachineShellConnection
 
 
@@ -66,7 +66,7 @@ class ntonencryptionTest(BaseTestCase):
         :return:
         """
         try:
-            age = list(range(70))
+            age = range(70)
             first = ['james', 'sharon', 'dave', 'bill', 'mike', 'steve']
             template = '{{ "number": {0}, "first_name": "{1}" , "mutated":0}}'
             gen_load = DocumentGenerator('test_docs', template, age, first,
@@ -99,7 +99,7 @@ class ntonencryptionTest(BaseTestCase):
             for index in self.fts_obj.fts_indexes:
                 self.fts_obj.run_query_and_compare(index=index, num_queries=20)
             return self.fts_obj
-        except Exception as ex:
+        except Exception, ex:
             self.log.info("Exception is {0}".format(ex))
     
     def create_cbas_index_query(self):
@@ -123,7 +123,7 @@ class ntonencryptionTest(BaseTestCase):
             query_stmt = 'SELECT VALUE COUNT(*) FROM dataset_1;'
             content = cbas_rest.execute_statement_on_cbas(query_stmt,None)
             self.log.info( "Creating CBAS Index")
-        except Exception as ex:
+        except Exception, ex:
             self.log.info("Exception is {0}".format(ex))
             raise Exception ("Exception in CBAS node")
             

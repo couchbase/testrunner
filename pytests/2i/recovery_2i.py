@@ -2,7 +2,7 @@ import logging
 from threading import Thread
 import time
 
-from .base_2i import BaseSecondaryIndexingTests
+from base_2i import BaseSecondaryIndexingTests
 from couchbase.n1ql import CONSISTENCY_REQUEST
 from couchbase_helper.query_definitions import QueryDefinition
 from lib.memcached.helper.data_helper import MemcachedClientHelper
@@ -41,7 +41,7 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
                     task.result()
                 self.async_multi_drop_index(
                     buckets=self.buckets, query_definitions=self.load_query_definitions)
-            except Exception as ex:
+            except Exception, ex:
                 log.info(ex)
         super(SecondaryIndexingRecoveryTests, self).tearDown()
 
@@ -70,7 +70,7 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
                                            server=self.n1ql_node)
             self.n1ql_helper.run_cbq_query(query=create_index_query5,
                                            server=self.n1ql_node)
-        except Exception as ex:
+        except Exception, ex:
             self.log.info(str(ex))
             self.fail(
                 "index creation failed with error : {0}".format(str(ex)))
@@ -105,7 +105,7 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         # Results are not garunteed to be accurate so the query successfully running is all we can check
         try:
             results = self.n1ql_helper.run_cbq_query(query=use_index_query, server=self.n1ql_node)
-        except Exception as ex:
+        except Exception, ex:
             self.log.info(str(ex))
             self.fail("query should run correctly, an index is available for use")
 
@@ -152,7 +152,7 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             self._check_all_bucket_items_indexed()
             post_recovery_tasks = self.async_run_operations(phase="after")
             self._run_tasks([post_recovery_tasks])
-        except Exception as ex:
+        except Exception, ex:
             log.info(str(ex))
             raise
 
@@ -165,7 +165,7 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             #self._create_replica_indexes()
             rebalance = self.cluster.async_rebalance(
                 self.servers[:self.nodes_init],
-                [], self.nodes_out_list)
+                [],self.nodes_out_list)
             mid_recovery_tasks = self.async_run_operations(phase="in_between")
             rebalance.result()
             self._run_tasks([kvOps_tasks, mid_recovery_tasks])
@@ -176,7 +176,7 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             self._check_all_bucket_items_indexed()
             post_recovery_tasks = self.async_run_operations(phase="after")
             self._run_tasks([post_recovery_tasks])
-        except Exception as ex:
+        except Exception, ex:
             log.info(str(ex))
             raise
 
@@ -200,7 +200,7 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             self._check_all_bucket_items_indexed()
             post_recovery_tasks = self.async_run_operations(phase="after")
             self._run_tasks([post_recovery_tasks])
-        except Exception as ex:
+        except Exception, ex:
             log.info(str(ex))
             raise
 
@@ -255,7 +255,7 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             self._check_all_bucket_items_indexed()
             post_recovery_tasks = self.async_run_operations(phase="after")
             self._run_tasks([post_recovery_tasks])
-        except Exception as ex:
+        except Exception, ex:
             log.info(str(ex))
             raise
 
@@ -271,12 +271,12 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
                 self.nodes_in_list,
                 self.nodes_out_list, services=self.services_in)
             stopped = RestConnection(self.master).stop_rebalance(
-                wait_timeout=self.wait_timeout // 3)
+                wait_timeout=self.wait_timeout / 3)
             self.assertTrue(stopped, msg="Unable to stop rebalance")
             rebalance.result()
             self.sleep(100)
             rebalance = self.cluster.async_rebalance(
-                self.servers[:self.nodes_init], self.nodes_in_list,
+                self.servers[:self.nodes_init],self.nodes_in_list,
                 self.nodes_out_list, services=self.services_in)
             mid_recovery_tasks = self.async_run_operations(phase="in_between")
             rebalance.result()
@@ -288,7 +288,7 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             self._check_all_bucket_items_indexed()
             post_recovery_tasks = self.async_run_operations(phase="after")
             self._run_tasks([post_recovery_tasks])
-        except Exception as ex:
+        except Exception, ex:
             log.info(str(ex))
             raise
 
@@ -300,7 +300,7 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         try:
             self.use_replica=False
             self._create_replica_indexes()
-            self.targetProcess= self.input.param("targetProcess", 'memcached')
+            self.targetProcess= self.input.param("targetProcess",'memcached')
             for node in self.nodes_out_list:
                 remote = RemoteMachineShellConnection(node)
                 if self.targetProcess == "memcached":
@@ -317,7 +317,7 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             self._check_all_bucket_items_indexed()
             post_recovery_tasks = self.async_run_operations(phase="after")
             self._run_tasks([post_recovery_tasks])
-        except Exception as ex:
+        except Exception, ex:
             log.info(str(ex))
             raise
 
@@ -337,7 +337,7 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             self._run_tasks([kvOps_tasks, mid_recovery_tasks])
             post_recovery_tasks = self.async_run_operations(phase="after")
             self._run_tasks([post_recovery_tasks])
-        except Exception as ex:
+        except Exception, ex:
             log.info(str(ex))
             raise
         finally:
@@ -369,7 +369,7 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             self._check_all_bucket_items_indexed()
             post_recovery_tasks = self.async_run_operations(phase="after")
             self._run_tasks([post_recovery_tasks])
-        except Exception as ex:
+        except Exception, ex:
             log.info(str(ex))
             raise
 
@@ -404,7 +404,7 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             self._check_all_bucket_items_indexed()
             post_recovery_tasks = self.async_run_operations(phase="after")
             self._run_tasks([post_recovery_tasks])
-        except Exception as ex:
+        except Exception, ex:
             log.info(str(ex))
             raise
 
@@ -447,7 +447,7 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             self._check_all_bucket_items_indexed()
             post_recovery_tasks = self.async_run_operations(phase="after")
             self._run_tasks([post_recovery_tasks])
-        except Exception as ex:
+        except Exception, ex:
             log.info(str(ex))
             raise
 
@@ -504,7 +504,7 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             self._check_all_bucket_items_indexed()
             post_recovery_tasks = self.async_run_operations(phase="after")
             self._run_tasks([post_recovery_tasks])
-        except Exception as ex:
+        except Exception, ex:
             log.info(str(ex))
             raise
 
@@ -528,7 +528,7 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
                 try:
                     self.query_using_index(bucket=bucket,
                                            query_definition=query)
-                except Exception as ex:
+                except Exception, ex:
                     msg = "queryport.indexNotFound"
                     if msg in str(ex):
                         continue
@@ -567,7 +567,7 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             self._check_all_bucket_items_indexed()
             post_recovery_tasks = self.async_run_operations(phase="after")
             self._run_tasks([post_recovery_tasks])
-        except Exception as ex:
+        except Exception, ex:
             log.info(str(ex))
             raise
         finally:
@@ -588,7 +588,7 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
             self._run_tasks([kvOps_tasks, mid_recovery_tasks])
             post_recovery_tasks = self.async_run_operations(phase="after")
             self._run_tasks([post_recovery_tasks])
-        except Exception as ex:
+        except Exception, ex:
             log.info(str(ex))
             raise
         finally:
@@ -826,8 +826,8 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         log.info("index_map: {0}".format(index_map))
         for index_node in self.index_nodes_out:
             host = "{0}:8091".format(index_node.ip)
-            for index in index_map.values():
-                for keys, vals in index.items():
+            for index in index_map.itervalues():
+                for keys, vals in index.iteritems():
                     if vals["hosts"] == host:
                         lost_indexes.append(keys)
         log.info("Lost Indexes: {0}".format(lost_indexes))

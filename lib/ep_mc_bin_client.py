@@ -5,9 +5,9 @@ Copyright (c) 2007  Dustin Sallings <dustin@spy.net>
 """
 
 import array
+import exceptions
 import hmac
 import json
-import builtins as exceptions
 import random
 import re
 import select
@@ -90,6 +90,8 @@ class MemcachedErrorMetaclass(type):
 class MemcachedError(exceptions.Exception):
     """Error raised when a command fails."""
 
+    __metaclass__ = MemcachedErrorMetaclass
+
     def __init__(self, status, msg):
         supermsg='Memcached error #' + repr(status)
         if msg: supermsg += ":  " + msg
@@ -143,15 +145,13 @@ class ErrorSubdocSuccessDeleted(MemcachedError): ERRCODE = 0xcd
 class ErrorSubdocXattrInvalidFlagCombo(MemcachedError): ERRCODE = 0xce
 class ErrorSubdocXattrInvalidKeyCombo(MemcachedError): ERRCODE = 0xcf
 class ErrorSubdocXattrUnknownMacro(MemcachedError): ERRCODE = 0xd0
-from cluster_run_manager import KeepRefs
 
-class MemcachedClient(KeepRefs):
+class MemcachedClient(object):
     """Simple memcached client."""
 
     vbucketId = 0
 
     def __init__(self, host='127.0.0.1', port=11211, family=socket.AF_UNSPEC):
-        super(MemcachedClient, self).__init__()
         self.host = host
         self.port = port
 
@@ -203,21 +203,6 @@ class MemcachedClient(KeepRefs):
         msg=struct.pack(fmt, magic,
             cmd, len(key), len(extraHeader), dtype, vbucketId,
                 len(key) + len(extraHeader) + len(val), opaque, cas)
-        try:
-            key = key.encode()
-        except AttributeError:
-            pass
-
-        try:
-            extraHeader = extraHeader.encode()
-        except AttributeError:
-            pass
-
-        try:
-            val = val.encode()
-        except AttributeError:
-            pass
-
         self.s.sendall(msg + extraHeader + key + val)
 
     def _socketRecv(self, amount):
@@ -227,20 +212,20 @@ class MemcachedClient(KeepRefs):
         raise TimeoutError(30)
 
     def _recvMsg(self):
-        response = b""
+        response = ""
         while len(response) < MIN_RECV_PACKET:
             data = self._socketRecv(MIN_RECV_PACKET - len(response))
-            if data == b'':
+            if data == '':
                 raise exceptions.EOFError("Got empty data (remote died?).")
             response += data
         assert len(response) == MIN_RECV_PACKET
         magic, cmd, keylen, extralen, dtype, errcode, remaining, opaque, cas=\
             struct.unpack(RES_PKT_FMT, response)
 
-        rv = b""
+        rv = ""
         while remaining > 0:
             data = self._socketRecv(remaining)
-            if data == b'':
+            if data == '':
                 raise exceptions.EOFError("Got empty data (remote died?).")
             rv += data
             remaining -= len(data)
@@ -423,7 +408,7 @@ class MemcachedClient(KeepRefs):
         """Start a plan auth session."""
         try:
             self.sasl_auth_start('CRAM-MD5', '')
-        except MemcachedError as e:
+        except MemcachedError, e:
             if e.status != memcacheConstants.ERR_AUTH_CONTINUE:
                 raise
             challenge = e.msg
@@ -454,8 +439,8 @@ class MemcachedClient(KeepRefs):
 
     def compact_db(self, vbucket, purgeBeforeTs, purgeBeforeSeq, dropDeletes):
         assert isinstance(vbucket, int)
-        assert isinstance(purgeBeforeTs, int)
-        assert isinstance(purgeBeforeSeq, int)
+        assert isinstance(purgeBeforeTs, long)
+        assert isinstance(purgeBeforeSeq, long)
         assert isinstance(dropDeletes, int)
         self.vbucketId = vbucket
         compact = struct.pack(memcacheConstants.COMPACT_DB_PKT_FMT,
@@ -482,7 +467,7 @@ class MemcachedClient(KeepRefs):
         opaqued=dict(enumerate(keys))
         terminal=len(opaqued)+10
         # Send all of the keys in quiet
-        for k, v in opaqued.items():
+        for k,v in opaqued.iteritems():
             self._sendCmd(memcacheConstants.CMD_GETQ, v, '', k, collection=collection)
 
         self._sendCmd(memcacheConstants.CMD_NOOP, '', '', terminal)
@@ -504,15 +489,15 @@ class MemcachedClient(KeepRefs):
         Give me (key, value) pairs."""
 
         # If this is a dict, convert it to a pair generator
-        if hasattr(items, 'items'):
-            items = iter(items.items())
+        if hasattr(items, 'iteritems'):
+            items = items.iteritems()
 
         opaqued=dict(enumerate(items))
         terminal=len(opaqued)+10
         extra=struct.pack(SET_PKT_FMT, flags, exp)
 
         # Send all of the keys in quiet
-        for opaque, kv in opaqued.items():
+        for opaque,kv in opaqued.iteritems():
             self._sendCmd(memcacheConstants.CMD_SETQ, kv[0], kv[1], opaque, extra, collection=collection)
 
         self._sendCmd(memcacheConstants.CMD_NOOP, '', '', terminal)
@@ -524,7 +509,7 @@ class MemcachedClient(KeepRefs):
             try:
                 opaque, cas, data = self._handleSingleResponse(None)
                 done = opaque == terminal
-            except MemcachedError as e:
+            except MemcachedError, e:
                 failed.append(e)
 
         return failed
@@ -538,7 +523,7 @@ class MemcachedClient(KeepRefs):
         extra = ''
 
         # Send all of the keys in quiet
-        for opaque, k in opaqued.items():
+        for opaque, k in opaqued.iteritems():
             self._sendCmd(memcacheConstants.CMD_DELETEQ, k, '', opaque, extra, collection=collection)
 
         self._sendCmd(memcacheConstants.CMD_NOOP, '', '', terminal)
@@ -550,7 +535,7 @@ class MemcachedClient(KeepRefs):
             try:
                 opaque, cas, data = self._handleSingleResponse(None)
                 done = opaque == terminal
-            except MemcachedError as e:
+            except MemcachedError, e:
                 failed.append(e)
 
         return failed
@@ -564,17 +549,10 @@ class MemcachedClient(KeepRefs):
         while not done:
             cmd, opaque, cas, klen, extralen, data = self._handleKeyedResponse(None)
             if klen:
-                rv[data[0:klen].decode()] = data[klen:].decode()
+                rv[data[0:klen]] = data[klen:]
             else:
                 done = True
-        return self.get_decoded_dict(rv)
-
-    def get_decoded_dict(self, rv):
-        decoded_rv = {}
-        for key, value in list(rv.items()):
-            decoded_rv[key.decode("utf-8") if isinstance(key, bytes) else key] = \
-                value.decode("utf-8") if isinstance(value, bytes) else value
-        return decoded_rv
+        return rv
 
     def get_random_key(self):
         opaque=self.r.randint(0, 2**32)
@@ -615,7 +593,7 @@ class MemcachedClient(KeepRefs):
 
         d = {}
 
-        for k, v in errmap['errors'].items():
+        for k,v in errmap['errors'].iteritems():
             d[int(k, 16)] = v
 
         errmap['errors'] = d
@@ -661,7 +639,7 @@ class MemcachedClient(KeepRefs):
             # expect scope.collection for name API
             try:
                 collection = self.collection_map[collection]
-            except KeyError as e:
+            except KeyError, e:
                 self.log.info("Error: cannot map collection \"{}\" to an ID".format(collection))
                 self.log.info("name API expects \"scope.collection\" as the key")
                 raise e

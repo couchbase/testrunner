@@ -1,6 +1,7 @@
 import random
 from mc_bin_client import MemcachedClient,decodeCollectionID
 from memcacheConstants import *
+import Queue
 import time
 
 MAX_SEQNO = 0xFFFFFFFFFFFFFFFF
@@ -191,7 +192,7 @@ class DcpClient(MemcachedClient):
     def send_op(self, op):
         """ sends op details to mcd client for lowlevel packet assembly """
         if self._opcode_dump:
-            print('Opcode Dump - Send:   ', str(hex(op.opcode)), self.opcode_lookup(op.opcode))
+            print 'Opcode Dump - Send:   ', str(hex(op.opcode)), self.opcode_lookup(op.opcode)
         self.vbucketId = op.vbucket
         self._sendCmd(op.opcode,
                       op.key,
@@ -212,7 +213,7 @@ class DcpClient(MemcachedClient):
 
 
                 if self._opcode_dump:
-                    print('Opcode Dump - Receive:', str(hex(opcode)), self.opcode_lookup(opcode))
+                    print 'Opcode Dump - Receive:', str(hex(opcode)), self.opcode_lookup(opcode)
 
                 if opaque == op.opaque:
                     response = op.formated_response(opcode, keylen,
@@ -244,7 +245,7 @@ class DcpClient(MemcachedClient):
 
 
             except Exception as ex:
-                print("recv_op Exception:", ex)
+                print "recv_op Exception:", ex
                 if 'died' in str(ex):
                     return {'opcode': op.opcode,
                             'status': 0xff}
@@ -275,7 +276,7 @@ class DcpClient(MemcachedClient):
         self._opcode_dump = control
 
     def opcode_lookup(self, opcode):
-        from .memcacheConstants import DCP_Opcode_Dictionary
+        from memcacheConstants import DCP_Opcode_Dictionary
         return DCP_Opcode_Dictionary.get(opcode, 'Unknown Opcode')
 
 
@@ -286,7 +287,7 @@ class DcpStream(object):
 
         self.__generator = generator
         self.vbucket = vbucket
-        response = next(self.__generator)
+        response = self.__generator.next()
         assert response is not None
 
         self.failover_log = response.get('failover_log')
@@ -303,7 +304,7 @@ class DcpStream(object):
 
         if self._ended: return None
 
-        response = next(self.__generator)
+        response = self.__generator.next()
 
         if response:
 
@@ -371,7 +372,7 @@ class Operation(object):
         self.extras = extras
         self.vbucket = vbucket
         self.opaque = opaque or random.Random().randint(0, 2 ** 32)
-        self.queue = queue.Queue()
+        self.queue = Queue.Queue()
 
     def formated_response(self, opcode, keylen, extlen, dtype, status, cas, body, opaque, frameextralen):
         return {'opcode': opcode,

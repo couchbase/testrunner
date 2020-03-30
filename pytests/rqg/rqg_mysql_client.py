@@ -3,7 +3,7 @@
 Python based MySQL interface
 """
 
-from .base_rqg_mysql_client import BaseRQGMySQLClient
+from base_rqg_mysql_client import BaseRQGMySQLClient
 from lib.mysql_client import MySQLClient
 
 class RQGMySQLClient(BaseRQGMySQLClient):

@@ -166,7 +166,7 @@ class ImportExportTests(CliBaseTest):
             if self.format_type == "list":
                 self.log.info("remove [] in file")
                 self.shell.execute_command("sed%s -i '/^\[\]/d' %s"
-                                                 % (self.cmd_ext, export_file))
+                                                 % (self.cmd_ext,export_file))
             output, _ = self.shell.execute_command("gawk%s 'END {print NR}' %s"
                                                      % (self.cmd_ext, export_file))
             self.assertTrue(int(total_items) == int(output[0]),
@@ -292,7 +292,7 @@ class ImportExportTests(CliBaseTest):
                     elif self.test_type == "export":
                         self.test_type = "cbexport"
                         self.shell.execute_command("rm -rf {0}export{1}"\
-                                                   .format(self.tmp_path, self.master.ip))
+                                                   .format(self.tmp_path,self.master.ip))
                         self.shell.execute_command("mkdir {0}export{1}"\
                                                    .format(self.tmp_path, self.master.ip))
                         export_file = self.ex_path + bucket.name
@@ -358,7 +358,7 @@ class ImportExportTests(CliBaseTest):
                 self.shell.execute_command("rm -rf {0}export{1}"\
                                            .format(self.tmp_path, self.master.ip))
                 self.shell.execute_command("mkdir {0}export{1}"\
-                                           .format(self.tmp_path, self.master.ip))
+                                           .format(self.tmp_path,self.master.ip))
                 """ /opt/couchbase/bin/cbexport json -c localhost -u Administrator
                               -p password -b default -f list -o /tmp/test4.zip """
                 if len(self.buckets) >= 1:
@@ -374,9 +374,9 @@ class ImportExportTests(CliBaseTest):
                                                                    export_file)
                         self.shell.execute_command(exe_cmd_str)
                         self._verify_export_file(bucket.name, options)
-        except Exception as e:
+        except Exception, e:
             if e:
-                print(("Exception throw: ", e))
+                print "Exception throw: ", e
             test_failed = True
         finally:
             if port_changed:
@@ -1058,7 +1058,7 @@ class ImportExportTests(CliBaseTest):
                                           limit_lines, skip_lines,
                                           omit_empty, infer_types,
                                           secure_conn, json_invalid_errors_file)
-                    print(("\ncommand format: ", imp_cmd_str))
+                    print "\ncommand format: ", imp_cmd_str
                     if self.dgm_run and self.active_resident_threshold:
                         """ disable auto compaction so that bucket could
                             go into dgm faster.
@@ -1151,8 +1151,8 @@ class ImportExportTests(CliBaseTest):
             keys = int(keys) - int(self.pre_imex_ops_keys)
 
         if not self.json_invalid_errors:
-            print(("Total docs in bucket: ", keys))
-            print(("Docs need to import: ", data_import))
+            print "Total docs in bucket: ", keys
+            print "Docs need to import: ", data_import
 
         if data_import != int(keys):
             if self.skip_docs:
@@ -1173,7 +1173,7 @@ class ImportExportTests(CliBaseTest):
                 for i in range(10):
                     self.keys_check.append(self.rest.get_random_key("default"))
                 if self.debug_logs:
-                    print(("keys:   ", self.keys_check))
+                    print "keys:   ", self.keys_check
                 for x in self.keys_check:
                     if self.field_substitutions == "age":
                       if not x["key"].split("::")[1].isdigit():
@@ -1207,7 +1207,7 @@ class ImportExportTests(CliBaseTest):
                     src_data = list(itertools.islice(f, self.skip_docs,
                                                         skip_lines +
                                                         int(self.limit_docs)))
-                    src_data = [s.strip() for s in src_data]
+                    src_data = map(lambda s: s.strip(), src_data)
                     src_data = [x.replace(" ", "") for x in src_data]
                 elif self.skip_rows and self.limit_rows:
                     self.log.info("Skip %s rows and import only %s rows after that"
@@ -1251,8 +1251,8 @@ class ImportExportTests(CliBaseTest):
                     bucket_data[len(bucket_data) - 1] = \
                     bucket_data[len(bucket_data) - 1].replace("]", "")
                 if self.debug_logs:
-                    print(("\nsource data  \n", src_data))
-                    print(("\nbucket data  \n", bucket_data))
+                    print "\nsource data  \n", src_data
+                    print "\nbucket data  \n", bucket_data
                 self.log.info("Compare source data and bucket data")
                 for x in range(0, len(bucket_data)):
                     k = json.loads(bucket_data[x])
@@ -1276,8 +1276,8 @@ class ImportExportTests(CliBaseTest):
                 bucket_keys = bucket_keys["rows"]
                 for x in range(0, len(src_data)):
                     if self.debug_logs:
-                        print(("source data:  ", src_data[x].split(",")[2]))
-                        print(("bucket data:  \n", bucket_keys[x]["id"]))
+                        print "source data:  ", src_data[x].split(",")[2]
+                        print "bucket data:  \n", bucket_keys[x]["id"]
                     if not any(str(src_data[x].split(",")[2]) in\
                                                     k["id"] for k in bucket_keys):
                         self.fail("Failed to import key %s to bucket"
@@ -1292,7 +1292,7 @@ class ImportExportTests(CliBaseTest):
                             if output:
                                 key_value = output[0]
                                 key_value = ast.literal_eval(key_value)
-                                print(("key value json  ", key_value["json"]))
+                                print "key value json  ", key_value["json"]
                                 if "age" in key_value["json"]:
                                     if "body" in key_value["json"]:
                                         self.fail("Failed to omit empty value field")
@@ -1346,10 +1346,10 @@ class ImportExportTests(CliBaseTest):
                     if self.debug_logs:
                         s = set(exports)
                         not_in_exports = [x for x in samples if x not in s]
-                        print(("\n data in sample not in exports  ", not_in_exports))
+                        print "\n data in sample not in exports  ", not_in_exports
                         e = set(samples)
                         not_in_samples = [x for x in exports if x not in e]
-                        print(("\n data in exports not in samples  ", not_in_samples))
+                        print "\n data in exports not in samples  ", not_in_samples
                     count = 0
                     self.log.info("Compare data with sample data")
                     for x in range(0, len(exports)):
@@ -1385,8 +1385,8 @@ class ImportExportTests(CliBaseTest):
                             x["index"] = str(x["index"])
 
                     if self.debug_logs:
-                        print(("\nSample list data: %s" % samples))
-                        print(("\nExport list data: %s" % exports))
+                        print "\nSample list data: %s" % samples
+                        print "\nExport list data: %s" % exports
                     if samples == exports:
                         self.log.info("export and sample json files are matched")
                     else:

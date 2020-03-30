@@ -2,7 +2,7 @@ import time
 import logger
 from dcp.constants import *
 from mc_bin_client import MemcachedError
-from .dcpbase import DCPBase
+from dcpbase import DCPBase
 from membase.api.rest_client import RestConnection, RestHelper
 from couchbase_helper.documentgenerator import BlobGenerator
 from remote.remote_util import RemoteMachineShellConnection
@@ -51,7 +51,7 @@ class DCPRollBack(DCPBase):
              "val-field-name": "serial-vals-100"
             }
         """
-        vals = ['serial-vals-' + str(i) for i in range(NUMBER_OF_DOCS)]
+        vals = ['serial-vals-' + str(i) for i in xrange(NUMBER_OF_DOCS)]
         template = '{{ "val-field-name": "{0}"  }}'
         gen_load = DocumentGenerator('keyname', template, vals, start=0,
                                      end=NUMBER_OF_DOCS)
@@ -64,7 +64,7 @@ class DCPRollBack(DCPBase):
         modified_kvs_active_on_node1 = {}
         vbucket_client = VBucketAwareMemcached(RestConnection(self.master), 'default')
         client = MemcachedClientHelper.direct_client(self.servers[0], 'default')
-        for i in range(NUMBER_OF_DOCS//100):
+        for i in range(NUMBER_OF_DOCS/100):
             keyname = 'keyname-' + str(i)
             vbId = ((zlib.crc32(keyname) >> 16) & 0x7fff) & (self.vbuckets- 1)
             if vbucket_client.vBucketMap[vbId].split(':')[0] == self.servers[0].ip:
@@ -80,16 +80,16 @@ class DCPRollBack(DCPBase):
                 except MemcachedError as e:
                     if self.bucket_type == 'ephemeral':
                         self.assertTrue(
-                            "Memcached error #4 'Invalid':  Flusher not running. for vbucket :0 to mc " in str(e))
+                            "Memcached error #4 'Invalid':  Flusher not running. for vbucket :0 to mc " in e.message)
                         return
                     else:
                         raise
 
         # modify less than 1/2 of the keys
-        vals = ['modified-serial-vals-' + str(i) for i in range(NUMBER_OF_DOCS//100)]
+        vals = ['modified-serial-vals-' + str(i) for i in xrange(NUMBER_OF_DOCS/100)]
         template = '{{ "val-field-name": "{0}"  }}'
         gen_load = DocumentGenerator('keyname', template, vals, start=0,
-                                     end=NUMBER_OF_DOCS//100)
+                                     end=NUMBER_OF_DOCS/100)
         rc = self.cluster.load_gen_docs(self.servers[0], self.buckets[0].name, gen_load,
                                    self.buckets[0].kvs[1], "create", exp=0, flag=0, batch_size=1000,
                                         compression=self.sdk_compression)
@@ -111,7 +111,7 @@ class DCPRollBack(DCPBase):
 
         # check the values, they should be what they were prior to the second update
         client = MemcachedClientHelper.direct_client(self.servers[0], 'default')
-        for k, v  in modified_kvs_active_on_node1.items():
+        for k,v  in modified_kvs_active_on_node1.iteritems():
             rc = client.get( k )
             self.assertTrue( v == rc[2], 'Expected {0}, actual {1}'.format(v, rc[2]))
 
@@ -129,7 +129,7 @@ class DCPRollBack(DCPBase):
         if status:
             rest_obj.set_recovery_type(node_id_for_recovery,
                                        recoveryType='delta')
-        rc = self.cluster.rebalance(self.servers[:self.nodes_init], [], [])
+        rc = self.cluster.rebalance(self.servers[:self.nodes_init], [],[])
 
     """
     # MB-21568 sequence number is incorrect during a race between persistence and failover.
@@ -158,7 +158,7 @@ class DCPRollBack(DCPBase):
                     client.stop_persistence()
                 except MemcachedError as e:
                     if self.bucket_type == 'ephemeral':
-                        self.assertTrue("Memcached error #4 'Invalid':  Flusher not running. for vbucket :0 to mc " in str(e))
+                        self.assertTrue("Memcached error #4 'Invalid':  Flusher not running. for vbucket :0 to mc " in e.message)
                         return
                     else:
                         raise

@@ -10,11 +10,11 @@ from membase.api.exception import ReadDocumentException
 from membase.api.exception import DesignDocCreationException
 from membase.helper.cluster_helper import ClusterOperationHelper
 from remote.remote_util import RemoteMachineShellConnection
-import subprocess
+import commands
 from security.auditmain import audit
 from clitest.cli_base import CliBaseTest
 import socket
-import urllib.request, urllib.parse, urllib.error
+import urllib
 
 
 class auditcheckconfig(BaseTestCase):
@@ -77,7 +77,7 @@ class auditcheckconfig(BaseTestCase):
                                     'auth_type':'sasl', "autocompaction":'false', "purge_interval":"undefined", \
                                     "flush_enabled":1, "num_threads":3, \
                                     "ip":self.ipAddress, "port":57457, 'sessionid':'' }
-        rest.create_bucket(expectedResults['name'], expectedResults['ram_quota'] // 1048576, expectedResults['auth_type'], 'password', expectedResults['num_replicas'], \
+        rest.create_bucket(expectedResults['name'], expectedResults['ram_quota'] / 1048576, expectedResults['auth_type'], 'password', expectedResults['num_replicas'], \
                                     '11211', 'membase', 0, expectedResults['num_threads'], expectedResults['flush_enabled'], 'valueOnly')
         return expectedResults
 
@@ -334,7 +334,7 @@ class auditcheckconfig(BaseTestCase):
         intervalSec = self.input.param("intervalSec", None)
         nodes_init = self.input.param("nodes_init", 2)
         auditIns = audit(host=self.master)
-        auditIns.setAuditEnable('true')
+	auditIns.setAuditEnable('true')
         originalInt = auditIns.getAuditRotateInterval()
         auditIns.setAuditRotateInterval(intervalSec)
         firstEventTime = []
@@ -426,7 +426,7 @@ class auditcheckconfig(BaseTestCase):
                                        'auth_type':'sasl', "autocompaction":'false', "purge_interval":"undefined", \
                                         "flush_enabled":False, "num_threads":3, "source":source, \
                                        "user":user, "ip":self.ipAddress, "port":57457, 'sessionid':'' }
-            rest.create_bucket(expectedResults['name'], expectedResults['ram_quota'] // 1048576, expectedResults['auth_type'], 'password', expectedResults['num_replicas'], \
+            rest.create_bucket(expectedResults['name'], expectedResults['ram_quota'] / 1048576, expectedResults['auth_type'], 'password', expectedResults['num_replicas'], \
                                        '11211', 'membase', 0, expectedResults['num_threads'], expectedResults['flush_enabled'], 'valueOnly')
 
             #Check on Events
@@ -529,7 +529,7 @@ class auditCLITest(CliBaseTest):
                 rest = RestConnection(self.master)
                 self.setupLDAPSettings(rest)
                 #rest.ldapUserRestOperation(True, [[self.ldapUser]], exclude=None)
-                self.set_user_role(rest, self.ldapUser)
+                self.set_user_role(rest,self.ldapUser)
 
     def tearDown(self):
         super(auditCLITest, self).tearDown()
@@ -538,9 +538,9 @@ class auditCLITest(CliBaseTest):
         payload = "name=" + username + "&roles=" + user_role
         content = rest.set_user_roles(user_id=username, payload=payload)
 
-    def setupLDAPSettings (self, rest):
+    def setupLDAPSettings (self,rest):
         api = rest.baseUrl + 'settings/saslauthdAuth'
-        params = urllib.parse.urlencode({"enabled":'true',"admins":[],"roAdmins":[]})
+        params = urllib.urlencode({"enabled":'true',"admins":[],"roAdmins":[]})
         status, content, header = rest._http_request(api, 'POST', params)
         return status, content, header
 

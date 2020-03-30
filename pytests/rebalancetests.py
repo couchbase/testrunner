@@ -238,7 +238,7 @@ class RebalanceBaseTest(unittest.TestCase):
         # TODO: assert no value greater than 1
         # TODO: assert sum of mutation ratios not greater than 1
 
-        for bucket in list(bucket_data.keys()):
+        for bucket in bucket_data.keys():
             get_task = None
             del_task = None
             exp_task = None
@@ -304,7 +304,7 @@ class RebalanceBaseTest(unittest.TestCase):
     @staticmethod
     def finish_bucket_task(bucket_name_info):
         log = logger.Logger().get_logger()
-        for k, _t in list(bucket_name_info['tasks'].items()):
+        for k, _t in bucket_name_info['tasks'].items():
             if _t is not None:
                 log.info("Waiting for {0} task".format(k))
                 _t.result()
@@ -404,7 +404,7 @@ class RebalanceBaseTest(unittest.TestCase):
             # run data integrity
             error_list = RebalanceBaseTest.do_kv_verification(task_manager, rest, bucket_data)
 
-            [self.assertEqual(0, len(list(errors.items()))) for errors in error_list]
+            [self.assertEqual(0, len(errors.items())) for errors in error_list]
 
     @staticmethod
     def check_resident_ratio(self, master):
@@ -480,7 +480,7 @@ class IncrementalRebalanceInTests(unittest.TestCase):
         #because parallel ops is too slow due to num_locks=1 is used in old kvs store
         data_perc = 1
 
-        #self.keys_count = self.keys_count // 10
+        #self.keys_count = self.keys_count / 10
         for server in self.servers[1:]:
             if self.keys_count >= 100000:
                 data_perc *= 0.1
@@ -532,13 +532,13 @@ class IncrementalRebalanceWithMcsoda(unittest.TestCase):
         # start load, max_ops_per_second is the combined limit for all buckets
         buckets = rest.get_buckets()
         loaders = []
-        self.log.info("max-ops-per-second per bucket: {0}".format(self.max_ops_per_second // len(buckets)))
+        self.log.info("max-ops-per-second per bucket: {0}".format(self.max_ops_per_second / len(buckets)))
         for bucket in buckets:
             loader = {}
             loader["mcsoda"] = LoadWithMcsoda(master, self.keys_count, prefix='', bucket=bucket.name,
                 password=bucket.saslPassword, protocol='membase-binary')
             loader["mcsoda"].cfg["max-ops"] = 0
-            loader["mcsoda"].cfg["max-ops-per-sec"] = self.max_ops_per_second // len(buckets)
+            loader["mcsoda"].cfg["max-ops-per-sec"] = self.max_ops_per_second / len(buckets)
             loader["mcsoda"].cfg["exit-after-creates"] = 0
             loader["mcsoda"].cfg["min-value-size"] = self.min_item_size
             loader["mcsoda"].cfg["json"] = 0

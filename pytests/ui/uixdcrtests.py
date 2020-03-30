@@ -1,6 +1,6 @@
 from membase.api.rest_client import RestConnection
-from .uibasetest import *
-from .uisampletests import Bucket, NavigationHelper
+from uibasetest import *
+from uisampletests import Bucket, NavigationHelper
 from selenium.common.exceptions import StaleElementReferenceException
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
@@ -68,7 +68,7 @@ class XDCRTests(BaseUITestCase):
         NavigationHelper(self).navigate('XDCR')
         try:
             XDCRHelper(self).create_cluster_reference(name, ip, user, passwd)
-        except Exception as ex:
+        except Exception, ex:
             self.log.error(str(ex))
             if error:
                 self.assertTrue(str(ex).find(error) != -1, 'Error is not expected')
@@ -102,7 +102,7 @@ class XDCRTests(BaseUITestCase):
         self.sleep(3)
         try:
             XDCRHelper(self).create_replication(dest_cluster, src_bucket, dest_bucket, advanced_settings=advanced_settings)
-        except Exception as ex:
+        except Exception, ex:
             self.log.error(str(ex))
             if error:
                 self.assertTrue(str(ex).find(error) != -1, 'Error is not expected')

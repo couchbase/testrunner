@@ -1,26 +1,25 @@
+import Queue
 from datetime import datetime
 
+from base_2i import BaseSecondaryIndexingTests, log
+from membase.api.rest_client import RestConnection, RestHelper
 import random
 import threading
-from membase.api.rest_client import RestConnection, RestHelper
-from queue import Queue
-
 from lib import testconstants
 from lib.couchbase_helper.query_definitions import SQLDefinitionGenerator, QueryDefinition, RANGE_SCAN_TEMPLATE
 from lib.couchbase_helper.tuq_generators import TuqGenerators
+from lib.membase.helper.cluster_helper import ClusterOperationHelper
 from lib.remote.remote_util import RemoteMachineShellConnection
+from pytests.ent_backup_restore.enterprise_backup_restore_base import EnterpriseBackupRestoreBase, Backupset
 from pytests.fts.fts_base import NodeHelper
 from pytests.query_tests_helper import QueryHelperTests
-from .base_2i import BaseSecondaryIndexingTests, log
+from pytests.tuqquery.tuq import QueryTests
 
 
-#class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTests,  NodeHelper,
-#                                      EnterpriseBackupRestoreBase):
-class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTests,  NodeHelper):
-#class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests):
+class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTests, NodeHelper,
+                                      EnterpriseBackupRestoreBase):
     def setUp(self):
-        #super(SecondaryIndexingRebalanceTests, self).setUp()
-        super().setUp()
+        super(SecondaryIndexingRebalanceTests, self).setUp()
         self.rest = RestConnection(self.servers[0])
         self.n1ql_server = self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=False)
         self.create_primary_index = False
@@ -47,7 +46,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         else:
             raise Exception("OS not supported.")
         self.rand = random.randint(1, 1000000000)
-        self.alter_index = self.input.param("alter_index", None)
+        self.alter_index = self.input.param("alter_index",None)
         if self.ansi_join:
             self.rest.load_sample("travel-sample")
 
@@ -118,14 +117,14 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         rebalance.result()
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init + 1], [], to_remove_nodes)
         index_server = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
-        for i in range(20):
+        for i in xrange(20):
             output = self.rest.list_indexer_rebalance_tokens(server=index_server)
             if "rebalancetoken" in output:
                 log.info(output)
                 break
             self.sleep(2)
         if i == 19 and "rebalancetoken" not in output:
-            self.log.warning("rebalancetoken was not returned by /listRebalanceTokens during gsi rebalance")
+            self.log.warn("rebalancetoken was not returned by /listRebalanceTokens during gsi rebalance")
         self.run_async_index_operations(operation_type="query")
         reached = RestHelper(self.rest).rebalance_reached()
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
@@ -154,7 +153,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
 
-        self._cbindex_move(index_server, self.servers[self.nodes_init], indexes, alter_index=self.alter_index)
+        self._cbindex_move(index_server, self.servers[self.nodes_init], indexes,alter_index=self.alter_index)
         if not self.alter_index:
             self.wait_for_cbindex_move_to_complete(self.servers[self.nodes_init], no_of_indexes)
         else:
@@ -217,7 +216,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
             self.n1ql_helper.run_cbq_query(
                 query="CREATE INDEX " + index_name_prefix + " ON default(age) USING GSI  WITH {'defer_build': True};",
                 server=self.n1ql_node)
-        except Exception as ex:
+        except Exception, ex:
             log.info(str(ex))
             if "Create index or Alter replica cannot proceed due to rebalance in progress" not in str(ex):
                 self.fail("index creation did not fail with expected error : {0}".format(str(ex)))
@@ -243,7 +242,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         try:
             # when rebalance is in progress, run drop index
             self._drop_index(self.query_definitions[0], self.buckets[0])
-        except Exception as ex:
+        except Exception, ex:
             log.info(str(ex))
             if "Indexer Cannot Process Drop Index - Rebalance In Progress" not in str(ex):
                 self.fail("drop index did not fail with expected error : {0}".format(str(ex)))
@@ -257,7 +256,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         # Validate that the index is dropped after retry
         try:
             self._drop_index(self.query_definitions[0], self.buckets[0])
-        except Exception as ex:
+        except Exception, ex:
             log.info(str(ex))
             if "not found" not in str(ex):
                 self.fail("drop index did not fail with expected error : {0}".format(str(ex)))
@@ -283,7 +282,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
             self.fail("deleting bucket succeeded during gsi rebalance")
         try:
             status2 = self.rest.flush_bucket(bucket=self.buckets[0])
-        except Exception as ex:
+        except Exception, ex:
             if "unable to flush bucket" not in str(ex):
                 self.fail("flushing bucket failed with unexpected error message")
         self.run_operation(phase="during")
@@ -371,7 +370,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [index_server])
         self.sleep(2)
         exceptions = self._build_index()
-        if not [x for x in exceptions if 'Indexer Cannot Process Build Index - Rebalance In Progress' in x]:
+        if not filter(lambda x: 'Indexer Cannot Process Build Index - Rebalance In Progress' in x, exceptions):
             self.fail(
                 "build index did not fail during gsi rebalance with expected error message: See MB-23452 for more details")
         reached = RestHelper(self.rest).rebalance_reached()
@@ -466,7 +465,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
             self.log.info(msg.format(result))
         self.sleep(30)
         map_after_rebalance, _ = self._return_maps()
-        self.assertEqual(len(list(map_after_rebalance.keys())), 0)
+        self.assertEqual(len(map_after_rebalance.keys()), 0)
 
     def test_graceful_failover_and_full_recovery_and_gsi_rebalance(self):
         index_server = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
@@ -576,7 +575,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         # rebalance out a indexer node
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [index_server])
         # stop the rebalance
-        stopped = RestConnection(self.master).stop_rebalance(wait_timeout=self.wait_timeout // 3)
+        stopped = RestConnection(self.master).stop_rebalance(wait_timeout=self.wait_timeout / 3)
         self.assertTrue(stopped, msg="unable to stop rebalance")
         rebalance.result()
         # start rebalance again
@@ -620,7 +619,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         try:
             rebalance = self.cluster.rebalance(self.servers[:self.nodes_init], [], [index_server])
             rebalance.result()
-        except Exception as ex:
+        except Exception, ex:
             if "Rebalance failed. See logs for detailed reason. You can try again" not in str(ex):
                 self.fail("rebalance failed with some unexpected error : {0}".format(str(ex)))
         else:
@@ -736,7 +735,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
             reached = RestHelper(self.rest).rebalance_reached()
             self.assertTrue(reached, "rebalance failed, stuck or did not complete")
             rebalance.result()
-        except Exception as ex:
+        except Exception, ex:
             log.info(
                 "If there are multiple services in the cluster and rebalance is done, all services get the request to rebalance.\
                  As indexer is running DDL, it will fail with : indexer rebalance failure - ddl in progress")
@@ -767,7 +766,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
             reached = RestHelper(self.rest).rebalance_reached()
             self.assertTrue(reached, "rebalance failed, stuck or did not complete")
             rebalance.result()
-        except Exception as ex:
+        except Exception, ex:
             log.info("rebalance failed during network partitioning: {0}".format(str(ex)))
         finally:
             self.stop_firewall_on_node(index_server)
@@ -896,7 +895,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [index_server])
             RestHelper(self.rest).rebalance_reached()
             rebalance.result()
-        except Exception as ex:
+        except Exception, ex:
             if "Rebalance failed. See logs for detailed reason. You can try again" not in str(ex):
                 self.fail("rebalance failed with some unexpected error : {0}".format(str(ex)))
         else:
@@ -957,7 +956,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         services_in = ["index"]
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], to_add_nodes, [], services=services_in)
         rebalance.result()
-        self._cbindex_move(index_server, self.servers[self.nodes_init], indexes, alter_index=self.alter_index)
+        self._cbindex_move(index_server, self.servers[self.nodes_init], indexes,alter_index=self.alter_index)
         self.run_operation(phase="during")
         tasks = self.async_run_doc_ops()
         for task in tasks:
@@ -992,7 +991,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
                                            expect_failure=True,
                                            alter_index=False)
 
-        if not [x for x in error if 'Error occured' in x]:
+        if not filter(lambda x: 'Error occured' in x, error):
             self.fail("cbindex move did not fail with expected error message")
 
         # cbindex move with invalid destination host
@@ -1139,7 +1138,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         rebalance.result()
         #  cbindex move with invalid src host not valid for alter index query
         _, error = self._cbindex_move(self.servers[self.nodes_init + 1], "", indexes, expect_failure=True)
-        if not [x for x in error if 'Error occured invalid index specified' in x]:
+        if not filter(lambda x: 'Error occured invalid index specified' in x, error):
             self.fail("cbindex move did not fail with expected error message")
 
     def test_kv_failover_when_ddl_in_progress(self):
@@ -1238,7 +1237,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
             reached = RestHelper(self.rest).rebalance_reached()
             self.assertTrue(reached, "rebalance failed, stuck or did not complete")
             rebalance.result()
-        except Exception as ex:
+        except Exception, ex:
             if "Rebalance failed. See logs for detailed reason. You can try again" not in str(ex):
                 self.fail("rebalance failed with some unexpected error : {0}".format(str(ex)))
         else:
@@ -1264,7 +1263,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
             reached = RestHelper(self.rest).rebalance_reached()
             self.assertTrue(reached, "rebalance failed, stuck or did not complete")
             rebalance.result()
-        except Exception as ex:
+        except Exception, ex:
             if "Rebalance failed. See logs for detailed reason. You can try again" not in str(ex):
                 self.fail("rebalance failed with some unexpected error : {0}".format(str(ex)))
         else:
@@ -1292,7 +1291,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
             reached = RestHelper(self.rest).rebalance_reached()
             self.assertTrue(reached, "rebalance failed, stuck or did not complete")
             rebalance.result()
-        except Exception as ex:
+        except Exception, ex:
             self.fail("rebalance failed after memcached got killed: {0}".format(str(ex)))
         self.run_operation(phase="after")
 
@@ -1376,7 +1375,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         map_before_rebalance, stats_map_before_rebalance = self._return_maps()
         indexes, no_of_indexes = self._get_indexes_in_move_index_format(map_before_rebalance)
         to_add_nodes = self.servers[self.nodes_init:self.nodes_init+2]
-        services_in = ["index", "index"]
+        services_in = ["index","index"]
         index_server = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], to_add_nodes, [], services=services_in)
         rebalance.result()
@@ -1424,7 +1423,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
             reached = RestHelper(self.rest).rebalance_reached()
             self.assertTrue(reached, "rebalance failed, stuck or did not complete")
             rebalance.result()
-        except Exception as ex:
+        except Exception, ex:
             if "Rebalance stopped by janitor" not in str(ex):
                 self.fail("rebalance failed with some unexpected error : {0}".format(str(ex)))
         else:
@@ -1644,7 +1643,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
             self.servers[self.nodes_init].rest_password)
         o, e = shell.execute_non_sudo_command(command)
         shell.log_command_output(o, e)
-        if e or not [x for x in o if 'SUCCESS: Server added' in x]:
+        if e or not filter(lambda x: 'SUCCESS: Server added' in x, o):
             self.fail("server-add failed")
         self.sleep(30)
         command = "{0}couchbase-cli rebalance -c {1} -u {2} -p {3}".format(
@@ -1653,7 +1652,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
             kv_node.rest_password)
         o, e = shell.execute_non_sudo_command(command)
         shell.log_command_output(o, e)
-        if e or not [x for x in o if 'SUCCESS: Rebalance complete' in x]:
+        if e or not filter(lambda x: 'SUCCESS: Rebalance complete' in x, o):
             self.fail("rebalance failed")
         reached = RestHelper(self.rest).rebalance_reached()
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
@@ -1726,7 +1725,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
             reached = RestHelper(self.rest).rebalance_reached()
             self.assertTrue(reached, "rebalance failed, stuck or did not complete")
             rebalance.result()
-        except Exception as ex:
+        except Exception, ex:
             if "Rebalance failed. See logs for detailed reason. You can try again" not in str(ex):
                 self.fail("rebalance failed with some unexpected error : {0}".format(str(ex)))
         else:
@@ -1795,7 +1794,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init + 1], [], to_remove_nodes)
         # kill n1ql while rebalance is running
         self.sleep(5)
-        for i in range(20):
+        for i in xrange(20):
             self._kill_all_processes_cbq(n1ql_node)
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
@@ -1823,13 +1822,13 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         try:
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init + 1], [], to_remove_nodes)
             # kill indexer while rebalance is running
-            for i in range(20):
+            for i in xrange(20):
                 self._kill_all_processes_index(self.servers[self.nodes_init])
                 self.sleep(2)
             reached = RestHelper(self.rest).rebalance_reached()
             self.assertTrue(reached, "rebalance failed, stuck or did not complete")
             rebalance.result()
-        except Exception as ex:
+        except Exception, ex:
             if "Rebalance failed. See logs for detailed reason. You can try again" not in str(ex):
                 self.fail("rebalance failed with some unexpected error : {0}".format(str(ex)))
         else:
@@ -1858,7 +1857,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
             reached = RestHelper(self.rest).rebalance_reached()
             self.assertTrue(reached, "rebalance failed, stuck or did not complete")
             rebalance.result()
-        except Exception as ex:
+        except Exception, ex:
             self.fail("rebalance failed with  error : {0}".format(str(ex)))
         finally:
             remote.start_server()
@@ -1890,21 +1889,21 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
             reached = RestHelper(self.rest).rebalance_reached()
             self.assertTrue(reached, "rebalance failed, stuck or did not complete")
             rebalance.result()
-        except Exception as ex:
+        except Exception, ex:
             if "Rebalance failed. See logs for detailed reason. You can try again" not in str(ex):
                 self.fail("rebalance failed with some unexpected error : {0}".format(str(ex)))
         else:
             self.fail("rebalance did not fail after index node reboot")
         self.sleep(60)
         # Rerun rebalance to check if it can recover from failure
-        for i in range(5):
+        for i in xrange(5):
             try:
                 rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [index_server])
                 self.sleep(2)
                 reached = RestHelper(self.rest).rebalance_reached()
                 self.assertTrue(reached, "rebalance failed, stuck or did not complete")
                 rebalance.result()
-            except Exception as ex:
+            except Exception, ex:
                 if "Rebalance failed. See logs for detailed reason. You can try again" in str(ex) and i == 4:
                     self.fail("rebalance did not recover from failure : {0}".format(str(ex)))
                     # Rerun after MB-23900 is fixed.
@@ -1931,7 +1930,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         # do a swap rebalance
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], to_add_nodes, [], services=services_in)
         self.sleep(5)
-        for i in range(20):
+        for i in xrange(20):
             self._kill_fts_process(fts_node)
         self.run_operation(phase="during")
         reached = RestHelper(self.rest).rebalance_reached()
@@ -1940,7 +1939,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init + 1], [], to_remove_nodes)
         # kill fts while rebalance is running
         self.sleep(5)
-        for i in range(20):
+        for i in xrange(20):
             self._kill_fts_process(fts_node)
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
@@ -1998,7 +1997,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         self.run_operation(phase="after")
 
     def test_cbindex_move_with_reboot_of_destination_node(self):
-        queue = Queue()
+        queue = Queue.Queue()
         self.run_operation(phase="before")
         self.sleep(30)
         map_before_rebalance, stats_map_before_rebalance = self._return_maps()
@@ -2026,8 +2025,8 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
             t1.join()
             for item in iter(queue.get, None):
                 log.info(item)
-                if [x for x in item if "dial tcp {0}:9100: getsockopt: connection refused".format(
-                        self.servers[self.nodes_init].ip) in x]:
+                if filter(lambda x: "dial tcp {0}:9100: getsockopt: connection refused".format(
+                        self.servers[self.nodes_init].ip) in x, item):
                     msg = "error found"
                     log.info("error found")
                     break
@@ -2056,11 +2055,11 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
             self.start_firewall_on_node(index_server)
             output, error = self._cbindex_move(index_server, self.servers[self.nodes_init], indexes, self.alter_index,
                                                expect_failure=True)
-            if not [x for x in error if 'Client.Timeout exceeded while awaiting headers' in x]:
-                if not [x for x in error if 'i/o timeout' in x]:
+            if not filter(lambda x: 'Client.Timeout exceeded while awaiting headers' in x, error):
+                if not filter(lambda x: 'i/o timeout' in x, error):
                     self.fail("cbindex move did not fail during network partition with expected error message : {0}".format(
                         error))
-        except Exception as ex:
+        except Exception, ex:
             self.fail(str(ex))
         finally:
             self.stop_firewall_on_node(index_server)
@@ -2086,11 +2085,11 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init + 1], [], to_remove_nodes)
             # partition n1ql node while running gsi rebalance
             self.sleep(5)
-            for i in range(5):
+            for i in xrange(5):
                 self.start_firewall_on_node(n1ql_node)
             self.stop_firewall_on_node(n1ql_node)
             self.assertTrue(reached, "rebalance failed, stuck or did not complete")
-        except Exception as ex:
+        except Exception, ex:
             self.fail("gsi rebalance failed because firewall was enabled on n1ql node : {0}".format(str(ex)))
         finally:
             self.stop_firewall_on_node(n1ql_node)
@@ -2104,7 +2103,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         self.run_operation(phase="after")
 
     def test_cbindex_move_with_reboot_of_source_node(self):
-        queue = Queue()
+        queue = Queue.Queue()
         self.run_operation(phase="before")
         self.sleep(30)
         map_before_rebalance, stats_map_before_rebalance = self._return_maps()
@@ -2124,7 +2123,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         # start multiple cbindex moves in parallel
         for index in indexes:
             t1 = threading.Thread(target=self._cbindex_move,
-                                  args=(index_server, self.servers[self.nodes_init], index, self.alter_index, queue, True))
+                                  args=(index_server, self.servers[self.nodes_init], index, self.alter_index, queue,True))
             threads.append(t1)
             t1.start()
             self.sleep(2)
@@ -2132,7 +2131,8 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
             t1.join()
             for item in iter(queue.get, None):
                 log.info(item)
-                if [x for x in item if "dial tcp {0}:9100: getsockopt: connection refused".format(index_server.ip) in x]:
+                if filter(lambda x: "dial tcp {0}:9100: getsockopt: connection refused".format(index_server.ip) in x,
+                          item):
                     msg = "error found"
                     log.info("error found")
                     break
@@ -2168,7 +2168,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
             reached = RestHelper(self.rest).rebalance_reached()
             self.assertTrue(reached, "rebalance failed, stuck or did not complete")
             rebalance.result()
-        except Exception as ex:
+        except Exception, ex:
             if "Rebalance failed. See logs for detailed reason. You can try again" not in str(ex):
                 self.fail("rebalance failed with some unexpected error : {0}".format(str(ex)))
         else:
@@ -2180,7 +2180,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         self.run_operation(phase="after")
 
     def test_cbindex_move_with_index_server_being_killed(self):
-        queue = Queue()
+        queue = Queue.Queue()
         self.run_operation(phase="before")
         self.sleep(30)
         map_before_rebalance, stats_map_before_rebalance = self._return_maps()
@@ -2200,7 +2200,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         # start multiple cbindex moves
         for index in indexes:
             t1 = threading.Thread(target=self._cbindex_move,
-                                  args=(index_server, self.servers[self.nodes_init], index, self.alter_index, queue, True))
+                                  args=(index_server, self.servers[self.nodes_init], index, self.alter_index, queue,True))
             threads.append(t1)
             t1.start()
             self.sleep(2)
@@ -2209,7 +2209,8 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
             t1.join()
             for item in iter(queue.get, None):
                 log.info(item)
-                if [x for x in item if "WatcherServer.runOnce() : Watcher terminated unexpectedly".format(self.servers[self.nodes_init].ip) in x]:
+                if filter(lambda x: "WatcherServer.runOnce() : Watcher terminated unexpectedly".format(self.servers[self.nodes_init].ip) in x,
+                          item):
                     msg = "error found"
                     log.info("error found")
                     break
@@ -2355,7 +2356,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
             self.n1ql_helper.verify_indexes_redistributed(map_before_rebalance, map_after_rebalance,
                                                         stats_map_before_rebalance, stats_map_after_rebalance,
                                                         to_add_nodes, to_remove_nodes, swap_rebalance=True)
-        except Exception as ex:
+        except Exception, ex:
             if "some indexes are missing after rebalance" not in str(ex):
                 self.fail("gsi rebalance failed with unexpected error: {0}".format(str(ex)))
         else:
@@ -2377,7 +2378,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
             try:
                 self.n1ql_helper.run_cbq_query(query=intersect_query, server=self.n1ql_node)
                 self.n1ql_helper.run_cbq_query(query=nest_query, server=self.n1ql_node)
-            except Exception as ex:
+            except Exception, ex:
                 self.log.info(str(ex))
                 raise Exception("query with nest and intersect failed")
         self.run_operation(phase="during")
@@ -2394,7 +2395,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
             try:
                 self.n1ql_helper.run_cbq_query(query=intersect_query, server=self.n1ql_node)
                 self.n1ql_helper.run_cbq_query(query=nest_query, server=self.n1ql_node)
-            except Exception as ex:
+            except Exception, ex:
                 self.log.info(str(ex))
                 raise Exception("query with nest and intersect failed")
         self.run_operation(phase="after")
@@ -2403,7 +2404,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         index_server = self.get_nodes_from_services_map(service_type="index", get_all_nodes=False)
         self.run_operation(phase="before")
         self.rest.set_service_memoryQuota(service='indexMemoryQuota', memoryQuota=256)
-        for i in range(2):
+        for i in xrange(2):
             query_definition_generator = SQLDefinitionGenerator()
             self.query_definitions = query_definition_generator.generate_airlines_data_query_definitions()
             self.query_definitions = query_definition_generator.filter_by_group(self.groups, self.query_definitions)
@@ -2424,7 +2425,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [self.servers[self.nodes_init]])
             RestHelper(self.rest).rebalance_reached()
             rebalance.result()
-        except Exception as ex:
+        except Exception, ex:
             if "Rebalance failed. See logs for detailed reason. You can try again" not in str(ex):
                 self.fail("rebalance failed with some unexpected error : {0}".format(str(ex)))
         else:
@@ -2565,7 +2566,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
             result = self.n1ql_helper.run_cbq_query(query=alter_idx_query,
                                                     server=self.n1ql_node)
             self.log.info(result)
-        except Exception as ex:
+        except Exception, ex:
             if not "Unsupported action value" in str(ex):
                 self.log.info(str(ex))
                 self.fail(
@@ -2703,7 +2704,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
             result = self.n1ql_helper.run_cbq_query(query=explain_query,
                                                     server=self.n1ql_node)
             self.log.info(result)
-        except Exception as ex:
+        except Exception, ex:
             self.log.info(str(ex))
             self.fail("Alter index did not fail with expected error message")
 
@@ -2772,7 +2773,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
             reached = RestHelper(self.rest).rebalance_reached()
             self.assertTrue(reached, "rebalance failed, stuck or did not complete")
             rebalance.result()
-        except Exception as ex:
+        except Exception, ex:
             if "Rebalance failed" not in str(ex):
                 self.fail("rebalance failed with some unexpected error : {0}".format(str(ex)))
         else:
@@ -2809,10 +2810,10 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
             try:
                 self.n1ql_helper.run_cbq_query(query=alter_index_query,
                                                server=self.n1ql_node)
-                return "success", ""
-            except Exception as ex:
+                return "success",""
+            except Exception, ex:
                 self.log.info(str(ex))
-                return "", str(ex)
+                return "",str(ex)
         else:
 
             cmd = """cbindex -type move -index '{0}' -bucket {1} -with '{{"nodes":"{2}"}}' -auth '{3}:{4}'""".format(
@@ -2832,7 +2833,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
             command = "{0}/{1}".format(self.cli_command_location, cmd)
             output, error = remote_client.execute_command(command)
             remote_client.log_command_output(output, error)
-            if error and not [x for x in output if 'Moving Index for' in x]:
+            if error and not filter(lambda x: 'Moving Index for' in x, output):
                 if expect_failure:
                     log.info("cbindex move failed")
                     if queue is not None:
@@ -2922,7 +2923,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
                         n1ql_helper=self.n1ql_helper)
                     build_index_task.result()
                     self.sleep(sleep)
-        except Exception as ex:
+        except Exception, ex:
             exceptions.append(str(ex))
         finally:
             return exceptions
@@ -2930,11 +2931,11 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
     def _set_indexer_compaction(self):
         DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
         date = datetime.now()
-        dayOfWeek = (date.weekday() + (date.hour + ((date.minute + 5) // 60)) // 24) % 7
+        dayOfWeek = (date.weekday() + (date.hour + ((date.minute + 5) / 60)) / 24) % 7
         status, content, header = self.rest.set_indexer_compaction(indexDayOfWeek=DAYS[dayOfWeek],
-                                                                   indexFromHour=date.hour + ((date.minute + 2) // 60),
+                                                                   indexFromHour=date.hour + ((date.minute + 2) / 60),
                                                                    indexFromMinute=(date.minute + 2) % 60,
-                                                                   indexToHour=date.hour + ((date.minute + 3) // 60),
+                                                                   indexToHour=date.hour + ((date.minute + 3) / 60),
                                                                    indexToMinute=(date.minute + 3) % 60,
                                                                    abortOutside=True)
         self.assertTrue(status, "Error in setting Circular Compaction... {0}".format(content))
@@ -3003,14 +3004,14 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
             self.rand)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        if error and not [x for x in output if 'created successfully in archive' in x]:
+        if error and not filter(lambda x: 'created successfully in archive' in x, output):
             self.fail("cbbackupmgr config failed")
         cmd = "cbbackupmgr backup --archive /data/backups --repo example{0} --cluster couchbase://127.0.0.1 --username {1} --password {2}".format(
             self.rand, username, password)
         command = "{0}{1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        if error and not [x for x in output if 'Backup successfully completed' in x]:
+        if error and not filter(lambda x: 'Backup successfully completed' in x, output):
             self.fail("cbbackupmgr backup failed")
 
     def _create_restore(self, server, username="Administrator", password="password"):
@@ -3020,7 +3021,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         command = "{0}{1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        if error and not [x for x in output if 'Restore completed successfully' in x]:
+        if error and not filter(lambda x: 'Restore completed successfully' in x, output):
             self.fail("cbbackupmgr restore failed")
 
     def _run_prepare_statement(self):
@@ -3110,7 +3111,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         rebalance.result()
         load_thread.join()
         errors = self.check_dataloss_for_high_ops_loader(self.master, self.buckets[0],
-                                                         self.num_docs,
+                                                         self.num_docs ,
                                                          self.batch_size,
                                                          self.threads,
                                                          0,
@@ -3119,7 +3120,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         if errors:
             self.log.info("Printing missing keys:")
         for error in errors:
-            print(error)
+            print error
         if self.num_docs + self.docs_per_day != self.rest.get_active_key_count(self.buckets[0]):
             self.fail("FATAL: Data loss detected!! Docs loaded : {0}, docs present: {1}".
                       format(self.num_docs + self.docs_per_day, self.rest.get_active_key_count(self.buckets[0])))
@@ -3140,7 +3141,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         self.sleep(30)
         load_thread1.join()
         errors = self.check_dataloss_for_high_ops_loader(self.master, self.buckets[0],
-                                                         self.num_docs * 2,
+                                                         self.num_docs * 2 ,
                                                          self.batch_size,
                                                          self.threads,
                                                          0,
@@ -3149,7 +3150,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         if errors:
             self.log.info("Printing missing keys:")
         for error in errors:
-            print(error)
+            print error
         if self.num_docs * 2 +  self.docs_per_day != self.rest.get_active_key_count(self.buckets[0]):
             self.fail("FATAL: Data loss detected!! Docs loaded : {0}, docs present: {1}".
                       format(self.num_docs * 2 +  self.docs_per_day, self.rest.get_active_key_count(self.buckets[0])))
@@ -3163,7 +3164,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
     def load_buckets_with_high_ops(self, server, bucket, items, batch=20000,
                                    threads=5, start_document=0, instances=1, ttl=0):
         import subprocess
-        cmd_format = "python3 scripts/high_ops_doc_gen.py  --node {0} --bucket {1} --user {2} --password {3} " \
+        cmd_format = "python scripts/high_ops_doc_gen.py  --node {0} --bucket {1} --user {2} --password {3} " \
                      "--count {4} --batch_size {5} --threads {6} --start_document {7} --cb_version {8} --instances {9} --ttl {10}"
         cb_version = RestConnection(server).get_nodes_version()[:3]
         if self.num_replicas > 0 and self.use_replica_to:
@@ -3197,7 +3198,7 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         import subprocess
         from lib.memcached.helper.data_helper import VBucketAwareMemcached
 
-        cmd_format = "python3 scripts/high_ops_doc_gen.py  --node {0} --bucket {1} --user {2} --password {3} " \
+        cmd_format = "python scripts/high_ops_doc_gen.py  --node {0} --bucket {1} --user {2} --password {3} " \
                      "--count {4} " \
                      "--batch_size {5} --threads {6} --start_document {7} --cb_version {8} --validate"
         cb_version = RestConnection(server).get_nodes_version()[:3]

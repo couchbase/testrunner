@@ -1,4 +1,4 @@
-from .base_2i import BaseSecondaryIndexingTests
+from base_2i import BaseSecondaryIndexingTests
 from remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection
 
@@ -16,7 +16,7 @@ class SecondaryIndexingBootstrapTests(BaseSecondaryIndexingTests):
             self._run_aync_tasks()
             rebalance.result()
             self.run_after_operations()
-        except Exception as ex:
+        except Exception, ex:
             raise
 
     def test_rebalance_out(self):
@@ -26,7 +26,7 @@ class SecondaryIndexingBootstrapTests(BaseSecondaryIndexingTests):
             self._run_aync_tasks()
             rebalance.result()
             self.run_after_operations()
-        except Exception as ex:
+        except Exception, ex:
             raise
 
     def test_rebalance_in_out(self):
@@ -38,7 +38,7 @@ class SecondaryIndexingBootstrapTests(BaseSecondaryIndexingTests):
             self._run_aync_tasks()
             rebalance.result()
             self.run_after_operations()
-        except Exception as ex:
+        except Exception, ex:
             raise
 
     def test_rebalance_with_stop_start(self):
@@ -51,7 +51,7 @@ class SecondaryIndexingBootstrapTests(BaseSecondaryIndexingTests):
             # runs operations
             for task in tasks:
                 task.result()
-            stopped = RestConnection(self.master).stop_rebalance(wait_timeout=self.wait_timeout // 3)
+            stopped = RestConnection(self.master).stop_rebalance(wait_timeout=self.wait_timeout / 3)
             self.assertTrue(stopped, msg="unable to stop rebalance")
             rebalance.result()
             rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],
@@ -59,7 +59,7 @@ class SecondaryIndexingBootstrapTests(BaseSecondaryIndexingTests):
                                    self.nodes_out_list, services=self.services_in)
             rebalance.result()
             self.run_after_operations()
-        except Exception as ex:
+        except Exception, ex:
             raise
 
     def test_failover(self):
@@ -78,7 +78,7 @@ class SecondaryIndexingBootstrapTests(BaseSecondaryIndexingTests):
             tasks = self.async_run_operations(buckets=self.buckets, phase="in_between")
             self._run_aync_tasks()
             self.run_after_operations()
-        except Exception as ex:
+        except Exception, ex:
             raise
 
     def test_failover_add_back(self):
@@ -111,7 +111,7 @@ class SecondaryIndexingBootstrapTests(BaseSecondaryIndexingTests):
             self._run_aync_tasks()
             rebalance.result()
             self.run_after_operations()
-        except Exception as ex:
+        except Exception, ex:
             raise
 
     def test_autofailover(self):
@@ -128,7 +128,7 @@ class SecondaryIndexingBootstrapTests(BaseSecondaryIndexingTests):
             self._run_aync_tasks()
             rebalance.result()
             self.run_after_operations()
-        except Exception as ex:
+        except Exception, ex:
             raise
         finally:
             remote.start_server()
@@ -142,7 +142,7 @@ class SecondaryIndexingBootstrapTests(BaseSecondaryIndexingTests):
                 self.start_firewall_on_node(node)
             self._run_aync_tasks()
             self.run_after_operations()
-        except Exception as ex:
+        except Exception, ex:
             raise
         finally:
             for node in self.nodes_out_list:
@@ -156,4 +156,4 @@ class SecondaryIndexingBootstrapTests(BaseSecondaryIndexingTests):
     def run_after_operations(self):
         # Run Data verification
         servers = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
-        self.verify_cluster_stats(servers, check_ep_items_remaining=True)
+        self.verify_cluster_stats(servers , check_ep_items_remaining=True)

@@ -61,8 +61,8 @@ class ViewMergingTests(BaseTestCase):
 
     def test_empty_vbuckets(self):
         results = self.merged_query(self.map_view_name)
-        self.assertEqual(results.get('total_rows', None), 0)
-        self.assertEqual(len(results.get('rows', None)), 0)
+        self.assertEquals(results.get(u'total_rows', None), 0)
+        self.assertEquals(len(results.get(u'rows', None)), 0)
 
     def test_nonexisting_views(self):
         view_names = ['mapview2', 'mapview3', 'mapview4', 'mapview5']
@@ -81,8 +81,8 @@ class ViewMergingTests(BaseTestCase):
         docs = ViewMergingTests.make_docs(1, self.num_docs + 1)
         self.populate_sequenced(num_vbuckets, docs)
         results = self.merged_query(self.map_view_name)
-        self.assertEqual(results.get('total_rows', 0), self.num_docs)
-        self.assertEqual(len(results.get('rows', [])), self.num_docs)
+        self.assertEquals(results.get(u'total_rows', 0), self.num_docs)
+        self.assertEquals(len(results.get(u'rows', [])), self.num_docs)
 
     def test_queries(self):
         all_query_params = ['skip', 'limit', 'startkey', 'endkey', 'startkey_docid',
@@ -116,10 +116,10 @@ class ViewMergingTests(BaseTestCase):
                                     {"include_docs": "true"})
         self.verify_results(results, {"include_docs": "true"})
         num = 1
-        for row in results.get('rows', []):
-            self.assertEqual(row['doc']['json']['integer'], num)
-            self.assertEqual(row['doc']['json']['string'], str(num))
-            self.assertEqual(row['doc']['meta']['id'], str(num))
+        for row in results.get(u'rows', []):
+            self.assertEquals(row['doc']['json']['integer'], num)
+            self.assertEquals(row['doc']['json']['string'], str(num))
+            self.assertEquals(row['doc']['meta']['id'], str(num))
             num += 1
 
     def test_queries_reduce(self):
@@ -138,8 +138,8 @@ class ViewMergingTests(BaseTestCase):
         docs = ViewMergingTests.make_docs(self.num_docs + 1, self.num_docs + 3)
         self.populate_alternated(num_vbuckets, docs)
         results = self.merged_query(self.map_view_name, {'stale': 'ok'})
-        self.assertEqual(results.get('total_rows', None), self.num_docs)
-        self.assertEqual(len(results.get('rows', None)), self.num_docs)
+        self.assertEquals(results.get(u'total_rows', None), self.num_docs)
+        self.assertEquals(len(results.get(u'rows', None)), self.num_docs)
         self.verify_keys_are_sorted(results)
 
     def test_stale_update_after_alternated_docs(self):
@@ -149,8 +149,8 @@ class ViewMergingTests(BaseTestCase):
         # see all changes.
         time.sleep(0.4)
         results = self.merged_query(self.map_view_name, {'stale': 'update_after'})
-        self.assertEqual(results.get('total_rows', None), self.num_docs)
-        self.assertEqual(len(results.get('rows', None)), self.num_docs)
+        self.assertEquals(results.get(u'total_rows', None), self.num_docs)
+        self.assertEquals(len(results.get(u'rows', None)), self.num_docs)
 
         retries = 50
         for i in range(retries):
@@ -164,8 +164,8 @@ class ViewMergingTests(BaseTestCase):
             self.fail("Updater didn't finish after {0} retries".format(
                     retries))
 
-        self.assertEqual(results.get('total_rows', None), self.num_docs + 2)
-        self.assertEqual(len(results.get('rows', None)), self.num_docs + 2)
+        self.assertEquals(results.get(u'total_rows', None), self.num_docs + 2)
+        self.assertEquals(len(results.get(u'rows', None)), self.num_docs + 2)
         self.verify_keys_are_sorted(results)
 
     def test_stats_error(self):
@@ -186,12 +186,12 @@ class ViewMergingTests(BaseTestCase):
                             ': {"error":"error","reason":"Reducer: Error building index for view `' + \
                             self.red_view_stats_name + '`, reason: Value is not a number (key \\"1\\")"}'
 
-                self.assertEqual(str(ex).strip("\n"), expectedStr)
+                self.assertEquals(str(ex).strip("\n"), expectedStr)
         else:
             self.assertTrue(nodes > 1)
             results = self.merged_query(self.red_view_stats_name, params=params, ddoc='test2')
-            self.assertEqual(len(results.get('rows', None)), 0)
-            self.assertEqual(len(results.get('errors', None)), 1)
+            self.assertEquals(len(results.get(u'rows', None)), 0)
+            self.assertEquals(len(results.get(u'errors', None)), 1)
 
     def test_dev_view(self):
         # A lot of additional documents are needed in order to trigger the
@@ -223,7 +223,7 @@ class ViewMergingTests(BaseTestCase):
                           params)
 
     def calculate_matching_keys(self, params):
-        keys = list(range(1, self.num_docs + 1))
+        keys = range(1, self.num_docs + 1)
         if 'descending' in params:
             keys.reverse()
         if 'startkey' in params:
@@ -260,25 +260,25 @@ class ViewMergingTests(BaseTestCase):
     def verify_results(self, results, params):
         if 'keys' not in params:
             expected = self.calculate_matching_keys(params)
-            self.assertEqual(
-                results.get('total_rows', 0), self.num_docs,
+            self.assertEquals(
+                results.get(u'total_rows', 0), self.num_docs,
                 "total_rows parameter is wrong, expected %d, actual %d"
-                % (self.num_docs, results.get('total_rows', 0)))
-            self.assertEqual(
-                len(results.get('rows', [])), len(expected),
+                % (self.num_docs, results.get(u'total_rows', 0)))
+            self.assertEquals(
+                len(results.get(u'rows', [])), len(expected),
                 "Rows number is wrong, expected %d, actual %d"
-                % (len(expected), len(results.get('rows', []))))
+                % (len(expected), len(results.get(u'rows', []))))
             if expected:
                 # first
-                self.assertEqual(
-                    results.get('rows', [])[0]['key'], expected[0],
+                self.assertEquals(
+                    results.get(u'rows', [])[0]['key'], expected[0],
                     "First row key is wrong, expected %d, actual %d"
-                    % (expected[0], results.get('rows', [])[0]['key']))
+                    % (expected[0], results.get(u'rows', [])[0]['key']))
                 # last
-                self.assertEqual(
-                    results.get('rows', [])[-1]['key'], expected[-1],
+                self.assertEquals(
+                    results.get(u'rows', [])[-1]['key'], expected[-1],
                     "Last row key is wrong, expected %d, actual %d"
-                    % (expected[-1], results.get('rows', [])[-1]['key']))
+                    % (expected[-1], results.get(u'rows', [])[-1]['key']))
                 desc = ('descending' in params and
                         params['descending'] == 'true')
                 self.verify_keys_are_sorted(results, desc=desc)
@@ -289,14 +289,14 @@ class ViewMergingTests(BaseTestCase):
             # result contains at most the keys that were supplied as query
             # parameter and that the keys from the response have the same
             # order as the keys that were supplied as query parameter.
-            rows = [row['key'] for row in results.get('rows', [])]
+            rows = [row[u'key'] for row in results.get(u'rows', [])]
             self.log.info("vmx: viewmergetests: rows {}".format(rows))
             actual = list(rows)
             for key in params['keys']:
                 while len(rows) > 0 and rows[0] == key:
                     rows.pop(0)
 
-            self.assertEqual(
+            self.assertEquals(
                 len(rows), 0,
                 "Result is wrong, expected the result to be sorted and "
                 "a subset of the `keys` query parameter. Supplied keys {}, "
@@ -306,14 +306,14 @@ class ViewMergingTests(BaseTestCase):
         # A development view is always a subset of the production view,
         # hence only check for that (and not the exact items)
         expected = self.calculate_matching_keys({})
-        self.assertTrue(len(results.get('rows', [])) < len(expected) and
-                        len(results.get('rows', [])) > 0,
+        self.assertTrue(len(results.get(u'rows', [])) < len(expected) and
+                        len(results.get(u'rows', [])) > 0,
                           ("Rows number is wrong, expected to be lower than "
                            "%d and >0, but it was %d"
-                          % (len(expected), len(results.get('rows', [])))))
+                          % (len(expected), len(results.get(u'rows', [])))))
         self.assertTrue(
-            results.get('rows', [])[0]['key'] != expected[0] or
-            results.get('rows', [])[-1]['key'] != expected[-1],
+            results.get(u'rows', [])[0]['key'] != expected[0] or
+            results.get(u'rows', [])[-1]['key'] != expected[-1],
             "Dev view should be a subset, but returned the same as "
             "the production view")
         self.verify_keys_are_sorted(results)
@@ -322,23 +322,23 @@ class ViewMergingTests(BaseTestCase):
         if 'reduce' in params and params['reduce'] == 'false' or \
           'group_level' in params or 'group' in params and params['group'] == 'true':
             expected = self.calculate_matching_keys(params)
-            self.assertEqual(len(results.get('rows', [])), len(expected),
+            self.assertEquals(len(results.get(u'rows', [])), len(expected),
                           "Rows number is wrong, expected %d, actual %d"
-                          % (len(expected), len(results.get('rows', []))))
+                          % (len(expected), len(results.get(u'rows', []))))
             if expected:
                 #first
-                self.assertEqual(results.get('rows', [])[0]['key'][0], expected[0],
+                self.assertEquals(results.get(u'rows', [])[0]['key'][0], expected[0],
                                   "First element is wrong, expected %d, actual %d"
-                                  % (expected[0], results.get('rows', [])[0]['key'][0]))
+                                  % (expected[0], results.get(u'rows', [])[0]['key'][0]))
                 #last
-                self.assertEqual(results.get('rows', [])[-1]['key'][0], expected[-1],
+                self.assertEquals(results.get(u'rows', [])[-1]['key'][0], expected[-1],
                                   "Last element is wrong, expected %d, actual %d"
-                                  % (expected[-1], results.get('rows', [])[-1]['key'][0]))
+                                  % (expected[-1], results.get(u'rows', [])[-1]['key'][0]))
         else:
             expected = self.calculate_matching_keys(params)
-            self.assertEqual(results.get('rows', [])[0]['value'], len(expected),
+            self.assertEquals(results.get(u'rows', [])[0][u'value'], len(expected),
                               "Value for reduce is incorrect. Expected %s, actual %s"
-                              % (len(expected), results.get('rows', [])[0]['value']))
+                              % (len(expected), results.get(u'rows', [])[0][u'value']))
 
     def create_ddocs(self, is_dev_view):
         mapview = View(self.map_view_name, '''function(doc) {
@@ -356,7 +356,7 @@ class ViewMergingTests(BaseTestCase):
         # The keys view is there to test the `keys` query parameter. In order
         # to reproduce the ordering bug (MB-16618) there must be more than
         # one document with the same key, hence modulo is used
-        modulo = self.num_docs // 3
+        modulo = self.num_docs / 3
         keysview = View(self.keys_view_name, '''function(doc) {
              emit(doc.integer % ''' + str(modulo) + ''', doc.string);
           }''', '_count', dev_view=is_dev_view)
@@ -381,7 +381,7 @@ class ViewMergingTests(BaseTestCase):
         for vbucket in self.bucket.vbuckets:
             if vbucket.master not in clients:
                 ip, port = vbucket.master.split(':')
-                sport = str((int(port[-2:]))//2 + int(self.master.port))
+                sport = str((int(port[-2:]))/2 + int(self.master.port))
                 if sport:
                     clients[vbucket.master] = \
                         MemcachedClientHelper.direct_client(self._get_server(sport),\
@@ -421,7 +421,7 @@ class ViewMergingTests(BaseTestCase):
             vbucket-2: doc-3, doc-4
             vbucket-3: doc-5, doc-5
         """
-        docs_per_vbucket = len(docs) // num_vbuckets
+        docs_per_vbucket = len(docs) / num_vbuckets
 
         for vbucket in range(num_vbuckets):
             start = vbucket * docs_per_vbucket
@@ -473,6 +473,6 @@ class ViewMergingTests(BaseTestCase):
     @staticmethod
     def _verify_list_is_sorted(keys, key=lambda x: x, desc=False):
         if desc:
-            return all([key(keys[i]) >= key(keys[i + 1]) for i in range(len(keys) - 1)])
+            return all([key(keys[i]) >= key(keys[i + 1]) for i in xrange(len(keys) - 1)])
         else:
-            return all([key(keys[i]) <= key(keys[i + 1]) for i in range(len(keys) - 1)])
+            return all([key(keys[i]) <= key(keys[i + 1]) for i in xrange(len(keys) - 1)])

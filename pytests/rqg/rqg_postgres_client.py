@@ -2,7 +2,7 @@
 """
 Python based MySQL interface
 """
-from .rqg_query_helper import RQGQueryHelper
+from rqg_query_helper import RQGQueryHelper
 from lib.postgres_client import PostgresClient
 import pdb
 import psycopg2
@@ -37,10 +37,10 @@ class RQGPostgresClient(PostgresClient):
         try:
             cursor.execute(create_table_query)
             self.connection.commit()
-        except Exception as ex:
-            print(("##### Cannot create table - "+str(ex)))
+        except Exception, ex:
+            print("##### Cannot create table - "+str(ex))
         map = self._get_pkey_map_for_tables_wit_primary_key_column()
-        for table_name in list(map.keys()):
+        for table_name in map.keys():
             for x in range(0, number_of_rows):
                 statement = self._generate_insert_statement(helper, table_name, map[table_name], "\'" + str(x + 1) + "\'")
                 cursor.execute(statement)
@@ -51,9 +51,9 @@ class RQGPostgresClient(PostgresClient):
     def _generate_insert_statement(self, helper, table_name="TABLE_NAME", table_map={}, primary_key=''):
         intial_statement = ""
         intial_statement += " INSERT INTO {0} ".format(table_name)
-        column_names = "( "+",".join(list(table_map.keys()))+" ) "
+        column_names = "( "+",".join(table_map.keys())+" ) "
         values = ""
-        for field_name in list(table_map.keys()):
+        for field_name in table_map.keys():
             if "datetime_field1" == field_name:
                 values += "\'"+str(helper._random_datetime())+"\',"
             elif "bool_field1" == field_name:
@@ -78,7 +78,7 @@ class RQGPostgresClient(PostgresClient):
     def _get_pkey_map_for_tables_wit_primary_key_column(self):
         target_map = {}
         map = self._get_tables_information()
-        for table_name in list(map.keys()):
+        for table_name in map.keys():
             target_map[table_name] ={}
             field_map = {}
             for field_info in map[table_name]:
@@ -132,7 +132,7 @@ class RQGPostgresClient(PostgresClient):
             map = {}
             for column in columns:
                 value = row[index]
-                if isinstance(column, dict):
+                if type(column) is dict:
                     map[column["column_name"]] = self._convert_to_mysql_json_compatible_val(value, column["type"])
                 else:
                     map[column] = value
@@ -151,32 +151,32 @@ class RQGPostgresClient(PostgresClient):
                     return float(str(value))
                 else:
                     try:
-                        return int(str(value))
-                    except ValueError as e:
-                        print(("####### INVALID NUMBER ::"+str(value)+":: "))
+                        return long(str(value))
+                    except ValueError, e:
+                        print("####### INVALID NUMBER ::"+str(value)+":: ")
         if "1114" == str(type): # datetime
             return str(value)
 
-        return str(value)
+        return unicode(value)
 
 
     def _gen_index_combinations_for_tables(self, index_type="GSI", partitioned_indexes=False):
         index_map = {}
         map = self._get_pkey_map_for_tables_without_primary_key_column()
         final_map = {}
-        for table_name in list(map.keys()):
+        for table_name in map.keys():
             index_map[table_name] = {}
             number_field_list = []
             string_field_list = []
             datetime_field_list = []
-            for key in list(map[table_name].keys()):
+            for key in map[table_name].keys():
                 if "int" in key or "decimal" in key:
                     number_field_list.append(key)
                 if "char" in key or "text" in key:
                     string_field_list.append(key)
                 if "tinyint" in key:
                     datetime_field_list.append(key)
-            key_list = list(map[table_name].keys())
+            key_list = map[table_name].keys()
             index_list_map = {}
             prefix = table_name + "_idx_"
             for pair in list(itertools.permutations(key_list, 1)):
@@ -190,9 +190,9 @@ class RQGPostgresClient(PostgresClient):
             index_list_map[prefix + "_".join(key_list)] = key_list
             index_map[table_name] = index_list_map
             index_list_map = {}
-            for table_name in list(index_map.keys()):
+            for table_name in index_map.keys():
                 final_map[table_name] = {}
-                for index_name in list(index_map[table_name].keys()):
+                for index_name in index_map[table_name].keys():
                     if partitioned_indexes:
                         definition = "CREATE INDEX {0} ON {1}({2}) PARTITION BY HASH(meta().id) USING {3}".format(
                             index_name, "test" + "_" + table_name,
@@ -214,7 +214,7 @@ class RQGPostgresClient(PostgresClient):
     def _get_pkey_map_for_tables_without_primary_key_column(self):
         target_map = {}
         map = self._get_tables_information()
-        for table_name in list(map.keys()):
+        for table_name in map.keys():
             target_map[table_name] ={}
             field_map = {}
             for field_info in map[table_name]:
@@ -226,7 +226,7 @@ class RQGPostgresClient(PostgresClient):
     def _get_field_list_map_for_tables(self, table_name=None):
         target_map = {}
         map = self._get_tables_information(table_name)
-        for table_name in list(map.keys()):
+        for table_name in map.keys():
             field_list = []
             for field_info in map[table_name]:
                 field_list.append(field_info['field'])
@@ -236,9 +236,9 @@ class RQGPostgresClient(PostgresClient):
     def _get_values_with_type_for_fields_in_table(self, can_remove_copy_table=True, table_name=None):
         map = self._get_field_with_types_list_map_for_tables(can_remove_copy_table=can_remove_copy_table, table_name=table_name)
         gen_map = self._get_pkey_map_for_tables_with_primary_key_column(can_remove_copy_table=can_remove_copy_table, table_name=table_name)
-        for table_name in list(map.keys()):
+        for table_name in map.keys():
             for vals in map[table_name]:
-                field_name = list(vals.keys())[0]
+                field_name = vals.keys()[0]
                 value_list = self._get_distinct_values_for_fields(table_name, field_name)
                 gen_map[table_name]["fields"][field_name]["distinct_values"] = sorted(value_list)
         return gen_map
@@ -246,7 +246,7 @@ class RQGPostgresClient(PostgresClient):
     def _get_field_with_types_list_map_for_tables(self, can_remove_copy_table=True, table_name=None):
         target_map = {}
         map = self._get_tables_information(table_name)
-        for table_name in list(map.keys()):
+        for table_name in map.keys():
             field_list = []
             for field_info in map[table_name]:
                 field_list.append({field_info['field']: field_info['type']})
@@ -258,11 +258,11 @@ class RQGPostgresClient(PostgresClient):
     def _get_pkey_map_for_tables_with_primary_key_column(self, can_remove_copy_table=True, table_name=None):
         target_map = {}
         map = self._get_tables_information(table_name)
-        if can_remove_copy_table and "copy_simple_table" in list(map.keys()):
+        if can_remove_copy_table and "copy_simple_table" in map.keys():
             map.pop("copy_simple_table")
-        number_of_tables = len(list(map.keys()))
+        number_of_tables = len(map.keys())
         count = 1
-        for table_name in list(map.keys()):
+        for table_name in map.keys():
             target_map[table_name] ={}
             field_map = {}
             primary_key_field = "primary_key_field"
@@ -308,14 +308,14 @@ class RQGPostgresClient(PostgresClient):
             if key.lower() in query_map['sql'].lower():
                 n1ql_name = key
                 sql_name = sql_n1ql_synonim_functions[key]['sql_name']
-                query_map['sql'] = re.sub(r'([^\w]{1})'+key+'([^\w]{1})', r'\1'+sql_name+r'\2', query_map['sql'], flags=re.IGNORECASE)
+                query_map['sql'] = re.sub(r'([^\w]{1})'+key+'([^\w]{1})', r'\1'+sql_name+r'\2',query_map['sql'], flags=re.IGNORECASE)
 
         return query_map
 
     def _get_primary_key_map_for_tables(self, table_name=None):
         target_map = {}
         map = self._get_tables_information(table_name)
-        for table_name in list(map.keys()):
+        for table_name in map.keys():
             for field_info in map[table_name]:
                 if field_info['field'] == "primary_key_id":
                     target_map[table_name] = field_info['field']
@@ -351,10 +351,10 @@ class RQGPostgresClient(PostgresClient):
         os.mkdir(data_dump_path)
         table_key_map = self._get_primary_key_map_for_tables()
         # Make a list of buckets that we want to create for querying
-        bucket_list = list(table_key_map.keys())
+        bucket_list = table_key_map.keys()
         # Read Data from mysql database and populate the couchbase server
-        print("in dump database, reading data from mysql database and populating couchbase server")
-        print("bucket_list is {0}".format(bucket_list))
+        print "in dump database, reading data from mysql database and populating couchbase server"
+        print "bucket_list is {0}".format(bucket_list)
         for bucket_name in bucket_list:
             query = "select * from {0}".format(bucket_name)
             columns, rows = self._execute_query(query = query)

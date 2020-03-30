@@ -2,7 +2,7 @@ import copy
 import logging
 import random
 
-from string import ascii_lowercase
+from string import lowercase
 from couchbase.bucket import Bucket
 from couchbase_helper.documentgenerator import DocumentGenerator
 from couchbase_helper.data import FIRST_NAMES, COUNTRIES
@@ -10,10 +10,9 @@ from couchbase_helper.query_definitions import QueryDefinition
 from couchbase_helper.tuq_generators import TuqGenerators
 from membase.api.rest_client import RestConnection
 from membase.helper.bucket_helper import BucketOperationHelper
-from .base_2i import BaseSecondaryIndexingTests
-from deepdiff import DeepDiff
+from base_2i import BaseSecondaryIndexingTests
 
-DATATYPES = [str, "scalar", int, dict, "missing", "empty", "null"]
+DATATYPES = [unicode, "scalar", int, dict, "missing", "empty", "null"]
 
 log = logging.getLogger()
 
@@ -35,6 +34,7 @@ class SecondaryIndexArrayIndexTests(BaseSecondaryIndexingTests):
 
     def tearDown(self):
         super(SecondaryIndexArrayIndexTests, self).tearDown()
+
 
     def test_create_query_drop_all_array_index(self):
         self.multi_create_index_using_rest(
@@ -144,7 +144,7 @@ class SecondaryIndexArrayIndexTests(BaseSecondaryIndexingTests):
                                            query_definitions=query_definitions)
         self.sleep(20)
         index_map = self.rest.get_index_id_map()
-        doc_list = self.full_docs_list[:len(self.full_docs_list)//2]
+        doc_list = self.full_docs_list[:len(self.full_docs_list) / 2]
         for bucket in self.buckets:
             index_id = str(index_map[bucket.name][query_definition.index_name]["id"])
             for data in DATATYPES:
@@ -152,16 +152,13 @@ class SecondaryIndexArrayIndexTests(BaseSecondaryIndexingTests):
                                              "travel_history",
                                              doc_list, data, query_definition)
                 actual_result = self.rest.full_table_scan_gsi_index_with_rest(
-                        index_id, body={"stale": "false"})
+                    index_id, body={"stale": "false"})
                 expected_result = self._get_expected_results_for_full_table_scan(
-                        query_definition)
+                    query_definition)
                 msg = "Results don't match for index {0}. Actual number: {1}, Expected number: {2}"
-                #self.assertEqual(sorted(actual_result), sorted(expected_result),
-                #             msg.format(query_definition.index_name,
-                #                        actual_result, expected_result))
-                diffs = DeepDiff(actual_result, expected_result, ignore_order=True)
-                if diffs:
-                    self.assertTrue(False, diffs)
+                self.assertEqual(sorted(actual_result), sorted(expected_result),
+                                 msg.format(query_definition.index_name,
+                                            actual_result, expected_result))
                 self.full_docs_list = self.generate_full_docs_list(self.gens_load)
         self.multi_drop_index_using_rest(buckets=self.buckets,
                                          query_definitions=query_definitions)
@@ -172,52 +169,49 @@ class SecondaryIndexArrayIndexTests(BaseSecondaryIndexingTests):
             pass
         else:
             query_definition = QueryDefinition(index_name="index_name_travel_history_leading",
-                                                index_fields=["ALL `travel_history` END", "name", "age"],
-                                                query_template="SELECT {0} FROM %s WHERE `travel_history` IS NOT NULL",
-                                                groups=["array"], index_where_clause=" `travel_history` IS NOT NULL ")
+                                               index_fields=["ALL `travel_history` END", "name", "age"],
+                                               query_template="SELECT {0} FROM %s WHERE `travel_history` IS NOT NULL",
+                                               groups=["array"], index_where_clause=" `travel_history` IS NOT NULL ")
             definitions_list.append(query_definition)
             query_definition = QueryDefinition(index_name="index_name_travel_history_non_leading_end",
-                                                index_fields=["name", "age", "ALL `travel_history` END"],
-                                                query_template="SELECT {0} FROM %s WHERE `travel_history` IS NOT NULL",
-                                                groups=["array"], index_where_clause=" `travel_history` IS NOT NULL ")
+                                               index_fields=["name", "age", "ALL `travel_history` END"],
+                                               query_template="SELECT {0} FROM %s WHERE `travel_history` IS NOT NULL",
+                                               groups=["array"], index_where_clause=" `travel_history` IS NOT NULL ")
             definitions_list.append(query_definition)
             query_definition = QueryDefinition(index_name="index_name_travel_history_non_leading_middle",
-                                                index_fields=["name", "ALL `travel_history` END", "age"],
-                                                query_template="SELECT {0} FROM %s WHERE `travel_history` IS NOT NULL",
-                                                groups=["array"], index_where_clause=" `travel_history` IS NOT NULL ")
+                                               index_fields=["name", "ALL `travel_history` END", "age"],
+                                               query_template="SELECT {0} FROM %s WHERE `travel_history` IS NOT NULL",
+                                               groups=["array"], index_where_clause=" `travel_history` IS NOT NULL ")
             definitions_list.append(query_definition)
             self.multi_create_index_using_rest(buckets=self.buckets, query_definitions=definitions_list)
             self.sleep(20)
             index_map = self.rest.get_index_id_map()
             for query_definition in definitions_list:
                 for bucket in self.buckets:
-                    doc_list = self.full_docs_list[:len(self.full_docs_list)//2]
+                    doc_list = self.full_docs_list[:len(self.full_docs_list) / 2]
                     index_id = str(index_map[bucket.name][query_definition.index_name]["id"])
                     for data in DATATYPES:
                         self.change_index_field_type(bucket.name, "travel_history",
                                                      doc_list, data, query_definition)
                         actual_result = self.rest.full_table_scan_gsi_index_with_rest(
-                        index_id, body={"stale": "false"})
+                            index_id, body={"stale": "false"})
                         expected_result = self._get_expected_results_for_full_table_scan(
                             query_definition)
                         msg = "Results don't match for index {0}. Actual number: {1}, Expected number: {2}"
-                        #self.assertEqual(sorted(actual_result), sorted(expected_result),
-                        #                 msg.format(query_definition.index_name,
-                        #                            actual_result, expected_result))
-                        diffs = DeepDiff(actual_result, expected_result, ignore_order=True)
-                        if diffs:
-                            self.assertTrue(False, diffs)
+                        self.assertEqual(sorted(actual_result), sorted(expected_result),
+                                         msg.format(query_definition.index_name,
+                                                    actual_result, expected_result))
                         self.full_docs_list = self.generate_full_docs_list(self.gens_load)
             self.multi_drop_index_using_rest(buckets=self.buckets, query_definitions=definitions_list)
 
     def test_create_query_drop_index_on_missing_empty_null_field(self):
         data_types = ["empty", "null"]
         index_field, data_type = self._find_datatype(self.query_definitions[0])
-        doc_list = self.full_docs_list[:len(self.full_docs_list)//2]
+        doc_list = self.full_docs_list[:len(self.full_docs_list) / 2]
         for data_type in data_types:
             definitions_list = []
             query_definition = QueryDefinition(index_name="index_name_{0}_duplicate".format(data_type),
-                                                index_fields=["ALL `{0}`".format(index_field)],
+                                               index_fields=["ALL `{0}`".format(index_field)],
                                                query_template="SELECT {0} FROM %s WHERE `{0}` IS NOT NULL".format(
                                                    index_field),
                                                groups=["array"],
@@ -237,12 +231,9 @@ class SecondaryIndexArrayIndexTests(BaseSecondaryIndexingTests):
                     expected_result = self._get_expected_results_for_full_table_scan(
                         query_definition)
                     msg = "Results don't match for index {0}. Actual number: {1}, Expected number: {2}"
-                    #self.assertEqual(sorted(actual_result), sorted(expected_result),
-                    #             msg.format(query_definition.index_name,
-                    #                        len(actual_result), len(expected_result)))
-                    diffs = DeepDiff(actual_result, expected_result, ignore_order=True)
-                    if diffs:
-                        self.assertTrue(False, diffs)
+                    self.assertEqual(sorted(actual_result), sorted(expected_result),
+                                     msg.format(query_definition.index_name,
+                                                len(actual_result), len(expected_result)))
             self.multi_drop_index_using_rest(buckets=self.buckets, query_definitions=definitions_list)
             self.full_docs_list = self.generate_full_docs_list(self.gens_load)
 
@@ -256,7 +247,7 @@ class SecondaryIndexArrayIndexTests(BaseSecondaryIndexingTests):
         for bucket in self.buckets:
             for data in DATATYPES:
                 start = end
-                end = end + len(self.full_docs_list)//len(DATATYPES)
+                end = end + len(self.full_docs_list) / len(DATATYPES)
                 doc_list = self.full_docs_list[start:end]
                 self.change_index_field_type(bucket.name,
                                              "travel_history",
@@ -268,16 +259,13 @@ class SecondaryIndexArrayIndexTests(BaseSecondaryIndexingTests):
         for bucket in self.buckets:
             index_id = str(index_map[bucket.name][query_definition.index_name]["id"])
             actual_result = self.rest.full_table_scan_gsi_index_with_rest(
-                        index_id, body={"stale": "false"})
+                index_id, body={"stale": "false"})
             expected_result = self._get_expected_results_for_full_table_scan(
-                        query_definition)
+                query_definition)
             msg = "Results don't match for index {0}. Actual number: {1}, Expected number: {2}"
-            #self.assertEqual(sorted(actual_result), sorted(expected_result),
-            #                 msg.format(query_definition.index_name,
-            #                            actual_result, expected_result))
-            diffs = DeepDiff(actual_result, expected_result, ignore_order=True)
-            if diffs:
-                self.assertTrue(False, diffs)
+            self.assertEqual(sorted(actual_result), sorted(expected_result),
+                             msg.format(query_definition.index_name,
+                                        actual_result, expected_result))
         self.multi_drop_index_using_rest(buckets=self.buckets,
                                          query_definitions=[query_definition])
 
@@ -313,21 +301,21 @@ class SecondaryIndexArrayIndexTests(BaseSecondaryIndexingTests):
 
     def test_array_item_limit(self):
         query_definition = QueryDefinition(index_name="index_name_big_values",
-                                                index_fields=["DISTINCT ARRAY t FOR t in bigValues END"],
-                                                query_template="SELECT {0} FROM %s WHERE bigValues IS NOT NULL",
-                                                groups=["array"], index_where_clause=" bigValues IS NOT NULL ")
+                                           index_fields=["DISTINCT ARRAY t FOR t in bigValues END"],
+                                           query_template="SELECT {0} FROM %s WHERE bigValues IS NOT NULL",
+                                           groups=["array"], index_where_clause=" bigValues IS NOT NULL ")
         self.rest.flush_bucket(self.buckets[0])
         generators = []
         template = '{{"name":"{0}", "age":{1}, "bigValues":{2} }}'
         for i in range(10):
-            name = FIRST_NAMES[random.choice(list(range(len(FIRST_NAMES))))]
+            name = FIRST_NAMES[random.choice(range(len(FIRST_NAMES)))]
             id = "{0}-{1}".format(name, str(i))
-            age = random.choice(list(range(4, 19)))
+            age = random.choice(range(4, 19))
             bigValues = []
-            arrLen = random.choice(list(range(10, 15)))
+            arrLen = random.choice(range(10, 15))
             indiSize = (4096 * 4)
             for j in range(arrLen):
-                longStr = "".join(random.choice(ascii_lowercase) for k in range(indiSize))
+                longStr = "".join(random.choice(lowercase) for k in range(indiSize))
                 bigValues.append(longStr)
             generators.append(DocumentGenerator(id, template, [name], [age], [bigValues],
                                                 start=0, end=1))
@@ -352,7 +340,7 @@ class SecondaryIndexArrayIndexTests(BaseSecondaryIndexingTests):
             if "TO_ARRAY" in index_field:
                 index_field = index_field.split("TO_ARRAY(")[1].split(r")")[0]
             if index_field:
-                if isinstance(self.full_docs_list[0][index_field], list):
+                if type(self.full_docs_list[0][index_field]) is list:
                     return index_field, type(self.full_docs_list[0][index_field][0])
                 else:
                     return index_field, "scalar"
@@ -361,7 +349,7 @@ class SecondaryIndexArrayIndexTests(BaseSecondaryIndexingTests):
 
     def change_index_field_type(self, bucket_name, index_field,
                                 doc_list, data_type, query_definition):
-        if data_type is str:
+        if data_type is unicode:
             for doc in doc_list:
                 doc[index_field] = [random.choice(FIRST_NAMES) for i in range(10)]
                 self._update_document(bucket_name, doc["_id"], doc)
@@ -451,7 +439,7 @@ class SecondaryIndexArrayIndexTests(BaseSecondaryIndexingTests):
             doc_list = []
             list_param = False
             for field in index_fields:
-                if field not in list(doc.keys()):
+                if field not in doc.keys():
                     continue
                 if isinstance(doc[field], list):
                     list_param = True
