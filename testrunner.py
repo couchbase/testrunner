@@ -12,8 +12,8 @@ from multiprocessing import Process
 from pprint import pprint
 sys.path = ["lib", "pytests", "pysystests"] + sys.path
 
-if sys.hexversion < 0x02060000:
-    print("Testrunner requires version 2.6+ of python")
+if sys.hexversion < 0x30706f0:
+    print("Testrunner requires version 3.7.6+ of python")
     sys.exit()
 
 import re

@@ -63,7 +63,7 @@ def run_test(ini, conf, verbose, debug):
     try:
         os.chdir(TR_DIR)
 
-        args = ["python", "testrunner.py", "-i", ini, "-c", conf]
+        args = ["python3", "testrunner.py", "-i", ini, "-c", conf]
         params = "makefile=True"
 
         if verbose == 0:

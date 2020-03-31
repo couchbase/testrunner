@@ -22,7 +22,7 @@ test:
 	scripts/start_cluster_and_run_tests.sh b/resources/dev.ini $(TESTNAME)
 
 dcp-test:
-	python testrunner.py -i b/resources/dev-4-nodes.ini -c conf/py-dcp.conf -p skip_cleanup=False,dev=True,test=$(TEST)
+	python3 testrunner.py -i b/resources/dev-4-nodes.ini -c conf/py-dcp.conf -p skip_cleanup=False,dev=True,test=$(TEST)
 
 simple-test:
 	python3 scripts/start_cluster_and_run_tests.py $(MAKE) b/resources/dev-4-nodes-xdcr.ini conf/simple.conf $(VERBOSE) $(DEBUG)

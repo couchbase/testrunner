@@ -3,10 +3,11 @@
 Prerequisites
 -------------
 
-* Python 3.x or 3.6 or 3.7
+* Python 3.7.6
 * pip3 or easy_install
 
 See the setup steps in the Py2 to Py3 porting guide: https://docs.google.com/document/d/1fxJjmgEnRKsq7l7h-nJbs9piZhqmvjNAUnXPSjrz-TA/edit?usp=sharing
+https://docs.google.com/spreadsheets/d/1WtiihnuhJsDaI3kmNoNwov78OSTY2O-_0MT3bvv_Bk4/edit?pli=1#gid=1081178839&range=A1:G129
 
 
 Dependencies
@@ -15,25 +16,7 @@ Dependencies
 Use pip3 or pip3.6 or pip3.7 based on the platform.
 General:
 
-	pip3 install couchbase
-
-	pip3 install sgmllib3k
-
-	pip3 install paramiko
-
-	pip3 install httplib2
-
-	pip3 install pyyaml
-
-	pip3 install Geohash
-
-	pip3 install python-geohash
-
-	pip3 install deepdiff
-
-	pip3 install pyes
-        
-    pip3 install beautifulsoup4
+pip3 install couchbase sgmllib3k paramiko httplib2 pyyaml beautifulsoup4 Geohash python-geohash deepdiff pyes pytz requests jsonpickle docker decorator
 
 Other:
 
