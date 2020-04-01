@@ -236,6 +236,8 @@ class CollectinfoTests(CliBaseTest):
                     if self.debug_logs:
                         print "File size: ", file_size
                     if file_size == 0:
+                        if "dist_cfg" in output_line[1]:
+                            continue
                         if "kv_trace" in output_line[1] and self.node_down:
                             continue
                         else:

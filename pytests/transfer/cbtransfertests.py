@@ -13,6 +13,8 @@ class CBTransferTests(TransferBaseTest):
         super(CBTransferTests, self).setUp()
         self.origin_buckets = list(self.buckets)
         self.master = self.server_recovery
+        self.add_built_in_server_user()
+        self.enable_diag_eval_on_non_local_hosts()
         self._bucket_creation()
         self.buckets = list(self.origin_buckets)
 
@@ -21,21 +23,28 @@ class CBTransferTests(TransferBaseTest):
 
     def test_load_regexp(self):
         template = '{{ "mutated" : 0, "age": {0}, "first_name": "{1}" }}'
-        gen_load = DocumentGenerator('load_by_id_test', template, range(5), ['james', 'john'], start=0, end=self.num_items)
-        gen_load2 = DocumentGenerator('cbtransfer', template, range(5), ['james', 'john'], start=0, end=self.num_items)
+        gen_load = DocumentGenerator('load_by_id_test', template, range(5),
+                                      ['james', 'john'], start=0, end=self.num_items)
+        gen_load2 = DocumentGenerator('cbtransfer', template, range(5),
+                                      ['james', 'john'], start=0, end=self.num_items)
         verify_gen = copy.deepcopy(gen_load2)
         for bucket in self.buckets:
             bucket.kvs[2] = KVStore()
             self.cluster.load_gen_docs(self.server_origin, bucket.name, gen_load,
-                                       self.buckets[0].kvs[2], "create", exp=0, flag=0, only_store_hash=True,
+                                       self.buckets[0].kvs[2], "create", exp=0,
+                                       flag=0, only_store_hash=True,
                                        batch_size=1000, compression=self.sdk_compression)
             self.cluster.load_gen_docs(self.server_origin, bucket.name, gen_load2,
-                                       self.buckets[0].kvs[1], "create", exp=0, flag=0, only_store_hash=True,
+                                       self.buckets[0].kvs[1], "create",
+                                       exp=0, flag=0, only_store_hash=True,
                                        batch_size=1000, compression=self.sdk_compression)
         transfer_source = 'http://%s:%s' % (self.server_origin.ip, self.server_origin.port)
-        transfer_destination = 'http://%s:%s' % (self.server_recovery.ip, self.server_recovery.port)
+        transfer_destination = 'http://%s:%s' % (self.server_recovery.ip,
+                                                 self.server_recovery.port)
         self._run_cbtransfer_all_buckets(transfer_source, transfer_destination,
-                                         "-k cbtransfer-[0-9]+")
+                                         "-k cbtransfer-[0-9]+ -u {0} -p {1} "\
+                                         .format(self.master.rest_username,
+                                                self.master.rest_password))
         self._wait_curr_items_all_buckets()
         self._verify_data_all_buckets(verify_gen)
 
