@@ -288,8 +288,24 @@ class RebalanceHighOpsWithPillowFight(BaseTestCase):
         if RestConnection(server).get_nodes_version()[:5] < '5':
             bkt = Bucket('couchbase://{0}/{1}'.format(server.ip, bucket.name))
         else:
-            cluster = Cluster("couchbase://{}".format(server.ip), ClusterOptions(PasswordAuthenticator(bucket.name, 'password')))
-            bkt = cluster.open_bucket(bucket.name)
+            try:
+                from couchbase.cluster import PasswordAuthenticator
+                connection = "couchbase://" + server.ip
+                if "ip6" in server.ip or server.ip.startswith("["):
+                    connection = connection+"?ipv6=allow"
+                cluster = Cluster(connection)
+                authenticator = PasswordAuthenticator(server.rest_username, server.rest_password)
+                cluster.authenticate(authenticator)
+                bkt = cluster.open_bucket(bucket.name)
+                bkt.timeout = 100
+            except ImportError:
+                from couchbase.cluster import ClusterOptions
+                from couchbase_core.cluster import PasswordAuthenticator
+                cluster = Cluster(self.connection_string, ClusterOptions(
+                    PasswordAuthenticator(server.rest_username, server.rest_password)))
+                bkt = cluster.bucket(bucket).default_collection()
+            except Exception as e:
+                self.log.error("Connection error\n" + traceback.format_exc())
 
         rest = RestConnection(self.master)
         VBucketAware = VBucketAwareMemcached(rest, bucket.name)
