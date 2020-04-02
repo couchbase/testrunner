@@ -260,13 +260,13 @@ class CliBaseTest(BaseTestCase):
 
         nodes_services = rest.get_nodes_services()
         for node, services in nodes_services.items():
-            if node.encode('ascii') == hostname:
+            if node == hostname:
                 if len(services) != len(expected_services):
-                    log.info("Services on %s do not match expected services (%s vs. %s)",
+                    log.info("Number of Services on %s do not match expected services (%s vs. %s)",
                              hostname, services, expected_services)
                     return False
                 for service in services:
-                    if service.encode("ascii") not in expected_services:
+                    if service not in expected_services:
                         log.info("Services on %s do not match expected services (%s vs. %s)",
                                  hostname, services, expected_services)
                         return False

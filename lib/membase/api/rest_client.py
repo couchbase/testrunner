@@ -4510,7 +4510,7 @@ class RestConnection(object):
     '''
 
     def deploy_function_by_name(self, name):
-        authorization = base64.encodestring('%s:%s' % (self.username, self.password))
+        authorization = self.get_authorization(self.username, self.password)
         url = "api/v1/functions/" + name + "/settings"
         body = {"deployment_status": True, "processing_status": True}
         api = self.eventing_baseUrl + url
@@ -4526,7 +4526,7 @@ class RestConnection(object):
     '''
 
     def pause_function_by_name(self, name):
-        authorization = base64.encodestring('%s:%s' % (self.username, self.password))
+        authorization = self.get_authorization(self.username, self.password)
         url = "api/v1/functions/" + name + "/settings"
         body = {"deployment_status": True, "processing_status": False}
         api = self.eventing_baseUrl + url
