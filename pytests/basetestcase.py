@@ -747,7 +747,10 @@ class BaseTestCase(unittest.TestCase):
 
     def _get_bucket_size(self, mem_quota, num_buckets):
         # min size is 100MB now
-        return max(100, int(float(mem_quota) / float(num_buckets)))
+        if num_buckets > 0:
+            return max(100, int(float(mem_quota) / float(num_buckets)))
+        else:
+            return 100
 
     def _set_time_sync_on_buckets(self, buckets):
 

@@ -2647,6 +2647,10 @@ class QueryTests(BaseTestCase):
 ##############################################################################################
     def _kill_all_processes_cbq(self):
         if hasattr(self, 'shell'):
+            if self.input.tuq_client and "client" in self.input.tuq_client:
+                self.shell = RemoteMachineShellConnection(self.input.tuq_client["client"])
+            else:
+                self.shell = RemoteMachineShellConnection(self.master)
             o = self.shell.execute_command("ps -aef| grep cbq-engine")
             if len(o):
                 for cbq_engine in o[0]:

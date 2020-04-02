@@ -382,6 +382,7 @@ class RackzoneTests(RackzoneBaseTest):
     def _verify_replica_distribution_in_zones(self, nodes, command, saslPassword = ""):
         shell = RemoteMachineShellConnection(self.servers[0])
         saslPassword = ''
+
         versions = RestConnection(self.master).get_nodes_versions()
         for group in nodes:
             for node in nodes[group]:
@@ -397,7 +398,7 @@ class RackzoneTests(RackzoneBaseTest):
                     output, error = shell.execute_command(cmd)
                 elif versions[0][:5] in COUCHBASE_FROM_VERSION_3:
                     command = "dcp"
-                    if 5 <= int(versions[0]):
+                    if 5 <= int(float(versions[0][:2])):
                         saslPassword = self.master.rest_password
                     cmd  = "%s %s:11210 %s -b %s -u Administrator -p '%s' "\
                             % (self.cbstat_command, node, command, buckets[0].name, saslPassword)

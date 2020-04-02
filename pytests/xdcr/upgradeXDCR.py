@@ -203,7 +203,7 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRNewBaseTest):
 
         self._offline_upgrade(nodes_to_upgrade)
 
-        if self.upgrade_versions[0][:3] >= 5.0:
+        if int(float(self.upgrade_versions[0][:3])) >= int(5.0):
             if "src" in upgrade_nodes:
                 # Add built-in user to C1
                 testuser = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'password': 'password'}]
