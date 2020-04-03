@@ -52,24 +52,38 @@ class Lww(XDCRNewBaseTest):
             nodes = self._input.servers
         for node in nodes:
             conn = RemoteMachineShellConnection(node)
-            output, error = conn.execute_command("chkconfig ntpd on")
-            conn.log_command_output(output, error)
-            output, error = conn.execute_command("/etc/init.d/ntpd start")
-            conn.log_command_output(output, error)
-            output, error = conn.execute_command("systemctl start ntpd")
-            conn.log_command_output(output, error)            
-            output, error = conn.execute_command("ntpdate -q " + ntp_server)
-            conn.log_command_output(output, error)
+            os = conn.extract_remote_info().distribution_version.lower()
+            if os == "oel 8":
+                output, error = conn.execute_command("systemctl start chronyd")
+                conn.log_command_output(output, error)
+                output, error = conn.execute_command("systemctl enable chronyd")
+                conn.log_command_output(output, error)
+            else:
+                output, error = conn.execute_command("chkconfig ntpd on")
+                conn.log_command_output(output, error)
+                output, error = conn.execute_command("/etc/init.d/ntpd start")
+                conn.log_command_output(output, error)
+                output, error = conn.execute_command("systemctl start ntpd")
+                conn.log_command_output(output, error)
+                output, error = conn.execute_command("ntpdate -q " + ntp_server)
+                conn.log_command_output(output, error)
 
     def _disable_ntp(self):
         for node in self._input.servers:
             conn = RemoteMachineShellConnection(node)
-            output, error = conn.execute_command("chkconfig ntpd off")
-            conn.log_command_output(output, error)
-            output, error = conn.execute_command("/etc/init.d/ntpd stop")
-            conn.log_command_output(output, error)
-            output, error = conn.execute_command("systemctl stop ntpd")
-            conn.log_command_output(output, error)
+            os = conn.extract_remote_info().distribution_version.lower()
+            if os == "oel 8":
+                output, error = conn.execute_command("systemctl stop chronyd")
+                conn.log_command_output(output, error)
+                output, error = conn.execute_command("systemctl disable chronyd")
+                conn.log_command_output(output, error)
+            else:
+                output, error = conn.execute_command("chkconfig ntpd off")
+                conn.log_command_output(output, error)
+                output, error = conn.execute_command("/etc/init.d/ntpd stop")
+                conn.log_command_output(output, error)
+                output, error = conn.execute_command("systemctl stop ntpd")
+                conn.log_command_output(output, error)
 
     def _offset_wall_clock(self, cluster=None, offset_secs=0, inc=True, offset_drift=-1):
         counter = 1
