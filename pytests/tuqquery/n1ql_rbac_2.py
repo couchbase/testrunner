@@ -24,7 +24,7 @@ class RbacN1QL(QueryTests):
 
     def test_select(self):
         self.create_users()
-        self.shell.execute_command("killall cbq-engine")
+        ##self.shell.execute_command("killall cbq-engine")
         self.grant_role()
         shell = RemoteMachineShellConnection(self.master)
         cmd = "{4} -u {0}:{1} http://{2}:8093/query/service -d 'statement=SELECT * from {3} LIMIT 10'".\
@@ -42,7 +42,7 @@ class RbacN1QL(QueryTests):
 
     def test_update(self):
         self.create_users()
-        self.shell.execute_command("killall cbq-engine")
+        ##self.shell.execute_command("killall cbq-engine")
         self.grant_role()
         shell = RemoteMachineShellConnection(self.master)
         old_name = "employee-14"
@@ -58,7 +58,7 @@ class RbacN1QL(QueryTests):
 
     def test_insert(self):
         self.create_users()
-        self.shell.execute_command("killall cbq-engine")
+        ##self.shell.execute_command("killall cbq-engine")
         self.grant_role()
         shell = RemoteMachineShellConnection(self.master)
         cmd = "%s -u %s:%s http://%s:8093/query/service -d " \
@@ -72,7 +72,7 @@ class RbacN1QL(QueryTests):
 
     def test_delete(self):
         self.create_users()
-        self.shell.execute_command("killall cbq-engine")
+        #self.shell.execute_command("killall cbq-engine")
         self.grant_role()
         shell = RemoteMachineShellConnection(self.master)
         del_name = "employee-14"
@@ -87,7 +87,7 @@ class RbacN1QL(QueryTests):
 
     def test_upsert(self):
         self.create_users()
-        self.shell.execute_command("killall cbq-engine")
+        #self.shell.execute_command("killall cbq-engine")
         self.grant_role()
         shell = RemoteMachineShellConnection(self.master)
         cmd = "%s -u %s:%s http://%s:8093/query/service -d " \
@@ -101,7 +101,7 @@ class RbacN1QL(QueryTests):
 
     def test_merge(self):
         self.create_users()
-        self.shell.execute_command("killall cbq-engine")
+        #self.shell.execute_command("killall cbq-engine")
         self.grant_role()
         shell = RemoteMachineShellConnection(self.master)
         cmd = "%s -u %s:%s http://%s:8093/query/service -d " \
@@ -163,7 +163,7 @@ class RbacN1QL(QueryTests):
 
     def test_create_build_index(self):
         self.create_users()
-        self.shell.execute_command("killall cbq-engine")
+        #self.shell.execute_command("killall cbq-engine")
         self.grant_role()
         shell = RemoteMachineShellConnection(self.master)
         cmd = "%s -u %s:%s http://%s:8093/query/service -d " \
@@ -202,7 +202,7 @@ class RbacN1QL(QueryTests):
     # List Indexes is not implemented by query yet, keeping this test for future.
     # def test_list_indexes(self):
     #     self.create_users()
-    #     self.shell.execute_command("killall cbq-engine")
+    #     #self.shell.execute_command("killall cbq-engine")
     #     self.grant_role()
     #     shell = RemoteMachineShellConnection(self.master)
     #     cmd = "%s -u %s:%s http://%s:8093/query/service -d " \
@@ -216,7 +216,7 @@ class RbacN1QL(QueryTests):
 
     def test_create_drop_index(self):
         self.create_users()
-        self.shell.execute_command("killall cbq-engine")
+        #self.shell.execute_command("killall cbq-engine")
         self.grant_role()
         shell = RemoteMachineShellConnection(self.master)
         cmd = "%s -u %s:%s http://%s:8093/query/service -d " \
@@ -248,7 +248,7 @@ class RbacN1QL(QueryTests):
 
     def test_create_alter_index(self):
         self.create_users()
-        self.shell.execute_command("killall cbq-engine")
+        #self.shell.execute_command("killall cbq-engine")
         self.grant_role()
         shell = RemoteMachineShellConnection(self.master)
         cmd = "%s -u %s:%s http://%s:8093/query/service -d " \
@@ -290,7 +290,7 @@ class RbacN1QL(QueryTests):
 
     def test_grant_role(self):
         self.create_users()
-        self.shell.execute_command("killall cbq-engine")
+        #self.shell.execute_command("killall cbq-engine")
         self.grant_role()
         self.create_users(users=[{'id': 'test',
                                            'name': 'test',
@@ -325,7 +325,7 @@ class RbacN1QL(QueryTests):
 
     def test_revoke_role(self):
         self.create_users()
-        self.shell.execute_command("killall cbq-engine")
+        #self.shell.execute_command("killall cbq-engine")
         self.grant_role()
         shell = RemoteMachineShellConnection(self.master)
         roles = ["select", "insert", "update", "delete"]
@@ -352,7 +352,7 @@ class RbacN1QL(QueryTests):
 
     def test_prepare(self):
         self.create_users()
-        #self.shell.execute_command("killall cbq-engine")
+        ##self.shell.execute_command("killall cbq-engine")
         self.grant_role()
         shell = RemoteMachineShellConnection(self.master)
         if "delete" in self.roles[0]['roles'] :
@@ -390,7 +390,7 @@ class RbacN1QL(QueryTests):
 
     def test_infer(self):
         self.create_users()
-        #self.shell.execute_command("killall cbq-engine")
+        ##self.shell.execute_command("killall cbq-engine")
         self.grant_role()
         shell = RemoteMachineShellConnection(self.master)
         gen_load = BlobGenerator('infer', 'infer-', self.value_size, end=self.num_items)
@@ -410,7 +410,7 @@ class RbacN1QL(QueryTests):
 
     def test_explain(self):
         self.create_users()
-        self.shell.execute_command("killall cbq-engine")
+        #self.shell.execute_command("killall cbq-engine")
         self.grant_role()
         shell = RemoteMachineShellConnection(self.master)
         if "delete" in self.roles[0]['roles'] :
@@ -450,7 +450,7 @@ class RbacN1QL(QueryTests):
 
     def test_create_user_roles(self):
         self.create_users()
-        self.shell.execute_command("killall cbq-engine")
+        #self.shell.execute_command("killall cbq-engine")
         user = self.users[0]['id']
         role = self.roles[0]['roles']
         self.grant_role()
@@ -468,7 +468,7 @@ class RbacN1QL(QueryTests):
 
     def test_update_user_roles(self):
         self.create_users()
-        self.shell.execute_command("killall cbq-engine")
+        #self.shell.execute_command("killall cbq-engine")
         user = self.users[0]['id']
         role = self.roles[0]['roles']
         self.grant_role()
@@ -500,7 +500,7 @@ class RbacN1QL(QueryTests):
 
     def test_delete_user_roles(self):
         self.create_users()
-        self.shell.execute_command("killall cbq-engine")
+        #self.shell.execute_command("killall cbq-engine")
         user = self.users[0]['id']
         role = self.roles[0]['roles']
         self.grant_role()
@@ -530,7 +530,7 @@ class RbacN1QL(QueryTests):
 
     def test_multiple_user_roles_listing(self):
         self.create_users()
-        self.shell.execute_command("killall cbq-engine")
+        #self.shell.execute_command("killall cbq-engine")
         user = self.users[0]['id']
         role = "query_select(default),admin"
         self.grant_role(role=role)
@@ -554,7 +554,7 @@ class RbacN1QL(QueryTests):
 
     def test_multiple_user_roles_precedence(self):
         self.create_users()
-        self.shell.execute_command("killall cbq-engine")
+        #self.shell.execute_command("killall cbq-engine")
         shell = RemoteMachineShellConnection(self.master)
         role = "query_select(default),admin"
         self.grant_role(role=role)
@@ -571,7 +571,7 @@ class RbacN1QL(QueryTests):
 
     def test_incorrect_n1ql_role(self):
         self.create_users()
-        self.shell.execute_command("killall cbq-engine")
+        #self.shell.execute_command("killall cbq-engine")
         self.grant_role()
         shell = RemoteMachineShellConnection(self.master)
         old_name = "employee-14"
@@ -606,7 +606,7 @@ class RbacN1QL(QueryTests):
 
     def test_insert_nested_with_select_with_full_access(self):
         self.create_users()
-        self.shell.execute_command("killall cbq-engine")
+        #self.shell.execute_command("killall cbq-engine")
         self.grant_role()
         self.grant_role(role="query_select(default)")
         shell = RemoteMachineShellConnection(self.master)
@@ -622,7 +622,7 @@ class RbacN1QL(QueryTests):
 
     def test_upsert_nested_with_select_with_full_access(self):
         self.create_users()
-        self.shell.execute_command("killall cbq-engine")
+        #self.shell.execute_command("killall cbq-engine")
         self.grant_role()
         self.grant_role(role="query_select(default)")
         shell = RemoteMachineShellConnection(self.master)
@@ -638,7 +638,7 @@ class RbacN1QL(QueryTests):
 
     def test_update_nested_with_select_with_full_access(self):
         self.create_users()
-        self.shell.execute_command("killall cbq-engine")
+        #self.shell.execute_command("killall cbq-engine")
         self.grant_role()
         self.grant_role(role="query_select(default)")
         shell = RemoteMachineShellConnection(self.master)
@@ -654,7 +654,7 @@ class RbacN1QL(QueryTests):
 
     def test_delete_nested_with_select_with_full_access(self):
         self.create_users()
-        self.shell.execute_command("killall cbq-engine")
+        #self.shell.execute_command("killall cbq-engine")
         self.grant_role()
         self.grant_role(role="query_select(default)")
         shell = RemoteMachineShellConnection(self.master)
@@ -669,7 +669,7 @@ class RbacN1QL(QueryTests):
 
     def test_insert_nested_with_select_with_no_access(self):
         self.create_users()
-        self.shell.execute_command("killall cbq-engine")
+        #self.shell.execute_command("killall cbq-engine")
         self.grant_role()
         shell = RemoteMachineShellConnection(self.master)
         cmd = "%s -u %s:%s http://%s:8093/query/service -d " \
@@ -686,7 +686,7 @@ class RbacN1QL(QueryTests):
 
     def test_update_nested_with_select_with_no_access(self):
         self.create_users()
-        self.shell.execute_command("killall cbq-engine")
+        #self.shell.execute_command("killall cbq-engine")
         self.grant_role()
         shell = RemoteMachineShellConnection(self.master)
         new_name = "employee-14-2"
@@ -703,7 +703,7 @@ class RbacN1QL(QueryTests):
 
     def test_delete_nested_with_select_with_no_access(self):
         self.create_users()
-        self.shell.execute_command("killall cbq-engine")
+        #self.shell.execute_command("killall cbq-engine")
         self.grant_role()
         shell = RemoteMachineShellConnection(self.master)
         cmd = "{5} -u {0}:{1} http://{2}:8093/query/service -d " \
@@ -719,7 +719,7 @@ class RbacN1QL(QueryTests):
 
     def test_insert_nested_with_select_with_full_access_and_diff_buckets(self):
         self.create_users()
-        self.shell.execute_command("killall cbq-engine")
+        #self.shell.execute_command("killall cbq-engine")
         self.grant_role()
         self.grant_role(role="query_select(bucket0)")
         shell = RemoteMachineShellConnection(self.master)
@@ -735,7 +735,7 @@ class RbacN1QL(QueryTests):
 
     def test_insert_nested_with_select_with_no_access_and_diff_buckets(self):
         self.create_users()
-        self.shell.execute_command("killall cbq-engine")
+        #self.shell.execute_command("killall cbq-engine")
         self.grant_role()
         shell = RemoteMachineShellConnection(self.master)
         cmd = "%s -u %s:%s http://%s:8093/query/service -d " \
@@ -752,7 +752,7 @@ class RbacN1QL(QueryTests):
 
     def test_upsert_nested_with_select_with_full_access_and_diff_buckets(self):
         self.create_users()
-        self.shell.execute_command("killall cbq-engine")
+        #self.shell.execute_command("killall cbq-engine")
         self.grant_role()
         self.grant_role(role="query_select(bucket0)")
         shell = RemoteMachineShellConnection(self.master)
@@ -768,7 +768,7 @@ class RbacN1QL(QueryTests):
 
     def test_upsert_nested_with_select_with_no_access_and_diff_buckets(self):
         self.create_users()
-        self.shell.execute_command("killall cbq-engine")
+        #self.shell.execute_command("killall cbq-engine")
         self.grant_role()
         shell = RemoteMachineShellConnection(self.master)
         cmd = "%s -u %s:%s http://%s:8093/query/service -d " \
@@ -785,7 +785,7 @@ class RbacN1QL(QueryTests):
 
     def test_update_nested_with_select_with_full_access_and_diff_buckets(self):
         self.create_users()
-        self.shell.execute_command("killall cbq-engine")
+        #self.shell.execute_command("killall cbq-engine")
         self.grant_role()
         self.grant_role(role="query_select(bucket0)")
         shell = RemoteMachineShellConnection(self.master)
@@ -801,7 +801,7 @@ class RbacN1QL(QueryTests):
 
     def test_update_nested_with_select_with_no_access_and_diff_buckets(self):
         self.create_users()
-        self.shell.execute_command("killall cbq-engine")
+        #self.shell.execute_command("killall cbq-engine")
         self.grant_role()
         shell = RemoteMachineShellConnection(self.master)
         new_name = "employee-14-2"
@@ -818,7 +818,7 @@ class RbacN1QL(QueryTests):
 
     def test_delete_nested_with_select_with_full_access_and_diff_buckets(self):
         self.create_users()
-        self.shell.execute_command("killall cbq-engine")
+        #self.shell.execute_command("killall cbq-engine")
         self.grant_role()
         self.grant_role(role="query_select(bucket0)")
         shell = RemoteMachineShellConnection(self.master)
@@ -833,7 +833,7 @@ class RbacN1QL(QueryTests):
 
     def test_delete_nested_with_select_with_no_access_and_diff_buckets(self):
         self.create_users()
-        self.shell.execute_command("killall cbq-engine")
+        #self.shell.execute_command("killall cbq-engine")
         self.grant_role()
         shell = RemoteMachineShellConnection(self.master)
         cmd = "{5} -u {0}:{1} http://{2}:8093/query/service -d " \
@@ -851,7 +851,7 @@ class RbacN1QL(QueryTests):
     # This test will run with Administrator,cluster admin,bucket admin and view admin.
     def test_select_system_catalog(self):
         self.create_users()
-        self.shell.execute_command("killall cbq-engine")
+        #self.shell.execute_command("killall cbq-engine")
         self.grant_role()
         role = self.roles[0]['roles']
         self.system_catalog_helper_select("test_select_system_catalog", role)
@@ -864,7 +864,7 @@ class RbacN1QL(QueryTests):
     # This test will select/delete on any system table with read only admin user.
     def test_read_only_admin_select_delete(self):
         self.create_users()
-        self.shell.execute_command("killall cbq-engine")
+        #self.shell.execute_command("killall cbq-engine")
         self.grant_role()
         role = self.roles[0]['roles']
         self.system_catalog_helper_select("test_read_only_admin_select_delete", role)
@@ -876,7 +876,7 @@ class RbacN1QL(QueryTests):
         self.create_users()
 
         rest = RestConnection(self.master)
-        self.shell.execute_command("killall cbq-engine")
+        #self.shell.execute_command("killall cbq-engine")
         self.grant_role()
         role = self.roles[0]['roles']
         self.system_catalog_helper_select("test_sys_catalog", role)
@@ -894,7 +894,7 @@ class RbacN1QL(QueryTests):
 
     def test_query_select_role(self):
         self.create_users()
-        #self.shell.execute_command("killall cbq-engine")
+        ##self.shell.execute_command("killall cbq-engine")
         self.grant_role()
         role = self.roles[0]['roles']
         self.system_catalog_helper_select("test_query_select_role", role)
@@ -902,21 +902,21 @@ class RbacN1QL(QueryTests):
 
     def test_query_insert_role(self):
         self.create_users()
-        #self.shell.execute_command("killall cbq-engine")
+        ##self.shell.execute_command("killall cbq-engine")
         self.grant_role()
         role = self.roles[0]['roles']
         self.system_catalog_helper_insert("test_query_insert_role", role)
 
     def test_query_update_role(self):
         self.create_users()
-        #self.shell.execute_command("killall cbq-engine")
+        ##self.shell.execute_command("killall cbq-engine")
         self.grant_role()
         role = self.roles[0]['roles']
         self.system_catalog_helper_update("test_query_update_role", role)
 
     def test_query_delete_role(self):
         self.create_users()
-        #self.shell.execute_command("killall cbq-engine")
+        ##self.shell.execute_command("killall cbq-engine")
         self.grant_role()
         role = self.roles[0]['roles']
         self.system_catalog_helper_delete("test_query_delete_role", role)
@@ -927,7 +927,7 @@ class RbacN1QL(QueryTests):
     # Right now the test fails ,hence no asserts until behavior is confirmed.
     def test_grant_revoke_permissions(self):
         self.create_users()
-        self.shell.execute_command("killall cbq-engine")
+        #self.shell.execute_command("killall cbq-engine")
         self.grant_role()
         res = self.curl_with_roles(self.query)
         self.assign_role(roles=[{'id': self.users[0]['id'],
