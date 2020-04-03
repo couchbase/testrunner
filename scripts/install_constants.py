@@ -152,11 +152,17 @@ NON_ROOT_CMDS = {
     "deb": {
         "uninstall":
             "dpkg -r couchbase-server; "
-            "rm -rf " + DEFAULT_INSTALL_DIR["LINUX_DISTROS"] + " > /dev/null && echo 1 || echo 0",
+            "rm -rf " + DEFAULT_INSTALL_DIR["LINUX_DISTROS"] + " > /dev/null && echo 1 || echo 0;"
+            "rm -rf " + DEFAULT_NONROOT_INSTALL_DIR["LINUX_DISTROS"] + " > /dev/null && echo 1 || echo 0;",
         "pre_install": None,
-        "install": "apt-get update; dpkg -i buildpath; apt-get -f install > /dev/null && echo 1 || echo 0",
-        "post_install": "systemctl -q is-active couchbase-server.service && echo 1 || echo 0",
-        "post_install_retry": "systemctl restart couchbase-server.service",
+        "install":
+            "dpkg-deb -x buildpath $HOME > /dev/null && echo 1 || echo 0;"
+            "cd " + NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "/opt/couchbase/; "
+            "./bin/install/reloc.sh `pwd`  > /dev/null && echo 1 || echo 0; ",
+        "post_install":
+            "cd " + NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "/opt/couchbase/; "
+            "./bin/couchbase-server -- -noinput -detached",
+        "post_install_retry": "./bin/couchbase-server -- -noinput -detached",
         "init": None,
         "cleanup": "ls -td " + DOWNLOAD_DIR["LINUX_DISTROS"] + "couchbase*.deb | awk 'NR>" + RETAIN_NUM_BINARIES_AFTER_INSTALL + "' | xargs rm -f"
     },
@@ -208,7 +214,10 @@ NON_ROOT_CMDS = {
             "rpm2cpio buildpath | cpio --extract --make-directories --no-absolute-filenames  > /dev/null && echo 1 || echo 0; " 
             "cd " + NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "/opt/couchbase/; " 
             "./bin/install/reloc.sh `pwd`  > /dev/null && echo 1 || echo 0; ",
-        "suse_install": "rpm -i buildpath",
+        "suse_install": "cd " + NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "; " 
+            "rpm2cpio buildpath | cpio --extract --make-directories --no-absolute-filenames  > /dev/null && echo 1 || echo 0; " 
+            "cd " + NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "/opt/couchbase/; " 
+            "./bin/install/reloc.sh `pwd`  > /dev/null && echo 1 || echo 0; ",
         "post_install": NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "opt/couchbase/bin/couchbase-server \-- -noinput -detached",
         "post_install_retry":
             "systemctl daemon-reexec; "
