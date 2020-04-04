@@ -372,14 +372,14 @@ class Lww(XDCRNewBaseTest):
         self.c1_cluster.pause_all_replications_by_id()
         self.sleep(10)
 
-        gen = DocumentGenerator('lww', '{{"key":"value"}}', range(100), start=0, end=1)
+        gen = DocumentGenerator('lww', '{{"key":"value"}}', list(range(100)), start=0, end=1)
         self.c2_cluster.load_all_buckets_from_generator(gen)
         self.sleep(10)
         self._upsert(conn=dest_lww, doc_id='lww-0', old_key='key', new_key='key1', new_val='value1')
         self.sleep(10)
         self._upsert(conn=dest_nolww, doc_id='lww-0', old_key='key', new_key='key1', new_val='value1')
         self.sleep(10)
-        gen = DocumentGenerator('lww', '{{"key2":"value2"}}', range(100), start=0, end=1)
+        gen = DocumentGenerator('lww', '{{"key2":"value2"}}', list(range(100)), start=0, end=1)
         self.c1_cluster.load_all_buckets_from_generator(gen)
         self.sleep(10)
 
@@ -435,14 +435,14 @@ class Lww(XDCRNewBaseTest):
         dest_nolww = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'nolww', self.c2_cluster)
         self.sleep(10)
 
-        gen = DocumentGenerator('lww', '{{"key":"value"}}', range(100), start=0, end=1)
+        gen = DocumentGenerator('lww', '{{"key":"value"}}', list(range(100)), start=0, end=1)
         self.c1_cluster.load_all_buckets_from_generator(gen)
         self.sleep(10)
         self._upsert(conn=src_lww, doc_id='lww-0', old_key='key', new_key='key1', new_val='value1')
         self.sleep(10)
         self._upsert(conn=src_nolww, doc_id='lww-0', old_key='key', new_key='key1', new_val='value1')
         self.sleep(10)
-        gen = DocumentGenerator('lww', '{{"key2":"value2"}}', range(100), start=0, end=1)
+        gen = DocumentGenerator('lww', '{{"key2":"value2"}}', list(range(100)), start=0, end=1)
         self.c2_cluster.load_all_buckets_from_generator(gen)
         self.sleep(10)
 
@@ -498,14 +498,14 @@ class Lww(XDCRNewBaseTest):
         dest_nolww = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'nolww', self.c2_cluster)
         self.sleep(10)
 
-        gen = DocumentGenerator('lww', '{{"key":"value"}}', range(100), start=0, end=1)
+        gen = DocumentGenerator('lww', '{{"key":"value"}}', list(range(100)), start=0, end=1)
         self.c2_cluster.load_all_buckets_from_generator(gen)
         self.sleep(10)
         self._upsert(conn=dest_lww, doc_id='lww-0', old_key='key', new_key='key1', new_val='value1')
         self.sleep(10)
         self._upsert(conn=dest_nolww, doc_id='lww-0', old_key='key', new_key='key1', new_val='value1')
         self.sleep(10)
-        gen = DocumentGenerator('lww', '{{"key2":"value2"}}', range(100), start=0, end=1)
+        gen = DocumentGenerator('lww', '{{"key2":"value2"}}', list(range(100)), start=0, end=1)
         self.c1_cluster.load_all_buckets_from_generator(gen)
         self.sleep(10)
 
@@ -562,14 +562,14 @@ class Lww(XDCRNewBaseTest):
         dest_nolww = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'nolww', self.c2_cluster)
         self.sleep(10)
 
-        gen = DocumentGenerator('lww', '{{"key":"value"}}', range(100), start=0, end=1)
+        gen = DocumentGenerator('lww', '{{"key":"value"}}', list(range(100)), start=0, end=1)
         self.c1_cluster.load_all_buckets_from_generator(gen)
         self.sleep(10)
         self._upsert(conn=src_lww, doc_id='lww-0', old_key='key', new_key='key1', new_val='value1')
         self.sleep(10)
         self._upsert(conn=src_nolww, doc_id='lww-0', old_key='key', new_key='key1', new_val='value1')
         self.sleep(10)
-        gen = DocumentGenerator('lww', '{{"key2":"value2"}}', range(100), start=0, end=1)
+        gen = DocumentGenerator('lww', '{{"key2":"value2"}}', list(range(100)), start=0, end=1)
         self.c2_cluster.load_all_buckets_from_generator(gen)
         self.sleep(10)
 
@@ -606,7 +606,7 @@ class Lww(XDCRNewBaseTest):
         self.setup_xdcr()
         self.merge_all_buckets()
 
-        gen = DocumentGenerator('lww', '{{"key":"value"}}', range(100), start=0, end=1)
+        gen = DocumentGenerator('lww', '{{"key":"value"}}', list(range(100)), start=0, end=1)
         self.c1_cluster.load_all_buckets_from_generator(gen)
         self._wait_for_replication_to_catchup()
 
@@ -651,7 +651,7 @@ class Lww(XDCRNewBaseTest):
         self.setup_xdcr()
         self.merge_all_buckets()
 
-        gen = DocumentGenerator('lww', '{{"key":"value"}}', range(100), start=0, end=1)
+        gen = DocumentGenerator('lww', '{{"key":"value"}}', list(range(100)), start=0, end=1)
         self.c1_cluster.load_all_buckets_from_generator(gen)
         self._wait_for_replication_to_catchup()
 
@@ -752,12 +752,12 @@ class Lww(XDCRNewBaseTest):
         dst_def = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'default', self.c2_cluster)
         self.sleep(10)
 
-        gen = DocumentGenerator('lww', '{{"key":"value"}}', range(100), start=0, end=1)
+        gen = DocumentGenerator('lww', '{{"key":"value"}}', list(range(100)), start=0, end=1)
         self.c1_cluster.load_all_buckets_from_generator(gen)
         self.sleep(10)
         self._upsert(conn=src_def, doc_id='lww-0', old_key='key', new_key='key1', new_val='value1')
         self.sleep(10)
-        gen = DocumentGenerator('lww', '{{"key":"value"}}', range(100), start=0, end=1)
+        gen = DocumentGenerator('lww', '{{"key":"value"}}', list(range(100)), start=0, end=1)
         self.c2_cluster.load_all_buckets_from_generator(gen)
         self.sleep(10)
         self._upsert(conn=dst_def, doc_id='lww-0', old_key='key', new_key='key2', new_val='value2')
@@ -797,7 +797,7 @@ class Lww(XDCRNewBaseTest):
         self.setup_xdcr()
         self.merge_all_buckets()
 
-        gen = DocumentGenerator('lww', '{{"key":"value"}}', range(100), start=0, end=1)
+        gen = DocumentGenerator('lww', '{{"key":"value"}}', list(range(100)), start=0, end=1)
         self.c2_cluster.load_all_buckets_from_generator(gen)
 
         self.c1_cluster.pause_all_replications_by_id()
@@ -814,7 +814,7 @@ class Lww(XDCRNewBaseTest):
         self._upsert(conn=dest_lww, doc_id='lww-0', old_key='key', new_key='key1', new_val='value1')
         self._upsert(conn=dest_nolww, doc_id='lww-0', old_key='key', new_key='key1', new_val='value1')
 
-        gen = DocumentGenerator('lww', '{{"key3":"value3"}}', range(100), start=0, end=1)
+        gen = DocumentGenerator('lww', '{{"key3":"value3"}}', list(range(100)), start=0, end=1)
         self.c1_cluster.load_all_buckets_from_generator(gen)
 
         self.c1_cluster.resume_all_replications_by_id()
@@ -859,7 +859,7 @@ class Lww(XDCRNewBaseTest):
         self.setup_xdcr()
         self.merge_all_buckets()
 
-        gen = DocumentGenerator('lww', '{{"key":"value"}}', range(100), start=0, end=1)
+        gen = DocumentGenerator('lww', '{{"key":"value"}}', list(range(100)), start=0, end=1)
         self.c2_cluster.load_all_buckets_from_generator(gen)
 
         self.c1_cluster.pause_all_replications_by_id()
@@ -876,7 +876,7 @@ class Lww(XDCRNewBaseTest):
         self._upsert(conn=dest_lww, doc_id='lww-0', old_key='key', new_key='key1', new_val='value1')
         self._upsert(conn=dest_nolww, doc_id='lww-0', old_key='key', new_key='key1', new_val='value1')
 
-        gen = DocumentGenerator('lww', '{{"key3":"value3"}}', range(100), start=0, end=1)
+        gen = DocumentGenerator('lww', '{{"key3":"value3"}}', list(range(100)), start=0, end=1)
         self.c1_cluster.load_all_buckets_from_generator(gen)
 
         self.c1_cluster.resume_all_replications_by_id()
@@ -918,7 +918,7 @@ class Lww(XDCRNewBaseTest):
         self.setup_xdcr()
         self.merge_all_buckets()
 
-        gen = DocumentGenerator('lww', '{{"key":"value"}}', range(100), start=0, end=1)
+        gen = DocumentGenerator('lww', '{{"key":"value"}}', list(range(100)), start=0, end=1)
         self.c1_cluster.load_all_buckets_from_generator(gen)
         self._wait_for_replication_to_catchup()
 
@@ -971,7 +971,7 @@ class Lww(XDCRNewBaseTest):
         self.setup_xdcr()
         self.merge_all_buckets()
 
-        gen = DocumentGenerator('lww', '{{"key":"value"}}', range(100), start=0, end=1)
+        gen = DocumentGenerator('lww', '{{"key":"value"}}', list(range(100)), start=0, end=1)
         self.c1_cluster.load_all_buckets_from_generator(gen)
         self._wait_for_replication_to_catchup()
 
@@ -1046,10 +1046,10 @@ class Lww(XDCRNewBaseTest):
 
         tasks = []
 
-        gen = DocumentGenerator('lww', '{{"key":"value"}}', range(100), start=0, end=1)
+        gen = DocumentGenerator('lww', '{{"key":"value"}}', list(range(100)), start=0, end=1)
         tasks += self.c1_cluster.async_load_all_buckets_from_generator(gen)
 
-        gen = DocumentGenerator('lww', '{{"key2":"value2"}}', range(100), start=0, end=1)
+        gen = DocumentGenerator('lww', '{{"key2":"value2"}}', list(range(100)), start=0, end=1)
         tasks += self.c2_cluster.async_load_all_buckets_from_generator(gen)
 
         for task in tasks:
@@ -1277,11 +1277,11 @@ class Lww(XDCRNewBaseTest):
         dest_nolww = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'nolww', self.c2_cluster)
         self.sleep(10)
 
-        gen = DocumentGenerator('lww', '{{"key":"value"}}', range(100), start=0, end=1)
+        gen = DocumentGenerator('lww', '{{"key":"value"}}', list(range(100)), start=0, end=1)
         self.c2_cluster.load_all_buckets_from_generator(gen)
         self._upsert(conn=dest_lww, doc_id='lww-0', old_key='key', new_key='key1', new_val='value1')
         self._upsert(conn=dest_nolww, doc_id='lww-0', old_key='key', new_key='key1', new_val='value1')
-        gen = DocumentGenerator('lww', '{{"key2":"value2"}}', range(100), start=0, end=1)
+        gen = DocumentGenerator('lww', '{{"key2":"value2"}}', list(range(100)), start=0, end=1)
         self.c1_cluster.load_all_buckets_from_generator(gen)
 
         self.c1_cluster.resume_all_replications_by_id()
@@ -1347,11 +1347,11 @@ class Lww(XDCRNewBaseTest):
         dest_nolww = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'nolww', self.c2_cluster)
         self.sleep(10)
 
-        gen = DocumentGenerator('lww', '{{"key":"value"}}', range(100), start=0, end=1)
+        gen = DocumentGenerator('lww', '{{"key":"value"}}', list(range(100)), start=0, end=1)
         self.c1_cluster.load_all_buckets_from_generator(gen)
         self._upsert(conn=src_lww, doc_id='lww-0', old_key='key', new_key='key1', new_val='value1')
         self._upsert(conn=src_nolww, doc_id='lww-0', old_key='key', new_key='key1', new_val='value1')
-        gen = DocumentGenerator('lww', '{{"key2":"value2"}}', range(100), start=0, end=1)
+        gen = DocumentGenerator('lww', '{{"key2":"value2"}}', list(range(100)), start=0, end=1)
         self.c2_cluster.load_all_buckets_from_generator(gen)
 
         self.c1_cluster.resume_all_replications_by_id()
@@ -1397,7 +1397,7 @@ class Lww(XDCRNewBaseTest):
         self.setup_xdcr()
         self.merge_all_buckets()
 
-        gen = DocumentGenerator('lww', '{{"key":"value"}}', range(100), start=0, end=1)
+        gen = DocumentGenerator('lww', '{{"key":"value"}}', list(range(100)), start=0, end=1)
         self.c1_cluster.load_all_buckets_from_generator(gen)
         self._wait_for_replication_to_catchup()
 
@@ -1460,7 +1460,7 @@ class Lww(XDCRNewBaseTest):
         self.setup_xdcr()
         self.merge_all_buckets()
 
-        gen = DocumentGenerator('lww', '{{"key":"value"}}', range(100), start=0, end=1)
+        gen = DocumentGenerator('lww', '{{"key":"value"}}', list(range(100)), start=0, end=1)
         self.c1_cluster.load_all_buckets_from_generator(gen)
         self._wait_for_replication_to_catchup()
 
@@ -1770,9 +1770,9 @@ class Lww(XDCRNewBaseTest):
             src_conn.shuffle_nodes_in_zones(["{0}".format(str(list(src_conn.get_nodes_in_zone(source_zone).keys())))],
                                             source_zone, target_zone)
 
-            gen = DocumentGenerator('lww-', '{{"age": {0}}}', range(100), start=0, end=self._num_items)
+            gen = DocumentGenerator('lww-', '{{"age": {0}}}', list(range(100)), start=0, end=self._num_items)
             self.c2_cluster.load_all_buckets_from_generator(gen)
-            gen = DocumentGenerator('lww-', '{{"age": {0}}}', range(100), start=0, end=self._num_items)
+            gen = DocumentGenerator('lww-', '{{"age": {0}}}', list(range(100)), start=0, end=self._num_items)
             self.c1_cluster.load_all_buckets_from_generator(gen)
 
             self.c1_cluster.resume_all_replications_by_id()
@@ -2309,7 +2309,7 @@ class Lww(XDCRNewBaseTest):
         self.setup_xdcr()
         self.merge_all_buckets()
 
-        gen = DocumentGenerator('lww', '{{"key":"value"}}', range(100), start=0, end=1)
+        gen = DocumentGenerator('lww', '{{"key":"value"}}', list(range(100)), start=0, end=1)
         self.c1_cluster.load_all_buckets_from_generator(gen)
         self._wait_for_replication_to_catchup()
 
@@ -2417,11 +2417,11 @@ class Lww(XDCRNewBaseTest):
         self.setup_xdcr()
         self.merge_all_buckets()
 
-        gen1 = DocumentGenerator('lww', '{{"key":"value"}}', range(100), start=0, end=1)
+        gen1 = DocumentGenerator('lww', '{{"key":"value"}}', list(range(100)), start=0, end=1)
         self.c1_cluster.load_all_buckets_from_generator(gen1)
         self._wait_for_replication_to_catchup()
 
-        gen2 = DocumentGenerator('lww', '{{"key":"value"}}', range(100), start=0, end=1)
+        gen2 = DocumentGenerator('lww', '{{"key":"value"}}', list(range(100)), start=0, end=1)
         self.c3_cluster.load_all_buckets_from_generator(gen2)
         self._wait_for_replication_to_catchup()
 
@@ -2471,7 +2471,7 @@ class Lww(XDCRNewBaseTest):
 
         self.sleep(10)
 
-        gen = DocumentGenerator('lww', '{{"key1":"value1"}}', range(100), start=0, end=1)
+        gen = DocumentGenerator('lww', '{{"key1":"value1"}}', list(range(100)), start=0, end=1)
         self.c1_cluster.load_all_buckets_from_generator(gen)
 
         vbucket_id = self._get_vbucket_id(key='lww-0')
@@ -2534,13 +2534,13 @@ class Lww(XDCRNewBaseTest):
 
         self.c1_cluster.pause_all_replications_by_id()
 
-        gen = DocumentGenerator('lww', '{{"key1":"value1"}}', range(100), start=0, end=1)
+        gen = DocumentGenerator('lww', '{{"key1":"value1"}}', list(range(100)), start=0, end=1)
         self.c2_cluster.load_all_buckets_from_generator(gen)
 
         vbucket_id = self._get_vbucket_id(key='lww-0')
         max_cas_c2_before = self._get_max_cas(node=self.c2_cluster.get_master_node(), bucket='default', vbucket_id=vbucket_id)
 
-        gen = DocumentGenerator('lww', '{{"key2":"value2"}}', range(100), start=0, end=1)
+        gen = DocumentGenerator('lww', '{{"key2":"value2"}}', list(range(100)), start=0, end=1)
         self.c1_cluster.load_all_buckets_from_generator(gen)
 
         self.c1_cluster.resume_all_replications_by_id()
@@ -2588,13 +2588,13 @@ class Lww(XDCRNewBaseTest):
 
         self.c1_cluster.pause_all_replications_by_id()
 
-        gen = DocumentGenerator('lww', '{{"key1":"value1"}}', range(100), start=0, end=1)
+        gen = DocumentGenerator('lww', '{{"key1":"value1"}}', list(range(100)), start=0, end=1)
         self.c2_cluster.load_all_buckets_from_generator(gen)
 
         vbucket_id = self._get_vbucket_id(key='lww-0')
         max_cas_c2_before = self._get_max_cas(node=self.c2_cluster.get_master_node(), bucket='default', vbucket_id=vbucket_id)
 
-        gen = DocumentGenerator('lww', '{{"key2":"value2"}}', range(100), start=0, end=1)
+        gen = DocumentGenerator('lww', '{{"key2":"value2"}}', list(range(100)), start=0, end=1)
         self.c1_cluster.load_all_buckets_from_generator(gen)
 
         self.c1_cluster.resume_all_replications_by_id()
@@ -2640,13 +2640,13 @@ class Lww(XDCRNewBaseTest):
 
         self.c1_cluster.pause_all_replications_by_id()
 
-        gen = DocumentGenerator('lww', '{{"key1":"value1"}}', range(100), start=0, end=1)
+        gen = DocumentGenerator('lww', '{{"key1":"value1"}}', list(range(100)), start=0, end=1)
         self.c2_cluster.load_all_buckets_from_generator(gen)
 
         vbucket_id = self._get_vbucket_id(key='lww-0')
         max_cas_c2_before = self._get_max_cas(node=self.c2_cluster.get_master_node(), bucket='default', vbucket_id=vbucket_id)
 
-        gen = DocumentGenerator('lww', '{{"key2":"value2"}}', range(100), start=0, end=1)
+        gen = DocumentGenerator('lww', '{{"key2":"value2"}}', list(range(100)), start=0, end=1)
         self.c1_cluster.load_all_buckets_from_generator(gen)
 
         self.c1_cluster.resume_all_replications_by_id()
@@ -2700,13 +2700,13 @@ class Lww(XDCRNewBaseTest):
 
         self.c1_cluster.pause_all_replications_by_id()
 
-        gen = DocumentGenerator('lww', '{{"key1":"value1"}}', range(100), start=0, end=1)
+        gen = DocumentGenerator('lww', '{{"key1":"value1"}}', list(range(100)), start=0, end=1)
         self.c2_cluster.load_all_buckets_from_generator(gen)
 
         vbucket_id = self._get_vbucket_id(key='lww-0')
         max_cas_c2_before = self._get_max_cas(node=self.c2_cluster.get_master_node(), bucket='default', vbucket_id=vbucket_id)
 
-        gen = DocumentGenerator('lww', '{{"key2":"value2"}}', range(100), start=0, end=1)
+        gen = DocumentGenerator('lww', '{{"key2":"value2"}}', list(range(100)), start=0, end=1)
         self.c1_cluster.load_all_buckets_from_generator(gen)
 
         self.c1_cluster.resume_all_replications_by_id()
@@ -2758,7 +2758,7 @@ class Lww(XDCRNewBaseTest):
 
         self.c1_cluster.pause_all_replications_by_id()
 
-        gen = DocumentGenerator('lww', '{{"key1":"value1"}}', range(100), start=0, end=1)
+        gen = DocumentGenerator('lww', '{{"key1":"value1"}}', list(range(100)), start=0, end=1)
         self.c1_cluster.load_all_buckets_from_generator(gen)
 
         vbucket_id = self._get_vbucket_id(key='lww-0')
@@ -2766,7 +2766,7 @@ class Lww(XDCRNewBaseTest):
 
         self.sleep(timeout=1200)
 
-        gen = DocumentGenerator('lww', '{{"key2":"value2"}}', range(100), start=0, end=1)
+        gen = DocumentGenerator('lww', '{{"key2":"value2"}}', list(range(100)), start=0, end=1)
         self.c2_cluster.load_all_buckets_from_generator(gen)
 
         vbucket_id = self._get_vbucket_id(key='lww-0')
