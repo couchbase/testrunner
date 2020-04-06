@@ -20,5 +20,7 @@
   "create_missing_collections": false,
   "auto_delete_collections": false,
   "include_data": [],
-  "exclude_data": []
+  "exclude_data": [],
+  "include_data_v2" : null,
+  "exclude_data_v2" : null
 }
