@@ -198,34 +198,23 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
             # TODO : add this back when getEventProcessingStats works reliably for doc timer events as well
             if not doc_timer_events:
                 count = 0
-                if num_nodes <= 1:
-                    stats = self.rest.get_event_processing_stats(name)
-                else:
-                    stats = self.rest.get_aggregate_event_processing_stats(name)
-                if on_delete:
-                    mutation_type = "dcp_deletion"
-                else:
-                    mutation_type = "dcp_mutation"
-                actual_dcp_mutations = stats[mutation_type]
-                # This is required when binary data is involved where dcp_mutation will have process DCP_MUTATIONS
-                # but ignore it
-                # wait for eventing node to process dcp mutations
-                log.info("Number of {0} processed till now : {1}".format(mutation_type, actual_dcp_mutations))
-                while actual_dcp_mutations != expected_dcp_mutations and count < 20:
-                    self.sleep(timeout/20, message="Waiting for eventing to process all dcp mutations...")
-                    count += 1
-                    if num_nodes <= 1:
-                        stats = self.rest.get_event_processing_stats(name)
-                    else:
-                        stats = self.rest.get_aggregate_event_processing_stats(name)
-                    actual_dcp_mutations = stats[mutation_type]
-                    log.info("Number of {0} processed till now : {1}".format(mutation_type, actual_dcp_mutations))
-                if count == 20:
-                    raise Exception(
-                        "Eventing has not processed all the {0}. Current : {1} Expected : {2}".format(mutation_type,
-                                                                                                      actual_dcp_mutations,
-                                                                                                      expected_dcp_mutations
-                                                                                                      ))
+        actual_dcp_mutations = self.getActualMutations(num_nodes, name, on_delete)
+
+        # This is required when binary data is involved where dcp_mutation will have process DCP_MUTATIONS
+        # but ignore it
+        # wait for eventing node to process dcp mutations
+        log.info("Number of (is Deleted: {0}) processed till now : {1}".format(on_delete, actual_dcp_mutations))
+        while actual_dcp_mutations != expected_dcp_mutations and count < 20:
+            self.sleep(timeout/20, message="Waiting for eventing to process all dcp mutations...")
+            count += 1
+            actual_dcp_mutations = self.getActualMutations(num_nodes, name, on_delete)
+            log.info("Number of onDelete? {0} processed till now : {1}".format(on_delete, actual_dcp_mutations))
+        if count == 20:
+            raise Exception(
+                "Eventing has not processed all the isDeleted: {0}. Current : {1}   Expected : {2}".format(on_delete,
+                                                                                              actual_dcp_mutations,
+                                                                                              expected_dcp_mutations
+                                                                                              ))
         # wait for bucket operations to complete and verify it went through successfully
         count = 0
         stats_dst = self.rest.get_bucket_stats(bucket)
@@ -283,6 +272,22 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
                                                                                       indent=4)))
             log.debug("Full Stats for Node {0} is \n{1} ".format(eventing_node.ip, json.dumps(full_out, sort_keys=True,
                                                                                             indent=4)))
+
+    def getActualMutations(self, num_nodes, name, on_delete):
+        actual_dcp_mutations = 0
+        if num_nodes <= 1:
+            stats = self.rest.get_event_processing_stats(name)
+        else:
+            stats = self.rest.get_aggregate_event_processing_stats(name)
+
+        if on_delete:
+            if "dcp_deletion" in stats:
+                actual_dcp_mutations = stats["dcp_deletion"]
+            if "dcp_expiration" in stats:
+                actual_dcp_mutations += stats["dcp_expiration"]
+        else:
+            actual_dcp_mutations = stats["dcp_mutation"]
+        return actual_dcp_mutations
 
     def eventing_stats(self):
         self.sleep(30)
