@@ -80,6 +80,8 @@ def main():
 
     options, args = parser.parse_args()
 
+    #Fix the OS for addPoolServers. See CBQE-5609 for details
+    addPoolServer_os = "centos"
     print(('the run is', options.run))
     print(('the  version is', options.version))
     releaseVersion = float('.'.join(options.version.split('.')[:2]))
@@ -317,10 +319,10 @@ def main():
                             if options.serverType.lower() == 'docker':
                                 # may want to add OS at some point
                                 getAddPoolUrl = getAddPoolUrl + 'docker?os={0}&poolId={1}'.format(
-                                    options.os, options.addPoolId)
+                                    addPoolServer_os, options.addPoolId)
                             else:
                                 getAddPoolUrl = getAddPoolUrl + '{0}?poolId={1}'.format(
-                                    options.os, options.addPoolId)
+                                    addPoolServer_os, options.addPoolId)
 
                             response, content = httplib2.Http(
                                 timeout=TIMEOUT).request(getAddPoolUrl, 'GET')
