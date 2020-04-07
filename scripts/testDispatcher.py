@@ -7,12 +7,15 @@ import string
 import time
 from optparse import OptionParser
 import traceback
+import os as OS
 import paramiko
 
 from couchbase import Couchbase
 from couchbase.bucket import Bucket
 from couchbase.exceptions import CouchbaseError
 from couchbase.n1ql import N1QLQuery
+import get_jenkins_params
+import find_rerun_job
 
 # takes an ini template as input, standard out is populated with the server pool
 # need a descriptor as a parameter
@@ -163,8 +166,10 @@ def main():
     # whether to use production version of a test_suite_executor or test version
     parser.add_option('-l','--launch_job', dest='launch_job', default='test_suite_executor')
     parser.add_option('-f','--jenkins_server_url', dest='jenkins_server_url', default='http://qa.sc.couchbase.com')
-    parser.add_option('-m','--retry_params', dest='retry_params', default='')
+    parser.add_option('-m','--rerun_params', dest='rerun_params', default='')
     parser.add_option('-i','--retries', dest='retries', default='1')
+    parser.add_option('-q', '--fresh_run', dest='fresh_run',
+                      default=False, action='store_true')
     parser.add_option('-k','--include_tests', dest='include_tests', default=None)
     parser.add_option('-x','--server_manager', dest='SERVER_MANAGER',
                       default='172.23.105.177:8081')
@@ -198,7 +203,7 @@ def main():
 
     print(('the reportedParameters are', options.dashboardReportedParameters))
 
-    print(('retry params are', options.retry_params))
+    print(('rerun params are', options.rerun_params))
     print(('Server Manager is ', options.SERVER_MANAGER))
     print(('Timeout is ', options.TIMEOUT))
 
@@ -380,18 +385,24 @@ def main():
                          'iniFile={5}&parameters={6}&os={7}&initNodes={' \
                          '8}&installParameters={9}&branch={10}&slave={' \
                          '11}&owners={12}&mailing_list={13}&mode={14}&timeout={15}'
-
-
-    launchString = launchString + '&retry_params=' + urllib.parse.quote(options.retry_params)
+    if options.rerun_params:
+        rerun_params = options.rerun_params.strip('\'')
+        launchString = launchString + '&' + urllib.parse.urlencode({
+            "rerun_params" : rerun_params})
     launchString = launchString + '&retries=' + options.retries
     if options.include_tests:
         launchString = launchString + '&include_tests='+urllib.parse.quote(options.include_tests.replace("'", " ").strip())
-
+    launchString = launchString + '&fresh_run=' + urllib.parse.quote(
+        str(options.fresh_run).lower())
     if options.url is not None:
         launchString = launchString + '&url=' + options.url
     if options.cherrypick is not None:
         launchString = launchString + '&cherrypick=' + urllib.parse.quote(options.cherrypick)
-
+    currentDispatcherJobUrl = OS.getenv("BUILD_URL")
+    currentExecutorParams = get_jenkins_params.get_params(
+        currentDispatcherJobUrl)
+    currentExecutorParams['dispatcher_url'] = OS.getenv('JOB_URL')
+    currentExecutorParams = json.dumps(currentExecutorParams)
 
     summary = []
     servers = []
@@ -491,25 +502,26 @@ def main():
                         else:
                             parameters = testsToLaunch[i]['parameters'] + ',' + runTimeTestRunnerParameters
 
-
-
                     url = launchString.format(options.version,
-                                                testsToLaunch[i]['confFile'],
-                                                descriptor,
-                                                testsToLaunch[i]['component'],
-                                                dashboardDescriptor,
-                                                testsToLaunch[i]['iniFile'],
-                                                urllib.parse.quote(parameters),
-                                                options.os,
-                                                testsToLaunch[i]['initNodes'],
-                                                testsToLaunch[i]['installParameters'],
-                                                options.branch,
-                                                testsToLaunch[i]['slave'],
-                                                urllib.parse.quote(testsToLaunch[i]['owner']),
-                                                urllib.parse.quote(
-                                                    testsToLaunch[i]['mailing_list']),
-                                                testsToLaunch[i]['mode'],
-                                                testsToLaunch[i]['timeLimit'])
+                                              testsToLaunch[i]['confFile'],
+                                              descriptor,
+                                              testsToLaunch[i]['component'],
+                                              dashboardDescriptor,
+                                              testsToLaunch[i]['iniFile'],
+                                              urllib.parse.quote(parameters),
+                                              options.os,
+                                              testsToLaunch[i]['initNodes'],
+                                              testsToLaunch[i]['installParameters'],
+                                              options.branch,
+                                              testsToLaunch[i]['slave'],
+                                              urllib.parse.quote(testsToLaunch[i]['owner']),
+                                              urllib.parse.quote(
+                                                  testsToLaunch[i]['mailing_list']),
+                                              testsToLaunch[i]['mode'],
+                                              testsToLaunch[i]['timeLimit'])
+                    url = url + '&dispatcher_params=' + \
+                                   urllib.parse.urlencode({"parameters":
+                                                 currentExecutorParams})
 
 
                     if options.serverType.lower() != 'docker':
@@ -533,8 +545,15 @@ def main():
 
                     print('\n', time.asctime( time.localtime(time.time()) ), 'launching ', url)
                     print(url)
+                    dispatch_job = True
+                    if not options.fresh_run:
+                        dispatch_job = \
+                            find_rerun_job.should_dispatch_job(
+                                options.os, testsToLaunch[i][
+                                    'component'], testsToLaunch[i][
+                                    'subcomponent'], options.version)
 
-                    if options.noLaunch:
+                    if options.noLaunch or not dispatch_job:
                         # free the VMs
                         time.sleep(3)
                         if options.serverType.lower() == 'docker':
