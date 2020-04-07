@@ -393,7 +393,7 @@ def main():
                                     '/getdockers/{0}?count={1}&os={2}&poolId={3}'. \
                                format(descriptor,
                                       testsToLaunch[i]['addPoolServerCount'],
-                                      options.os,
+                                      addPoolServer_os,
                                       options.addPoolId)
 
                         else:
@@ -402,7 +402,7 @@ def main():
                                format(descriptor,
                                       testsToLaunch[i]['addPoolServerCount'],
                                       testsToLaunch[i]['timeLimit'], \
-                                      options.os,
+                                      addPoolServer_os,
                                       options.addPoolId)
                         print 'getServerURL', getServerURL
 
