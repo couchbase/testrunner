@@ -385,21 +385,22 @@ def main():
                     # get additional pool servers as needed
                     if testsToLaunch[i]['addPoolServerCount']:
                         if options.serverType.lower() == 'docker':
-                            getServerURL = 'http://' + SERVER_MANAGER + \
-                                           '/getdockers/{0}?count={1}&os={2}&poolId={3}'. \
-                                               format(descriptor,
-                                                      testsToLaunch[i]['addPoolServerCount'],
-                                                      options.os,
-                                                      options.addPoolId)
+                             getServerURL = 'http://' + SERVER_MANAGER + \
+                                    '/getdockers/{0}?count={1}&os={2}&poolId={3}'. \
+                               format(descriptor,
+                                      testsToLaunch[i]['addPoolServerCount'],
+                                      addPoolServer_os,
+                                      options.addPoolId)
 
                         else:
                             getServerURL = 'http://' + SERVER_MANAGER + \
-                                           '/getservers/{0}?count={1}&expiresin={2}&os={3}&poolId={4}'. \
-                                               format(descriptor,
-                                                      testsToLaunch[i]['addPoolServerCount'],
-                                                      testsToLaunch[i]['timeLimit'], options.os,
-                                                      options.addPoolId)
-                        print(('getServerURL', getServerURL))
+                                    '/getservers/{0}?count={1}&expiresin={2}&os={3}&poolId={4}'. \
+                               format(descriptor,
+                                      testsToLaunch[i]['addPoolServerCount'],
+                                      testsToLaunch[i]['timeLimit'], \
+                                      addPoolServer_os,
+                                      options.addPoolId)
+                        print 'getServerURL', getServerURL
 
                         response2, content2 = httplib2.Http(timeout=TIMEOUT).request(getServerURL,
                                                                                  'GET')
