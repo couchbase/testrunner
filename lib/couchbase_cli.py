@@ -309,7 +309,7 @@ class CouchbaseCLI:
     def setting_audit(self, enabled, log_path, rotate_interval):
         options = self._get_default_options()
         if enabled is not None:
-            options += " --audit-enabled " + str(enabled)
+            options += " --set --audit-enabled " + str(enabled)
         if log_path is not None:
             options += " --audit-log-path " + str(log_path)
         if rotate_interval is not None:
