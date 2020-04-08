@@ -400,7 +400,7 @@ def main():
                                       testsToLaunch[i]['timeLimit'], \
                                       addPoolServer_os,
                                       options.addPoolId)
-                        print 'getServerURL', getServerURL
+                        print('getServerURL', getServerURL)
 
                         response2, content2 = httplib2.Http(timeout=TIMEOUT).request(getServerURL,
                                                                                  'GET')

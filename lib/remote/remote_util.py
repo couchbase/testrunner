@@ -4854,6 +4854,11 @@ class RemoteMachineShellConnection(KeepRefs):
             log.info("Enabling diag/eval on non-local hosts is available only post 5.5.2 or 6.0 releases")
             return None, "Enabling diag/eval on non-local hosts is available only post 5.5.2 or 6.0 releases"
         output, error = self.execute_command(command)
+        log.info(output)
+        try:
+            output = output.decode()
+        except AttributeError:
+            pass
         return output, error
 
 
