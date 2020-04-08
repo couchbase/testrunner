@@ -2446,6 +2446,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         ClusterOperationHelper.cleanup_cluster(self.backupset.restore_cluster,
                                                master=self.backupset.restore_cluster_host)
         rest_bk = RestConnection(self.backupset.cluster_host)
+        bk_storage_mode = \
+                     rest_bk.get_index_settings()["indexer.settings.storage_mode"]
         eventing_service_in = False
         bk_cluster_services = rest_bk.get_nodes_services().values()
         for srv in bk_cluster_services:
@@ -2468,6 +2470,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             shell.enable_diag_eval_on_non_local_hosts()
             shell.disconnect()
         kv_quota = rest_rs.init_node(self.backupset.restore_cluster_host.services)
+        self._reset_storage_mode(rest_rs, bk_storage_mode)
         if len(bk_cluster_services) > 1:
             bk_cluster_services.remove(bk_services)
         if len(self.input.clusters[0]) > 1:
