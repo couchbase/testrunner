@@ -6,14 +6,13 @@ Prerequisites
 * Python 3.7.6
 * pip3 or easy_install
 
-See the setup steps in the Py2 to Py3 porting guide: https://docs.google.com/document/d/1fxJjmgEnRKsq7l7h-nJbs9piZhqmvjNAUnXPSjrz-TA/edit?usp=sharing
-https://docs.google.com/spreadsheets/d/1WtiihnuhJsDaI3kmNoNwov78OSTY2O-_0MT3bvv_Bk4/edit?pli=1#gid=1081178839&range=A1:G129
-
+See the setup steps in the Py2 to Py3 porting guide: https://hub.internal.couchbase.com/confluence/display/QA/Python+3.7.6+installation+for+testrunner
 
 Dependencies
 ------------
 
-Use pip3 or pip3.6 or pip3.7 based on the platform.
+Use pip3.7 based on the platform.
+
 General:
 
 pip3 install couchbase sgmllib3k paramiko httplib2 pyyaml beautifulsoup4 Geohash python-geohash deepdiff pyes pytz requests jsonpickle docker decorator
@@ -43,6 +42,8 @@ Documentation:
 Buildout:
 
     pip3 install zc.buildout
+
+Any issues w.r.t python3 syntax. Please refer: https://blog.couchbase.com/tips-and-tricks-for-upgrading-from-python-2-to-python-3/
 
 Usage
 -----
