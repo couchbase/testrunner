@@ -1,6 +1,6 @@
 import logging
 import threading
-from tuq import QueryTests
+from .tuq import QueryTests
 
 class QueryNewTuqTests(QueryTests):
 
@@ -38,7 +38,7 @@ class QueryNewTuqTests(QueryTests):
         for bucket in self.buckets:
             if self.monitoring:
                 e = threading.Event()
-                t1 = threading.Thread(name='run_simple', target=self.run_active_requests,args=(e,2))
+                t1 = threading.Thread(name='run_simple', target=self.run_active_requests, args=(e, 2))
                 t1.start()
 
             query = 'select * from %s' %(bucket.name)
@@ -58,9 +58,9 @@ class QueryNewTuqTests(QueryTests):
             e = threading.Event()
             if self.monitoring:
                 e = threading.Event()
-                t2 = threading.Thread(name='run_joins', target=self.run_active_requests,args=(e,2))
+                t2 = threading.Thread(name='run_joins', target=self.run_active_requests, args=(e, 2))
                 t2.start()
-            query = 'select * from %s b1 inner join %s b2 on keys b1.CurrencyCode inner join %s b3 on keys b1.CurrencyCode left outer join %s b4 on keys b1.CurrencyCode' % (bucket.name,bucket.name,bucket.name,bucket.name)
+            query = 'select * from %s b1 inner join %s b2 on keys b1.CurrencyCode inner join %s b3 on keys b1.CurrencyCode left outer join %s b4 on keys b1.CurrencyCode' % (bucket.name, bucket.name, bucket.name, bucket.name)
             actual_result = self.run_cbq_query(query)
             logging.debug("event is set")
             if self.monitoring:
@@ -68,11 +68,11 @@ class QueryNewTuqTests(QueryTests):
                 t2.join(100)
 
     def test_simple_negative_check(self):
-        queries_errors = {'SELECT $str0 FROM {0} WHERE COUNT({0}.$str0)>3' :
+        queries_errors = {'SELECT $str0 FROM {0} WHERE COUNT({0}.$str0)>3':
                           'Aggregates not allowed in WHERE',
-                          'SELECT *.$str0 FROM {0}' : 'syntax error',
-                          'SELECT *.* FROM {0} ... ERROR' : 'syntax error',
-                          'FROM %s SELECT $str0 WHERE id=null' : 'syntax error',}
+                          'SELECT *.$str0 FROM {0}': 'syntax error',
+                          'SELECT *.* FROM {0} ... ERROR': 'syntax error',
+                          'FROM %s SELECT $str0 WHERE id=null': 'syntax error',}
         self.negative_common_body(queries_errors)
 
     def test_unnest(self):
@@ -80,7 +80,7 @@ class QueryNewTuqTests(QueryTests):
         for bucket in self.buckets:
             query_template = 'SELECT emp.$int0, task FROM %s emp UNNEST emp.$nested_list_3l0 task' % bucket.name
             actual_result, expected_result = self.run_query_from_template(query_template)
-            self._verify_results(sorted(actual_result['results']), sorted(expected_result))
+            self._verify_results(actual_result['results'], expected_result)
 
     def test_subquery_select(self):
         self.fail_if_no_buckets()
@@ -119,7 +119,7 @@ class QueryNewTuqTests(QueryTests):
         for bucket in self.buckets:
             if self.monitoring:
                 e = threading.Event()
-                t3 = threading.Thread(name='run_simple_nulls', target=self.run_active_requests,args=(e,2))
+                t3 = threading.Thread(name='run_simple_nulls', target=self.run_active_requests, args=(e, 2))
                 t3.start()
             for query in queries:
                 actual_result = self.run_cbq_query(query % (bucket.name))
@@ -160,7 +160,7 @@ class QueryNewTuqTests(QueryTests):
         for bucket in self.buckets:
             if self.monitoring:
                 e = threading.Event()
-                t4 = threading.Thread(name='run_limit_offset', target=self.run_active_requests,args=(e,2))
+                t4 = threading.Thread(name='run_limit_offset', target=self.run_active_requests, args=(e, 2))
                 t4.start()
             query_template = 'SELECT DISTINCT $str0 FROM %s ORDER BY $str0 LIMIT 10' % (bucket.name)
             actual_result, expected_result = self.run_query_from_template(query_template)
@@ -177,12 +177,12 @@ class QueryNewTuqTests(QueryTests):
             query_template = 'SELECT DISTINCT $str0 FROM %s ORDER BY $str0 LIMIT 0' % (bucket.name)
             self.query = self.gen_results.generate_query(query_template)
             actual_result = self.run_cbq_query()
-            self.assertEquals(actual_result['results'], [],
+            self.assertEqual(actual_result['results'], [],
                               "Results are incorrect.Actual %s.\n Expected: %s.\n" % (
                                         actual_result['results'], []))
             query_template = 'SELECT DISTINCT $str0 FROM %s ORDER BY $str0 LIMIT 10 OFFSET 0' % (bucket.name)
             actual_result, expected_result = self.run_query_from_template(query_template)
-            self.assertEquals(actual_result['results'], expected_result,
+            self.assertEqual(actual_result['results'], expected_result,
                               "Results are incorrect.Actual %s.\n Expected: %s.\n" % (
                                         actual_result['results'], expected_result))
 
@@ -209,13 +209,13 @@ class QueryNewTuqTests(QueryTests):
         for bucket in self.buckets:
             if self.monitoring:
                 e = threading.Event()
-                t5 = threading.Thread(name='run_limit_offset', target=self.run_active_requests,args=(e,2))
+                t5 = threading.Thread(name='run_limit_offset', target=self.run_active_requests, args=(e, 2))
                 t5.start()
             query_template = 'SELECT COUNT($str0) AS COUNT_EMPLOYEE FROM %s' % (bucket.name)
             if self.analytics:
                 query_template = 'SELECT COUNT(`$str0`) AS COUNT_EMPLOYEE FROM %s' % (bucket.name)
             actual_result, expected_result = self.run_query_from_template(query_template)
-            self.assertEquals(actual_result['results'], expected_result,
+            self.assertEqual(actual_result['results'], expected_result,
                               "Results are incorrect.Actual %s.\n Expected: %s.\n" % (
                                         actual_result['results'], expected_result))
 
@@ -225,7 +225,7 @@ class QueryNewTuqTests(QueryTests):
                 e.set()
                 t5.join(100)
             expected_result = [ { "COUNT_EMPLOYEE": expected_result[0]['COUNT_EMPLOYEE'] + 1 } ]
-            self.assertEquals(actual_result['results'], expected_result,
+            self.assertEqual(actual_result['results'], expected_result,
                               "Results are incorrect.Actual %s.\n Expected: %s.\n" % (
                                         actual_result['results'], expected_result))
 
@@ -259,7 +259,7 @@ class QueryNewTuqTests(QueryTests):
         for bucket in self.buckets:
             if self.monitoring:
                 e = threading.Event()
-                t6 = threading.Thread(name='run_limit_offset', target=self.run_active_requests,args=(e,2))
+                t6 = threading.Thread(name='run_limit_offset', target=self.run_active_requests, args=(e, 2))
                 t6.start()
             for query_template in queries_templates:
                 actual_result, expected_result = self.run_query_from_template(query_template  % (bucket.name))
@@ -281,7 +281,7 @@ class QueryNewTuqTests(QueryTests):
         for bucket in self.buckets:
             if self.monitoring:
                 e = threading.Event()
-                t7 = threading.Thread(name='run_limit_offset', target=self.run_active_requests,args=(e,2))
+                t7 = threading.Thread(name='run_limit_offset', target=self.run_active_requests, args=(e, 2))
                 t7.start()
             query_template = 'SELECT $str0 AS name_new FROM %s AS test ORDER BY name_new DESC' %(
                                                                                 bucket.name)
@@ -307,7 +307,7 @@ class QueryNewTuqTests(QueryTests):
         for bucket in self.buckets:
             if self.monitoring:
                 e = threading.Event()
-                t8 = threading.Thread(name='run_limit_offset', target=self.run_active_requests,args=(e,2))
+                t8 = threading.Thread(name='run_limit_offset', target=self.run_active_requests, args=(e, 2))
                 t8.start()
             query_template = 'SELECT COUNT(TEST.$str0) from %s AS TEST' %(bucket.name)
             if self.analytics:
@@ -474,7 +474,7 @@ class QueryNewTuqTests(QueryTests):
         expected_result = self.run_cbq_query()
         self.query = 'SELECT * FROM default WHERE CONTAINS_TOKEN_REGEXP(TOSTRING(v),"(\d{3}-\\d{2}-\\d{4})|(\\b\\d{9}\\b)|(\\d{3}[ ]\\d{2}[ ]\\d{4})") order by meta().id'
         actual_result = self.run_cbq_query()
-        self.assertEquals(actual_result['results'],expected_result['results'])
+        self.assertEqual(actual_result['results'], expected_result['results'])
         self.query = 'SELECT * FROM default WHERE CONTAINS_TOKEN_REGEXP(TOSTRING(v),"(\d{3}-\d{2}-\d{4})|\d{9)|(\d{3}[ ]\d{2}[ ]\d{4})") order by meta().id'
         actual_result = self.run_cbq_query()
-        self.assertEquals(actual_result['results'],expected_result['results'])
+        self.assertEqual(actual_result['results'], expected_result['results'])

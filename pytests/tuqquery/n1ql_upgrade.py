@@ -1,5 +1,5 @@
 import threading
-from tuq import QueryTests
+from .tuq import QueryTests
 from upgrade.newupgradebasetest import NewUpgradeBaseTest
 from remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection
@@ -10,7 +10,7 @@ from membase.api.rest_client import RestHelper
 from security.audittest import auditTest
 from security.auditmain import audit
 import socket
-import urllib
+import urllib.request, urllib.parse, urllib.error
 
 class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
 
@@ -62,7 +62,6 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
             self.filter = self.input.param("filter", False)
         self.log.info("==============  QueriesUpgradeTests setup has completed ==============")
 
-
     def suite_setUp(self):
 
         super(QueriesUpgradeTests, self).suite_setUp()
@@ -97,7 +96,6 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
         super(QueriesUpgradeTests, self).suite_tearDown()
 
     def test_upgrade(self):
-
         """
         Upgrade Test.
         1) Run pre-upgrade feature test
@@ -407,11 +405,11 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
 
         url = "'https://jira.atlassian.com/rest/api/latest/issue/JRA-9'"
         query="select curl("+ url +")"
-        curl = self.shell.execute_commands_inside(self.cbqpath,query,'', '', '', '', '')
+        curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
         self.assertTrue(self.jira_error_msg in actual_curl['errors'][0]['msg'],
                         "Error message is %s this is incorrect it should be %s"
-                        % (actual_curl['errors'][0]['msg'],self.jira_error_msg))
+                        % (actual_curl['errors'][0]['msg'], self.jira_error_msg))
 
         curl_output = self.shell.execute_command("%s --get https://maps.googleapis.com/maps/api/geocode/json "
                                                  "-d 'address=santa+cruz&components=country:ES&key=AIzaSyCT6niGCMsgegJkQSYSqpoLZ4_rSO59XQQ'"
@@ -420,7 +418,7 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
         url = "'https://maps.googleapis.com/maps/api/geocode/json'"
         options= "{'get':True,'data': 'address=santa+cruz&components=country:ES&key=AIzaSyCT6niGCMsgegJkQSYSqpoLZ4_rSO59XQQ'}"
         query="select curl("+ url +", %s" % options + ")"
-        curl = self.shell.execute_commands_inside(self.cbqpath,query,'', '', '', '', '')
+        curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
         self.assertEqual(actual_curl['results'][0]['$1'], expected_curl)
 
@@ -430,7 +428,7 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
 
         url = "'https://jira.atlassian.com/rest/api/latest/issue/JRA-9'"
         query="select curl("+ url +")"
-        curl = self.shell.execute_commands_inside(self.cbqpath,query,'', '', '', '', '')
+        curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
         self.assertTrue(self.jira_error_msg in actual_curl['errors'][0]['msg'],
                         "Error message is %s this is incorrect it should be %s"
@@ -439,7 +437,7 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
         url = "'https://maps.googleapis.com/maps/api/geocode/json'"
         options= "{'get':True,'data': 'address=santa+cruz&components=country:ES&key=AIzaSyCT6niGCMsgegJkQSYSqpoLZ4_rSO59XQQ'}"
         query="select curl("+ url +", %s" % options + ")"
-        curl = self.shell.execute_commands_inside(self.cbqpath,query,'', '', '', '', '')
+        curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
         self.assertTrue(self.google_error_msg in actual_curl['errors'][0]['msg'],
                         "Error message is %s this is incorrect it should be %s"
@@ -575,7 +573,7 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
 
     def setupLDAPSettings (self, rest):
         api = rest.baseUrl + 'settings/saslauthdAuth'
-        params = urllib.urlencode({"enabled":'true',"admins":[],"roAdmins":[]})
+        params = urllib.parse.urlencode({"enabled":'true',"admins":[],"roAdmins":[]})
         status, content, header = rest._http_request(api, 'POST', params)
         return status, content, header
 

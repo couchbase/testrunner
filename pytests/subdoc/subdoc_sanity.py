@@ -76,7 +76,7 @@ class SubdocSanityTests(unittest.TestCase):
 
         '''Intermediate element Dict.Array'''
         self.log.info('Testing Intermediate element Dict. Array')
-        data_set.get_all_docs(inserted_keys, path = self._get_path('child', levels/2)+'.array[0]')
+        data_set.get_all_docs(inserted_keys, path = self._get_path('child', levels//2)+'.array[0]')
 
     def test_deep_nested_dataset_get_array(self):
         num_docs = self.helper.input.param("num-docs")
@@ -93,20 +93,20 @@ class SubdocSanityTests(unittest.TestCase):
 
         '''Last element Array'''
         last_path ='child'
-        for i in xrange(levels-1):
+        for i in range(levels-1):
             last_path +='.child'
         data_set.get_all_docs(inserted_keys, path = last_path)
 
         '''Last element Array of Array'''
         last_path ='child'
-        for i in xrange(levels-3):
+        for i in range(levels-3):
             last_path +='.child'
         last_path +='.array[-1][-1][-1]'
         data_set.get_all_docs(inserted_keys, path = last_path)
 
         '''Intermediate element Array'''
         last_path ='child'
-        for i in xrange(levels/2):
+        for i in range(levels//2):
             last_path +='.child'
         last_path +='.array[0][-1]'
         data_set.get_all_docs(inserted_keys, path = last_path)
@@ -240,7 +240,7 @@ class SubdocSanityTests(unittest.TestCase):
 
         #Should be a negative testcase below.
         #data_set.array_push_last(inserted_keys, replace_string, path='isDict')
-        data_set.counter_all_paths(inserted_keys,path='geometry.coordinates[0]')
+        data_set.counter_all_paths(inserted_keys, path='geometry.coordinates[0]')
         #data_set.array_push_last(inserted_keys, replace_string, path='dict_value.name')
         data_set.counter_all_paths(inserted_keys, path='height')
         #data_set.counter_all_paths(inserted_keys, path='array')
@@ -292,7 +292,7 @@ class SubdocSanityTests(unittest.TestCase):
 
     def _get_path(self, subdoc_elt=None, levels=None):
         subdoc_path = subdoc_elt
-        for i in xrange(levels-1):
+        for i in range(levels-1):
             subdoc_path +='.'+subdoc_elt
         return subdoc_path
 
@@ -321,9 +321,9 @@ class SimpleDataSet(SubdocSanityTests):
         for in_key in inserted_keys:
             num_tries = 1
             try:
-                opaque, cas, data = self.helper.client.dict_upsert_sd(in_key, path ,long_string)
+                opaque, cas, data = self.helper.client.dict_upsert_sd(in_key, path, long_string)
             except Exception as e:
-                print '[ERROR] {}'.format(e)
+                print('[ERROR] {}'.format(e))
                 self.helper.testcase.fail(
                     "Unable to upsert key {0} for path {1} after {2} tries"
                     .format(in_key, path, num_tries))
@@ -332,9 +332,9 @@ class SimpleDataSet(SubdocSanityTests):
         for in_key in inserted_keys:
             num_tries = 1
             try:
-                opaque, cas, data = self.helper.client.dict_add_sd(in_key, path ,long_string)
+                opaque, cas, data = self.helper.client.dict_add_sd(in_key, path, long_string)
             except Exception as e:
-                print '[ERROR] {}'.format(e)
+                print('[ERROR] {}'.format(e))
                 self.helper.testcase.fail(
                     "Unable to add key {0} for path {1} after {2} tries"
                     .format(in_key, path, num_tries))
@@ -345,7 +345,7 @@ class SimpleDataSet(SubdocSanityTests):
             try:
                 opaque, cas, data = self.helper.client.delete_sd(in_key, path)
             except Exception as e:
-                print '[ERROR] {}'.format(e)
+                print('[ERROR] {}'.format(e))
                 self.helper.testcase.fail(
                     "Unable to remove value for key {0} for path {1} after {2} tries"
                     .format(in_key, path, num_tries))
@@ -356,7 +356,7 @@ class SimpleDataSet(SubdocSanityTests):
             try:
                 opaque, cas, data = self.helper.client.exists_sd(in_key, path)
             except Exception as e:
-                print '[ERROR] {}'.format(e)
+                print('[ERROR] {}'.format(e))
                 self.helper.testcase.fail(
                     "Unable to validate value for key {0} for path {1} after {2} tries"
                     .format(in_key, path, num_tries))
@@ -365,9 +365,9 @@ class SimpleDataSet(SubdocSanityTests):
         for in_key in inserted_keys:
             num_tries = 1
             try:
-                opaque, cas, data = self.helper.client.replace_sd(in_key, path ,long_string)
+                opaque, cas, data = self.helper.client.replace_sd(in_key, path, long_string)
             except Exception as e:
-                print '[ERROR] {}'.format(e)
+                print('[ERROR] {}'.format(e))
                 self.helper.testcase.fail(
                     "Unable to replace for key {0} for path {1} after {2} tries"
                     .format(in_key, path, num_tries))
@@ -376,9 +376,9 @@ class SimpleDataSet(SubdocSanityTests):
         for in_key in inserted_keys:
             num_tries = 1
             try:
-                opaque, cas, data = self.helper.client.array_push_last_sd(in_key, path ,long_string)
+                opaque, cas, data = self.helper.client.array_push_last_sd(in_key, path, long_string)
             except Exception as e:
-                print '[ERROR] {}'.format(e)
+                print('[ERROR] {}'.format(e))
                 self.helper.testcase.fail(
                     "Unable to  array push last for key {0} for path {1} after {2} tries"
                     .format(in_key, path, num_tries))
@@ -387,9 +387,9 @@ class SimpleDataSet(SubdocSanityTests):
         for in_key in inserted_keys:
             num_tries = 1
             try:
-                opaque, cas, data = self.helper.client.array_push_first_sd(in_key, path ,long_string)
+                opaque, cas, data = self.helper.client.array_push_first_sd(in_key, path, long_string)
             except Exception as e:
-                print '[ERROR] {}'.format(e)
+                print('[ERROR] {}'.format(e))
                 self.helper.testcase.fail(
                     "Unable to  array push first for key {0} for path {1} after {2} tries"
                     .format(in_key, path, num_tries))
@@ -398,9 +398,9 @@ class SimpleDataSet(SubdocSanityTests):
         for in_key in inserted_keys:
             num_tries = 1
             try:
-                opaque, cas, data = self.helper.client.counter_sd(in_key, path ,10000)
+                opaque, cas, data = self.helper.client.counter_sd(in_key, path, 10000)
             except Exception as e:
-                print '[ERROR] {}'.format(e)
+                print('[ERROR] {}'.format(e))
                 self.helper.testcase.fail(
                     "Unable to  counter incr/decr for key {0} for path {1} after {2} tries"
                     .format(in_key, path, num_tries))
@@ -409,9 +409,9 @@ class SimpleDataSet(SubdocSanityTests):
         for in_key in inserted_keys:
             num_tries = 1
             try:
-                opaque, cas, data = self.helper.client.array_add_unique_sd(in_key, path ,long_string)
+                opaque, cas, data = self.helper.client.array_add_unique_sd(in_key, path, long_string)
             except Exception as e:
-                print '[ERROR] {}'.format(e)
+                print('[ERROR] {}'.format(e))
                 self.helper.testcase.fail(
                     "Unable to  add array_unique key {0} for path {1} after {2} tries"
                     .format(in_key, path, num_tries))
@@ -421,9 +421,9 @@ class SimpleDataSet(SubdocSanityTests):
             num_tries = 1
             try:
                 opaque, cas, data = self.helper.client.multi_lookup_sd(in_key, path)
-                print data
+                print(data)
             except Exception as e:
-                print '[ERROR] {}'.format(e)
+                print('[ERROR] {}'.format(e))
                 self.helper.testcase.fail(
                     "Unable to  add array_unique key {0} for path {1} after {2} tries"
                     .format(in_key, path, num_tries))

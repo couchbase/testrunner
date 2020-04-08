@@ -1,5 +1,5 @@
-from xdcrnewbasetests import XDCRNewBaseTest
-from xdcrnewbasetests import Utility, BUCKET_NAME, OPS
+from .xdcrnewbasetests import XDCRNewBaseTest
+from .xdcrnewbasetests import Utility, BUCKET_NAME, OPS
 """Testing Rebalance on Unidirectional and Bidirectional XDCR replication setup"""
 
 
@@ -12,12 +12,18 @@ class Rebalance(XDCRNewBaseTest):
         self.dest_cluster = self.get_cb_cluster_by_name('C2')
         self.dest_master = self.dest_cluster.get_master_node()
         self.__rebalance = self._input.param("rebalance", "").split('-')
-        self.__failover = self._input.param("failover","").split('-')
+        self.__failover = self._input.param("failover", "").split('-')
         self.__num_rebalance = self._input.param("num_rebalance", 1)
         self.__num_failover = self._input.param("num_failover", 1)
 
     def tearDown(self):
         super(Rebalance, self).tearDown()
+
+    def suite_setUp(self):
+        self.log.info("*** Rebalance: suite_setUp() ***")
+
+    def suite_tearDown(self):
+        self.log.info("*** Rebalance: suite_tearDown() ***")
 
     """Load data only at source for unidirectional, and at both source/destination for bidirection replication.
     Async Rebalance-In node at Source/Destination while
@@ -195,7 +201,7 @@ class Rebalance(XDCRNewBaseTest):
                 if "C2" in self.__rebalance:
                     tasks.append(self.dest_cluster.async_swap_rebalance())
 
-            self.sleep(self._wait_timeout / 2)
+            self.sleep(self._wait_timeout // 2)
             for task in tasks:
                 task.result(self._poll_timeout)
 

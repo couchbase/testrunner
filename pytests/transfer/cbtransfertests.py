@@ -21,8 +21,8 @@ class CBTransferTests(TransferBaseTest):
 
     def test_load_regexp(self):
         template = '{{ "mutated" : 0, "age": {0}, "first_name": "{1}" }}'
-        gen_load = DocumentGenerator('load_by_id_test', template, range(5), ['james', 'john'], start=0, end=self.num_items)
-        gen_load2 = DocumentGenerator('cbtransfer', template, range(5), ['james', 'john'], start=0, end=self.num_items)
+        gen_load = DocumentGenerator('load_by_id_test', template, list(range(5)), ['james', 'john'], start=0, end=self.num_items)
+        gen_load2 = DocumentGenerator('cbtransfer', template, list(range(5)), ['james', 'john'], start=0, end=self.num_items)
         verify_gen = copy.deepcopy(gen_load2)
         for bucket in self.buckets:
             bucket.kvs[2] = KVStore()
@@ -55,17 +55,17 @@ class CBTransferTests(TransferBaseTest):
     def test_vbucket_id_option(self):
         bucket = RestConnection(self.server_origin).get_bucket(self.buckets[0])
         self.num_items = self.num_items - (self.num_items % len(bucket.vbuckets))
-        num_items_per_vb = self.num_items / len(bucket.vbuckets)
+        num_items_per_vb = self.num_items // len(bucket.vbuckets)
         template = '{{ "mutated" : 0, "age": {0}, "first_name": "{1}" }}'
-        gen_load = DocumentGenerator('cbtransfer', template, range(5), ['james', 'john'], start=0, end=self.num_items)
+        gen_load = DocumentGenerator('cbtransfer', template, list(range(5)), ['james', 'john'], start=0, end=self.num_items)
         client = MemcachedClient(self.server_origin.ip,
                                  int(bucket.vbuckets[0].master.split(':')[1]))
         kv_value_dict = {}
         vb_id_to_check = bucket.vbuckets[-1].id
-        for vb_id in xrange(len(bucket.vbuckets)):
+        for vb_id in range(len(bucket.vbuckets)):
             cur_items_per_vb = 0
             while cur_items_per_vb < num_items_per_vb:
-                key, value = gen_load.next()
+                key, value = next(gen_load)
 
                 client.set(key, 0, 0, value, vb_id)
                 if vb_id_to_check == vb_id:
@@ -78,14 +78,14 @@ class CBTransferTests(TransferBaseTest):
                                       "-b %s -B %s -i %s" % (bucket.name, bucket.name, vb_id_to_check))
         client = MemcachedClient(self.server_recovery.ip,
                                  int(bucket.vbuckets[0].master.split(':')[1]))
-        for key, value in kv_value_dict.iteritems():
+        for key, value in kv_value_dict.items():
             _, _, d = client.get(key, vbucket=vb_id_to_check)
-            self.assertEquals(d, value, 'Key: %s expected. Value expected %s. Value actual %s' % (
+            self.assertEqual(d, value, 'Key: %s expected. Value expected %s. Value actual %s' % (
                                         key, value, d))
 
     def test_vbucket_state_option(self):
         template = '{{ "mutated" : 0, "age": {0}, "first_name": "{1}" }}'
-        gen_load = DocumentGenerator('cbtransfer', template, range(5), ['james', 'john'], start=0, end=self.num_items)
+        gen_load = DocumentGenerator('cbtransfer', template, list(range(5)), ['james', 'john'], start=0, end=self.num_items)
         verify_gen = copy.deepcopy(gen_load)
         for bucket in self.buckets:
             self.cluster.load_gen_docs(self.server_origin, bucket.name, gen_load,
@@ -104,8 +104,8 @@ class CBTransferTests(TransferBaseTest):
     def test_destination_operation(self):
         dest_op = self.input.param('dest_op', 'set')
         template = '{{ "mutated" : 0, "age": {0}, "first_name": "{1}" }}'
-        gen_load = DocumentGenerator('cbtransfer', template, range(5), ['james', 'john'], start=0, end=self.num_items)
-        gen_load2 = DocumentGenerator('cbtransfer', template, range(5), ['helena', 'karen'], start=0, end=self.num_items)
+        gen_load = DocumentGenerator('cbtransfer', template, list(range(5)), ['james', 'john'], start=0, end=self.num_items)
+        gen_load2 = DocumentGenerator('cbtransfer', template, list(range(5)), ['helena', 'karen'], start=0, end=self.num_items)
         verify_gen = copy.deepcopy((gen_load2, gen_load)[dest_op == 'set'])
         self.cluster.load_gen_docs(self.server_origin, self.buckets[0].name, gen_load,
                                    self.buckets[0].kvs[1], "create", exp=0, flag=0, only_store_hash=True,
@@ -128,12 +128,12 @@ class CBTransferTests(TransferBaseTest):
             rest = RestConnection(self.server_recovery)
             client = VBucketAwareMemcached(rest, bucket)
             while gen.has_next():
-                key, value = gen.next()
+                key, value = next(gen)
                 try:
                     _, _, d = client.get(key)
-                    self.assertEquals(d, value, 'Key: %s expected. Value expected %s. Value actual %s' % (
+                    self.assertEqual(d, value, 'Key: %s expected. Value expected %s. Value actual %s' % (
                                             key, value, d))
-                except Exception, ex:
+                except Exception as ex:
                     raise Exception('Key %s not found %s' % (key, str(ex)))
 
     def _run_cbtransfer_all_buckets(self, source, dest, options):

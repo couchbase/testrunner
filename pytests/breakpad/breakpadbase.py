@@ -6,8 +6,8 @@ from basetestcase import BaseTestCase
 from membase.api.rest_client import RestConnection
 from TestInput import TestInputSingleton
 from lib.cluster_run_manager  import CRManager
-from logpoll import NSLogPoller
-from constants import MD_PATH, NS_NUM_NODES
+from .logpoll import NSLogPoller
+from .constants import MD_PATH, NS_NUM_NODES
 from memcached.helper.data_helper import VBucketAwareMemcached
 
 class BreakpadBase(BaseTestCase):
@@ -114,6 +114,6 @@ class BreakpadBase(BaseTestCase):
     def verify_core(self, f_core):
 
         pc = subprocess.Popen(["file", f_core], stdout=subprocess.PIPE)
-        f_info , err = pc.communicate()
+        f_info, err = pc.communicate()
         f_info = f_info.rstrip()
         return "core file" in f_info

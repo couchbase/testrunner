@@ -36,8 +36,8 @@ class MySQLClient(object):
         try:
             cur.execute(query)
             self.mysql_connector_client.commit()
-        except Exception, ex:
-            print ex
+        except Exception as ex:
+            print(ex)
             raise
 
     def _db_execute_query(self, query=""):
@@ -45,9 +45,9 @@ class MySQLClient(object):
         try:
             rows = cur.execute(query, multi=True)
             for row in rows:
-                print row
-        except Exception, ex:
-            print ex
+                print(row)
+        except Exception as ex:
+            print(ex)
             raise
         finally:
             cur.close()

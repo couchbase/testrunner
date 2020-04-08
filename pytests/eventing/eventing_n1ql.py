@@ -4,7 +4,7 @@ import datetime
 from lib.couchbase_helper.documentgenerator import JSONNonDocGenerator
 from lib.membase.api.rest_client import RestConnection
 from lib.testconstants import STANDARD_BUCKET_PORT
-from pytests.eventing.eventing_constants import HANDLER_CODE,HANDLER_CODE_ERROR
+from pytests.eventing.eventing_constants import HANDLER_CODE, HANDLER_CODE_ERROR
 from pytests.eventing.eventing_base import EventingBaseTest, log
 from lib.couchbase_helper.tuq_helper import N1QLHelper
 from pytests.security.rbacmain import rbacmain
@@ -75,7 +75,7 @@ class EventingN1QL(EventingBaseTest):
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
         self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
-        body = self.create_save_function_body(self.function_name,HANDLER_CODE.N1QL_DML,dcp_stream_boundary="from_now",
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.N1QL_DML, dcp_stream_boundary="from_now",
                                               execution_timeout=15)
         self.deploy_function(body)
         query = "UPDATE "+self.src_bucket_name+" set mutated=1 where mutated=0 limit 1"
@@ -86,7 +86,7 @@ class EventingN1QL(EventingBaseTest):
     def test_n1ql_DDL(self):
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
-        body = self.create_save_function_body(self.function_name,HANDLER_CODE.N1QL_DDL,dcp_stream_boundary="from_now",
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.N1QL_DDL, dcp_stream_boundary="from_now",
                                               execution_timeout=15)
         self.deploy_function(body)
         #create a mutation via N1QL
@@ -101,7 +101,7 @@ class EventingN1QL(EventingBaseTest):
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
         body = self.create_save_function_body(self.function_name, HANDLER_CODE.RECURSIVE_MUTATION,
-                                              dcp_stream_boundary="from_now",execution_timeout=15)
+                                              dcp_stream_boundary="from_now", execution_timeout=15)
         self.deploy_function(body)
         # create a mutation via N1QL
         self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
@@ -114,7 +114,7 @@ class EventingN1QL(EventingBaseTest):
     def test_grant_revoke(self):
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
-        body = self.create_save_function_body(self.function_name,HANDLER_CODE.GRANT_REVOKE,dcp_stream_boundary="from_now",
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.GRANT_REVOKE, dcp_stream_boundary="from_now",
                                               execution_timeout=15)
         self.deploy_function(body)
         #create a mutation via N1QL
@@ -132,7 +132,7 @@ class EventingN1QL(EventingBaseTest):
         self.rest.create_whitelist(self.master, {"all_access": True})
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
-        body = self.create_save_function_body(self.function_name,HANDLER_CODE.CURL,dcp_stream_boundary="from_now",
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.CURL, dcp_stream_boundary="from_now",
                                               execution_timeout=15)
         self.deploy_function(body)
         # create a mutation via N1QL
@@ -144,7 +144,7 @@ class EventingN1QL(EventingBaseTest):
     def test_anonymous(self):
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
-        body = self.create_save_function_body(self.function_name,HANDLER_CODE.ANONYMOUS,dcp_stream_boundary="from_now"
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.ANONYMOUS, dcp_stream_boundary="from_now"
                                               )
         self.deploy_function(body)
         #create a mutation via N1QL
@@ -175,7 +175,7 @@ class EventingN1QL(EventingBaseTest):
         body = self.create_save_function_body(self.function_name, HANDLER_CODE_ERROR.GLOBAL_VARIABLE,
                                               dcp_stream_boundary="from_now")
         try :
-            self.deploy_function(body,deployment_fail=True)
+            self.deploy_function(body, deployment_fail=True)
         except Exception as e:
             if "Only function declaration are allowed in global scope" not in str(e):
                 self.fail("Deployment is expected to be failed but no message of failure")
@@ -186,7 +186,7 @@ class EventingN1QL(EventingBaseTest):
         body = self.create_save_function_body(self.function_name, HANDLER_CODE_ERROR.EMPTY,
                                               dcp_stream_boundary="from_now")
         try:
-            self.deploy_function(body,deployment_fail=True)
+            self.deploy_function(body, deployment_fail=True)
         except Exception as e:
             if "Function handler should not be empty" not in str(e):
                 self.fail("Function deployment succeeded with empty handler")
@@ -198,7 +198,7 @@ class EventingN1QL(EventingBaseTest):
                                               dcp_stream_boundary="from_now")
         # MB-27126
         try:
-            self.deploy_function(body,deployment_fail=True)
+            self.deploy_function(body, deployment_fail=True)
         except Exception as e:
             if "Handler code is missing OnUpdate() and OnDelete() functions. At least one of them is needed to deploy the handler" not in str(e):
                 self.fail("Function deployment succeeded with missing OnUpdate() and OnDelete()")
@@ -224,16 +224,16 @@ class EventingN1QL(EventingBaseTest):
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
         self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
-        body = self.create_save_function_body(self.function_name,HANDLER_CODE.N1QL_ITERATOR,dcp_stream_boundary="from_now",execution_timeout=15)
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.N1QL_ITERATOR, dcp_stream_boundary="from_now", execution_timeout=15)
         self.deploy_function(body)
         query = "UPDATE "+self.src_bucket_name+" set mutated=1 where mutated=0 limit 1"
         self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_node)
-        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 , skip_stats_validation=True)
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
 
     # This was moved from base class to here because http://ci-eventing.northscale.in/ was failing as it could not find
     # from pytests.security.rbacmain import rbacmain
-    def verify_user_noroles(self,username):
+    def verify_user_noroles(self, username):
         status, content, header=rbacmain(self.master)._retrieve_user_roles()
         res = json.loads(content)
         userExist=False

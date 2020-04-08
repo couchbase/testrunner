@@ -1,8 +1,8 @@
-from __future__ import absolute_import
+
 import uuid
 import json
 import time
-import urllib
+import urllib.request, urllib.parse, urllib.error
 from app.celery import celery
 from celery import Task
 from celery.task.sets import TaskSet
@@ -148,7 +148,7 @@ class QueryWorkload(object):
 
 
     def uniq_include_filters(self, ex_filters):
-        include = ["startkey","endkey","limit"]
+        include = ["startkey", "endkey", "limit"]
         [include.append(f_) for f_ in ex_filters]
         logger.error(include)
         include = list(set(include))

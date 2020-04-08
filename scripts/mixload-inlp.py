@@ -1,5 +1,5 @@
 #this script will run until stopped. it will set keys with small/large values
-# python scripts/mixedload.py -p expiry=10,count=10000,prefix=something,size=1024
+# python3 scripts/mixedload.py -p expiry=10,count=10000,prefix=something,size=1024
 
 
 
@@ -25,7 +25,7 @@ if __name__ == "__main__":
         expiry = 0
         if "count" in params:
             count = int(params["count"])
-            print count
+            print(count)
         if "size" in params:
             size = int(params["size"])
         if "prefix" in params:
@@ -68,7 +68,7 @@ if __name__ == "__main__":
                     mc = MemcachedClientHelper.proxy_client(server, bucket.name)
 
     except Exception as ex:
-        print ex
+        print(ex)
 
 
 

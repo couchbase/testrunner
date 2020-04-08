@@ -1,4 +1,4 @@
-from xdcrnewbasetests import XDCRNewBaseTest
+from .xdcrnewbasetests import XDCRNewBaseTest
 import time
 
 class XDCRFilterTests(XDCRNewBaseTest):

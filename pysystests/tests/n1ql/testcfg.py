@@ -51,7 +51,7 @@ WORKER_CONFIGS = ["all"]
 WORKER_PYSYSTESTS_PATH = "/root/systest-worker/testrunner/pysystests"
 
 # CHANGE THIS! to match all clusters will be managed by this worker
-CLUSTER_IPS = ["10.6.2.237","10.6.2.164","10.6.2.167","10.6.2.233","10.6.2.234","10.6.2.194","10.6.2.195","10.6.2.168","10.6.2.232","10.6.2.237","10.6.2.238"]
+CLUSTER_IPS = ["10.6.2.237", "10.6.2.164", "10.6.2.167", "10.6.2.233", "10.6.2.234", "10.6.2.194", "10.6.2.195", "10.6.2.168", "10.6.2.232", "10.6.2.237", "10.6.2.238"]
 
 LOGDIR = "logs"  # relative to current dir
 

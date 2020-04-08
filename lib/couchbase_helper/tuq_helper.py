@@ -14,6 +14,8 @@ from remote.remote_util import RemoteMachineShellConnection
 from membase.api.exception import CBQError, ReadDocumentException
 from membase.api.rest_client import RestConnection
 import copy
+import traceback
+from deepdiff import DeepDiff
 
 class N1QLHelper():
     def __init__(self, version=None, master=None, shell=None,  max_verify=0, buckets=[], item_flag=0,
@@ -154,14 +156,14 @@ class N1QLHelper():
             if "#primary" in query:
                 query = query.replace("'#primary'", '\\"#primary\\"')
             query = "select curl('POST', " + url + ", {'data' : 'statement=%s'})" % query
-            print query
+            print(query)
             output = shell.execute_commands_inside(cmd, query, "", "", "", "", "")
-            print "-"*128
-            print output
+            print("-"*128)
+            print(output)
             new_curl = json.dumps(output[47:])
             string_curl = json.loads(new_curl)
             result = json.loads(string_curl)
-            print result
+            print(result)
         if isinstance(result, str) or 'errors' in result:
             error_result = str(result)
             length_display = len(error_result)
@@ -218,7 +220,9 @@ class N1QLHelper():
         if len(actual_result) != len(expected_result):
             raise Exception("Results are incorrect.Actual num %s. Expected num: %s.\n" % (len(actual_result), len(expected_result)))
         msg = "The number of rows match but the results mismatch, please check"
-        if actual_result != expected_result:
+        diffs = DeepDiff(actual_result, expected_result, ignore_order=True)
+        if diffs:
+            self.log.info("-->actual vs expected diffs found:{}".format(diffs))
             raise Exception(msg)
 
     def _verify_results_rqg(self, subquery, aggregate=False, n1ql_result=[], sql_result=[], hints=["a1"], aggregate_pushdown=False):
@@ -262,8 +266,8 @@ class N1QLHelper():
                                 x['char_field1'] != y['char_field1'] or \
                                 x['int_field1'] != y['int_field1'] or \
                                 x['bool_field1'] != y['bool_field1']:
-                    print "actual_result is %s" % actual_result
-                    print "expected result is %s" % expected_result
+                    print("actual_result is %s" % actual_result)
+                    print("expected result is %s" % expected_result)
                     extra_msg = self._get_failure_message(expected_result, actual_result)
                     raise Exception(msg+"\n "+extra_msg)
         else:
@@ -319,20 +323,20 @@ class N1QLHelper():
         actual_map = {}
         for data in expected_result:
             primary=None
-            for key in data.keys():
+            for key in list(data.keys()):
                 keys = key
                 if keys.encode('ascii') == "primary_key_id":
                     primary = keys
             expected_map[data[primary]] = data
         for data in actual_result:
             primary = None
-            for key in data.keys():
+            for key in list(data.keys()):
                 keys = key
                 if keys.encode('ascii') == "primary_key_id":
                     primary = keys
             actual_map[data[primary]] = data
         check = True
-        for key in expected_map.keys():
+        for key in list(expected_map.keys()):
             if sorted(actual_map[key]) != sorted(expected_map[key]):
                 check= False
         return check
@@ -343,11 +347,11 @@ class N1QLHelper():
         if actual_result is None:
             actual_result = []
         if len(expected_result) == 1:
-            value = expected_result[0].values()[0]
+            value = list(expected_result[0].values())[0]
             if value is None or value == 0:
                 expected_result = []
         if len(actual_result) == 1:
-            value = actual_result[0].values()[0]
+            value = list(actual_result[0].values())[0]
             if value is None or value == 0:
                 actual_result = []
         return expected_result, actual_result
@@ -365,21 +369,13 @@ class N1QLHelper():
             extra_msg = self._get_failure_message(sql_result, n1ql_result)
             raise Exception(msg+"\n"+extra_msg)
         n1ql_result = self._gen_dict_n1ql_func_result(n1ql_result)
-        n1ql_result = sorted(n1ql_result)
         sql_result = self._gen_dict_n1ql_func_result(sql_result)
-        sql_result = sorted(sql_result)
         if len(sql_result) == 0 and len(n1ql_result) == 0:
             return
-        if sql_result != n1ql_result:
-            i = 0
-            for sql_value, n1ql_value in zip(sql_result, n1ql_result):
-                if sql_value != n1ql_value:
-                    break
-                i = i + 1
-            num_results = len(sql_result)
-            last_idx = min(i+5, num_results)
-            msg = "mismatch in results :: result length :: {3}, first mismatch position :: {0}, sql value :: {1}, n1ql value :: {2} ".format(i, sql_result[i:last_idx], n1ql_result[i:last_idx], num_results)
-            raise Exception(msg)
+        diffs = DeepDiff(n1ql_result, sql_result, ignore_order=True)
+        if diffs:
+            self.log.info("-->actual vs expected diffs found:{0}".format(diffs))
+            raise Exception("mismatch in results:{0}".format(diffs))
 
     def _convert_to_number(self, val):
         if not isinstance(val, str):
@@ -389,7 +385,7 @@ class N1QLHelper():
             if value == '':
                 return 0
             value = int(val.split("(")[1].split(")")[0])
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(ex)
         finally:
             return value
@@ -397,8 +393,8 @@ class N1QLHelper():
     def analyze_failure(self, actual, expected):
         missing_keys = []
         different_values = []
-        for key in expected.keys():
-            if key not in actual.keys():
+        for key in list(expected.keys()):
+            if key not in list(actual.keys()):
                 missing_keys.append(key)
             if expected[key] != actual[key]:
                 different_values.append("for key {0}, expected {1} \n actual {2}".format(key, expected[key], actual[key]))
@@ -458,7 +454,7 @@ class N1QLHelper():
                 couchbase_path = testconstants.WIN_COUCHBASE_BIN_PATH
             if self.input.tuq_client and "sherlock_path" in self.input.tuq_client:
                 couchbase_path = "%s/bin" % self.input.tuq_client["sherlock_path"]
-                print "PATH TO SHERLOCK: %s" % couchbase_path
+                print("PATH TO SHERLOCK: %s" % couchbase_path)
             if os == 'windows':
                 cmd = "cd %s; " % (couchbase_path) +\
                 "./cbq-engine.exe -datastore http://%s:%s/ >/dev/null 2>&1 &" % (server.ip, server.port)
@@ -495,7 +491,7 @@ class N1QLHelper():
         actual_result = []
         for item in result:
             curr_item = {}
-            for key, value in item.iteritems():
+            for key, value in item.items():
                 if isinstance(value, list) or isinstance(value, set):
                     curr_item[key] = sorted(value)
                 else:
@@ -525,7 +521,7 @@ class N1QLHelper():
                 check = self._is_index_in_list(bucket.name, "#primary", server = server)
                 if check:
                     self.run_cbq_query(server=server)
-            except Exception, ex:
+            except Exception as ex:
                 self.log.error('ERROR during index creation %s' % str(ex))
 
     def create_primary_index(self, using_gsi=True, server=None):
@@ -547,7 +543,7 @@ class N1QLHelper():
                             raise Exception(" Timed-out Exception while building primary index for bucket {0} !!!".format(bucket.name))
                     else:
                         raise Exception(" Primary Index Already present, This looks like a bug !!!")
-                except Exception, ex:
+                except Exception as ex:
                     self.log.error('ERROR during index creation %s' % str(ex))
                     raise ex
 
@@ -577,7 +573,7 @@ class N1QLHelper():
                     else:
                         raise Exception(
                             " Primary Index Already present, This looks like a bug !!!")
-                except Exception, ex:
+                except Exception as ex:
                     self.log.error('ERROR during index creation %s' % str(ex))
                     raise ex
 
@@ -610,12 +606,15 @@ class N1QLHelper():
             try:
                 actual_result = self.run_cbq_query(query=query, server=server, scan_consistency=scan_consistency,
                                                    scan_vector=scan_vector)
+                #self.log.info("-->actual_result={}".format(actual_result))
                 if verify_results:
-                    self._verify_results(sorted(actual_result['results']), sorted(expected_result))
+                    #self._verify_results(sorted(actual_result['results']), sorted(expected_result))
+                    self._verify_results(actual_result['results'], expected_result)
                 else:
                     return "ran query with success and validated results", True
                 check = True
-            except Exception, ex:
+            except Exception as ex:
+                traceback.print_exc()
                 if next_time - init_time > timeout or try_count >= max_try:
                     return ex, False
             finally:
@@ -720,7 +719,7 @@ class N1QLHelper():
         index_map = {}
         for item in res['results']:
             bucket_name = item['indexes']['keyspace_id'].encode('ascii', 'ignore')
-            if bucket_name not in index_map.keys():
+            if bucket_name not in list(index_map.keys()):
                 index_map[bucket_name] = {}
             index_name = str(item['indexes']['name'])
             index_map[bucket_name][index_name] = {}
@@ -748,12 +747,12 @@ class N1QLHelper():
         result_set = []
         if result is not None and len(result) > 0:
             for val in result:
-                for key in val.keys():
+                for key in list(val.keys()):
                     result_set.append(val[key])
         return result_set
 
     def _gen_dict_n1ql_func_result(self, result):
-        result_set = [val[key] for val in result for key in val.keys()]
+        result_set = [val[key] for val in result for key in list(val.keys())]
         new_result_set = []
         if len(result_set) > 0:
             for value in result_set:
@@ -774,7 +773,7 @@ class N1QLHelper():
             return False
         if result is not None and len(result) > 0:
             sample = result[0]
-            for key in sample.keys():
+            for key in list(sample.keys()):
                 for sample in expected_in_key:
                     if key in sample:
                         return True
@@ -787,15 +786,15 @@ class N1QLHelper():
         try:
             if result is not None and len(result) > 0:
                 for val in result:
-                    for key in val.keys():
+                    for key in list(val.keys()):
                         result_set.append(val[key])
             for val in result_set:
-                if val["_id"] in map.keys():
+                if val["_id"] in list(map.keys()):
                     duplicate_keys.append(val["_id"])
                 map[val["_id"]] = val
-            keys = map.keys()
+            keys = list(map.keys())
             keys.sort()
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(ex)
             raise
         if len(duplicate_keys) > 0:
@@ -881,8 +880,9 @@ class N1QLHelper():
                 items_count_after_rebalance[index] = stats_map_after_rebalance[bucket][index]["items_count"]
         self.log.info("item_count of indexes before rebalance {0}".format(items_count_before_rebalance))
         self.log.info("item_count of indexes after rebalance {0}".format(items_count_after_rebalance))
-        if cmp(items_count_before_rebalance, items_count_after_rebalance) != 0:
-            self.log.info("items_count mismatch")
+        diffs = DeepDiff(items_count_before_rebalance, items_count_after_rebalance, ignore_order=True)
+        if diffs:
+            self.log.info(diffs)
             raise Exception("items_count mismatch")
 
         # verify that index status before and after rebalance are same
@@ -896,8 +896,9 @@ class N1QLHelper():
                 index_state_after_rebalance[index] = map_after_rebalance[bucket][index]["status"]
         self.log.info("index status of indexes rebalance {0}".format(index_state_before_rebalance))
         self.log.info("index status of indexes rebalance {0}".format(index_state_after_rebalance))
-        if cmp(index_state_before_rebalance, index_state_after_rebalance) != 0:
-            self.log.info("index status mismatch")
+        diffs = DeepDiff(index_state_before_rebalance, index_state_after_rebalance, ignore_order=True)
+        if diffs:
+            self.log.info(diffs)
             raise Exception("index status mismatch")
 
         # Rebalance is not guaranteed to achieve a balanced cluster.
@@ -910,11 +911,11 @@ class N1QLHelper():
         for node in host_names_after_rebalance:
             index_distribution_map_after_rebalance[node] = index_distribution_map_after_rebalance.get(node, 0) + 1
         self.log.info("Distribution of indexes before rebalance")
-        for k, v in index_distribution_map_before_rebalance.iteritems():
-            print k, v
+        for k, v in index_distribution_map_before_rebalance.items():
+            print(k, v)
         self.log.info("Distribution of indexes after rebalance")
-        for k, v in index_distribution_map_after_rebalance.iteritems():
-            print k, v
+        for k, v in index_distribution_map_after_rebalance.items():
+            print(k, v)
 
     def verify_replica_indexes(self, index_names, index_map, num_replicas, expected_nodes=None, dropped_replica=False, replicaId=None):
         # 1. Validate count of no_of_indexes
@@ -941,7 +942,7 @@ class N1QLHelper():
                     if not skip_replica_check:
                         index_replica_hostname, index_replica_id = self.get_index_details_using_index_name(
                             index_replica_name, index_map)
-                except Exception, ex:
+                except Exception as ex:
                     self.log.info(str(ex))
                     raise Exception(str(ex))
 
@@ -962,7 +963,7 @@ class N1QLHelper():
                     try:
                         index_replica_hostname, index_replica_id = self.get_index_details_using_index_name(
                             skipped_index, index_map)
-                    except Exception, ex:
+                    except Exception as ex:
                         self.log.info(str(ex))
                         continue
                     raise Exception("Replica is still present when it should have been dropped")
@@ -993,7 +994,7 @@ class N1QLHelper():
                 index_replica_name = index_name + " (replica {0})".format(str(i))
                 try:
                     index_replica_status, index_replica_progress = self.get_index_status_using_index_name(index_replica_name, index_map)
-                except Exception, ex:
+                except Exception as ex:
                     self.log.info(str(ex))
                     raise Exception(str(ex))
 
@@ -1007,15 +1008,15 @@ class N1QLHelper():
                     self.log.info("index_name = %s, defer_build = %s, index_replica_status = %s" % (index_replica_name, defer_build, index_status))
 
     def get_index_details_using_index_name(self, index_name, index_map):
-        for key in index_map.iterkeys():
-            if index_name in index_map[key].keys():
+        for key in index_map.keys():
+            if index_name in list(index_map[key].keys()):
                 return index_map[key][index_name]['hosts'], index_map[key][index_name]['id']
             else:
                 raise Exception ("Index does not exist - {0}".format(index_name))
 
     def get_index_status_using_index_name(self, index_name, index_map):
-        for key in index_map.iterkeys():
-            if index_name in index_map[key].keys():
+        for key in index_map.keys():
+            if index_name in list(index_map[key].keys()):
                 return index_map[key][index_name]['status'], \
                        index_map[key][index_name]['progress']
             else:

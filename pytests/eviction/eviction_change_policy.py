@@ -84,5 +84,5 @@ class EvictionChangePolicy(EvictionBase):
         try:
             rc = mcd.set(KEY_NAME, 0, 0, json.dumps({'value': 'value2'}))
             self.fail('Bucket is incorrectly functional')
-        except MemcachedError, e:
+        except MemcachedError as e:
             pass  # this is the exception we are hoping for

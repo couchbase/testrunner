@@ -25,7 +25,7 @@ class initialize(unittest.TestCase):
         self._log = logger.Logger.get_logger()
         self._input = TestInputSingleton.input
         self._clusters_dic = self._input.clusters
-        self._clusters_keys_olst = range(len(self._clusters_dic))
+        self._clusters_keys_olst = list(range(len(self._clusters_dic)))
         try:
             self._num_initial_nodes = self._input.param("initial_nodes", '1').split(',')
         except:
@@ -35,7 +35,7 @@ class initialize(unittest.TestCase):
         if self._default_bucket:
             self.default_bucket_name = "default"
         self._standard_buckets = self._input.param("standard_buckets", 0)
-        self._sasl_buckets = self._input.param("sasl_buckets",0)
+        self._sasl_buckets = self._input.param("sasl_buckets", 0)
         self._buckets = []
         self._default_quota = self._input.param("default_mem_quota", 0)
         self._sasl_quota = self._input.param("sasl_mem_quota", 0)
@@ -43,7 +43,7 @@ class initialize(unittest.TestCase):
         self._mem_quota_int = 0
         self._num_replicas = self._input.param("replicas", 1)
         self._xdcr = self._input.param("xdcr", False)
-        self._rdirection = self._input.param("rdirection","unidirection")
+        self._rdirection = self._input.param("rdirection", "unidirection")
         if self._xdcr:
             #Considering that there be a maximum of 2 clusters for XDCR
             self._s_master = self._clusters_dic[0][0]

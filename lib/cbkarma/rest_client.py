@@ -1,5 +1,5 @@
 import json
-import urllib
+import urllib.request, urllib.parse, urllib.error
 
 from lib.membase.api.rest_client import RestConnection
 from lib.membase.api.exception import ServerUnavailableException
@@ -25,7 +25,7 @@ class CbKarmaClient(RestConnection):
         try:
             return self._http_request(api, 'GET', timeout=30)
         except ServerUnavailableException:
-            print "Dashboard is not available... bypassing."
+            print("Dashboard is not available... bypassing.")
             return (False, None)
 
     def update(self, id=None, build='', spec='', ini='', phase='', status=''):
@@ -52,10 +52,10 @@ class CbKarmaClient(RestConnection):
             params['id'] = id
 
         try:
-            return self._http_request(api, 'POST', urllib.urlencode(params),
+            return self._http_request(api, 'POST', urllib.parse.urlencode(params),
                                       timeout=30)
         except ServerUnavailableException:
-            print "Dashboard is not available... bypassing."
+            print("Dashboard is not available... bypassing.")
 
     def histo(self, id=None, description='', attachment=''):
         """Attach latency histogram to the test"""
@@ -69,10 +69,10 @@ class CbKarmaClient(RestConnection):
             params['id'] = id
 
         try:
-            return self._http_request(api, 'POST', urllib.urlencode(params),
+            return self._http_request(api, 'POST', urllib.parse.urlencode(params),
                                       timeout=30)
         except ServerUnavailableException:
-            print "Dashboard is not available... bypassing."
+            print("Dashboard is not available... bypassing.")
 
     def report(self, id, filename, url):
         """Sumbit link to pdf report"""
@@ -81,7 +81,7 @@ class CbKarmaClient(RestConnection):
         params = {'test_id': id, 'description': filename, 'url': url}
 
         try:
-            return self._http_request(api, 'POST', urllib.urlencode(params),
+            return self._http_request(api, 'POST', urllib.parse.urlencode(params),
                                       timeout=30)
         except ServerUnavailableException:
-            print "Dashboard is not available... bypassing."
+            print("Dashboard is not available... bypassing.")

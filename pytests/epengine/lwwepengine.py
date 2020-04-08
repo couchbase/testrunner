@@ -78,7 +78,7 @@ class LWW_EP_Engine(BaseTestCase):
         try:
             res = client.get_adjusted_time(vbucket_id)
             return True, struct.unpack( memcacheConstants.GET_ADJUSTED_TIME_RES_FMT, res[2])[0]
-        except Exception,e :
+        except Exception as e :
             if e.status == memcacheConstants.ERR_NOT_SUPPORTED:
                 return False, 0
             else:
@@ -226,7 +226,7 @@ class LWW_EP_Engine(BaseTestCase):
 
         # verify conflict res is set
         set_with_meta_resp = mc_master.set_with_meta(LWW_EP_Engine.TEST_KEY, 0, 0, 0, 0, LWW_EP_Engine.TEST_VALUE,
-            vbucket_id, add_extended_meta_data=True, adjusted_time=master_val,conflict_resolution_mode=1)
+            vbucket_id, add_extended_meta_data=True, adjusted_time=master_val, conflict_resolution_mode=1)
 
         get_meta_resp = mc_master.getMeta(LWW_EP_Engine.TEST_KEY, request_extended_meta_data=True)
         self.assertTrue( get_meta_resp[5] == 1, msg='Metadata indicate conflict resolution is not set')
@@ -237,7 +237,7 @@ class LWW_EP_Engine(BaseTestCase):
         new_key = LWW_EP_Engine.TEST_KEY + '1'
         vbucket_id = client._get_vBucket_id( new_key )
         set_with_meta_resp = client.memcached_for_vbucket( vbucket_id ).\
-                 set_with_meta(new_key, 0, 0, 0, 0, LWW_EP_Engine.TEST_VALUE,vbucket_id)
+                 set_with_meta(new_key, 0, 0, 0, 0, LWW_EP_Engine.TEST_VALUE, vbucket_id)
 
 
         get_meta_resp = client.memcached_for_vbucket( vbucket_id ).getMeta(new_key) #, request_extended_meta_data=True)
@@ -252,7 +252,7 @@ class LWW_EP_Engine(BaseTestCase):
         vbucket_id = client._get_vBucket_id( new_key )
 
         del_with_meta_resp = client.memcached_for_vbucket( vbucket_id ).del_with_meta(new_key, 0, 0, 0, 0, 0,
-            vbucket_id, add_extended_meta_data=True, adjusted_time=master_val,conflict_resolution_mode=1)
+            vbucket_id, add_extended_meta_data=True, adjusted_time=master_val, conflict_resolution_mode=1)
 
 
         get_meta_resp = client.memcached_for_vbucket( vbucket_id ).getMeta(new_key, request_extended_meta_data=True)

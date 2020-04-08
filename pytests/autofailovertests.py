@@ -82,7 +82,7 @@ class AutoFailoverBaseTest(unittest.TestCase):
 
         rest = RestConnection(master)
         rest.print_UI_logs()
-        testcase.log.warn("pools/default from {0} : {1}".format(master.ip, rest.cluster_status()))
+        testcase.log.warning("pools/default from {0} : {1}".format(master.ip, rest.cluster_status()))
         testcase.fail("{0} nodes failed over, expected {1} in {2} seconds".
                          format(failover_count, autofailover_count, time.time() - time_start))
 
@@ -139,12 +139,12 @@ class AutoFailoverTests(unittest.TestCase):
         time.sleep(timeout)
 
     def test_enable(self):
-        status = self.rest.update_autofailover_settings(True, self.timeout / 2)
+        status = self.rest.update_autofailover_settings(True, self.timeout // 2)
         if not status:
             self.fail('failed to change autofailover_settings! See MB-7282')
         #read settings and verify
         settings = self.rest.get_autofailover_settings()
-        self.assertEquals(settings.enabled, True)
+        self.assertEqual(settings.enabled, True)
 
     def test_disable(self):
         status = self.rest.update_autofailover_settings(False, self.timeout)
@@ -152,7 +152,7 @@ class AutoFailoverTests(unittest.TestCase):
             self.fail('failed to change autofailover_settings! See MB-7282')
         #read settings and verify
         settings = self.rest.get_autofailover_settings()
-        self.assertEquals(settings.enabled, False)
+        self.assertEqual(settings.enabled, False)
 
     def test_valid_timeouts(self):
         timeouts = [30, 31, 300, 3600]
@@ -165,7 +165,7 @@ class AutoFailoverTests(unittest.TestCase):
             self.assertTrue(settings.timeout == timeout)
 
     def test_30s_timeout_firewall(self):
-        timeout = self.timeout / 2
+        timeout = self.timeout // 2
         server_fail = self.servers[1]
         status = self.rest.update_autofailover_settings(True, timeout)
         if not status:
@@ -205,7 +205,7 @@ class AutoFailoverTests(unittest.TestCase):
         AutoFailoverBaseTest.wait_for_failover_or_assert(self.master, 1, timeout + AutoFailoverBaseTest.MAX_FAIL_DETECT_TIME, self)
 
     def test_reset_count(self):
-        timeout = self.timeout / 2
+        timeout = self.timeout // 2
         server_fail1 = self.servers[1]
         server_fail2 = self.servers[2]
         status = self.rest.update_autofailover_settings(True, timeout)
@@ -229,7 +229,7 @@ class AutoFailoverTests(unittest.TestCase):
             self.fail('failed to reset autofailover count!')
 
     def test_30s_timeout_pause(self):
-        timeout = self.timeout / 2
+        timeout = self.timeout // 2
         server_fail = self.servers[1]
         shell = RemoteMachineShellConnection(server_fail)
         type = shell.extract_remote_info().distribution_type
@@ -271,7 +271,7 @@ class AutoFailoverTests(unittest.TestCase):
             self.assertNotEqual(settings.timeout, timeout)
 
     def test_two_failed_nodes(self):
-        timeout = self.timeout / 2
+        timeout = self.timeout // 2
         server_fail1 = self.servers[1]
         server_fail2 = self.servers[2]
         status = self.rest.update_autofailover_settings(True, timeout)
@@ -349,7 +349,7 @@ class AutoFailoverTests(unittest.TestCase):
         ClusterOperationHelper.add_and_rebalance(self.servers, True)
 
         if num_buckets == 1:
-            bucket_ram = info.memoryQuota * 2 / 3
+            bucket_ram = info.memoryQuota * 2 // 3
             rest.create_bucket(bucket=bucket_name,
                                ramQuotaMB=bucket_ram,
                                replicaNumber=replicas,

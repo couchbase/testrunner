@@ -31,15 +31,15 @@ class QueryTests(BaseTestCase):
         self.docs_per_day = self.input.param("doc-per-day", 49)
         self.item_flag = self.input.param("item_flag", 4042322160)
         self.n1ql_port = self.input.param("n1ql_port", 8093)
-        self.analytics = self.input.param("analytics",False)
+        self.analytics = self.input.param("analytics", False)
         self.dataset = self.input.param("dataset", "default")
         self.primary_indx_type = self.input.param("primary_indx_type", 'GSI')
         self.index_type = self.input.param("index_type", 'GSI')
         self.primary_indx_drop = self.input.param("primary_indx_drop", False)
-        self.monitoring = self.input.param("monitoring",False)
+        self.monitoring = self.input.param("monitoring", False)
         self.isprepared = False
         self.named_prepare = self.input.param("named_prepare", None)
-        self.skip_primary_index = self.input.param("skip_primary_index",False)
+        self.skip_primary_index = self.input.param("skip_primary_index", False)
         self.scan_consistency = self.input.param("scan_consistency", 'REQUEST_PLUS')
         shell = RemoteMachineShellConnection(self.master)
         type = shell.extract_remote_info().distribution_type
@@ -71,7 +71,7 @@ class QueryTests(BaseTestCase):
                 self.create_primary_index_for_3_0_and_greater()
         if (self.analytics):
             self.setup_analytics()
-            self.sleep(30,'wait for analytics setup')
+            self.sleep(30, 'wait for analytics setup')
 
     def suite_setUp(self):
         try:
@@ -82,7 +82,7 @@ class QueryTests(BaseTestCase):
             if (self.analytics):
                 self.cluster.rebalance([self.master, self.cbas_node], [self.cbas_node], [], services=['cbas'])
                 self.setup_analytics()
-                self.sleep(30,'wait for analytics setup')
+                self.sleep(30, 'wait for analytics setup')
         except:
             self.log.error('SUITE SETUP FAILED')
             self.tearDown()
@@ -99,7 +99,7 @@ class QueryTests(BaseTestCase):
                 data += 'drop dataset {0} if exists;'.format(bucket.name+ "_shadow")
                 data += 'drop bucket {0} if exists;'.format(bucket.name)
             filename = "file.txt"
-            f = open(filename,'w')
+            f = open(filename, 'w')
             f.write(data)
             f.close()
             url = 'http://{0}:8095/analytics/service'.format(self.cbas_node.ip)
@@ -132,7 +132,7 @@ class QueryTests(BaseTestCase):
             data += 'connect bucket {0} with {{"username":"{1}","password":"{2}"}};'.format(
                 bucket.name, bucket_username, bucket_password)
         filename = "file.txt"
-        f = open(filename,'w')
+        f = open(filename, 'w')
         f.write(data)
         f.close()
         url = 'http://{0}:8095/analytics/service'.format(self.cbas_node.ip)
@@ -179,13 +179,13 @@ class QueryTests(BaseTestCase):
         subquery_template = re.sub(r'.*\$subquery\(', '', query_template)
         subquery_template = subquery_template[:subquery_template.rfind(')')]
         keys_num = int(re.sub(r'.*KEYS \$', '', subquery_template).replace('KEYS $', ''))
-        subquery_full_list = self.generate_full_docs_list(gens_load=self.gens_load,keys=self._get_keys(keys_num))
+        subquery_full_list = self.generate_full_docs_list(gens_load=self.gens_load, keys=self._get_keys(keys_num))
         subquery_template = re.sub(r'USE KEYS.*', '', subquery_template)
         sub_results = TuqGenerators(self.log, subquery_full_list)
         self.query = sub_results.generate_query(subquery_template)
         expected_sub = sub_results.generate_expected_result()
         alias = re.sub(r',.*', '', re.sub(r'.*\$subquery\(.*\)', '', query_template))
-        alias = re.sub(r'.*as','', re.sub(r'FROM.*', '', alias)).strip()
+        alias = re.sub(r'.*as', '', re.sub(r'FROM.*', '', alias)).strip()
         if not alias:
             alias = '$1'
         for item in self.gen_results.full_set:
@@ -216,7 +216,7 @@ class QueryTests(BaseTestCase):
         if not queries_errors:
             self.fail("No queries to run!")
         for bucket in self.buckets:
-            for query_template, error in queries_errors.iteritems():
+            for query_template, error in queries_errors.items():
                 try:
                     query = self.gen_results.generate_query(query_template)
                     actual_result = self.run_cbq_query(query.format(bucket.name))
@@ -257,7 +257,7 @@ class QueryTests(BaseTestCase):
             if self.analytics:
                 query = query + ";"
                 for bucket in self.buckets:
-                    query = query.replace(bucket.name,bucket.name+"_shadow")
+                    query = query.replace(bucket.name, bucket.name+"_shadow")
                 result = RestConnection(self.cbas_node).execute_statement_on_cbas(query, "immediate")
                 result = json.loads(result)
 
@@ -268,7 +268,7 @@ class QueryTests(BaseTestCase):
         else:
             if self.version == "git_repo":
                 output = self.shell.execute_commands_inside("$GOPATH/src/github.com/couchbase/query/" +\
-                                                            "shell/cbq/cbq ","","","","","","")
+                                                            "shell/cbq/cbq ", "", "", "", "", "", "")
             else:
                 os = self.shell.extract_remote_info().type.lower()
                 if not(self.isprepared):
@@ -277,7 +277,7 @@ class QueryTests(BaseTestCase):
 
                 cmd =  "%s/cbq  -engine=http://%s:%s/ -q -u %s -p %s" % (self.path, server.ip, server.port, username, password)
 
-                output = self.shell.execute_commands_inside(cmd,query,"","","","","")
+                output = self.shell.execute_commands_inside(cmd, query, "", "", "", "", "")
                 if not(output[0] == '{'):
                     output1 = '{'+str(output)
                 else:
@@ -443,8 +443,8 @@ class QueryTests(BaseTestCase):
         msg = "Results are incorrect.\n Actual first and last 100:  %s.\n ... \n %s" +\
         "Expected first and last 100: %s.\n  ... \n %s"
         self.assertTrue(actual_result == expected_result,
-                          msg % (actual_result[:100],actual_result[-100:],
-                                 expected_result[:100],expected_result[-100:]))
+                          msg % (actual_result[:100], actual_result[-100:],
+                                 expected_result[:100], expected_result[-100:]))
 
     def check_missing_and_extra(self, actual, expected):
         missing = []
@@ -461,7 +461,7 @@ class QueryTests(BaseTestCase):
         actual_result = []
         for item in result:
             curr_item = {}
-            for key, value in item.iteritems():
+            for key, value in item.items():
                 if isinstance(value, list) or isinstance(value, set):
                     curr_item[key] = sorted(value)
                 else:
@@ -483,8 +483,8 @@ class QueryTests(BaseTestCase):
         if versions[0].startswith("4") or versions[0].startswith("3") or versions[0].startswith("5"):
             for bucket in self.buckets:
                 if self.primary_indx_drop:
-                    self.log.info("Dropping primary index for %s using %s ..." % (bucket.name,self.primary_indx_type))
-                    self.query = "DROP PRIMARY INDEX ON %s USING %s" % (bucket.name,self.primary_indx_type)
+                    self.log.info("Dropping primary index for %s using %s ..." % (bucket.name, self.primary_indx_type))
+                    self.query = "DROP PRIMARY INDEX ON %s USING %s" % (bucket.name, self.primary_indx_type)
                     #self.run_cbq_query()
                     self.sleep(3, 'Sleep for some time after index drop')
                 self.query = 'select * from system:indexes where name="#primary" and keyspace_id = "%s"' % bucket.name
@@ -502,7 +502,7 @@ class QueryTests(BaseTestCase):
                             self.primary_index_created = True
                             if self.primary_indx_type.lower() == 'gsi':
                                 self._wait_for_index_online(bucket, '#primary')
-                        except Exception, ex:
+                        except Exception as ex:
                             self.log.info(str(ex))
 
     def _wait_for_index_online(self, bucket, index_name, timeout=6000):
@@ -525,8 +525,8 @@ class QueryTests(BaseTestCase):
         keys = []
         for gen in self.gens_load:
             gen_copy = copy.deepcopy(gen)
-            for i in xrange(gen_copy.end):
-                key, _ = gen_copy.next()
+            for i in range(gen_copy.end):
+                key, _ = next(gen_copy)
                 keys.append(key)
                 if len(keys) == key_num:
                     return keys

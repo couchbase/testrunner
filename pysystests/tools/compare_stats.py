@@ -32,8 +32,8 @@ table_template = """
 
 
 def compare_stats(file1, file2):
-    print file1
-    print file2
+    print(file1)
+    print(file2)
     json_dict = {}
     files = [file1, file2]
 
@@ -42,8 +42,8 @@ def compare_stats(file1, file2):
         json_data = open(f)
         try:
             data[f] = json.load(json_data)
-        except ValueError, e:
-            print "can't compare: %s" % (json_data)
+        except ValueError as e:
+            print("can't compare: %s" % (json_data))
             return
 
 
@@ -82,7 +82,7 @@ def compare_stats(file1, file2):
             if sublock == '':
                  continue
             json_dict[block][sublock] = {}
-            for i in xrange(len(files)):
+            for i in range(len(files)):
                 table += ("data.addColumn('string', '%s:f%s');" % (sublock, i + 1)).replace(":8091", "")
             table += "data.addColumn('number', '%');"
         column_counter = 0
@@ -100,8 +100,8 @@ def compare_stats(file1, file2):
                     else:
                         temp += ", "
                     isInt = True
-                    for i in xrange(len(files)):
-                        if stat not in data[files[i]][block][sublock].keys():
+                    for i in range(len(files)):
+                        if stat not in list(data[files[i]][block][sublock].keys()):
                             cell = "NONE"
                         else:
                             cell = str(data[files[i]][block][sublock][stat])
@@ -111,7 +111,7 @@ def compare_stats(file1, file2):
                             json_dict[block][sublock][stat]["old"] = cell
                         try:
                             x = float(cell)
-                        except ValueError, e:
+                        except ValueError as e:
                             isInt = False;
                         temp += "'%s'," % cell
                         column_counter += 1
@@ -123,7 +123,7 @@ def compare_stats(file1, file2):
                             if percentage > 10:
                                 diff_str = "%s:%s %s - %s=+%s%%" % (sublock, stat, data[files[1]][block][sublock][stat], data[files[0]][block][sublock][stat], percentage)
                                 information += "<p style=\"font-family:arial;color:grey;font-size:12px;\">&nbsp;&nbsp;" + diff_str + "</p>"
-                                print diff_str
+                                print(diff_str)
                         else:
                             temp += "0"
                     else:
@@ -136,7 +136,7 @@ def compare_stats(file1, file2):
             break
         formater = ""
         columns_format = 0
-        for columns_format in  xrange(len(blocks[block])):
+        for columns_format in  range(len(blocks[block])):
 
             formater += """
             formatter.format(data, %s); // Apply formatter to column""" % ((columns_format + 1) * 3)
@@ -153,11 +153,11 @@ def compare_stats(file1, file2):
     <li>f2: %s</li>
     </ul>""" % (file1, file2)
     for block in blocks:
-        if data[files[0]][block].keys()[0] == '':
-            num_rows = len(data[files[0]][block][data[files[0]][block].keys()[1]].keys())
+        if list(data[files[0]][block].keys())[0] == '':
+            num_rows = len(list(data[files[0]][block][list(data[files[0]][block].keys())[1]].keys()))
         else:
-            num_rows = len(data[files[0]][block][data[files[0]][block].keys()[0]].keys())
-        num_columns = len(data[files[0]][block].keys()) * 3 + 1
+            num_rows = len(list(data[files[0]][block][list(data[files[0]][block].keys())[0]].keys()))
+        num_columns = len(list(data[files[0]][block].keys())) * 3 + 1
         content += "<p style=\"background-color:green;\">%s</p>" % (block)
         content += table_template.format(block, num_columns * 111, 22 * num_rows + 35)
     content += information
@@ -175,8 +175,8 @@ def compare_stats(file1, file2):
     file1.write(content)
     file1.close()
     json.dump(json_dict, open(json_path, 'w'), indent=4, sort_keys=True)
-    print """
-    the comparison has been saved in %s & %s""" % (html_path, json_path)
+    print("""
+    the comparison has been saved in %s & %s""" % (html_path, json_path))
 
 def compare_by_folders(folder1, folder2):
     folders = os.walk(folder1).next()[1]
@@ -186,21 +186,21 @@ def compare_by_folders(folder1, folder2):
             for file in files:
                 fileName, fileExtension = os.path.splitext(os.path.join(folder1, folder, file))
                 if fileExtension != ".txt":
-                    print "can't  compare files with %s format: %s" % (fileExtension, os.path.join(folder1, folder))
+                    print("can't  compare files with %s format: %s" % (fileExtension, os.path.join(folder1, folder)))
                     continue
                 try:
                     with open(os.path.join(folder2, folder, file)):
-                        print "Generate report for  %s & %s" % (os.path.join(folder1, folder, file), os.path.join(folder2, folder, file))
+                        print("Generate report for  %s & %s" % (os.path.join(folder1, folder, file), os.path.join(folder2, folder, file)))
                         compare_stats(os.path.join(folder1, folder, file), os.path.join(folder2, folder, file))
                 except IOError:
-                    print 'file was not found: %s. comparison of the file will be skipped' % (os.path.join(folder2, folder, file))
+                    print('file was not found: %s. comparison of the file will be skipped' % (os.path.join(folder2, folder, file)))
 
 
 def main():
     files = []
     for arg in sys.argv[1:]:
         if not os.path.isdir(arg):
-            print 'folder was not found: %s' % (arg)
+            print('folder was not found: %s' % (arg))
             sys.exit()
     compare_by_folders(sys.argv[1], sys.argv[2])
 

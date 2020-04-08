@@ -3,7 +3,7 @@ import copy
 import random
 import json
 import sys
-from random_gen import RandomDataGenerator
+from .random_gen import RandomDataGenerator
 
 class SubdocHelper():
     def __init__(self):
@@ -20,7 +20,7 @@ class SubdocHelper():
 
     def find_pairs_data_type(self, data_set, path  = "", pairs = {}, data_type = "any"):
       if isinstance(data_set, dict):
-        for key in data_set.keys():
+        for key in list(data_set.keys()):
           prefix = ""
           if path != "":
             prefix = path+"."
@@ -43,7 +43,7 @@ class SubdocHelper():
 
     def find_pairs(self, data_set, path  = "", pairs = {}):
     	if isinstance(data_set, dict):
-    		for key in data_set.keys():
+    		for key in list(data_set.keys()):
     			prefix = ""
     			if path != "":
     				prefix = path+"."
@@ -74,9 +74,9 @@ class SubdocHelper():
       operation_index = 1
       self.find_pairs_data_type(data_set,"", pairs = pairs, data_type = mutation_operation_type)
       for i in range(10000):
-        if len(pairs.keys()) == 0:
+        if len(list(pairs.keys())) == 0:
           return operation_definition
-        key = random.choice(pairs.keys())
+        key = random.choice(list(pairs.keys()))
         if self.isPathPresent(key, filter_paths):
           pairs.pop(key)
           filter_paths.append(key)
@@ -108,7 +108,7 @@ class SubdocHelper():
                   })
               operation_index += 1
             elif operation["mutate"] and new_path == None:
-              print "mutation failed"
+              print("mutation failed")
         if operation_index == max_number_operations:
           return operation_definition
       return operation_definition
@@ -126,7 +126,7 @@ class SubdocHelper():
         self.find_pairs_data_type(data_set,"", pairs = pairs, data_type = mutation_operation_type)
         if len(pairs) == 0:
           return operation_definition
-        key = random.choice(pairs.keys())
+        key = random.choice(list(pairs.keys()))
         if mutation_operation_type  == "any":
           operation = self.pick_operations(pairs[key], operation = force_operation_type)
         elif mutation_operation_type  == "dict":
@@ -195,7 +195,7 @@ class SubdocHelper():
       modify_dataset  = self.parse_and_get_data(original_dataset, path)
       if len(modify_dataset) == 0:
         return None, None
-      index = random.choice(range(len(modify_dataset)))
+      index = random.choice(list(range(len(modify_dataset))))
       modify_dataset[index] = copy.deepcopy(data_set)
       return path+"["+str(index)+"]", data_set
 
@@ -228,7 +228,7 @@ class SubdocHelper():
       else:
         if len(modify_dataset) == 0:
           return None, None
-        index = random.choice(range(len(modify_dataset)))
+        index = random.choice(list(range(len(modify_dataset))))
         path = path+"["+str(index)+"]"
       modify_dataset.insert(index,copy.deepcopy(data_set))
       return path, data_set
@@ -237,9 +237,9 @@ class SubdocHelper():
       modify_dataset = original_dataset
       if path != "":
         modify_dataset  = self.parse_and_get_data(original_dataset, path)
-      if(len(modify_dataset.keys())  == 0):
+      if(len(list(modify_dataset.keys()))  == 0):
         return None, None
-      key_to_remove = random.choice(modify_dataset.keys())
+      key_to_remove = random.choice(list(modify_dataset.keys()))
       modify_dataset.pop(key_to_remove)
       if path == "":
         path  = key_to_remove
@@ -253,7 +253,7 @@ class SubdocHelper():
         modify_dataset  = self.parse_and_get_data(original_dataset, path)
       if len(modify_dataset) == 0:
         return None, None
-      index = random.choice(range(len(modify_dataset)))
+      index = random.choice(list(range(len(modify_dataset))))
       modify_dataset.pop(index)
       if path == "":
         path  = "["+str(index)+"]"
@@ -264,16 +264,16 @@ class SubdocHelper():
     def python_based_dict_upsert_replace(self, path = "", original_dataset = None):
       field_name, data_set = self.gen_data()
       if path == "":
-        if(len(original_dataset.keys()) == 0):
+        if(len(list(original_dataset.keys())) == 0):
           return None, None
-        field_name = random.choice(original_dataset.keys())
+        field_name = random.choice(list(original_dataset.keys()))
         modify_dataset = original_dataset
         modify_dataset[field_name] = copy.deepcopy(data_set)
       else:
         modify_dataset  = self.parse_and_get_data(original_dataset, path)
-        if(len(modify_dataset.keys()) == 0):
+        if(len(list(modify_dataset.keys())) == 0):
           return None, None
-        field_name = random.choice(modify_dataset.keys())
+        field_name = random.choice(list(modify_dataset.keys()))
         modify_dataset[field_name] = copy.deepcopy(data_set)
       if path != "":
         path = path + "." + field_name
@@ -306,7 +306,7 @@ class SubdocHelper():
       }
       if isinstance(data, list):
         if operation == None:
-          operation = random.choice(array_ops.keys())
+          operation = random.choice(list(array_ops.keys()))
         return array_ops[operation]
       else:
         return {"mutate":False}
@@ -321,7 +321,7 @@ class SubdocHelper():
       }
       if isinstance(data, dict):
         if operation == None:
-          operation = random.choice(dict_ops.keys())
+          operation = random.choice(list(dict_ops.keys()))
         return dict_ops[operation]
       else:
         return {"mutate":False}
@@ -339,19 +339,19 @@ class SubdocHelper():
     def show_all_operations(self, ops = []):
       operation_index = 0
       for operation in ops:
-        print "++++++++++++++++++ OPERATION {0} ++++++++++++++++++++++".format(operation_index)
+        print("++++++++++++++++++ OPERATION {0} ++++++++++++++++++++++".format(operation_index))
         operation_index += 1
-        for field in operation.keys():
-          print "{0} :: {1}".format(field, operation[field])
+        for field in list(operation.keys()):
+          print("{0} :: {1}".format(field, operation[field]))
 
     def show_all_paths(self, pairs, data_set):
-      for path in pairs.keys():
+      for path in list(pairs.keys()):
         parse_path_data = self.parse_and_get_data(data_set, path)
-        print "PATH = {0} || VALUE = {1} || PARSE PATH = {2} ".format(path, pairs[path], parse_path_data)
+        print("PATH = {0} || VALUE = {1} || PARSE PATH = {2} ".format(path, pairs[path], parse_path_data))
         key, ops_info = self.pick_operations(parse_path_data)
-        print key
-        print "Run python operation {0}".format(ops_info["python"])
-        print "Run equivalent subdoc api operation {0}".format(ops_info["subdoc_api"])
+        print(key)
+        print("Run python operation {0}".format(ops_info["python"]))
+        print("Run equivalent subdoc api operation {0}".format(ops_info["subdoc_api"]))
 
     def gen_input_file(self, file_name = "sample_json.txt", number_of_test_cases = 100):
       dump_file = open(file_name, 'wb')

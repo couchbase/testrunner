@@ -41,7 +41,7 @@ if "--purge" in sys.argv:
 for q_ in queues:
     try:
         RabbitHelper().delete(q_)
-        print "Cleanup Queue: %s" % q_
+        print("Cleanup Queue: %s" % q_)
     except Exception as ex:
         pass
 

@@ -4,8 +4,8 @@ from selenium import webdriver
 from selenium.webdriver.support.ui import WebDriverWait
 from couchbase_helper.cluster import Cluster
 from membase.api.rest_client import RestConnection
-from uibasetest import *
-from uisampletests import Bucket, NavigationHelper, BucketHelper
+from .uibasetest import *
+from .uisampletests import Bucket, NavigationHelper, BucketHelper
 from selenium.common.exceptions import StaleElementReferenceException
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper

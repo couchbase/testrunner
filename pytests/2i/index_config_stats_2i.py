@@ -1,4 +1,4 @@
-from base_2i import BaseSecondaryIndexingTests
+from .base_2i import BaseSecondaryIndexingTests
 from remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection, RestHelper
 
@@ -13,8 +13,13 @@ class SecondaryIndexingStatsConfigTests(BaseSecondaryIndexingTests, QueryHelperT
         self.flush_bucket = self.input.param('flush_bucket', False)
         self.move_index = self.input.param('move_index', False)
 
+    def suite_setUp(self):
+        pass
     def tearDown(self):
         super(SecondaryIndexingStatsConfigTests, self).tearDown()
+
+    def suite_tearDown(self):
+        pass
 
     def test_key_size_distribution(self):
         index_node = self.get_nodes_from_services_map(service_type="index",
@@ -64,7 +69,7 @@ class SecondaryIndexingStatsConfigTests(BaseSecondaryIndexingTests, QueryHelperT
                                            server=self.n1ql_node)
             self.n1ql_helper.run_cbq_query(query=create_index_query4,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             self.fail(
                 "index creation did not fail with expected error : {0}".format(
@@ -123,7 +128,7 @@ class SecondaryIndexingStatsConfigTests(BaseSecondaryIndexingTests, QueryHelperT
             self.n1ql_helper.run_cbq_query(query=create_index_query2,
                                            server=self.n1ql_node)
 
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             self.fail(
                 "index creation did not fail with expected error : {0}".format(
@@ -169,7 +174,7 @@ class SecondaryIndexingStatsConfigTests(BaseSecondaryIndexingTests, QueryHelperT
             self.n1ql_helper.run_cbq_query(query=create_index_query2,
                                            server=self.n1ql_node)
 
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             self.fail(
                 "index creation did not fail with expected error : {0}".format(
@@ -220,7 +225,7 @@ class SecondaryIndexingStatsConfigTests(BaseSecondaryIndexingTests, QueryHelperT
             self.n1ql_helper.run_cbq_query(query=create_index_query2,
                                            server=self.n1ql_node)
 
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             self.fail(
                 "index creation did not fail with expected error : {0}".format(
@@ -304,7 +309,7 @@ class SecondaryIndexingStatsConfigTests(BaseSecondaryIndexingTests, QueryHelperT
                                            server=self.n1ql_node)
             self.n1ql_helper.run_cbq_query(query=create_index_query4,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             self.fail(
                 "index creation did not fail with expected error : {0}".format(
@@ -333,8 +338,8 @@ class SecondaryIndexingStatsConfigTests(BaseSecondaryIndexingTests, QueryHelperT
     def test_keysize_rebalance_out(self):
         rest = RestConnection(self.master)
 
-        create_index_query1 = "CREATE INDEX idx ON default(name) USING GSI  WITH {'nodes': ['%s:%s']}" % (self.servers[1].ip,self.servers[1].port)
-        create_index_query2 = "CREATE INDEX idx2 ON default(join_mo) USING GSI WITH {'nodes': ['%s:%s']}" % (self.servers[1].ip,self.servers[1].port)
+        create_index_query1 = "CREATE INDEX idx ON default(name) USING GSI  WITH {'nodes': ['%s:%s']}" % (self.servers[1].ip, self.servers[1].port)
+        create_index_query2 = "CREATE INDEX idx2 ON default(join_mo) USING GSI WITH {'nodes': ['%s:%s']}" % (self.servers[1].ip, self.servers[1].port)
         create_index_query3 = "CREATE INDEX idx ON standard_bucket0(name) USING GSI"
         create_index_query4 = "CREATE INDEX idx2 ON standard_bucket0(join_mo) USING GSI"
 
@@ -512,13 +517,13 @@ class SecondaryIndexingStatsConfigTests(BaseSecondaryIndexingTests, QueryHelperT
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             self.fail(
                 "index creation did not fail with expected error : {0}".format(
                     str(ex)))
 
-        shell.execute_cbworkloadgen(rest.username, rest.password, 1000000, 70,'default', 1024, '-j')
+        shell.execute_cbworkloadgen(rest.username, rest.password, 1000000, 70, 'default', 1024, '-j')
         doc = {"indexer.settings.scan_timeout": 10}
         rest.set_index_settings(doc)
         query_params = {'scan_consistency': 'request_plus'}
@@ -541,7 +546,7 @@ class SecondaryIndexingStatsConfigTests(BaseSecondaryIndexingTests, QueryHelperT
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             if self.expected_err_msg not in str(ex):
                 self.fail(
@@ -571,7 +576,7 @@ class SecondaryIndexingStatsConfigTests(BaseSecondaryIndexingTests, QueryHelperT
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             self.fail(
                 "index creation did not fail with expected error : {0}".format(
@@ -605,7 +610,7 @@ class SecondaryIndexingStatsConfigTests(BaseSecondaryIndexingTests, QueryHelperT
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             self.fail(
                 "index creation did not fail with expected error : {0}".format(
@@ -626,13 +631,13 @@ class SecondaryIndexingStatsConfigTests(BaseSecondaryIndexingTests, QueryHelperT
         try:
             self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             self.fail(
                 "index creation did not fail with expected error : {0}".format(
                     str(ex)))
 
-        shell.execute_cbworkloadgen(rest.username, rest.password, 500000, 70,'default', 1024, '-j')
+        shell.execute_cbworkloadgen(rest.username, rest.password, 500000, 70, 'default', 1024, '-j')
 
         official_stats = rest.get_index_official_stats()
         index_map = self.get_index_stats()
@@ -659,7 +664,7 @@ class SecondaryIndexingStatsConfigTests(BaseSecondaryIndexingTests, QueryHelperT
                 bucket_name = bucket.name
                 check_keys = ['items_count', 'total_scan_duration', 'num_docs_queued',
                  'num_requests', 'num_rows_returned', 'num_docs_queued',
-                 'num_docs_pending','delete_bytes' ]
+                 'num_docs_pending', 'delete_bytes' ]
                 map = self._create_stats_map(items_count=2016)
                 self._verify_index_stats(index_map, index_name, bucket_name, map, check_keys)
 
@@ -672,8 +677,8 @@ class SecondaryIndexingStatsConfigTests(BaseSecondaryIndexingTests, QueryHelperT
         for node in indexer_nodes:
             indexer_rest = RestConnection(node)
             content = indexer_rest.get_index_storage_stats()
-            for index in content.values():
-                for stats in index.values():
+            for index in list(content.values()):
+                for stats in list(index.values()):
                     self.log.info("MainStore Stats - {0}: {1}".format(
                         index, stats["MainStore"]))
                     self.log.info("BackStore Stats - {0}: {1}".format(
@@ -699,17 +704,16 @@ class SecondaryIndexingStatsConfigTests(BaseSecondaryIndexingTests, QueryHelperT
             else:
                 count = int(count)
             shell.disconnect()
-            self.assertGreater(count, 0, "Password leak found in Indexer {"
-                                         "0}".format(server.ip))
+            self.assertGreater(count, 0, "Password leak found in Indexer {0}".format(server.ip))
 
     def test_get_index_settings(self):
         #Check Index Settings
         map = self.get_index_settings()
-        for node in map.keys():
+        for node in list(map.keys()):
             val = map[node]
             gen = self._create_settings_map()
-            for key in gen.keys():
-                self.assertTrue(key in val.keys(), "{0} not in {1} ".format(key, val))
+            for key in list(gen.keys()):
+                self.assertTrue(key in list(val.keys()), "{0} not in {1} ".format(key, val))
 
     def test_set_index_settings(self):
         #Check Index Settings
@@ -717,18 +721,18 @@ class SecondaryIndexingStatsConfigTests(BaseSecondaryIndexingTests, QueryHelperT
         self.log.info(map1)
         self.set_index_settings(map1)
         map = self.get_index_settings()
-        for node in map.keys():
+        for node in list(map.keys()):
             val = map[node]
-            for key in map1.keys():
-                self.assertTrue(key in val.keys(), "{0} not in {1} ".format(key, val))
+            for key in list(map1.keys()):
+                self.assertTrue(key in list(val.keys()), "{0} not in {1} ".format(key, val))
 
     def _verify_index_stats(self, index_map, index_name, bucket_name, index_stat_values, check_keys=None):
-        self.assertIn(bucket_name, index_map.keys(), "bucket name {0} not present in stats".format(bucket_name))
-        self.assertIn(index_name, index_map[bucket_name].keys(),
+        self.assertIn(bucket_name, list(index_map.keys()), "bucket name {0} not present in stats".format(bucket_name))
+        self.assertIn(index_name, list(index_map[bucket_name].keys()),
                         "index name {0} not present in set of indexes {1}".format(index_name,
-                                                                                  index_map[bucket_name].keys()))
-        for key in index_stat_values.keys():
-            self.assertIn(key, index_map[bucket_name][index_name].keys(),
+                                                                                  list(index_map[bucket_name].keys())))
+        for key in list(index_stat_values.keys()):
+            self.assertIn(key, list(index_map[bucket_name][index_name].keys()),
                             "stats {0} not present in Index stats {1}".format(key,
                                                                                   index_map[bucket_name][index_name]))
             if check_keys:

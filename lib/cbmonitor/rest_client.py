@@ -1,6 +1,7 @@
 import sys
-import urllib
+import urllib.request, urllib.parse, urllib.error
 import logging
+from functools import reduce
 
 sys.path.append('lib')
 from lib.membase.api.rest_client import RestConnection
@@ -46,11 +47,10 @@ class CbmonitorClient(RestConnection):
 
         params = [('build', build), ('testcase', testcase), ('env', env)]
         params += reduce(lambda x, y: x + y,
-                         map(lambda (k, v): [('metric', k), ('value', v)],
-                         metrics.iteritems()))
+                         [[('metric', k_v[0]), ('value', k_v[1])] for k_v in iter(metrics.items())])
 
         try:
-            self._http_request(api, 'POST', urllib.urlencode(params),
+            self._http_request(api, 'POST', urllib.parse.urlencode(params),
                                timeout=30)
         except ServerUnavailableException:
             logging.error("litmus dashboard server %s is not available"

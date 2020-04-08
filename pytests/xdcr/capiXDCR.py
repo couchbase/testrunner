@@ -10,8 +10,8 @@ from memcached.helper.data_helper import VBucketAwareMemcached
 from newupgradebasetest import NewUpgradeBaseTest
 from remote.remote_util import RemoteMachineShellConnection
 
-from xdcrnewbasetests import REPL_PARAM, NodeHelper
-from xdcrnewbasetests import XDCRNewBaseTest
+from .xdcrnewbasetests import REPL_PARAM, NodeHelper
+from .xdcrnewbasetests import XDCRNewBaseTest
 
 
 
@@ -58,7 +58,7 @@ class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):
 
         self.src_cluster.pause_all_replications()
 
-        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}', xrange(100), start=0, end=self._num_items)
+        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}', range(100), start=0, end=self._num_items)
         self.src_cluster.load_all_buckets_from_generator(gen)
 
         self.perform_update_delete()
@@ -74,7 +74,7 @@ class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):
 
         self.src_cluster.pause_all_replications()
 
-        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}', xrange(100), start=0, end=self._num_items)
+        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}', range(100), start=0, end=self._num_items)
         self.src_cluster.load_all_buckets_from_generator(gen)
 
         self.async_perform_update_delete()
@@ -88,7 +88,7 @@ class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):
     def test_capi_with_pause_resume(self):
         self.setup_xdcr()
 
-        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}', xrange(100), start=0, end=self._num_items)
+        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}', range(100), start=0, end=self._num_items)
         self.src_cluster.async_load_all_buckets_from_generator(gen)
 
         self.src_cluster.pause_all_replications()
@@ -105,7 +105,7 @@ class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):
 
         self.src_cluster.pause_all_replications()
 
-        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}', xrange(100), start=0, end=self._num_items)
+        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}', range(100), start=0, end=self._num_items)
         self.src_cluster.load_all_buckets_from_generator(gen)
 
         self.src_cluster.resume_all_replications()
@@ -135,7 +135,7 @@ class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):
 
         self.src_cluster.pause_all_replications()
 
-        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}', xrange(100), start=0, end=self._num_items)
+        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}', range(100), start=0, end=self._num_items)
         self.src_cluster.load_all_buckets_from_generator(gen)
 
         self.perform_update_delete()
@@ -152,7 +152,7 @@ class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):
 
         self.src_cluster.pause_all_replications()
 
-        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}', xrange(100), start=0, end=self._num_items)
+        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}', range(100), start=0, end=self._num_items)
         self.src_cluster.load_all_buckets_from_generator(gen)
 
         self.src_cluster.resume_all_replications()
@@ -185,7 +185,7 @@ class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):
 
         self.src_cluster.pause_all_replications()
 
-        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}', xrange(100), start=0, end=self._num_items)
+        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}', range(100), start=0, end=self._num_items)
         self.src_cluster.load_all_buckets_from_generator(gen)
 
         self.src_cluster.resume_all_replications()
@@ -202,7 +202,7 @@ class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):
 
         self.src_cluster.pause_all_replications()
 
-        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}', xrange(100), start=0, end=self._num_items)
+        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}', range(100), start=0, end=self._num_items)
         self.src_cluster.load_all_buckets_from_generator(gen)
 
         self.src_cluster.resume_all_replications()
@@ -218,7 +218,7 @@ class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):
 
         self.src_cluster.pause_all_replications()
 
-        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}', xrange(100), start=0, end=self._num_items)
+        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}', range(100), start=0, end=self._num_items)
         self.src_cluster.load_all_buckets_from_generator(gen)
 
         self.src_cluster.resume_all_replications()
@@ -234,7 +234,7 @@ class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):
 
         self.src_cluster.pause_all_replications()
 
-        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}', xrange(100), start=0, end=self._num_items)
+        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}', range(100), start=0, end=self._num_items)
         self.src_cluster.load_all_buckets_from_generator(gen)
 
         self.src_cluster.resume_all_replications()
@@ -249,7 +249,7 @@ class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):
         self.setup_xdcr()
 
         self.src_cluster.pause_all_replications()
-        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}', xrange(100), start=0, end=self._num_items)
+        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}', range(100), start=0, end=self._num_items)
         self.src_cluster.load_all_buckets_from_generator(gen)
 
         self.src_cluster.resume_all_replications()
@@ -283,7 +283,7 @@ class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):
 
         self.src_cluster.pause_all_replications()
 
-        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}', xrange(100), start=0, end=self._num_items)
+        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}', range(100), start=0, end=self._num_items)
         self.src_cluster.load_all_buckets_from_generator(gen)
 
         self.src_cluster.resume_all_replications()
@@ -310,7 +310,7 @@ class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):
         self.setup_xdcr()
         self.src_cluster.pause_all_replications()
 
-        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}', xrange(100), start=0, end=self._num_items)
+        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}', range(100), start=0, end=self._num_items)
         self.src_cluster.load_all_buckets_from_generator(gen)
 
         self.perform_update_delete()
@@ -329,7 +329,7 @@ class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):
         self._join_all_clusters()
         self.src_cluster.pause_all_replications()
 
-        gen = DocumentGenerator('es', '{{"key":"value"}}', xrange(100), start=0, end=self._num_items)
+        gen = DocumentGenerator('es', '{{"key":"value"}}', range(100), start=0, end=self._num_items)
         self.src_cluster.load_all_buckets_from_generator(gen)
 
         self.perform_update_delete()
@@ -351,7 +351,7 @@ class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):
         rest_conn = RestConnection(self.src_master)
         rest_conn.pause_resume_repl_by_id(repl_id, REPL_PARAM.PAUSE_REQUESTED, 'true')
 
-        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}', xrange(100), start=0, end=self._num_items)
+        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}', range(100), start=0, end=self._num_items)
         self.src_cluster.load_all_buckets_from_generator(gen)
 
         self.perform_update_delete()
@@ -408,7 +408,7 @@ class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):
         rest_conn = RestConnection(self.src_master)
         rest_conn.pause_resume_repl_by_id(repl_id, REPL_PARAM.PAUSE_REQUESTED, 'true')
 
-        gen = DocumentGenerator('es', '{{"key":"value"}}', xrange(100), start=0, end=self._num_items)
+        gen = DocumentGenerator('es', '{{"key":"value"}}', range(100), start=0, end=self._num_items)
         self.src_cluster.load_all_buckets_from_generator(gen)
 
         self.perform_update_delete()
@@ -424,7 +424,7 @@ class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):
 
         self.src_cluster.pause_all_replications()
 
-        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}', xrange(100), start=0, end=self._num_items)
+        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}', range(100), start=0, end=self._num_items)
         self.src_cluster.load_all_buckets_from_generator(gen)
 
         self.src_cluster.resume_all_replications()
@@ -446,7 +446,7 @@ class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):
 
         self.src_cluster.pause_all_replications()
 
-        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}', xrange(100), start=0, end=self._num_items)
+        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}', range(100), start=0, end=self._num_items)
         self.src_cluster.load_all_buckets_from_generator(gen)
 
         self.src_cluster.resume_all_replications()
@@ -468,7 +468,7 @@ class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):
 
         self.src_cluster.pause_all_replications()
 
-        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}', xrange(100), start=0, end=self._num_items)
+        gen = DocumentGenerator('es', '{{"key":"value","mutated":0}}', range(100), start=0, end=self._num_items)
         self.src_cluster.load_all_buckets_from_generator(gen)
 
         self.src_cluster.resume_all_replications()

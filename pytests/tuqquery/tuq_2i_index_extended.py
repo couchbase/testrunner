@@ -3,7 +3,7 @@ import math
 import re
 import uuid
 import time
-from tuq import QueryTests
+from .tuq import QueryTests
 from remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection
 from membase.api.exception import CBQError
@@ -65,7 +65,7 @@ class QueriesIndexTestsExtended(QueryTests):
             test_dict["%s-01" % (bname)] = {"indexes": [primary_idx, idx_1, idx_2, idx_3], "queries": [query_1], "post_queries": [explain_1], "asserts": [assert_1]}
 
             query_2 = 'select count(1) from {0} where name = "employee-23" and meta().id = "query-testemployee10317.9004497-0"'.format(bucket.name)
-            assert_2 = lambda x: self.assertEqual(x['q_res'][0]['results'], ([{u'$1': 1}]))
+            assert_2 = lambda x: self.assertEqual(x['q_res'][0]['results'], ([{'$1': 1}]))
             test_dict["%s-02" % (bname)] = {"indexes": [primary_idx, idx_1, idx_2, idx_3], "queries": [query_2], "asserts": [assert_2]}
 
             query_3 = 'explain select name from {0} where name = "employee-23" and meta().id like "query-testemployee%" limit 3'.format(bucket.name)
@@ -73,7 +73,7 @@ class QueriesIndexTestsExtended(QueryTests):
             test_dict["%s-03" % (bname)] = {"indexes": [primary_idx, idx_1, idx_2, idx_3], "queries": [query_3], "post_queries": [explain_1],  "asserts": [assert_3]}
 
             query_4 = 'select name from {0} where name = "employee-23" and meta().id like "query-testemployee%" limit 3'.format(bucket.name)
-            assert_4 = lambda x: self.assertEqual(x['q_res'][0]['results'], [{u'name': u'employee-23'}, {u'name': u'employee-23'}, {u'name': u'employee-23'}])
+            assert_4 = lambda x: self.assertEqual(x['q_res'][0]['results'], [{'name': 'employee-23'}, {'name': 'employee-23'}, {'name': 'employee-23'}])
             test_dict["%s-04" % (bname)] = {"indexes": [primary_idx, idx_1, idx_2, idx_3], "queries": [query_4], "asserts": [assert_4]}
 
             query_5 = 'explain select min(join_day) from {0} where VMs[0].memory=12 and meta().id = "query-testemployee10317.9004497-0"'.format(bucket.name)
@@ -81,11 +81,11 @@ class QueriesIndexTestsExtended(QueryTests):
             test_dict["%s-05" % (bname)] = {"indexes": [primary_idx, idx_1, idx_2, idx_3], "queries": [query_5], "post_queries": [explain_1],"asserts": [assert_5]}
 
             query_6 = 'select min(VMs[0].memory) from {0} where join_mo=12 and meta().id = "query-testemployee10317.9004497-0"'.format(bucket.name)
-            assert_6 = lambda x: self.assertEqual(x['q_res'][0]['results'], [{u'$1': 12}])
+            assert_6 = lambda x: self.assertEqual(x['q_res'][0]['results'], [{'$1': 12}])
             test_dict["%s-06" % (bname)] = {"indexes": [primary_idx, idx_1, idx_2, idx_3], "queries": [query_6], "asserts": [assert_6]}
 
             query_7 = 'select min(join_mo) from {0} where  VMs[0].memory=12 and meta().id = "query-testemployee10317.9004497-0"'.format(bucket.name)
-            assert_7 = lambda x: self.assertEqual(x['q_res'][0]['results'], [{u'$1': 12}])
+            assert_7 = lambda x: self.assertEqual(x['q_res'][0]['results'], [{'$1': 12}])
             test_dict["%s-07" % (bname)] = {"indexes": [primary_idx, idx_1, idx_2, idx_3], "queries": [query_7], "asserts": [assert_7]}
 
             query_8 = 'explain select count(1) from {0} where name = "employee-23"'.format(bucket.name)
@@ -93,7 +93,7 @@ class QueriesIndexTestsExtended(QueryTests):
             test_dict["%s-08" % (bname)] = {"indexes": [primary_idx, idx_1, idx_2, idx_3], "queries": [query_8], "post_queries": [explain_1], "asserts": [assert_8]}
 
             query_9 = 'select count(1) from {0} where name = "employee-23"'.format(bucket.name)
-            assert_9 = lambda x: self.assertEqual(x['q_res'][0]['results'], [{u'$1': 432}])
+            assert_9 = lambda x: self.assertEqual(x['q_res'][0]['results'], [{'$1': 432}])
             test_dict["%s-09" % (bname)] = {"indexes": [primary_idx, idx_1, idx_2, idx_3], "queries": [query_9], "asserts": [assert_9]}
 
             query_10 = 'explain select count(1) from {0} where name = "employee-23" and join_yr=2010'.format(bucket.name)
@@ -109,7 +109,7 @@ class QueriesIndexTestsExtended(QueryTests):
             test_dict["%s-12" % (bname)] = {"indexes": [primary_idx, idx_2, idx_3, idx_4], "queries": [query_12], "post_queries": [explain_1], "asserts": [assert_12]}
 
             query_13 = 'select count(1) from {0} where name = "employee-23" and meta().id = "query-testemployee10317.9004497-0"'.format(bucket.name)
-            assert_13 = lambda x: self.assertEqual(x['q_res'][0]['results'], ([{u'$1': 1}]))
+            assert_13 = lambda x: self.assertEqual(x['q_res'][0]['results'], ([{'$1': 1}]))
             test_dict["%s-13" % (bname)] = {"indexes": [primary_idx, idx_2, idx_3, idx_4], "queries": [query_13], "asserts": [assert_13]}
 
             query_14 = 'explain select count(1) from {0} where meta().id = "query-testemployee10317.9004497-0"'.format(bucket.name)
@@ -117,7 +117,7 @@ class QueriesIndexTestsExtended(QueryTests):
             test_dict["%s-14" % (bname)] = {"indexes": [primary_idx, idx_2, idx_3, idx_5], "queries": [query_14], "post_queries": [explain_1], "asserts": [assert_14]}
 
             query_15 = 'select count(1) from {0} where meta().id = "query-testemployee10317.9004497-0"'.format(bucket.name)
-            assert_15 = lambda x: self.assertEqual(x['q_res'][0]['results'], [{u'$1': 1}])
+            assert_15 = lambda x: self.assertEqual(x['q_res'][0]['results'], [{'$1': 1}])
             test_dict["%s-15" % (bname)] = {"indexes": [primary_idx, idx_2, idx_3, idx_5], "queries": [query_15], "asserts": [assert_15]}
 
             query_16 = 'explain select count(1) from {0} where meta().id = "query-testemployee10317.9004497-0"'.format(bucket.name)
@@ -125,7 +125,7 @@ class QueriesIndexTestsExtended(QueryTests):
             test_dict["%s-16" % (bname)] = {"indexes": [primary_idx, idx_2, idx_3], "queries": [query_16], "post_queries": [explain_1], "asserts": [assert_16]}
 
             query_17 = 'select count(1) from {0} where meta().id = "query-testemployee10317.9004497-0"'.format(bucket.name)
-            assert_17 = lambda x: self.assertEqual(x['q_res'][0]['results'], [{u'$1': 1}])
+            assert_17 = lambda x: self.assertEqual(x['q_res'][0]['results'], [{'$1': 1}])
             test_dict["%s-17" % (bname)] = {"indexes": [primary_idx, idx_2, idx_3], "queries": [query_17], "asserts": [assert_17]}
 
             query_18 = 'explain select count(*) from {0} where join_yr>2010 and join_mo = 12'.format(bucket.name)
@@ -133,7 +133,7 @@ class QueriesIndexTestsExtended(QueryTests):
             test_dict["%s-18" % (bname)] = {"indexes": [primary_idx, idx_2, idx_3, idx_6], "queries": [query_18], "post_queries": [explain_1], "asserts": [assert_18]}
 
             query_19 = 'select count(*) from {0} where join_yr>2010 and join_mo = 12'.format(bucket.name)
-            assert_19 = lambda x: self.assertEqual(x['q_res'][0]['results'], [{u'$1': 504}])
+            assert_19 = lambda x: self.assertEqual(x['q_res'][0]['results'], [{'$1': 504}])
             test_dict["%s-19" % (bname)] = {"indexes": [primary_idx, idx_2, idx_3, idx_6], "queries": [query_19], "asserts": [assert_19]}
 
             query_20 = 'explain select count(*) from {0} where join_day = 23 and join_yr<2010'.format(bucket.name)
@@ -141,7 +141,7 @@ class QueriesIndexTestsExtended(QueryTests):
             test_dict["%s-20" % (bname)] = {"indexes": [primary_idx, idx_2, idx_3, idx_7], "queries": [query_20], "post_queries": [explain_1], "asserts": [assert_20]}
 
             query_21 = 'select count(*) from {0} where join_day = 23 and join_yr<2011'.format(bucket.name)
-            assert_21 = lambda x: self.assertEqual(x['q_res'][0]['results'], [{u'$1': 216}])
+            assert_21 = lambda x: self.assertEqual(x['q_res'][0]['results'], [{'$1': 216}])
             test_dict["%s-21" % (bname)] = {"indexes": [primary_idx, idx_2, idx_3, idx_7], "queries": [query_21], "asserts": [assert_21]}
 
             query_22 = 'explain select count(*) from {0} where join_day = 23 and join_yr<2012 limit 10'.format(bucket.name)

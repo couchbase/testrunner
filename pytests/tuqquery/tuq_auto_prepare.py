@@ -1,5 +1,5 @@
 from membase.api.rest_client import RestConnection, RestHelper
-from tuq import QueryTests
+from .tuq import QueryTests
 from remote.remote_util import RemoteMachineShellConnection
 from membase.api.exception import CBQError
 
@@ -95,10 +95,10 @@ class QueryAutoPrepareTests(QueryTests):
     def test_anonymous_prepared_positional_parameters_dollar(self):
         query = 'select * from default where name=$1 and join_day=$2'
         args = 'args=[\"employee-8\",8]'
-        self.prepared_common(query=query,args=args)
+        self.prepared_common(query=query, args=args)
 
         args = '$1=\"employee-8\"&$2=8'
-        self.prepared_common(query=query,args=args)
+        self.prepared_common(query=query, args=args)
 
     ''' Test named parameters with a prepared statement explicitly named'''
     def test_named_prepared_positional_parameters_dollar(self):
@@ -113,7 +113,7 @@ class QueryAutoPrepareTests(QueryTests):
     def test_anonymous_prepared_positional_parameters_question_mark(self):
         query = 'select * from default where name=? and join_day=?'
         args = 'args=[\"employee-8\",8]'
-        self.prepared_common(query=query,args=args)
+        self.prepared_common(query=query, args=args)
 
     ''' Test named parameters with a prepared statement explicitly named'''
     def test_named_prepared_positional_parameters_question_mark(self):
@@ -181,7 +181,7 @@ class QueryAutoPrepareTests(QueryTests):
         self.assertEqual(query_1['metrics']['resultCount'], 1, "Count mismatch dumping results from system:prepareds: " % query_1)
         self.assertEqual(query_2['metrics']['resultCount'], 1, "Count mismatch dumping results from system:prepareds: " % query_2)
 
-        self.run_cbq_query('select * from default',server=self.master)
+        self.run_cbq_query('select * from default', server=self.master)
         self.run_cbq_query('select * from default limit 10', server=self.master)
 
         # Make sure the uses goes up since these queries are already prepared
@@ -209,7 +209,7 @@ class QueryAutoPrepareTests(QueryTests):
         prepared_result = self.run_cbq_query(query="PREPARE P1 FROM select * from default limit 5", server=self.servers[0])
         self.sleep(2)
         self.query = "delete from system:prepareds where node = '%s:%s'" \
-                     % (self.servers[1].ip,self.servers[1].port)
+                     % (self.servers[1].ip, self.servers[1].port)
         self.run_cbq_query()
         query_results = self.run_cbq_query(query="execute P1", server=self.servers[0])
         self.assertEqual(query_results['metrics']['resultCount'], 5)
@@ -378,7 +378,7 @@ class QueryAutoPrepareTests(QueryTests):
         self.sleep(30)
         self.run_cbq_query(query="PREPARE p1 from select * from default limit 5", server=self.servers[0])
         self.sleep(5)
-        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [],[])
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [])
         reached = RestHelper(self.rest).rebalance_reached()
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
         rebalance.result()
@@ -387,7 +387,7 @@ class QueryAutoPrepareTests(QueryTests):
             for i in range(self.nodes_init + 1):
                 try:
                     self.run_cbq_query(query="execute p1", server=self.servers[i])
-                except CBQError,ex:
+                except CBQError as ex:
                     self.assertTrue("No such prepared statement: p1" in str(ex), "There error should be no such prepared "
                                                                                  "statement, it really is %s" % ex)
                     self.log.info(ex)
@@ -422,7 +422,7 @@ class QueryAutoPrepareTests(QueryTests):
         for i in range(1, self.nodes_init):
             try:
                 self.run_cbq_query(query="execute p1", server=self.servers[i])
-            except CBQError, ex:
+            except CBQError as ex:
                 self.assertTrue("No such prepared statement: p1" in str(ex), "There error should be no such prepared "
                                                                              "statement, it really is %s" % ex)
                 self.log.info(ex)
@@ -436,7 +436,7 @@ class QueryAutoPrepareTests(QueryTests):
         for i in range(self.nodes_init):
             self.run_cbq_query(query="execute p1", server=self.servers[i])
         services_in = ["n1ql", "index", "data"]
-        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]],[],
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [self.servers[self.nodes_init]], [],
                                                  services=services_in)
         reached = RestHelper(self.rest).rebalance_reached()
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")

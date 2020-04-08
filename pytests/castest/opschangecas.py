@@ -7,7 +7,6 @@ from mc_bin_client import MemcachedError
 from membase.api.rest_client import RestConnection, RestHelper
 from memcached.helper.data_helper import VBucketAwareMemcached, MemcachedClientHelper
 import json
-from sdk_client import SDKClient
 from couchbase.exceptions import NotFoundError
 
 
@@ -31,9 +30,9 @@ class OpsChangeCasTests(CasBaseTest):
         We also use MemcachedClient delete() to delete a quarter of the items"""
 
         gen_load_mysql = BlobGenerator('nosql', 'nosql-', self.value_size, end=self.num_items)
-        gen_update = BlobGenerator('nosql', 'nosql-', self.value_size, end=(self.num_items / 2 - 1))
-        gen_delete = BlobGenerator('nosql', 'nosql-', self.value_size, start=self.num_items / 2, end=(3*self.num_items / 4 - 1))
-        gen_expire = BlobGenerator('nosql', 'nosql-', self.value_size, start=3*self.num_items / 4, end=self.num_items)
+        gen_update = BlobGenerator('nosql', 'nosql-', self.value_size, end=(self.num_items // 2 - 1))
+        gen_delete = BlobGenerator('nosql', 'nosql-', self.value_size, start=self.num_items // 2, end=(3*self.num_items // 4 - 1))
+        gen_expire = BlobGenerator('nosql', 'nosql-', self.value_size, start=3*self.num_items // 4, end=self.num_items)
         self._load_all_buckets(self.master, gen_load_mysql, "create", 0, flag=self.item_flag)
 
         if self.doc_ops is not None:
@@ -65,7 +64,7 @@ class OpsChangeCasTests(CasBaseTest):
             cas_error_collection = []
             data_error_collection = []
             while gen.has_next():
-                key, value = gen.next()
+                key, value = next(gen)
 
                 if ops in ["update", "touch"]:
                     for x in range(self.mutate_times):
@@ -77,12 +76,12 @@ class OpsChangeCasTests(CasBaseTest):
 
                         o_new, cas_new, d_new = client.memcached(key).get(key)
                         if cas_old == cas_new:
-                            print 'cas did not change'
+                            print('cas did not change')
                             cas_error_collection.append(cas_old)
 
                         if ops == 'update':
                             if d_new != "{0}-{1}".format("mysql-new-value", x):
-                                data_error_collection.append((d_new,"{0}-{1}".format("mysql-new-value", x)))
+                                data_error_collection.append((d_new, "{0}-{1}".format("mysql-new-value", x)))
                             if cas_old != cas_new and d_new == "{0}-{1}".format("mysql-new-value", x):
                                 self.log.info("Use item cas {0} to mutate the same item with key {1} successfully! Now item cas is {2} "
                                               .format(cas_old, key, cas_new))
@@ -189,9 +188,9 @@ class OpsChangeCasTests(CasBaseTest):
         mcd.setWithMetaInvalid(key, json.dumps({'value': 'value2'}),
                                0, 0, 0, -2)
         # print 'max cas pt1', mcd.getMeta(key)[4]
-        mcd.set(key, 0, 0,json.dumps({'value':'value3'}))
+        mcd.set(key, 0, 0, json.dumps({'value':'value3'}))
         # print 'max cas pt2', mcd.getMeta(key)[4]
-        mcd.set(key, 0, 0,json.dumps({'value':'value4'}))
+        mcd.set(key, 0, 0, json.dumps({'value':'value4'}))
         # print 'max cas pt3', mcd.getMeta(key)[4]
 
     # test for MB-17517 - verify that if max CAS somehow becomes -1 we can recover from it
@@ -210,7 +209,7 @@ class OpsChangeCasTests(CasBaseTest):
 
         # figure out which node it is on
         mc_active = client.memcached(KEY_NAME)
-        mc_replica = client.memcached(KEY_NAME, replica_index=0)
+        mc_replica = client.memcached( KEY_NAME, replica_index=0 )
 
         # set the CAS to -2 and then mutate to increment to -1 and then it should stop there
         self._corrupt_max_cas(mc_active, KEY_NAME)
@@ -218,7 +217,7 @@ class OpsChangeCasTests(CasBaseTest):
         # CAS should be 0 now, do some gets and sets to verify that nothing bad happens
 
         resp = mc_active.get(KEY_NAME)
-        self.log.info('get for {0} is {1}'.format(KEY_NAME, resp))
+        self.log.info( 'get for {0} is {1}'.format(KEY_NAME, resp))
 
         # remove that node
         self.log.info('Remove the node with -1 max cas')
@@ -242,7 +241,7 @@ class OpsChangeCasTests(CasBaseTest):
         mc_active = client.memcached(KEY_NAME)
         active_CAS = mc_active.getMeta(KEY_NAME)[4]
 
-        self.assertTrue(replica_CAS == active_CAS, 'cas mismatch active: {0} replica {1}'.format(active_CAS,replica_CAS))
+        self.assertTrue(replica_CAS == active_CAS, 'cas mismatch active: {0} replica {1}'.format(active_CAS, replica_CAS))
 
     # One node only needed for this test
     def corrupt_cas_is_healed_on_reboot(self):

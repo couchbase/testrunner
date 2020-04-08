@@ -3,11 +3,12 @@ import re
 import time
 import logger
 import threading
-from breakpadbase import BreakpadBase
+from .breakpadbase import BreakpadBase
 from membase.api.rest_client import RestConnection
-from logpoll import NSLogPoller
+from .logpoll import NSLogPoller
 
 log = logger.Logger.get_logger()
+
 
 class BreakpadVerifyDumpTests(BreakpadBase):
 
@@ -75,8 +76,8 @@ class BreakpadVerifyDumpTests(BreakpadBase):
             rc = self.kill_memcached(0)
             assert rc, "Did not kill mc"
             # get restart msg
-	    msg = logp.getEventQItem()
-	    assert msg
+            msg = logp.getEventQItem()
+            assert msg
             crashes += 1
 
         logp.setMcEventFlag(False)
@@ -99,10 +100,9 @@ class BreakpadVerifyDumpTests(BreakpadBase):
             [self.master],
             self.servers[1:], [])
 
-
         self.load_docs(nodeA, 10000)
 
-        node_range = range(len(self.servers))
+        node_range = list(range(len(self.servers)))
 
         # start log pollers
         for i in node_range:
@@ -143,7 +143,7 @@ class BreakpadVerifyDumpTests(BreakpadBase):
         nodeA = self.servers[index]
         self.load_docs(nodeA, 100000)
 
-        reb_poller= NSLogPoller(index)
+        reb_poller = NSLogPoller(index)
         reb_poller.start()
         reb_poller.setRebalanceEventFlag(True)
 
@@ -155,7 +155,7 @@ class BreakpadVerifyDumpTests(BreakpadBase):
         # did start rebalance
         assert reb_poller.getEventQItem()
 
-        node_range = range(len(self.servers))
+        node_range = list(range(len(self.servers)))
         # start log pollers
         for i in node_range:
             logp = NSLogPoller(i)
@@ -216,7 +216,7 @@ class BreakpadVerifyDumpTests(BreakpadBase):
                     pass
 
         # async doc loaders
-        for  i in range(10):
+        for i in range(10):
             t = threading.Thread(target=loader)
             t.start()
             threads.append(t)
@@ -249,7 +249,7 @@ class BreakpadVerifyDumpTests(BreakpadBase):
             rest.compact_bucket()
 
         # async doc loaders
-        for  i in range(10):
+        for i in range(10):
             t = threading.Thread(target=loader)
             t.start()
             threads.append(t)
@@ -262,7 +262,7 @@ class BreakpadVerifyDumpTests(BreakpadBase):
         t.start()
 
         # verify compaction event did happen
-	assert logp.getEventQItem()
+        assert logp.getEventQItem()
         logp.setCompactEventFlag(False)
 
         # kill mc

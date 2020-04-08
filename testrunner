@@ -1,2 +1,2 @@
 #! /bin/bash
-exec python ${0}.py "$@"
+exec python3 ${0}.py "$@"

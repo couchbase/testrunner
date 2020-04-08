@@ -1,4 +1,4 @@
-from tuq import QueryTests
+from .tuq import QueryTests
 import threading
 import time
 import json
@@ -150,7 +150,7 @@ class QueryMiscTests(QueryTests):
                 res = self.run_cbq_query()
                 self.assertEqual(len(res['results']), 2)
         finally:
-            for index in createdIndexes.keys():
+            for index in list(createdIndexes.keys()):
                 if index == "#primary":
                     self.query = "DROP primary index on temp_bucket"
                 else:
@@ -247,7 +247,7 @@ class QueryMiscTests(QueryTests):
             self.log.info("number of intersect threads B: "+str(count_intersect_b))
             self.assertEqual(count_intersect_b, 0)
         finally:
-            for index in createdIndexes.keys():
+            for index in list(createdIndexes.keys()):
                 if index == "#primary":
                     self.query = "DROP primary index on temp_bucket"
                 else:

@@ -207,7 +207,7 @@ def runNQueryParam(query, param, server_ip):
     for p in param:
         if isinstance(p, (bool)):
             myarg = myarg + str.lower(str(p))
-        elif isinstance(p, (int, float, long)) and not isinstance(p, (bool)):
+        elif isinstance(p, (int, float)) and not isinstance(p, (bool)):
             myarg = myarg + str(p)
         else:
             myarg = myarg + '\\"' + str(p) + '\\"'
@@ -220,11 +220,11 @@ def runNQueryParam(query, param, server_ip):
     #print stmt
 
     query = json.loads(stmt)
-    print query
+    print(query)
 
     r = requests.post(url, data=query, stream=False, headers={'Connection': 'close'},
         auth=('Administrator', 'password'))
-    print r.json()
+    print(r.json())
     r123 = r.json()['results']
     return r123
 
@@ -241,22 +241,22 @@ def runSDKQuery(keys, servers_ips, buckets):
 
     for cb in cbs:
         try:
-            print 'Inserting %s docs...' % len(keys)
+            print('Inserting %s docs...' % len(keys))
             out = cb.insert_multi(keys)
-        except TimeoutError, ex:
+        except TimeoutError as ex:
             out = str(ex)
-            print 'WARNING: Not all documents were inserted because of timeout error!! Please decrease batch size'
+            print('WARNING: Not all documents were inserted because of timeout error!! Please decrease batch size')
     return out
 
 
 def calcFlightSegmentDateTime():
-    segments=[0,1] # assume 2 segments
+    segments=[0, 1] # assume 2 segments
     x = dict((a, {}) for a in segments)
 
     year_range = [str(i) for i in range(2013, 2015)]
-    month_range = ["01","02","03","04","05","06","07","08","09","10","11","12"]
-    day_range = [str(i).zfill(2) for i in range(1,28)]
-    hour_range = [str(i).zfill(2) for i in range(0,23)]
+    month_range = ["01", "02", "03", "04", "05", "06", "07", "08", "09", "10", "11", "12"]
+    day_range = [str(i).zfill(2) for i in range(1, 28)]
+    hour_range = [str(i).zfill(2) for i in range(0, 23)]
     min_range = [str(i).zfill(2) for i in range(0, 59)]
 
     year=int(random.choice(year_range))
@@ -266,8 +266,8 @@ def calcFlightSegmentDateTime():
     minute = int(random.choice(min_range))
 
     for i in range(len(segments)):
-        hour_delta = randint(0,12)
-        minute_delta = randint(0,59)
+        hour_delta = randint(0, 12)
+        minute_delta = randint(0, 59)
         dep_1 = datetime.datetime(year, month, day, hour, minute) # Temp Assignment
 
         if i==1: # assuming 2 segments in all currently, to change for more flexibility
@@ -275,7 +275,7 @@ def calcFlightSegmentDateTime():
                 dep_1 = x[0]['arrv_2'] # Last Journey Location becomes input for the next Segment
 
         arrv_1 = dep_1 + datetime.timedelta(hours=hour_delta, minutes=minute_delta)
-        arrv_2 = arrv_1 + datetime.timedelta(hours=randint(0,12), minutes=randint(0,59))
+        arrv_2 = arrv_1 + datetime.timedelta(hours=randint(0, 12), minutes=randint(0, 59))
         elapsed_time_1 = int((arrv_1 - dep_1).total_seconds() / 60)
         elapsed_time_2 = int((arrv_2 - arrv_1).total_seconds() / 60)
 
@@ -296,21 +296,21 @@ def calcFlightSegmentDateTime():
     return x
 
 def calcAirportRouteInfo():
-    segments=[0,1] # assume 2 segments
+    segments=[0, 1] # assume 2 segments
     y = dict((a, {}) for a in segments)
     #y = {}
-    all_airports = ["ABR", "ABI", "ATL","BOS", "BUR", "CHI", "MDW", "DAL", "SFO", "SAN", "SJC", "LGA", "JFK", "MSP"]
+    all_airports = ["ABR", "ABI", "ATL", "BOS", "BUR", "CHI", "MDW", "DAL", "SFO", "SAN", "SJC", "LGA", "JFK", "MSP"]
     airport_codes = []
     # Improve this logic
-    all_air_equip_type = ["757","777", "787", "788", "M5", "A101", "A203", "M6"]
+    all_air_equip_type = ["757", "777", "787", "788", "M5", "A101", "A203", "M6"]
     air_equip_codes = []
      ### Improve this logic
-    all_flight_numbers = ["240","250", "260", "270","280", "1200" ,"1210", "1150", "1140" ]
+    all_flight_numbers = ["240", "250", "260", "270", "280", "1200", "1210", "1150", "1140" ]
     flight_codes =[]
 
 
     for i in range(len(segments)):
-        airport_codes = random.sample(all_airports,3)
+        airport_codes = random.sample(all_airports, 3)
         air_equip_codes = random.sample(all_air_equip_type, 2)
         flight_codes = random.sample(all_flight_numbers, 2)
         y[0]['dep_airport'] = airport_codes[0]
@@ -333,7 +333,7 @@ def calcTaxes():
     t = dict((a, {}) for a in all_tax_codes)
     total_taxes=0
     for i in all_tax_codes:
-        t[i]=round(random.uniform(10,25))
+        t[i]=round(random.uniform(10, 25))
         total_taxes = total_taxes+t[i]
     return t, total_taxes
 
@@ -349,15 +349,15 @@ def load_documents(insert_documents, seed, server_ip):
         key = str(j)+ '_' +seed
         y=calcAirportRouteInfo()
         x=calcFlightSegmentDateTime()
-        journey_direction = random.sample(all_journey_direction,1)
+        journey_direction = random.sample(all_journey_direction, 1)
         eTicketBool=random.choice([True, False])
         if eTicketBool:
             ticket_type="eTicket"
         ticket_type="paper"
-        marketingAirline = random.sample(all_marketing_airlines,1)
+        marketingAirline = random.sample(all_marketing_airlines, 1)
         dummyvar=0 #placeholder
         t, total_taxes = calcTaxes()
-        base_fare = round(random.uniform(250,600)) # later can add logic for varying with mileage/airports
+        base_fare = round(random.uniform(250, 600)) # later can add logic for varying with mileage/airports
         total_fare = base_fare+total_taxes
         sequence_number = j+1000 # for the lack of better understanding of sequencenUmber
 
@@ -408,12 +408,12 @@ def load_documents(insert_documents, seed, server_ip):
                  sequence_number, #45
                  ticket_type #46
         ]
-        print list(q)[0]
+        print(list(q)[0])
         k_qry = list(q)[0]
-        r = runNQueryParam(q[k_qry],param, server_ip)
-        print r
+        r = runNQueryParam(q[k_qry], param, server_ip)
+        print(r)
 
-        print "Done!"
+        print("Done!")
 
 def sdk_load_documents(insert_documents, seed, server_ip, batch_size, buckets):
     all_journey_direction = ["Return"]
@@ -424,19 +424,19 @@ def sdk_load_documents(insert_documents, seed, server_ip, batch_size, buckets):
     j = 1
     while j <= insert_documents:
         keys = {}
-        for doc_num in xrange(batch_size):
+        for doc_num in range(batch_size):
             key = str(j)+ '_' +seed
             y=calcAirportRouteInfo()
             x=calcFlightSegmentDateTime()
-            journey_direction = random.sample(all_journey_direction,1)
+            journey_direction = random.sample(all_journey_direction, 1)
             eTicketBool=random.choice([True, False])
             if eTicketBool:
                 ticket_type="eTicket"
             ticket_type="paper"
-            marketingAirline = random.sample(all_marketing_airlines,1)
+            marketingAirline = random.sample(all_marketing_airlines, 1)
             dummyvar=0 #placeholder
             t, total_taxes = calcTaxes()
-            base_fare = round(random.uniform(250,600)) # later can add logic for varying with mileage/airports
+            base_fare = round(random.uniform(250, 600)) # later can add logic for varying with mileage/airports
             total_fare = base_fare+total_taxes
             sequence_number = j+1000 # for the lack of better understanding of sequencenUmber
 
@@ -490,10 +490,10 @@ def sdk_load_documents(insert_documents, seed, server_ip, batch_size, buckets):
             global doc_template
             template = doc_template
             template = template.replace('\\"', '"')
-            for p in reversed(xrange(len(param))):
+            for p in reversed(range(len(param))):
                 if isinstance(param[p], (bool)):
                     template = template.replace('$%s' % (p + 1), str.lower(str(param[p])))
-                elif isinstance(param[p], (int, float, long)) and not isinstance(param[p], (bool)):
+                elif isinstance(param[p], (int, float)) and not isinstance(param[p], (bool)):
                     template = template.replace('$%s' % (p + 1), str(param[p]))
                 elif isinstance(param[p], list):
                     template = template.replace('$%s' % (p + 1), str(param[p]))
@@ -502,25 +502,25 @@ def sdk_load_documents(insert_documents, seed, server_ip, batch_size, buckets):
             template = template.replace("'", '"')
             keys[key] = json.loads(template)
             j += 1
-        print list(q)[0]
+        print(list(q)[0])
         r = runSDKQuery(keys, server_ip, buckets)
-        print r
+        print(r)
 
-    print "Done!"
+    print("Done!")
 
 
 
 parser = argparse.ArgumentParser(description='This script is used load sabre dataset')
-parser.add_argument('-doc','--documents',help='Number of documents', required=True)
-parser.add_argument('-q','--queryNode',help='query node ip', required=True)
-parser.add_argument('-s','--seed',help='Seed for key generation', required=False)
-parser.add_argument('-b','--queryBuckets',help='Buckets to query', required=False)
-parser.add_argument('-z','--queryBatchSize',help='Batch size to insert', required=False)
+parser.add_argument('-doc', '--documents', help='Number of documents', required=True)
+parser.add_argument('-q', '--queryNode', help='query node ip', required=True)
+parser.add_argument('-s', '--seed', help='Seed for key generation', required=False)
+parser.add_argument('-b', '--queryBuckets', help='Buckets to query', required=False)
+parser.add_argument('-z', '--queryBatchSize', help='Batch size to insert', required=False)
 args = vars(parser.parse_args())
 
 ## output duration and clients ##
-print ("Documents: %s" % args['documents'] )
-print ("QueryNode: %s" % args['queryNode'])
+print(("Documents: %s" % args['documents'] ))
+print(("QueryNode: %s" % args['queryNode']))
 
 insert_documents = int(args['documents'])
 queryNode = str(args['queryNode'])
@@ -532,13 +532,13 @@ if args['queryBuckets']:
 batchSize = 1
 if 'queryBatchSize' in args:
     batchSize = int(args['queryBatchSize'])
-print 'Batch size: %s' % batchSize
+print('Batch size: %s' % batchSize)
 #Create random insert key
 seed = "sabre_" + str(randint(1, 100000))
 
-print "------------ Begin Inserts  ------------"
+print("------------ Begin Inserts  ------------")
 if isinstance(queryNode, list) or batchSize > 1 or isinstance(queryBuckets, list):
     l = sdk_load_documents(insert_documents, seed, queryNode, batchSize, queryBuckets)
 else:
-    l = load_documents(insert_documents,seed,queryNode)
-print "------------ End of my insert program ------------"
+    l = load_documents(insert_documents, seed, queryNode)
+print("------------ End of my insert program ------------")

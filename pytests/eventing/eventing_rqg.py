@@ -1,4 +1,4 @@
-import os,re
+import os, re
 import zipfile
 import datetime
 import logging
@@ -42,8 +42,8 @@ class EventingRQG(EventingBaseTest):
                                       use_rest=True
                                       )
         self.number_of_handler = self.input.param('number_of_handler', 5)
-        self.number_of_queries = self.input.param('number_of_queries',None)
-        self.template_file=self.input.param('template_file','b/resources/rqg/simple_table_db/query_tests_using_templates/query_10000_fields.txt.zip')
+        self.number_of_queries = self.input.param('number_of_queries', None)
+        self.template_file=self.input.param('template_file', 'b/resources/rqg/simple_table_db/query_tests_using_templates/query_10000_fields.txt.zip')
 
     having_map = {"STRING_FIELD ": "email ", "NUMERIC_FIELD ": "age ", "UPPER_BOUND_VALUE": "8",
                   "LOWER_BOUND_VALUE": "0", "NUMERIC_FIELD_LIST": "age", "STRING_FIELD_LIST": "email",
@@ -114,7 +114,7 @@ class EventingRQG(EventingBaseTest):
                 for i in range(j, j + k):
                     if i >= s:
                         break
-                    threads.append(Thread(target=self.create_function_and_deploy, args=(query_list[i],False)))
+                    threads.append(Thread(target=self.create_function_and_deploy, args=(query_list[i], False)))
                 for thread in threads:
                     thread.start()
                 for thread in threads:
@@ -149,24 +149,24 @@ class EventingRQG(EventingBaseTest):
     def _convert_template_n1ql(self, query):
         n1ql = str(query).replace("BUCKET_NAME", self.src_bucket_name)
         n1ql = str(n1ql).replace("TRUNCATE", "TRUNC")
-        for k, v in self.field_map.items():
+        for k, v in list(self.field_map.items()):
             n1ql = str(n1ql).replace(k, v)
         if "HAVING" in n1ql:
-            for k, v in self.having_map.items():
-                n1ql=str(n1ql).replace(k,v)
+            for k, v in list(self.having_map.items()):
+                n1ql=str(n1ql).replace(k, v)
             group_fields = re.search(r'GROUP BY(.*?)HAVING', n1ql).group(1)
             n1ql = n1ql.replace("GROUPBY_FIELDS", group_fields)
         elif "GROUP BY" in n1ql:
-            for k, v in self.having_map.items():
-                n1ql=str(n1ql).replace(k,v)
+            for k, v in list(self.having_map.items()):
+                n1ql=str(n1ql).replace(k, v)
             group_fields = re.search(r'GROUP BY(.*?);', n1ql).group(1)
             n1ql = n1ql.replace("GROUPBY_FIELDS", group_fields)
         if "UPDATE" in n1ql:
-            for k,v in self.update_map.items():
+            for k, v in list(self.update_map.items()):
                 n1ql = str(n1ql).replace(k, v)
             n1ql = n1ql.replace(self.src_bucket_name, self.dst_bucket_name)
         if "JOIN" in n1ql:
-            for k,v in self.join_map.items():
+            for k, v in list(self.join_map.items()):
                 n1ql = str(n1ql).replace(k, v)
         return n1ql
 

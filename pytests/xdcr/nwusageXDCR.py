@@ -7,7 +7,7 @@ from couchbase_helper.documentgenerator import BlobGenerator
 from membase.api.rest_client import RestConnection
 from remote.remote_util import RemoteMachineShellConnection
 
-from xdcrnewbasetests import XDCRNewBaseTest, NodeHelper, FloatingServers
+from .xdcrnewbasetests import XDCRNewBaseTest, NodeHelper, FloatingServers
 
 
 class nwusage(XDCRNewBaseTest):
@@ -47,8 +47,8 @@ class nwusage(XDCRNewBaseTest):
         self._temp = self._value_size
         # Decrease number of docs as size increases
         while self._temp > 10:
-            self._temp /= 10
-            self._num_items /= 10
+            self._temp //= 10
+            self._num_items //= 10
         self._value_size *= self.num_src_nodes
         self._num_items *= self.num_src_nodes
         self.log.info("Doc size = {0} bytes, Number of docs = {1}".format(self._value_size, self._num_items))
@@ -98,7 +98,7 @@ class nwusage(XDCRNewBaseTest):
 
     def _verify_bandwidth_usage(self, node, nw_limit, no_of_nodes, event_time=None, nw_usage="[0-9][0-9]*",
                                 end_time=None):
-        #nw_max = (nw_limit * 1024 * 1024) / no_of_nodes
+        #nw_max = (nw_limit * 1024 * 1024) // no_of_nodes
         if event_time:
             time_to_compare = self._extract_timestamp(event_time)
         else:

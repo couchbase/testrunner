@@ -35,7 +35,7 @@ class FailoverHelper(object):
         for f in failed:
             self.log.info("will fail over node : {0}".format(f.id))
 
-        if len(nodes) / (1 + howmany) >= 1:
+        if len(nodes) // (1 + howmany) >= 1:
             self.test.assertTrue(RebalanceHelper.wait_for_replication(rest.get_nodes(), timeout=900),
                             msg="replication did not finish after 15 minutes")
             for f in failed:

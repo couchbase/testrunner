@@ -154,7 +154,7 @@ class CreateMembaseBucketsTests(unittest.TestCase):
             except BucketCreationException as ex:
                 #check if 'default' and 'Default' buckets exist
                 self.log.info('BucketCreationException was thrown as expected')
-                self.log.info(ex.message)
+                self.log.info(ex._message)
 
     def test_non_default_case_sensitive_same_port(self):
         postfix = uuid.uuid4()
@@ -351,7 +351,7 @@ class CreateMembaseBucketsTests(unittest.TestCase):
                 except BucketCreationException as ex:
                     self.log.info(ex)
 
-    # create maximum number of buckets (server memory / 100MB)
+    # create maximum number of buckets (server memory // 100MB)
     # only done on the first server
     def test_max_buckets(self):
         log = logger.Logger.get_logger()

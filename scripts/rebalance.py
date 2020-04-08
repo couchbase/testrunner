@@ -3,7 +3,7 @@
 import sys
 import subprocess
 import json
-import ConfigParser
+import configparser
 import getopt
 
 #[global]
@@ -33,29 +33,29 @@ def usage(err=None):
     err_code = 0
     if err:
         err_code = 1
-        print "Error:",err
-        print
-    print "./rebalance.py -i <inifile> -m <master:port> +<num_in> -<num_out> --phase-hint=[phase_hint]"
-    print ""
-    print " inifile            the standard testrunner ini with all nodes listed (base nodes + number rebalance in + number rebalance out"
-    print " num_in             number of nodes to rebalance in (chooses from the end of the server list)"
-    print " num_out            number of nodes to rebalance out (chooses from the start of the server list)"
-    print " phase_hint         1: remove nodes from the end of the list, 2: remove nodes from the start of the list"
-    print ""
-    print " assuming we start with 24 nodes:"
-    print "./rebalance.py -i nodes.ini -m master:port +24 -12 --phase-hint=1"
-    print "./rebalance.py -i nodes.ini -m master:port +12 -12 --phase-hint=2"
-    print "./rebalance.py -i nodes.ini -m master:port +12"
-    print """24 nodes -> (add 24 new nodes and remove 12 existing nodes) -> 36 nodes
+        print("Error:", err)
+        print()
+    print("./rebalance.py -i <inifile> -m <master:port> +<num_in> -<num_out> --phase-hint=[phase_hint]")
+    print("")
+    print(" inifile            the standard testrunner ini with all nodes listed (base nodes + number rebalance in + number rebalance out")
+    print(" num_in             number of nodes to rebalance in (chooses from the end of the server list)")
+    print(" num_out            number of nodes to rebalance out (chooses from the start of the server list)")
+    print(" phase_hint         1: remove nodes from the end of the list, 2: remove nodes from the start of the list")
+    print("")
+    print(" assuming we start with 24 nodes:")
+    print("./rebalance.py -i nodes.ini -m master:port +24 -12 --phase-hint=1")
+    print("./rebalance.py -i nodes.ini -m master:port +12 -12 --phase-hint=2")
+    print("./rebalance.py -i nodes.ini -m master:port +12")
+    print("""24 nodes -> (add 24 new nodes and remove 12 existing nodes) -> 36 nodes
 36 nodes -> (add 12 nodes with upgraded RAM that were removed  and remove 12 existing nodes with lower RAM size) -> 36 nodes
-36 nodes -> (add 12 nodes with upgraded RAM that were removed in previous rebalance)  -> 48 nodes"""
+36 nodes -> (add 12 nodes with upgraded RAM that were removed in previous rebalance)  -> 48 nodes""")
     sys.exit(err_code)
 
 
 def run_cmd(cmd):
     rtn = ""
-    p = subprocess.Popen(cmd,shell=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
-    stdoutdata,stderrdata=p.communicate()
+    p = subprocess.Popen(cmd, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    stdoutdata, stderrdata=p.communicate()
     rtn += stdoutdata
     return rtn
 
@@ -83,15 +83,15 @@ def _vbucket_diff(original_vbuckets, new_vbuckets, index):
             deleted_vbuckets += 1
         elif original_vbuckets[i][index] != new_vbuckets[i][index]:
             if verbose:
-                rtn += `i` + " " + original_vbuckets[i][index] + " -> " + new_vbuckets[i][index] + "\n"
+                rtn += repr(i) + " " + original_vbuckets[i][index] + " -> " + new_vbuckets[i][index] + "\n"
             moved_vbuckets += 1
 
     if index == 0:
-        rtn += "moved   " + `moved_vbuckets` + " vbuckets"
+        rtn += "moved   " + repr(moved_vbuckets) + " vbuckets"
     else:
-        rtn += "moved   " + `moved_vbuckets` + " replica vbuckets" + "\n"
-        rtn += "created " + `created_vbuckets` + " replica vbuckets" + "\n"
-        rtn += "deleted " + `deleted_vbuckets` + " replica vbuckets"
+        rtn += "moved   " + repr(moved_vbuckets) + " replica vbuckets" + "\n"
+        rtn += "created " + repr(created_vbuckets) + " replica vbuckets" + "\n"
+        rtn += "deleted " + repr(deleted_vbuckets) + " replica vbuckets"
  
     return rtn
 
@@ -207,7 +207,7 @@ class Config(object):
             (opts, args) = getopt.getopt(argv_stripped, 'hi:m:p:', ['help', 'ini=', 'master=', 'phase-hint='])
         except IndexError:
             usage()
-        except getopt.GetoptError, err:
+        except getopt.GetoptError as err:
             usage(err)
 
         for o, a in opts:
@@ -234,7 +234,7 @@ class Config(object):
         self.num_out = int(num_out)
         self.phase_hint = int(phase_hint)
 
-        config = ConfigParser.ConfigParser()
+        config = configparser.ConfigParser()
         config.read(inifile)
 
         servers_map = {}
@@ -254,7 +254,7 @@ class Config(object):
  
         i = 0
         for server in config.options('servers'):
-            server_name = config.get('servers',server)
+            server_name = config.get('servers', server)
             server_id = i
             i = i + 1
             server_ip = server_name
@@ -271,7 +271,7 @@ class Config(object):
                 self.master = server_info
 
         # sort the servers based on their index in the ini file
-        for index,server in servers_map.iteritems():
+        for index, server in servers_map.items():
             self.servers.append(server)
 
     def __str__(self):
@@ -279,13 +279,13 @@ class Config(object):
         rtn += "servers:\n"
         for s in self.servers:
             if s == self.master:
-                rtn += "*" + `s` + "\n"
+                rtn += "*" + repr(s) + "\n"
             else:
-                rtn += " " + `s` + "\n"
+                rtn += " " + repr(s) + "\n"
 
-        rtn += "num_in: " + `self.num_in` + "\n"
-        rtn += "num_out: " + `self.num_out` + "\n"
-        rtn += "phase_hint: " + `self.phase_hint` + "\n"
+        rtn += "num_in: " + repr(self.num_in) + "\n"
+        rtn += "num_out: " + repr(self.num_out) + "\n"
+        rtn += "phase_hint: " + repr(self.phase_hint) + "\n"
 
         return rtn
 
@@ -304,20 +304,20 @@ if __name__ == "__main__":
     # determine which servers to add and which to remove
     servers_add = extra_servers[:config.num_in]
     if config.phase_hint == 1:
-        print "phase 1"
+        print("phase 1")
         servers_remove = config.servers[config.num_out:config.num_out*2]
     elif config.phase_hint == 2:
-        print "phase 2"
+        print("phase 2")
         servers_remove = config.servers[:config.num_out]
     else:
         servers_remove = current_servers[:config.num_out]
 
-    print "adding {0} nodes".format(config.num_in)
+    print("adding {0} nodes".format(config.num_in))
     for server in servers_add:
-        print " " + `server`
-    print "removing {0} nodes".format(config.num_out)
+        print(" " + repr(server))
+    print("removing {0} nodes".format(config.num_out))
     for server in servers_remove:
-        print " " + `server`
+        print(" " + repr(server))
 
     # rebalane in/out
     config.master.rebalance(servers_add, servers_remove)
@@ -328,10 +328,10 @@ if __name__ == "__main__":
             config.master = servers_add[0]
         else:
             config.master = servers_diff(current_servers, servers_remove + [config.master])[0]
-        print "new master:", config.master
+        print("new master:", config.master)
 
     # get new vbucket state
     new_vbuckets = config.master.vbucket_map()
 
-    print vbucket_active_diff(original_vbuckets, new_vbuckets)
-    print vbucket_replica_diff(original_vbuckets, new_vbuckets)
+    print(vbucket_active_diff(original_vbuckets, new_vbuckets))
+    print(vbucket_replica_diff(original_vbuckets, new_vbuckets))

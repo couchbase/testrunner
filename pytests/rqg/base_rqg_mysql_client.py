@@ -88,13 +88,13 @@ class BaseRQGMySQLClient(MySQLClient):
                 if isinstance(value, float):
                     return round(value, 0)
                 return int(round(value, 0))
-        return unicode(value)
+        return str(value)
 
     def _get_table_list(self):
         table_list = []
         columns, rows = self._execute_query(query="SHOW TABLES")
         for row in rows:
-            table_list.append(row[0].decode("utf-8"))
+            table_list.append(row[0])
         return table_list
 
     def _get_databases(self):
@@ -124,7 +124,7 @@ class BaseRQGMySQLClient(MySQLClient):
     def _get_field_list_map_for_tables(self, table_name=None):
         target_map = {}
         map = self._get_tables_information(table_name)
-        for table_name in map.keys():
+        for table_name in list(map.keys()):
             field_list = []
             for field_info in map[table_name]:
                 field_list.append(field_info['Field'])
@@ -134,7 +134,7 @@ class BaseRQGMySQLClient(MySQLClient):
     def _get_field_with_types_list_map_for_tables(self, can_remove_copy_table=True, table_name=None):
         target_map = {}
         map = self._get_tables_information(table_name)
-        for table_name in map.keys():
+        for table_name in list(map.keys()):
             field_list = []
             for field_info in map[table_name]:
                 field_list.append({field_info['Field']: field_info['Type']})
@@ -146,7 +146,7 @@ class BaseRQGMySQLClient(MySQLClient):
     def _get_primary_key_map_for_tables(self, table_name=None):
         target_map = {}
         map = self._get_tables_information(table_name)
-        for table_name in map.keys():
+        for table_name in list(map.keys()):
             for field_info in map[table_name]:
                 if field_info['Key'] == "PRI":
                     target_map[table_name] = field_info['Field']
@@ -155,36 +155,36 @@ class BaseRQGMySQLClient(MySQLClient):
     def _gen_index_combinations_for_tables(self, index_type="GSI", partitioned_indexes=False):
         index_map = {}
         map = self._get_pkey_map_for_tables_without_primary_key_column()
-        for table_name in map.keys():
+        for table_name in list(map.keys()):
             index_map[table_name] = {}
             number_field_list = []
             string_field_list = []
             datetime_field_list = []
-            for key in map[table_name].keys():
+            for key in list(map[table_name].keys()):
                 if "int" in key or "decimal" in key:
                     number_field_list.append(key)
                 if "char" in key or "text" in key:
                     string_field_list.append(key)
                 if "tinyint" in key:
                     datetime_field_list.append(key)
-            key_list = map[table_name].keys()
+            key_list = list(map[table_name].keys())
             index_list_map = {}
             prefix = table_name+"_idx_"
-            for pair in list(itertools.permutations(key_list,1)):
+            for pair in list(itertools.permutations(key_list, 1)):
                 index_list_map[prefix+"_".join(pair)] = pair
-            for pair in list(itertools.permutations(key_list,3)):
+            for pair in list(itertools.permutations(key_list, 3)):
                 index_list_map[prefix+"_".join(pair)] = pair
-            for pair in list(itertools.permutations(string_field_list,len(string_field_list))):
+            for pair in list(itertools.permutations(string_field_list, len(string_field_list))):
                 index_list_map[prefix+"_".join(pair)] = pair
-            for pair in list(itertools.permutations(number_field_list,len(number_field_list))):
+            for pair in list(itertools.permutations(number_field_list, len(number_field_list))):
                 index_list_map[prefix+"_".join(pair)] = pair
             index_list_map[prefix+"_".join(key_list)] = key_list
             index_map[table_name] = index_list_map
             index_list_map = {}
             final_map = {}
-            for table_name in index_map.keys():
+            for table_name in list(index_map.keys()):
                 final_map[table_name] = {}
-                for index_name in index_map[table_name].keys():
+                for index_name in list(index_map[table_name].keys()):
                     if partitioned_indexes:
                         definition = "CREATE INDEX {0} ON {1}({2}) PARTITION BY HASH(meta().id) USING {3}".format(
                             index_name, self.database + "_" + table_name,
@@ -206,11 +206,11 @@ class BaseRQGMySQLClient(MySQLClient):
     def _get_pkey_map_for_tables_with_primary_key_column(self, can_remove_copy_table=True, table_name=None):
         target_map = {}
         map = self._get_tables_information(table_name)
-        if can_remove_copy_table and "copy_simple_table" in map.keys():
+        if can_remove_copy_table and "copy_simple_table" in list(map.keys()):
             map.pop("copy_simple_table")
-        number_of_tables = len(map.keys())
+        number_of_tables = len(list(map.keys()))
         count = 1
-        for table_name in map.keys():
+        for table_name in list(map.keys()):
             target_map[table_name] ={}
             field_map = {}
             primary_key_field = "primary_key_field"
@@ -231,7 +231,7 @@ class BaseRQGMySQLClient(MySQLClient):
     def _get_pkey_map_for_tables_without_primary_key_column(self):
         target_map = {}
         map = self._get_tables_information()
-        for table_name in map.keys():
+        for table_name in list(map.keys()):
             target_map[table_name] ={}
             field_map = {}
             for field_info in map[table_name]:
@@ -243,7 +243,7 @@ class BaseRQGMySQLClient(MySQLClient):
     def _get_pkey_map_for_tables_wit_primary_key_column(self):
         target_map = {}
         map = self._get_tables_information()
-        for table_name in map.keys():
+        for table_name in list(map.keys()):
             target_map[table_name] ={}
             field_map = {}
             for field_info in map[table_name]:
@@ -262,9 +262,9 @@ class BaseRQGMySQLClient(MySQLClient):
     def _get_values_with_type_for_fields_in_table(self, can_remove_copy_table=True, table_name=None):
         map = self._get_field_with_types_list_map_for_tables(can_remove_copy_table=can_remove_copy_table, table_name=table_name)
         gen_map = self._get_pkey_map_for_tables_with_primary_key_column(can_remove_copy_table=can_remove_copy_table, table_name=table_name)
-        for table_name in map.keys():
+        for table_name in list(map.keys()):
             for vals in map[table_name]:
-                field_name = vals.keys()[0]
+                field_name = list(vals.keys())[0]
                 value_list = self._get_distinct_values_for_fields(table_name, field_name)
                 gen_map[table_name]["fields"][field_name]["distinct_values"] = sorted(value_list)
         return gen_map
@@ -272,7 +272,7 @@ class BaseRQGMySQLClient(MySQLClient):
     def _gen_data_simple_table(self, number_of_rows=1000):
         helper = RQGQueryHelper()
         map = self._get_pkey_map_for_tables_wit_primary_key_column()
-        for table_name in map.keys():
+        for table_name in list(map.keys()):
             for x in range(0, number_of_rows):
                 statement = helper._generate_insert_statement(table_name, map[table_name], "\"" + str(x + 1) + "\"")
                 self._insert_execute_query(statement)
@@ -313,8 +313,8 @@ class BaseRQGMySQLClient(MySQLClient):
                 try:
                     sql_result = self._query_and_convert_to_json(query)
                     map["expected_result"] = sql_result
-                except Exception, ex:
-                    print ex
+                except Exception as ex:
+                    print(ex)
                     check = False
             if check:
                 f.write(json.dumps(map)+"\n")
@@ -353,8 +353,8 @@ class BaseRQGMySQLClient(MySQLClient):
                 try:
                     sql_result = self._query_and_convert_to_json(sql_query)
                     sql_n1ql_index_map["expected_result"] = sql_result
-                except Exception, ex:
-                    print ex
+                except Exception as ex:
+                    print(ex)
 
 
             sql_n1ql_index_map = self._translate_function_names(sql_n1ql_index_map)
@@ -498,10 +498,10 @@ class BaseRQGMySQLClient(MySQLClient):
         os.mkdir(data_dump_path)
         table_key_map = self._get_primary_key_map_for_tables()
         # Make a list of buckets that we want to create for querying
-        bucket_list = table_key_map.keys()
+        bucket_list = list(table_key_map.keys())
         # Read Data from mysql database and populate the couchbase server
-        print "in dump database, reading data from mysql database and populating couchbase server"
-        print "bucket_list is {0}".format(bucket_list)
+        print("in dump database, reading data from mysql database and populating couchbase server")
+        print("bucket_list is {0}".format(bucket_list))
         for bucket_name in bucket_list:
             query = "select * from {0}".format(bucket_name)
             columns, rows = self._execute_query(query = query)

@@ -1,5 +1,5 @@
 import logging
-from base_2i import BaseSecondaryIndexingTests
+from .base_2i import BaseSecondaryIndexingTests
 from couchbase_helper.query_definitions import QueryDefinition
 from membase.api.rest_client import RestConnection
 from membase.helper.bucket_helper import BucketOperationHelper
@@ -37,7 +37,7 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
             log.info("Flushing bucket {0}...".format(bucket.name))
             rest.flush_bucket(bucket)
         self.sleep(30)
-        self.multi_create_index(buckets=self.buckets,query_definitions=self.query_definitions)
+        self.multi_create_index(buckets=self.buckets, query_definitions=self.query_definitions)
         self._verify_bucket_count_with_index_count()
 
     def test_deployment_plan_with_defer_build_plan_create_drop_index(self):
@@ -55,14 +55,14 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
             for bucket in self.buckets:
                 query_definition_map[bucket.name] =[]
                 for server in servers:
-                    index_name = "index_name_ip_{0}_port_{1}_{2}".format(server.ip.replace(".","_"),server.port,bucket.name)
+                    index_name = "index_name_ip_{0}_port_{1}_{2}".format(server.ip.replace(".", "_"), server.port, bucket.name)
                     query_definition = QueryDefinition(index_name=index_name, index_fields = ["join_yr"], \
                         query_template = "", groups = [])
                     query_definition_map[bucket.name].append(query_definition)
                     query_definitions.append(query_definition)
-                    node_key = "{0}:{1}".format(server.ip,server.port)
+                    node_key = "{0}:{1}".format(server.ip, server.port)
                     deploy_node_info = [node_key]
-                    if node_key not in verification_map.keys():
+                    if node_key not in list(verification_map.keys()):
                         verification_map[node_key] = {}
                     verification_map[node_key][bucket.name]=index_name
                     tasks.append(self.async_create_index(bucket.name, query_definition, deploy_node_info = deploy_node_info))
@@ -71,11 +71,11 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
             index_map = self.get_index_stats(perNode=True)
             self.log.info(index_map)
             for bucket in self.buckets:
-                for node in index_map.keys():
+                for node in list(index_map.keys()):
                     self.log.info(" verifying node {0}".format(node))
-                    self.assertTrue(verification_map[node][bucket.name] in index_map[node][bucket.name].keys(), \
-                        "for bucket {0} and node {1}, could not find key {2} in {3}".format(bucket.name, node, verification_map[node][bucket.name],index_map))
-        except Exception, ex:
+                    self.assertTrue(verification_map[node][bucket.name] in list(index_map[node][bucket.name].keys()), \
+                        "for bucket {0} and node {1}, could not find key {2} in {3}".format(bucket.name, node, verification_map[node][bucket.name], index_map))
+        except Exception as ex:
             self.log.info(ex)
             raise
         finally:
@@ -95,13 +95,13 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
                 query_definition = QueryDefinition(index_name=index_name, index_fields = ["join_yr"], \
                     query_template = "", groups = [])
                 query_definitions.append(query_definition)
-                deploy_node_info = ["{0}:{1}".format(server.ip,server.port)]
+                deploy_node_info = ["{0}:{1}".format(server.ip, server.port)]
                 tasks.append(self.async_create_index(self.buckets[0], query_definition, deploy_node_info = deploy_node_info))
             for task in tasks:
                 task.result()
-        except Exception, ex:
+        except Exception as ex:
             msg =  "index test_deployment_plan_defer_build_same_name_index already exist"
-            self.assertTrue(msg in str(ex),ex)
+            self.assertTrue(msg in str(ex), ex)
 
     def test_concurrent_deployment_plan_defer_build_different_name_index(self):
         query_definitions = []
@@ -113,11 +113,11 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
             servers.reverse()
             for server in servers:
                 self.defer_build=True
-                for index in range(0,10):
+                for index in range(0, 10):
                     query_definition = QueryDefinition(index_name=index_name+"_"+str(index), index_fields = ["join_yr"], \
                         query_template = "", groups = [])
                     query_definitions.append(query_definition)
-                    deploy_node_info = ["{0}:{1}".format(server.ip,server.port)]
+                    deploy_node_info = ["{0}:{1}".format(server.ip, server.port)]
                     tasks.append(self.async_create_index(self.buckets[0], query_definition, deploy_node_info = deploy_node_info))
             for task in tasks:
                 task.result()
@@ -129,7 +129,7 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
                 tasks.append(self.async_monitor_index(bucket = "default", index_name = index_name))
             for task in tasks:
                 task.result()
-        except Exception, ex:
+        except Exception as ex:
             msg =  "Index test_deployment_plan_defer_build_same_name_index already exist"
             self.assertTrue(msg in str(ex), ex)
 
@@ -142,20 +142,20 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
             for task in tasks:
                 task.result()
             self.assertTrue(False, " Created indexes concurrently, should have failed! ")
-        except Exception, ex:
+        except Exception as ex:
             msg = "Build Already In Progress"
-            self.assertTrue(msg in str(ex),ex)
+            self.assertTrue(msg in str(ex), ex)
 
     def test_deployment_plan_with_nodes_only_plan_create_drop_index_for_primary_index(self):
         server = self.get_nodes_from_services_map(service_type = "n1ql")
         self.query = "DROP PRIMARY INDEX ON {0} using gsi".format(self.buckets[0].name)
         try:
             self.n1ql_helper.run_cbq_query(query = self.query, server = server)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(ex)
         query_definitions = []
         servers = self.get_nodes_from_services_map(service_type = "index", get_all_nodes = True)
-        deploy_node_info = ["{0}:{1}".format(servers[0].ip,servers[0].port)]
+        deploy_node_info = ["{0}:{1}".format(servers[0].ip, servers[0].port)]
         self.query = "CREATE PRIMARY INDEX ON {0} using gsi".format(self.buckets[0].name)
         deployment_plan = {}
         if deploy_node_info  != None:
@@ -174,7 +174,7 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
 
             self.query = "DROP PRIMARY INDEX ON {0} using gsi".format(self.buckets[0].name)
             self.n1ql_helper.run_cbq_query(query = self.query, server = server)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(ex)
             raise
 
@@ -190,7 +190,7 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
             # create index
             server = self.get_nodes_from_services_map(service_type = "n1ql")
             self.n1ql_helper.run_cbq_query(query = self.query, server = server)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(ex)
             raise
 
@@ -206,12 +206,12 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
             # create index
             server = self.get_nodes_from_services_map(service_type = "n1ql")
             self.n1ql_helper.run_cbq_query(query = self.query, server = server)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(ex)
             raise
 
     def test_create_gsi_index_existing_view_index(self):
-        self.indexes= self.input.param("indexes","").split(":")
+        self.indexes= self.input.param("indexes", "").split(":")
         query_definition = QueryDefinition(
             index_name="test_failure_create_index_existing_index",
             index_fields = self.indexes,
@@ -227,7 +227,7 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
             self.query = query_definition.generate_index_create_query(bucket = self.buckets[0].name,
             use_gsi_for_secondary = True, gsi_type=self.gsi_type)
             self.n1ql_helper.run_cbq_query(query = self.query, server = server)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(ex)
             raise
         finally:
@@ -236,7 +236,7 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
 
     def test_failure_create_index_big_fields(self):
         field_name = ""
-        field_name += ",".join([ str(a) for a in range(1,100)]).replace(",","_")
+        field_name += ",".join([ str(a) for a in range(1, 100)]).replace(",", "_")
         query_definition = QueryDefinition(
             index_name="test_failure_create_index_existing_index",
             index_fields = field_name,
@@ -247,13 +247,13 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
             # create index
             server = self.get_nodes_from_services_map(service_type = "n1ql")
             self.n1ql_helper.run_cbq_query(query = self.query, server = server)
-        except Exception, ex:
+        except Exception as ex:
             msg="Expression not indexable"
             self.assertTrue(msg in str(ex),
                 " 5000 error not recived as expected {0}".format(ex))
 
     def test_create_gsi_index_without_primary_index(self):
-        self.indexes= self.input.param("indexes","").split(":")
+        self.indexes= self.input.param("indexes", "").split(":")
         query_definition = QueryDefinition(
             index_name="test_failure_create_index_existing_index",
             index_fields = self.indexes,
@@ -264,13 +264,13 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
             # create index
             server = self.get_nodes_from_services_map(service_type = "n1ql")
             self.n1ql_helper.run_cbq_query(query = self.query, server = server)
-        except Exception, ex:
+        except Exception as ex:
             msg="Keyspace not_present_bucket name not found - cause: Bucket not_present_bucket not found"
             self.assertTrue(msg in str(ex),
                 " 5000 error not recived as expected {0}".format(ex))
 
     def test_failure_create_index_non_existing_bucket(self):
-        self.indexes= self.input.param("indexes","").split(":")
+        self.indexes= self.input.param("indexes", "").split(":")
         query_definition = QueryDefinition(
             index_name="test_failure_create_index_existing_index",
             index_fields = self.indexes,
@@ -281,7 +281,7 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
             # create index
             server = self.get_nodes_from_services_map(service_type = "n1ql")
             self.n1ql_helper.run_cbq_query(query = self.query, server = server)
-        except Exception, ex:
+        except Exception as ex:
             msg="Keyspace not found in CB datastore keyspace not_present_bucket - cause: No bucket named not_present_bucket"
             self.assertTrue(msg in str(ex),
                 " 12003 error not recived as expected {0}".format(ex))
@@ -297,7 +297,7 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
             # create index
             server = self.get_nodes_from_services_map(service_type = "n1ql")
             self.n1ql_helper.run_cbq_query(query = self.query, server = server)
-        except Exception, ex:
+        except Exception as ex:
             msg="Keyspace not found in CB datastore keyspace not_present_bucket - cause: No bucket named not_present_bucket"
             self.assertTrue(msg in str(ex),
                 " 12003 error not recived as expected {0}".format(ex))
@@ -313,13 +313,13 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
             # create index
             server = self.get_nodes_from_services_map(service_type = "n1ql")
             self.n1ql_helper.run_cbq_query(query = self.query, server = server)
-        except Exception, ex:
+        except Exception as ex:
             msg="GSI index test_failure_create_index_existing_index not found"
             self.assertTrue(msg in str(ex),
                 " 5000 error not recived as expected {0}".format(ex))
 
     def test_failure_create_index_existing_index(self):
-        self.indexes= self.input.param("indexes","").split(":")
+        self.indexes= self.input.param("indexes", "").split(":")
         query_definition = QueryDefinition(
             index_name="test_failure_create_index_existing_index",
             index_fields = self.indexes,
@@ -332,7 +332,7 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
             self.n1ql_helper.run_cbq_query(query = self.query, server = server)
             # create same index again
             self.n1ql_helper.run_cbq_query(query = self.query, server = server)
-        except Exception, ex:
+        except Exception as ex:
             self.assertTrue("index test_failure_create_index_existing_index already exist" in str(ex),
                 " 5000 error not recived as expected {0}".format(ex))
         finally:
@@ -354,7 +354,7 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
         try:
             res = self.n1ql_helper.run_cbq_query(query = self.query, server = self.n1ql_node)
             self.log.info(res)
-        except Exception, ex:
+        except Exception as ex:
             msg = "cause: Encountered transient error.  Index creation will be retried in background."
             self.log.info(ex)
             self.assertTrue(msg in str(ex), ex)
@@ -374,7 +374,7 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
             self.query = self.query_definitions[0].generate_index_drop_query(bucket = self.buckets[0].name, use_gsi_for_secondary = self.use_gsi_for_secondary, use_gsi_for_primary = self.use_gsi_for_primary)
             self.n1ql_helper.run_cbq_query(query = self.query, server = self.n1ql_node)
             self.log.info(" non-existant indexes cannot be dropped ")
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(ex)
             msg = "GSI index {0} not found".format(self.query_definitions[0].index_name)
             self.assertTrue(msg in str(ex), ex)
@@ -408,7 +408,7 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
             query_definition = QueryDefinition(index_name="test_ambiguity_in_gsi_indexes_due_to_node_down", index_fields = ["join_yr"], \
                     query_template = "SELECT * from %s WHERE join_yr > 1999", groups = [])
             query_definitions.append(query_definition)
-            deploy_node_info = ["{0}:{1}".format(servr_out.ip,servr_out.port)]
+            deploy_node_info = ["{0}:{1}".format(servr_out.ip, servr_out.port)]
             task = self.async_create_index(self.buckets[0].name, query_definition, deploy_node_info = deploy_node_info)
             task.result()
             remote = RemoteMachineShellConnection(servr_out)
@@ -417,8 +417,8 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
             task = self.async_create_index(self.buckets[0].name, query_definition)
             task.result()
             self.assertTrue(False, "Duplicate index should not be allowed when index node is down")
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(ex)
             remote = RemoteMachineShellConnection(servr_out)
             remote.start_server()
-            self.assertTrue("Index test_ambiguity_in_gsi_indexes_due_to_node_down already exist" in str(ex),ex)
+            self.assertTrue("Index test_ambiguity_in_gsi_indexes_due_to_node_down already exist" in str(ex), ex)

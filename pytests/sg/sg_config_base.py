@@ -1,10 +1,10 @@
 from sg.sg_base import GatewayBaseTest
 import json
-import urllib
+import urllib.request, urllib.parse, urllib.error
 try:
     from jinja2 import Environment, FileSystemLoader
 except ImportError as e:
-    print 'please install required modules:', e
+    print('please install required modules:', e)
     raise
 from remote.remote_util import RemoteMachineShellConnection, RemoteMachineHelper
 
@@ -49,7 +49,7 @@ class GatewayConfigBaseTest(GatewayBaseTest):
         env = Environment(loader=loader)
         template = env.get_template('{0}'.format(template_filename))
         if self.password:
-            password_str = urllib.quote('{0}'.format(self.bucket)) +':{0}@'.format(self.password)
+            password_str = urllib.parse.quote('{0}'.format(self.bucket)) +':{0}@'.format(self.password)
         else:
             password_str = ''
         if template_filename == 'gateway_config_template.json':
@@ -175,7 +175,7 @@ class GatewayConfigBaseTest(GatewayBaseTest):
                 return False
             for item in channels:
                 if item.encode('ascii', 'ignore') not in self.doc_channels:
-                    self.log.info('get_all_docs channels missing item - {0}'.format(item.encode('ascii','ignore')))
+                    self.log.info('get_all_docs channels missing item - {0}'.format(item.encode('ascii', 'ignore')))
                     return False
             if not channels:
                 self.log.info('get_all_docs does not return channels - {0}'.format(send_requst_dic))
@@ -264,7 +264,7 @@ class GatewayConfigBaseTest(GatewayBaseTest):
                     return False
                 for item in send_requst_dic['admin_channels']:
                     if item.encode('ascii', 'ignore') not in self.admin_channels:
-                        self.log.info('get_user admin_channels missing item - {0}'.format(item.encode('ascii','ignore')))
+                        self.log.info('get_user admin_channels missing item - {0}'.format(item.encode('ascii', 'ignore')))
                         return False
             if self.admin_roles and 'admin_roles' in send_requst_dic and send_requst_dic['admin_roles'] != self.admin_roles:
                 input_list = self.admin_roles.split(',')
@@ -273,16 +273,16 @@ class GatewayConfigBaseTest(GatewayBaseTest):
                                   .format(len(send_requst_dic['admin_roles']), len(input_list)))
                     return False
                 for item in send_requst_dic['admin_roles']:
-                    if item.encode('ascii','ignore') not in self.admin_roles:
-                        self.log.info('get_user admin_roles missing item - {0}'.format(item.encode('ascii','ignore')))
+                    if item.encode('ascii', 'ignore') not in self.admin_roles:
+                        self.log.info('get_user admin_roles missing item - {0}'.format(item.encode('ascii', 'ignore')))
                         return False
                 if len(send_requst_dic['roles']) != len(input_list):
                     self.log.info('get_user number of items in roles({0}) is different from admin_roles input({1})'
                                   .format(len(send_requst_dic['admin_roles']), len(input_list)))
                     return False
                 for item in send_requst_dic['roles']:
-                    if item.encode('ascii','ignore') not in self.admin_roles:
-                        self.log.info('get_user roles missing item set by admin_roles - {0}'.format(item.encode('ascii','ignore')))
+                    if item.encode('ascii', 'ignore') not in self.admin_roles:
+                        self.log.info('get_user roles missing item set by admin_roles - {0}'.format(item.encode('ascii', 'ignore')))
                         return False
             if self.expect_channels:
                 input_list = self.expect_channels.split(',')
@@ -291,13 +291,13 @@ class GatewayConfigBaseTest(GatewayBaseTest):
                                   .format(len(send_requst_dic['all_channels']), len(input_list)))
                     return False
                 for item in send_requst_dic['all_channels']:
-                    if item.encode('ascii','ignore') not in self.expect_channels and item.encode('ascii','ignore') != '!':
-                        self.log.info('get_user missing channel from self.expect_channels({0})'.format(item.encode('ascii','ignore')))
+                    if item.encode('ascii', 'ignore') not in self.expect_channels and item.encode('ascii', 'ignore') != '!':
+                        self.log.info('get_user missing channel from self.expect_channels({0})'.format(item.encode('ascii', 'ignore')))
                         return False
             if self.roles and 'roles' in send_requst_dic and send_requst_dic['roles'] != self.roles:
                 for item in send_requst_dic['roles']:
-                    if item.encode('ascii','ignore') in self.roles:
-                        self.log.info('get_user roles setting {0} should have no effect'.format(item.encode('ascii','ignore')))
+                    if item.encode('ascii', 'ignore') in self.roles:
+                        self.log.info('get_user roles setting {0} should have no effect'.format(item.encode('ascii', 'ignore')))
                         return False
             if self.email:
                 if '@' in self.email and '.' in self.email:
@@ -344,7 +344,7 @@ class GatewayConfigBaseTest(GatewayBaseTest):
         else:
             return True
 
-    def parse_input_create_roles(self,shell):
+    def parse_input_create_roles(self, shell):
         if self.role_channels:
             roles = self.role_channels.split(';')
             for index, role in enumerate(roles):
@@ -396,7 +396,7 @@ class GatewayConfigBaseTest(GatewayBaseTest):
                         return False
                     for item in send_requst_dic['admin_channels']:
                         if item.encode('ascii', 'ignore') not in self.admin_channels:
-                            self.log.info('get_role admin_channels missing item - {0}'.format(item.encode('ascii','ignore')))
+                            self.log.info('get_role admin_channels missing item - {0}'.format(item.encode('ascii', 'ignore')))
                             return False
                 if self.admin_roles and 'admin_roles' in send_requst_dic and send_requst_dic['admin_roles'] != self.admin_roles:
                     input_list = self.admin_roles.split(',')
@@ -405,8 +405,8 @@ class GatewayConfigBaseTest(GatewayBaseTest):
                                       .format(len(send_requst_dic['admin_roles']), len(input_list)))
                         return False
                     for item in send_requst_dic['admin_roles']:
-                        if item.encode('ascii','ignore') not in self.admin_roles:
-                            self.log.info('get_role admin_roles missing item - {0}'.format(item.encode('ascii','ignore')))
+                        if item.encode('ascii', 'ignore') not in self.admin_roles:
+                            self.log.info('get_role admin_roles missing item - {0}'.format(item.encode('ascii', 'ignore')))
                             return False
                 return True
 

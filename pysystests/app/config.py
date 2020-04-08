@@ -1,4 +1,4 @@
-from __future__ import absolute_import
+
 from kombu import Exchange, Queue
 from datetime import timedelta
 from celery.task.schedules import crontab
@@ -50,10 +50,10 @@ class BaseConfig(object):
         )
 
         self.CELERY_ROUTES = (
-            {'app.systest_manager.systestManager'  : self.route_args('systest_mgr_consumer','test.mgr') },
-            {'app.systest_manager.get_phase_status'  : self.route_args('phase_status','phase.status') },
-            {'app.systest_manager.runPhase'  : self.route_args('run_phase','run.phase') },
-            {'app.workload_manager.updateClusterStatus'  : self.route_args('cluster_status','cluster.status') },
+            {'app.systest_manager.systestManager'  : self.route_args('systest_mgr_consumer', 'test.mgr') },
+            {'app.systest_manager.get_phase_status'  : self.route_args('phase_status', 'phase.status') },
+            {'app.systest_manager.runPhase'  : self.route_args('run_phase', 'run.phase') },
+            {'app.workload_manager.updateClusterStatus'  : self.route_args('cluster_status', 'cluster.status') },
         )
 
         for type_ in types:
@@ -104,12 +104,12 @@ class BaseConfig(object):
         # in the case that key is None, set it equal to queue
         # as this is default behavior
 
-        queue = "%s_%s" % (queue , self.CB_CLUSTER_TAG)
+        queue = "%s_%s" % (queue, self.CB_CLUSTER_TAG)
         routing_key = None
         if key is None:
             routing_key = queue
         else:
-            routing_key = "%s.%s" % (self.CB_CLUSTER_TAG , key)
+            routing_key = "%s.%s" % (self.CB_CLUSTER_TAG, key)
         return queue, routing_key
 
     def add_kvconfig(self):
@@ -152,17 +152,17 @@ class BaseConfig(object):
 
         self.CELERY_ROUTES = self.CELERY_ROUTES +\
         (
-            {'app.sdk_client_tasks.mdelete': self.route_args('delete','kv.delete') },
-            {'app.sdk_client_tasks.mset'   : self.route_args('set','kv.set') },
-            {'app.sdk_client_tasks.mget'  : self.route_args('get','kv.get') },
-            {'app.workload_manager.workloadConsumer' : self.route_args('kv_consumer','kv.consumer') },
-            {'app.workload_manager.taskScheduler' : self.route_args('kv_scheduler','kv.scheduler') },
-            {'app.workload_manager.postcondition_handler' : self.route_args('kv_postcondition','kv.postcondition') },
-            {'app.workload_manager.task_prerun_handler' : self.route_args('kv_prerun','kv.prerun') },
-            {'app.workload_manager.postrun' : self.route_args('kv_postrun','kv.postrun') },
-            {'app.workload_manager.queue_op_cycles' : self.route_args('kv_queueops','kv.queueops') },
-            {'app.workload_manager.generate_pending_tasks' : self.route_args('kv_task_gen','kv.taskgen') },
-            {'app.workload_manager.sysTestRunner' : self.route_args('kv_systestrunner','kv.systestrunner') },
+            {'app.sdk_client_tasks.mdelete': self.route_args('delete', 'kv.delete') },
+            {'app.sdk_client_tasks.mset'   : self.route_args('set', 'kv.set') },
+            {'app.sdk_client_tasks.mget'  : self.route_args('get', 'kv.get') },
+            {'app.workload_manager.workloadConsumer' : self.route_args('kv_consumer', 'kv.consumer') },
+            {'app.workload_manager.taskScheduler' : self.route_args('kv_scheduler', 'kv.scheduler') },
+            {'app.workload_manager.postcondition_handler' : self.route_args('kv_postcondition', 'kv.postcondition') },
+            {'app.workload_manager.task_prerun_handler' : self.route_args('kv_prerun', 'kv.prerun') },
+            {'app.workload_manager.postrun' : self.route_args('kv_postrun', 'kv.postrun') },
+            {'app.workload_manager.queue_op_cycles' : self.route_args('kv_queueops', 'kv.queueops') },
+            {'app.workload_manager.generate_pending_tasks' : self.route_args('kv_task_gen', 'kv.taskgen') },
+            {'app.workload_manager.sysTestRunner' : self.route_args('kv_systestrunner', 'kv.systestrunner') },
         )
 
 
@@ -206,12 +206,12 @@ class BaseConfig(object):
 
         self.CELERY_ROUTES = self.CELERY_ROUTES +\
         (   # route schedulable tasks both to same interal task queue
-            {'app.query.queryConsumer': self.route_args('query_consumer','query.consumer')},
-            {'app.query.queryRunner': self.route_args('query_runner','query.runner')},
-            {'app.query.updateQueryBuilders': self.route_args('query_upt_builder','query.updateqb')},
-            {'app.query.updateQueryWorkload': self.route_args('query_upt_workload','query.updateqw')},
-            {'app.rest_client_tasks.multi_query': self.route_args('query_multi','query.multi')},
-            {'app.query.query_ops_manager': self.route_args('query_ops_manager','query.opmanager')},
+            {'app.query.queryConsumer': self.route_args('query_consumer', 'query.consumer')},
+            {'app.query.queryRunner': self.route_args('query_runner', 'query.runner')},
+            {'app.query.updateQueryBuilders': self.route_args('query_upt_builder', 'query.updateqb')},
+            {'app.query.updateQueryWorkload': self.route_args('query_upt_workload', 'query.updateqw')},
+            {'app.rest_client_tasks.multi_query': self.route_args('query_multi', 'query.multi')},
+            {'app.query.query_ops_manager': self.route_args('query_ops_manager', 'query.opmanager')},
         )
 
     def add_adminconfig(self):
@@ -245,15 +245,15 @@ class BaseConfig(object):
         self.CELERY_ROUTES = self.CELERY_ROUTES +\
         (   # route schedulable tasks both to same interal task queue
             {'app.admin_manager.adminConsumer':
-                self.route_args('admin_tasks','admin_tasks.adminconsumer')},
+                self.route_args('admin_tasks', 'admin_tasks.adminconsumer')},
             {'app.admin_manager.xdcrConsumer':
-                self.route_args('admin_tasks','admin_tasks.xdcrconsumer')},
+                self.route_args('admin_tasks', 'admin_tasks.xdcrconsumer')},
             {'app.admin_manager.backup_task':
-                self.route_args('admin_tasks','admin_tasks.backuptasks')},
+                self.route_args('admin_tasks', 'admin_tasks.backuptasks')},
             {'app.rest_client_tasks.perform_admin_tasks':
-                self.route_args('admin_tasks','admin_tasks.performadmin')},
+                self.route_args('admin_tasks', 'admin_tasks.performadmin')},
             {'app.rest_client_tasks.perform_xdcr_tasks':
-                self.route_args('admin_tasks','admin_tasks.performxdcr')},
+                self.route_args('admin_tasks', 'admin_tasks.performxdcr')},
         )
 
 
@@ -279,7 +279,7 @@ class BaseConfig(object):
         (
             # route schedulable tasks both to same interal task queue
             {'app.workload_manager.kv_ops_manager':
-                self.route_args('kv_ops_mgr','kv.ops_mgr')},
+                self.route_args('kv_ops_mgr', 'kv.ops_mgr')},
         )
 
     def add_report_kv_latency(self):
@@ -303,10 +303,10 @@ class BaseConfig(object):
         self.CELERY_ROUTES = self.CELERY_ROUTES +\
         (
             {'app.workload_manager.report_kv_latency':
-                self.route_args('kv_mng_latency','kv.mnglatency')},
+                self.route_args('kv_mng_latency', 'kv.mnglatency')},
             {'app.sdk_client_tasks.mc_op_latency':
-                self.route_args('kv_mc_latency','kv.mclatency')},
+                self.route_args('kv_mc_latency', 'kv.mclatency')},
             {'app.sdk_client_tasks.sdk_op_latency':
-                self.route_args('kv_sdk_latency','kv.sdklatency')},
+                self.route_args('kv_sdk_latency', 'kv.sdklatency')},
         )
 

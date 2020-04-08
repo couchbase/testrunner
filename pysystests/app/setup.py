@@ -4,7 +4,7 @@ import testcfg as cfg
 # cluster setup
 try:
     cfg.CLUSTER
-except NameError, AttributeError:
+except NameError as AttributeError:
     cfg.CLUSTER = {}
 
 function = "setitup"

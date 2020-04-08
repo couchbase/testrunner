@@ -1,12 +1,12 @@
-from xdcrnewbasetests import XDCRNewBaseTest
-from xdcrnewbasetests import OPS
+from .xdcrnewbasetests import XDCRNewBaseTest
+from .xdcrnewbasetests import OPS
 
 
 class XDCRTopologyTest(XDCRNewBaseTest):
 
     def setUp(self):
         XDCRNewBaseTest.setUp(self)
-        self.assert_(
+        self.assertTrue(
             self.get_num_cb_cluster() >= 3,
             "Atleast 3 Clusters needed to run Topology Tests"
         )

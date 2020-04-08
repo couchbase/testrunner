@@ -2,7 +2,7 @@
 
 import struct
 
-from obs_def import ObservePktFmt, OBS_OPCODE
+from .obs_def import ObservePktFmt, OBS_OPCODE
 from memcacheConstants import REQ_MAGIC_BYTE
 
 class ObserveRequestKey:

@@ -115,8 +115,8 @@ class RebalanceProgressTests(RebalanceBaseTest):
 
         failover_nodes = []
         for failover_server in servers_failover:
-            failover_nodes.extend(filter(lambda node: node.ip == failover_server.ip and \
-                                         str(node.port) == failover_server.port, nodes_all))
+            failover_nodes.extend([node for node in nodes_all if node.ip == failover_server.ip and \
+                                         str(node.port) == failover_server.port])
         self.cluster.failover(servers_init, servers_failover)
         self.sleep(30)
         for node in failover_nodes:
@@ -170,9 +170,9 @@ class RebalanceProgressTests(RebalanceBaseTest):
                                       server.ip, current_stat, previous_stat))
                 try:
                     if current_stat['docsTotal'] != previous_stat['docsTotal']:
-                        self.log.warn("docsTotal for node %s changed! Previous stat %s. Actual: %s" % (
+                        self.log.warning("docsTotal for node %s changed! Previous stat %s. Actual: %s" % (
                                           server.ip, current_stat, previous_stat))
-                except Exception, ex:
+                except Exception as ex:
                     if previous_stat['docsTotal'] != 0 and current_stat['docsTotal'] == 0:
                         command = "sys:get_status({global, ns_rebalance_observer})."
                         self.log.info("posting: %s" % command)
@@ -205,15 +205,15 @@ class RebalanceProgressTests(RebalanceBaseTest):
         for task in tasks:
                 if "detailedProgress" in task:
                     try:
-                        if u"perNode" in task["detailedProgress"]:
+                        if "perNode" in task["detailedProgress"]:
                             nodes = task["detailedProgress"]["perNode"]
                             for node in nodes:
                                 detailed_progress[node.split('@')[1]] = nodes[node]
                         detailed_progress["bucket"] = task["detailedProgress"]["bucket"]
                         detailed_progress["buckets_count"] = task["detailedProgress"]["bucketsCount"]
                         break
-                    except Exception, ex:
-                        self.log.warn("Didn't get statistics %s" % str(ex))
+                    except Exception as ex:
+                        self.log.warning("Didn't get statistics %s" % str(ex))
         return detailed_progress
 
     def _create_indexes(self):
@@ -228,7 +228,7 @@ class RebalanceProgressTests(RebalanceBaseTest):
             views += temp
 
         timeout = max(self.wait_timeout * 4,
-                      len(self.buckets) * self.wait_timeout * self.num_items / 50000)
+                      len(self.buckets) * self.wait_timeout * self.num_items // 50000)
 
         for task in tasks:
             task.result(timeout)

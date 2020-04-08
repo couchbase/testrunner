@@ -1,5 +1,5 @@
 import time
-import Queue
+import queue
 
 from threading import Thread
 from tasks.task import Task
@@ -7,8 +7,8 @@ from tasks.task import Task
 class TaskManager(Thread):
     def __init__(self, thread_name=None):
         Thread.__init__(self)
-        self.readyq = Queue.Queue()
-        self.sleepq = Queue.Queue()
+        self.readyq = queue.Queue()
+        self.sleepq = queue.Queue()
         self.running = True
         if thread_name is not None:
             self.name = thread_name
@@ -47,5 +47,5 @@ class TaskManager(Thread):
                 try:
                     task = self.readyq.get()
                     task.cancel()
-                except Exception, ex:
+                except Exception as ex:
                     raise ex

@@ -4,7 +4,7 @@ import sys
 
 sys.path = [".", "lib"] + sys.path
 import threading
-import Queue
+import queue
 import time
 import random
 import install_utils, install_constants
@@ -15,7 +15,7 @@ import traceback
 
 logging.config.fileConfig("scripts.logging.conf")
 log = logging.getLogger()
-q = Queue.Queue()
+q = queue.Queue()
 
 
 def node_installer(node, install_tasks):
@@ -30,7 +30,7 @@ def node_installer(node, install_tasks):
 
 def on_install_error(install_task, node, e):
     node.queue.empty()
-    log.error("Error {0}:{1} occurred on {2} during {3}".format(repr(e), e.message, node.ip, install_task))
+    log.error("Error {0}:{1} occurred on {2} during {3}".format(repr(e), e, node.ip, install_task))
 
 
 def do_install_task(task, node):
@@ -66,7 +66,7 @@ def validate_install(version):
                     node.install_success = False
 
                 afamily = "Unknown"
-                if 'addressFamily' in item.keys():
+                if 'addressFamily' in list(item.keys()):
                     afamily = item['addressFamily']
 
                 log.info("node:{0}\tversion:{1}\taFamily:{2}\tservices:{3}".format(item['hostname'],
@@ -80,7 +80,7 @@ def do_install(params):
     for server in params["servers"]:
         node_helper = install_utils.get_node_helper(server.ip)
         install_tasks = params["install_tasks"]
-        q = Queue.Queue()
+        q = queue.Queue()
         for _ in install_tasks:
             q.put(_)
         t = threading.Thread(target=node_installer, args=(node_helper, q))

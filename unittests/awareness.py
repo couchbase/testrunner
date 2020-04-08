@@ -17,16 +17,16 @@ server.port = 9000
 rest = RestConnection(server)
 nodes = rest.node_statuses()
 
-vm = VBucketAwareMemcached(rest,{"name":"bucket-0","password":""})
+vm = VBucketAwareMemcached(rest, {"name":"bucket-0","password":""})
 key = str(uuid.uuid4())
 vm.memcached(key).set(key, 0, 0, "hi")
 vm.memcached(key).get(key)
 
-RebalanceHelper.print_taps_from_all_nodes(rest,bucket="bucket-0",password="")
-RebalanceHelper.verify_items_count(server,"bucket-0")
-RebalanceHelper.verify_items_count(server,"bucket-1")
-RebalanceHelper.verify_items_count(server,"bucket-2")
-RebalanceHelper.wait_till_total_numbers_match(server,"bucket-0",120,"")
+RebalanceHelper.print_taps_from_all_nodes(rest, bucket="bucket-0", password="")
+RebalanceHelper.verify_items_count(server, "bucket-0")
+RebalanceHelper.verify_items_count(server, "bucket-1")
+RebalanceHelper.verify_items_count(server, "bucket-2")
+RebalanceHelper.wait_till_total_numbers_match(server, "bucket-0", 120, "")
 
 
 cm = MemcachedClientHelper.proxy_client(server, "bucket-0", "")

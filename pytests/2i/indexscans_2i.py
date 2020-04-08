@@ -1,4 +1,4 @@
-from base_2i import BaseSecondaryIndexingTests
+from .base_2i import BaseSecondaryIndexingTests
 import copy
 from couchbase_helper.query_definitions import QueryDefinition
 from couchbase_helper.query_definitions import SQLDefinitionGenerator
@@ -14,10 +14,10 @@ class SecondaryIndexingScanTests(BaseSecondaryIndexingTests):
         super(SecondaryIndexingScanTests, self).tearDown()
 
     def test_create_query_explain_drop_index(self):
-        self.use_primary_index= self.input.param("use_primary_index",False)
-        self.indexes= self.input.param("indexes","").split(":")
-        self.emitFields= self.input.param("emitFields","*").split(":")
-        self.whereCondition= self.input.param("whereCondition",None)
+        self.use_primary_index= self.input.param("use_primary_index", False)
+        self.indexes= self.input.param("indexes", "").split(":")
+        self.emitFields= self.input.param("emitFields", "*").split(":")
+        self.whereCondition= self.input.param("whereCondition", None)
         self.emitFields = ",".join(self.emitFields)
         query_template = QUERY_TEMPLATE
         query_template = query_template.format(self.emitFields)
@@ -47,7 +47,7 @@ class SecondaryIndexingScanTests(BaseSecondaryIndexingTests):
             self.run_doc_ops()
             self._query_explain_in_async()
             self._verify_index_map()
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(ex)
             raise
         finally:
@@ -62,7 +62,7 @@ class SecondaryIndexingScanTests(BaseSecondaryIndexingTests):
             # runs operations
             self._run_tasks(kvops_tasks)
             self._query_explain_in_async()
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(ex)
             raise
         finally:
@@ -119,7 +119,7 @@ class SecondaryIndexingScanTests(BaseSecondaryIndexingTests):
             self._run_tasks(kvops_tasks)
             self._run_tasks(query_tasks)
             self._run_tasks(drop_tasks)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(ex)
             if not scan_vectors:
                 msg = "No scan_vector value"
@@ -151,7 +151,7 @@ class SecondaryIndexingScanTests(BaseSecondaryIndexingTests):
             self.run_doc_ops()
             self._verify_primary_index_count()
             self._query_explain_in_async()
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(ex)
             raise
 
@@ -186,7 +186,7 @@ class SecondaryIndexingScanTests(BaseSecondaryIndexingTests):
         self.test_multi_create_query_explain_drop_index_scan_consistency()
 
     def test_multi_create_query_explain_drop_index_scan_consistency(self):
-        self.random_scan_vector= self.input.param("random_scan_vector",False)
+        self.random_scan_vector= self.input.param("random_scan_vector", False)
         scan_vector_ranges = []
         scan_vectors = None
         if self.scan_vector_per_values:
@@ -246,7 +246,7 @@ class SecondaryIndexingScanTests(BaseSecondaryIndexingTests):
                         scan_consistency = self.scan_consistency,
                         scan_vectors = scan_vectors)
                 self._run_tasks(tasks)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(ex)
             if self.scan_consistency == "at_plus" and not scan_vectors:
                 msg = "No scan_vector value"
@@ -262,7 +262,7 @@ class SecondaryIndexingScanTests(BaseSecondaryIndexingTests):
             self._run_tasks(tasks)
 
     def test_primary_query_scan_consistency(self):
-        self.random_scan_vector= self.input.param("random_scan_vector",False)
+        self.random_scan_vector= self.input.param("random_scan_vector", False)
         scan_vector_ranges = []
         scan_vectors = None
         if self.scan_vector_per_values:
@@ -312,7 +312,7 @@ class SecondaryIndexingScanTests(BaseSecondaryIndexingTests):
                         scan_consistency = self.scan_consistency,
                         scan_vectors = scan_vectors)
                 self._run_tasks(tasks)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(ex)
             if self.scan_consistency == "at_plus" and not scan_vectors:
                 msg = "No scan_vector value"
@@ -322,9 +322,9 @@ class SecondaryIndexingScanTests(BaseSecondaryIndexingTests):
                 raise
 
     def test_failure_query_with_non_existing_primary_index(self):
-        self.indexes= self.input.param("indexes","").split(":")
-        self.emitFields= self.input.param("emitFields","*").split(":")
-        self.whereCondition= self.input.param("whereCondition",None)
+        self.indexes= self.input.param("indexes", "").split(":")
+        self.emitFields= self.input.param("emitFields", "*").split(":")
+        self.whereCondition= self.input.param("whereCondition", None)
         self.emitFields = ",".join(self.emitFields)
         query_template = QUERY_TEMPLATE
         query_template = query_template.format(self.emitFields)
@@ -344,9 +344,9 @@ class SecondaryIndexingScanTests(BaseSecondaryIndexingTests):
                 create_index = False, drop_index = False,
                 query_with_explain = False, query = self.run_query)
             self.fail(" querying without indexes and primary indexes is not allowed")
-        except Exception, ex:
+        except Exception as ex:
             msg = "No primary index on keyspace default. Use CREATE PRIMARY INDEX to create one."
-            self.assertTrue(msg in str(ex),"did not recieve message as expected : {0}".format(ex))
+            self.assertTrue(msg in str(ex), "did not recieve message as expected : {0}".format(ex))
 
     def _generate_scan_vector_ranges(self, scan_vector_per_values = None):
         scan_vector_per_values = str(scan_vector_per_values)
@@ -361,12 +361,12 @@ class SecondaryIndexingScanTests(BaseSecondaryIndexingTests):
             task.result()
 
     def _translate_where_clause(self, query):
-        query = query.replace("EQUALS","==")
-        query = query.replace("NOT_EQUALS","!=")
-        query = query.replace("LESS_THAN","<")
-        query = query.replace("LESS_THAN_EQUALS","<=")
-        query = query.replace("GREATER_THAN",">")
-        query = query.replace("GREATER_THAN_EQUALS",">=")
+        query = query.replace("EQUALS", "==")
+        query = query.replace("NOT_EQUALS", "!=")
+        query = query.replace("LESS_THAN", "<")
+        query = query.replace("LESS_THAN_EQUALS", "<=")
+        query = query.replace("GREATER_THAN", ">")
+        query = query.replace("GREATER_THAN_EQUALS", ">=")
         return query
 
     def _create_index_in_async(self, query_definitions = None, buckets = None, index_nodes = None):
@@ -395,7 +395,7 @@ class SecondaryIndexingScanTests(BaseSecondaryIndexingTests):
                             refer_index.append(query_definitions[x].index_name)
                             deploy_node_info = None
                             if self.use_gsi_for_secondary:
-                                deploy_node_info = ["{0}:{1}".format(server.ip,server.port)]
+                                deploy_node_info = ["{0}:{1}".format(server.ip, server.port)]
                             build_index_map[bucket.name].append(query_definitions[x].index_name)
                             tasks.append(self.async_create_index(bucket.name, query_definitions[x],
                                                                  deploy_node_info=deploy_node_info))
@@ -403,12 +403,12 @@ class SecondaryIndexingScanTests(BaseSecondaryIndexingTests):
             for task in tasks:
                 task.result()
             if self.defer_build:
-                for bucket_name in build_index_map.keys():
+                for bucket_name in list(build_index_map.keys()):
                     if len(build_index_map[bucket_name]) > 0:
                         build_index_task = self.async_build_index(bucket_name, build_index_map[bucket_name])
                         build_index_task.result()
                 monitor_index_tasks = []
-                for bucket_name in build_index_map.keys():
+                for bucket_name in list(build_index_map.keys()):
                     for index_name in build_index_map[bucket_name]:
                         monitor_index_tasks.append(self.async_monitor_index(bucket_name, index_name))
                 for task in monitor_index_tasks:

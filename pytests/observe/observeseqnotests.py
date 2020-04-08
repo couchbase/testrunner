@@ -109,9 +109,9 @@ class ObserveSeqNoTests(BaseTestCase):
         set_resp = self.extract_vbucket_uuid_and_seqno( client.set('test1key', 0, 0, '123456789') )
 
         # test the inplace operations
-        test = client.generic_request(client.memcached('test1key').set, 'test1key', 0, 0,'totally new value')
+        test = client.generic_request(client.memcached('test1key').set, 'test1key', 0, 0, 'totally new value')
         replace_resp = self.extract_vbucket_uuid_and_seqno(
-            client.generic_request( client.memcached('test1key').replace,  'test1key', 0, 0,'totally new value') )
+            client.generic_request( client.memcached('test1key').replace,  'test1key', 0, 0, 'totally new value') )
         self.verify_vbucket_and_seqno( set_resp, replace_resp, 'replace')
 
         append_resp = self.extract_vbucket_uuid_and_seqno(
@@ -125,7 +125,7 @@ class ObserveSeqNoTests(BaseTestCase):
 
         # and finally do the delete
         delete_resp = self.extract_vbucket_uuid_and_seqno(
-            client.generic_request( client.memcached('test1key').delete,'test1key') )
+            client.generic_request( client.memcached('test1key').delete, 'test1key') )
         self.verify_vbucket_and_seqno( set_resp, delete_resp, 'delete')
 
 
@@ -143,14 +143,14 @@ class ObserveSeqNoTests(BaseTestCase):
 
         get_meta_resp = client.generic_request(client.memcached( 'test1keyformeta').getMeta, 'test1keyformeta')
         self.assertTrue(TEST_SEQNO == get_meta_resp[3], \
-               msg='get meta seqno does not match as set. Expected {0}, actual {1}'.format(TEST_SEQNO,get_meta_resp[3]) )
+               msg='get meta seqno does not match as set. Expected {0}, actual {1}'.format(TEST_SEQNO, get_meta_resp[3]) )
         self.assertTrue(TEST_CAS == get_meta_resp[4], \
-               msg='get meta cas does not match as set. Expected {0}, actual {1}'.format(TEST_CAS,get_meta_resp[4]) )
+               msg='get meta cas does not match as set. Expected {0}, actual {1}'.format(TEST_CAS, get_meta_resp[4]) )
 
 
         #   def del_with_meta(self, key, exp, flags, seqno, old_cas, new_cas, vbucket= -1):
         del_with_meta_resp = client.generic_request(
-            client.memcached('test1keyformeta').del_with_meta,'test1keyformeta', 0, 0, TEST_SEQNO, TEST_CAS, TEST_CAS+1)
+            client.memcached('test1keyformeta').del_with_meta, 'test1keyformeta', 0, 0, TEST_SEQNO, TEST_CAS, TEST_CAS+1)
         vbucket_uuid, seqno = struct.unpack('>QQ', del_with_meta_resp[2])
         del_with_meta_dict = {'vbucket_uuid':vbucket_uuid, 'seqno': seqno}
 
@@ -167,13 +167,13 @@ class ObserveSeqNoTests(BaseTestCase):
         self.verify_vbucket_and_seqno(set_resp, incr_resp_dict, 'incr')
 
 
-        decr_resp = client.generic_request(client.memcached('key-for-integer-value').decr,'key-for-integer-value')
+        decr_resp = client.generic_request(client.memcached('key-for-integer-value').decr, 'key-for-integer-value')
         decr_resp_dict = {'vbucket_uuid':decr_resp[2], 'seqno':decr_resp[3]}
         self.verify_vbucket_and_seqno(incr_resp_dict, decr_resp_dict, 'decr')
 
 
         add_resp = self.extract_vbucket_uuid_and_seqno(
-            client.generic_request( client.memcached('totally new key').add, 'totally new key', 0, 0,'totally new value') )
+            client.generic_request( client.memcached('totally new key').add, 'totally new key', 0, 0, 'totally new value') )
 
         self.assertTrue( add_resp['vbucket_uuid'] > 0, msg='Add request vbucket uuid is zero')
 
@@ -374,7 +374,7 @@ class ObserveSeqNoTests(BaseTestCase):
         time.sleep(10)
 
         after_failover_results = self.observe_seqno_response_to_dict(
-            client.observe_seqno('hardfailoverkey',op_data['vbucket_uuid']) )
+            client.observe_seqno('hardfailoverkey', op_data['vbucket_uuid']) )
 
         self.check_results( op_data, after_failover_results)
 
@@ -389,21 +389,21 @@ class ObserveSeqNoTests(BaseTestCase):
         # without hello(mutationseqencenumber)
         client = VBucketAwareMemcached(RestConnection(self.master), 'default')
         KEY_NAME = "test1key"
-        client.set(KEY_NAME, 0,0, json.dumps({'value':'value2'}))
+        client.set(KEY_NAME, 0, 0, json.dumps({'value':'value2'}))
         client.generic_request(client.memcached(KEY_NAME).append, 'test1key', 'appended data')
         get_meta_resp = client.generic_request(client.memcached(KEY_NAME).getMeta, 'test1key')
         self.log.info('the CAS value without hello(mutationseqencenumber): {} '.format(get_meta_resp[4]))
-        self.assertNotEquals(get_meta_resp[4], 0)
+        self.assertNotEqual(get_meta_resp[4], 0)
         
         # with hello(mutationseqencenumber)
         KEY_NAME = "test2key"
-        client.set(KEY_NAME, 0,0, json.dumps({'value':'value1'}))
+        client.set(KEY_NAME, 0, 0, json.dumps({'value':'value1'}))
         h = client.sendHellos(memcacheConstants.PROTOCOL_BINARY_FEATURE_MUTATION_SEQNO)
         client.generic_request(client.memcached(KEY_NAME).append, 'test2key', 'appended data456')
 
         get_meta_resp = client.generic_request(client.memcached(KEY_NAME).getMeta, 'test2key')
         self.log.info('the CAS value with hello(mutationseqencenumber): {} '.format(get_meta_resp[4]))
-        self.assertNotEquals(get_meta_resp[4], 0)
+        self.assertNotEqual(get_meta_resp[4], 0)
 
     def test_appendprepend(self):
         # MB-32078, Append with CAS=0 can return ENGINE_KEY_EEXISTS
@@ -418,7 +418,7 @@ class ObserveSeqNoTests(BaseTestCase):
         client.generic_request(
             client.memcached(KEY_NAME).set_with_meta, KEY_NAME, 0, 0, TEST_SEQNO, TEST_CAS, '123456789')
         get_resp = client.generic_request(client.memcached(KEY_NAME).get, KEY_NAME)
-        self.assertEquals(get_resp[2],'123456789')
+        self.assertEqual(get_resp[2], '123456789')
 
         # check if the changing the value fails
         try:
@@ -426,17 +426,17 @@ class ObserveSeqNoTests(BaseTestCase):
             client.memcached(KEY_NAME).set_with_meta, KEY_NAME, 0, 0, 0, 0, 'value')
             self.fail('Expected to fail but passed')
         except MemcachedError as exp:
-            self.assertEquals(int(exp.status), 2)
+            self.assertEqual(int(exp.status), 2)
 
         # check if append works fine
         client.generic_request(client.memcached(KEY_NAME).append, KEY_NAME, 'appended data')
         get_resp = client.generic_request(client.memcached(KEY_NAME).get, KEY_NAME)
-        self.assertEquals(get_resp[2],'123456789appended data')
+        self.assertEqual(get_resp[2], '123456789appended data')
 
         # check if prepend works fine and verify the data
         client.generic_request(client.memcached(KEY_NAME).prepend, KEY_NAME, 'prepended data')
         get_resp = client.generic_request(client.memcached(KEY_NAME).get, KEY_NAME)
-        self.assertEquals(get_resp[2],'prepended data123456789appended data')
+        self.assertEqual(get_resp[2], 'prepended data123456789appended data')
 
 
 

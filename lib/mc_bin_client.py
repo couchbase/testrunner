@@ -6,7 +6,7 @@ Copyright (c) 2007  Dustin Sallings <dustin@spy.net>
 """
 
 import array
-import exceptions
+import builtins as exceptions
 import hmac
 import json
 import random
@@ -25,6 +25,8 @@ from memcacheConstants import TOUCH_PKT_FMT, GAT_PKT_FMT, GETL_PKT_FMT, REQ_PKT_
 from memcacheConstants import COMPACT_DB_PKT_FMT
 import memcacheConstants
 import logger
+from cluster_run_manager import KeepRefs
+
 def decodeCollectionID(key):
     # A leb128 varint encodes the CID
     data = array.array('B', key)
@@ -49,7 +51,8 @@ class MemcachedError(exceptions.Exception):
 
     def __init__(self, status, msg=None):
         error_msg = error_to_str(status)
-        supermsg = 'Memcached error #' + `status` + ' ' + `error_msg`
+        supermsg = 'Memcached error #' + repr(status) + ' ' + repr(error_msg)
+        msg = str(msg)
         if msg: supermsg += ":  " + msg
         exceptions.Exception.__init__(self, supermsg)
 
@@ -59,12 +62,13 @@ class MemcachedError(exceptions.Exception):
     def __repr__(self):
         return "<MemcachedError #%d ``%s''>" % (self.status, self.msg)
 
-class MemcachedClient(object):
+class MemcachedClient(KeepRefs):
     """Simple memcached client."""
 
     vbucketId = 0
 
     def __init__(self, host='127.0.0.1', port=11211, timeout=30):
+        super(MemcachedClient, self).__init__()
         self.host = host
         self.port = port
         self.timeout = timeout
@@ -120,31 +124,58 @@ class MemcachedClient(object):
         msg = struct.pack(fmt, magic,
             cmd, len(key), extraHeaderLength, dtype, vbucketId,
                 len(key) + len(extraHeader) + len(val) + len(extended_meta_data), opaque, cas)
-        _, w, _ = select.select([], [self.s], [], self.timeout)
-        if w:
-            self.s.send(msg + extraHeader + key + val + extended_meta_data)
-        else:
-            raise exceptions.EOFError("Timeout waiting for socket send. from {0}".format(self.host))
+        self.pollerObject = select.poll()
+        self.pollerObject.register(self.s, select.POLLOUT)
+        fdVsEvent = self.pollerObject.poll(1000)
+        for w, _ in fdVsEvent:
+        # _, w, _ = select.select([], [self.s], [], self.timeout)
+            if w:
+                try:
+                    key = key.encode()
+                except AttributeError:
+                    pass
+
+                try:
+                    extraHeader = extraHeader.encode()
+                except AttributeError:
+                    pass
+
+                try:
+                    val = val.encode()
+                except AttributeError:
+                    pass
+
+                try:
+                    extended_meta_data = extended_meta_data.encode()
+                except AttributeError:
+                    pass
+                self.s.send(msg + extraHeader + key + val + extended_meta_data)
+            else:
+                raise exceptions.EOFError("Timeout waiting for socket send. from {0}".format(self.host))
 
 
 
 
     def _recvMsg(self):
-        response = ""
+        response = b""
+        self.pollerObject = select.poll()
+        self.pollerObject.register(self.s, select.POLLIN)
         while len(response) < MIN_RECV_PACKET:
-            r, _, _ = select.select([self.s], [], [], self.timeout)
-            if r:
-                data = self.s.recv(MIN_RECV_PACKET - len(response))
-                if data == '':
-                    raise exceptions.EOFError("Got empty data (remote died?). from {0}".format(self.host))
-                response += data
-            else:
-                raise exceptions.EOFError("Timeout waiting for socket recv. from {0}".format(self.host))
+            fdVsEvent = self.pollerObject.poll(1000)
+            for r, _ in fdVsEvent:
+            # r, _, _ = select.select([self.s], [], [], self.timeout)
+                if r:
+                    data = self.s.recv(MIN_RECV_PACKET - len(response))
+                    if data == b'':
+                        raise exceptions.EOFError("Got empty data (remote died?). from {0}".format(self.host))
+                    response += data
+                else:
+                    raise exceptions.EOFError("Timeout waiting for socket recv. from {0}".format(self.host))
 
         assert len(response) == MIN_RECV_PACKET
 
         # Peek at the magic so we can support alternative-framing
-        magic = struct.unpack(">B", response[0:1])[0]
+        magic = struct.unpack(b">B", response[0:1])[0]
         assert (magic in (RES_MAGIC_BYTE, REQ_MAGIC_BYTE, ALT_RES_MAGIC_BYTE, ALT_REQ_MAGIC_BYTE)), "Got magic: 0x%x" % magic
 
         cmd = 0
@@ -162,17 +193,19 @@ class MemcachedClient(object):
             magic, cmd, keylen, extralen, dtype, errcode, remaining, opaque, cas = \
                 struct.unpack(RES_PKT_FMT, response)
 
-        rv = ""
+        rv = b""
         while remaining > 0:
-            r, _, _ = select.select([self.s], [], [], self.timeout)
-            if r:
-                data = self.s.recv(remaining)
-                if data == '':
-                    raise exceptions.EOFError("Got empty data (remote died?). from {0}".format(self.host))
-                rv += data
-                remaining -= len(data)
-            else:
-                raise exceptions.EOFError("Timeout waiting for socket recv. from {0}".format(self.host))
+            fdVsEvent = self.pollerObject.poll(1000)
+            for r, _ in fdVsEvent:
+            # r, _, _ = select.select([self.s], [], [], self.timeout)
+                if r:
+                    data = self.s.recv(remaining)
+                    if data == b'':
+                        raise exceptions.EOFError("Got empty data (remote died?). from {0}".format(self.host))
+                    rv += data
+                    remaining -= len(data)
+                else:
+                    raise exceptions.EOFError("Timeout waiting for socket recv. from {0}".format(self.host))
 
         return cmd, errcode, opaque, cas, keylen, extralen, dtype, rv
 
@@ -223,7 +256,7 @@ class MemcachedClient(object):
         body = ''
         extraHeader = ''
         mcmd = None
-        for k, v  in cmdDict.iteritems():
+        for k, v  in cmdDict.items():
             if k == "store":
                 mcmd = memcacheConstants.CMD_SUBDOC_DICT_ADD
             elif k == "counter":
@@ -299,7 +332,7 @@ class MemcachedClient(object):
         self._set_vbucket(key, vbucket, collection=collection)
         return self.__incrdecr(memcacheConstants.CMD_DECR, key, amt, init, exp, collection)
 
-    def set(self, key, exp, flags, val, vbucket= -1, collection=None):
+    def set(self, key, exp, flags, val, vbucket=-1, collection=None):
         """Set a value in the memcached server."""
         collection = self.collection_name(collection)
         self._set_vbucket(key, vbucket, collection=collection)
@@ -467,11 +500,15 @@ class MemcachedClient(object):
         """Observe a key for persistence and replication."""
         collection = self.collection_name(collection)
         self._set_vbucket(key, vbucket, collection=collection)
+        try:
+            key = key.encode()
+        except AttributeError:
+            pass
         value = struct.pack('>HH', self.vbucketId, len(key)) + key
         opaque, cas, data = self._doCmd(memcacheConstants.CMD_OBSERVE, '', value, collection=collection)
         rep_time = (cas & 0xFFFFFFFF)
         persist_time = (cas >> 32) & 0xFFFFFFFF
-        persisted = struct.unpack('>B', data[4 + len(key)])[0]
+        persisted = struct.unpack('>B', bytes([data[4 + len(key)]]))
         return opaque, rep_time, persist_time, persisted, cas
 
 
@@ -503,7 +540,7 @@ class MemcachedClient(object):
         if klen == 0:
             return flags, data[1], data[-1][4 + klen:]
         else:
-            return flags, data[1], "{" + data[-1].split('{')[-1] # take only the value and value starts with "{"
+            return flags, data[1], b"{" + data[-1].split(b'{')[-1] # take only the value and value starts with "{"
 
     def get(self, key, vbucket= -1, collection=None):
         """Get the value for a given key within the memcached server."""
@@ -610,7 +647,7 @@ class MemcachedClient(object):
     def sasl_mechanisms(self):
         """Get the supported SASL methods."""
         return set(self._doCmd(memcacheConstants.CMD_SASL_LIST_MECHS,
-                               '', '')[2].split(' '))
+                               b'', b'')[2].split(b' '))
 
     def sasl_auth_start(self, mech, data):
         """Start a sasl auth session."""
@@ -625,7 +662,7 @@ class MemcachedClient(object):
         challenge = None
         try:
             self.sasl_auth_start('CRAM-MD5', '')
-        except MemcachedError, e:
+        except MemcachedError as e:
             if e.status != memcacheConstants.ERR_AUTH_CONTINUE:
                 raise
             challenge = e.msg.split(' ')[0]
@@ -695,7 +732,7 @@ class MemcachedClient(object):
         terminal = len(opaqued) + 10
         # Send all of the keys in quiet
         vbs = set()
-        for k, v in opaqued.iteritems():
+        for k, v in opaqued.items():
             self._set_vbucket(v, vbucket, collection=collection)
             vbs.add(self.vbucketId)
             self._sendCmd(memcacheConstants.CMD_GETQ, v, '', k, collection=collection)
@@ -726,8 +763,8 @@ class MemcachedClient(object):
         # If this is a dict, convert it to a pair generator
         collection = self.collection_name(collection)
 
-        if hasattr(items, 'iteritems'):
-            items = items.iteritems()
+        if hasattr(items, 'items'):
+            items = iter(items.items())
 
         opaqued = dict(enumerate(items))
         terminal = len(opaqued) + 10
@@ -735,7 +772,7 @@ class MemcachedClient(object):
 
         # Send all of the keys in quiet
         vbs = set()
-        for opaque, kv in opaqued.iteritems():
+        for opaque, kv in opaqued.items():
             self._set_vbucket(kv[0], vbucket, collection=collection)
             vbs.add(self.vbucketId)
             self._sendCmd(memcacheConstants.CMD_SETQ, kv[0], kv[1], opaque, extra, collection=collection)
@@ -753,7 +790,7 @@ class MemcachedClient(object):
                 try:
                     opaque, cas, data = self._handleSingleResponse(None)
                     done = opaque == terminal
-                except MemcachedError, e:
+                except MemcachedError as e:
                     failed.append(e)
 
         return failed
@@ -773,7 +810,7 @@ class MemcachedClient(object):
         while not done:
             cmd, opaque, cas, klen, extralen, data = self._handleKeyedResponse(None)
             if klen:
-                rv[data[0:klen]] = data[klen:]
+                rv[data[0:klen].decode()] = data[klen:].decode()
             else:
                 done = True
         return rv
@@ -801,37 +838,37 @@ class MemcachedClient(object):
     def sync_persistence(self, keyspecs):
         payload = self._build_sync_payload(0x8, keyspecs)
 
-        print "sending sync for persistence command for the following keyspecs:", keyspecs
+        print("sending sync for persistence command for the following keyspecs:", keyspecs)
         (opaque, cas, data) = self._doCmd(memcacheConstants.CMD_SYNC, "", payload)
         return (opaque, cas, self._parse_sync_response(data))
 
     def sync_mutation(self, keyspecs):
         payload = self._build_sync_payload(0x4, keyspecs)
 
-        print "sending sync for mutation command for the following keyspecs:", keyspecs
+        print("sending sync for mutation command for the following keyspecs:", keyspecs)
         (opaque, cas, data) = self._doCmd(memcacheConstants.CMD_SYNC, "", payload)
         return (opaque, cas, self._parse_sync_response(data))
 
     def sync_replication(self, keyspecs, numReplicas=1):
         payload = self._build_sync_payload((numReplicas & 0x0f) << 4, keyspecs)
 
-        print "sending sync for replication command for the following keyspecs:", keyspecs
+        print("sending sync for replication command for the following keyspecs:", keyspecs)
         (opaque, cas, data) = self._doCmd(memcacheConstants.CMD_SYNC, "", payload)
         return (opaque, cas, self._parse_sync_response(data))
 
     def sync_replication_or_persistence(self, keyspecs, numReplicas=1):
         payload = self._build_sync_payload(((numReplicas & 0x0f) << 4) | 0x8, keyspecs)
 
-        print "sending sync for replication or persistence command for the " \
-            "following keyspecs:", keyspecs
+        print("sending sync for replication or persistence command for the " \
+            "following keyspecs:", keyspecs)
         (opaque, cas, data) = self._doCmd(memcacheConstants.CMD_SYNC, "", payload)
         return (opaque, cas, self._parse_sync_response(data))
 
     def sync_replication_and_persistence(self, keyspecs, numReplicas=1):
         payload = self._build_sync_payload(((numReplicas & 0x0f) << 4) | 0xA, keyspecs)
 
-        print "sending sync for replication and persistence command for the " \
-            "following keyspecs:", keyspecs
+        print("sending sync for replication and persistence command for the " \
+            "following keyspecs:", keyspecs)
         (opaque, cas, data) = self._doCmd(memcacheConstants.CMD_SYNC, "", payload)
         return (opaque, cas, self._parse_sync_response(data))
 
@@ -842,9 +879,9 @@ class MemcachedClient(object):
         for spec in keyspecs:
             if not isinstance(spec, dict):
                 raise TypeError("each keyspec must be a dict")
-            if not spec.has_key('vbucket'):
+            if 'vbucket' not in spec:
                 raise TypeError("missing vbucket property in keyspec")
-            if not spec.has_key('key'):
+            if 'key' not in spec:
                 raise TypeError("missing key property in keyspec")
 
             payload += struct.pack(">Q", spec.get('cas', 0))
@@ -859,7 +896,7 @@ class MemcachedClient(object):
         nkeys = struct.unpack(">H", data[0 : struct.calcsize("H")])[0]
         offset = struct.calcsize("H")
 
-        for i in xrange(nkeys):
+        for i in range(nkeys):
             spec = {}
             width = struct.calcsize("QHHB")
             (spec['cas'], spec['vbucket'], keylen, eventid) = \
@@ -903,9 +940,9 @@ class MemcachedClient(object):
         """Reset the replication chain."""
         return self._doCmd(memcacheConstants.CMD_RESET_REPLICATION_CHAIN, '', '', '', 0)
 
-    def _set_vbucket(self, key, vbucket= -1, collection=None):
-        if vbucket < 0:
-            self.vbucketId = (((zlib.crc32(key)) >> 16) & 0x7fff) & (self.vbucket_count - 1)
+    def _set_vbucket(self, key, vbucket=-1, collection=None):
+        if not vbucket or vbucket < 0:
+            self.vbucketId = (((zlib.crc32(key.encode())) >> 16) & 0x7fff) & (self.vbucket_count - 1)
         else:
             self.vbucketId = vbucket
 
@@ -921,7 +958,7 @@ class MemcachedClient(object):
         def new_func(*args, **kwargs):
             try:
                 return fn(*args, **kwargs)
-            except Exception, ex:
+            except Exception as ex:
                 raise
         return new_func
 
@@ -1009,7 +1046,7 @@ class MemcachedClient(object):
 
         d = {}
 
-        for k,v in errmap['errors'].iteritems():
+        for k, v in errmap['errors'].items():
             d[int(k, 16)] = v
 
         errmap['errors'] = d
@@ -1057,7 +1094,7 @@ class MemcachedClient(object):
             # expect scope.collection for name API
             try:
                 collection = self.collection_map[collection]
-            except KeyError, e:
+            except KeyError as e:
                 self.log.info("Error: cannot map collection \"{}\" to an ID".format(collection))
                 self.log.info("name API expects \"scope.collection\" as the key")
                 raise e
@@ -1082,8 +1119,8 @@ class MemcachedClient(object):
         for scope in parsed['scopes']:
             try:
                 for collection in scope['collections']:
-                    key = scope[u'name'] + "." + collection[u'name']
-                    self.collection_map[key] = int(collection[u'uid'], 16)
+                    key = scope['name'] + "." + collection['name']
+                    self.collection_map[key] = int(collection['uid'], 16)
             except KeyError:
                 pass
 

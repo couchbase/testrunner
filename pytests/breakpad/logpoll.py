@@ -3,9 +3,9 @@ import re
 import time
 import subprocess
 import select
-import Queue
+import queue
 import threading
-import constants
+from . import constants
 
 class NSLogPoller(threading.Thread):
 
@@ -13,8 +13,8 @@ class NSLogPoller(threading.Thread):
         super(NSLogPoller, self).__init__()
         self.index = index
         self.filename = "%s/cluster_run_n_%i.log" % (path, index)
-        self.dump_q = Queue.Queue()
-        self.event_q = Queue.Queue()
+        self.dump_q = queue.Queue()
+        self.event_q = queue.Queue()
         self.mc_flag = False
         self.compact_flag = False
         self.ns_started_flag = False
@@ -36,7 +36,7 @@ class NSLogPoller(threading.Thread):
         msg = None
         try:
             msg = q.get(timeout = timeout)
-        except Queue.Empty:
+        except queue.Empty:
             pass
         return msg
 
@@ -53,13 +53,13 @@ class NSLogPoller(threading.Thread):
 
         while ns_running:
             # poll for data to read
-            read, write, ex = select.select([f],[],[])
+            read, write, ex = select.select([f], [], [])
 
             # till EOF
             msg = f.readline()
             while msg:
                 if constants.NS_EXITED_STR in msg: # ns exited
-                  print msg
+                  print(msg)
                   ns_running = False
                   break
                 m = re.search(' /.*/n_'+str(self.index)+'/.*dmp', msg)
@@ -67,20 +67,20 @@ class NSLogPoller(threading.Thread):
                     dmp_path = m.group(0).lstrip()
                     if dmp_path not in existing_dumps:
                         existing_dumps[dmp_path] = True
-                        print dmp_path
+                        print(dmp_path)
                         self.dump_q.put(dmp_path)
 
                 if self.mc_flag and constants.MC_STARTED_STR in msg:
-                    print msg
+                    print(msg)
                     self.event_q.put(msg)
                 if self.compact_flag and constants.COMPACT_STARTED_STR in msg:
-                    print msg
+                    print(msg)
                     self.event_q.put(msg)
                 if self.ns_started_flag and constants.NS_STARTED_STR in msg:
-                    print msg
+                    print(msg)
                     self.event_q.put(msg)
                 if self.rebalance_flag and constants.REBALANCE_STARTED_STR in msg:
-                    print msg
+                    print(msg)
                     self.event_q.put(msg)
 
                 # next msg

@@ -1,4 +1,4 @@
-from base_2i import BaseSecondaryIndexingTests
+from .base_2i import BaseSecondaryIndexingTests
 from remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection
 
@@ -14,7 +14,7 @@ class SecondaryIndexingPlasmaBasicTests(BaseSecondaryIndexingTests):
         if self.gsi_type == "plasma":
             try:
                 self.multi_create_index(query_definitions=self.query_definitions)
-            except Exception, ex:
+            except Exception as ex:
                 msg = "Error=Ephemeral Buckets Must Use MOI Storage"
                 if msg not in str(ex):
                     self.log.info(str(ex))

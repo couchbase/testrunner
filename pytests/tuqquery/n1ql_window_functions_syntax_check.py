@@ -1,4 +1,4 @@
-from tuq import QueryTests
+from .tuq import QueryTests
 import random
 import string
 from random import randint
@@ -195,8 +195,8 @@ class WindowFunctionsSyntaxTest(QueryTests):
     def _run_test(self, query):
         try:
             self.run_cbq_query(query)
-        except CBQError, e:
-            self.assertEquals('True', 'False', 'Wrong query - '+str(query))
+        except CBQError as e:
+            self.assertEqual('True', 'False', 'Wrong query - '+str(query))
 
     def test_select_from_batches(self):
         queries = self.generate_select_from_queries()

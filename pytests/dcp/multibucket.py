@@ -1,7 +1,7 @@
 import time
 import logger
 from dcp.constants import *
-from dcpbase import DCPBase
+from .dcpbase import DCPBase
 from membase.api.rest_client import RestConnection, RestHelper
 from couchbase_helper.documentgenerator import BlobGenerator
 
@@ -14,14 +14,14 @@ class DCPMultiBucket(DCPBase):
             'dcpdata', 'dcpdata-', self.value_size, end=self.num_items)
         self._load_all_buckets(self.master, doc_gen, "create", 0)
 
-        user_name = self.input.param("user_name",None)
-        password = self.input.param("password",None)
+        user_name = self.input.param("user_name", None)
+        password = self.input.param("password", None)
         nodeA = self.servers[0]
         rest = RestConnection(nodeA)
         vbuckets = rest.get_vbuckets()
 
         buckets = ['default']
-        for i in xrange(self.standard_buckets):
+        for i in range(self.standard_buckets):
             buckets.append('standard_bucket'+str(i))
 
         for bucket in buckets:

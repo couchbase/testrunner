@@ -157,9 +157,9 @@ class EventingVolume(EventingBaseTest):
             self.verify_eventing_results(self.function_name, docs_expected, skip_stats_validation=True,
                                          bucket=self.dst_bucket_name3, timeout=timeout)
             if docs_expected == 0:
-                self.verify_source_bucket_mutation(docs_expected,deletes=True,timeout=timeout,bucket=self.sbm_bucket)
+                self.verify_source_bucket_mutation(docs_expected, deletes=True, timeout=timeout, bucket=self.sbm_bucket)
             else:
-                self.verify_source_bucket_mutation(docs_expected,timeout=timeout,bucket=self.sbm_bucket)
+                self.verify_source_bucket_mutation(docs_expected, timeout=timeout, bucket=self.sbm_bucket)
         else:
             # Just print the stats after sleeping for 10 mins. Required to get the latest stats.
             self.sleep(timeout)

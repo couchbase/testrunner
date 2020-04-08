@@ -11,8 +11,8 @@ class PostgresClient(object):
         connection = None
         try:
             connection = psycopg2.connect(connstr)
-        except Exception, e:
-            print "Cannot connect to Postgres database."
-            print("Exception - "+str(e))
+        except Exception as e:
+            print("Cannot connect to Postgres database.")
+            print(("Exception - "+str(e)))
         return connection
 

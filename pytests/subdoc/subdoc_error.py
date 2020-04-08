@@ -3,7 +3,7 @@ import logger
 from couchbase_helper.cluster import Cluster
 
 from membase.helper.subdoc_helper import SubdocHelper
-from subdoc_sanity import SubdocSanityTests, SimpleDataSet, DeeplyNestedDataSet
+from .subdoc_sanity import SubdocSanityTests, SimpleDataSet, DeeplyNestedDataSet
 
 
 class SubdocErrorTests(SubdocSanityTests):
@@ -114,7 +114,7 @@ class SubdocErrorTests(SubdocSanityTests):
                       "dataset with {0} docs".format(num_docs))
 
         data_set = DeeplyNestedDataSet(self.helper, num_docs)
-        inserted_keys,levels = data_set.load()
+        inserted_keys, levels = data_set.load()
 
         '''path does not exist'''
         self.log.info('Testing empty path for dictionary')
@@ -134,7 +134,7 @@ class SubdocErrorTests(SubdocSanityTests):
                       "dataset with {0} docs".format(num_docs))
 
         data_set = DeeplyNestedDataSet(self.helper, num_docs)
-        inserted_keys,levels = data_set.load()
+        inserted_keys, levels = data_set.load()
 
         '''path does not exist'''
         self.log.info('Testing empty path for dictionary')
@@ -156,7 +156,7 @@ class SubdocErrorTests(SubdocSanityTests):
                       "dataset with {0} docs".format(num_docs))
 
         data_set = DeeplyNestedDataSet(self.helper, num_docs)
-        inserted_keys,levels = data_set.load()
+        inserted_keys, levels = data_set.load()
 
         '''path does not exist'''
         self.log.info('Testing path not exists')
@@ -164,7 +164,7 @@ class SubdocErrorTests(SubdocSanityTests):
 
         '''Last element Array of Array'''
         last_path ='child'
-        for i in xrange(levels-3):
+        for i in range(levels-3):
             last_path +='.child'
         last_path +='.array[-1]'
         #data_set.get_all_docs(inserted_keys, path = last_path)
@@ -186,7 +186,7 @@ class SubdocErrorTests(SubdocSanityTests):
                       "dataset with {0} docs".format(num_docs))
 
         data_set = DeeplyNestedDataSet(self.helper, num_docs)
-        inserted_keys,levels = data_set.load()
+        inserted_keys, levels = data_set.load()
 
         '''path does not exist'''
         self.log.info('Testing path not exists')
@@ -194,7 +194,7 @@ class SubdocErrorTests(SubdocSanityTests):
 
         '''Last element Array of Array'''
         last_path ='child'
-        for i in xrange(levels-3):
+        for i in range(levels-3):
             last_path +='.child'
         last_path +='.array[-1]'
         #data_set.get_all_docs(inserted_keys, path = last_path)
@@ -212,7 +212,7 @@ class SubdocErrorTests(SubdocSanityTests):
         for in_key in inserted_keys:
             try:
                 opaque, cas, data = self.helper.client.get_sd(in_key, path)
-                print data
+                print(data)
             except Exception as ex:
                 if not (str(ex).find(error) != -1):
                     result[field]  = "Error is incorrect.Actual %s.Expected: %s." %(str(ex), error)
@@ -223,7 +223,7 @@ class SubdocErrorTests(SubdocSanityTests):
         for in_key in inserted_keys:
             try:
                 opaque, cas, data = self.helper.client.exists_sd(in_key, path)
-                print data
+                print(data)
             except Exception as ex:
                 if not (str(ex).find(error) != -1):
                     result[field] = "Error is incorrect.Actual %s.Expected: %s." %(str(ex), error)
@@ -234,7 +234,7 @@ class SubdocErrorTests(SubdocSanityTests):
         for in_key in inserted_keys:
             try:
                 opaque, cas, data = self.helper.client.dict_add_sd(in_key, path, add_str)
-                print data
+                print(data)
             except Exception as ex:
                 if not (str(ex).find(error) != -1):
                      result[field] = "Error is incorrect.Actual %s.Expected: %s." %(str(ex), error)
@@ -255,7 +255,7 @@ class SubdocErrorTests(SubdocSanityTests):
         for in_key in inserted_keys:
             try:
                 opaque, cas, data = self.helper.client.delete_sd(in_key, path)
-                print data
+                print(data)
             except Exception as ex:
                 if not ():
                     result[field] = "Error is incorrect.Actual %s.Expected: %s." %(str(ex), error)
@@ -266,7 +266,7 @@ class SubdocErrorTests(SubdocSanityTests):
         for in_key in inserted_keys:
             try:
                 opaque, cas, data = self.helper.client.replace_sd(in_key, path, replace_str)
-                print data
+                print(data)
             except Exception as ex:
                 if not (str(ex).find(error) != -1):
                     result[field] = "Error is incorrect.Actual %s.Expected: %s." %(str(ex), error)

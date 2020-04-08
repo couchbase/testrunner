@@ -76,6 +76,10 @@ class EventingTools(EventingBaseTest, EnterpriseBackupRestoreBase, NewUpgradeBas
         cmd = 'curl -g %s:8091/diag/eval -u Administrator:password ' % self.master.ip
         cmd += '-d "path_config:component_path(bin)."'
         bin_path = subprocess.check_output(cmd, shell=True)
+        try:
+            bin_path = bin_path.decode()
+        except AttributeError:
+            pass
         if "bin" not in bin_path:
             self.fail("Check if cb server install on %s" % self.master.ip)
         else:
@@ -315,7 +319,7 @@ class EventingTools(EventingBaseTest, EnterpriseBackupRestoreBase, NewUpgradeBas
         command = "{0}/{1}".format(self.cli_command_location, cmd)
         log.info(command)
         output, error = remote_client.execute_command(command)
-        if error or not filter(lambda x: result in x, output):
+        if error or not [x for x in output if result in x]:
             self.fail("couchbase-cli event-setup function {0} failed: {1}".format(operation, output))
         else:
             log.info("couchbase-cli event-setup function {0} succeeded : {1}".format(operation, output))

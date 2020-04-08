@@ -3,7 +3,7 @@ import logging
 
 from couchbase_helper.tuq_helper import N1QLHelper
 from membase.api.rest_client import RestConnection
-from tuq import QueryTests
+from .tuq import QueryTests
 
 
 log = logging.getLogger(__name__)

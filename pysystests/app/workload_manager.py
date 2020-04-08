@@ -1,4 +1,4 @@
-from __future__ import absolute_import
+
 from app.celery import celery
 from celery.task.sets import TaskSet
 import app.postcondition_handlers as phandler
@@ -225,7 +225,7 @@ def task_postrun_handler(sender=None, task_id=None, task=None, args=None, kwargs
 #
     if sender == client.mset:
 
-        if isinstance(retval,tuple):
+        if isinstance(retval, tuple):
             isupdate = args[3]
             if isupdate == False:
 
@@ -276,7 +276,7 @@ def queue_op_cycles(workload):
         active_hosts = clusterStatus.get_all_hosts()
 
     # create 30 op cycles
-    for i in xrange(20):
+    for i in range(20):
 
         if workload.cc_queues is not None:
             # override template attribute with workload
@@ -444,7 +444,7 @@ def generate_pending_tasks(task_queue, template, bucketInfo, create_count,
     bucket = bucketInfo['bucket']
     password = bucketInfo['password']
 
-    create_tasks , update_tasks , get_tasks , del_tasks = ([],[],[],[])
+    create_tasks, update_tasks, get_tasks, del_tasks = ([], [], [], [])
     if create_count > 0:
         set_template = copy.deepcopy(template)
         set_template.ttl = 0 # override template level ttl
@@ -763,7 +763,7 @@ def getClusterStat(bucket, stat):
     return val
 
 def replace_magic_vars(str_):
-    ref = re.match(r".*\$(?P<var>\w+)",str_).group('var')
+    ref = re.match(r".*\$(?P<var>\w+)", str_).group('var')
     ref = str(ref.strip())
     value = CacheHelper.getPhaseVar(ref) or 0
     str_  = str_.replace("$"+ref, str(value))
@@ -799,7 +799,7 @@ class ClusterStatus(object):
     def get_random_host(self):
         all_hosts = self.get_all_hosts()
         if len(all_hosts) > 0:
-            return all_hosts[random.randint(0,len(all_hosts) - 1)]
+            return all_hosts[random.randint(0, len(all_hosts) - 1)]
 
     def http_ping_node(self, node = None):
         if node:
@@ -1034,7 +1034,7 @@ class Template(object):
         self.cc_queues = params["cc_queues"]
         self.kv = params["kv"]
         self.size = params.get("size") or ['128']
-        self.size = map(int, self.size)
+        self.size = list(map(int, self.size))
         self.indexed_keys = []
 
         # cache

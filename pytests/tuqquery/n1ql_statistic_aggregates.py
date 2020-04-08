@@ -1,4 +1,4 @@
-from tuq import QueryTests
+from .tuq import QueryTests
 import math
 import sys
 from membase.api.exception import CBQError
@@ -64,14 +64,14 @@ class StatisticAggregatesTest(QueryTests):
             for datatype in self.datatypes:
                 query = "select "+fname+"("+datatype+"_field) from temp_bucket where "+datatype+"_field is not null or missing"
 
-                args = map(lambda x: float(x), self.numbers)
+                args = [float(x) for x in self.numbers]
                 if datatype == 'float':
-                    args = map(lambda x: x*math.pi, self.numbers)
+                    args = [x*math.pi for x in self.numbers]
 
                 arithmetic_result = eval('self._calculate_'+fname+'_value(args)')
                 my_result = "%.9f" % float(arithmetic_result)
 
-                lambda1 = lambda x, y = my_result: self.assertEquals("%.9f" % float(str(x['q_res'][0]['results'][0]["$1"])), y)
+                lambda1 = lambda x, y = my_result: self.assertEqual("%.9f" % float(str(x['q_res'][0]['results'][0]["$1"])), y)
                 test_dict["%d-default" % (count)] = {"indexes": self.indexes,
                                                      "pre_queries": [],
                                                      "queries": [query],
@@ -97,14 +97,14 @@ class StatisticAggregatesTest(QueryTests):
             for datatype in self.datatypes:
                 query = "select "+fname+"("+datatype+"_field) from temp_bucket"
 
-                args = map(lambda x: float(x), self.numbers)
+                args = [float(x) for x in self.numbers]
                 if datatype == 'float':
-                    args = map(lambda x: x*math.pi, self.numbers)
+                    args = [x*math.pi for x in self.numbers]
 
                 arithmetic_result = eval('self._calculate_'+fname+'_value(args)')
                 my_result = "%.9f" % float(arithmetic_result)
 
-                lambda1 = lambda x, y=my_result: self.assertEquals("%.9f" % float(str(x['q_res'][0]['results'][0]["$1"])), y)
+                lambda1 = lambda x, y=my_result: self.assertEqual("%.9f" % float(str(x['q_res'][0]['results'][0]["$1"])), y)
                 test_dict["%d-default" % (count)] = {"indexes": self.indexes,
                                                      "pre_queries": [],
                                                      "queries": [query],
@@ -130,7 +130,7 @@ class StatisticAggregatesTest(QueryTests):
             query = "select "+fname+"(int_field) from temp_bucket"
 
             my_result = None
-            lambda1 = lambda x, y=my_result: self.assertEquals(x['q_res'][0]['results'][0]["$1"], y)
+            lambda1 = lambda x, y=my_result: self.assertEqual(x['q_res'][0]['results'][0]["$1"], y)
             test_dict["%d-default" % (count)] = {"indexes": self.indexes,
                                                  "pre_queries": [],
                                                  "queries": [query],
@@ -159,7 +159,7 @@ class StatisticAggregatesTest(QueryTests):
             query = "select "+fname+"(int_field) from temp_bucket"
 
             my_result = "success"
-            lambda1 = lambda x, y=my_result: self.assertEquals(x['q_res'][0]['status'], y)
+            lambda1 = lambda x, y=my_result: self.assertEqual(x['q_res'][0]['status'], y)
             test_dict["%d-default" % (count)] = {"indexes": self.indexes,
                                                  "pre_queries": [],
                                                  "queries": [query],
@@ -189,7 +189,7 @@ class StatisticAggregatesTest(QueryTests):
                 else:
                     result = 'ix3'
 
-                lambda1 = lambda x, y=result: self.assertEquals(x['q_res'][0]['results'][0]['plan']['~children'][0]['index'], y)
+                lambda1 = lambda x, y=result: self.assertEqual(x['q_res'][0]['results'][0]['plan']['~children'][0]['index'], y)
                 test_dict["%d-default" % (count)] = {"indexes": self.indexes,
                                                      "pre_queries": [],
                                                      "queries": [query],
@@ -216,14 +216,14 @@ class StatisticAggregatesTest(QueryTests):
 
                 args = []
                 if datatype == 'int':
-                    args = [1.0,3.0,6.0,8.0,9.0,10.0]
+                    args = [1.0, 3.0, 6.0, 8.0, 9.0, 10.0]
                 else:
                     args = [3.14, 9.14, 18.14, 21.14, 24.14, 30.14]
 
                 arithmetic_result = eval('self._calculate_'+fname+'_value(args)')
                 my_result = "%.9f" % float(arithmetic_result)
 
-                lambda1 = lambda x, y=my_result: self.assertEquals("%.9f" % float(str(x['q_res'][0]['results'][0]["$1"])), y)
+                lambda1 = lambda x, y=my_result: self.assertEqual("%.9f" % float(str(x['q_res'][0]['results'][0]["$1"])), y)
                 test_dict["%d-default" % (count)] = {"indexes": self.indexes,
                                                      "pre_queries": [],
                                                      "queries": [query],
@@ -245,7 +245,7 @@ class StatisticAggregatesTest(QueryTests):
         result = 'index_group_aggs'
 
         try:
-            self.assertEquals(str(n1ql_result).find(result) > -1, True)
+            self.assertEqual(str(n1ql_result).find(result) > -1, True)
         finally:
             self._unload_test_data()
 
@@ -261,10 +261,10 @@ class StatisticAggregatesTest(QueryTests):
                 error_detected = False
                 try:
                     n1ql_result = self.run_cbq_query(query)
-                except CBQError, e:
+                except CBQError as e:
                     error_detected = True
 
-                self.assertEquals(error_detected, True)
+                self.assertEqual(error_detected, True)
 
         self._unload_test_data()
 
@@ -278,10 +278,10 @@ class StatisticAggregatesTest(QueryTests):
             error_detected = False
             try:
                 n1ql_result = self.run_cbq_query(query)
-            except CBQError, e:
+            except CBQError as e:
                 error_detected = True
 
-            self.assertEquals(error_detected, True)
+            self.assertEqual(error_detected, True)
 
         self._unload_test_data()
 
@@ -303,14 +303,14 @@ class StatisticAggregatesTest(QueryTests):
             return sortedParams[0]
 
         if len(sortedParams) == 2:
-            return (sortedParams[0] + sortedParams[1])/2
+            return (sortedParams[0] + sortedParams[1])//2
 
         if len(sortedParams)%2 != 0:
-            retVal = sortedParams[len(sortedParams)/2]
+            retVal = sortedParams[len(sortedParams)//2]
         else:
-            valLeft = sortedParams[len(sortedParams)/2 -1]
-            valRight = sortedParams[len(sortedParams)/2]
-            retVal = (valLeft+valRight)/2
+            valLeft = sortedParams[len(sortedParams)//2 -1]
+            valRight = sortedParams[len(sortedParams)//2]
+            retVal = (valLeft+valRight)//2
 
         return retVal
 
@@ -321,7 +321,7 @@ class StatisticAggregatesTest(QueryTests):
         for i in range(len(filtered_params)):
             sum+=math.pow(filtered_params[i] - avg, 2)
 
-        return math.sqrt(sum/(len(filtered_params)-1))
+        return math.sqrt(sum//(len(filtered_params)-1))
 
     def _calculate_stddev_pop_value(self, params):
         filtered_params = self._filter_digit_params(params)
@@ -330,7 +330,7 @@ class StatisticAggregatesTest(QueryTests):
         for i in range(len(filtered_params)):
             sum+=math.pow(filtered_params[i] - avg, 2)
 
-        return math.sqrt(sum/len(filtered_params))
+        return math.sqrt(sum//len(filtered_params))
 
     def _calculate_stddev_samp_value(self, params):
         filtered_params = self._filter_digit_params(params)
@@ -346,7 +346,7 @@ class StatisticAggregatesTest(QueryTests):
         sum = 0
         for i in range(len(params)):
             sum += params[i]
-        return sum/len(params)
+        return sum//len(params)
 
 
     def _calculate_variance_value(self, params):
@@ -356,7 +356,7 @@ class StatisticAggregatesTest(QueryTests):
         for i in range(len(filtered_params)):
             sum+=math.pow(filtered_params[i] - avg, 2)
 
-        return sum/(len(filtered_params)-1)
+        return sum//(len(filtered_params)-1)
 
     def _calculate_variance_pop_value(self, params):
         filtered_params = self._filter_digit_params(params)
@@ -365,7 +365,7 @@ class StatisticAggregatesTest(QueryTests):
         for i in range(len(filtered_params)):
             sum += math.pow(filtered_params[i] - avg, 2)
 
-        return sum/len(params)
+        return sum//len(params)
 
 
     def _calculate_variance_samp_value(self, params):
@@ -375,10 +375,10 @@ class StatisticAggregatesTest(QueryTests):
         for i in range(len(filtered_params)):
             sum+=math.pow(filtered_params[i] - avg, 2)
 
-        return sum/(len(filtered_params)-1)
+        return sum//(len(filtered_params)-1)
 
     def _filter_digit_params(self, params):
-        ret_val = list(filter(lambda x: isinstance(x, int) or isinstance(x, long) or isinstance(x, float), params))
+        ret_val = list([x for x in params if isinstance(x, int) or isinstance(x, int) or isinstance(x, float)])
         for i in range(len(ret_val)):
             ret_val[i] = float(ret_val[i])
 
@@ -449,7 +449,7 @@ class StatisticAggregatesTest(QueryTests):
         for bucket in self.buckets:
             self.cluster.bucket_flush(self.master, bucket=bucket, timeout=self.wait_timeout * 5)
 
-        for i in [1,2,3,4,5,6,7,8,9,10]:
+        for i in [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]:
             int_val = "null"
             float_val = "null"
             if i%2 == 0:

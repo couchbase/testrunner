@@ -3,17 +3,16 @@ import logging
 import random
 from threading import Thread
 
-from string import lowercase
 from couchbase.bucket import Bucket
 from couchbase_helper.data import FIRST_NAMES, COUNTRIES
 from couchbase_helper.query_definitions import QueryDefinition
 from membase.api.rest_client import RestConnection
 from membase.helper.bucket_helper import BucketOperationHelper
-from base_2i import BaseSecondaryIndexingTests
+from .base_2i import BaseSecondaryIndexingTests
 from couchbase_helper.cluster import Cluster
 from couchbase_helper.documentgenerator import BlobGenerator
 
-DATATYPES = [unicode, "scalar", int, dict, "missing", "empty", "null"]
+DATATYPES = [str, "scalar", int, dict, "missing", "empty", "null"]
 RANGE_SCAN_TEMPLATE = "SELECT {0} FROM %s WHERE {1}"
 log = logging.getLogger()
 emit_fields = "*"
@@ -259,7 +258,7 @@ class SecondaryIndexingOffsetTests(BaseSecondaryIndexingTests):
                                     total docs returned does not comply with definition of offset and limit.
                                 '''
                                 self.assertEqual(len(multiscan_result), expected_doc)
-                            except Exception, ex:
+                            except Exception as ex:
                                 log.info(str(ex))
 
     def test_with_offset_limit_and_with_array_indexes(self):
@@ -334,7 +333,7 @@ class SecondaryIndexingOffsetTests(BaseSecondaryIndexingTests):
         scan_contents.append([{"Seek": None,
                                "Filter": [{"Low": "A", "High": "Z"},
                                           {"Low": 0, "High": 100}]}])
-        for i in xrange(0, self.docs_per_day / 10 + 1):
+        for i in range(0, self.docs_per_day // 10 + 1):
             for bucket in self.buckets:
                 if not id_map:
                     id_map = self.create_index_using_rest(bucket, query_definition)
@@ -826,8 +825,8 @@ class SecondaryIndexingOffsetTests(BaseSecondaryIndexingTests):
         scan_contents.append({"Seek": None,
                               "Filter": [{"Low": "N", "High": "Z"}]})
 
-        projections = [{"EntryKeys": [0], "PrimaryKey": True},{"EntryKeys": [0, 1], "PrimaryKey": True},
-                       {"EntryKeys": [0, 1, 2], "PrimaryKey": True},{"EntryKeys": [0, 1, 2, 3], "PrimaryKey": True},
+        projections = [{"EntryKeys": [0], "PrimaryKey": True}, {"EntryKeys": [0, 1], "PrimaryKey": True},
+                       {"EntryKeys": [0, 1, 2], "PrimaryKey": True}, {"EntryKeys": [0, 1, 2, 3], "PrimaryKey": True},
                        {"EntryKeys": [0], "PrimaryKey": False}, {"EntryKeys": [0, 1], "PrimaryKey": False},
                        {"EntryKeys": [0, 1, 2], "PrimaryKey": False}, {"EntryKeys": [0, 1, 2, 3], "PrimaryKey": False}]
 
@@ -971,7 +970,7 @@ class SecondaryIndexingOffsetTests(BaseSecondaryIndexingTests):
                 # Validations could fail
                 # See MB-22724 for more details
                 self._multiscan_distinct_api_helper(scan_contents, offset=0, limit=100, id_map=id_map,
-                                                    projection=pr,verify=False)
+                                                    projection=pr, verify=False)
 
     def test_offset_limit_and_projection_with_indexed_values_of_large_size(self):
         """

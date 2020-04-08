@@ -1,7 +1,7 @@
 import logging
 import random
 
-from tuq import QueryTests
+from .tuq import QueryTests
 
 log = logging.getLogger(__name__)
 
@@ -77,7 +77,7 @@ class DateTimeFunctionClass(QueryTests):
                 query = 'SELECT DATE PART_MILLIS({0}, "{1}")'.format(expression, part)
                 try:
                     actual_result = self.run_cbq_query(query)
-                except Exception, ex:
+                except Exception as ex:
                     msg = "syntax error"
                     if msg not in str(ex):
                         raise
@@ -226,10 +226,10 @@ class DateTimeFunctionClass(QueryTests):
                                  "Query {0} Failed".format(query))
             else:
                 if not (8%interval):
-                    self.assertEqual(len(lst), (8/interval),
+                    self.assertEqual(len(lst), (8//interval),
                                      "Query {0} Failed".format(query))
                 else:
-                    self.assertEqual(len(lst), (8/interval)+1,
+                    self.assertEqual(len(lst), (8//interval)+1,
                                      "Query {0} Failed".format(query))
 
     def test_date_range_millis_for_intervals(self):
@@ -249,10 +249,10 @@ class DateTimeFunctionClass(QueryTests):
                 self.assertEqual(len(lst), 0, "Query {0} Failed".format(query))
             else:
                 if not (8%interval):
-                    self.assertEqual(len(lst), (8/interval),
+                    self.assertEqual(len(lst), (8//interval),
                                      "Query {0} Failed".format(query))
                 else:
-                    self.assertEqual(len(lst), (8/interval)+1,
+                    self.assertEqual(len(lst), (8//interval)+1,
                                      "Query {0} Failed".format(query))
 
     def test_new_functions(self):

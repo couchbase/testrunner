@@ -112,7 +112,7 @@ class LogRedactionBase(BaseTestCase):
         match_output, _ = shell.execute_command(command=command)
         if len(ln_output) == 0 and len(match_output) == 0:
             self.fail("No user data tags found in " + remotepath + nonredactFileName)
-        nonredact_dict = dict(zip(ln_output, match_output))
+        nonredact_dict = dict(list(zip(ln_output, match_output)))
 
         command = "zipgrep -n -o \"<ud>.+</ud>\" " + remotepath + redactFileName + " " + log_file_name + " | cut -f2 -d:"
         ln_output, _ = shell.execute_command(command=command)
@@ -120,40 +120,40 @@ class LogRedactionBase(BaseTestCase):
         match_output, _ = shell.execute_command(command=command)
         if len(ln_output) == 0 and len(match_output) == 0:
             self.fail("No user data tags found in " + remotepath + redactFileName)
-        redact_dict = dict(zip(ln_output, match_output))
+        redact_dict = dict(list(zip(ln_output, match_output)))
 
-        self.log.info("Number of tagged items in non-redacted log: " + str(len(nonredact_dict.items())))
-        self.log.info("Number of tagged items in redacted log: " + str(len(redact_dict.items())))
-        if len(nonredact_dict.items()) != len(redact_dict.items()):
+        self.log.info("Number of tagged items in non-redacted log: " + str(len(list(nonredact_dict.items()))))
+        self.log.info("Number of tagged items in redacted log: " + str(len(list(redact_dict.items()))))
+        if len(list(nonredact_dict.items())) != len(list(redact_dict.items())):
             self.fail("User tags count mismatch between redacted and non-redacted files")
 
         tmp_nonredact_dict = dict()
-        for (k, v) in nonredact_dict.iteritems():
-            if not tmp_nonredact_dict.has_key(v):
+        for (k, v) in nonredact_dict.items():
+            if v not in tmp_nonredact_dict:
                 tmp_nonredact_dict[v] = k
 
         unique_nonredact_dict = dict()
-        for (k, v) in tmp_nonredact_dict.iteritems():
+        for (k, v) in tmp_nonredact_dict.items():
             unique_nonredact_dict[v] = k
 
         tmp_redact_dict = dict()
-        for (k, v) in redact_dict.iteritems():
-            if not tmp_redact_dict.has_key(v):
+        for (k, v) in redact_dict.items():
+            if v not in tmp_redact_dict:
                 tmp_redact_dict[v] = k
 
         unique_redact_dict = dict()
-        for (k, v) in tmp_redact_dict.iteritems():
+        for (k, v) in tmp_redact_dict.items():
             unique_redact_dict[v] = k
 
-        self.log.info("Number of tagged items in unique non-redacted log: " + str(len(unique_nonredact_dict.items())))
-        self.log.info("Number of tagged items in unique redacted log: " + str(len(unique_redact_dict.items())))
-        if len(unique_nonredact_dict.items()) != len(unique_redact_dict.items()):
+        self.log.info("Number of tagged items in unique non-redacted log: " + str(len(list(unique_nonredact_dict.items()))))
+        self.log.info("Number of tagged items in unique redacted log: " + str(len(list(unique_redact_dict.items()))))
+        if len(list(unique_nonredact_dict.items())) != len(list(unique_redact_dict.items())):
             self.fail("User tags count mismatch between unique redacted and non-redacted files")
 
         #TODO For now, we are just validating the redacted tag contents with a regex for SHA1 --> [a-f0-9]{40}
         #TODO Should replace it with hashlib function
-        for key, value in unique_nonredact_dict.items():
-            if key not in unique_redact_dict.keys():
+        for key, value in list(unique_nonredact_dict.items()):
+            if key not in list(unique_redact_dict.keys()):
                 self.fail("Line: " + key + " Value: " + value + " not found in redacted file")
             else:
                 redact_value = unique_redact_dict[key]

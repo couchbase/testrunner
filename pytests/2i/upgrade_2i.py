@@ -3,7 +3,7 @@ import logging
 from datetime import datetime
 from threading import Thread
 
-from base_2i import BaseSecondaryIndexingTests
+from .base_2i import BaseSecondaryIndexingTests
 from couchbase_helper.query_definitions import QueryDefinition
 from membase.helper.bucket_helper import BucketOperationHelper
 from newupgradebasetest import NewUpgradeBaseTest
@@ -28,7 +28,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
         self.toggle_disable_upgrade = self.input.param("toggle_disable_upgrade", False)
         query_template = QUERY_TEMPLATE
         query_template = query_template.format("job_title")
-        self.whereCondition= self.input.param("whereCondition"," job_title != \"Sales\" ")
+        self.whereCondition= self.input.param("whereCondition", " job_title != \"Sales\" ")
         query_template += " WHERE {0}".format(self.whereCondition)
         self.load_query_definitions = []
         self.initial_index_number = self.input.param("initial_index_number", 1)
@@ -97,7 +97,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
                     query_definitions=self.load_query_definitions)
         try:
             self._execute_prepare_statement(prepare_statements)
-        except Exception, ex:
+        except Exception as ex:
             msg = "No such prepared statement"
             self.assertIn(msg, str(ex), str(ex))
         self._verify_index_partitioning()
@@ -110,7 +110,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
         in_between_tasks = self.async_run_operations(buckets=self.buckets, phase="in_between")
         kv_ops = self.kv_mutations()
         log.info("Upgrading servers to {0}...".format(self.upgrade_to))
-        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],[],self.nodes_out_list)
+        rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], self.nodes_out_list)
         rebalance.result()
         self.upgrade_servers = self.nodes_out_list
         upgrade_th = self._async_update(self.upgrade_to, server_out)
@@ -119,7 +119,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
         log.info("==== Upgrade Complete ====")
         self.sleep(120)
         node_version = RestConnection(server_out[0]).get_nodes_versions()
-        for service in self.services_map.keys():
+        for service in list(self.services_map.keys()):
             for node in self.nodes_out_list:
                 node = "{0}:{1}".format(node.ip, node.port)
                 if node in self.services_map[service]:
@@ -148,7 +148,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
         """
         before_tasks = self.async_run_operations(buckets=self.buckets, phase="before")
         self._run_tasks([before_tasks])
-        self._install(self.nodes_in_list,version=self.upgrade_to)
+        self._install(self.nodes_in_list, version=self.upgrade_to)
         in_between_tasks = self.async_run_operations(buckets=self.buckets, phase="in_between")
         kv_ops = self.kv_mutations()
         log.info("Swapping servers...")
@@ -176,7 +176,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
                                                  phase="before")
         self._run_tasks([before_tasks])
         community_to_enterprise = (self.upgrade_build_type == "enterprise" and self.initial_build_type == "community")
-        self._install(self.nodes_in_list, version=self.upgrade_to,community_to_enterprise=community_to_enterprise)
+        self._install(self.nodes_in_list, version=self.upgrade_to, community_to_enterprise=community_to_enterprise)
         for i in range(len(self.nodes_out_list)):
             node = self.nodes_out_list[i]
             node_rest = RestConnection(node)
@@ -296,7 +296,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
                     try:
                         self._verify_bucket_count_with_index_count()
                         verify_items = True
-                    except Exception, e:
+                    except Exception as e:
                         msg = "All Items didn't get Indexed"
                         if msg in str(e) and count < 15:
                             count += 1
@@ -465,9 +465,9 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
             servers = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
             rest = RestConnection(servers[0])
             date = datetime.now()
-            dayOfWeek = (date.weekday() + (date.hour+((date.minute+5)/60))/24)%7
+            dayOfWeek = (date.weekday() + (date.hour+((date.minute+5)//60))//24)%7
             status, content, header = rest.set_indexer_compaction(indexDayOfWeek=DAYS[dayOfWeek],
-                                              indexFromHour=date.hour+((date.minute+1)/60),
+                                              indexFromHour=date.hour+((date.minute+1)//60),
                                               indexFromMinute=(date.minute+1)%60)
             self.assertTrue(status, "Error in setting Circular Compaction... {0}".format(content))
         self.multi_create_index(self.buckets, self.query_definitions)
@@ -502,7 +502,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
                                 self.n1ql_node = n1ql_node
                                 break
                 log.info("Rebalancing the node out...")
-                rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init],[], [node])
+                rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], [node])
                 rebalance.result()
                 active_nodes = []
                 for active_node in self.servers:
@@ -542,7 +542,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
         self._verify_create_index_api()
         buckets = self._create_plasma_buckets()
         self.load(self.gens_load, buckets=buckets, flag=self.item_flag, batch_size=self.batch_size)
-        self.multi_create_index(buckets=buckets,query_definitions=self.query_definitions)
+        self.multi_create_index(buckets=buckets, query_definitions=self.query_definitions)
         self.multi_query_using_index(buckets=buckets, query_definitions=self.query_definitions)
         self._verify_gsi_rebalance()
         self._verify_index_partitioning()
@@ -569,7 +569,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
         old_api = False
         node_map = self._get_nodes_with_version()
         log.info(node_map)
-        for node, vals in node_map.iteritems():
+        for node, vals in node_map.items():
             if vals["version"] < "5":
                 old_api = True
                 break
@@ -577,7 +577,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
         try:
             query_result = self.n1ql_helper.run_cbq_query(query=create_index_query_age,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             if old_api:
                 msgs = ["'syntax error - at DESC'",
                     "This option is enabled after cluster is fully upgraded and there is no failed node"]
@@ -607,7 +607,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
             log.info(actual_result)
             old_api = False
             api_two = False
-            for node, vals in node_map.iteritems():
+            for node, vals in node_map.items():
                 if vals["version"] < "5":
                     old_api = True
                     break
@@ -626,11 +626,11 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
         try:
             query_result = self.n1ql_helper.run_cbq_query(query=create_index_query,
                                            server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             old_api = False
             node_map = self._get_nodes_with_version()
             log.info(node_map)
-            for node, vals in node_map.iteritems():
+            for node, vals in node_map.items():
                 if vals["version"] < "5":
                     old_api = True
                     msg = "Fails to create index with replica"
@@ -646,39 +646,39 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
 
     def _recreate_equivalent_indexes(self, index_node):
         node_map = self._get_nodes_with_version()
-        for node, vals in node_map.iteritems():
+        for node, vals in node_map.items():
             if vals["version"] < "5":
                 rest = RestConnection(self.master)
                 index_map = rest.get_index_status()
                 log.info(index_map)
                 lost_indexes = {}
-                for bucket, index in index_map.iteritems():
-                    for index, vals in index.iteritems():
+                for bucket, index in index_map.items():
+                    for index, vals in index.items():
                         if "_replica" in index:
-                            if not index in lost_indexes.keys():
+                            if not index in list(lost_indexes.keys()):
                                 lost_indexes[index] = []
                             lost_indexes[index].append(bucket)
                 deploy_node_info = ["{0}:{1}".format(index_node.ip, index_node.port)]
-                for index, buckets in lost_indexes.iteritems():
+                for index, buckets in lost_indexes.items():
                     for query_definition in self.query_definitions:
                         if query_definition.index_name == index:
                             query_definition.index_name = query_definition.index_name.split("_replica")[0]
                             for bucket in buckets:
-                                bucket = filter(lambda x: x.name == bucket, self.buckets)[0]
+                                bucket = [x for x in self.buckets if x.name == bucket][0]
                                 self.create_index(bucket=bucket,
                                               query_definition=query_definition,
                                               deploy_node_info=deploy_node_info)
                                 self.sleep(20)
                             query_definition.index_name = index
                             for bucket in buckets:
-                                bucket = filter(lambda x: x.name == bucket, self.buckets)[0]
+                                bucket = [x for x in self.buckets if x.name == bucket][0]
                                 self.drop_index(bucket, query_definition)
                                 self.sleep(20)
                             query_definition.index_name = query_definition.index_name.split("_replica")[0]
 
     def _remove_equivalent_indexes(self, index_node):
         node_map = self._get_nodes_with_version()
-        for node, vals in node_map.iteritems():
+        for node, vals in node_map.items():
             if vals["version"] > "5":
                 rest = RestConnection(self.master)
                 index_map = rest.get_index_status()
@@ -692,7 +692,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
 
     def _create_equivalent_indexes(self, index_node):
         node_map = self._get_nodes_with_version()
-        for node, vals in node_map.iteritems():
+        for node, vals in node_map.items():
             if vals["version"] < "5":
                 index_nodes = self.get_nodes_from_services_map(service_type="index",
                                                                get_all_nodes=True)
@@ -703,12 +703,12 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
                         lost_indexes = self._find_index_lost_when_indexer_down(index_node)
                         deploy_node_info = ["{0}:{1}".format(index_nodes[0].ip,
                                                              index_nodes[0].port)]
-                        for index, buckets in lost_indexes.iteritems():
+                        for index, buckets in lost_indexes.items():
                             for query_definition in self.query_definitions:
                                 if query_definition.index_name == index:
                                     query_definition.index_name = query_definition.index_name + "_replica"
                                     for bucket in buckets:
-                                        bucket = filter(lambda x: x.name == bucket, self.buckets)[0]
+                                        bucket = [x for x in self.buckets if x.name == bucket][0]
                                         self.create_index(bucket=bucket,
                                                           query_definition=query_definition,
                                                           deploy_node_info=deploy_node_info)
@@ -720,10 +720,10 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
         index_map = rest.get_index_status()
         log.info("index_map: {0}".format(index_map))
         host = "{0}:8091".format(index_node.ip)
-        for bucket, index in index_map.iteritems():
-            for index, vals in index.iteritems():
+        for bucket, index in index_map.items():
+            for index, vals in index.items():
                 if vals["hosts"] == host:
-                    if not index in lost_indexes.keys():
+                    if not index in list(lost_indexes.keys()):
                         lost_indexes[index] = []
                     lost_indexes[index].append(bucket)
         log.info("Lost Indexes: {0}".format(lost_indexes))
@@ -795,7 +795,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
 
     def _verify_gsi_rebalance(self):
         node_map = self._get_nodes_with_version()
-        for node, vals in node_map.iteritems():
+        for node, vals in node_map.items():
             if vals["version"] < "5":
                 return
         self.rest = RestConnection(self.master)
@@ -828,7 +828,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
         index_map = rest.get_index_status()
         log.info("index_map: {0}".format(index_map))
         index_info = index_map[self.buckets[0].name]
-        for index_name, index_vals in index_info.iteritems():
+        for index_name, index_vals in index_info.items():
             host = index_vals["hosts"]
             for index_node in index_nodes:
                 ip_str = index_node.ip + ":" + index_node.port
@@ -841,7 +841,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
 
     def _verify_index_partitioning(self):
         node_map = self._get_nodes_with_version()
-        for node, vals in node_map.iteritems():
+        for node, vals in node_map.items():
             if vals["version"] < "5.5":
                 return
         indexer_node = self.get_nodes_from_services_map(service_type="index")
@@ -855,7 +855,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
         try:
             self.n1ql_helper.run_cbq_query(query=create_partitioned_index1_query, server=self.n1ql_node)
             self.n1ql_helper.run_cbq_query(query=create_index1_query, server=self.n1ql_node)
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(str(ex))
             self.fail(
                 "index creation failed with error : {0}".format(str(ex)))
@@ -898,13 +898,13 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
                 query_partitioned_index = query_details["query"].format(query_details["partitioned_idx_name"])
                 query_non_partitioned_index = query_details["query"].format(query_details["non_partitioned_idx_name"])
 
-                result_partitioned_index = self.n1ql_helper.run_cbq_query(query=query_partitioned_index,server=self.n1ql_node)["results"]
-                result_non_partitioned_index = self.n1ql_helper.run_cbq_query(query=query_non_partitioned_index,server=self.n1ql_node)["results"]
+                result_partitioned_index = self.n1ql_helper.run_cbq_query(query=query_partitioned_index, server=self.n1ql_node)["results"]
+                result_non_partitioned_index = self.n1ql_helper.run_cbq_query(query=query_non_partitioned_index, server=self.n1ql_node)["results"]
 
                 if sorted(result_partitioned_index) != sorted(result_non_partitioned_index):
                     failed_queries.append(query_partitioned_index)
                     log.warning("*** This query does not return same results for partitioned and non-partitioned indexes.")
-            except Exception, ex:
+            except Exception as ex:
                 log.info(str(ex))
         msg = "Some scans did not yield the same results for partitioned index and non-partitioned indexes"
         self.assertEqual(len(failed_queries), 0, msg)
@@ -946,7 +946,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
         rest = RestConnection(indexer_node)
         index_metadata = rest.get_indexer_metadata()["status"]
         node_map = self._get_nodes_with_version()
-        for node in node_map.iterkeys():
+        for node in node_map.keys():
             if node == indexer_node.ip:
                 if node_map[node]["version"] < "5" or \
                                 self.gsi_type == "memory_optimized":

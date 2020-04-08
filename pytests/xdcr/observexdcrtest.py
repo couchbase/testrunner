@@ -1,4 +1,4 @@
-from xdcrnewbasetests import XDCRNewBaseTest
+from .xdcrnewbasetests import XDCRNewBaseTest
 from couchbase_helper.documentgenerator import BlobGenerator
 from couchbase_helper.document import View
 from observe.observetest import ObserveTests

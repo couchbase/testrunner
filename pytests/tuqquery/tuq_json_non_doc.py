@@ -46,7 +46,7 @@ class JSONNonDocTests(QueryTests):
             actual_result = self.run_cbq_query()
             actual_result = [doc[bucket.name] for doc in actual_result['results']]
             expected_result = self.generate_full_docs_list(self.gens_load)
-            self._verify_results(sorted(actual_result), sorted(expected_result))
+            self._verify_results(actual_result, expected_result)
 
     def test_int_where(self):
         self.fail_if_no_buckets()
@@ -58,7 +58,7 @@ class JSONNonDocTests(QueryTests):
             actual_result = [doc["v"] for doc in actual_result['results']]
             expected_result = self.generate_full_docs_list(self.gens_load)
             expected_result = [doc for doc in expected_result if doc > 300 ]
-            self._verify_results(sorted(actual_result), sorted(expected_result))
+            self._verify_results(actual_result, expected_result)
 
     def test_prepared_int_where(self):
         self.fail_if_no_buckets()
@@ -76,7 +76,7 @@ class JSONNonDocTests(QueryTests):
             actual_result = [doc["$1"] for doc in actual_result['results']]
             expected_result = self.generate_full_docs_list(self.gens_load)
             expected_result = [doc for doc in expected_result if doc == 4 ]
-            self._verify_results(sorted(actual_result), sorted(expected_result))
+            self._verify_results(actual_result, expected_result)
 
     def test_array_where(self):
         self.fail_if_no_buckets()
@@ -88,5 +88,5 @@ class JSONNonDocTests(QueryTests):
             actual_result = [doc["v"] for doc in actual_result['results']]
             expected_result = self.generate_full_docs_list(self.gens_load)
             expected_result = [doc for doc in expected_result if doc[0] > 20 or doc[1] > 20 ]
-            self._verify_results(sorted(actual_result), sorted(expected_result))
+            self._verify_results(actual_result, expected_result)
 

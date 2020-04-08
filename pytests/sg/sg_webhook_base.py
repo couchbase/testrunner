@@ -83,7 +83,7 @@ class GatewayWebhookBaseTest(GatewayBaseTest):
         doc_content_dic = json.loads(doc_content)
         if not doc_content_dic:
             return True
-        for key, value in doc_content_dic.items():
+        for key, value in list(doc_content_dic.items()):
             if not post_dic[key]:
                 self.log.info('check_post_contents found missing key {0}'.format(key))
                 return False

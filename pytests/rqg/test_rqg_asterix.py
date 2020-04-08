@@ -6,13 +6,13 @@ import json
 import os
 import zipfile
 import pprint
-import Queue
+import queue
 import json
 from membase.helper.cluster_helper import ClusterOperationHelper
 import mc_bin_client
 import threading
 from memcached.helper.data_helper import  VBucketAwareMemcached
-from rqg_mysql_client import RQGMySQLClient as MySQLClient
+from .rqg_mysql_client import RQGMySQLClient as MySQLClient
 from membase.api.rest_client import RestConnection, Bucket
 from couchbase_helper.analytics_helper import AnalyticsHelper
 from couchbase_helper.query_helper import QueryHelper
@@ -29,47 +29,47 @@ class RQGASTERIXTests(BaseTestCase):
         self.log.info("==============  RQGTests setup was finished for test #{0} {1} =============="\
                       .format(self.case_number, self._testMethodName))
         self.skip_setup_cleanup = True
-        self.remove_alias = self.input.param("remove_alias",True)
-        self.number_of_buckets = self.input.param("number_of_buckets",5)
-        self.crud_type = self.input.param("crud_type","update")
-        self.populate_with_replay = self.input.param("populate_with_replay",False)
-        self.crud_batch_size = self.input.param("crud_batch_size",1)
-        self.skip_cleanup = self.input.param("skip_cleanup",False)
-        self.record_failure= self.input.param("record_failure",False)
-        self.failure_record_path= self.input.param("failure_record_path","/tmp")
-        self.use_mysql= self.input.param("use_mysql",True)
-        self.joins = self.input.param("joins",False)
+        self.remove_alias = self.input.param("remove_alias", True)
+        self.number_of_buckets = self.input.param("number_of_buckets", 5)
+        self.crud_type = self.input.param("crud_type", "update")
+        self.populate_with_replay = self.input.param("populate_with_replay", False)
+        self.crud_batch_size = self.input.param("crud_batch_size", 1)
+        self.skip_cleanup = self.input.param("skip_cleanup", False)
+        self.record_failure= self.input.param("record_failure", False)
+        self.failure_record_path= self.input.param("failure_record_path", "/tmp")
+        self.use_mysql= self.input.param("use_mysql", True)
+        self.joins = self.input.param("joins", False)
         self.ansi_joins = self.input.param("ansi_joins", False)
-        self.subquery = self.input.param("subquery",False)
-        self.initial_loading_to_cb= self.input.param("initial_loading_to_cb",True)
-        self.change_bucket_properties = self.input.param("change_bucket_properties",False)
-        self.database= self.input.param("database","flightstats")
-        self.merge_operation= self.input.param("merge_operation",False)
-        self.load_copy_table= self.input.param("load_copy_table",False)
-        self.user_id= self.input.param("user_id","root")
-        self.user_cluster = self.input.param("user_cluster","Administrator")
-        self.password= self.input.param("password","")
-        self.password_cluster = self.input.param("password_cluster","password")
-        self.generate_input_only = self.input.param("generate_input_only",False)
-        self.using_gsi= self.input.param("using_gsi",True)
-        self.reset_database = self.input.param("reset_database",True)
-        self.items = self.input.param("items",1000)
-        self.mysql_url= self.input.param("mysql_url","localhost")
-        self.mysql_url=self.mysql_url.replace("_",".")
+        self.subquery = self.input.param("subquery", False)
+        self.initial_loading_to_cb= self.input.param("initial_loading_to_cb", True)
+        self.change_bucket_properties = self.input.param("change_bucket_properties", False)
+        self.database= self.input.param("database", "flightstats")
+        self.merge_operation= self.input.param("merge_operation", False)
+        self.load_copy_table= self.input.param("load_copy_table", False)
+        self.user_id= self.input.param("user_id", "root")
+        self.user_cluster = self.input.param("user_cluster", "Administrator")
+        self.password= self.input.param("password", "")
+        self.password_cluster = self.input.param("password_cluster", "password")
+        self.generate_input_only = self.input.param("generate_input_only", False)
+        self.using_gsi= self.input.param("using_gsi", True)
+        self.reset_database = self.input.param("reset_database", True)
+        self.items = self.input.param("items", 1000)
+        self.mysql_url= self.input.param("mysql_url", "localhost")
+        self.mysql_url=self.mysql_url.replace("_", ".")
         self.n1ql_server = self.get_nodes_from_services_map(service_type = "n1ql")
-        self.concurreny_count= self.input.param("concurreny_count",10)
-        self.total_queries= self.input.param("total_queries",None)
-        self.run_query_with_primary= self.input.param("run_query_with_primary",False)
-        self.run_query_with_secondary= self.input.param("run_query_with_secondary",False)
-        self.run_explain_with_hints= self.input.param("run_explain_with_hints",False)
-        self.test_file_path= self.input.param("test_file_path",None)
-        self.db_dump_path= self.input.param("db_dump_path",None)
-        self.input_rqg_path= self.input.param("input_rqg_path",None)
-        self.set_limit = self.input.param("set_limit",0)
+        self.concurreny_count= self.input.param("concurreny_count", 10)
+        self.total_queries= self.input.param("total_queries", None)
+        self.run_query_with_primary= self.input.param("run_query_with_primary", False)
+        self.run_query_with_secondary= self.input.param("run_query_with_secondary", False)
+        self.run_explain_with_hints= self.input.param("run_explain_with_hints", False)
+        self.test_file_path= self.input.param("test_file_path", None)
+        self.db_dump_path= self.input.param("db_dump_path", None)
+        self.input_rqg_path= self.input.param("input_rqg_path", None)
+        self.set_limit = self.input.param("set_limit", 0)
         self.query_count= 0
-        self.use_rest = self.input.param("use_rest",True)
-        self.ram_quota = self.input.param("ram_quota",512)
-        self.drop_bucket = self.input.param("drop_bucket",False)
+        self.use_rest = self.input.param("use_rest", True)
+        self.ram_quota = self.input.param("ram_quota", 512)
+        self.drop_bucket = self.input.param("drop_bucket", False)
         if self.input_rqg_path != None:
             self.db_dump_path = self.input_rqg_path+"/db_dump/database_dump.zip"
             self.test_file_path = self.input_rqg_path+"/input/source_input_rqg_run.txt"
@@ -77,7 +77,7 @@ class RQGASTERIXTests(BaseTestCase):
         self.keyword_list = self.query_helper._read_keywords_from_file("b/resources/rqg/n1ql_info/keywords.txt")
         self._initialize_analytics_helper()
         self.rest = RestConnection(self.master)
-        self.indexer_memQuota = self.input.param("indexer_memQuota",1024)
+        self.indexer_memQuota = self.input.param("indexer_memQuota", 1024)
         if self.initial_loading_to_cb:
             self._initialize_cluster_setup()
         if not(self.use_rest):
@@ -85,7 +85,7 @@ class RQGASTERIXTests(BaseTestCase):
             self._ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
             try:
                 self.os = self.shell.extract_remote_info().type.lower()
-            except Exception, ex:
+            except Exception as ex:
                 self.log.error('SETUP FAILED')
                 self.tearDown()
 
@@ -98,7 +98,7 @@ class RQGASTERIXTests(BaseTestCase):
         
         data = 'disconnect link Local;'
         filename = "file.txt"
-        f = open(filename,'w')
+        f = open(filename, 'w')
         f.write(data)
         f.close()
         url = 'http://{0}:8095/analytics/service'.format(self.master.ip)
@@ -109,7 +109,7 @@ class RQGASTERIXTests(BaseTestCase):
         for bucket in self.buckets:
             data = 'drop dataset {0}'.format(bucket.name + "_shadow")
             filename = "file.txt"
-            f = open(filename,'w')
+            f = open(filename, 'w')
             f.write(data)
             f.close()
             url = 'http://{0}:8095/analytics/service'.format(self.master.ip)
@@ -123,7 +123,7 @@ class RQGASTERIXTests(BaseTestCase):
             if self.use_mysql and self.reset_database and (not self.skip_cleanup):
                 try:
                     self.client.drop_database(self.database)
-                except Exception, ex:
+                except Exception as ex:
                     self.log.info(ex)
 
 
@@ -143,7 +143,7 @@ class RQGASTERIXTests(BaseTestCase):
         #create copy of simple table if this is a merge operation
         self.sleep(10)
         if self.gsi_type ==  "memory_optimized":
-            os.system("curl -X POST  http://Administrator:password@{1}:8091/pools/default -d memoryQuota={0} -d indexMemoryQuota={2}".format(self.ram_quota, self.n1ql_server.ip,self.indexer_memQuota))
+            os.system("curl -X POST  http://Administrator:password@{1}:8091/pools/default -d memoryQuota={0} -d indexMemoryQuota={2}".format(self.ram_quota, self.n1ql_server.ip, self.indexer_memQuota))
             self.sleep(10)
 
             # self.log.info("Increasing Indexer Memory Quota to {0}".format(self.indexer_memQuota))
@@ -151,8 +151,8 @@ class RQGASTERIXTests(BaseTestCase):
             # self.sleep(120)
         if self.change_bucket_properties:
             shell = RemoteMachineShellConnection(self.master)
-            shell.execute_command("curl -X POST -u {0}:{1} -d maxBucketCount=25 http://{2}:{3}/internalSettings".format(self.user_cluster,self.password_cluster,self.master.ip,self.master.port))
-            self.sleep(10,"Updating maxBucket count to 15")
+            shell.execute_command("curl -X POST -u {0}:{1} -d maxBucketCount=25 http://{2}:{3}/internalSettings".format(self.user_cluster, self.password_cluster, self.master.ip, self.master.port))
+            self.sleep(10, "Updating maxBucket count to 15")
 
     def _initialize_mysql_client(self):
         if self.reset_database:
@@ -198,13 +198,13 @@ class RQGASTERIXTests(BaseTestCase):
         if self.change_bucket_properties:
             shell = RemoteMachineShellConnection(self.master)
             #print "master is {0}".format(self.master)
-            shell.execute_command("curl -X POST -u {0}:{1} -d maxBucketCount=25 http://{2}:{3}/internalSettings".format(self.user_cluster,self.password_cluster,self.master.ip,self.master.port))
-            self.sleep(10,"Updating maxBucket count to 25")
+            shell.execute_command("curl -X POST -u {0}:{1} -d maxBucketCount=25 http://{2}:{3}/internalSettings".format(self.user_cluster, self.password_cluster, self.master.ip, self.master.port))
+            self.sleep(10, "Updating maxBucket count to 25")
         # Pull information about tables from mysql database and interpret them as no-sql dbs
         table_key_map = self.client._get_primary_key_map_for_tables()
         # Make a list of buckets that we want to create for querying
-        bucket_list = table_key_map.keys()
-        print "database used is {0}".format(self.database)
+        bucket_list = list(table_key_map.keys())
+        print("database used is {0}".format(self.database))
         new_bucket_list =[]
         for bucket in bucket_list:
             if (bucket.find("copy_simple_table")>0):
@@ -215,7 +215,7 @@ class RQGASTERIXTests(BaseTestCase):
 
         # Create New Buckets
         self._create_buckets(self.master, new_bucket_list, server_id=None, bucket_size=bucket_size)
-        print "buckets created"
+        print("buckets created")
         # Wait till the buckets are up
         self.sleep(5)
         self.buckets = self.rest.get_buckets()
@@ -224,7 +224,7 @@ class RQGASTERIXTests(BaseTestCase):
             if bucket.name in new_bucket_list:
                 self.newbuckets.append(bucket)
 
-        print "safe to start another job"
+        print("safe to start another job")
         self.record_db = {}
         self.buckets = self.newbuckets
         # Read Data from mysql database and populate the couchbase server
@@ -244,7 +244,7 @@ class RQGASTERIXTests(BaseTestCase):
             data = 'create dataset {1} on {0}; '.format(bucket.name,
                                                                 bucket.name + "_shadow")
             filename = "file.txt"
-            f = open(filename,'w')
+            f = open(filename, 'w')
             f.write(data)
             f.close()
             url = 'http://{0}:8095/analytics/service'.format(self.cbas_node.ip)
@@ -253,7 +253,7 @@ class RQGASTERIXTests(BaseTestCase):
             os.remove(filename)
         data = 'connect link Local;'
         filename = "file.txt"
-        f = open(filename,'w')
+        f = open(filename, 'w')
         f.write(data)
         f.close()
         url = 'http://{0}:8095/analytics/service'.format(self.cbas_node.ip)
@@ -267,27 +267,27 @@ class RQGASTERIXTests(BaseTestCase):
             return template_path
         tokens =  template_path.split("/")
         file_name = tokens[len(tokens)-1]
-        output_path = template_path.replace(file_name,"")
+        output_path = template_path.replace(file_name, "")
         with zipfile.ZipFile(template_path, "r") as z:
             z.extractall(output_path)
-        template_path = template_path.replace(".zip","")
+        template_path = template_path.replace(".zip", "")
         return template_path
 
     def _initialize_analytics_helper(self):
         self.n1ql_helper = AnalyticsHelper(version = "spock", shell = None,
             use_rest = True, max_verify = self.max_verify,
             buckets = self.buckets, item_flag = None,
-            analytics_port=8095,full_docs_list = [],
-            log = self.log, input = self.input, master = self.master,database = self.database)
+            analytics_port=8095, full_docs_list = [],
+            log = self.log, input = self.input, master = self.master, database = self.database)
 
     def _load_bulk_data_in_buckets_using_n1ql(self, bucket, data_set):
         try:
             count=0
-            n1ql_query = self.query_helper._builk_insert_statement_n1ql(bucket.name,data_set)
+            n1ql_query = self.query_helper._builk_insert_statement_n1ql(bucket.name, data_set)
             actual_result = self.n1ql_helper.run_cbq_query(query = n1ql_query, server = self.n1ql_server, verbose = False)
-        except Exception, ex:
-            print 'WARN======================='
-            print ex
+        except Exception as ex:
+            print('WARN=======================')
+            print(ex)
 
     def test_rqg_concurrent(self):
         # Get Data Map
@@ -320,20 +320,20 @@ class RQGASTERIXTests(BaseTestCase):
                 break
         if inserted_count != len(query_list):
             batches.append(batch)
-        result_queue = Queue.Queue()
-        input_queue = Queue.Queue()
-        failure_record_queue = Queue.Queue()
+        result_queue = queue.Queue()
+        input_queue = queue.Queue()
+        failure_record_queue = queue.Queue()
         # Run Test Batches
         test_case_number = 1
         thread_list = []
-        for i in xrange(self.concurreny_count):
+        for i in range(self.concurreny_count):
             t = threading.Thread(target=self._testrun_worker, args = (input_queue, result_queue, failure_record_queue))
             t.daemon = True
             t.start()
             thread_list.append(t)
         for test_batch in batches:
             # Build all required secondary Indexes
-            list = [data[data.keys()[0]] for data in test_batch]
+            list = [data[list(data.keys())[0]] for data in test_batch]
             list = self.client._convert_template_query_info(
                     table_map = table_map,
                     n1ql_queries = list,
@@ -351,7 +351,7 @@ class RQGASTERIXTests(BaseTestCase):
             t.join()
 
             for bucket in self.buckets:
-                BucketOperationHelper.delete_bucket_or_assert(serverInfo=self.master,bucket=bucket)
+                BucketOperationHelper.delete_bucket_or_assert(serverInfo=self.master, bucket=bucket)
         # Analyze the results for the failure and assert on the run
         success, summary, result = self._test_result_analysis(result_queue)
         self.log.info(result)
@@ -383,10 +383,10 @@ class RQGASTERIXTests(BaseTestCase):
             sql_result = self.client._gen_json_from_results(columns, rows)
             client._close_connection()
             client = None
-        except Exception, ex:
+        except Exception as ex:
             self.log.info(ex)
             if ex.message.__contains__("SQL syntax") or ex.message.__contains__("ERROR"):
-                print "Error in sql syntax"
+                print("Error in sql syntax")
 
     def _run_basic_test(self, test_data, test_case_number, result_queue, failure_record_queue = None):
         data = test_data
@@ -407,15 +407,15 @@ class RQGASTERIXTests(BaseTestCase):
             if ("IN" in n1ql_query):
                     index = n1ql_query.find("IN (")
                     temp1 = n1ql_query[0:index] + " IN [ "
-                    temp2 = n1ql_query[index+4:].replace(")","]",1)
+                    temp2 = n1ql_query[index+4:].replace(")", "]", 1)
                     n1ql_query = temp1 + temp2
-                    print "n1ql query after in replace  is %s"%n1ql_query
+                    print("n1ql query after in replace  is %s"%n1ql_query)
             #LOCK.release()
 
 
 
         if (n1ql_query.find("simple_table")>0) and ((self.database+"_"+"simple_table") not in n1ql_query):
-            n1ql_query = n1ql_query.replace("simple_table",self.database+"_"+"simple_table")
+            n1ql_query = n1ql_query.replace("simple_table", self.database+"_"+"simple_table")
 
         sql_query = data["sql"]
         table_name = data["bucket"]
@@ -426,18 +426,18 @@ class RQGASTERIXTests(BaseTestCase):
         result_run["sql_query"] = sql_query
         result_run["test_case_number"] = test_case_number
         if self.set_limit > 0 and n1ql_query.find("DISTINCT") > 0:
-            result_limit = self.query_helper._add_limit_to_query(n1ql_query,self.set_limit)
-            query_index_run = self._run_queries_and_verify(n1ql_query = result_limit , sql_query = sql_query, expected_result = expected_result)
+            result_limit = self.query_helper._add_limit_to_query(n1ql_query, self.set_limit)
+            query_index_run = self._run_queries_and_verify(n1ql_query = result_limit, sql_query = sql_query, expected_result = expected_result)
             result_run["run_query_with_limit"] = query_index_run
         if  expected_result == None:
             expected_result = self._gen_expected_result(sql_query)
             data["expected_result"] = expected_result
-        query_index_run = self._run_queries_and_verify(n1ql_query = n1ql_query , sql_query = sql_query, expected_result = expected_result)
+        query_index_run = self._run_queries_and_verify(n1ql_query = n1ql_query, sql_query = sql_query, expected_result = expected_result)
         result_run["run_query_without_index_hint"] = query_index_run
         if self.run_query_with_primary:
             index_info = {"name":"`#primary`","type":"GSI"}
             query = self.query_helper._add_index_hints_to_query(n1ql_query, [index_info])
-            query_index_run = self._run_queries_and_verify(n1ql_query = query , sql_query = sql_query, expected_result = expected_result)
+            query_index_run = self._run_queries_and_verify(n1ql_query = query, sql_query = sql_query, expected_result = expected_result)
             result_run["run_query_with_primary"] = query_index_run
 
         result_queue.put(result_run)
@@ -465,9 +465,9 @@ class RQGASTERIXTests(BaseTestCase):
         # Run n1ql query
         hints = self.query_helper._find_hints(sql_query)
 
-        for i,item in enumerate(hints):
+        for i, item in enumerate(hints):
             if "simple_table" in item:
-                hints[i] = hints[i].replace("simple_table",self.database+"_"+"simple_table")
+                hints[i] = hints[i].replace("simple_table", self.database+"_"+"simple_table")
         try:
             actual_result = self.n1ql_helper.run_analytics_query(query = n1ql_query, server = self.n1ql_server, scan_consistency="request_plus")
             n1ql_result = actual_result["results"]
@@ -488,11 +488,11 @@ class RQGASTERIXTests(BaseTestCase):
                 return {"success":False, "result": str("different results")}
             try:
                 self.n1ql_helper._verify_results_rqg_new(sql_result = sql_result, n1ql_result = n1ql_result, hints = hints)
-            except Exception, ex:
+            except Exception as ex:
                 self.log.info(ex)
                 return {"success":False, "result": str(ex)}
             return {"success":True, "result": "Pass"}
-        except Exception, ex:
+        except Exception as ex:
             return {"success":False, "result": str(ex)}
 
     def _test_result_analysis(self, queue):
@@ -518,13 +518,13 @@ class RQGASTERIXTests(BaseTestCase):
             else:
                 fail_case +=  1
                 for failure_reason_type in failure_types:
-                    if failure_reason_type not in failure_reason_map.keys():
+                    if failure_reason_type not in list(failure_reason_map.keys()):
                         failure_reason_map[failure_reason_type] = 1
                     else:
                         failure_reason_map[failure_reason_type] += 1
                 keyword_list = self.query_helper.find_matching_keywords(n1ql_query, self.keyword_list)
                 for keyword in keyword_list:
-                    if keyword not in keyword_map.keys():
+                    if keyword not in list(keyword_map.keys()):
                         keyword_map[keyword] = 1
                     else:
                         keyword_map[keyword] += 1
@@ -533,11 +533,11 @@ class RQGASTERIXTests(BaseTestCase):
         summary = " Total Queries Run = {0}, Pass = {1}, Fail = {2}, Pass Pecentage = {3} %".format(total, pass_case, fail_case, ((pass_case*100)/total))
         if len(keyword_map) > 0:
             summary += "\n [ KEYWORD FAILURE DISTRIBUTION ] \n"
-        for keyword in keyword_map.keys():
+        for keyword in list(keyword_map.keys()):
             summary  += keyword+" :: " + str((keyword_map[keyword]*100)/total)+"%\n "
         if len(failure_reason_map)  > 0:
             summary += "\n [ FAILURE TYPE DISTRIBUTION ] \n"
-            for keyword in failure_reason_map.keys():
+            for keyword in list(failure_reason_map.keys()):
                 summary  += keyword+" :: " + str((failure_reason_map[keyword]*100)/total)+"%\n "
         self.log.info(" Total Queries Run = {0}, Pass = {1}, Fail = {2}, Pass Pecentage = {3} %".format(total, pass_case, fail_case, ((pass_case*100)/total)))
         result = self._generate_result(failure_map)
@@ -547,7 +547,7 @@ class RQGASTERIXTests(BaseTestCase):
         check = True
         failure_types = []
         message = "\n ____________________________________________________\n "
-        for key in result.keys():
+        for key in list(result.keys()):
             if key != "test_case_number" and key != "n1ql_query" and key != "sql_query":
                 check = check and result[key]["success"]
                 if not result[key]["success"]:
@@ -558,9 +558,9 @@ class RQGASTERIXTests(BaseTestCase):
 
     def _generate_result(self, data):
         result = ""
-        for key in data.keys():
+        for key in list(data.keys()):
             result +="<<<<<<<<<< TEST {0} >>>>>>>>>>> \n".format(key)
-            for result_key in data[key].keys():
+            for result_key in list(data[key].keys()):
                 result += "{0} :: {1} \n".format(result_key, data[key][result_key])
         return result
 
@@ -568,7 +568,7 @@ class RQGASTERIXTests(BaseTestCase):
         if not self.record_failure:
             return
         check = True
-        for key in result.keys():
+        for key in list(result.keys()):
             if key != "test_case_number" and key != "n1ql_query" and key != "sql_query":
                 check = check and result[key]["success"]
                 if not result[key]["success"]:
@@ -580,12 +580,12 @@ class RQGASTERIXTests(BaseTestCase):
         table_list = self.client._get_table_list()
         table_map = self.client._get_values_with_type_for_fields_in_table()
         if self.remove_alias:
-            for key in table_map.keys():
-                if "alias_name" in table_map[key].keys():
-                    table_map[key].pop("alias_name",None)
+            for key in list(table_map.keys()):
+                if "alias_name" in list(table_map[key].keys()):
+                    table_map[key].pop("alias_name", None)
         check = True
         failure_map = {}
-        batches = Queue.Queue()
+        batches = queue.Queue()
         batch = []
         test_case_number = 1
         count = 1
@@ -612,16 +612,16 @@ class RQGASTERIXTests(BaseTestCase):
                 break
         if inserted_count != len(query_list):
             batches.put(batch)
-        result_queue = Queue.Queue()
-        input_queue = Queue.Queue()
-        failure_record_queue = Queue.Queue()
+        result_queue = queue.Queue()
+        input_queue = queue.Queue()
+        failure_record_queue = queue.Queue()
         # Run Test Batches
         test_case_number = 1
         thread_list = []
         start_test_case_number = 1
         table_queue_map = {}
         for table_name in table_list:
-            table_queue_map[table_name] = Queue.Queue()
+            table_queue_map[table_name] = queue.Queue()
         self.log.info("CREATE BACTHES")
         while not batches.empty():
             # Build all required secondary Indexes
@@ -630,7 +630,7 @@ class RQGASTERIXTests(BaseTestCase):
                     break
                 test_batch = batches.get()
 
-                list = [data[data.keys()[0]] for data in test_batch]
+                list = [data[list(data.keys())[0]] for data in test_batch]
                 table_queue_map[table_name].put({"table_name":table_name, "table_map":table_map,"list":list, "start_test_case_number":start_test_case_number })
                 start_test_case_number += len(list)
         self.log.info("SPAWNING THREADS")
@@ -646,7 +646,7 @@ class RQGASTERIXTests(BaseTestCase):
         if self.drop_bucket == True:
             #import pdb;pdb.set_trace()
             for bucket in self.buckets:
-                BucketOperationHelper.delete_bucket_or_assert(serverInfo=self.master,bucket=bucket)
+                BucketOperationHelper.delete_bucket_or_assert(serverInfo=self.master, bucket=bucket)
         # Analyze the results for the failure and assert on the run
         success, summary, result = self._test_result_analysis(result_queue)
         self.log.info(result)
@@ -680,17 +680,17 @@ class RQGASTERIXTests(BaseTestCase):
         if not self.record_failure:
             return
         import uuid
-        sub_dir = str(uuid.uuid4()).replace("-","")
+        sub_dir = str(uuid.uuid4()).replace("-", "")
         self.data_dump_path= self.failure_record_path+"/"+sub_dir
         os.mkdir(self.data_dump_path)
         input_file_path=self.data_dump_path+"/input"
         os.mkdir(input_file_path)
-        f_write_file = open(input_file_path+"/source_input_rqg_run.txt",'w')
+        f_write_file = open(input_file_path+"/source_input_rqg_run.txt", 'w')
         secondary_index_path=self.data_dump_path+"/index"
         os.mkdir(secondary_index_path)
         database_dump = self.data_dump_path+"/db_dump"
         os.mkdir(database_dump)
-        f_write_index_file = open(secondary_index_path+"/secondary_index_definitions.txt",'w')
+        f_write_index_file = open(secondary_index_path+"/secondary_index_definitions.txt", 'w')
         client = MySQLClient(database = self.database, host = self.mysql_url,
             user_id = self.user_id, password = self.password)
         client.dump_database(data_dump_path = database_dump)

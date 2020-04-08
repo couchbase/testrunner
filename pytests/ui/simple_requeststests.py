@@ -1,7 +1,7 @@
 from basetestcase import BaseTestCase
 from membase.api.rest_client import RestConnection
 from remote.remote_util import RemoteMachineShellConnection
-from httplib import IncompleteRead
+from http.client import IncompleteRead
 import sys
 import re
 
@@ -37,8 +37,8 @@ class SimpleRequests(BaseTestCase):
             self.log.info("GET " + url)
             try:
                 status, content, header = rest._http_request(url)
-            except IncompleteRead, e:
-                self.log.warn("size of partial responce {0} api is {1} bytes".format(api, sys.getsizeof(e.partial)))
+            except IncompleteRead as e:
+                self.log.warning("size of partial responce {0} api is {1} bytes".format(api, sys.getsizeof(e.partial)))
                 if api != "diag":
                     #otherwise for /diag API we should increase request time for dynamic data in _http_request
                     passed = False
@@ -53,10 +53,10 @@ class SimpleRequests(BaseTestCase):
         self.assertTrue(passed, msg="some GET requests failed. See logs above")
 
         _, content, _ = rest._http_request(rest.baseUrl + "sasl_logs")
-        occurrences = [m.start() for m in re.finditer('web request failed', content)]
+        occurrences = [m.start() for m in re.finditer('web request failed', str(content))]
         for occurrence in occurrences:
             subcontent = content[occurrence - 1000: occurrence + 1000]
-            if 'path,"/diag"' in subcontent:
+            if 'path,"/diag"' in str(subcontent):
                 break
             else:
                 passed = False

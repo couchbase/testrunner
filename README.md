@@ -1,37 +1,49 @@
-*** Test Runner: Readme ***
+*** Test Runner Python3: Readme ***
 
 Prerequisites
 -------------
 
-* Python 2.6 or 2.7
-* pip or easy_install
+* Python 3.7.6
+* pip3 or easy_install
+
+See the setup steps in the Py2 to Py3 porting guide: https://hub.internal.couchbase.com/confluence/display/QA/Python+3.7.6+installation+for+testrunner
 
 Dependencies
 ------------
 
+Use pip3.7 based on the platform.
+
 General:
 
-    pip install paramiko
+pip3 install couchbase sgmllib3k paramiko httplib2 pyyaml beautifulsoup4 Geohash python-geohash deepdiff pyes pytz requests jsonpickle docker decorator
 
-    pip install boto
+Other:
+
+    pip3 install boto
+    
+    pip3 install boto3
+	
+	pip3 install botocore
 
 Performance tests:
 
-    pip install btrc
+    pip3 install btrc
 
 PDF reports:
 
-    pip install couchdbkit
+    pip3 install couchdbkit
 
 Documentation:
 
-    pip install sphinx
+    pip3 install sphinx
 
-    pip install sphinx-pypi-upload
+    pip3 install sphinx-pypi-upload
 
 Buildout:
 
-    pip install zc.buildout
+    pip3 install zc.buildout
+
+Any issues w.r.t python3 syntax. Please refer: https://blog.couchbase.com/tips-and-tricks-for-upgrading-from-python-2-to-python-3/
 
 Usage
 -----
@@ -127,7 +139,7 @@ xunit reports in the newly generated folder.
 
 for instance if you run
 
-    $ python testrunner.py -i resources/jenkins/single-node-centos-32.ini -t setgettests.MembaseBucket.value_100b -p your_first_parameter=x,your_second_parameter=y
+    $ python3 testrunner.py -i resources/jenkins/single-node-centos-32.ini -t setgettests.MembaseBucket.value_100b -p your_first_parameter=x,your_second_parameter=y
 
 you will see this summary after each test is ran:
 

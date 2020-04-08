@@ -1,5 +1,5 @@
 from xdcr.xdcrnewbasetests import XDCRNewBaseTest
-from createdeleteview import CreateDeleteViewTests
+from .createdeleteview import CreateDeleteViewTests
 from membase.api.exception import QueryViewException
 from couchbase_helper.document import View
 
@@ -28,8 +28,8 @@ class XDCRViewTests(XDCRNewBaseTest, CreateDeleteViewTests):
 
     def _query_view(self, exp_items=None):
         query = {"stale" : "false", "full_set" : "true", "connection_timeout" : 60000}
-        for bucket, self.ddoc_view_map in self.bucket_ddoc_map.items():
-            for ddoc_name, view_list in self.ddoc_view_map.items():
+        for bucket, self.ddoc_view_map in list(self.bucket_ddoc_map.items()):
+            for ddoc_name, view_list in list(self.ddoc_view_map.items()):
                 try:
                     for view in view_list:
                             self.cluster.query_view(self.master, ddoc_name, view.name, query, exp_items, bucket)
@@ -42,13 +42,13 @@ class XDCRViewTests(XDCRNewBaseTest, CreateDeleteViewTests):
         buckets = cluster.get_buckets();
         if view_ops in ["update", "delete"]:
             for bucket in buckets:
-                tasks.extend(self._async_execute_ddoc_ops(view_ops, self.test_with_view, self.num_ddocs / 2,
-                                                        self.num_views_per_ddoc / 2, "dev_test", "v1", bucket=bucket))
+                tasks.extend(self._async_execute_ddoc_ops(view_ops, self.test_with_view, self.num_ddocs // 2,
+                                                        self.num_views_per_ddoc // 2, "dev_test", "v1", bucket=bucket))
         elif view_ops == "query":
             if self.stale_param in ["false", "ok", "update_after"]:
                 query = {"stale" : self.stale_param, "full_set" : "true"}
-            for bucket, self.ddoc_view_map in self.bucket_ddoc_map.items():
-                for ddoc_name, view_list in self.ddoc_view_map.items():                                                                      
+            for bucket, self.ddoc_view_map in list(self.bucket_ddoc_map.items()):
+                for ddoc_name, view_list in list(self.ddoc_view_map.items()):                                                                      
                     for view in view_list:
                         tasks.append(self.cluster.async_query_view(master, ddoc_name, view.name, query))
         return tasks
@@ -72,7 +72,7 @@ class XDCRViewTests(XDCRNewBaseTest, CreateDeleteViewTests):
             for bucket in buckets:
                 self._execute_ddoc_ops("create", self.test_with_view, self.num_ddocs, self.num_views_per_ddoc, "dev_test", "v1", bucket=bucket)
             self._query_view()
-            self.sleep(self.wait_timeout / 2)
+            self.sleep(self.wait_timeout // 2)
 
         tasks = []
         if self.ddoc_ops is not None:
@@ -85,6 +85,6 @@ class XDCRViewTests(XDCRNewBaseTest, CreateDeleteViewTests):
         self.async_perform_update_delete()
 
         self.verify_results()
-        self.sleep(self.wait_timeout / 2)
+        self.sleep(self.wait_timeout // 2)
         
         self._verify_views(True)

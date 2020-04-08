@@ -1,4 +1,5 @@
-from tuq import QueryTests
+from .tuq import QueryTests
+from deepdiff import DeepDiff
 
 class QueryINDEXUNNESTTests(QueryTests):
     def setUp(self):
@@ -50,7 +51,7 @@ class QueryINDEXUNNESTTests(QueryTests):
 
         index_1 = {'name': 'idx',
                    'bucket': 'default',
-                   'fields': (("ALL ARRAY v1 FOR v1 IN VMs END",0), ("email",1), ("department",2)),
+                   'fields': (("ALL ARRAY v1 FOR v1 IN VMs END", 0), ("email", 1), ("department", 2)),
                    'state': 'online',
                    'using': self.index_type.lower(),
                    'is_primary': False}
@@ -82,7 +83,9 @@ class QueryINDEXUNNESTTests(QueryTests):
                     'd.email == "9-mail@couchbase.com" and d.department == "Support" and v1.RAM == 10'
             expected_results = self.run_cbq_query(query=primary_query)
 
-            self.assertEqual(sorted(actual_results), sorted(expected_results), "The results dont match up")
+            diffs = DeepDiff(actual_results['results'], expected_results['results'], ignore_order=True)
+            if diffs:
+                self.assertTrue(False, diffs)
         finally:
             self.run_cbq_query(query = "DROP INDEX default.array_index")
 
@@ -105,7 +108,9 @@ class QueryINDEXUNNESTTests(QueryTests):
                     'd.email == "9-mail@couchbase.com" and d.department == "Support" and nv1.RAM == 10'
             expected_results = self.run_cbq_query(query=primary_query)
 
-            self.assertEqual(sorted(actual_results), sorted(expected_results), "The results dont match up")
+            diffs = DeepDiff(actual_results['results'], expected_results['results'], ignore_order=True)
+            if diffs:
+                self.assertTrue(False, diffs)
         finally:
             self.run_cbq_query(query="DROP INDEX default.array_index")
 
@@ -129,7 +134,9 @@ class QueryINDEXUNNESTTests(QueryTests):
                             'lower(d.email) == "9-mail@couchbase.com" and upper(d.department) == "SUPPORT" and v1.RAM == 10'
             expected_results = self.run_cbq_query(query=primary_query)
 
-            self.assertEqual(sorted(actual_results), sorted(expected_results), "The results dont match up")
+            diffs = DeepDiff(actual_results['results'], expected_results['results'], ignore_order=True)
+            if diffs:
+                self.assertTrue(False, diffs)
         finally:
             self.run_cbq_query(query="DROP INDEX default.array_index")
 
@@ -153,7 +160,9 @@ class QueryINDEXUNNESTTests(QueryTests):
                             'exp(d.join_mo) == 81 and upper(d.department) == "SUPPORT" and v1.RAM == 10'
             expected_results = self.run_cbq_query(query=primary_query)
 
-            self.assertEqual(sorted(actual_results), sorted(expected_results), "The results dont match up")
+            diffs = DeepDiff(actual_results['results'], expected_results['results'], ignore_order=True)
+            if diffs:
+                self.assertTrue(False, diffs)
         finally:
             self.run_cbq_query(query="DROP INDEX default.array_index")
 
@@ -181,7 +190,9 @@ class QueryINDEXUNNESTTests(QueryTests):
                     'd.email == "9-mail@couchbase.com" and d.department == "Support" and v1.RAM == 10'
             expected_results = self.run_cbq_query(query=primary_query)
 
-            self.assertEqual(sorted(actual_results), sorted(expected_results), "The results dont match up")
+            diffs = DeepDiff(actual_results['results'], expected_results['results'], ignore_order=True)
+            if diffs:
+                self.assertTrue(False, diffs)
         finally:
             self.run_cbq_query(query = "DROP INDEX default.array_index")
 
@@ -204,7 +215,9 @@ class QueryINDEXUNNESTTests(QueryTests):
                     'd.email == "9-mail@couchbase.com" and d.department == "Support" and v1.RAM == 10'
             expected_results = self.run_cbq_query(query=primary_query)
 
-            self.assertEqual(sorted(actual_results), sorted(expected_results), "The results dont match up")
+            diffs = DeepDiff(actual_results['results'], expected_results['results'], ignore_order=True)
+            if diffs:
+                self.assertTrue(False, diffs)
         finally:
             self.run_cbq_query(query = "DROP INDEX default.array_index")
 
@@ -228,7 +241,9 @@ class QueryINDEXUNNESTTests(QueryTests):
                             'lower(d.email) == "9-mail@couchbase.com" and upper(d.department) == "SUPPORT" and v1.RAM == 10'
             expected_results = self.run_cbq_query(query=primary_query)
 
-            self.assertEqual(sorted(actual_results), sorted(expected_results), "The results dont match up")
+            diffs = DeepDiff(actual_results['results'], expected_results['results'], ignore_order=True)
+            if diffs:
+                self.assertTrue(False, diffs)
         finally:
             self.run_cbq_query(query="DROP INDEX default.array_index")
 
@@ -252,7 +267,9 @@ class QueryINDEXUNNESTTests(QueryTests):
                             'exp(d.join_mo) == 81 and upper(d.department) == "SUPPORT" and v1.RAM == 10'
             expected_results = self.run_cbq_query(query=primary_query)
 
-            self.assertEqual(sorted(actual_results), sorted(expected_results), "The results dont match up")
+            diffs = DeepDiff(actual_results['results'], expected_results['results'], ignore_order=True)
+            if diffs:
+                self.assertTrue(False, diffs)
         finally:
             self.run_cbq_query(query="DROP INDEX default.array_index")
 
@@ -283,7 +300,9 @@ class QueryINDEXUNNESTTests(QueryTests):
 
             expected_results = self.run_cbq_query(query=primary_query)
 
-            self.assertEqual(sorted(actual_results), sorted(expected_results), "The results dont match up")
+            diffs = DeepDiff(actual_results['results'], expected_results['results'], ignore_order=True)
+            if diffs:
+                self.assertTrue(False, diffs)
         finally:
             self.run_cbq_query(query="DROP INDEX default.array_index")
 
@@ -309,7 +328,9 @@ class QueryINDEXUNNESTTests(QueryTests):
 
             expected_results = self.run_cbq_query(query=primary_query)
 
-            self.assertEqual(sorted(actual_results), sorted(expected_results), "The results dont match up")
+            diffs = DeepDiff(actual_results['results'], expected_results['results'], ignore_order=True)
+            if diffs:
+                self.assertTrue(False, diffs)
         finally:
             self.run_cbq_query(query="DROP INDEX default.array_index")
 
@@ -335,7 +356,9 @@ class QueryINDEXUNNESTTests(QueryTests):
 
             expected_results = self.run_cbq_query(query=primary_query)
 
-            self.assertEqual(sorted(actual_results), sorted(expected_results), "The results dont match up")
+            diffs = DeepDiff(actual_results['results'], expected_results['results'], ignore_order=True)
+            if diffs:
+                self.assertTrue(False, diffs)
         finally:
             self.run_cbq_query(query="DROP INDEX default.array_index")
 
@@ -361,7 +384,9 @@ class QueryINDEXUNNESTTests(QueryTests):
 
             expected_results = self.run_cbq_query(query=primary_query)
 
-            self.assertEqual(sorted(actual_results), sorted(expected_results), "The results dont match up")
+            diffs = DeepDiff(actual_results['results'], expected_results['results'], ignore_order=True)
+            if diffs:
+                self.assertTrue(False, diffs)
         finally:
             self.run_cbq_query(query="DROP INDEX default.array_index")
 
@@ -387,7 +412,9 @@ class QueryINDEXUNNESTTests(QueryTests):
 
             expected_results = self.run_cbq_query(query=primary_query)
 
-            self.assertEqual(sorted(actual_results), sorted(expected_results), "The results dont match up")
+            diffs = DeepDiff(actual_results['results'], expected_results['results'], ignore_order=True)
+            if diffs:
+                self.assertTrue(False, diffs)
         finally:
             self.run_cbq_query(query="DROP INDEX default.array_index")
 
@@ -413,7 +440,9 @@ class QueryINDEXUNNESTTests(QueryTests):
 
             expected_results = self.run_cbq_query(query=primary_query)
 
-            self.assertEqual(sorted(actual_results), sorted(expected_results), "The results dont match up")
+            diffs = DeepDiff(actual_results['results'], expected_results['results'], ignore_order=True)
+            if diffs:
+                self.assertTrue(False, diffs)
         finally:
             self.run_cbq_query(query="DROP INDEX default.array_index")
 
@@ -443,7 +472,9 @@ class QueryINDEXUNNESTTests(QueryTests):
                     'd.email == "9-mail@couchbase.com" and d.department == "Support" and v1.RAM == 10'
             expected_results = self.run_cbq_query(query=primary_query)
 
-            self.assertEqual(sorted(actual_results), sorted(expected_results), "The results dont match up")
+            diffs = DeepDiff(actual_results['results'], expected_results['results'], ignore_order=True)
+            if diffs:
+                self.assertTrue(False, diffs)
         finally:
             self.run_cbq_query(query = "DROP INDEX default.array_index")
 
@@ -468,7 +499,9 @@ class QueryINDEXUNNESTTests(QueryTests):
                     'd.email == "9-mail@couchbase.com" and d.department == "Support" and v1.RAM == 10'
             expected_results = self.run_cbq_query(query=primary_query)
 
-            self.assertEqual(sorted(actual_results), sorted(expected_results), "The results dont match up")
+            diffs = DeepDiff(actual_results['results'], expected_results['results'], ignore_order=True)
+            if diffs:
+                self.assertTrue(False, diffs)
         finally:
             self.run_cbq_query(query="DROP INDEX default.array_index")
 
@@ -494,7 +527,9 @@ class QueryINDEXUNNESTTests(QueryTests):
 
             expected_results = self.run_cbq_query(query=primary_query)
 
-            self.assertEqual(sorted(actual_results), sorted(expected_results), "The results dont match up")
+            diffs = DeepDiff(actual_results['results'], expected_results['results'], ignore_order=True)
+            if diffs:
+                self.assertTrue(False, diffs)
         finally:
             self.run_cbq_query(query="DROP INDEX default.array_index")
 
@@ -520,7 +555,9 @@ class QueryINDEXUNNESTTests(QueryTests):
 
             expected_results = self.run_cbq_query(query=primary_query)
 
-            self.assertEqual(sorted(actual_results), sorted(expected_results), "The results dont match up")
+            diffs = DeepDiff(actual_results['results'], expected_results['results'], ignore_order=True)
+            if diffs:
+                self.assertTrue(False, diffs)
         finally:
             self.run_cbq_query(query="DROP INDEX default.array_index")
 

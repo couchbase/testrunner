@@ -33,7 +33,7 @@ class RackzoneBaseTest(BaseTestCase):
             #gen_load data is used for upload before each test(1000 items by default)
             self.gen_load = BlobGenerator('test', 'test-', self.value_size, end=self.num_items)
             #gen_update is used for doing mutation for 1/2th of uploaded data
-            self.gen_update = BlobGenerator('test', 'test-', self.value_size, end=(self.num_items / 2 - 1))
+            self.gen_update = BlobGenerator('test', 'test-', self.value_size, end=(self.num_items // 2 - 1))
             #upload data before each test
             self._load_all_buckets(self.servers[0], self.gen_load, "create", 0)
         else:

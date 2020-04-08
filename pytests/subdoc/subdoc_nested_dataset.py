@@ -1,10 +1,14 @@
-from subdoc_base import SubdocBaseTest
+from .subdoc_base import SubdocBaseTest
 import copy, json
 import yaml
 import random
+import traceback
 
 import couchbase.subdocument as SD
-from sdk_client import SDKClient
+try:
+    from sdk_client import SDKClient
+except:
+    from sdk_client3 import SDKClient
 from threading import Thread
 
 class SubdocNestedDataset(SubdocBaseTest):
@@ -50,26 +54,30 @@ class SubdocNestedDataset(SubdocBaseTest):
             "a_i_a": [1, 1],
             "ai_sub": [0, 0]
         }
-        base_json = self.generate_json_for_nesting()
-        nested_json = self.generate_nested(base_json, array, self.nesting_level)
-        if not self.is_sdk_client:
+        try:
+          base_json = self.generate_json_for_nesting()
+          nested_json = self.generate_nested(base_json, array, self.nesting_level)
+          if not self.is_sdk_client:
             nested_json = json.dumps(nested_json)
-        self.set_doc(self.client, self.key, nested_json, 0, 0, xattr=self.xattr)
-        self.counter(self.client, key=self.key, path='i_add', value="1",
+          self.set_doc(self.client, self.key, nested_json, 0, 0, xattr=self.xattr)
+          self.counter(self.client, key=self.key, path='i_add', value="1",
                      xattr=self.xattr, create_parents=self.create_parents)
-        self.counter(self.client, key=self.key, path='i_sub', value="-1",
+          self.counter(self.client, key=self.key, path='i_sub', value="-1",
                      xattr=self.xattr, create_parents=self.create_parents)
-        self.counter(self.client, key=self.key, path='a_i_a[0]', value="1",
+          self.counter(self.client, key=self.key, path='a_i_a[0]', value="1",
                      xattr=self.xattr, create_parents=self.create_parents)
-        self.counter(self.client, key=self.key, path='ai_sub[1]', value="-1",
+          self.counter(self.client, key=self.key, path='ai_sub[1]', value="-1",
                      xattr=self.xattr, create_parents=self.create_parents)
-        self.json = expected_array
-        for key in expected_array.keys():
+          self.json = expected_array
+          for key in expected_array.keys():
             logic, data_return = self.get_string_and_verify_return(
                 self.client, key=self.key, path = key, expected_value = expected_array[key], xattr=self.xattr)
             if not logic:
                 dict[key] = {"expected": expected_array[key], "actual": data_return}
             result = result and logic
+        except Exception as e:
+          traceback.print_exc()
+
         self.assertTrue(result, dict)
 
 # SD_GET
@@ -123,9 +131,9 @@ class SubdocNestedDataset(SubdocBaseTest):
         self.key = "element_array"
         expected_value = "value"
         data_set = {
-                        "1_d_a":[ { "field": [expected_value] }],
-                        "2_d_a":[ [{ "field": [expected_value] }]],
-                        "3_d_a":[ [[{ "field": [expected_value] }]]],
+                        "1_d_a": [ { "field": [expected_value] }],
+                        "2_d_a": [ [{ "field": [expected_value] }]],
+                        "3_d_a": [ [[{ "field": [expected_value] }]]],
                     }
         base_json = self.generate_json_for_nesting()
         nested_json = self.generate_nested(base_json, data_set, self.nesting_level)
@@ -186,9 +194,9 @@ class SubdocNestedDataset(SubdocBaseTest):
         self.key = "element_array"
         expected_value = "value"
         data_set =  {
-                        "1_a":[ { "field": [expected_value] }],
-                        "2_a":[ [{ "field": [expected_value] }]],
-                        "3_a":[ [[{ "field": [expected_value] }]]],
+                        "1_a": [ { "field": [expected_value] }],
+                        "2_a": [ [{ "field": [expected_value] }]],
+                        "3_a": [ [[{ "field": [expected_value] }]]],
                     }
         base_json = self.generate_json_for_nesting()
         nested_json = self.generate_nested(base_json, data_set, self.nesting_level)
@@ -228,7 +236,7 @@ class SubdocNestedDataset(SubdocBaseTest):
                 }
         expected_array = {
                     "s_e":["1"],
-                    "1d_a":["0","1"],
+                    "1d_a":["0", "1"],
                     "2_d_a":[["0", "1"]],
                     "3d_a":[[["0", "1"]]],
                     "4d_a":[[[{"field":["0", "1"]}]]]
@@ -249,7 +257,7 @@ class SubdocNestedDataset(SubdocBaseTest):
         self.array_add_last(self.client, key=self.key, path='4d_a[0][0][0].field',
                             value="1", xattr=self.xattr, create_parents=self.create_parents)
         self.json = expected_array
-        for key in expected_array.keys():
+        for key in list(expected_array.keys()):
             value = expected_array[key]
             logic, data_return = self.get_string_and_verify_return( self.client, key = self.key, path = key, expected_value = value, xattr=self.xattr)
             if not logic:
@@ -270,10 +278,10 @@ class SubdocNestedDataset(SubdocBaseTest):
                 }
         expected_array = {
                     "s_e": ["0"],
-                    "1_d_a": ["0","1"],
+                    "1_d_a": ["0", "1"],
                     "2_d_a": [["0", "1"]],
                     "3_d_a": [[["0", "1"]]],
-                    "4_d_a": [[[{"field":["0","1"]}]]]
+                    "4_d_a": [[[{"field":["0", "1"]}]]]
                 }
         base_json = self.generate_json_for_nesting()
         nested_json = self.generate_nested(base_json, array, self.nesting_level)
@@ -285,7 +293,7 @@ class SubdocNestedDataset(SubdocBaseTest):
         self.array_add_first(self.client, key = self.key, path = '2_d_a[0]', value = "0", xattr=self.xattr, create_parents=True)
         self.array_add_first(self.client, key = self.key, path = '3_d_a[0][0]', value = "0", xattr=self.xattr, create_parents=True)
         self.array_add_first(self.client, key = self.key, path = '4_d_a[0][0][0].field', value =  "0", xattr=self.xattr, create_parents=True)
-        for key in expected_array.keys():
+        for key in list(expected_array.keys()):
             value = expected_array[key]
             logic, data_return = self.get_string_and_verify_return( self.client, key = self.key, path = key, expected_value = value, xattr=self.xattr)
             if not logic:
@@ -299,16 +307,16 @@ class SubdocNestedDataset(SubdocBaseTest):
         self.key = "test_add_unique_array"
         array = {
                     "s_e":[],
-                    "1_d_a": ["0",2],
-                    "2_d_a": [["0",2]],
+                    "1_d_a": ["0", 2],
+                    "2_d_a": [["0", 2]],
                     "3_d_a": [[["0", 2]]],
                     "4_d_a": [[[{"field":["0", 2]}]]]
                 }
         expected_array = {
                     "s_e":["1"],
-                    "1_d_a": ["0",2, "1"],
-                    "2_d_a": [["0",2, "1"]],
-                    "3_d_a": [[["0",2,"1"]]],
+                    "1_d_a": ["0", 2, "1"],
+                    "2_d_a": [["0", 2, "1"]],
+                    "3_d_a": [[["0", 2, "1"]]],
                     "4_d_a": [[[{"field":["0", 2, "1"]}]]]
                 }
         base_json = self.generate_json_for_nesting()
@@ -321,7 +329,7 @@ class SubdocNestedDataset(SubdocBaseTest):
         self.array_add_unique(self.client, key = self.key, path = '2_d_a[0]', value =  "1", xattr=self.xattr, create_parents=True)
         self.array_add_unique(self.client, key = self.key, path = '3_d_a[0][0]', value =  "1", xattr=self.xattr, create_parents=True)
         self.array_add_unique(self.client, key = self.key, path = '4_d_a[0][0][0].field', value = "1", xattr=self.xattr, create_parents=True)
-        for key in expected_array.keys():
+        for key in list(expected_array.keys()):
             expected_value = expected_array[key]
             logic, data_return = self.get_string_and_verify_return( self.client, key = self.key, path = key, expected_value = expected_value, xattr=self.xattr)
             if not logic:
@@ -340,9 +348,9 @@ class SubdocNestedDataset(SubdocBaseTest):
                     "3_d_j":[[[{"field":[]}]]]
                 }
         expected_array = {
-                    "1_d_a":[0, 1 , 2, 3],
-                    "2_d_a":[[0, 1, 2, 3],[0, 1, 2, 3]],
-                    "3_d_a":[[[0, 1, 2, 3],[0, 1, 2, 3]],[0, 1, 2, 3]],
+                    "1_d_a":[0, 1, 2, 3],
+                    "2_d_a":[[0, 1, 2, 3], [0, 1, 2, 3]],
+                    "3_d_a":[[[0, 1, 2, 3], [0, 1, 2, 3]], [0, 1, 2, 3]],
                     "3_d_j":[[[{"field":[0, 1, 2, 3]}]]]
                 }
         base_json = self.generate_json_for_nesting()
@@ -352,7 +360,7 @@ class SubdocNestedDataset(SubdocBaseTest):
         self.set_doc(self.client, self.key, nested_json, 0, 0, xattr=self.xattr)
         self.array_add_insert(self.client, key=self.key, path="1_d_a[0]",
                               value=1, xattr=self.xattr)
-        self.array_add_insert(self.client, key=self.key , path="1_d_a[0]",
+        self.array_add_insert(self.client, key=self.key, path="1_d_a[0]",
                               value=0, xattr=self.xattr)
         self.array_add_insert(self.client, key=self.key, path="1_d_a[2]",
                               value=3, xattr=self.xattr)
@@ -388,7 +396,7 @@ class SubdocNestedDataset(SubdocBaseTest):
                               path="3_d_j[0][0][0].field[2]", value=2, xattr=self.xattr)
         self.array_add_insert(self.client, key=self.key,
                               path="3_d_j[0][0][0].field[3]", value=3, xattr=self.xattr)
-        for key in expected_array.keys():
+        for key in list(expected_array.keys()):
             expected_value = expected_array[key]
             logic, actual_value = self.get_string_and_verify_return(self.client, key=self.key, path=key,
                                                                    expected_value=expected_value, xattr=self.xattr)
@@ -568,13 +576,13 @@ class SubdocNestedDataset(SubdocBaseTest):
         result = True
         self.key = "test_delete_array"
         array = {
-                    "nums":[1,2,3],
+                    "nums":[1, 2, 3],
                     "strs":["absde", "dddl", "dkdkd"],
-                    "2_d_a":[["0","1"]],
-                    "3_d_a":[[["0","1"]]]
+                    "2_d_a":[["0", "1"]],
+                    "3_d_a":[[["0", "1"]]]
                 }
         expected_array = {
-                    "nums":[2,3],
+                    "nums":[2, 3],
                     "strs":["absde", "dddl"],
                     "2_d_a":[["1"]],
                     "3_d_a":[[["1"]]]
@@ -588,7 +596,7 @@ class SubdocNestedDataset(SubdocBaseTest):
         self.delete(self.client, key = self.key, path = 'strs[2]', xattr=self.xattr)
         self.delete(self.client, key = self.key, path = '2_d_a[0][0]', xattr=self.xattr)
         self.delete(self.client, key = self.key, path = '3_d_a[0][0][0]', xattr=self.xattr)
-        for key in expected_array.keys():
+        for key in list(expected_array.keys()):
             value = expected_array[key]
             new_path = self.generate_path(self.nesting_level, key)
             logic, data_return = self.get_string_and_verify_return( self.client, key = self.key, path = new_path, expected_value = value, xattr=self.xattr)
@@ -601,14 +609,14 @@ class SubdocNestedDataset(SubdocBaseTest):
         result = True
         self.key = "test_delete_array"
         array = {
-                    "2ja":[{"field":[0, 1, 2]},[0, 1, 2]],
-                    "3ja":[[{"field":[0, 1, 2]},[0, 1, 2]]],
-                    "4ja":[[[{"field":[0, 1, 2]},[0, 1, 2]]]]
+                    "2ja":[{"field":[0, 1, 2]}, [0, 1, 2]],
+                    "3ja":[[{"field":[0, 1, 2]}, [0, 1, 2]]],
+                    "4ja":[[[{"field":[0, 1, 2]}, [0, 1, 2]]]]
                 }
         expected_array = {
-                    "2ja":[{"field":[1]},[1]],
-                    "3ja":[[{"field":[1]},[1]]],
-                    "4ja":[[[{"field":[1]},[1]]]]
+                    "2ja":[{"field":[1]}, [1]],
+                    "3ja":[[{"field":[1]}, [1]]],
+                    "4ja":[[[{"field":[1]}, [1]]]]
                 }
         base_json = self.generate_json_for_nesting()
         self.json = self.generate_nested(base_json, array, self.nesting_level)
@@ -627,7 +635,7 @@ class SubdocNestedDataset(SubdocBaseTest):
         self.delete(self.client, key = self.key, path = '4ja[0][0][0].field[1]', xattr=self.xattr)
         self.delete(self.client, key = self.key, path = '4ja[0][0][1][0]', xattr=self.xattr)
         self.delete(self.client, key = self.key, path = '4ja[0][0][1][1]', xattr=self.xattr)
-        for key in expected_array.keys():
+        for key in list(expected_array.keys()):
             value = expected_array[key]
             new_path = self.generate_path(self.nesting_level, key)
             logic, data_return = self.get_string_and_verify_return(
@@ -648,7 +656,7 @@ class SubdocNestedDataset(SubdocBaseTest):
         if not self.is_sdk_client:
             nested_json = json.dumps(nested_json)
         self.set_doc(self.client, self.key, nested_json, 0, 0, xattr=self.xattr)
-        for key in dataset.keys():
+        for key in list(dataset.keys()):
             logic, data_return = self.get_string_and_verify_return(
                 self.client, key=self.key, path = key, expected_value = dataset[key], xattr=self.xattr)
             if not logic:
@@ -666,10 +674,10 @@ class SubdocNestedDataset(SubdocBaseTest):
         if not self.is_sdk_client:
             self.json = json.dumps(self.json)
         self.set_doc(self.client, self.key, self.json, 0, 0, xattr=self.xattr)
-        for key in dataset.keys():
+        for key in list(dataset.keys()):
             value = dataset[key]
             self.dict_add(self.client, self.key, key, value, xattr=self.xattr, create_parents=self.create_parents)
-        for key in dataset.keys():
+        for key in list(dataset.keys()):
             logic, data_return = self.get_string_and_verify_return(
                 self.client, key = self.key, path = key, expected_value = dataset[key], xattr=self.xattr)
             if not logic:
@@ -687,10 +695,10 @@ class SubdocNestedDataset(SubdocBaseTest):
         if not self.is_sdk_client:
             self.json = json.dumps(self.json)
         self.set_doc(self.client, self.key, self.json, 0, 0, xattr=self.xattr)
-        for key in dataset.keys():
+        for key in list(dataset.keys()):
             value = dataset[key]
             self.dict_upsert(self.client, self.key, key, value, xattr=self.xattr, create_parents=self.create_parents)
-        for key in dataset.keys():
+        for key in list(dataset.keys()):
             logic, data_return = self.get_string_and_verify_return(
                 self.client, key = self.key, path = key, expected_value = dataset[key], xattr=self.xattr)
             if not logic:
@@ -709,10 +717,10 @@ class SubdocNestedDataset(SubdocBaseTest):
         if not self.is_sdk_client:
             self.json = json.dumps(self.json)
         self.set_doc(self.client, self.key, self.json, 0, 0, xattr=self.xattr)
-        for key in new_json.keys():
+        for key in list(new_json.keys()):
             value = new_json[key]
             self.dict_upsert(self.client, self.key, key, value, xattr=self.xattr, create_parents=self.create_parents)
-        for key in new_json.keys():
+        for key in list(new_json.keys()):
             logic, data_return = self.get_string_and_verify_return(
                 self.client, key = self.key, path = key, expected_value = new_json[key], xattr=self.xattr)
             if not logic:
@@ -731,10 +739,10 @@ class SubdocNestedDataset(SubdocBaseTest):
         if not self.is_sdk_client:
             self.json = json.dumps(self.json)
         self.set_doc(self.client, self.key, self.json, 0, 0, xattr=self.xattr)
-        for key in new_json.keys():
+        for key in list(new_json.keys()):
             value = new_json[key]
             self.dict_replace(self.client, self.key, key, value, xattr=self.xattr)
-        for key in new_json.keys():
+        for key in list(new_json.keys()):
             logic, data_return = self.get_string_and_verify_return(
                 self.client, key = self.key, path = key, expected_value = new_json[key], xattr=self.xattr)
             if not logic:
@@ -752,10 +760,10 @@ class SubdocNestedDataset(SubdocBaseTest):
         if not self.is_sdk_client:
             self.json = json.dumps(self.json)
         self.set_doc(self.client, self.key, self.json, 0, 0, xattr=self.xattr)
-        for key in dataset.keys():
+        for key in list(dataset.keys()):
             self.delete(self.client, self.key, key, xattr=self.xattr)
             dataset.pop(key)
-            for key_1 in dataset.keys():
+            for key_1 in list(dataset.keys()):
                 # value = dataset[key_1]
                 logic, data_return = self.get_string_and_verify_return(
                     self.client, key = self.key, path = key_1, expected_value = dataset[key_1], xattr=self.xattr)
@@ -774,8 +782,8 @@ class SubdocNestedDataset(SubdocBaseTest):
         if not self.is_sdk_client:
             self.json = json.dumps(self.json)
         self.set_doc(self.client, self.key, self.json, 0, 0, xattr=self.xattr)
-        print self.json
-        for key in dataset.keys():
+        print(self.json)
+        for key in list(dataset.keys()):
             logic, data_return = self.verify_exists(self.client, key=self.key, path=key)
             if not logic:
                 self.log.info(data_return)
@@ -798,7 +806,7 @@ class SubdocNestedDataset(SubdocBaseTest):
         try:
             new_path = self.generate_path(self.nesting_level, path)
             if self.is_sdk_client:
-                print path, ":", value
+                print(path, ":", value)
                 rv = client.mutate_in(key, SD.insert(path, value, xattr=xattr, create_parents=create_parents))
                 self.log.info("xattr '%s' inserted successfully" % path)
             else:
@@ -934,15 +942,15 @@ class SubdocNestedDataset(SubdocBaseTest):
             self.log.error(e)
             msg = "Unable to get key {0} for path {1} after {2} tries".format(key, path, 1)
             return False, msg
-        return (str(data).encode('utf-8') == str(expected_value)), str(data).encode('utf-8')
+        return (str(data) == str(expected_value)), str(data).encode('utf-8')
 
     def _fix_unicode(self, data):
-        if isinstance(data, unicode):
+        if isinstance(data, str):
             return data.encode('utf-8')
         elif isinstance(data, dict):
             data = dict((self._fix_unicode(k), self._fix_unicode(data[k])) for k in data)
         elif isinstance(data, list):
-            for i in xrange(0, len(data)):
+            for i in range(0, len(data)):
                 data[i] = self._fix_unicode(data[i])
         return data
 
@@ -952,8 +960,8 @@ class SubdocNestedDataset(SubdocBaseTest):
                 # for verification xattr in subdoc
                 client.cb.set(key, {}, exp, flags, )
                 if isinstance(value, dict):
-                    for k, v in value.iteritems():
-                        print k, ":", v
+                    for k, v in value.items():
+                        print(k, ":", v)
                         rv = client.cb.mutate_in(key, SD.upsert(k, v, xattr=xattr))
                         self.log.info("xattr '%s' added successfully?: %s" % (k, rv.success))
                         self.assertTrue(rv.success)
@@ -987,9 +995,9 @@ class SubdocNestedDataset(SubdocBaseTest):
 
     def shuffle_json(self, json_value):
         dict = {}
-        keys = json_value.keys()
+        keys = list(json_value.keys())
         for key in keys:
-            index = random.randint(0,len(keys)-1)
+            index = random.randint(0, len(keys)-1)
             dict[key] =json_value[keys[index]]
         return dict
 
@@ -997,7 +1005,7 @@ class SubdocNestedDataset(SubdocBaseTest):
         try:
             self.log.info("run test case {0}".format(test_case_name))
             test_case()
-        except Exception, ex:
+        except Exception as ex:
             result[test_case_name] = str(ex)
 
 

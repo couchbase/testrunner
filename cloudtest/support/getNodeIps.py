@@ -9,7 +9,7 @@ def main():
 
     for node in nodeList.items:
         if node.metadata.namespace == currNameSpace:
-            print("%s %s" % (node.metadata.name, node.status.pod_ip))
+            print(("%s %s" % (node.metadata.name, node.status.pod_ip)))
 
 if __name__ == '__main__':
     if len(sys.argv) != 2:

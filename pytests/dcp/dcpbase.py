@@ -157,7 +157,7 @@ class DCPBase(BaseTestCase):
 
     def all_vb_info(self, node, table_entry=0, bucket='default', password=''):
 
-        print '*****in all vbinfo'
+        print('*****in all vbinfo')
 
         vbInfoMap = {}
         rest = RestConnection(node)
@@ -174,9 +174,9 @@ class DCPBase(BaseTestCase):
             seq_key = 'vb_{0}:{1}:seq'.format(vbucket, table_entry)
             hi_key = 'vb_{0}:high_seqno'.format(vbucket)
             vb_uuid, seqno, high_seqno = \
-                (long(failoverStats[id_key]),
-                 long(failoverStats[seq_key]),
-                 long(seqnoStats[hi_key]))
+                (int(failoverStats[id_key]),
+                 int(failoverStats[seq_key]),
+                 int(seqnoStats[hi_key]))
             vbInfoMap[vbucket] = (vb_uuid, seqno, high_seqno)
 
         return vbInfoMap
@@ -198,7 +198,7 @@ class DCPBase(BaseTestCase):
         assert len(stats) > vbucket, ENO_STAT
         id_key = 'vb_{0}:{1}:id'.format(vbucket, table_entry)
         seq_key = 'vb_{0}:{1}:seq'.format(vbucket, table_entry)
-        return long(stats[id_key]), long(stats[seq_key])
+        return int(stats[id_key]), int(stats[seq_key])
 
     def vb_seqno(self, node, vbucket, bucket='default', password=''):
         mcd_client = self.mcd_client(
@@ -206,7 +206,7 @@ class DCPBase(BaseTestCase):
         stats = mcd_client.stats(VBSEQNO_STAT)
         assert len(stats) > vbucket, ENO_STAT
         id_key = 'vb_{0}:high_seqno'.format(vbucket)
-        return long(stats[id_key])
+        return int(stats[id_key])
 
     def stop_node(self, index):
         status = False

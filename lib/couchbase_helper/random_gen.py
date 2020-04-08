@@ -3,6 +3,7 @@ import string
 import uuid
 from datetime import datetime
 from random import randint
+from functools import reduce
 
 class RandomDataGenerator(object):
 
@@ -17,7 +18,7 @@ class RandomDataGenerator(object):
 
     def random_alphanumeric(self, limit = 10):
         #ascii alphabet of all alphanumerals
-        r = (range(48, 58) + range(65, 91) + range(97, 123))
+        r = (list(range(48, 58)) + list(range(65, 91)) + list(range(97, 123)))
         random.shuffle(r)
         return reduce(lambda i, s: i + chr(s), r[:random.randint(0, len(r))], "")
 
@@ -42,9 +43,9 @@ class RandomDataGenerator(object):
         return random.choice([True, False])
 
     def random_datetime(self, start = 1999, end = 2015):
-        year = random.choice(range(start, end))
-        month = random.choice(range(1, 13))
-        day = random.choice(range(1, 29))
+        year = random.choice(list(range(start, end)))
+        month = random.choice(list(range(1, 13)))
+        day = random.choice(list(range(1, 29)))
         return datetime(year, month, day)
 
     def random_alphabet_string(self, limit =10):
@@ -71,12 +72,12 @@ class RandomDataGenerator(object):
                 array.append(d )
             return array
         else:
-        	array_size = randint(1, max_array_size)
-        	array = []
-        	for x in range(array_size):
-        		array_element = self.random_multi_dimension_array(level = level-1, max_array_size = max_array_size)
-        		array.append(array_element)
-        	return array
+            array_size = randint(1, max_array_size)
+            array = []
+            for x in range(array_size):
+                array_element = self.random_multi_dimension_array(level = level-1, max_array_size = max_array_size)
+                array.append(array_element)
+            return array
 
     def random_single_dimension_array(self, max_array_size = 1):
         array_size = randint(0, max_array_size)
@@ -86,8 +87,8 @@ class RandomDataGenerator(object):
         return array
 
     def gen_data(self):
-    	function_list = ["random_int", "random_float", "random_alphanumeric", "random_float","random_boolean", "random_multi_dimension_array", "random_char", "random_json"]
-    	function_name = random.choice(function_list)
+        function_list = ["random_int", "random_float", "random_alphanumeric", "random_float","random_boolean", "random_multi_dimension_array", "random_char", "random_json"]
+        function_name = random.choice(function_list)
         return (self.random_uuid() + "_" + function_name), getattr(self, function_name)()
 
     def gen_data_no_json(self):
@@ -96,8 +97,8 @@ class RandomDataGenerator(object):
         return (self.random_uuid() + "_" + function_name), getattr(self, function_name)()
 
     def random_json(self, random_fields = False, random_array_count = 4):
-    	json_body = {}
-    	function_list = ["random_int", "random_float", "random_alphanumeric", "random_float","random_boolean", "random_multi_dimension_array", "random_char"]
+        json_body = {}
+        function_list = ["random_int", "random_float", "random_alphanumeric", "random_float","random_boolean", "random_multi_dimension_array", "random_char"]
         for function in function_list:
             if random_fields and self.isChoice():
                 json_body[(self.random_uuid() + "_" + function.replace("random_", ""))] = getattr(self, function)()
@@ -114,8 +115,8 @@ class RandomDataGenerator(object):
 
 if __name__=="__main__":
     helper = RandomDataGenerator()
-    print helper.isChoice()
-    print helper.isChoice()
+    print(helper.isChoice())
+    print(helper.isChoice())
     #print helper.random_single_dimension_array(max_array_size = 100)
-    print helper.random_array()
+    print(helper.random_array())
     #print helper.random_json()

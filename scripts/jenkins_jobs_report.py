@@ -1,4 +1,4 @@
-import urllib2
+import urllib.request, urllib.error, urllib.parse
 import json
 import csv
 import getopt
@@ -69,7 +69,7 @@ def get_jobs_stats(job_url=None, onlyLastBuild=False, get_current_jobs=True):
         f = open(JOBS_FILE, 'r')
         lines = f.readlines()
     elif get_current_jobs:
-        content = urllib2.urlopen(JENKINS_URL + 'api/json').read()
+        content = urllib.request.urlopen(JENKINS_URL + 'api/json').read()
         json_parsed = json.loads(content)
         lines = [job['url'] for job in json_parsed["jobs"]]
     else:
@@ -77,9 +77,9 @@ def get_jobs_stats(job_url=None, onlyLastBuild=False, get_current_jobs=True):
     jobs = []
     for k in lines:
         url = k.strip() + API
-        print "read base info from %s" % url
+        print("read base info from %s" % url)
         try:
-            content = urllib2.urlopen(url).read()
+            content = urllib.request.urlopen(url).read()
         except:
             continue
         json_parsed = json.loads(content)
@@ -112,16 +112,16 @@ def get_jobs_stats(job_url=None, onlyLastBuild=False, get_current_jobs=True):
         jobs.append(job)
 
     for job in jobs:
-        last = (3,1)[onlyLastBuild]
+        last = (3, 1)[onlyLastBuild]
         for build_history in job.build_histories:
-                print build_history
+                print(build_history)
             # get last 5 results only
                 if last <= 0:
                     break
                 last -= 1
                 url = build_history["url"] + API
                 try:
-                    content = urllib2.urlopen(url).read()
+                    content = urllib.request.urlopen(url).read()
                 except:
                     continue
                 # content = content.replace('None', '"None"').replace(': True', ': "True"').replace(':True', ':"True"').replace(': False', ': "False"').replace(':False', ':"False"')
@@ -141,7 +141,7 @@ def get_jobs_stats(job_url=None, onlyLastBuild=False, get_current_jobs=True):
                         build.urlName = action["urlName"]
                         report_url = build_history["url"] + build.urlName + API
                         try:
-                            report_content = urllib2.urlopen(report_url).read()
+                            report_content = urllib.request.urlopen(report_url).read()
                         except:
                             continue
                         # report_content = report_content.replace('None', '"None"').replace(': True', ': "True"').replace(': False', ': "False"')  # .replace(':False', ':"False"')
@@ -188,8 +188,7 @@ def main():
         for version in results[job]:
             versions.append(version)
 
-    versions = list(set(versions))
-    versions.sort()
+    versions = sorted(set(versions))
 
     f = csv.writer(open("test.csv", "wb+"))
 
@@ -197,17 +196,17 @@ def main():
     # Write CSV Header, If you dont need that, remove this line
     f.writerow(["JOB NAME"] + versions)
 
-    job_names = results.keys()
+    job_names = list(results.keys())
     job_names.sort()
 
     for x in job_names:
-        print "handle results from %s" % x
+        print("handle results from %s" % x)
         if x is None:
             continue
         row = [x]
         for version in versions:
             if version in results[x]:
-                print version
+                print(version)
     #            if results[x][version]["result"]:
     #                row.append("Result:" + results[x][version]["result"] + " FailCount:" + str(results[x][version]["failCount"]) + " TotalCount:" + str(results[x][version]["totalCount"]) + " SkipCount:" + str(results[x][version]["skipCount"]) + " Number:" + str(results[x][version]["number"]))
     #            else:
@@ -216,12 +215,12 @@ def main():
                 row.append("")
         f.writerow(row)
 
-    print "SEE RESULTS IN results.csv"
+    print("SEE RESULTS IN results.csv")
 
 def build_json_result(jobs):
     jsons = []
     for job in jobs:
-        os = ((('N/A', 'UBUNTU')[job.name.lower().find('ubuntu') != -1], 'CENTOS')[job.name.lower().find('cent') != -1],'WINDOWS')[job.name.lower().find('win') != -1]
+        os = ((('N/A', 'UBUNTU')[job.name.lower().find('ubuntu') != -1], 'CENTOS')[job.name.lower().find('cent') != -1], 'WINDOWS')[job.name.lower().find('win') != -1]
         rq = {'name' : job.name, 'os' : os}
         component = "KV"
         if job.name.lower().find('xdcr') != -1:
@@ -251,18 +250,18 @@ def build_json_result(jobs):
                         'failCount': job.build_histories[0]['result'].failCount,
                         'result': job.build_histories[0]['result'].result,
                         'build_id' : job.lastBuild['number']})
-        print rq
+        print(rq)
         try:
             key = md5(rq["name"] + str(rq["build_id"])).hexdigest()
             if 'build' not in rq or 'result' not in rq or\
                ('build' in rq and not re.match(r'[0-9].[0-9].[0-9]-[0-9]+', rq['build'])):
-                print "ERROR forming rq for: %s" % rq
+                print("ERROR forming rq for: %s" % rq)
                 continue
             if rq['build'].find(',') != -1:
                 build_num = [attr for attr in rq['build'].split(',')
                              if re.match(r'[0-9].[0-9].[0-9]-[0-9]+', attr)]
                 if not build_num:
-                    print "ERROR forming rq for: %s" % rq
+                    print("ERROR forming rq for: %s" % rq)
                     continue
                 rq['build'] = build_num[0]
             if rq['totalCount'] == '':
@@ -270,16 +269,16 @@ def build_json_result(jobs):
             if rq['failCount'] == '':
                 rq['failCount'] = 0
             if not rq['result']:
-                print "ERROR forming rq for: %s" % rq
+                print("ERROR forming rq for: %s" % rq)
                 continue
             jsons.append((key, json.dumps(rq)))
-            print "Sent"
+            print("Sent")
         except:
-            print "ERROR forming rq for: %s" % rq
+            print("ERROR forming rq for: %s" % rq)
     return jsons
 
 def usage(err=None):
-    print """\
+    print("""\
 Syntax: install.py [options]
 
 Options:
@@ -293,7 +292,7 @@ Options:
 
 Examples:
  jenkins_jobs_report.py -o json -s localhost -p 8091 --user Administrator --pass password --name "centos_x64--00_04--warmup-P0"
-"""
+""")
     sys.exit(err)
 
 def _parse_variables():
@@ -301,7 +300,7 @@ def _parse_variables():
             "--user" : 'Administrator', "--pass": "password",
             "--jenkins" : JENKINS_URL + 'job/', "--name" : None,
             "server_info" : None}
-    (opts, _) = getopt.getopt(sys.argv[1:], 'o:s:p:', ['user=','password=','jenkins=','name='])
+    (opts, _) = getopt.getopt(sys.argv[1:], 'o:s:p:', ['user=', 'password=', 'jenkins=', 'name='])
     for o, a in opts:
         if o == "-h":
             usage()
@@ -327,7 +326,7 @@ def send_json(server_info, job=None):
     for key, rq in jsons:
         try:
             client.set(key, 0, 0, rq)
-        except Exception, ex:
+        except Exception as ex:
             sys.exit(str(ex))
 
 if __name__ == "__main__":

@@ -1,7 +1,7 @@
 import json
 import time
 import unittest
-import urllib
+import urllib.request, urllib.parse, urllib.error
 import testconstants
 from TestInput import TestInputSingleton
 
@@ -55,10 +55,10 @@ class CommunityTests(CommunityBaseTest):
         try:
             self.log.info("create zone name 'group1'!")
             result = self.rest.add_zone(zone_name)
-            print "result  ",result
-        except Exception, e :
+            print("result  ", result)
+        except Exception as e :
             if e:
-                print e
+                print(e)
                 disabled_zone = True
                 pass
         if not disabled_zone:
@@ -69,9 +69,9 @@ class CommunityTests(CommunityBaseTest):
         try:
             self.rest.getAuditSettings()
             audit_available = True
-        except Exception, e :
+        except Exception as e :
             if e:
-                print e
+                print(e)
         if audit_available:
             self.fail("This feature 'audit' only available on "
                       "Enterprise Edition")
@@ -83,9 +83,9 @@ class CommunityTests(CommunityBaseTest):
             s, c, h = self.rest.clearLDAPSettings()
             if s:
                 ldap_available = True
-        except Exception, e :
+        except Exception as e :
             if e:
-                print e
+                print(e)
         if ldap_available:
             self.fail("This feature 'ldap' only available on "
                       "Enterprise Edition")
@@ -96,9 +96,9 @@ class CommunityTests(CommunityBaseTest):
         try:
             status = self.rest.init_node_services(hostname=self.master.ip,
                                                  services=[self.services])
-        except Exception, e:
+        except Exception as e:
             if e:
-                print e
+                print(e)
         if self.services == "kv":
             if status:
                 self.log.info("CE could set {0} only service."
@@ -175,9 +175,9 @@ class CommunityTests(CommunityBaseTest):
                                         services=[self.start_node_services])
             init_node = self.cluster.async_init_node(self.master,
                                             services = [self.start_node_services])
-        except Exception, e:
+        except Exception as e:
             if e:
-                print e
+                print(e)
         if not status:
             if self.version not in COUCHBASE_FROM_WATSON and \
                          self.start_node_services not in sherlock_services_in_ce:
@@ -316,9 +316,9 @@ class CommunityTests(CommunityBaseTest):
                             username=self.input.membase_settings.rest_username,
                             password=self.input.membase_settings.rest_password,
                                                 storageMode='memory_optimized')
-        except Exception, ex:
+        except Exception as ex:
             if ex:
-                print ex
+                print(ex)
         if not status:
             self.log.info("Memory Optimized setting enforced in CE "
                           "Could not set memory_optimized option")
@@ -334,9 +334,9 @@ class CommunityTests(CommunityBaseTest):
                       "should return False")
         try:
             status, content, header = self.rest._http_request(api, 'GET')
-        except Exception, ex:
+        except Exception as ex:
             if ex:
-                print ex
+                print(ex)
         if status:
             self.fail("This X509 certificate feature only available in EE")
         elif not status:
@@ -355,9 +355,9 @@ class CommunityTests(CommunityBaseTest):
         param = "name=%s&roles=%s" % (self.user_add, self.user_role)
         try:
             status, content, header = self.rest._http_request(api, 'PUT', param)
-        except Exception, ex:
+        except Exception as ex:
             if ex:
-                print ex
+                print(ex)
         if status:
             self.fail("CE should not allow to add admin users")
         else:
@@ -371,9 +371,9 @@ class CommunityTests(CommunityBaseTest):
         api = self.rest.baseUrl + "pools/default/certificate"
         try:
             status, content, header = self.rest._http_request(api, 'GET')
-        except Exception, ex:
+        except Exception as ex:
             if ex:
-                print ex
+                print(ex)
         if status:
             self.fail("CE should not see root certificate!")
         elif "requires enterprise edition" in content:
@@ -387,9 +387,9 @@ class CommunityTests(CommunityBaseTest):
         api = self.rest.baseUrl + "settings/audit"
         try:
             status, content, header = self.rest._http_request(api, 'GET')
-        except Exception, ex:
+        except Exception as ex:
             if ex:
-                print ex
+                print(ex)
         if status:
             self.fail("CE should not allow to set audit !")
         elif "requires enterprise edition" in content:
@@ -408,13 +408,13 @@ class CommunityTests(CommunityBaseTest):
         bucket = "default"
         self.rest.create_bucket(bucket, ramQuotaMB=200)
         api = self.rest.query_baseUrl + "query/service"
-        param = urllib.urlencode({"statement":"infer `%s` ;" % bucket})
+        param = urllib.parse.urlencode({"statement":"infer `%s` ;" % bucket})
         try:
             status, content, header = self.rest._http_request(api, 'POST', param)
             json_parsed = json.loads(content)
-        except Exception, ex:
+        except Exception as ex:
             if ex:
-                print ex
+                print(ex)
         if json_parsed["status"] == "success":
             self.fail("CE should not allow to run INFER !")
         elif json_parsed["status"] == "fatal":

@@ -31,7 +31,7 @@ monkey.patch_all()
 
 #logging
 import logging
-logging.basicConfig(filename='consumer.log',level=logging.DEBUG)
+logging.basicConfig(filename='consumer.log', level=logging.DEBUG)
 
 # setup parser
 parser = argparse.ArgumentParser(description='CB System Test KV Consumer')
@@ -86,7 +86,7 @@ class SDKClient(threading.Thread):
         if not self.active_hosts:
             self.active_hosts = [cfg.COUCHBASE_IP]
 
-        addr = task['active_hosts'][random.randint(0,len(self.active_hosts) - 1)].split(':')
+        addr = task['active_hosts'][random.randint(0, len(self.active_hosts) - 1)].split(':')
         host = addr[0]
         port = 8091
         if len(addr) > 1:
@@ -186,7 +186,7 @@ class SDKClient(threading.Thread):
     def do_cycle(self):
 
         sizes = self.template.get('size') or self.default_tsizes
-        t_size = sizes[random.randint(0,len(sizes)-1)]
+        t_size = sizes[random.randint(0, len(sizes)-1)]
         self.template['t_size'] = t_size
 
         if self.create_count > 0:
@@ -219,7 +219,7 @@ class SDKClient(threading.Thread):
         j = 0
 
         template = resolveTemplate(template)
-        for j in xrange(count):
+        for j in range(count):
             self.i = self.i+1
             msg[self.name+str(self.i)] = template
             keys.append(self.name+str(self.i))
@@ -421,7 +421,7 @@ class SDKClient(threading.Thread):
             return
 
         # put about 20 items into the queue
-        for i in xrange(20):
+        for i in range(20):
             key_map = self.getKeyMapFromRemoteQueue()
             if key_map:
                 self.memq.put_nowait(key_map)
@@ -474,8 +474,8 @@ class SDKProcess(Process):
         self.id = id
         self.clients = []
         p_id = self.id
-        self.client_events = [Event() for e in xrange(CLIENTSPERPROCESS)]
-        for i in xrange(CLIENTSPERPROCESS):
+        self.client_events = [Event() for e in range(CLIENTSPERPROCESS)]
+        for i in range(CLIENTSPERPROCESS):
             name = _random_string(4)+"-"+str(p_id)+str(i)+"_"
 
             # start client
@@ -582,8 +582,8 @@ def init(message):
         task = json.loads(str(body))
 
     except Exception:
-        print "Unable to parse workload task"
-        print body
+        print("Unable to parse workload task")
+        print(body)
         return
 
     if  task['active'] == False:
@@ -598,8 +598,8 @@ def init(message):
             start_client_processes(task)
 
         except Exception as ex:
-            print "Unable to start workload processes"
-            print ex
+            print("Unable to start workload processes")
+            print(ex)
 
 
 
@@ -607,10 +607,10 @@ def init(message):
 def resolveTemplate(template):
 
     conversionFuncMap = {
-        'str' : lambda n : _random_string(n),
-        'int' : lambda n : _random_int(n),
-        'flo' : lambda n : _random_float(n),
-        'boo' : lambda n : (True, False)[random.randint(0,1)],
+        'str': lambda n : _random_string(n),
+        'int': lambda n : _random_int(n),
+        'flo': lambda n : _random_float(n),
+        'boo': lambda n : (True, False)[random.randint(0, 1)],
     }
 
     def convToType(val):
@@ -618,7 +618,7 @@ def resolveTemplate(template):
         if mObj:
             prefix, magic, type_, len_, suffix = mObj.groups()
             len_ = len_ or 5
-            if type_ in conversionFuncMap.keys():
+            if type_ in list(conversionFuncMap.keys()):
                 val = conversionFuncMap[type_](int(len_))
                 val = "{}{}{}".format(prefix, val, suffix)
 
@@ -628,22 +628,22 @@ def resolveTemplate(template):
         rc = []
         for item in li:
             val = item
-            if type(item) == list:
+            if isinstance(item, list):
                 val = resolveList(item)
-            elif item and type(item) == str and '$' in item:
+            elif item and isinstance(item, str) and '$' in item:
                 val = convToType(item)
             rc.append(val)
 
         return rc
     def resolveDict(di):
         rc = {}
-        for k,v in di.iteritems():
+        for k, v in di.items():
             val = v
-            if type(v) == dict:
+            if isinstance(v, dict):
                 val = resolveDict(v)
-            elif type(v) == list:
+            elif isinstance(v, list):
                 val = resolveList(v)
-            elif v and type(v) == str and '$' in v:
+            elif v and isinstance(v, str) and '$' in v:
                 val = convToType(v)
             rc[k] = val
         return rc

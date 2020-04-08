@@ -21,8 +21,8 @@ def collect_index_barriers(server):
     except requests.exceptions.ConnectionError:
         return
 
-    main = filter(lambda t: t['type'] == 'couch_main_index_barrier', tasks)
-    repl = filter(lambda t: t['type'] == 'couch_replica_index_barrier', tasks)
+    main = [t for t in tasks if t['type'] == 'couch_main_index_barrier']
+    repl = [t for t in tasks if t['type'] == 'couch_replica_index_barrier']
 
     return {
         server.ip + '_running_couch_main_index_barrier': main[0]['running'],
@@ -81,7 +81,7 @@ def main():
     try:
         input = TestInput.TestInputParser.get_test_input(sys.argv)
     except AttributeError:
-        print USAGE
+        print(USAGE)
     else:
         all_samples = list()
         while True:
@@ -97,14 +97,14 @@ def main():
                     samples['timestamp'] = time.strftime("%Y-%m-%d %H:%M:%S GMT", \
                                                 time.gmtime(samples['timestamp']))
                 pprint(samples)
-                print " "
+                print(" ")
                 time.sleep(input.param('interval', 5))
             except KeyboardInterrupt:
                 break
         filename = 'active_tasks_{0}.json'\
             .format(time.strftime('%Y%m%d_%H%M', time.localtime(time.time())))
         with open(filename, 'w') as fh:
-            print '\nSaving all stats to: {0}'.format(filename)
+            print('\nSaving all stats to: {0}'.format(filename))
             fh.write(json.dumps(all_samples, indent=4, sort_keys=True))
 
 

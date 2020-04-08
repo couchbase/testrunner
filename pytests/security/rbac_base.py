@@ -1,7 +1,7 @@
-from ldap_user import LdapUser
-from internal_user import InternalUser
+from .ldap_user import LdapUser
+from .internal_user import InternalUser
 from remote.remote_util import RemoteMachineShellConnection
-import urllib
+import urllib.request, urllib.parse, urllib.error
 import json
 
 class RbacBase:
@@ -15,11 +15,11 @@ class RbacBase:
     '''
     Enable LDAP on node
     '''
-    def enable_ldap(self,rest):
+    def enable_ldap(self, rest):
         content = rest.ldapRestOperationGetResponse()
         if not content['enabled']:
             api = rest.baseUrl + 'settings/saslauthdAuth'
-            params = urllib.urlencode({"enabled": 'true', "admins": [], "roAdmins": []})
+            params = urllib.parse.urlencode({"enabled": 'true', "admins": [], "roAdmins": []})
             status, content, header = rest._http_request(api, 'POST', params)
             return json.loads(content)
 
@@ -32,10 +32,10 @@ class RbacBase:
             password = user['password']
             user_name = user['name']
             if source == 'ldap':
-                return LdapUser(userid,password,host).user_setup()
+                return LdapUser(userid, password, host).user_setup()
             if source == 'builtin':
                 payload = "name=" + user_name + "&roles=&password=" + password
-                return InternalUser(userid,payload,host).user_setup()
+                return InternalUser(userid, payload, host).user_setup()
 
     '''
     user_role_list = list of user information and role assignment
@@ -57,9 +57,9 @@ class RbacBase:
                     final_roles = role + "," + final_roles
             payload="name="+username+"&roles="+final_roles
             if self.source == "ldap":
-                response = rest.set_user_roles(userid,payload)
+                response = rest.set_user_roles(userid, payload)
             elif self.source == 'builtin':
-                if 'password' in user_role.keys():
+                if 'password' in list(user_role.keys()):
                     payload=payload+'&password='+user_role['password']
                 cluster_compatibility = rest.check_cluster_compatibility("5.0")
                 if cluster_compatibility is None:
@@ -93,9 +93,9 @@ class RbacBase:
             response_return.append({'id':user,'response':response})
         return response_return
 
-    def check_user_permission(self,user,password,user_per_list,rest):
-        response = rest.check_user_permission(user,password,user_per_list)
-        print response
+    def check_user_permission(self, user, password, user_per_list, rest):
+        response = rest.check_user_permission(user, password, user_per_list)
+        print(response)
         return response
 
 

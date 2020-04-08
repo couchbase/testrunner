@@ -25,7 +25,7 @@ try:
     from seriesly import Seriesly
     import seriesly.exceptions
 except ImportError:
-    print "unable to import seriesly: see http://pypi.python.org/pypi/seriesly"
+    print("unable to import seriesly: see http://pypi.python.org/pypi/seriesly")
     Seriesly = None
 
 
@@ -53,7 +53,7 @@ def multi_buckets(test):
         prefix = self.parami("prefix", 0)
 
         procs = []
-        for bucket_id in reversed(range(num_buckets)):
+        for bucket_id in reversed(list(range(num_buckets))):
             self.set_param("bucket", buckets[bucket_id])
             new_prefix = prefix + bucket_id * num_clients
             self.set_param("prefix", str(new_prefix))
@@ -170,8 +170,8 @@ class EPerfMaster(perf.PerfBase):
         if input is None or not input:
             return output
 
-        for key, value in input.iteritems():
-            if key in output.keys():
+        for key, value in input.items():
+            if key in list(output.keys()):
                 output[key] += value
             else:
                 output[key] = value
@@ -182,7 +182,7 @@ class EPerfMaster(perf.PerfBase):
         qps = (ops.get('queriesPerSec', 0) for ops in ops_array)
         try:
             # Access phase w/ fg thread
-            return sum(qps) / len(ops_array)
+            return sum(qps) // len(ops_array)
         except:
             # Otherwise
             return 0
@@ -209,12 +209,12 @@ class EPerfMaster(perf.PerfBase):
             start_time = min(min(ops['startTime'] for ops in ops_array),
                              start_time)
         num_steps = max(len(base_ops), len(new_ops))
-        step = float(end_time - start_time) / num_steps
+        step = float(end_time - start_time) // num_steps
 
         # Merge (terrible time complexity)
         merged_ops = list()
         indexes = [0, 0]
-        for i in xrange(num_steps):
+        for i in range(num_steps):
             # Current time frame
             start_of_step = start_time + step * i
             end_of_step = start_of_step + step
@@ -229,7 +229,7 @@ class EPerfMaster(perf.PerfBase):
                         indexes[idx] += 1
                     else:
                         break
-            qps = total_queries / step
+            qps = total_queries // step
             merged_ops.append({'startTime': start_of_step,
                                'endTime': end_of_step,
                                'totalQueries': total_queries,
@@ -246,7 +246,7 @@ class EPerfMaster(perf.PerfBase):
                 file = gzip.open("{0}.{1}.json.gz".format(i, type), 'rb')
                 break
             except IOError:
-                self.log.warn("cannot open file {0}.{1}.json.gz".format(i, type))
+                self.log.warning("cannot open file {0}.{1}.json.gz".format(i, type))
                 i += 1
 
         if file is None:
@@ -257,7 +257,7 @@ class EPerfMaster(perf.PerfBase):
         final_json = json.loads(final_json)
         i += 1
         merge_keys = []
-        for latency in final_json.keys():
+        for latency in list(final_json.keys()):
             if latency.startswith('latency'):
                 merge_keys.append(str(latency))
 
@@ -274,13 +274,13 @@ class EPerfMaster(perf.PerfBase):
             except IOError:
                 # cannot find stats produced by this client, check stats
                 # collection. the results might be incomplete.
-                self.log.warn("cannot open file: {0}.{1}.json.gz".format(i, type))
+                self.log.warning("cannot open file: {0}.{1}.json.gz".format(i, type))
                 continue
 
             dict = file.read()
             file.close()
             dict = json.loads(dict)
-            for key, value in dict.items():
+            for key, value in list(dict.items()):
                 if key in merge_keys:
                     if key.endswith("histogram"):
                         self.merge_dict(final_json[key], value)
@@ -300,7 +300,7 @@ class EPerfMaster(perf.PerfBase):
         # sizes is 33% 1k, 33% 2k, 33% 3k, 1% 10k.
         mvs = []
         for i in range(33):
-            mvs.append(avg / 2)
+            mvs.append(avg // 2)
             mvs.append(avg)
             mvs.append(avg * 1.5)
         mvs.append(avg * 5)
@@ -354,7 +354,7 @@ class EPerfMaster(perf.PerfBase):
     def set_ep_mem_wat(self, percent, high=True):
         """Set ep engine high/low water marks for all nodes"""
         n_bytes = self.parami("mem_quota", PerfDefaults.mem_quota) * \
-            percent / 100 * 1024 * 1024
+            percent // 100 * 1024 * 1024
         self.log.info("mem_{0}_wat = {1} percent, {2} bytes"
                       .format("high" if high else "low", percent, n_bytes))
         self.set_ep_param("flush_param",
@@ -445,7 +445,7 @@ class EPerfMaster(perf.PerfBase):
             num_clients = self.parami("num_clients",
                                       len(self.input.clients) or 1)
             start_at = self.load_phase_clients_start_at(num_items, num_clients)
-            items = self.parami("num_items", num_items) / num_clients
+            items = self.parami("num_items", num_items) // num_clients
             self.is_multi_node = False
             mvs = self.min_value_size(self.parami("avg_value_size",
                                                   PerfDefaults.avg_value_size))
@@ -478,15 +478,15 @@ class EPerfMaster(perf.PerfBase):
         num_buckets = self.parami('num_buckets', 1)
         if self.parami("hot_load_phase", 0) == 0 or num_buckets <= 1:
             return int(self.paramf("start_at", 1.0) *
-                       self.parami("prefix", 0) * num_items / num_clients)
+                       self.parami("prefix", 0) * num_items // num_clients)
 
         # multi-bucket, hot-load-phase
         num_loaded_items = self.parami("items", PerfDefaults.items)
-        cpb = num_clients / num_buckets
-        offset = num_loaded_items / num_buckets * \
-            (self.parami("prefix", 0) / cpb)
+        cpb = num_clients // num_buckets
+        offset = num_loaded_items // num_buckets * \
+            (self.parami("prefix", 0) // cpb)
         return int(offset + self.paramf("start_at", 1.0) *
-                   self.parami("prefix", 0) % cpb * num_items / num_clients)
+                   self.parami("prefix", 0) % cpb * num_items // num_clients)
 
     def access_phase_clients_start_at(self):
         self.access_phase_items = self.parami("items", PerfDefaults.items)
@@ -522,7 +522,7 @@ class EPerfMaster(perf.PerfBase):
             start_delay = self.parami("start_delay", PerfDefaults.start_delay)
             if start_delay > 0:
                 time.sleep(start_delay * self.parami("prefix", 0))
-            max_creates = self.parami("max_creates", max_creates) / num_clients
+            max_creates = self.parami("max_creates", max_creates) // num_clients
             self.is_multi_node = False
             if self.param('reb_protocol', None) == 'memcached-binary':
                 proto_prefix = 'memcached-binary'
@@ -598,7 +598,7 @@ class EPerfMaster(perf.PerfBase):
         """
         stack = self.cur.get('hot-stack', None)
         if not stack:
-            self.log.warn("unable to clear hot stack : stack does not exist")
+            self.log.warning("unable to clear hot stack : stack does not exist")
             return False
 
         stack.clear()
@@ -664,7 +664,7 @@ class EPerfMaster(perf.PerfBase):
 
             bucket = self.param('bucket', 'default')
 
-            for ddoc_name, d in ddocs.items():
+            for ddoc_name, d in list(ddocs.items()):
                 d = copy.copy(d)
                 d["language"] = "javascript"
                 d_json = json.dumps(d)
@@ -674,8 +674,8 @@ class EPerfMaster(perf.PerfBase):
                                         headers=self.rest._create_capi_headers())
 
             # Initialize indexing
-            for ddoc_name, d in ddocs.items():
-                for view_name, x in d["views"].items():
+            for ddoc_name, d in list(ddocs.items()):
+                for view_name, x in list(d["views"].items()):
                     for attempt in range(10):
                         try:
                             self.rest.query_view(ddoc_name, view_name, bucket,
@@ -706,14 +706,14 @@ class EPerfMaster(perf.PerfBase):
         if ddocs:
             # Query with debug argument equals true
             bucket = self.param('bucket', 'default')
-            ddoc_name = ddocs.keys()[0]
-            view_name = ddocs[ddoc_name]['views'].keys()[0]
+            ddoc_name = list(ddocs.keys())[0]
+            view_name = list(ddocs[ddoc_name]['views'].keys())[0]
 
             response = self.rest.query_view(ddoc_name, view_name, bucket,
                                             {'debug': 'true'})
             debug_info = response['debug_info']
 
-            for subset, data in debug_info.iteritems():
+            for subset, data in debug_info.items():
                 self.log.info(subset)
                 self.log.info(data)
 
@@ -865,7 +865,7 @@ class EPerfMaster(perf.PerfBase):
             self.warmup_phase()
             return
 
-        self.log.warn("unable to find snapshot file, rerun the test")
+        self.log.warning("unable to find snapshot file, rerun the test")
         self.test_eperf_mixed(save_snapshot=True)
 
     @multi_buckets
@@ -885,7 +885,7 @@ class EPerfMaster(perf.PerfBase):
                 not self.parami("reb_no_fg", PerfDefaults.reb_no_fg):
             rebalance_after = self.parami("rebalance_after",
                                           PerfDefaults.rebalance_after)
-            self.level_callbacks = [('cur-creates', rebalance_after / num_clients,
+            self.level_callbacks = [('cur-creates', rebalance_after // num_clients,
                                      getattr(self, "latched_rebalance"))]
 
         reb_cons_view = self.parami("reb_cons_view", PerfDefaults.reb_cons_view)
@@ -1058,7 +1058,7 @@ class EPerfMaster(perf.PerfBase):
                 queries=queries,
                 proto_prefix="couchbase",
                 host=host,
-                ddoc=view_gen.ddocs.next()
+                ddoc=next(view_gen.ddocs)
             )
 
         # Incremental index phase
@@ -1085,7 +1085,7 @@ class EPerfMaster(perf.PerfBase):
         try:
             time.sleep(self.parami('sleep_time', 3600))
         except KeyboardInterrupt:
-            self.log.warn("ctats collection was interrupted")
+            self.log.warning("ctats collection was interrupted")
 
         end_time = time.time()
 
@@ -1170,7 +1170,7 @@ class EPerfClient(EPerfMaster):
 
     def init_seriesly(self, host, db):
         if not Seriesly:
-            self.log.warn("unable to initialize seriesly: library not installed")
+            self.log.warning("unable to initialize seriesly: library not installed")
             return False
 
         if self.seriesly:
@@ -1180,7 +1180,7 @@ class EPerfClient(EPerfMaster):
 
         try:
             dbs = self.seriesly.list_dbs()
-        except seriesly.exceptions.ConnectionError, e:
+        except seriesly.exceptions.ConnectionError as e:
             self.log.error("unable to connect to seriesly server {0}: {1}"
                            .format(host, e))
             return False
@@ -1253,7 +1253,7 @@ class EVPerfClient(EPerfClient):
 
         if why == "loop" and self.parami("fg_max_ops", self.fg_max_ops):
             cfg['max-ops'] = start_at + \
-                self.parami("fg_max_ops", self.fg_max_ops) / num_clients
+                self.parami("fg_max_ops", self.fg_max_ops) // num_clients
             ctl = {'run_ok': True}
             if self.parami("fg_max_ops_per_sec", 0):
                 cfg['max-ops-per-sec'] = self.parami("fg_max_ops_per_sec", 0)

@@ -4,9 +4,10 @@ import logging
 
 from couchbase_helper.query_definitions import QueryDefinition
 from membase.api.rest_client import RestConnection
-from base_2i import BaseSecondaryIndexingTests
+from .base_2i import BaseSecondaryIndexingTests
+from deepdiff import DeepDiff
 
-DATATYPES = [unicode, "scalar", int, dict, "missing", "empty", "null"]
+DATATYPES = [str, "scalar", int, dict, "missing", "empty", "null"]
 RANGE_SCAN_TEMPLATE = "SELECT {0} FROM %s WHERE {1}"
 NULL_STRING = "~[]{}UnboundedTruenilNA~"
 
@@ -72,12 +73,12 @@ class SecondaryIndexingMultiscanTests(BaseSecondaryIndexingTests):
         scan_contents.append([{"Seek": None}, {"Seek": ["Winta"]}])
         scan_contents.append([{"Seek": None}, {"Seek": ["Zack"]}])
         scan_contents.append([{"Seek": None}, {"Seek": [None]}])
-        scan_contents.append([{"Seek": ["Kala"]},{"Seek": None}])
-        scan_contents.append([{"Seek": ["Kala"]},{"Seek": ["Kala"]}])
-        scan_contents.append([{"Seek": ["Kala"]},{"Seek": ["Kala", 30]}])
-        scan_contents.append([{"Seek": ["Kala"]},{"Seek": ["Winta"]}])
-        scan_contents.append([{"Seek": ["Kala"]},{"Seek": ["Zack"]}])
-        scan_contents.append([{"Seek": ["Kala"]},{"Seek": [None]}])
+        scan_contents.append([{"Seek": ["Kala"]}, {"Seek": None}])
+        scan_contents.append([{"Seek": ["Kala"]}, {"Seek": ["Kala"]}])
+        scan_contents.append([{"Seek": ["Kala"]}, {"Seek": ["Kala", 30]}])
+        scan_contents.append([{"Seek": ["Kala"]}, {"Seek": ["Winta"]}])
+        scan_contents.append([{"Seek": ["Kala"]}, {"Seek": ["Zack"]}])
+        scan_contents.append([{"Seek": ["Kala"]}, {"Seek": [None]}])
         scan_contents.append([{"Seek": ["Kala", 30]}, {"Seek": None}])
         scan_contents.append([{"Seek": ["Kala", 30]}, {"Seek": ["Kala"]}])
         scan_contents.append([{"Seek": ["Kala", 30]}, {"Seek": ["Kala", 30]}])
@@ -758,12 +759,12 @@ class SecondaryIndexingMultiscanTests(BaseSecondaryIndexingTests):
                     for first_age_inclusion in range(4):
                         for second_name_inclusion in range(4):
                             for second_age_inclusion in range(4):
-                                if "Filter" in scan_content[0].keys():
+                                if "Filter" in list(scan_content[0].keys()):
                                     scan_content[0]["Filter"][0]["Inclusion"] = \
                                         first_name_inclusion
                                     scan_content[0]["Filter"][1]["Inclusion"] = \
                                         first_age_inclusion
-                                if "Filter" in scan_content[1].keys():
+                                if "Filter" in list(scan_content[1].keys()):
                                     scan_content[1]["Filter"][0]["Inclusion"] = \
                                         second_name_inclusion
                                     scan_content[1]["Filter"][1]["Inclusion"] = \
@@ -776,7 +777,7 @@ class SecondaryIndexingMultiscanTests(BaseSecondaryIndexingTests):
                                     id_map["id"], json.dumps(multiscan_content))
                                 check = self._verify_items_indexed_for_two_field_index(
                                     bucket, id_map["id"],
-                                    ["name","age"], scan_content, multiscan_result, multiscan_count_result)
+                                    ["name", "age"], scan_content, multiscan_result, multiscan_count_result)
                                 if not check:
                                     failed_scans.append(copy.deepcopy(scan_content))
         msg = "Failed Scans: {0}".format(failed_scans)
@@ -858,12 +859,12 @@ class SecondaryIndexingMultiscanTests(BaseSecondaryIndexingTests):
                     for first_age_inclusion in range(4):
                         for second_name_inclusion in range(4):
                             for second_age_inclusion in range(4):
-                                if "Filter" in scan_content[0].keys():
+                                if "Filter" in list(scan_content[0].keys()):
                                     scan_content[0]["Filter"][0]["Inclusion"] = \
                                         first_name_inclusion
                                     scan_content[0]["Filter"][1]["Inclusion"] = \
                                         first_age_inclusion
-                                if "Filter" in scan_content[1].keys():
+                                if "Filter" in list(scan_content[1].keys()):
                                     scan_content[1]["Filter"][0]["Inclusion"] = \
                                         second_name_inclusion
                                     scan_content[1]["Filter"][1]["Inclusion"] = \
@@ -924,17 +925,17 @@ class SecondaryIndexingMultiscanTests(BaseSecondaryIndexingTests):
                             for second_age_inclusion in range(4):
                                 for third_name_inclusion in range(4):
                                     for third_age_inclusion in range(4):
-                                        if "Filter" in scan_content[0].keys():
+                                        if "Filter" in list(scan_content[0].keys()):
                                             scan_content[0]["Filter"][0]["Inclusion"] = \
                                                 first_name_inclusion
                                             scan_content[0]["Filter"][1]["Inclusion"] = \
                                                 first_age_inclusion
-                                        if "Filter" in scan_content[1].keys():
+                                        if "Filter" in list(scan_content[1].keys()):
                                             scan_content[1]["Filter"][0]["Inclusion"] = \
                                                 second_name_inclusion
                                             scan_content[1]["Filter"][1]["Inclusion"] = \
                                                 second_age_inclusion
-                                        if "Filter" in scan_content[2].keys():
+                                        if "Filter" in list(scan_content[2].keys()):
                                             scan_content[2]["Filter"][0]["Inclusion"] = \
                                                 third_name_inclusion
                                             scan_content[2]["Filter"][1]["Inclusion"] = \
@@ -955,7 +956,7 @@ class SecondaryIndexingMultiscanTests(BaseSecondaryIndexingTests):
 
     def _update_multiscan_content(self, index_fields=2):
         multiscan_content = {}
-        projection = {"EntryKeys": range(index_fields), "PrimaryKey": True}
+        projection = {"EntryKeys": list(range(index_fields)), "PrimaryKey": True}
         multiscan_content["projection"] = json.dumps(projection)
         multiscan_content["distinct"] = False
         multiscan_content["reverse"] = False
@@ -968,8 +969,8 @@ class SecondaryIndexingMultiscanTests(BaseSecondaryIndexingTests):
                                                   scan_content, multiscan_result, multiscan_count_result=None):
         err_message = "There are more ranges than number"
         if isinstance(multiscan_result, dict):
-            if err_message in multiscan_result.values():
-                multiscan_result = ''
+            if err_message in list(multiscan_result.values()):
+                multiscan_result = []
         expected_results = []
         body = {"stale": "False"}
         for content in scan_content:
@@ -1027,7 +1028,12 @@ class SecondaryIndexingMultiscanTests(BaseSecondaryIndexingTests):
                 log.info("No. of items mismatch :- expected = {0} and actual = {1}".format(
                     len(expected_results), multiscan_count_result))
                 return False
-        if sorted(expected_results) != sorted(multiscan_result):
-            log.info("The number of rows match but the results mismatch, please check")
+
+        if multiscan_result == '':
+            multiscan_result = []
+        diffs = DeepDiff(expected_results, multiscan_result,  ignore_order = True, ignore_string_type_changes=True)
+        if diffs:
+            log.info("The number of rows match but the results mismatch, please check. Diffs: {}".format(diffs))
             return False
+
         return True

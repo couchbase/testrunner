@@ -4,10 +4,17 @@ import time
 from membase.api.rest_client import RestConnection
 from scripts.edgyjson.main import JSONDoc
 
-from xdcrnewbasetests import XDCRNewBaseTest
+from .xdcrnewbasetests import XDCRNewBaseTest
 
 
 class XDCRAdvFilterTests(XDCRNewBaseTest):
+
+
+    def suite_setUp(self):
+        print("*** XDCRAdvFilterTests : suite_Setup() ***")
+
+    def suite_tearDown(self):
+        print("*** XDCRAdvFilterTests : suite_tearDown() ***")
 
     def setUp(self):
         XDCRNewBaseTest.setUp(self)
@@ -28,11 +35,11 @@ class XDCRAdvFilterTests(XDCRNewBaseTest):
                 self.load_data()
         except Exception as e:
             if self.skip_validation:
-                if "create replication failed : status:False,content:{\"errors\":{\"filterExpression\":" in e.message:
-                    self.log.warn("Random filter generated may not be valid, skipping doc count validation")
+                if "create replication failed : status:False,content:{\"errors\":{\"filterExpression\":" in str(e):
+                    self.log.warning("Random filter generated may not be valid, skipping doc count validation")
                     self.tearDown()
             else:
-                self.fail(e.message)
+                self.fail(str(e))
 
     def tearDown(self):
         XDCRNewBaseTest.tearDown(self)
@@ -59,15 +66,15 @@ class XDCRAdvFilterTests(XDCRNewBaseTest):
                     num_docs=num_docs, template="query.json", xattrs=True)
             self.sleep(30, "Waiting for docs to be loaded")
         except Exception as e:
-            self.warn(
-                "Errors encountered while loading edgyjson docs: {0}. Trying to load binary docs".format(e.message))
-            self.load_data_topology()
+            self.fail(
+                "Errors encountered while loading data: {0}".format(str(e)))
 
     def verify_results(self):
         rdirection = self._input.param("rdirection", "unidirection")
         replications = self.src_rest.get_replications()
         self.verify_filtered_items(self.src_master, self.dest_master, replications)
         if rdirection == "bidirection":
+            self.load_data(self.dest_master.ip)
             replications = self.dest_rest.get_replications()
             self.verify_filtered_items(self.dest_master, self.src_master, replications, skip_index=True)
 

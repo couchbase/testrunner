@@ -130,14 +130,14 @@ class process_stats:
 
         pythoncom.CoInitialize() # Needed when run by the same process in a thread
         if not self.perf_object_list:
-            perf_object_list = self.supported_types.keys()
+            perf_object_list = list(self.supported_types.keys())
 
         for counter_type in perf_object_list:
             strComputer = "."
             objWMIService = win32com.client.Dispatch("WbemScripting.SWbemLocator")
-            objSWbemServices = objWMIService.ConnectServer(strComputer,"root\cimv2")
+            objSWbemServices = objWMIService.ConnectServer(strComputer, "root\cimv2")
 
-            query_str = '''Select * from %s%s''' % (self.win32_perf_base,counter_type)
+            query_str = '''Select * from %s%s''' % (self.win32_perf_base, counter_type)
             colItems = objSWbemServices.ExecQuery(query_str)
 
             if len(colItems) > 0:
@@ -163,14 +163,14 @@ class process_stats:
         pythoncom.CoInitialize() # Needed when run by the same process in a thread
         proc_results_list = []
         if not self.perf_object_list:
-            perf_object_list = self.supported_types.keys()
+            perf_object_list = list(self.supported_types.keys())
 
         for counter_type in perf_object_list:
             strComputer = "."
             objWMIService = win32com.client.Dispatch("WbemScripting.SWbemLocator")
-            objSWbemServices = objWMIService.ConnectServer(strComputer,"root\cimv2")
+            objSWbemServices = objWMIService.ConnectServer(strComputer, "root\cimv2")
 
-            query_str = '''Select * from %s%s''' % (self.win32_perf_base,counter_type)
+            query_str = '''Select * from %s%s''' % (self.win32_perf_base, counter_type)
             colItems = objSWbemServices.ExecQuery(query_str)
 
             try:
@@ -198,7 +198,7 @@ class process_stats:
                                                          + str(datetime.datetime.now().microsecond)[:3]
                             proc_results_list.append(this_proc_dict)
 
-            except pywintypes.com_error, err_msg:
+            except pywintypes.com_error as err_msg:
                 # Ignore and continue (proc_mem_logger calls this function once per second)
                 continue
         return proc_results_list
@@ -237,9 +237,9 @@ if __name__ == '__main__':
         else:
             this_name = sys.argv[1]
 
-    stats_processor = process_stats(process_name_list=['process2watch'],perf_object_list=[],filter_list=[])
+    stats_processor = process_stats(process_name_list=['process2watch'], perf_object_list=[], filter_list=[])
 
     this_proc_results = stats_processor.get_pid_stats(pid=this_pid, name=this_name)
 
     for item in this_proc_results:
-        print item, '=', this_proc_results[item]
+        print(item, '=', this_proc_results[item])

@@ -52,10 +52,10 @@ def generate_index_file(storage_folder, test_file):
     db_event = Seriesly(cfg.SERIESLY_IP, 3133)['event']
     all_event_docs = db_event.get_all()
     phases_info = {}
-    for doc in all_event_docs.itervalues():
-        phases_info[int(doc.keys()[0])] = doc.values()[0]
-    phases_info.keys().sort()
-    num_phases = len(phases_info.keys())
+    for doc in all_event_docs.values():
+        phases_info[int(list(doc.keys())[0])] = list(doc.values())[0]
+    list(phases_info.keys()).sort()
+    num_phases = len(list(phases_info.keys()))
     run_id = phases_info[1]['desc']
     run_id = run_id.replace(" ", "_")
     run_id = run_id.replace(",", "_")
@@ -66,7 +66,7 @@ def generate_index_file(storage_folder, test_file):
 
     for i in range(num_phases)[1:]:
         sub_folder = storage_folder + "phase" + str(i) + "/"
-        content += "<a style=\"font-family:arial;color:black;font-size:20px;\" href=\"%s\">%s</a><p>" % ("phase" + str(i) , "phase" + str(i))
+        content += "<a style=\"font-family:arial;color:black;font-size:20px;\" href=\"%s\">%s</a><p>" % ("phase" + str(i), "phase" + str(i))
         if str(i) in tests["phases"]:
             content += json.dumps(tests["phases"][str(i)], indent=10, sort_keys=True) + "<p>"
         files = [ f for f in os.listdir(sub_folder) if os.path.isfile(os.path.join(sub_folder, f))]
@@ -100,8 +100,8 @@ def main():
                 rest = RestConnection(serverInfo)
                 buckets = [bucket.name for bucket in rest.get_buckets()]
                 break
-            except Exception, e:
-                print e
+            except Exception as e:
+                print(e)
 
     release_number = options.release_number
     platform = options.platform
@@ -117,10 +117,10 @@ def main():
 
     if None in [options.release_to_compare, options.version_to_compare]:
         if options.release_to_compare is None:
-            print "release_to_compare was not set"
+            print("release_to_compare was not set")
         if options.version_to_compare is None:
-            print "version_to_compare was not set"
-        print 'Comparison of versions to be skipped'
+            print("version_to_compare was not set")
+        print('Comparison of versions to be skipped')
     else:
         release_to_compare = options.release_to_compare
         version_to_compare = options.version_to_compare

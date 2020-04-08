@@ -78,7 +78,7 @@ class CreateDeleteViewTests(BaseTestCase):
             self.log.info("Processing Create DDoc Operation On Bucket {0}".format(bucket))
             #if there are ddocs already, add to that else start with an empty map
             ddoc_view_map = self.bucket_ddoc_map.pop(bucket, {})
-            for ddoc_count in xrange(num_ddocs):
+            for ddoc_count in range(num_ddocs):
                 design_doc_name = prefix_ddoc + str(ddoc_count)
                 view_list = []
                 #Add views if flag is true
@@ -97,12 +97,12 @@ class CreateDeleteViewTests(BaseTestCase):
             ddoc_view_map = self.bucket_ddoc_map[bucket]
             ddoc_map_loop_cnt = 0
             #iterate for all the ddocs
-            for ddoc_name, view_list in ddoc_view_map.items():
+            for ddoc_name, view_list in list(ddoc_view_map.items()):
                 if ddoc_map_loop_cnt < num_ddocs:
                     #Update views if flag is true
                     if test_with_view:
                         #iterate and update all the views as per num_views_per_ddoc
-                        for view_count in xrange(num_views_per_ddoc):
+                        for view_count in range(num_views_per_ddoc):
                             #create new View object to be updated
                             updated_view = View(view_list[start_pos_for_mutation + view_count].name, self.updated_map_func, None, False)
                             self.cluster.create_view(self.master, ddoc_name, updated_view, bucket, self.wait_timeout * 2, check_replication=check_replication)
@@ -116,11 +116,11 @@ class CreateDeleteViewTests(BaseTestCase):
             ddoc_view_map = self.bucket_ddoc_map[bucket]
             ddoc_map_loop_cnt = 0
             #iterate for all the ddocs
-            for ddoc_name, view_list in ddoc_view_map.items():
+            for ddoc_name, view_list in list(ddoc_view_map.items()):
                 if ddoc_map_loop_cnt < num_ddocs:
                     #Update views if flag is true
                     if test_with_view:
-                        for view_count in xrange(num_views_per_ddoc):
+                        for view_count in range(num_views_per_ddoc):
                             #iterate and update all the views as per num_views_per_ddoc
                             self.cluster.delete_view(self.master, ddoc_name, view_list[start_pos_for_mutation + view_count], bucket, self.wait_timeout * 2)
                         #store the updated view list
@@ -162,7 +162,7 @@ class CreateDeleteViewTests(BaseTestCase):
             tasks = []
             #if there are ddocs already, add to that else start with an empty map
             ddoc_view_map = self.bucket_ddoc_map.pop(bucket, {})
-            for ddoc_count in xrange(num_ddocs):
+            for ddoc_count in range(num_ddocs):
                 design_doc_name = prefix_ddoc + str(ddoc_count)
                 view_list = []
                 #Add views if flag is true
@@ -183,12 +183,12 @@ class CreateDeleteViewTests(BaseTestCase):
             ddoc_map_loop_cnt = 0
             #iterate for all the ddocs
             tasks = []
-            for ddoc_name, view_list in ddoc_view_map.items():
+            for ddoc_name, view_list in list(ddoc_view_map.items()):
                 if ddoc_map_loop_cnt < num_ddocs:
                     #Update views if flag is true
                     if test_with_view:
                         #iterate and update all the views as per num_views_per_ddoc
-                        for view_count in xrange(num_views_per_ddoc):
+                        for view_count in range(num_views_per_ddoc):
                             #create new View object to be updated
                             updated_view = View(view_list[start_pos_for_mutation + view_count].name, self.updated_map_func, None, False)
                             t_ = self.cluster.async_create_view(self.master, ddoc_name, updated_view, bucket, check_replication=check_replication)
@@ -206,11 +206,11 @@ class CreateDeleteViewTests(BaseTestCase):
             tasks = []
             ddoc_map_loop_cnt = 0
             #iterate for all the ddocs
-            for ddoc_name, view_list in ddoc_view_map.items():
+            for ddoc_name, view_list in list(ddoc_view_map.items()):
                 if ddoc_map_loop_cnt < num_ddocs:
                     #Update views if flag is true
                     if test_with_view:
-                        for view_count in xrange(num_views_per_ddoc):
+                        for view_count in range(num_views_per_ddoc):
                             #iterate and update all the views as per num_views_per_ddoc
                             t_ = self.cluster.async_delete_view(self.master, ddoc_name, view_list[start_pos_for_mutation + view_count], bucket)
                             tasks.append(t_)
@@ -241,8 +241,8 @@ class CreateDeleteViewTests(BaseTestCase):
         self.log.info("DDoc Validation Started")
         rest = RestConnection(self.master)
         #Iterate over all the DDocs/Views stored in the internal dictionary
-        for bucket, self.ddoc_view_map in self.bucket_ddoc_map.items():
-            for ddoc_name, view_list in self.ddoc_view_map.items():
+        for bucket, self.ddoc_view_map in list(self.bucket_ddoc_map.items()):
+            for ddoc_name, view_list in list(self.ddoc_view_map.items()):
                 try:
                     #fetch the DDoc information from the database
                     ddoc_json, header = rest.get_ddoc(bucket, ddoc_name)
@@ -267,10 +267,10 @@ class CreateDeleteViewTests(BaseTestCase):
     def _verify_ddoc_data_all_buckets(self):
         rest = RestConnection(self.master)
         query = {"stale" : "false", "full_set" : "true", "connection_timeout" : 60000}
-        for bucket, self.ddoc_view_map in self.bucket_ddoc_map.items():
-            num_items = sum([len(kv_store) for kv_store in bucket.kvs.values()])
+        for bucket, self.ddoc_view_map in list(self.bucket_ddoc_map.items()):
+            num_items = sum([len(kv_store) for kv_store in list(bucket.kvs.values())])
             self.log.info("DDoc Data Validation Started on bucket {0}. Expected Data Items {1}".format(bucket, num_items))
-            for ddoc_name, view_list in self.ddoc_view_map.items():
+            for ddoc_name, view_list in list(self.ddoc_view_map.items()):
                 for view in view_list:
                     result = self.cluster.query_view(self.master, ddoc_name, view.name, query, num_items, bucket)
                     if not result:
@@ -316,7 +316,7 @@ class CreateDeleteViewTests(BaseTestCase):
     def test_create_view_with_duplicate_name(self):
         self._load_doc_data_all_buckets()
         for bucket in self.buckets:
-            for i in xrange(2):
+            for i in range(2):
                 self._execute_ddoc_ops('create', True, 1, 1, bucket=bucket)
         self._wait_for_stats_all_buckets([self.master])
         self._verify_ddoc_ops_all_buckets()
@@ -325,7 +325,7 @@ class CreateDeleteViewTests(BaseTestCase):
     def test_create_view_same_name_parallel(self):
         self._load_doc_data_all_buckets()
         for bucket in self.buckets:
-            for i in xrange(2):
+            for i in range(2):
                 tasks = self._async_execute_ddoc_ops('create', True, 1, 1, bucket=bucket)
         for task in tasks:
             task.result(self.wait_timeout * 2)
@@ -360,7 +360,7 @@ class CreateDeleteViewTests(BaseTestCase):
             self._execute_ddoc_ops("create", self.test_with_view, self.num_ddocs, self.num_views_per_ddoc, bucket=bucket)
             if self.ddoc_ops in ["update", "delete"]:
                 self._execute_ddoc_ops(self.ddoc_ops, self.test_with_view,
-                                       self.num_ddocs / 2, self.num_views_per_ddoc / 2, bucket=bucket)
+                                       self.num_ddocs // 2, self.num_views_per_ddoc // 2, bucket=bucket)
 
         self._wait_for_stats_all_buckets([self.master])
         self._verify_ddoc_ops_all_buckets()
@@ -411,7 +411,7 @@ class CreateDeleteViewTests(BaseTestCase):
         for bucket in self.buckets:
             self._execute_ddoc_ops("create", self.test_with_view, self.num_ddocs, self.num_views_per_ddoc, bucket=bucket)
             if self.ddoc_ops in ["update", "delete"]:
-                self._execute_ddoc_ops(self.ddoc_ops, self.test_with_view, self.num_ddocs / 2, self.num_views_per_ddoc / 2, bucket=bucket)
+                self._execute_ddoc_ops(self.ddoc_ops, self.test_with_view, self.num_ddocs // 2, self.num_views_per_ddoc // 2, bucket=bucket)
         rebalance.result()
         self._wait_for_stats_all_buckets(self.servers[:self.nodes_in + 1])
         max_verify = None
@@ -436,12 +436,12 @@ class CreateDeleteViewTests(BaseTestCase):
 
         self._load_doc_data_all_buckets()
 
-        for i in reversed(range(self.num_servers)[1:]):
+        for i in reversed(list(range(self.num_servers))[1:]):
             rebalance = self.cluster.async_rebalance(self.servers[:i], [], [self.servers[i]])
             for bucket in self.buckets:
                 self._execute_ddoc_ops("create", self.test_with_view, self.num_ddocs, self.num_views_per_ddoc, "dev_ddoc" + str(i), bucket=bucket)
                 if self.ddoc_ops in ["update", "delete"]:
-                    self._execute_ddoc_ops(self.ddoc_ops, self.test_with_view, self.num_ddocs / 2, self.num_views_per_ddoc / 2, "dev_ddoc" + str(i), bucket=bucket)
+                    self._execute_ddoc_ops(self.ddoc_ops, self.test_with_view, self.num_ddocs // 2, self.num_views_per_ddoc // 2, "dev_ddoc" + str(i), bucket=bucket)
             rebalance.result()
             self._wait_for_stats_all_buckets(self.servers[:i])
             max_verify = None
@@ -479,7 +479,7 @@ class CreateDeleteViewTests(BaseTestCase):
         for bucket in self.buckets:
             self._execute_ddoc_ops("create", self.test_with_view, self.num_ddocs, self.num_views_per_ddoc, bucket=bucket)
             if self.ddoc_ops in ["update", "delete"]:
-                self._execute_ddoc_ops(self.ddoc_ops, self.test_with_view, self.num_ddocs / 2, self.num_views_per_ddoc / 2, bucket=bucket)
+                self._execute_ddoc_ops(self.ddoc_ops, self.test_with_view, self.num_ddocs // 2, self.num_views_per_ddoc // 2, bucket=bucket)
         rebalance.result()
         self._wait_for_stats_all_buckets(servs_after_rebal)
         max_verify = None
@@ -559,7 +559,7 @@ class CreateDeleteViewTests(BaseTestCase):
         for bucket in self.buckets:
             self._execute_ddoc_ops("create", self.test_with_view, self.num_ddocs, self.num_views_per_ddoc, bucket=bucket)
             if self.ddoc_ops in ["update", "delete"]:
-                self._execute_ddoc_ops(self.ddoc_ops, self.test_with_view, self.num_ddocs / 2, self.num_views_per_ddoc / 2, bucket=bucket)
+                self._execute_ddoc_ops(self.ddoc_ops, self.test_with_view, self.num_ddocs // 2, self.num_views_per_ddoc // 2, bucket=bucket)
 
         self._verify_ddoc_ops_all_buckets()
         if self.test_with_view:
@@ -579,10 +579,10 @@ class CreateDeleteViewTests(BaseTestCase):
         for bucket in self.buckets:
             if self.ddoc_ops == "create":
                 #create some more ddocs
-                tasks_ddoc = self._async_execute_ddoc_ops(self.ddoc_ops, self.test_with_view, self.num_ddocs / 2, self.num_views_per_ddoc / 2, "dev_test_1", "v1", bucket=bucket, check_replication=False)
+                tasks_ddoc = self._async_execute_ddoc_ops(self.ddoc_ops, self.test_with_view, self.num_ddocs // 2, self.num_views_per_ddoc // 2, "dev_test_1", "v1", bucket=bucket, check_replication=False)
             elif self.ddoc_ops in ["update", "delete"]:
                 #update delete the same ddocs
-                tasks_ddoc = self._async_execute_ddoc_ops(self.ddoc_ops, self.test_with_view, self.num_ddocs / 2, self.num_views_per_ddoc / 2, "dev_test", "v1", bucket=bucket, check_replication=False)
+                tasks_ddoc = self._async_execute_ddoc_ops(self.ddoc_ops, self.test_with_view, self.num_ddocs // 2, self.num_views_per_ddoc // 2, "dev_test", "v1", bucket=bucket, check_replication=False)
 
         rest = RestConnection(self.master)
         for node in self.servers[1:]:
@@ -620,7 +620,7 @@ class CreateDeleteViewTests(BaseTestCase):
         for bucket in self.buckets:
             self._execute_ddoc_ops("create", self.test_with_view, self.num_ddocs, self.num_views_per_ddoc, bucket=bucket)
             if self.ddoc_ops in ["update", "delete"]:
-                self._execute_ddoc_ops(self.ddoc_ops, self.test_with_view, self.num_ddocs / 2, self.num_views_per_ddoc / 2, bucket=bucket)
+                self._execute_ddoc_ops(self.ddoc_ops, self.test_with_view, self.num_ddocs // 2, self.num_views_per_ddoc // 2, bucket=bucket)
 
         self._verify_ddoc_ops_all_buckets()
         if self.test_with_view:
@@ -648,10 +648,10 @@ class CreateDeleteViewTests(BaseTestCase):
         for bucket in self.buckets:
             if self.ddoc_ops == "create":
                 #create some more ddocs
-                tasks_ddoc = self._async_execute_ddoc_ops(self.ddoc_ops, self.test_with_view, self.num_ddocs / 2, self.num_views_per_ddoc / 2, "dev_test_1", "v1", bucket=bucket)
+                tasks_ddoc = self._async_execute_ddoc_ops(self.ddoc_ops, self.test_with_view, self.num_ddocs // 2, self.num_views_per_ddoc // 2, "dev_test_1", "v1", bucket=bucket)
             elif self.ddoc_ops in ["update", "delete"]:
                 #update delete the same ddocs
-                tasks_ddoc = self._async_execute_ddoc_ops(self.ddoc_ops, self.test_with_view, self.num_ddocs / 2, self.num_views_per_ddoc / 2, "dev_test", "v1", bucket=bucket)
+                tasks_ddoc = self._async_execute_ddoc_ops(self.ddoc_ops, self.test_with_view, self.num_ddocs // 2, self.num_views_per_ddoc // 2, "dev_test", "v1", bucket=bucket)
 
         #failover nodes
         self.cluster.failover(self.servers[:self.num_servers],
@@ -670,7 +670,7 @@ class CreateDeleteViewTests(BaseTestCase):
         for bucket in self.buckets:
             self._execute_ddoc_ops("create", self.test_with_view, self.num_ddocs, self.num_views_per_ddoc, "dev_test_2", "v2", bucket=bucket)
             if self.ddoc_ops in ["update", "delete"]:
-                self._execute_ddoc_ops(self.ddoc_ops, self.test_with_view, self.num_ddocs / 2, self.num_views_per_ddoc / 2, "dev_test_2", "v2", bucket=bucket)
+                self._execute_ddoc_ops(self.ddoc_ops, self.test_with_view, self.num_ddocs // 2, self.num_views_per_ddoc // 2, "dev_test_2", "v2", bucket=bucket)
 
         #wait for persistence before verification
         self._wait_for_stats_all_buckets(self.servers[:self.num_servers - self.nodes_out])
@@ -687,7 +687,7 @@ class CreateDeleteViewTests(BaseTestCase):
         for bucket in self.buckets:
             self._execute_ddoc_ops("create", self.test_with_view, self.num_ddocs, self.num_views_per_ddoc, "dev_test", "v2")
             if self.ddoc_ops in ["update", "delete"]:
-                self._execute_ddoc_ops(self.ddoc_ops, self.test_with_view, self.num_ddocs / 2, self.num_views_per_ddoc / 2, "dev_test", "v2")
+                self._execute_ddoc_ops(self.ddoc_ops, self.test_with_view, self.num_ddocs // 2, self.num_views_per_ddoc // 2, "dev_test", "v2")
         self._verify_ddoc_ops_all_buckets()
 
     """Remove the master node while doing design doc/view operations."""
@@ -711,10 +711,10 @@ class CreateDeleteViewTests(BaseTestCase):
         for bucket in self.buckets:
             if self.ddoc_ops == "create":
                 #create some more ddocs
-                tasks_ddoc = self._async_execute_ddoc_ops(self.ddoc_ops, self.test_with_view, self.num_ddocs / 2, self.num_views_per_ddoc / 2, "dev_test_1", "v1", bucket=bucket)
+                tasks_ddoc = self._async_execute_ddoc_ops(self.ddoc_ops, self.test_with_view, self.num_ddocs // 2, self.num_views_per_ddoc // 2, "dev_test_1", "v1", bucket=bucket)
             elif self.ddoc_ops in ["update", "delete"]:
                 #update delete the same ddocs
-                tasks_ddoc = self._async_execute_ddoc_ops(self.ddoc_ops, self.test_with_view, self.num_ddocs / 2, self.num_views_per_ddoc / 2, "dev_test", "v1", bucket=bucket)
+                tasks_ddoc = self._async_execute_ddoc_ops(self.ddoc_ops, self.test_with_view, self.num_ddocs // 2, self.num_views_per_ddoc // 2, "dev_test", "v1", bucket=bucket)
 
         self.log.info("rebalance out the master node")
         self.cluster.rebalance(self.servers[:self.num_servers], [], self.servers[:1])
@@ -749,8 +749,8 @@ class CreateDeleteViewTests(BaseTestCase):
                                 self.num_views_per_ddoc, bucket=bucket)
 
         # start fragmentation monitor
-        for bucket, ddoc_view_map in self.bucket_ddoc_map.items():
-            for ddoc_name, view_list in ddoc_view_map.items():
+        for bucket, ddoc_view_map in list(self.bucket_ddoc_map.items()):
+            for ddoc_name, view_list in list(ddoc_view_map.items()):
                 fragmentation_monitor = self.cluster.async_monitor_view_fragmentation(self.master,
                                                                                       ddoc_name,
                                                                                       self.fragmentation_value,
@@ -771,12 +771,12 @@ class CreateDeleteViewTests(BaseTestCase):
 
                 #create more ddocs, update/delete existing depending on the ddoc_ops type
                 if self.ddoc_ops == "create":
-                    self._execute_ddoc_ops(self.ddoc_ops, self.test_with_view, self.num_ddocs / 2,
-                                           self.num_views_per_ddoc / 2, "dev_test_1", "v1", bucket=bucket)
+                    self._execute_ddoc_ops(self.ddoc_ops, self.test_with_view, self.num_ddocs // 2,
+                                           self.num_views_per_ddoc // 2, "dev_test_1", "v1", bucket=bucket)
 
                 elif self.ddoc_ops in ["update", "delete"]:
-                    self._execute_ddoc_ops(self.ddoc_ops, self.test_with_view, self.num_ddocs / 2,
-                                           self.num_views_per_ddoc / 2, "dev_test", "v1", bucket=bucket)
+                    self._execute_ddoc_ops(self.ddoc_ops, self.test_with_view, self.num_ddocs // 2,
+                                           self.num_views_per_ddoc // 2, "dev_test", "v1", bucket=bucket)
 
                 result = compaction_task.result()
                 self.assertTrue(result)
@@ -797,8 +797,8 @@ class CreateDeleteViewTests(BaseTestCase):
         # run queries to create indexes
         query_ops = []
         query = {"stale" : "false"}
-        for bucket, self.ddoc_view_map in self.bucket_ddoc_map.items():
-            for ddoc_name, view_list in self.ddoc_view_map.items():
+        for bucket, self.ddoc_view_map in list(self.bucket_ddoc_map.items()):
+            for ddoc_name, view_list in list(self.ddoc_view_map.items()):
                 for view in view_list:
                     query_ops.append(self.cluster.async_query_view(self.master, ddoc_name, view.name, query))
 
@@ -913,8 +913,8 @@ class CreateDeleteViewTests(BaseTestCase):
         self.sleep(60, "Node {0} should be warming up".format(server.ip))
         ClusterOperationHelper.wait_for_ns_servers_or_assert([server], self, wait_if_warmup=True)
         self._wait_for_stats_all_buckets(self.servers[:self.nodes_init])
-        for bucket, ddoc_view_map in self.bucket_ddoc_map.items():
-            for ddoc_name, view_list in ddoc_view_map.items():
+        for bucket, ddoc_view_map in list(self.bucket_ddoc_map.items()):
+            for ddoc_name, view_list in list(ddoc_view_map.items()):
                     for view in view_list:
                         self.cluster.query_view(server, ddoc_name, view.name, query, self.num_items)
         self._verify_ddoc_ops_all_buckets()
@@ -928,11 +928,11 @@ class CreateDeleteViewTests(BaseTestCase):
         tasks = []
         if self.ddoc_ops in ["update", "delete"]:
             for bucket in self.buckets:
-                tasks = self._async_execute_ddoc_ops(self.ddoc_ops, self.test_with_view, self.num_ddocs / 2,
-                                                        self.num_views_per_ddoc / 2, "dev_test", "v1", bucket=bucket)
+                tasks = self._async_execute_ddoc_ops(self.ddoc_ops, self.test_with_view, self.num_ddocs // 2,
+                                                        self.num_views_per_ddoc // 2, "dev_test", "v1", bucket=bucket)
         elif self.ddoc_ops == "query":
-            for bucket, self.ddoc_view_map in self.bucket_ddoc_map.items():
-                for ddoc_name, view_list in self.ddoc_view_map.items():
+            for bucket, self.ddoc_view_map in list(self.bucket_ddoc_map.items()):
+                for ddoc_name, view_list in list(self.ddoc_view_map.items()):
                     for view in view_list:
                         query = {"stale" : "false", "full_set" : "true"}
                         tasks.append(self.cluster.async_query_view(self.master, ddoc_name, view.name, query))
@@ -1001,7 +1001,7 @@ class CreateDeleteViewTests(BaseTestCase):
                 for thread in threads:
                     thread.start()
                     time.sleep(10)
-                for i in xrange(10):
+                for i in range(10):
                     o, r = shell.execute_command("echo beam | xargs -n1 pgrep | xargs -n1 -r -- lsof -n -p | grep deleted")
                     shell.log_command_output(o, r)
                     if o:
@@ -1113,7 +1113,7 @@ class CreateDeleteViewTests(BaseTestCase):
                                                     self.src_master.rest_username,
                                                     self.src_master.rest_password)
                 output, _ = self.shell.execute_command(cmd)
-            self.assertEquals(len(output), 0, "View engine errors found in %s" % self.master.ip)
+            self.assertEqual(len(output), 0, "View engine errors found in %s" % self.master.ip)
             self.log.info("No View engine errors in %s" % self.master.ip)
 
             self.shell.delete_files(zip_file)

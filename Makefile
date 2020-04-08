@@ -22,10 +22,10 @@ test:
 	scripts/start_cluster_and_run_tests.sh b/resources/dev.ini $(TESTNAME)
 
 dcp-test:
-	python testrunner.py -i b/resources/dev-4-nodes.ini -c conf/py-dcp.conf -p skip_cleanup=False,dev=True,test=$(TEST)
+	python3 testrunner.py -i b/resources/dev-4-nodes.ini -c conf/py-dcp.conf -p skip_cleanup=False,dev=True,test=$(TEST)
 
 simple-test:
-	python scripts/start_cluster_and_run_tests.py $(MAKE) b/resources/dev-4-nodes-xdcr.ini conf/simple.conf $(VERBOSE) $(DEBUG)
+	python3 scripts/start_cluster_and_run_tests.py $(MAKE) b/resources/dev-4-nodes-xdcr.ini conf/simple.conf $(VERBOSE) $(DEBUG)
 
 #test-views:
 #	scripts/start_cluster_and_run_tests.sh b/resources/dev-4-nodes.ini conf/py-view.conf
@@ -60,7 +60,7 @@ e2e-kv-single-node:
 	scripts/start_cluster_and_run_tests.sh b/resources/dev.ini conf/py-all-dev.conf
 
 test-eventing-sanity-tests:
-	python scripts/start_cluster_and_run_tests.py $(MAKE) b/resources/dev-4-nodes-xdcr_n1ql_2i.ini conf/eventing/eventing_sanity.conf $(VERBOSE) $(DEBUG)
+	python3 scripts/start_cluster_and_run_tests.py $(MAKE) b/resources/dev-4-nodes-xdcr_n1ql_2i.ini conf/eventing/eventing_sanity.conf $(VERBOSE) $(DEBUG)
 
 test-xdcr-merge:
 	scripts/start_cluster_and_run_tests.sh b/resources/dev-4-nodes-xdcr.ini conf/py-xdcrmerge.conf

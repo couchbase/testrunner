@@ -60,7 +60,7 @@ class RebalanceStartStopTests(RebalanceBaseTest):
                             .format(expected_progress))
             if not RestHelper(rest).is_cluster_rebalanced():
                 self.log.info("Stop the rebalance")
-                stopped = rest.stop_rebalance(wait_timeout=self.wait_timeout / 3)
+                stopped = rest.stop_rebalance(wait_timeout=self.wait_timeout // 3)
                 self.assertTrue(stopped, msg="Unable to stop rebalance")
             rebalance.result()
             if RestHelper(rest).is_cluster_rebalanced():
@@ -287,7 +287,7 @@ class RebalanceStartStopTests(RebalanceBaseTest):
                         .format(expected_progress))
         if not RestHelper(rest).is_cluster_rebalanced():
             self.log.info("Stop the rebalance")
-            stopped = rest.stop_rebalance(wait_timeout=self.wait_timeout / 3)
+            stopped = rest.stop_rebalance(wait_timeout=self.wait_timeout // 3)
             self.assertTrue(stopped, msg="Unable to stop rebalance")
             self._verify_all_buckets(self.master, timeout=None,
                                      max_verify=self.max_verify, batch_size=1)

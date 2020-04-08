@@ -60,16 +60,16 @@ class SysCatalogTests(QueryTests):
         result = self.run_cbq_query()
         buckets = [bucket.name for bucket in self.buckets]
         self.log.info(result)
-        self.assertFalse(set(buckets) - set([b['keyspaces']['id'] for b in result['results']]),
+        self.assertFalse(set(buckets) - {b['keyspaces']['id'] for b in result['results']},
                         "Expected ids: %s. Actual result: %s" % (buckets, result))
-        self.assertFalse(set(buckets) - set([b['keyspaces']['name'] for b in result['results']]),
+        self.assertFalse(set(buckets) - {b['keyspaces']['name'] for b in result['results']},
                         "Expected names: %s. Actual result: %s" % (buckets, result))
         pools = self.run_cbq_query(query='SELECT * FROM system:namespaces')
-        self.assertFalse(set([b['keyspaces']['namespace_id'] for b in result['results']]) -\
-                        set([p['namespaces']['id'] for p in pools['results']]),
+        self.assertFalse({b['keyspaces']['namespace_id'] for b in result['results']} -\
+                        {p['namespaces']['id'] for p in pools['results']},
                         "Expected pools: %s, actual: %s" % (pools, result))
-        self.assertFalse(set([b['keyspaces']['datastore_id'] for b in result['results']]) -\
-                        set([p['namespaces']['datastore_id'] for p in pools['results']]),
+        self.assertFalse({b['keyspaces']['datastore_id'] for b in result['results']} -\
+                        {p['namespaces']['datastore_id'] for p in pools['results']},
                         "Expected site_ids: %s, actual: %s" % (pools, result))
 
     def test_prepared_buckets(self):

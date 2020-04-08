@@ -60,7 +60,7 @@ class StatsCrashRepro(BaseTestCase):
     def _run_get(self):
         server = self.servers[0]
         mc_conn = MemcachedClientHelper.direct_client(server, self.bucket_name, self.timeout)
-        for i in xrange(self.num_items):
+        for i in range(self.num_items):
             key = "warmup{0}".format(i)
             mc_conn.get(key)
 
@@ -93,7 +93,7 @@ class StatsCrashRepro(BaseTestCase):
             RebalanceHelper.wait_for_persistence(self.nodes_server[0], bucket, bucket_type=self.bucket_type)
 
 
-        while 1:
+        while True:
 
 #            read_data_task = self.cluster.async_verify_data(self.master, self.buckets[0], self.buckets[0].kvs[1])
 
@@ -106,7 +106,7 @@ class StatsCrashRepro(BaseTestCase):
                 stats_all_thread = []
                 stats_reset_thread = []
 
-                for i in xrange(self.threads_to_run):
+                for i in range(self.threads_to_run):
                     stat_str = ''
                     stats_all_thread.append(Thread(target=self._get_stats, args=[stat_str]))
                     stats_all_thread[i].start()
@@ -115,7 +115,7 @@ class StatsCrashRepro(BaseTestCase):
                     stats_reset_thread[i].start()
 
 
-                for i in xrange(self.threads_to_run):
+                for i in range(self.threads_to_run):
                     stats_all_thread[i].join()
                     stats_reset_thread[i].join()
 

@@ -3,7 +3,10 @@ import os
 from basetestcase import BaseTestCase
 
 
-from sdk_client import SDKClient
+try:
+    from sdk_client import SDKClient
+except:
+    from sdk_client3 import SDKClient
 
 
 from memcached.helper.data_helper import VBucketAwareMemcached, MemcachedClientHelper
@@ -53,7 +56,7 @@ class LWWStatsTests(BaseTestCase):
         self.log.info("Executing command: %s"%cmd)
         try:
             os.system(cmd)
-        except Exception,err:
+        except Exception as err:
             self.fail('Exception occurred: %s'%str(err))
         time.sleep(10)
         cl_stats = client.stats()
@@ -104,13 +107,13 @@ class LWWStatsTests(BaseTestCase):
         payload = "name={0}&roles=admin&password=password".format(
             self.buckets[0].name)
         self.rest.add_set_builtin_user(self.buckets[0].name, payload)
-        sdk_client = SDKClient(scheme='couchbase',hosts = [self.servers[0].ip], bucket = self.buckets[0].name)
+        sdk_client = SDKClient(scheme='couchbase', hosts = [self.servers[0].ip], bucket = self.buckets[0].name)
         mc_client = MemcachedClientHelper.direct_client(self.servers[0], self.buckets[0])
         # move the system clock ahead to poison the CAS
         shell = RemoteMachineShellConnection(self.servers[0])
         self.assertTrue(  shell.change_system_time( LWWStatsTests.ONE_HOUR_IN_SECONDS ), 'Failed to advance the clock')
 
-        output,error = shell.execute_command('date')
+        output, error = shell.execute_command('date')
         self.log.info('Date after is set forward {0}'.format( output ))
         rc = sdk_client.set('key1', 'val1')
         rc = mc_client.get('key1' )
@@ -126,14 +129,14 @@ class LWWStatsTests(BaseTestCase):
         use_mc_bin_client = self.input.param("use_mc_bin_client", True)
 
         if use_mc_bin_client:
-            rc = mc_client.set('key2',0,0,'val2')
+            rc = mc_client.set('key2', 0, 0, 'val2')
             second_poisoned_cas = rc[1]
         else:
             rc = sdk_client.set('key2', 'val2')
             second_poisoned_cas = rc.cas
         self.log.info('The second_poisoned CAS is {0}'.format(second_poisoned_cas))
         self.assertTrue(  second_poisoned_cas > poisoned_cas,
-                'Second poisoned CAS {0} is not larger than the first poisoned cas'.format(second_poisoned_cas,poisoned_cas))
+                'Second poisoned CAS {0} is not larger than the first poisoned cas'.format(second_poisoned_cas, poisoned_cas))
         # reset the CAS for all vbuckets. This needs to be done in conjunction with a clock change. If the clock is not
         # changed then the CAS will immediately continue with the clock. I see two scenarios:
         # 1. Set the clock back 1 hours and the CAS back 30 minutes, the CAS should be used
@@ -149,7 +152,7 @@ class LWWStatsTests(BaseTestCase):
         for i in range(self.vbuckets):
             max_cas = int( mc_client.stats('vbucket-details')['vb_' + str(i) + ':max_cas'] )
             self.assertTrue(max_cas == earlier_max_cas,
-                    'Max CAS not properly set for vbucket {0} set as {1} and observed {2}'.format(i,earlier_max_cas, max_cas ) )
+                    'Max CAS not properly set for vbucket {0} set as {1} and observed {2}'.format(i, earlier_max_cas, max_cas ) )
             self.log.info('Per cbstats the max cas for bucket {0} is {1}'.format(i, max_cas) )
 
         rc1 = sdk_client.set('key-after-resetting cas', 'val1')
@@ -163,7 +166,7 @@ class LWWStatsTests(BaseTestCase):
         self._load_all_buckets(self.master, gen_load, "create", 0)
         gen_load.reset()
         while gen_load.has_next():
-            key, value = gen_load.next()
+            key, value = next(gen_load)
             try:
                 rc = mc_client.get( key )
                 #rc = sdk_client.get(key)
@@ -221,7 +224,7 @@ class LWWStatsTests(BaseTestCase):
         current_time_cas = rc.cas
 
         test_key = 'test-set-with-metaxxxx'
-        vbId = (((zlib.crc32(test_key)) >> 16) & 0x7fff) & (self.vbuckets- 1)
+        vbId = (((zlib.crc32(test_key.encode())) >> 16) & 0x7fff) & (self.vbuckets- 1)
 
         #import pdb;pdb.set_trace()
         # verifying the case where we are within the threshold, do a set and del, neither should trigger
@@ -290,7 +293,7 @@ class LWWStatsTests(BaseTestCase):
         payload = "name={0}&roles=admin&password=password".format(
             self.buckets[0].name)
         self.rest.add_set_builtin_user(self.buckets[0].name, payload)
-        sdk_client = SDKClient(scheme='couchbase',hosts = [self.servers[0].ip], bucket = self.buckets[0].name)
+        sdk_client = SDKClient(scheme='couchbase', hosts = [self.servers[0].ip], bucket = self.buckets[0].name)
         mc_client = MemcachedClientHelper.direct_client(self.servers[0], self.buckets[0])
         shell = RemoteMachineShellConnection(self.servers[0])
 
