@@ -904,7 +904,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         bk_dir = self.backupset.directory
         if ipv6_raw_ip:
             bk_dir = bk_raw_ipv6_dir
-        command = "grep 'Transfer plan finished successfully' " + bk_dir + \
+        command = "grep 'Restore completed successfully' " + bk_dir + \
                   "/logs/{0}".format(bk_log_file_name)
         output, error = remote_client.execute_command(command)
         if self.debug_logs:
