@@ -5132,6 +5132,8 @@ class RestParser(object):
                 if storageTotals["ram"].get("total"):
                     ramKB = storageTotals["ram"]["total"]
                     node.storageTotalRam = ramKB/(1024*1024)
+                    if node.mcdMemoryReserved == 0:
+                        node.mcdMemoryReserved = node.storageTotalRam
 
                     if IS_CONTAINER:
                         # the storage total values are more accurate than
