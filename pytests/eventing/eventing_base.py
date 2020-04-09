@@ -289,6 +289,22 @@ class EventingBaseTest(QueryHelperTests, BaseTestCase):
             log.debug("Full Stats for Node {0} is \n{1} ".format(eventing_node.ip, json.dumps(full_out, sort_keys=True,
                                                                                             indent=4)))
 
+    def getActualMutations(self, num_nodes, name, on_delete):
+        actual_dcp_mutations = 0
+        if num_nodes <= 1:
+            stats = self.rest.get_event_processing_stats(name)
+        else:
+            stats = self.rest.get_aggregate_event_processing_stats(name)
+
+        if on_delete:
+            if "dcp_deletion" in stats:
+                actual_dcp_mutations = stats["dcp_deletion"]
+            if "dcp_expiration" in stats:
+                actual_dcp_mutations += stats["dcp_expiration"]
+        else:
+            actual_dcp_mutations = stats["dcp_mutation"]
+        return actual_dcp_mutations
+
     def eventing_stats(self):
         self.sleep(30)
         content=self.rest.get_all_eventing_stats()

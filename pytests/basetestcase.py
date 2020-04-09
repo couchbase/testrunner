@@ -1791,7 +1791,7 @@ class BaseTestCase(unittest.TestCase):
                         map[vbucket]['purge_seqno'] = purge_seqno
                         nodeMap[vbucket] = node
             bucketMap[bucket] = map
-        self.assertTrue(logic, output)
+            self.assertTrue(logic, output)
         return bucketMap
 
     def print_results_per_node(self, map):
