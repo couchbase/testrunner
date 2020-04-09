@@ -139,11 +139,12 @@ class NodeInitializeTask(Task):
                 print("debuging hanging issue task 127" + str(error))
                 self.set_exception(error)
                 return
+        self.log.info("server: %s, nodes/self ", self.server)
         info = Future.wait_until(lambda: rest.get_nodes_self(),
-                                 lambda x: x.memoryTotal > 0,
+                                 lambda x: x.memoryTotal > 0 or x.storageTotalRam > 0,
                                  timeout_secs=60, interval_time=0.1,
                                  exponential_backoff=False)
-        self.log.info("server: %s, nodes/self: %s", self.server, info.__dict__)
+        self.log.info(" %s", info.__dict__)
 
         username = self.server.rest_username
         password = self.server.rest_password
