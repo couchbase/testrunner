@@ -7,6 +7,7 @@ import string
 import time
 from optparse import OptionParser
 import traceback
+import paramiko
 
 from couchbase import Couchbase
 from couchbase.bucket import Bucket
@@ -22,6 +23,8 @@ POLL_INTERVAL = 60
 SERVER_MANAGER = '172.23.105.177:8081'
 TEST_SUITE_DB = '172.23.105.177'
 TIMEOUT = 60
+SSH_NUM_RETRIES = 3
+SSH_POLL_INTERVAL = 20
 
 def getNumberOfServers(iniFile):
     f = open(iniFile)
@@ -39,10 +42,92 @@ def getNumberOfAddpoolServers(iniFile, addPoolId):
     except:
         return 0
 
+def get_ssh_username(iniFile):
+    f = open(iniFile)
+    contents = f.readlines()
+    for line in contents:
+        if "username:" in line:
+            arr = line.split(":")[1:]
+            username = arr[0].rstrip()
+            return username
+    return ""
+
+def get_ssh_password(iniFile):
+    f = open(iniFile)
+    contents = f.readlines()
+    for line in contents:
+        if "password:" in line:
+            arr = line.split(":")[1:]
+            password = arr[0].rstrip()
+            return password
+    return ""
 
 def rreplace(str, pattern, num_replacements):
     return str.rsplit(pattern, num_replacements)[0]
 
+def get_available_servers_count(options=None, is_addl_pool=False):
+    # this bit is Docker/VM dependent
+    getAvailUrl = 'http://' + SERVER_MANAGER + '/getavailablecount/'
+    pool_id = options.addPoolId if is_addl_pool == True else options.poolId
+    if options.serverType.lower() == 'docker':
+        # may want to add OS at some point
+        getAvailUrl = getAvailUrl + 'docker?os={0}&poolId={1}'.format(options.os, pool_id)
+    else:
+        getAvailUrl = getAvailUrl + '{0}?poolId={1}'.format(options.os, pool_id)
+
+    response, content = httplib2.Http(timeout=60).request(getAvailUrl, 'GET')
+    if response.status != 200:
+        print(time.asctime(time.localtime(time.time())), 'invalid server response', content)
+        time.sleep(POLL_INTERVAL)
+    elif int(content) == 0:
+        print(time.asctime(time.localtime(time.time())), 'no VMs')
+        time.sleep(POLL_INTERVAL)
+    else:
+        return int(content)
+
+def get_servers(options=None, descriptor="", test=None, how_many=0, is_addl_pool=False):
+    pool_id = options.addPoolId if is_addl_pool == True else options.poolId
+    if options.serverType.lower() == 'docker':
+        getServerURL = 'http://' + SERVER_MANAGER + '/getdockers/{0}?count={1}&os={2}&poolId={3}'. \
+                           format(descriptor, how_many, options.os, pool_id)
+
+    else:
+        getServerURL = 'http://' + SERVER_MANAGER + '/getservers/{0}?count={1}&expiresin={2}&os={3}&poolId={4}'. \
+                           format(descriptor, how_many, test['timeLimit'], options.os, pool_id)
+    print(('getServerURL', getServerURL))
+
+    response, content = httplib2.Http(timeout=60).request(getServerURL, 'GET')
+    print(('response.status', response, content))
+    if response.status == 499:
+        time.sleep(POLL_INTERVAL)  # some error checking here at some point
+    return json.loads(content)
+
+def check_servers_via_ssh(servers=[], test=None):
+    alive_servers = []
+    bad_servers = []
+    for server in servers:
+        if is_vm_alive(server=server, ssh_username=test['ssh_username'], ssh_password=test['ssh_password']):
+            alive_servers.append(server)
+        else:
+            bad_servers.append(server)
+    return alive_servers, bad_servers
+
+def is_vm_alive(server="", ssh_username="", ssh_password=""):
+    num_retries = 1
+    while num_retries <= SSH_NUM_RETRIES:
+        try:
+            ssh = paramiko.SSHClient()
+            ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            ssh.connect(hostname=server, username=ssh_username, password=ssh_password)
+            return True
+        except Exception as e:
+            print("Exception occured while trying to establish ssh connection with {0}: {1}".format(server, str(e)))
+            num_retries = num_retries +1
+            time.sleep(SSH_POLL_INTERVAL)
+            continue
+
+    print("{0} is unreachable. Tried to establish ssh connection {1} times".format(server, num_retries))
+    return False
 
 def main():
     usage = '%prog -s suitefile -v version -o OS'
@@ -71,6 +156,10 @@ def main():
     parser.add_option('-x','--server_manager', dest='SERVER_MANAGER',
                       default='172.23.105.177:8081')
     parser.add_option('-z', '--timeout', dest='TIMEOUT', default = '60')
+    parser.add_option('-w', '--check_vm', dest='check_vm', default="True")
+    parser.add_option('--ssh_poll_interval', dest='SSH_POLL_INTERVAL', default="20")
+    parser.add_option('--ssh_num_retries', dest='SSH_NUM_RETRIES', default="3")
+
 
     # set of parameters for testing purposes.
     #TODO: delete them after successful testing
@@ -89,7 +178,7 @@ def main():
 
     print(('nolaunch', options.noLaunch))
     print(('os', options.os))
-    # print 'url', options.url
+    # print('url', options.url)
 
     print(('url is', options.url))
     print(('cherrypick command is', options.cherrypick))
@@ -104,6 +193,10 @@ def main():
         SERVER_MANAGER=options.SERVER_MANAGER
     if options.TIMEOUT:
         TIMEOUT=int(options.TIMEOUT)
+    if options.SSH_POLL_INTERVAL:
+        SSH_POLL_INTERVAL=int(options.SSH_POLL_INTERVAL)
+    if options.SSH_NUM_RETRIES:
+        SSH_NUM_RETRIES=int(options.SSH_NUM_RETRIES)
 
     # What do we do with any reported parameters?
     # 1. Append them to the extra (testrunner) parameters
@@ -226,6 +319,8 @@ def main():
                             'confFile': data['confFile'],
                             'iniFile': data['config'],
                             'serverCount': getNumberOfServers(data['config']),
+                            'ssh_username': get_ssh_username(data['config']),
+                            'ssh_password': get_ssh_password(data['config']),
                             'addPoolServerCount': addPoolServerCount,
                             'timeLimit': data['timeOut'],
                             'parameters': data['parameters'],
@@ -286,28 +381,14 @@ def main():
 
 
     summary = []
+    servers = []
 
     while len(testsToLaunch) > 0:
         try:
             # this bit is Docker/VM dependent
-            getAvailUrl = 'http://' + SERVER_MANAGER + '/getavailablecount/'
-            if options.serverType.lower() == 'docker':
-                # may want to add OS at some point
-                getAvailUrl = getAvailUrl + 'docker?os={0}&poolId={1}'.format(options.os, options.poolId)
-            else:
-                getAvailUrl = getAvailUrl + '{0}?poolId={1}'.format(options.os, options.poolId)
-
-            print(("URL:" + getAvailUrl))
-            response, content = httplib2.Http(timeout=TIMEOUT).request(getAvailUrl , 'GET')
-            if response.status != 200:
-                print((time.asctime(time.localtime(time.time())), 'invalid server response', content))
-                time.sleep(POLL_INTERVAL)
-            elif int(content) == 0:
-                print((time.asctime(time.localtime(time.time())), 'no VMs'))
-                time.sleep(POLL_INTERVAL)
-            else:
+            serverCount = get_available_servers_count(options=options)
+            if serverCount > 0:
                 # see if we can match a test
-                serverCount = int(content)
                 print((time.asctime(time.localtime(time.time())), 'there are', serverCount, ' servers available'))
 
                 haveTestToLaunch = False
@@ -315,29 +396,15 @@ def main():
                 while not haveTestToLaunch and i < len(testsToLaunch):
                     if testsToLaunch[i]['serverCount'] <= serverCount:
                         if testsToLaunch[i]['addPoolServerCount']:
-                            getAddPoolUrl = 'http://' + SERVER_MANAGER + '/getavailablecount/'
-                            if options.serverType.lower() == 'docker':
-                                # may want to add OS at some point
-                                getAddPoolUrl = getAddPoolUrl + 'docker?os={0}&poolId={1}'.format(
-                                    addPoolServer_os, options.addPoolId)
-                            else:
-                                getAddPoolUrl = getAddPoolUrl + '{0}?poolId={1}'.format(
-                                    addPoolServer_os, options.addPoolId)
-
-                            response, content = httplib2.Http(
-                                timeout=TIMEOUT).request(getAddPoolUrl, 'GET')
-                            if response.status != 200:
-                                print((time.asctime(time.localtime(
-                                    time.time())), 'invalid server response', content))
-                                time.sleep(POLL_INTERVAL)
-                            elif int(content) == 0:
-                                print((time.asctime(
-                                    time.localtime(time.time())), \
-                                    'no {0} VMs at this time'.format(options.addPoolId)))
+                            addlServersCount = get_available_servers_count(options=options, is_addl_pool=True)
+                            if addlServersCount == 0:
+                                print(time.asctime(time.localtime(time.time())), 'no {0} VMs at this time'.format(
+                                    options.addPoolId))
                                 i = i + 1
                             else:
-                                print((time.asctime(time.localtime(time.time())), \
-                                      "there are {0} {1} servers available".format(int(content), options.addPoolId)))
+                                print(time.asctime(
+                                    time.localtime(time.time())), "there are {0} {1} servers available".format(
+                                    addlServersCount, options.addPoolId))
                                 haveTestToLaunch = True
                         else:
                             haveTestToLaunch = True
@@ -358,127 +425,123 @@ def main():
 
                     # grab the server resources
                     # this bit is Docker/VM dependent
-                    if options.serverType.lower() == 'docker':
-                        getServerURL = 'http://' + SERVER_MANAGER + \
-                                       '/getdockers/{0}?count={1}&os={2}&poolId={3}'. \
-                                           format(descriptor, testsToLaunch[i]['serverCount'], \
-                                                  options.os, options.poolId)
-
-                    else:
-                        getServerURL = 'http://' + SERVER_MANAGER + \
-                                       '/getservers/{0}?count={1}&expiresin={2}&os={3}&poolId={4}'. \
-                                           format(descriptor, testsToLaunch[i]['serverCount'],
-                                                  testsToLaunch[i]['timeLimit'], \
-                                                  options.os, options.poolId)
-                    print(('getServerURL', getServerURL))
-
-                    response, content = httplib2.Http(timeout=TIMEOUT).request(getServerURL, 'GET')
-                    print(('response.status', response, content))
+                    servers = []
+                    unreachable_servers = []
+                    how_many = testsToLaunch[i]['serverCount'] - len(servers)
+                    while how_many > 0:
+                        unchecked_servers = get_servers(options=options, descriptor=descriptor, test=testsToLaunch[i],
+                                                    how_many=how_many)
+                        if options.check_vm == "True":
+                            checked_servers, bad_servers = check_servers_via_ssh(servers=unchecked_servers,
+                                                                             test=testsToLaunch[i])
+                            for ss in checked_servers:
+                                servers.append(ss)
+                            for ss in bad_servers:
+                                unreachable_servers.append(ss)
+                        else:
+                            for ss in unchecked_servers:
+                                servers.append(ss)
+                        how_many = testsToLaunch[i]['serverCount'] - len(servers)
 
                     if options.serverType.lower() != 'docker':
                         # sometimes there could be a race, before a dispatcher process acquires vms,
                         # another waiting dispatcher process could grab them, resulting in lesser vms
                         # for the second dispatcher process
-                        if len(json.loads(content)) != testsToLaunch[i]['serverCount']:
+                        if len(servers) != testsToLaunch[i]['serverCount']:
                             continue
 
                     # get additional pool servers as needed
+                    addl_servers = []
                     if testsToLaunch[i]['addPoolServerCount']:
-                        if options.serverType.lower() == 'docker':
-                             getServerURL = 'http://' + SERVER_MANAGER + \
-                                    '/getdockers/{0}?count={1}&os={2}&poolId={3}'. \
-                               format(descriptor,
-                                      testsToLaunch[i]['addPoolServerCount'],
-                                      addPoolServer_os,
-                                      options.addPoolId)
+                        how_many_addl = testsToLaunch[i]['addPoolServerCount'] - len(addl_servers)
+                        while how_many_addl > 0:
+                            unchecked_servers = get_servers(options=options, descriptor=descriptor, test=testsToLaunch[i], how_many=how_many_addl, is_addl_pool=True)
+                            if options.check_vm == "True":
+                                checked_servers, bad_servers = check_servers_via_ssh(servers=unchecked_servers, test=testsToLaunch[i])
+                                for ss in checked_servers:
+                                    addl_servers.append(ss)
+                                for ss in bad_servers:
+                                    unreachable_servers.append(ss)
+                            else:
+                                for ss in unchecked_servers:
+                                    addl_servers.append(ss)
+                            how_many_addl = testsToLaunch[i]['addPoolServerCount'] - len(addl_servers)
 
-                        else:
-                            getServerURL = 'http://' + SERVER_MANAGER + \
-                                    '/getservers/{0}?count={1}&expiresin={2}&os={3}&poolId={4}'. \
-                               format(descriptor,
-                                      testsToLaunch[i]['addPoolServerCount'],
-                                      testsToLaunch[i]['timeLimit'], \
-                                      addPoolServer_os,
-                                      options.addPoolId)
-                        print('getServerURL', getServerURL)
+                    # and send the request to the test executor
 
-                        response2, content2 = httplib2.Http(timeout=TIMEOUT).request(getServerURL,
-                                                                                 'GET')
-                        content2 = content2.decode('utf-8')
-
-                        print(('response2.status', response2, content2))
-
-                    if response.status == 499 or \
-                            (testsToLaunch[i]['addPoolServerCount'] and
-                             response2.status == 499):
-                        time.sleep(POLL_INTERVAL)  # some error checking here at some point
+                    # figure out the parameters, there are test suite specific, and added at dispatch time
+                    if  runTimeTestRunnerParameters is None:
+                        parameters = testsToLaunch[i]['parameters']
                     else:
-                        # and send the request to the test executor
-
-                        # figure out the parameters, there are test suite specific, and added at dispatch time
-                        if runTimeTestRunnerParameters is None:
-                            parameters = testsToLaunch[i]['parameters']
+                        if testsToLaunch[i]['parameters'] == 'None':
+                            parameters = runTimeTestRunnerParameters
                         else:
-                            if testsToLaunch[i]['parameters'] == 'None':
-                                parameters = runTimeTestRunnerParameters
-                            else:
-                                parameters = testsToLaunch[i]['parameters'] + ',' + runTimeTestRunnerParameters
+                            parameters = testsToLaunch[i]['parameters'] + ',' + runTimeTestRunnerParameters
 
-                        url = launchString.format(options.version,
-                                                  testsToLaunch[i]['confFile'],
-                                                  descriptor,
-                                                  testsToLaunch[i]['component'],
-                                                  dashboardDescriptor,
-                                                  testsToLaunch[i]['iniFile'],
-                                                  urllib.parse.quote(parameters),
-                                                  options.os,
-                                                  testsToLaunch[i]['initNodes'],
-                                                  testsToLaunch[i]['installParameters'],
-                                                  options.branch,
-                                                  testsToLaunch[i]['slave'],
-                                                  urllib.parse.quote(testsToLaunch[i]['owner']),
-                                                  urllib.parse.quote(
-                                                      testsToLaunch[i]['mailing_list']),
-                                                  testsToLaunch[i]['mode'],
-                                                  testsToLaunch[i]['timeLimit'])
 
-                        if options.serverType.lower() != 'docker':
-                            r2 = json.loads(content)
-                            servers = json.dumps(r2).replace(' ', '').replace('[', '', 1)
-                            servers = rreplace(servers, ']', 1)
-                            url = url + '&servers=' + urllib.parse.quote(servers)
 
-                            if testsToLaunch[i]['addPoolServerCount']:
-                                addPoolServers = content2.replace(' ', '').replace('[', '', 1)
-                                addPoolServers = rreplace(addPoolServers, ']', 1)
-                                url = url + '&addPoolServerId=' + \
-                                      options.addPoolId + \
-                                      '&addPoolServers=' + \
-                                      urllib.parse.quote(addPoolServers)
+                    url = launchString.format(options.version,
+                                                testsToLaunch[i]['confFile'],
+                                                descriptor,
+                                                testsToLaunch[i]['component'],
+                                                dashboardDescriptor,
+                                                testsToLaunch[i]['iniFile'],
+                                                urllib.parse.quote(parameters),
+                                                options.os,
+                                                testsToLaunch[i]['initNodes'],
+                                                testsToLaunch[i]['installParameters'],
+                                                options.branch,
+                                                testsToLaunch[i]['slave'],
+                                                urllib.parse.quote(testsToLaunch[i]['owner']),
+                                                urllib.parse.quote(
+                                                    testsToLaunch[i]['mailing_list']),
+                                                testsToLaunch[i]['mode'],
+                                                testsToLaunch[i]['timeLimit'])
 
-                        print(('\n', time.asctime(time.localtime(time.time())), 'launching ', url))
-                        print(url)
 
-                        if options.noLaunch:
-                            # free the VMs
-                            time.sleep(3)
-                            if options.serverType.lower() == 'docker':
-                                pass  # figure docker out later
-                            else:
-                                response, content = httplib2.Http(timeout=TIMEOUT).\
-                                    request('http://' + SERVER_MANAGER + '/releaseservers/' + descriptor + '/available', 'GET')
-                                print(('the release response', response, content))
+                    if options.serverType.lower() != 'docker':
+                        servers_str = json.dumps(servers).replace(' ','').replace('[','', 1)
+                        servers_str = rreplace(servers_str, ']', 1)
+                        url = url + '&servers=' + urllib.parse.quote(servers_str)
+
+                        if testsToLaunch[i]['addPoolServerCount']:
+                            addPoolServers = json.dumps(addl_servers).replace(' ','').replace('[','', 1)
+                            addPoolServers = rreplace(addPoolServers, ']', 1)
+                            url = url + '&addPoolServerId=' +\
+                                    options.addPoolId +\
+                                    '&addPoolServers=' +\
+                                    urllib.parse.quote(addPoolServers)
+
+                    if len(unreachable_servers) > 0:
+                        print("The following VM(s) are unreachable for ssh connection:")
+                        for s in unreachable_servers:
+                            response, content = httplib2.Http(timeout=TIMEOUT).request('http://' + SERVER_MANAGER + '/releaseip/' + s + '/ssh_failed', 'GET')
+                            print(s)
+
+                    print('\n', time.asctime( time.localtime(time.time()) ), 'launching ', url)
+                    print(url)
+
+                    if options.noLaunch:
+                        # free the VMs
+                        time.sleep(3)
+                        if options.serverType.lower() == 'docker':
+                            pass # figure docker out later
                         else:
-                            response, content = httplib2.Http(timeout=TIMEOUT).request(url, 'GET')
+                            response, content = httplib2.Http(timeout=TIMEOUT).\
+                                request('http://' + SERVER_MANAGER + '/releaseservers/' + descriptor + '/available', 'GET')
+                            print('the release response', response, content)
+                    else:
+                        response, content = httplib2.Http(timeout=TIMEOUT).request(url, 'GET')
 
-                        testsToLaunch.pop(i)
-                        summary.append({'test': descriptor, 'time': time.asctime(time.localtime(time.time()))})
-                        if options.noLaunch:
-                            pass  # no sleeping necessary
-                        elif options.serverType.lower() == 'docker':
-                            time.sleep(240)  # this is due to the docker port allocation race
-                        else:
-                            time.sleep(30)
+                    testsToLaunch.pop(i)
+                    summary.append( {'test':descriptor, 'time':time.asctime( time.localtime(time.time()) ) } )
+                    if options.noLaunch:
+                        pass # no sleeping necessary
+                    elif options.serverType.lower() == 'docker':
+                        time.sleep(240)     # this is due to the docker port allocation race
+                    else:
+                        time.sleep(30)
+
                 else:
                     print('not enough servers at this time')
                     time.sleep(POLL_INTERVAL)
