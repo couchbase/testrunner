@@ -35,6 +35,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.groups = self.input.param("groups", "all").split(":")
         self.use_rest = self.input.param("use_rest", False)
         self.plasma_dgm = self.input.param("plasma_dgm", False)
+        self.bucket_name = self.input.param("bucket_name", "default")
         if not self.use_rest:
             query_definition_generator = SQLDefinitionGenerator()
             if self.dataset == "default" or self.dataset == "employee":
@@ -665,6 +666,20 @@ class BaseSecondaryIndexingTests(QueryTests):
                 if index_val["num_docs_pending"] and index_val["num_docs_queued"]:
                     return False
         return True
+
+    def verify_type_fields(self, num_hotels=0, num_airports=0, num_airlines=0, expected_failure=False):
+        query = "select * from `{0}` where type = {1} order by meta().id"
+        hotel_query = query.format(self.bucket_name, "'hotel'")
+        hotel_results = self.n1ql_helper.run_cbq_query(query=hotel_query, server=self.n1ql_node)
+        self.assertEqual(hotel_results['metrics']['resultCount'], num_hotels)
+
+        airline_query = query.format(self.bucket_name, "'airline'")
+        airline_results = self.n1ql_helper.run_cbq_query(query=airline_query, server=self.n1ql_node)
+        self.assertEqual(airline_results['metrics']['resultCount'], num_airlines)
+
+        airport_query = query.format(self.bucket_name, "'airport'")
+        airport_results = self.n1ql_helper.run_cbq_query(query=airport_query, server=self.n1ql_node)
+        self.assertEqual(airport_results['metrics']['resultCount'], num_airports)
 
     def _verify_bucket_count_with_index_count(self, query_definitions=None, buckets=None):
         """
