@@ -68,6 +68,7 @@ def rreplace(str, pattern, num_replacements):
 def get_available_servers_count(options=None, is_addl_pool=False):
     # this bit is Docker/VM dependent
     getAvailUrl = 'http://' + SERVER_MANAGER + '/getavailablecount/'
+
     pool_id = options.addPoolId if is_addl_pool == True else options.poolId
     if options.serverType.lower() == 'docker':
         # may want to add OS at some point
@@ -75,6 +76,7 @@ def get_available_servers_count(options=None, is_addl_pool=False):
     else:
         getAvailUrl = getAvailUrl + '{0}?poolId={1}'.format(options.os, pool_id)
 
+    print("Connecting {}".format(getAvailUrl))
     response, content = httplib2.Http(timeout=60).request(getAvailUrl, 'GET')
     if response.status != 200:
         print(time.asctime(time.localtime(time.time())), 'invalid server response', content)
@@ -130,6 +132,11 @@ def is_vm_alive(server="", ssh_username="", ssh_password=""):
     return False
 
 def main():
+    global SERVER_MANAGER
+    global TIMEOUT
+    global SSH_NUM_RETRIES
+    global SSH_POLL_INTERVAL
+
     usage = '%prog -s suitefile -v version -o OS'
     parser = OptionParser(usage)
     parser.add_option('-v', '--version', dest='version')
