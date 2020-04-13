@@ -1,10 +1,10 @@
 #!/bin/bash
 
-python_exe="python";
+python_exe="python3";
 grep "centos" /etc/issue -i -q
 if [ $? = '0' ];then
 python_exe="python27"
-echo ${version_number} | grep "7\.0" && python_exe=python3
+echo ${version_number} | grep "7\.0" && python_exe="python3"
 fi
 
 if [ -n $BUILD_CAUSE ]
