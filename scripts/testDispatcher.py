@@ -394,7 +394,7 @@ def main():
         try:
             # this bit is Docker/VM dependent
             serverCount = get_available_servers_count(options=options)
-            if serverCount > 0:
+            if serverCount and serverCount > 0:
                 # see if we can match a test
                 print((time.asctime(time.localtime(time.time())), 'there are', serverCount, ' servers available'))
 
