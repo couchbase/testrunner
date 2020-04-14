@@ -396,7 +396,7 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
                 BucketOperationHelper.delete_bucket_or_assert(serverInfo=self.master, bucket=bucket.name)
                 build_task.result()
         except Exception as ex:
-            msg = "Keyspace not found in CB datastore keyspace default - cause: No bucket named default"
+            msg = "Keyspace not found in CB datastore: default:default - cause: No bucket named default"
             self.assertIn(msg, str(ex), str(ex))
             log.info("Error while building index Expected...")
 
