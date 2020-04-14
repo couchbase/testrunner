@@ -77,7 +77,7 @@ def get_available_servers_count(options=None, is_addl_pool=False):
         getAvailUrl = getAvailUrl + '{0}?poolId={1}'.format(options.os, pool_id)
 
     print("Connecting {}".format(getAvailUrl))
-    response, content = httplib2.Http(timeout=60).request(getAvailUrl, 'GET')
+    response, content = httplib2.Http(timeout=TIMEOUT).request(getAvailUrl, 'GET')
     if response.status != 200:
         print(time.asctime(time.localtime(time.time())), 'invalid server response', content)
         time.sleep(POLL_INTERVAL)
@@ -98,7 +98,7 @@ def get_servers(options=None, descriptor="", test=None, how_many=0, is_addl_pool
                            format(descriptor, how_many, test['timeLimit'], options.os, pool_id)
     print(('getServerURL', getServerURL))
 
-    response, content = httplib2.Http(timeout=60).request(getServerURL, 'GET')
+    response, content = httplib2.Http(timeout=TIMEOUT).request(getServerURL, 'GET')
     print(('response.status', response, content))
     if response.status == 499:
         time.sleep(POLL_INTERVAL)  # some error checking here at some point
