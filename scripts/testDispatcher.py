@@ -102,7 +102,13 @@ def get_servers(options=None, descriptor="", test=None, how_many=0, is_addl_pool
     print(('response.status', response, content))
     if response.status == 499:
         time.sleep(POLL_INTERVAL)  # some error checking here at some point
-    return json.loads(content)
+
+    content1 = content.decode()
+    if '[' not in content1:
+        content2 = '["'+str(content1)+'"]'
+        return json.loads(content2)
+    else:
+        return json.loads(content)
 
 def check_servers_via_ssh(servers=[], test=None):
     alive_servers = []
