@@ -250,7 +250,7 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
         except Exception as ex:
             msg="Expression not indexable"
             self.assertTrue(msg in str(ex),
-                " 5000 error not recived as expected {0}".format(ex))
+                " 5000 error not received as expected {0}".format(ex))
 
     def test_create_gsi_index_without_primary_index(self):
         self.indexes= self.input.param("indexes", "").split(":")
@@ -267,7 +267,7 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
         except Exception as ex:
             msg="Keyspace not_present_bucket name not found - cause: Bucket not_present_bucket not found"
             self.assertTrue(msg in str(ex),
-                " 5000 error not recived as expected {0}".format(ex))
+                " 5000 error not received as expected {0}".format(ex))
 
     def test_failure_create_index_non_existing_bucket(self):
         self.indexes= self.input.param("indexes", "").split(":")
@@ -282,9 +282,9 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
             server = self.get_nodes_from_services_map(service_type = "n1ql")
             self.n1ql_helper.run_cbq_query(query = self.query, server = server)
         except Exception as ex:
-            msg="Keyspace not found in CB datastore keyspace not_present_bucket - cause: No bucket named not_present_bucket"
+            msg="Keyspace not found in CB datastore: default:not_present_bucket - cause: No bucket named not_present_bucket"
             self.assertTrue(msg in str(ex),
-                " 12003 error not recived as expected {0}".format(ex))
+                " 12003 error not received as expected {0}".format(ex))
 
     def test_failure_drop_index_non_existing_bucket(self):
         query_definition = QueryDefinition(
@@ -298,9 +298,9 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
             server = self.get_nodes_from_services_map(service_type = "n1ql")
             self.n1ql_helper.run_cbq_query(query = self.query, server = server)
         except Exception as ex:
-            msg="Keyspace not found in CB datastore keyspace not_present_bucket - cause: No bucket named not_present_bucket"
+            msg="Keyspace not found in CB datastore: default:not_present_bucket - cause: No bucket named not_present_bucket"
             self.assertTrue(msg in str(ex),
-                " 12003 error not recived as expected {0}".format(ex))
+                " 12003 error not received as expected {0}".format(ex))
 
     def test_failure_drop_index_non_existing_index(self):
         query_definition = QueryDefinition(
@@ -316,7 +316,7 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
         except Exception as ex:
             msg="GSI index test_failure_create_index_existing_index not found"
             self.assertTrue(msg in str(ex),
-                " 5000 error not recived as expected {0}".format(ex))
+                " 5000 error not received as expected {0}".format(ex))
 
     def test_failure_create_index_existing_index(self):
         self.indexes= self.input.param("indexes", "").split(":")
@@ -334,7 +334,7 @@ class SecondaryIndexingCreateDropTests(BaseSecondaryIndexingTests):
             self.n1ql_helper.run_cbq_query(query = self.query, server = server)
         except Exception as ex:
             self.assertTrue("index test_failure_create_index_existing_index already exist" in str(ex),
-                " 5000 error not recived as expected {0}".format(ex))
+                " 5000 error not received as expected {0}".format(ex))
         finally:
             self.query = query_definition.generate_index_drop_query(bucket = self.buckets[0].name)
             self.n1ql_helper.run_cbq_query(query = self.query, server = server)
