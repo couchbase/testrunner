@@ -52,8 +52,7 @@ INDEX_DEFINITION = {
 }
 
 
-class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTest, EventingBaseTest):
-#class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase):
+class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTest):
     def setUp(self):
         super().setUp()
         self.users_check_restore = \

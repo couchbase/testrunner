@@ -970,6 +970,7 @@ class RestConnection(object):
     def init_node(self, set_node_services=None):
         """ need a standalone method to initialize a node that could call
             anywhere with quota from testconstant """
+
         self.node_services = []
         if set_node_services is None:
             set_node_services = self.services_node_init
@@ -978,7 +979,10 @@ class RestConnection(object):
         elif set_node_services is None and self.services != "":
             self.node_services = self.services.split(",")
         elif set_node_services is not None:
-            self.node_services = set_node_services.split("-")
+            if "-" in set_node_services:
+                self.node_services = set_node_services.split("-")
+            if "," in set_node_services:
+                self.node_services = set_node_services.split(",")
         kv_quota = 0
         while kv_quota == 0:
             time.sleep(1)

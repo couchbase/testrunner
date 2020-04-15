@@ -882,8 +882,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             if expected_error:
                 for line in output:
                     if self.debug_logs:
-                        print(("output from cmd: ", line))
-                        print(("expect error   : ", expected_error))
+                        print("output from cmd: ", line)
+                        print("expect error   : ", expected_error)
                     if line.find(expected_error) != -1:
                         error_found = True
                         break
@@ -1697,7 +1697,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                 self.log.error("invalid {0}".format(word_check))
         return found
 
-    def _reset_storage_mode(self, rest, storageMode):
+    def _reset_storage_mode(self, rest, storageMode, reset_node=True):
         nodes_in_cluster = rest.get_nodes()
         for node in nodes_in_cluster:
             matched_server = None
@@ -1705,21 +1705,28 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                 if node.hostname[:-5] == server.ip:
                     matched_server = server
                     break
-
-            RestConnection(node).force_eject_node()
-            ready = RestHelper(rest).is_ns_server_running()
-            if ready:
-                if server is not None:
-                    shell = RemoteMachineShellConnection(server)
-                    shell.enable_diag_eval_on_non_local_hosts()
-                    shell.disconnect()
-            else:
-                self.fail("NS server is not ready after reset node")
+            shell = RemoteMachineShellConnection(server)
+            shell.enable_diag_eval_on_non_local_hosts()
+            shell.disconnect()
+            if reset_node:
+                RestConnection(node).force_eject_node()
+                ready = RestHelper(rest).is_ns_server_running()
+                if ready:
+                    if server is not None:
+                        shell = RemoteMachineShellConnection(server)
+                        shell.enable_diag_eval_on_non_local_hosts()
+                        shell.disconnect()
+                else:
+                    self.fail("NS server is not ready after reset node")
         rest.set_indexer_storage_mode(username='Administrator',
                                       password='password',
                                       storageMode=storageMode)
         self.log.info("Done reset node")
-        kv_quota = rest.init_node()
+        sv_in_rs = self.backupset.restore_cluster_host.services
+        if self.backupset.restore_cluster_host.services and \
+            "," in self.backupset.restore_cluster_host.services[0]:
+            sv_in_rs = self.backupset.restore_cluster_host.services.split(",")
+        kv_quota = rest.init_node(sv_in_rs)
         return kv_quota
 
     def _reset_restore_cluster_with_bk_services(self, bk_services):
@@ -2458,8 +2465,12 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             shell = RemoteMachineShellConnection(self.backupset.restore_cluster_host)
             shell.enable_diag_eval_on_non_local_hosts()
             shell.disconnect()
-        kv_quota = rest_rs.init_node(self.backupset.restore_cluster_host.services)
-        self._reset_storage_mode(rest_rs, bk_storage_mode)
+        sv_in_rs = self.backupset.restore_cluster_host.services
+        if self.backupset.restore_cluster_host.services and \
+            "," in self.backupset.restore_cluster_host.services[0]:
+            sv_in_rs = self.backupset.restore_cluster_host.services[0].split(",")
+        kv_quota = rest_rs.init_node(sv_in_rs)
+        self._reset_storage_mode(rest_rs, bk_storage_mode, False)
         if len(bk_cluster_services) > 1:
             bk_cluster_services.remove(bk_services)
         if len(self.input.clusters[0]) > 1:
