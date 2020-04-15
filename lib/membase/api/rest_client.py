@@ -1431,7 +1431,8 @@ class RestConnection(object):
                     break_out += 1  # time needed for couchbase server reload after reset config
                 elif response['status'] in ['200', '201', '202']:
                     count_cbserver_up = 2
-                    log.info("couchbase server is up again")
+                    log.info("couchbase server is up again in few seconds")
+                    time.sleep(7)
             except socket.error as e:
                 log.info("couchbase server is down.  Waiting for couchbase server up")
                 time.sleep(2)
