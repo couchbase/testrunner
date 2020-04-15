@@ -9,6 +9,7 @@ from optparse import OptionParser
 import traceback
 import os as OS
 import paramiko
+import ipaddress
 
 from couchbase import Couchbase
 from couchbase.bucket import Bucket
@@ -111,7 +112,7 @@ def get_servers(options=None, descriptor="", test=None, how_many=0, is_addl_pool
         content2 = '["'+str(content1)+'"]'
         return json.loads(content2)
     else:
-        return json.loads(content)
+        return json.loads(content1)
 
 def check_servers_via_ssh(servers=[], test=None):
     alive_servers = []
@@ -124,12 +125,22 @@ def check_servers_via_ssh(servers=[], test=None):
     return alive_servers, bad_servers
 
 def is_vm_alive(server="", ssh_username="", ssh_password=""):
+    try:
+        if '[' in server or ']' in server:
+            server = server.replace('[', '')
+            server = server.replace(']','')
+        ip_version = ipaddress.ip_address(server).version
+    except ValueError as e:
+        print("{0} is not recognized as valid IPv4 or IPv6 address.".format(server))
+        return False
     num_retries = 1
     while num_retries <= SSH_NUM_RETRIES:
         try:
             ssh = paramiko.SSHClient()
             ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            #ssh.auth_password()
             ssh.connect(hostname=server, username=ssh_username, password=ssh_password)
+            print("Successfully established test ssh connection to {0}. VM is recognized as valid.".format(server))
             return True
         except Exception as e:
             print("Exception occured while trying to establish ssh connection with {0}: {1}".format(server, str(e)))
@@ -137,7 +148,7 @@ def is_vm_alive(server="", ssh_username="", ssh_password=""):
             time.sleep(SSH_POLL_INTERVAL)
             continue
 
-    print("{0} is unreachable. Tried to establish ssh connection {1} times".format(server, num_retries))
+    print("{0} is unreachable. Tried to establish ssh connection {1} times".format(server, num_retries-1))
     return False
 
 def main():
