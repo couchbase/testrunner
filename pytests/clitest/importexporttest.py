@@ -3,7 +3,7 @@ import json, filecmp, itertools
 import os, shutil, ast
 from threading import Thread
 
-from membase.api.rest_client import RestConnection
+from membase.api.rest_client import RestConnection, RestHelper
 from memcached.helper.data_helper import MemcachedClientHelper
 from TestInput import TestInputSingleton
 from clitest.cli_base import CliBaseTest
@@ -932,7 +932,13 @@ class ImportExportTests(CliBaseTest):
                 imp_rest = RestConnection(import_servers[2])
                 import_shell = RemoteMachineShellConnection(import_servers[2])
                 imp_rest.force_eject_node()
-                self.sleep(2)
+                ready = RestHelper(RestConnection(import_servers[2])).is_ns_server_running()
+                if ready:
+                    shell = RemoteMachineShellConnection(import_servers[2])
+                    shell.enable_diag_eval_on_non_local_hosts()
+                    shell.disconnect()
+                else:
+                    self.fail("NS server is not ready after reset node")
 
                 imp_rest = RestConnection(import_servers[2])
                 status = False
