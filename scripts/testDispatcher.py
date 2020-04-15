@@ -169,7 +169,7 @@ def main():
     parser.add_option('-x','--server_manager', dest='SERVER_MANAGER',
                       default='172.23.105.177:8081')
     parser.add_option('-z', '--timeout', dest='TIMEOUT', default = '60')
-    parser.add_option('-w', '--check_vm', dest='check_vm', default="True")
+    parser.add_option('-w', '--check_vm', dest='check_vm', default="False")
     parser.add_option('--ssh_poll_interval', dest='SSH_POLL_INTERVAL', default="20")
     parser.add_option('--ssh_num_retries', dest='SSH_NUM_RETRIES', default="3")
 
