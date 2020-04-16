@@ -1583,6 +1583,7 @@ class ESRunQueryCompare(Task):
                                           "...skipping ES validation")
                             self.passed = True
                             self.es_compare = False
+                            should_verify_n1ql = False
                         elif 0 < fts_status['successful'] < \
                                 self.fts_index.num_pindexes:
                             # partial results

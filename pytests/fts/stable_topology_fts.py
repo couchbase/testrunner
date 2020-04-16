@@ -640,7 +640,6 @@ class StableTopFTS(FTSBaseTest):
         """
         Index and query index, update map, query again, uses RQG
         """
-        err = None
         fail = False
         index = self.create_index(
             bucket=self._cb_cluster.get_bucket_by_name('default'),
@@ -652,6 +651,7 @@ class StableTopFTS(FTSBaseTest):
         try:
             self.run_query_and_compare(index)
         except AssertionError as err:
+            error_msg = str(err)
             self.log.error(err)
             fail = True
         self.log.info("Editing custom index with new map...")
@@ -670,7 +670,7 @@ class StableTopFTS(FTSBaseTest):
 
         self.run_query_and_compare(index, n1ql_executor=n1ql_executor)
         if fail:
-            raise err
+            raise error_msg
 
     def index_query_in_parallel(self):
         """
