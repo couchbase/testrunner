@@ -98,12 +98,16 @@ def merge_reports(filespath):
                     tests[tcname_filtered] = testcase
                 testsuite['tests'] = tests
                 testsuites[tsname] = testsuite
-    abs_path = os.path.dirname(os.path.abspath(sys.argv[0]))
-    abs_path = abs_path.rstrip("scripts")
-    logs_directory = os.path.join(abs_path, "logs")
-    move_logs_directory = os.path.join(abs_path, "job_logs")
-    os.rename(logs_directory, move_logs_directory)
-    os.mkdir(logs_directory)
+    try:
+        abs_path = os.path.dirname(os.path.abspath(sys.argv[0]))
+        abs_path = abs_path.rstrip("scripts")
+        logs_directory = os.path.join(abs_path, "logs")
+        move_logs_directory = os.path.join(abs_path, "job_logs")
+        os.rename(logs_directory, move_logs_directory)
+        os.mkdir(logs_directory)
+    except Exception as e:
+        log.info(e)
+        return {}
     log.info("\nNumber of TestSuites="+str(len(testsuites)))
     tsindex = 0
     for tskey in testsuites.keys():
