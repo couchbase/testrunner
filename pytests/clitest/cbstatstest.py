@@ -40,7 +40,10 @@ class cbstatsTests(CliBaseTest):
                                         self.item_size, self.command_options)
                         self.sleep(5)
                 for bucket in self.buckets:
-                    output, error = self.shell.execute_cbstats(bucket, self.command)
+                    if "allocator" in self.command:
+                        output, error = self.shell.execute_mcstat(bucket, self.command)
+                    else:
+                        output, error = self.shell.execute_cbstats(bucket, self.command)
                     self.verify_results(output, error)
                     if self.command in ["allocator", "kvtimings", "timings"]:
                         self.log.warning("We will not verify exact values for this stat")
@@ -50,7 +53,7 @@ class cbstatsTests(CliBaseTest):
             mc_conn = MemcachedClientHelper.direct_client(self.master, self.buckets[0].name, self.timeout)
             bucket_info = RestConnection(self.master).get_bucket(self.buckets[0])
             keys_map = {}
-            for i in range(self.num_items):
+            for i in range(1, self.num_items + 1):
                 vb_id = i - len(bucket_info.vbuckets) * int(i // len(bucket_info.vbuckets))
                 mc_conn.set("test_docs-%s" % i, 0, 0, json.dumps('{ "test" : "test"}').encode("ascii", "ignore"), vb_id)
                 keys_map["test_docs-%s" % i] = vb_id
@@ -171,8 +174,10 @@ class cbstatsTests(CliBaseTest):
             if stats[1].strip() == collect_stats:
                 continue
             else:
-                if stats[0].find('tcmalloc') != -1 or stats[0].find('bytes') != -1 or\
-                stats[0].find('mem_used') != -1:
+                if stats[0].find('tcmalloc') != -1 or stats[0].find('bytes') != -1 or \
+                   stats[0].find('mem_used') != -1 or stats[0].find("allocated") != -1 or \
+                   stats[0].find('fragmentation_size') != -1 or stats[0].find('mapped') != -1 or \
+                   stats[0].find('resident') != -1 or stats[0].find('retained') != -1:
                     self.log.warning("Stat didn't match, but it can be changed, not a bug")
                     continue
                 raise Exception("Command does not throw out error message \

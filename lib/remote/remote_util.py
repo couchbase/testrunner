@@ -4329,6 +4329,39 @@ class RemoteMachineShellConnection(KeepRefs):
             self.log_command_output(output, error)
         return output, error
 
+    def execute_mcstat(self, bucket, command, keyname="", vbid=0,
+                                      cbadmin_user="cbadminbucket",
+                                      cbadmin_password="password",
+                                      print_results=False):
+        cbstat_command = "%smcstat" % (LINUX_COUCHBASE_BIN_PATH)
+        if self.nonroot:
+            cbstat_command = "/home/%s%smcstat" % (self.username,
+                                                    LINUX_COUCHBASE_BIN_PATH)
+        self.extract_remote_info()
+        if self.info.type.lower() == 'windows':
+            cbstat_command = "%smcstat.exe" % (WIN_COUCHBASE_BIN_PATH)
+        if self.info.distribution_type.lower() == 'mac':
+            cbstat_command = "%smcstat" % (MAC_COUCHBASE_BIN_PATH)
+
+        if command != "key" and command != "raw":
+            command = "%s -h %s:11210 %s -u %s -P %s -b %s " % (cbstat_command,
+                                                             self.ip, command,
+                                                             cbadmin_user,
+                                                             cbadmin_password,
+                                                             bucket.name)
+        else:
+            command = "%s -h %s:11210 %s -u %s -P %s %s %s " % (cbstat_command,
+                                                             self.ip, command,
+                                                             cbadmin_user,
+                                                             cbadmin_password,
+                                                             keyname, vbid)
+
+
+        output, error = self.execute_command(command)
+        if print_results:
+            self.log_command_output(output, error)
+        return output, error
+
     def couchbase_cli(self, subcommand, cluster_host, options):
         cb_client = "{0}couchbase-cli".format(LINUX_COUCHBASE_BIN_PATH)
         if self.nonroot:
