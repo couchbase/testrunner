@@ -526,12 +526,16 @@ class BaseSecondaryIndexingTests(QueryTests):
                         if doc["_id"] == item["docid"]:
                             actual_result.append([doc])
                             doc_id_list.append(item["docid"])
-            self.assertEqual(len(sorted(actual_result)), len(sorted(expected_result)),
+
+            actual_result = [item[0] for item in actual_result]
+            expected_result = [item[0] for item in expected_result]
+            self.assertEqual(len(actual_result), len(expected_result),
                              "Actual Items {0} are not equal to expected Items {1}".
-                             format(len(sorted(actual_result)), len(sorted(expected_result))))
+                             format(len(actual_result), len(expected_result)))
             msg = "The number of rows match but the results mismatch, please check"
-            if sorted(actual_result) != sorted(expected_result):
-                raise Exception(msg)
+            for item in actual_result:
+                if item not in expected_result:
+                    raise Exception(msg)
 
     def run_lookup_gsi_index_with_rest(self, bucket, query_definition):
         pass
