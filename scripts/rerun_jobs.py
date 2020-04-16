@@ -259,7 +259,10 @@ def rerun_job(args):
         return
     rerun_params = get_rerun_parameters(rerun_document, is_rerun)
     if not rerun_params:
-        return
+        if install_failure:
+            rerun_params = ''
+        else:
+            return
     if jenkins_job:
         current_job_url = OS.getenv('BUILD_URL')
         current_job_params = get_jenkins_params.get_params(
