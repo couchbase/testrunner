@@ -558,12 +558,31 @@ class unidirectional(XDCRNewBaseTest):
 
         self.verify_results()
 
+    def _disable_compression(self):
+        shell = RemoteMachineShellConnection(self.src_master)
+        for remote_cluster in self.src_cluster.get_remote_clusters():
+            for repl in remote_cluster.get_replications():
+                src_bucket_name = repl.get_src_bucket().name
+                if src_bucket_name in str(repl):
+                    repl_id = repl.get_repl_id()
+                    repl_id = str(repl_id).replace('/', '%2F')
+                    base_url = "http://" + self.src_master.ip + \
+                               ":8091/settings/replications/" + repl_id
+                    command = "curl -X POST -u Administrator:password " + base_url + \
+                              " -d compressionType=" + "None"
+                    output, error = shell.execute_command(command)
+                    shell.log_command_output(output, error)
+        shell.disconnect()
+
     def test_optimistic_replication(self):
         """Tests with 2 buckets with customized optimisic replication thresholds
            one greater than value_size, other smaller
         """
         from .xdcrnewbasetests import REPL_PARAM
-        self.setup_xdcr_and_load()
+        self.setup_xdcr()
+        # To ensure docs size = value_size on target
+        self._disable_compression()
+        self.load_data_topology()
         self._wait_for_replication_to_catchup()
         for remote_cluster in self.src_cluster.get_remote_clusters():
             for replication in remote_cluster.get_replications():
