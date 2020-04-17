@@ -69,16 +69,16 @@ def get_ssh_password(iniFile):
 def rreplace(str, pattern, num_replacements):
     return str.rsplit(pattern, num_replacements)[0]
 
-def get_available_servers_count(options=None, is_addl_pool=False):
+def get_available_servers_count(options=None, is_addl_pool=False, os_version=""):
     # this bit is Docker/VM dependent
     getAvailUrl = 'http://' + SERVER_MANAGER + '/getavailablecount/'
 
     pool_id = options.addPoolId if is_addl_pool == True else options.poolId
     if options.serverType.lower() == 'docker':
         # may want to add OS at some point
-        getAvailUrl = getAvailUrl + 'docker?os={0}&poolId={1}'.format(options.os, pool_id)
+        getAvailUrl = getAvailUrl + 'docker?os={0}&poolId={1}'.format(os_version, pool_id)
     else:
-        getAvailUrl = getAvailUrl + '{0}?poolId={1}'.format(options.os, pool_id)
+        getAvailUrl = getAvailUrl + '{0}?poolId={1}'.format(os_version, pool_id)
 
     print("Connecting {}".format(getAvailUrl))
     response, content = httplib2.Http(timeout=TIMEOUT).request(getAvailUrl, 'GET')
@@ -91,15 +91,16 @@ def get_available_servers_count(options=None, is_addl_pool=False):
     else:
         return int(content)
 
-def get_servers(options=None, descriptor="", test=None, how_many=0, is_addl_pool=False):
+def get_servers(options=None, descriptor="", test=None, how_many=0, is_addl_pool=False, os_version=""):
     pool_id = options.addPoolId if is_addl_pool == True else options.poolId
+
     if options.serverType.lower() == 'docker':
         getServerURL = 'http://' + SERVER_MANAGER + '/getdockers/{0}?count={1}&os={2}&poolId={3}'. \
-                           format(descriptor, how_many, options.os, pool_id)
+                           format(descriptor, how_many, os_version, pool_id)
 
     else:
         getServerURL = 'http://' + SERVER_MANAGER + '/getservers/{0}?count={1}&expiresin={2}&os={3}&poolId={4}'. \
-                           format(descriptor, how_many, test['timeLimit'], options.os, pool_id)
+                           format(descriptor, how_many, test['timeLimit'], os_version, pool_id)
     print(('getServerURL', getServerURL))
 
     response, content = httplib2.Http(timeout=TIMEOUT).request(getServerURL, 'GET')
@@ -421,7 +422,7 @@ def main():
     while len(testsToLaunch) > 0:
         try:
             # this bit is Docker/VM dependent
-            serverCount = get_available_servers_count(options=options)
+            serverCount = get_available_servers_count(options=options, os_version=options.os)
             if serverCount and serverCount > 0:
                 # see if we can match a test
                 print((time.asctime(time.localtime(time.time())), 'there are', serverCount, ' servers available'))
@@ -431,7 +432,7 @@ def main():
                 while not haveTestToLaunch and i < len(testsToLaunch):
                     if testsToLaunch[i]['serverCount'] <= serverCount:
                         if testsToLaunch[i]['addPoolServerCount']:
-                            addlServersCount = get_available_servers_count(options=options, is_addl_pool=True)
+                            addlServersCount = get_available_servers_count(options=options, is_addl_pool=True, os_version=addPoolServer_os)
                             if addlServersCount == 0:
                                 print(time.asctime(time.localtime(time.time())), 'no {0} VMs at this time'.format(
                                     options.addPoolId))
@@ -465,7 +466,7 @@ def main():
                     how_many = testsToLaunch[i]['serverCount'] - len(servers)
                     while how_many > 0:
                         unchecked_servers = get_servers(options=options, descriptor=descriptor, test=testsToLaunch[i],
-                                                    how_many=how_many)
+                                                    how_many=how_many, os_version=options.os)
                         if options.check_vm == "True":
                             checked_servers, bad_servers = check_servers_via_ssh(servers=unchecked_servers,
                                                                              test=testsToLaunch[i])
@@ -490,16 +491,9 @@ def main():
                     if testsToLaunch[i]['addPoolServerCount']:
                         how_many_addl = testsToLaunch[i]['addPoolServerCount'] - len(addl_servers)
                         while how_many_addl > 0:
-                            unchecked_servers = get_servers(options=options, descriptor=descriptor, test=testsToLaunch[i], how_many=how_many_addl, is_addl_pool=True)
-                            if options.check_vm == "True":
-                                checked_servers, bad_servers = check_servers_via_ssh(servers=unchecked_servers, test=testsToLaunch[i])
-                                for ss in checked_servers:
-                                    addl_servers.append(ss)
-                                for ss in bad_servers:
-                                    unreachable_servers.append(ss)
-                            else:
-                                for ss in unchecked_servers:
-                                    addl_servers.append(ss)
+                            unchecked_servers = get_servers(options=options, descriptor=descriptor, test=testsToLaunch[i], how_many=how_many_addl, is_addl_pool=True, os_version=addPoolServer_os)
+                            for ss in unchecked_servers:
+                                addl_servers.append(ss)
                             how_many_addl = testsToLaunch[i]['addPoolServerCount'] - len(addl_servers)
 
                     # and send the request to the test executor
