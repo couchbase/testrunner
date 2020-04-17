@@ -104,6 +104,11 @@ CUSTOM_ANALYZER_TEMPLATE = {
         "truncate": {
             "length": 10,
             "type": "truncate_token"
+        },
+        "stemmer_porter": {
+            "min": 3,
+            "max": 255,
+            "type": "length"
         }
     },
     "token_maps": {
