@@ -140,6 +140,7 @@ class REPL_PARAM:
     PAUSE_REQUESTED = "pauseRequested"
     PRIORITY = "priority"
     DESIRED_LATENCY = "desiredLatency"
+    COMPRESSION_TYPE = "compressionType"
 
 
 class TEST_XDCR_PARAM:
@@ -157,6 +158,7 @@ class TEST_XDCR_PARAM:
     TIMEOUT_PERC = "timeout_percentage"
     PRIORITY = "priority"
     DESIRED_LATENCY = "desired_latency"
+    COMPRESSION_TYPE = "compression_type"
 
     @staticmethod
     def get_test_to_create_repl_param_map():
@@ -174,8 +176,8 @@ class TEST_XDCR_PARAM:
             TEST_XDCR_PARAM.TIMEOUT_PERC: REPL_PARAM.TIMEOUT_PERC,
             TEST_XDCR_PARAM.LOG_LEVEL: REPL_PARAM.LOG_LEVEL,
             TEST_XDCR_PARAM.PRIORITY: REPL_PARAM.PRIORITY,
-            TEST_XDCR_PARAM.DESIRED_LATENCY: REPL_PARAM.DESIRED_LATENCY
-
+            TEST_XDCR_PARAM.DESIRED_LATENCY: REPL_PARAM.DESIRED_LATENCY,
+            TEST_XDCR_PARAM.COMPRESSION_TYPE: REPL_PARAM.COMPRESSION_TYPE
         }
 
 
@@ -195,6 +197,7 @@ class XDCR_PARAM:
     XDCR_TIMEOUT_PERC = "xdcrTimeoutPercentageCap"
     XDCR_PRIORITY = "xdcrPriority"
     XDCR_DESIRED_LATENCY = "xdcrDesiredLatency"
+    XDCR_COMPRESSION_TYPE = "xdcrCompressionType"
 
 
 class CHECK_AUDIT_EVENT:
@@ -2845,6 +2848,7 @@ class XDCRNewBaseTest(unittest.TestCase):
         self._item_count_timeout = self._input.param("item_count_timeout", 300)
         self._checkpoint_interval = self._input.param("checkpoint_interval", 60)
         self._optimistic_threshold = self._input.param("optimistic_threshold", 256)
+        self._compression_type = self._input.param("compression_type", "")
         self._dgm_run = self._input.param("dgm_run", False)
         self._active_resident_threshold = \
             self._input.param("active_resident_threshold", 100)
