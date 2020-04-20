@@ -107,6 +107,7 @@ def get_servers(options=None, descriptor="", test=None, how_many=0, is_addl_pool
     print(('response.status', response, content))
     if response.status == 499:
         time.sleep(POLL_INTERVAL)  # some error checking here at some point
+        return json.loads("[]")
 
     content1 = content.decode()
     if '[' not in content1:
@@ -464,19 +465,21 @@ def main():
                     servers = []
                     unreachable_servers = []
                     how_many = testsToLaunch[i]['serverCount'] - len(servers)
-                    while how_many > 0:
-                        unchecked_servers = get_servers(options=options, descriptor=descriptor, test=testsToLaunch[i],
-                                                    how_many=how_many, os_version=options.os)
-                        if options.check_vm == "True":
+                    if options.check_vm == "True":
+                        while how_many > 0:
+                            unchecked_servers = get_servers(options=options, descriptor=descriptor, test=testsToLaunch[i],
+                                                        how_many=how_many, os_version=options.os)
                             checked_servers, bad_servers = check_servers_via_ssh(servers=unchecked_servers,
                                                                              test=testsToLaunch[i])
                             for ss in checked_servers:
                                 servers.append(ss)
                             for ss in bad_servers:
                                 unreachable_servers.append(ss)
-                        else:
-                            for ss in unchecked_servers:
-                                servers.append(ss)
+                            how_many = testsToLaunch[i]['serverCount'] - len(servers)
+
+                    else:
+                        servers = get_servers(options=options, descriptor=descriptor, test=testsToLaunch[i],
+                                              how_many=how_many, os_version=options.os)
                         how_many = testsToLaunch[i]['serverCount'] - len(servers)
 
                     if options.serverType.lower() != 'docker':
@@ -490,11 +493,8 @@ def main():
                     addl_servers = []
                     if testsToLaunch[i]['addPoolServerCount']:
                         how_many_addl = testsToLaunch[i]['addPoolServerCount'] - len(addl_servers)
-                        while how_many_addl > 0:
-                            unchecked_servers = get_servers(options=options, descriptor=descriptor, test=testsToLaunch[i], how_many=how_many_addl, is_addl_pool=True, os_version=addPoolServer_os)
-                            for ss in unchecked_servers:
-                                addl_servers.append(ss)
-                            how_many_addl = testsToLaunch[i]['addPoolServerCount'] - len(addl_servers)
+                        addl_servers = get_servers(options=options, descriptor=descriptor, test=testsToLaunch[i], how_many=how_many_addl, is_addl_pool=True, os_version=addPoolServer_os)
+                        how_many_addl = testsToLaunch[i]['addPoolServerCount'] - len(addl_servers)
 
                     # and send the request to the test executor
 
