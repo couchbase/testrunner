@@ -1010,35 +1010,38 @@ class BaseTestCase(unittest.TestCase):
                                 only_store_hash=True, batch_size=1, pause_secs=1, timeout_secs=30,
                                 proxy_client=None, collection=None):
         tasks = []
+        if kv_gen.isGenerator():
+            for bucket in self.buckets:
+                gen = copy.deepcopy(kv_gen)
+                try :
+                    len(self.collection_name[bucket.name])
+                except KeyError:
+                    self.collection_name[bucket.name] =[]
+                if not collection and (len(self.collection_name[bucket.name]) > 0):
+                    for collections in self.collection_name[bucket.name]:
+                        gen = copy.deepcopy(kv_gen)
+                        if bucket.type != 'memcached':
+                            tasks.append(self.cluster.async_load_gen_docs(server, bucket.name, gen,
+                                                                          bucket.kvs[kv_store],
+                                                                          op_type, exp, flag, only_store_hash,
+                                                                          batch_size, pause_secs, timeout_secs,
+                                                                          proxy_client, compression=self.sdk_compression,collection=collections))
+                        else:
+                            self._load_memcached_bucket(server, gen, bucket.name, collections)
 
-        for bucket in self.buckets:
-            gen = copy.deepcopy(kv_gen)
-            try :
-                len(self.collection_name[bucket.name])
-            except KeyError:
-                self.collection_name[bucket.name] =[]
-            if not collection and (len(self.collection_name[bucket.name]) > 0):
-                for collections in self.collection_name[bucket.name]:
-                    gen = copy.deepcopy(kv_gen)
-                    if bucket.type != 'memcached':
-                        tasks.append(self.cluster.async_load_gen_docs(server, bucket.name, gen,
-                                                                      bucket.kvs[kv_store],
-                                                                      op_type, exp, flag, only_store_hash,
-                                                                      batch_size, pause_secs, timeout_secs,
-                                                                      proxy_client, compression=self.sdk_compression,collection=collections))
-                    else:
-                        self._load_memcached_bucket(server, gen, bucket.name, collections)
-
-            else:
-                if bucket.type != 'memcached':
-                        tasks.append(self.cluster.async_load_gen_docs(server, bucket.name, gen,
-                                                                      bucket.kvs[kv_store],
-                                                                      op_type, exp, flag, only_store_hash,
-                                                                      batch_size, pause_secs, timeout_secs,
-                                                                      proxy_client, compression=self.sdk_compression,collection=collection))
                 else:
-                    self._load_memcached_bucket(server, gen, bucket.name, collection)
-
+                    if bucket.type != 'memcached':
+                            tasks.append(self.cluster.async_load_gen_docs(server, bucket.name, gen,
+                                                                          bucket.kvs[kv_store],
+                                                                          op_type, exp, flag, only_store_hash,
+                                                                          batch_size, pause_secs, timeout_secs,
+                                                                          proxy_client, compression=self.sdk_compression,collection=collection))
+                    else:
+                        self._load_memcached_bucket(server, gen, bucket.name, collection)
+        else:
+            for bucket in self.buckets:
+                tasks.append(self.cluster.async_load_gen_docs(server, bucket, kv_gen, pause_secs=1,
+                        timeout_secs=300))
         return tasks
 
     """Synchronously applys load generation to all bucekts in the cluster.
@@ -1051,7 +1054,7 @@ class BaseTestCase(unittest.TestCase):
         kv_store - The index of the bucket's kv_store to use. (int)
     """
 
-    def _load_all_buckets(self, server, kv_gen, op_type, exp, kv_store=1, flag=0,
+    def _load_all_buckets(self, server, kv_gen, op_type="create", exp=0, kv_store=1, flag=0,
                           only_store_hash=True, batch_size=1000, pause_secs=1,
                           timeout_secs=30, proxy_client=None, collection=None):
 
@@ -1071,41 +1074,42 @@ class BaseTestCase(unittest.TestCase):
            Load bucket to DGM if params active_resident_threshold is passed
         """
         if self.active_resident_threshold < 100.0:
-            stats_all_buckets = {}
-            for bucket in self.buckets:
-                stats_all_buckets[bucket.name] = StatsCommon()
+            if kv_gen.isGenerator():
+                stats_all_buckets = {}
+                for bucket in self.buckets:
+                    stats_all_buckets[bucket.name] = StatsCommon()
 
-            rest = RestConnection(self.master)
-            for bucket in self.buckets:
-                threshold_reached = False
-                while not threshold_reached:
-                    active_resident = \
-                        rest.get_bucket_stats(bucket)['vb_active_resident_items_ratio']
-                    if active_resident >= self.active_resident_threshold:
-                        self.log.info(
-                            "resident ratio is %s > %s for %s in bucket %s.\n"\
-                            " Continue loading to the cluster" %
-                                               (active_resident,
-                                                self.active_resident_threshold,
-                                                self.master.ip,
-                                                bucket.name))
-                        random_key = self.key_generator()
-                        generate_load = BlobGenerator(random_key,
-                                                      '%s-' % random_key,
-                                                      self.value_size,
-                                                      end=batch_size * 50)
-                        self._load_bucket(bucket, self.master, generate_load,
-                                          "create", exp=0, kv_store=1, flag=0,
-                                          only_store_hash=True,
-                                          batch_size=batch_size,
-                                          pause_secs=5, timeout_secs=60, collection=collection)
-                    else:
-                        threshold_reached = True
-                        self.log.info("\n DGM state achieved at %s %% for %s in bucket %s!"\
-                                                                     % (active_resident,
-                                                                        self.master.ip,
-                                                                        bucket.name))
-                        break
+                rest = RestConnection(self.master)
+                for bucket in self.buckets:
+                    threshold_reached = False
+                    while not threshold_reached:
+                        active_resident = \
+                            rest.get_bucket_stats(bucket)['vb_active_resident_items_ratio']
+                        if active_resident >= self.active_resident_threshold:
+                            self.log.info(
+                                "resident ratio is %s > %s for %s in bucket %s.\n"\
+                                " Continue loading to the cluster" %
+                                                   (active_resident,
+                                                    self.active_resident_threshold,
+                                                    self.master.ip,
+                                                    bucket.name))
+                            random_key = self.key_generator()
+                            generate_load = BlobGenerator(random_key,
+                                                          '%s-' % random_key,
+                                                          self.value_size,
+                                                          end=batch_size * 50)
+                            self._load_bucket(bucket, self.master, generate_load,
+                                              "create", exp=0, kv_store=1, flag=0,
+                                              only_store_hash=True,
+                                              batch_size=batch_size,
+                                              pause_secs=5, timeout_secs=60, collection=collection)
+                        else:
+                            threshold_reached = True
+                            self.log.info("\n DGM state achieved at %s %% for %s in bucket %s!"\
+                                                                         % (active_resident,
+                                                                            self.master.ip,
+                                                                            bucket.name))
+                            break
 
     def _async_load_bucket(self, bucket, server, kv_gen, op_type, exp, kv_store=1, flag=0, only_store_hash=True,
                            batch_size=1000, pause_secs=1, timeout_secs=30, collection=None):

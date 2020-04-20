@@ -444,9 +444,10 @@ class ClusterOperationHelper(object):
                 product = "couchbase"
 
             sync_type = sync_threads and "S" or "A"
-
-            command = "sed -i 's/+[A,S] .*/+%s %s \\\/g' /opt/%s/bin/%s-server" % \
-                 (sync_type, num_threads, product, product)
+            command = r"sed -i 's/+[A,S] .*/+[0] [1] \\\/g' /opt/[2]/bin/[2]-server"\
+                .format(sync_type, num_threads, product)
+            # command = "sed -i 's/+[A,S] .*/+%s %s \\\/g' /opt/%s/bin/%s-server" % \
+            #      (sync_type, num_threads, product, product)
             o, r = sh.execute_command(command)
             sh.log_command_output(o, r)
             msg = "modified erlang +%s to %s for server %s"
@@ -466,8 +467,7 @@ class ClusterOperationHelper(object):
             product = "membase"
             if sh.is_couchbase_installed():
                 product = "couchbase"
-            command = "sed -i 's/S\+ 128:128/S %s/' /opt/%s/bin/%s-server"\
-                      % (value, product, product)
+            command = r"sed -i 's/S\+ 128:128/S [0]/' /opt/[1]/bin/[1]-server".format(value, product)
             o, r = sh.execute_command(command)
             sh.log_command_output(o, r)
             log.info("modified erlang +A to %s for server %s"

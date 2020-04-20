@@ -5519,3 +5519,33 @@ class NodeMonitorsAnalyserTask(Task):
             self.state = EXECUTING
         else:
             raise Exception("Monitors not working correctly")
+
+class SDKLoadDocumentsTask(Task):
+    def __init__(self, server, bucket, sdk_docloader, pause_secs, timeout_secs):
+        Task.__init__(self, "SDKLoadDocumentsTask")
+        self.server = server
+        if isinstance(bucket, Bucket):
+            self.bucket = bucket.name
+        else:
+            self.bucket = bucket
+        self.params = sdk_docloader
+        self.pause_secs = pause_secs
+        self.timeout_secs = timeout_secs
+
+        from lib.collection.collections_dataloader import JavaSDKClient
+        self.javasdkclient = JavaSDKClient(self.server, self.bucket, self.params)
+
+    def execute(self, task_manager):
+        try:
+            self.javasdkclient.do_ops()
+            self.state = CHECKING
+            task_manager.schedule(self)
+        # catch and set all unexpected exceptions
+        except Exception as e:
+            self.state = FINISHED
+            self.set_unexpected_exception(e)
+
+    def check(self, task_manager):
+        self.set_result(True)
+        self.state = FINISHED
+        task_manager.schedule(self)

@@ -56,6 +56,10 @@ class KVGenerator(object):
     def __len__(self):
         return self.end - self.start
 
+    # is a python generator function
+    def isGenerator(self):
+        return True
+
 class DocumentGenerator(KVGenerator):
     """ An idempotent document generator."""
 
@@ -219,6 +223,10 @@ class BatchedDocumentGenerator(object):
             key_val[key] = val
             count += 1
         return key_val
+
+    # is a python generator function
+    def isGenerator(self):
+        return True
 
 class JSONNonDocGenerator(KVGenerator):
     """
@@ -641,3 +649,25 @@ class GeoSpatialDataLoader(KVGenerator):
         self.itr += 1
         return self.name+str(self.itr),\
                json.dumps(doc, indent=3).encode(self.encoding, "ignore")
+
+class SDKDataLoader(object):
+    # type: (int, int, int, int, str, int, str, str, list, list, str, bool)
+    def __init__(self, num_ops, percent_create, percent_update, percent_delete, load_pattern="uniform",
+                  start_seq_num=1, key_prefix="doc_", key_suffix="_",
+                 scope="_default", collection="default", json_template="Person", print_sdk_logs="info"):
+        #TODO : doc_size, batch_size, pause_secs, timeout, expiry
+        self.num_ops = num_ops
+        self.percent_create = percent_create
+        self.percent_update = percent_update
+        self.percent_delete = percent_delete
+        self.load_pattern = load_pattern
+        self.start_seq_num = start_seq_num
+        self.key_prefix = key_prefix
+        self.key_suffix = key_suffix
+        self.scope = scope
+        self.collection = collection
+        self.json_template = json_template
+        self.print_sdk_logs = print_sdk_logs
+
+    def isGenerator(self):
+        return False
