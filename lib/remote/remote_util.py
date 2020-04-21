@@ -872,14 +872,23 @@ class RemoteMachineShellConnection(KeepRefs):
         else:
             raise Exception("stopping standalone moxi is not supported on windows")
 
-    def is_url_live(self, url, exit_if_not_live=True):
+    def is_url_live(self, url="", exit_if_not_live=True, num_retries=3, timeout=10):
         live_url = False
         # log.info("Check if url {0} is ok".format(url))
-        status = urllib.request.urlopen(url).getcode()
-        if status == 200:
-            log.info("This url {0} is live".format(url))
-            live_url = True
-        else:
+        log.info("Trying to check is this url alive: {0}".format(url))
+        while num_retries > 0:
+            try:
+                status = urllib.request.urlopen(url).getcode()
+                if status == 200:
+                    log.info("This url {0} is live".format(url))
+                    live_url = True
+                    break
+            except Exception as e:
+                self.sleep(timeout, "Waiting for {0} seconds to try to reach url once again. "
+                           "Build server might be too busy.".format(timeout))
+                num_retries = num_retries - 1
+
+        if not live_url:
             mesg = "\n===============\n" \
                    "        This url {0} \n" \
                    "        is failed to connect.\n" \
