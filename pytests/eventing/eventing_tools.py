@@ -308,6 +308,86 @@ class EventingTools(EventingBaseTest, EnterpriseBackupRestoreBase, NewUpgradeBas
         self._couchbase_cli_eventing(eventing_node, "Function_396275055_test_export_function", "delete",
                                      "SUCCESS: Request to delete the function was accepted")
 
+
+    def test_eventing_lifecycle_with_couchbase_cli_from_now(self):
+        # This value is hardcoded in the exported function name
+        script_dir = os.path.dirname(__file__)
+        abs_file_path = os.path.join(script_dir, EXPORTED_FUNCTION.NEW_BUCKET_OP)
+        fh = open(abs_file_path, "r")
+        lines = fh.read()
+        shell = RemoteMachineShellConnection(self.servers[0])
+        info = shell.extract_remote_info().type.lower()
+        if info == 'linux':
+            self.cli_command_location = testconstants.LINUX_COUCHBASE_BIN_PATH
+        elif info == 'windows':
+            self.cmd_ext = ".exe"
+            self.cli_command_location = testconstants.WIN_COUCHBASE_BIN_PATH_RAW
+        elif info == 'mac':
+            self.cli_command_location = testconstants.MAC_COUCHBASE_BIN_PATH
+        else:
+            raise Exception("OS not supported.")
+        # create the json file need on the node
+        eventing_node = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
+        remote_client = RemoteMachineShellConnection(eventing_node)
+        remote_client.write_remote_file_single_quote("/root", "Function_396275055_test_export_function.json", lines)
+        # import the function
+        self._couchbase_cli_eventing(eventing_node, "Function_396275055_test_export_function", "import",
+                                     "SUCCESS: Events imported",
+                                     file_name="Function_396275055_test_export_function.json")
+        # deploy the function
+        self._couchbase_cli_eventing(eventing_node, "Function_396275055_test_export_function", "deploy --boundary from-now",
+                                     "SUCCESS: Request to deploy the function was accepted")
+        self.wait_for_handler_state("Function_396275055_test_export_function","deployed")
+        # load some data in the source bucket
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        # verify result
+        self.verify_eventing_results("Function_396275055_test_export_function", self.docs_per_day * 2016,
+                                     skip_stats_validation=True)
+        # pause function
+        self._couchbase_cli_eventing(eventing_node, "Function_396275055_test_export_function",
+                                     "pause",
+                                     "SUCCESS: Function was paused")
+        self.wait_for_handler_state("Function_396275055_test_export_function", "paused")
+        # delete all documents
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size, op_type='delete')
+        # resume function
+        self._couchbase_cli_eventing(eventing_node, "Function_396275055_test_export_function",
+                                     "resume", "SUCCESS: Function was resumed")
+        self.wait_for_handler_state("Function_396275055_test_export_function", "deployed")
+        # verify result
+        self.verify_eventing_results("Function_396275055_test_export_function", 0,
+                                     skip_stats_validation=True)
+        # list the function
+        self._couchbase_cli_eventing(eventing_node, "Function_396275055_test_export_function", "list",
+                                     " Status: Deployed")
+        # export the function
+        self._couchbase_cli_eventing(eventing_node, "Function_396275055_test_export_function", "export",
+                                     "SUCCESS: Function exported to: Function_396275055_test_export_function2.json",
+                                     file_name="Function_396275055_test_export_function2.json")
+        # check if the exported function actually exists
+        exists = remote_client.file_exists("/root", "Function_396275055_test_export_function2.json")
+        # check if the exported file exists
+        if not exists:
+            self.fail("file does not exist after export")
+        # export-all functions
+        self._couchbase_cli_eventing(eventing_node, "Function_396275055_test_export_function", "export-all",
+                                     "SUCCESS: All functions exported to: export_all.json",
+                                    file_name="export_all.json", name=False)
+        # check if the exported function actually exists
+        exists = remote_client.file_exists("/root", "export_all.json")
+        # check if the exported file exists
+        if not exists:
+            self.fail("file does not exist after export-all")
+        # undeploy the function
+        self._couchbase_cli_eventing(eventing_node, "Function_396275055_test_export_function", "undeploy",
+                                     "SUCCESS: Request to undeploy the function was accepted")
+        self.wait_for_handler_state("Function_396275055_test_export_function","undeployed")
+        # delete the function
+        self._couchbase_cli_eventing(eventing_node, "Function_396275055_test_export_function", "delete",
+                                     "SUCCESS: Request to delete the function was accepted")
+
     def _couchbase_cli_eventing(self, host, function_name, operation, result, file_name=None, name=True):
         remote_client = RemoteMachineShellConnection(host)
         cmd = "couchbase-cli eventing-function-setup -c {0} -u {1} -p {2} --{3} ".format(

@@ -90,6 +90,7 @@ class EventingBaseTest(QueryHelperTests):
             self.hostname= "http://"+ip+":1080/"
             self.log.info("local ip address:{}".format(self.hostname))
             self.setup_curl()
+        self.skip_metabucket_check=False
 
     def tearDown(self):
         # catch panics and print it in the test log
@@ -102,6 +103,12 @@ class EventingBaseTest(QueryHelperTests):
         self.hostname = self.input.param('host', 'https://postman-echo.com/')
         if self.hostname == 'local':
             self.teardown_curl()
+        # check metadata bucke is empty
+        if len(buckets) > 0 and not self.skip_metabucket_check:
+            stats_meta = rest.get_bucket_stats("metadata")
+            self.log.info("number of documents in metadata bucket {}".format(stats_meta["curr_items"]))
+            if stats_meta["curr_items"] != 0:
+                raise Exception("metdata bucket is not empty at the end of test")
         super(EventingBaseTest, self).tearDown()
 
     def create_save_function_body(self, appname, appcode, description="Sample Description",

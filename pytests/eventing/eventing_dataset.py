@@ -375,4 +375,35 @@ class EventingDataset(EventingBaseTest):
             fiid = bucket.lookup_in(docid, SD.exists('_eventing.fiid', xattr=True))
             crc = bucket.lookup_in(docid, SD.exists('_eventing.crc', xattr=True))
             if fiid_value != fiid['_eventing.fiid'] or crc_value !=crc['_eventing.crc']:
-                self.fail("fiid {} or crc {} values are not same:".format(fiid, crc))
+                self.fail("fiid {} or crc {} values are not same:".format(fiid,crc))
+
+
+    def test_read_cas_bucket_op(self):
+        self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        body = self.create_save_function_body(self.function_name, "handler_code/bucket_op_cas.js")
+        self.deploy_function(body)
+        # Wait for eventing to catch up with all the update mutations and verify results
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016)
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size, op_type='delete')
+        # Wait for eventing to catch up with all the delete mutations and verify results
+        self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+        self.undeploy_and_delete_function(body)
+
+
+    def test_read_expiration_bucket_op(self):
+        self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        body = self.create_save_function_body(self.function_name, "handler_code/bucket_op_exipration.js")
+        self.deploy_function(body)
+        # Wait for eventing to catch up with all the update mutations and verify results
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016)
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size, op_type='delete')
+        # Wait for eventing to catch up with all the delete mutations and verify results
+        self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+        self.undeploy_and_delete_function(body)
+

@@ -198,11 +198,13 @@ class EventingNegative(EventingBaseTest):
         self.wait_for_handler_state(body['appname'], "undeployed")
         # Delete the function
         self.delete_function(body)
-        self.sleep(60)
+        self.sleep(10)
         # check if all the eventing-consumers are cleaned up
         # Validation of any issues like panic will be taken care by teardown method
         self.assertTrue(self.check_if_eventing_consumers_are_cleaned_up(),
                         msg="eventing-consumer processes are not cleaned up even after undeploying the function")
+        # needs to remove when MB-38787 fixed
+        self.skip_metabucket_check=True
 
     # MB-29533 and MB-31545
     def test_metadata_bucket_delete_when_eventing_is_processing_mutations(self):
@@ -224,6 +226,7 @@ class EventingNegative(EventingBaseTest):
         # Validation of any issues like panic will be taken care by teardown method
         self.assertTrue(self.check_if_eventing_consumers_are_cleaned_up(),
                         msg="eventing-consumer processes are not cleaned up even after undeploying the function")
+        self.skip_metabucket_check=True
 
     def test_undeploy_when_function_is_still_in_bootstrap_state(self):
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
@@ -366,6 +369,7 @@ class EventingNegative(EventingBaseTest):
                   batch_size=self.batch_size)
         body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_ON_UPDATE)
         self.rest.create_function(body['appname'], body)
+        self.deploy_function(body,wait_for_bootstrap=False)
         try:
             self.pause_function(body)
             self.fail("application is paused even before deployment")
@@ -373,6 +377,8 @@ class EventingNegative(EventingBaseTest):
             if "ERR_APP_NOT_BOOTSTRAPPED" not in str(e):
                 log.info(str(e))
                 self.fail("Not correct exception thrown")
+        self.wait_for_handler_state(body['appname'],"deployed")
+        self.undeploy_and_delete_function(body)
 
     def test_delete_when_resume_in_progress(self):
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
@@ -388,6 +394,23 @@ class EventingNegative(EventingBaseTest):
             if "ERR_APP_NOT_UNDEPLOYED" not in str(e):
                 log.info(str(e))
                 self.fail("Not correct exception thrown")
+        self.wait_for_handler_state(body['appname'],"deployed")
+        self.undeploy_and_delete_function(body)
+
+    def test_delete_paused_handler(self):
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_ON_UPDATE)
+        self.deploy_function(body)
+        self.pause_function(body)
+        try:
+            self.delete_function(body)
+            self.fail("application is paused even before deployment")
+        except Exception as e:
+            if "ERR_APP_NOT_UNDEPLOYED" not in str(e):
+                log.info(str(e))
+                self.fail("Not correct exception thrown")
+        self.undeploy_function(body)
 
     def test_n1ql_DML_with_source_bucket(self):
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
@@ -472,6 +495,7 @@ class EventingNegative(EventingBaseTest):
         except Exception as e:
             if "ERR_APP_ALREADY_DEPLOYED" not in str(e):
                 raise Exception("Feed boundary updated when app is deployed")
+        self.undeploy_and_delete_function(body)
 
     #MB-31140
     def test_eventing_error_type(self):
@@ -480,6 +504,7 @@ class EventingNegative(EventingBaseTest):
         body = self.create_save_function_body(self.function_name, 'handler_code/eventing_error.js', worker_count=1)
         self.deploy_function(body)
         self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        self.undeploy_and_delete_function(body)
 
 
     #MB-31140
@@ -489,6 +514,7 @@ class EventingNegative(EventingBaseTest):
         body = self.create_save_function_body(self.function_name, 'handler_code/n1ql_error.js', worker_count=1)
         self.deploy_function(body)
         self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        self.undeploy_and_delete_function(body)
 
     #MB-31140
     def test_curl_error_type(self):
@@ -497,6 +523,7 @@ class EventingNegative(EventingBaseTest):
         body = self.create_save_function_body(self.function_name, 'handler_code/curl_error.js', worker_count=1)
         self.deploy_function(body)
         self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        self.undeploy_and_delete_function(body)
 
     #MB-35750
     def test_non_json(self):
@@ -505,3 +532,4 @@ class EventingNegative(EventingBaseTest):
         body = self.create_save_function_body(self.function_name, 'handler_code/non_json.js', worker_count=1)
         self.deploy_function(body)
         self.verify_eventing_results(self.function_name, self.docs_per_day * 2016*3, skip_stats_validation=True)
+        self.undeploy_and_delete_function(body)
