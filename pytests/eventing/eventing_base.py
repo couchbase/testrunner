@@ -20,8 +20,15 @@ from pytests.query_tests_helper import QueryHelperTests
 log = logging.getLogger()
 
 
-class EventingBaseTest(QueryHelperTests, BaseTestCase):
+class EventingBaseTest(QueryHelperTests):
     panic_count = 0
+    ### added to ignore error
+    def suite_setUp(self):
+       pass
+
+    def suite_tearDown(self):
+       pass
+
 
     def setUp(self):
         if self._testMethodDoc:
