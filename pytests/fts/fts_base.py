@@ -925,8 +925,8 @@ class FTSIndex:
             self.name,
             rest.ip))
         rest.update_fts_index(self.name, self.index_definition)
-        self.__log.info("sleeping for 200")
-        time.sleep(200)
+        #self.__log.info("sleeping for 200")
+        #time.sleep(200)
 
     def update_index_to_upside_down(self):
         if self.is_upside_down():
@@ -3134,7 +3134,7 @@ class FTSBaseTest(unittest.TestCase):
 
     def __is_cluster_run(self):
         return len(set([server.ip for server in self._input.servers])) == 1
-
+    
     def _setup_node_secret(self, secret_password):
         for server in self._input.servers:
             SecretsMasterBase(server).setup_pass_node(server, secret_password)
@@ -3175,7 +3175,7 @@ class FTSBaseTest(unittest.TestCase):
             error_logger = self.check_error_count_in_fts_log()
             if error_logger:
                 self.fail("Errors found in logs : {0}".format(error_logger))
-
+        
         if self.enable_secrets:
             self._setup_node_secret("")
 
@@ -3228,15 +3228,15 @@ class FTSBaseTest(unittest.TestCase):
         finally:
             self.log.info("closing all ssh connections")
             for ins in RemoteMachineShellConnection.get_instances():
-                # self.log.info(str(ins))
+                #self.log.info(str(ins))
                 ins.disconnect()
             self.log.info("closing all memcached connections")
             for ins in MemcachedClient.get_instances():
-                # self.log.info(str(ins))
+                #self.log.info(str(ins))
                 ins.close()
 
             for ins in MC_MemcachedClient.get_instances():
-                # self.log.info(str(ins))
+                #self.log.info(str(ins))
                 ins.close()
             self.__cluster_op.shutdown(force=True)
             unittest.TestCase.tearDown(self)
@@ -3304,7 +3304,7 @@ class FTSBaseTest(unittest.TestCase):
         self.__error_count_dict = {}
         if len(self.__report_error_list) > 0:
             self.__initialize_error_count_dict()
-
+            
         if self.ntonencrypt == 'enable':
             self.setup_nton_encryption()
 
@@ -3326,10 +3326,10 @@ class FTSBaseTest(unittest.TestCase):
                         master.ip))
         else:
             self.log.info("Running in compatibility mode, not enabled diag/eval for non-local hosts")
-
+    
     def setup_nton_encryption(self):
         self.log.info('Setting up node to node encyrption from ')
-        ntonencryptionBase().setup_nton_cluster(self._input.servers, clusterEncryptionLevel=self.ntonencrypt_level)
+        ntonencryptionBase().setup_nton_cluster(self._input.servers,clusterEncryptionLevel=self.ntonencrypt_level)
 
     def construct_serv_list(self, serv_str):
         """
@@ -3456,8 +3456,8 @@ class FTSBaseTest(unittest.TestCase):
             if self.consistency_vectors is not None and self.consistency_vectors != '':
                 if not isinstance(self.consistency_vectors, dict):
                     self.consistency_vectors = json.loads(self.consistency_vectors)
-        self.ntonencrypt = self._input.param('ntonencrypt', 'disable')
-        self.ntonencrypt_level = self._input.param('ntonencrypt_level', 'control')
+        self.ntonencrypt = self._input.param('ntonencrypt','disable')
+        self.ntonencrypt_level = self._input.param('ntonencrypt_level','control')
 
     def __initialize_error_count_dict(self):
         """
@@ -3812,12 +3812,6 @@ class FTSBaseTest(unittest.TestCase):
                         if self.compare_es:
                             if bucket_doc_count == es_index_count:
                                 break
-                            elif retry_count == 0:
-                                self.fail("ES index count not matching with bucket_doc_count. Docs in bucket = %s, docs "
-                                          "in FTS index '%s': %s, docs in ES index: %s " % (
-                                              bucket_doc_count, index.name,
-                                              index_doc_count,
-                                              es_index_count))
                         else:
                             break
 
@@ -4251,7 +4245,7 @@ class FTSBaseTest(unittest.TestCase):
         self.dataset = "earthquakes"
         self.log.info("Loading earthquakes.json ...")
         self.async_load_data()
-        self.sleep(10, "Waiting to load earthquakes.json ...")
+        #self.sleep(10, "Waiting to load earthquakes.json ...")
         self.wait_for_indexing_complete()
         return geo_index
 
@@ -4459,7 +4453,7 @@ class FTSBaseTest(unittest.TestCase):
                 zipped.close()
                 os.remove(path + '/' + filename)
                 print(("downloaded and zipped diags @ : {0}/{1}".format(path,
-                                                                        filename)))
+                                                                       filename)))
             except urllib.error.URLError as error:
                 print(("unable to obtain fts diags from {0}".format(diag_url)))
             except BadStatusLine:

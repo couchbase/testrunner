@@ -168,7 +168,7 @@ class BaseSecondaryIndexingTests(QueryTests):
                     for bucket in buckets:
                         create_index_tasks.append(self.async_create_index(bucket.name,
                             query_definition, deploy_node_info = self.deploy_node_info))
-                    self.sleep(3)
+                    #self.sleep(3)
         if self.defer_build and self.build_index_after_create:
             index_list = []
             for task in create_index_tasks:
@@ -526,16 +526,12 @@ class BaseSecondaryIndexingTests(QueryTests):
                         if doc["_id"] == item["docid"]:
                             actual_result.append([doc])
                             doc_id_list.append(item["docid"])
-
-            actual_result = [item[0] for item in actual_result]
-            expected_result = [item[0] for item in expected_result]
-            self.assertEqual(len(actual_result), len(expected_result),
+            self.assertEqual(len(sorted(actual_result)), len(sorted(expected_result)),
                              "Actual Items {0} are not equal to expected Items {1}".
-                             format(len(actual_result), len(expected_result)))
+                             format(len(sorted(actual_result)), len(sorted(expected_result))))
             msg = "The number of rows match but the results mismatch, please check"
-            for item in actual_result:
-                if item not in expected_result:
-                    raise Exception(msg)
+            if sorted(actual_result) != sorted(expected_result):
+                raise Exception(msg)
 
     def run_lookup_gsi_index_with_rest(self, bucket, query_definition):
         pass
@@ -643,7 +639,7 @@ class BaseSecondaryIndexingTests(QueryTests):
             count += 1
         self.assertTrue(self._verify_items_count(), "All Items didn't get Indexed...")
         self.log.info("All the documents are indexed...")
-        self.sleep(10)
+        #self.sleep(10)
         index_bucket_map = self.n1ql_helper.get_index_count_using_primary_index(self.buckets, self.n1ql_node)
         self.log.info(bucket_map)
         self.log.info(index_bucket_map)
@@ -1001,7 +997,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         shell.log_command_output(o, r)
         shell.disconnect()
         # wait for restart and warmup on all node
-        self.sleep(self.wait_timeout * 5)
+        self.sleep(self.wait_timeout * 3)
         # disable firewall on these nodes
         self.stop_firewall_on_node(node)
         # wait till node is ready after warmup

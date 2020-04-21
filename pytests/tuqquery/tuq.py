@@ -138,22 +138,22 @@ class QueryTests(BaseTestCase):
                 self.log.info("--> start: create_primary_index_for_3_0_and_greater...")
                 self.create_primary_index_for_3_0_and_greater()
                 self.log.info("--> End: create_primary_index_for_3_0_and_greater...")
-        self.log.info('-'*100)
-        self.log.info('Temp fix for MB-16888')
-        if self.cluster_ops == False:
-            output, error = self.shell.execute_command("killall -9 cbq-engine")
-            output1, error1 = self.shell.execute_command("killall -9 indexer")
-            if (len(error) == 0 or len(error1) == 0):
-                self.sleep(30, 'wait for indexer')
-            else:
-                if (len(error) > 0):
-                    self.log.info("Error executing shell command: killall -9 cbq-engine! Error - " + str(error[0]))
-                if (len(error1) > 0):
-                    self.log.info("Error executing shell command: killall -9 indexer! Error - " + str(error1[0]))
-        self.log.info('-'*100)
+        #self.log.info('-'*100)
+        #self.log.info('Temp fix for MB-16888')
+        #if self.cluster_ops == False:
+        #    output, error = self.shell.execute_command("killall -9 cbq-engine")
+        #    output1, error1 = self.shell.execute_command("killall -9 indexer")
+        #    if (len(error) == 0 or len(error1) == 0):
+        #        self.sleep(30, 'wait for indexer')
+        #    else:
+        #        if (len(error) > 0):
+        #            self.log.info("Error executing shell command: killall -9 cbq-engine! Error - " + str(error[0]))
+        #        if (len(error1) > 0):
+        #            self.log.info("Error executing shell command: killall -9 indexer! Error - " + str(error1[0]))
+        #self.log.info('-'*100)
         if self.analytics:
             self.setup_analytics()
-            self.sleep(30, 'wait for analytics setup')
+            #self.sleep(30, 'wait for analytics setup')
         if self.monitoring:
             self.run_cbq_query('delete from system:prepareds')
             self.run_cbq_query('delete from system:completed_requests')
@@ -163,8 +163,8 @@ class QueryTests(BaseTestCase):
         self.log.info("==============  QueryTests suite_setup has started ==============")
         try:
             os = self.shell.extract_remote_info().type.lower()
-            if os != 'windows':
-                self.sleep(10, 'sleep before load')
+            #if os != 'windows':
+                #self.sleep(10, 'sleep before load')
             if not self.skip_load:
                 if self.flat_json:
                     self.log.info("-->gens_load flat_json")
@@ -178,7 +178,7 @@ class QueryTests(BaseTestCase):
             if self.analytics:
                 self.cluster.rebalance([self.master, self.cbas_node], [self.cbas_node], [], services=['cbas'])
                 self.setup_analytics()
-                self.sleep(30, 'wait for analytics setup')
+                #self.sleep(30, 'wait for analytics setup')
             if self.testrunner_client == 'python_sdk':
                 from couchbase.cluster import Cluster
                 from couchbase.cluster import PasswordAuthenticator
@@ -1473,17 +1473,34 @@ class QueryTests(BaseTestCase):
                 requestId = result['requestID']
                 result = self.run_cbq_query(
                     'delete from system:active_requests where requestId  =  "%s"' % requestId)
-                time.sleep(20)
-                result = self.run_cbq_query(
-                    'select * from system:active_requests  where requestId  =  "%s"' % requestId)
+                #time.sleep(20)
+
+                retries = 3
+                while retries > 0:
+                    result = self.run_cbq_query(
+                        'select * from system:active_requests  where requestId  =  "%s"' % requestId)
+                    if result['metrics']['resultCount'] > 0 :
+                        self.sleep(5)
+                        retries -= 1
+                    else:
+                        break;
+
                 self.assertTrue(result['metrics']['resultCount'] == 0)
                 result = self.run_cbq_query("select * from system:completed_requests")
                 requestId = result['requestID']
                 result = self.run_cbq_query(
                     'delete from system:completed_requests where requestId  =  "%s"' % requestId)
-                time.sleep(10)
-                result = self.run_cbq_query(
-                    'select * from system:completed_requests where requestId  =  "%s"' % requestId)
+                #time.sleep(10)
+                retries = 3
+                while retries > 0:
+                    result = self.run_cbq_query(
+                        'select * from system:completed_requests where requestId  =  "%s"' % requestId)
+                    if result['metrics']['resultCount'] > 0:
+                        self.sleep(5)
+                        retries -= 1
+                    else:
+                        break;
+
                 self.assertTrue(result['metrics']['resultCount'] == 0)
 
     def debug_query(self, query, expected_result, result, function_name):
@@ -1668,7 +1685,7 @@ class QueryTests(BaseTestCase):
             self.query_assert_success(query)
         self.query = 'create index idx1 on {0}(name)'.format(self.buckets[0].name)
         res = self.run_cbq_query(query=query)
-        self.sleep(10)
+        #self.sleep(10)
         for query in ['select * from system:indexes', 'select * from system:dual',
                       "prepare st1 from select * from {0} union select * from {0} union select * from {0}".format(self.buckets[0].name),
                       'execute st1']:
@@ -1926,9 +1943,9 @@ class QueryTests(BaseTestCase):
         upgrade_threads = self._async_update(self.upgrade_to, self.servers)
         for upgrade_thread in upgrade_threads:
             upgrade_thread.join()
-        self.sleep(20)
+        #self.sleep(20)
         self.add_built_in_server_user()
-        self.sleep(20)
+        #self.sleep(20)
         self.upgrade_servers = self.servers
 
     def _perform_online_upgrade_with_rebalance(self):
@@ -1967,7 +1984,7 @@ class QueryTests(BaseTestCase):
                 self.log.info("Adding node back to cluster...")
                 rebalance = self.cluster.async_rebalance(active_nodes, [node], [], services=node_services)
                 rebalance.result()
-                self.sleep(60)
+                #self.sleep(60)
                 node_version = RestConnection(node).get_nodes_versions()
                 self.log.info("{0} node {1} Upgraded to: {2}".format(service, node.ip, node_version))
 
@@ -1996,7 +2013,7 @@ class QueryTests(BaseTestCase):
                     th.join()
 
                 self.log.info("==== Upgrade Complete ====")
-                self.sleep(30)
+                #self.sleep(30)
 
                 self.log.info("Adding node back to cluster...")
                 rest = RestConnection(self.master)
@@ -2010,7 +2027,7 @@ class QueryTests(BaseTestCase):
                 self.log.info("Adding node back to cluster...")
                 rebalance = self.cluster.async_rebalance(active_nodes, [], [])
                 rebalance.result()
-                self.sleep(60)
+                #self.sleep(60)
                 node_version = RestConnection(node).get_nodes_versions()
                 self.log.info("{0} node {1} Upgraded to: {2}".format(service, node.ip, node_version))
 
@@ -2173,10 +2190,10 @@ class QueryTests(BaseTestCase):
                         "query_update(default)", "query_delete(default)"]:
             self.query = 'create index idx1 on {0}(name)'.format(self.buckets[0].name)
             res = self.curl_with_roles(self.query)
-            self.sleep(10)
+            #self.sleep(10)
             self.query = 'create index idx2 on {0}(name)'.format(self.buckets[1].name)
             self.curl_with_roles(self.query)
-            self.sleep(10)
+            #self.sleep(10)
             self.query = 'select * from system:indexes'
             res = self.curl_with_roles(self.query)
 
@@ -2540,7 +2557,7 @@ class QueryTests(BaseTestCase):
         output = ""
         if shell.remote:
             stdin, stdout, stderro = shell._ssh_client.exec_command(main_command)
-            time.sleep(20)
+            #time.sleep(20)
             count = 0
             for line in stdout.readlines():
                 if (count >= 0):
@@ -2561,7 +2578,7 @@ class QueryTests(BaseTestCase):
             stdout, stderro = p.communicate()
             output = stdout
             print(output)
-            time.sleep(1)
+            #time.sleep(1)
         if (shell.remote and not (queries == "")):
             sftp.remove(filename)
             sftp.close()
@@ -2713,7 +2730,7 @@ class QueryTests(BaseTestCase):
                 self.log.error("socket error while connecting to {0} error {1} ".format(api, e))
                 if time.time() > end_time:
                     raise Exception("nothing")
-            time.sleep(3)
+            #time.sleep(3)
 
 ##############################################################################################
 #
