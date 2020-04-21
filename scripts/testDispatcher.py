@@ -549,7 +549,6 @@ def main():
                             print(s)
 
                     print('\n', time.asctime( time.localtime(time.time()) ), 'launching ', url)
-                    print(url)
                     dispatch_job = True
                     if not options.fresh_run:
                         dispatch_job = \
@@ -569,6 +568,8 @@ def main():
                             print('the release response', response, content)
                     else:
                         response, content = httplib2.Http(timeout=TIMEOUT).request(url, 'GET')
+                        print("Response is: {0}".format(str(response)))
+                        print("Content is: {0}".format(str(content)))
 
                     testsToLaunch.pop(i)
                     summary.append( {'test':descriptor, 'time':time.asctime( time.localtime(time.time()) ) } )
