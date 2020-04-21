@@ -40,7 +40,7 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
     def suite_tearDown(self):
         pass
     # Create an index and verify the replicas
-    def _create_index_query(self, index_statement='', index_name=''):
+    def _create_index_query(self, index_statement='', index_name='', defer_build=False):
         try:
             self.n1ql_helper.run_cbq_query(query=index_statement, server=self.n1ql_node)
         except Exception as ex:
@@ -49,13 +49,13 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
 
         self.assertTrue(self.verify_index_in_index_map(index_name),
                         "Index did not appear in the index map after 10 minutes")
-        self.assertTrue(self.wait_until_specific_index_online(index_name), "Index never finished building")
+        self.assertTrue(self.wait_until_specific_index_online(index_name, defer_build=defer_build), "Index never finished building")
         index_map = self.get_index_map()
         self.log.info(index_map)
         self.n1ql_helper.verify_replica_indexes([index_name], index_map, self.num_index_replicas)
 
     # Create a partitioned index and verify the replicas
-    def _create_partitioned_index(self, index_statement='', index_name =''):
+    def _create_partitioned_index(self, index_statement='', index_name ='', defer_build=False):
         try:
             self.n1ql_helper.run_cbq_query(query=index_statement,
                                            server=self.n1ql_node)
@@ -66,7 +66,7 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
         self.assertTrue(self.verify_index_in_index_map(index_name),
                         "Index did not appear in the index map after 10 minutes")
 
-        self.assertTrue(self.wait_until_indexes_online(), "Indexes never finished building")
+        self.assertTrue(self.wait_until_indexes_online(defer_build=defer_build), "Indexes never finished building")
 
         self.verify_partitioned_indexes(index_name, self.num_index_replicas)
 
@@ -260,9 +260,9 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
             create_index_query = "CREATE INDEX idx1 on default(name,dept,salary) partition by hash(name) with {{'num_replica':{0}, 'num_partition':{1}, 'defer_build':true}}".format(
                 self.num_index_replicas, self.num_index_partitions)
         else:
-            create_index_query = "CREATE INDEX idx1 on default(name,dept,salary) partition by hash(name) with {{'num_partition':{1}, 'defer_build':true}}".format(self.num_index_partitions)
+            create_index_query = "CREATE INDEX idx1 on default(name,dept,salary) partition by hash(name) with {{'num_partition':{0}, 'defer_build':true}}".format(self.num_index_partitions)
 
-        self._create_partitioned_index(create_index_query, 'idx1')
+        self._create_partitioned_index(create_index_query, 'idx1', defer_build=True)
 
         if self.build_index:
             build_index_query = "BUILD INDEX ON default('idx1')"
@@ -440,7 +440,7 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
         else:
             create_index_query = "CREATE INDEX " + index_name_prefix + " ON default(age) USING GSI WITH {{'defer_build':true}};"
 
-        self._create_index_query(index_statement=create_index_query, index_name=index_name_prefix)
+        self._create_index_query(index_statement=create_index_query, index_name=index_name_prefix, defer_build=True)
 
         if self.build_index:
             build_index_query = "BUILD INDEX ON default(%s)" % index_name_prefix
@@ -609,7 +609,7 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
         else:
             create_index_query = "CREATE INDEX " + index_name_prefix + " ON default(age) USING GSI WITH {{'defer_build':true}};"
 
-        self._create_index_query(index_statement=create_index_query, index_name=index_name_prefix)
+        self._create_index_query(index_statement=create_index_query, index_name=index_name_prefix, defer_build=True)
 
         if self.build_index:
             build_index_query = "BUILD INDEX ON default(%s)" % index_name_prefix
@@ -1705,6 +1705,7 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
         index_metadata = self.rest.get_indexer_metadata()
         self.log.info(index_metadata)
 
+        replica_id = None
         for index in index_metadata['status']:
             if index['hosts'][0] == (self.servers[1].ip + ":" + self.servers[1].port):
                 replica_id = index['replicaId']
@@ -1713,7 +1714,6 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
         self.sleep(30)
         self.assertTrue(self.wait_until_indexes_online(), "Indexes never finished building")
 
-        self.sleep(60)
         index_map = self.get_index_map()
 
         self.n1ql_helper.verify_replica_indexes([index_name_prefix], index_map, (expected_num_replicas - 1),
@@ -1722,5 +1722,6 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
         error = self._alter_index_replicas(index_name=index_name_prefix, num_replicas=expected_num_replicas)
         self.sleep(10)
         self.assertTrue(self.wait_until_indexes_online(), "Indexes never finished building")
+        index_map = self.get_index_map()
 
         self.n1ql_helper.verify_replica_indexes([index_name_prefix], index_map, expected_num_replicas )
