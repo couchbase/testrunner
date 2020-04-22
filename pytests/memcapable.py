@@ -1044,7 +1044,7 @@ class MultiGetNegativeTest(unittest.TestCase):
 
         self.log.info("running multiget to get {0} keys".format(howmany))
         gets = client.getMulti(keys)
-        self.log.info("recieved {0} keys".format(len(gets)))
+        self.log.info("received {0} keys".format(len(gets)))
 
         self.log.info(gets)
         self.assertEqual(len(gets), len(keys))
