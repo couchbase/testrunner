@@ -81,6 +81,7 @@ def get_available_servers_count(options=None, is_addl_pool=False, os_version="")
         getAvailUrl = getAvailUrl + '{0}?poolId={1}'.format(os_version, pool_id)
 
     print("Connecting {}".format(getAvailUrl))
+    count = 0
     response, content = httplib2.Http(timeout=TIMEOUT).request(getAvailUrl, 'GET')
     if response.status != 200:
         print(time.asctime(time.localtime(time.time())), 'invalid server response', content)
@@ -89,7 +90,8 @@ def get_available_servers_count(options=None, is_addl_pool=False, os_version="")
         print(time.asctime(time.localtime(time.time())), 'no VMs')
         time.sleep(POLL_INTERVAL)
     else:
-        return int(content)
+        count = int(content)
+    return count
 
 def get_servers(options=None, descriptor="", test=None, how_many=0, is_addl_pool=False, os_version=""):
     pool_id = options.addPoolId if is_addl_pool == True else options.poolId
@@ -414,9 +416,12 @@ def main():
     currentDispatcherJobUrl = OS.getenv("BUILD_URL")
     currentExecutorParams = get_jenkins_params.get_params(
         currentDispatcherJobUrl)
-    currentExecutorParams['dispatcher_url'] = OS.getenv('JOB_URL')
+    if currentExecutorParams is None:
+        currentExecutorParams = {}
+    if OS.environ.get('JOB_URL') is not None:
+        currentExecutorParams['dispatcher_url'] = OS.getenv('JOB_URL')
     currentExecutorParams = json.dumps(currentExecutorParams)
-
+    print(currentExecutorParams)
     summary = []
     servers = []
 
@@ -424,6 +429,7 @@ def main():
         try:
             # this bit is Docker/VM dependent
             serverCount = get_available_servers_count(options=options, os_version=options.os)
+            print("Server count={}".format(serverCount))
             if serverCount and serverCount > 0:
                 # see if we can match a test
                 print((time.asctime(time.localtime(time.time())), 'there are', serverCount, ' servers available'))
