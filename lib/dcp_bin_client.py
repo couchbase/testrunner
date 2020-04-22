@@ -88,7 +88,7 @@ class DcpClient(MemcachedClient):
         return self._handle_op(op, 1)
 
     def quit(self):
-        """ send quit command to mc - when response is recieved quit reader """
+        """ send quit command to mc - when response is received quit reader """
         op = Quit()
         r = {'opcode': op.opcode}
         if not self.dead:

@@ -12,7 +12,7 @@ FAILOVER_STAT = "failovers"
 VBSEQNO_STAT  = "vbucket-seqno"
 
 """ Error Messages """
-EINV_KEY        = "ERROR: Recieved invald key"
+EINV_KEY        = "ERROR: received invald key"
 EINV_RESPONSE   = "ERROR: received invalid stream response"
 ENO_BUCKET      = "ERROR: unable to find bucket"
 ENO_CLIENT      = "ERROR: failed to create client"

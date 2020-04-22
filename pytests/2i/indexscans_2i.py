@@ -353,7 +353,7 @@ class SecondaryIndexingScanTests(BaseSecondaryIndexingTests):
             self.fail(" querying without indexes and primary indexes is not allowed")
         except Exception as ex:
             msg = "No primary index on keyspace default. Use CREATE PRIMARY INDEX to create one."
-            self.assertTrue(msg in str(ex), "did not recieve message as expected : {0}".format(ex))
+            self.assertTrue(msg in str(ex), "did not receive message as expected : {0}".format(ex))
 
     def _generate_scan_vector_ranges(self, scan_vector_per_values = None):
         scan_vector_per_values = str(scan_vector_per_values)

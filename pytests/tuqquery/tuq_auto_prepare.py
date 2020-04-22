@@ -368,7 +368,7 @@ class QueryAutoPrepareTests(QueryTests):
         finally:
             self.run_cbq_query(query="DROP INDEX default.idx")
 
-    ''' Test that if a node is in the cluster but not currently taking traffic, it will not recieve the auto-prepare'''
+    ''' Test that if a node is in the cluster but not currently taking traffic, it will not receive the auto-prepare'''
     def test_add_node_no_rebalance(self):
         services_in = ["index", "n1ql", "kv"]
         # rebalance in a node

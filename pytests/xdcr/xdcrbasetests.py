@@ -1409,7 +1409,7 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
     def _wait_flusher_empty(self, master, servers, timeout=120):
         tasks = []
         buckets = self._get_cluster_buckets(master)
-        self.assertTrue(buckets, "No buckets recieved from the server {0} for verification".format(master.ip))
+        self.assertTrue(buckets, "No buckets received from the server {0} for verification".format(master.ip))
         for server in servers:
             for bucket in buckets:
                 tasks.append(self.cluster.async_wait_for_stats([server], bucket, '', 'ep_queue_size', '==', 0))
@@ -1419,7 +1419,7 @@ class XDCRReplicationBaseTest(XDCRBaseTest):
     def _verify_data_all_buckets(self, server, kv_store=1, timeout=None, max_verify=None, only_store_hash=True, batch_size=1000):
         tasks = []
         buckets = self._get_cluster_buckets(server)
-        self.assertTrue(buckets, "No buckets recieved from the server {0} for verification".format(server.ip))
+        self.assertTrue(buckets, "No buckets received from the server {0} for verification".format(server.ip))
         for bucket in buckets:
             tasks.append(self.cluster.async_verify_data(server, bucket, bucket.kvs[kv_store], max_verify,
                                                         only_store_hash, batch_size, timeout_sec=60,
