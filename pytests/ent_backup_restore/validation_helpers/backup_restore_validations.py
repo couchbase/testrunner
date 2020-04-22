@@ -138,37 +138,37 @@ class BackupRestoreValidations(BackupRestoreValidationBase):
         bucket_name = False
         backup_folder_timestamp = False
         items_count = False
-        shard_count = False
+        bk_type = ["FULL"]
         items = 0
-        for line in output:
-            if self.backupset.name in line:
-                backup_name = True
-            if str(self.buckets[0].name) in line:
-                bucket_name = True
-            if self.backups[0] in line:
-                backup_folder_timestamp = True
-            if "+ data" in line:
-                split = line.split(" ")
-                split = [s for s in split if s]
-                if int(split[1]) == self.num_items:
-                    items_count = True
-            if "shard" in line.lower():
-                split = line.split(" ")
-                split = [s for s in split if s]
-                items += int(split[1])
-        if items == self.num_items:
-            shard_count = True
+        if output and output[0]:
+            bk_info = json.loads(output[0])
+            bk_name = bk_info["name"]
+            bk_info = bk_info["repos"]
+        else:
+            return False, "No output content"
+
+        self.log.info("list is deprecated from 7.0.0.  Use `info` instead")
+        if self.backupset.name in bk_name: #bk_info[0]["backups"][0]["date"]:
+            backup_name = True
+        if str(self.buckets[0].name) in bk_info[0]["backups"][0]["buckets"][0]["name"]:
+            bucket_name = True
+        if self.backups[0] in bk_info[0]["backups"][0]["date"]:
+            backup_folder_timestamp = True
+        if self.num_items == bk_info[0]["backups"][0]["buckets"][0]["items"]:
+            items_count = True
         if not backup_name:
-            return False, "Expected Backup name not found in list command output"
+            return False, "Expected Backup name not found in info command output"
         if not bucket_name:
-            return False, "Expected Bucket name not found in list command output"
+            return False, "Expected Bucket name not found in info command output"
         if not backup_folder_timestamp:
-            return False, "Expected folder timestamp not found in list command output"
+            return False, "Expected folder timestamp not found in info command output"
         if not items_count:
-            return False, "Items count mismatch in list command output"
-        if not shard_count:
-            return False, "Shard count mismatch in list command output"
-        return True, "List command validation success"
+            return False, "Items count mismatch in info command output"
+        if bk_info[0]["backups"][0]["type"] not in bk_type:
+            return False, "Backup complete does not have value"
+        if not bk_info[0]["backups"][0]["complete"]:
+            return False, "Backup type is not in info command output"
+        return True, "Info command validation success"
 
     def validate_compact_lists(self, output_before_compact, output_after_compact, is_approx=False):
         size_match = True

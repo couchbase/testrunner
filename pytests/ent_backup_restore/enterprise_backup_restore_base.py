@@ -953,7 +953,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         remote_client.disconnect()
 
     def backup_list(self):
-        args = "list --archive {0}".format(self.backupset.directory)
+        args = "info --all -j --archive {0}".format(self.backupset.directory)
         if self.backupset.backup_list_name:
             args += " --repo {0}".format(self.backupset.backup_list_name)
         if self.backupset.backup_incr_backup:
