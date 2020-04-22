@@ -55,7 +55,6 @@ class QueryN1QLAuditTests(auditTest, QueryTests):
         query_type = self.input.param("ops", None)
         user = self.master.rest_username
         source = 'ns_server'
-        self.sleep(180)
         if (query_type =='create_index'):
             if self.filter:
                 self.execute_filtered_query()
@@ -63,7 +62,7 @@ class QueryN1QLAuditTests(auditTest, QueryTests):
             expectedResults = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success', 'isAdHoc': True,
                                'name': 'CREATE INDEX statement', 'real_userid': {'source': source, 'user': user},
                                'statement': 'CREATE INDEX idx on default(join_day)',
-                               'userAgent': 'Python-httplib2/$Rev: 259 $', 'id': self.eventID,
+                               'userAgent': 'Python-httplib2/0.13.1 (gzip)', 'id': self.eventID,
                                'description': 'A N1QL CREATE INDEX statement was executed'}
 
         elif(query_type =='alter_index'):
@@ -74,7 +73,7 @@ class QueryN1QLAuditTests(auditTest, QueryTests):
             expectedResults = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success', 'isAdHoc': True,
                                'name': 'ALTER INDEX statement', 'real_userid': {'source': source, 'user': user},
                                'statement': "ALTER INDEX default.idx4 WITH {'action':'move','nodes':['%s:%s']}" % (self.servers[1].ip, self.servers[1].port),
-                               'userAgent': 'Python-httplib2/$Rev: 259 $', 'id': self.eventID,
+                               'userAgent': 'Python-httplib2/0.13.1 (gzip)', 'id': self.eventID,
                                'description': 'A N1QL ALTER INDEX statement was executed'}
 
         elif (query_type =='build_index'):
@@ -85,7 +84,7 @@ class QueryN1QLAuditTests(auditTest, QueryTests):
             expectedResults = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success', 'isAdHoc': True,
                                'name': 'BUILD INDEX statement', 'real_userid': {'source': source, 'user': user},
                                'statement': 'BUILD INDEX on default(idx3)',
-                               'userAgent': 'Python-httplib2/$Rev: 259 $', 'id': self.eventID,
+                               'userAgent': 'Python-httplib2/0.13.1 (gzip)', 'id': self.eventID,
                                'description': 'A N1QL BUILD INDEX statement was executed'}
 
         elif(query_type == 'drop_index'):
@@ -96,7 +95,7 @@ class QueryN1QLAuditTests(auditTest, QueryTests):
             expectedResults = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success', 'isAdHoc': True,
                                'name': 'DROP INDEX statement', 'real_userid': {'source': source, 'user': user},
                                'statement': 'DROP INDEX default.idx2',
-                               'userAgent': 'Python-httplib2/$Rev: 259 $', 'id': self.eventID,
+                               'userAgent': 'Python-httplib2/0.13.1 (gzip)', 'id': self.eventID,
                                'description': 'A N1QL DROP INDEX statement was executed'}
 
         elif(query_type == 'primary_index'):
@@ -110,7 +109,7 @@ class QueryN1QLAuditTests(auditTest, QueryTests):
             expectedResults = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success', 'isAdHoc': True,
                                'name': 'CREATE PRIMARY INDEX statement', 'real_userid': {'source': source, 'user': user},
                                'statement': 'CREATE PRIMARY INDEX on default',
-                               'userAgent': 'Python-httplib2/$Rev: 259 $', 'id': self.eventID,
+                               'userAgent': 'Python-httplib2/0.13.1 (gzip)', 'id': self.eventID,
                                'description': 'A N1QL CREATE PRIMARY INDEX statement was executed'}
 
         elif(query_type == 'select'):
@@ -120,7 +119,7 @@ class QueryN1QLAuditTests(auditTest, QueryTests):
             expectedResults = {'node':'%s:%s' % (self.master.ip, self.master.port), 'status': 'success', 'isAdHoc': True,
                                'name': 'SELECT statement', 'real_userid': {'source': source, 'user': user},
                                'statement': 'SELECT * FROM default LIMIT 100',
-                               'userAgent': 'Python-httplib2/$Rev: 259 $', 'id': self.eventID,
+                               'userAgent': 'Python-httplib2/0.13.1 (gzip)', 'id': self.eventID,
                                'description': 'A N1QL SELECT statement was executed'}
 
         elif(query_type == 'explain'):
@@ -130,7 +129,7 @@ class QueryN1QLAuditTests(auditTest, QueryTests):
             expectedResults = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success', 'isAdHoc': True,
                                'name': 'EXPLAIN statement', 'real_userid': {'source': source, 'user': user},
                                'statement': 'EXPLAIN SELECT * FROM default',
-                               'userAgent': 'Python-httplib2/$Rev: 259 $', 'id': self.eventID,
+                               'userAgent': 'Python-httplib2/0.13.1 (gzip)', 'id': self.eventID,
                                'description': 'A N1QL EXPLAIN statement was executed'}
 
         elif(query_type == 'prepare'):
@@ -141,7 +140,7 @@ class QueryN1QLAuditTests(auditTest, QueryTests):
             expectedResults = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success', 'isAdHoc': True,
                                'name': 'PREPARE statement', 'real_userid': {'source': source, 'user': user},
                                'statement': 'prepare {0} from select * from default'.format(prepared_name),
-                               'userAgent': 'Python-httplib2/$Rev: 259 $', 'id': self.eventID,
+                               'userAgent': 'Python-httplib2/0.13.1 (gzip)', 'id': self.eventID,
                                'description': 'A N1QL PREPARE statement was executed'}
 
         elif(query_type == 'adhoc_false'):
@@ -153,7 +152,7 @@ class QueryN1QLAuditTests(auditTest, QueryTests):
             expectedResults = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success', 'isAdHoc': False,
                                'name': 'INFER statement', 'real_userid': {'source': source, 'user': user},
                                'statement': 'prepare {0}'.format(prepared_name) + ' from INFER default WITH {"sample_size":10000,"num_sample_values":1,"similarity_metric":0.0}',
-                               'userAgent': 'Python-httplib2/$Rev: 259 $', 'id': self.eventID, 'preparedId': '{0}'.format(prepared_name),
+                               'userAgent': 'Python-httplib2/0.13.1 (gzip)', 'id': self.eventID, 'preparedId': '{0}'.format(prepared_name),
                                'description': 'A N1QL INFER statement was executed'}
 
         elif(query_type == 'unrecognized'):
@@ -164,7 +163,7 @@ class QueryN1QLAuditTests(auditTest, QueryTests):
             except CBQError:
                 expectedResults = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'fatal', 'isAdHoc': True,
                                    'name': 'UNRECOGNIZED statement', 'real_userid': {'source': source, 'user': user},
-                                   'statement': 'selec * fro default', 'userAgent': 'Python-httplib2/$Rev: 259 $',
+                                   'statement': 'selec * fro default', 'userAgent': 'Python-httplib2/0.13.1 (gzip)',
                                    'id': self.eventID, 'description': 'An unrecognized statement was received by the N1QL query engine'}
 
         elif(query_type == 'insert'):
@@ -178,7 +177,7 @@ class QueryN1QLAuditTests(auditTest, QueryTests):
                                'statement': 'INSERT INTO default ( KEY, VALUE ) VALUES ("1",{ "order_id": "1", "type": '
                                        '"order", "customer_id":"24601", "total_price": 30.3, "lineitems": '
                                        '[ "11", "12", "13" ] })',
-                               'userAgent': 'Python-httplib2/$Rev: 259 $', 'id': self.eventID,
+                               'userAgent': 'Python-httplib2/0.13.1 (gzip)', 'id': self.eventID,
                                'description': 'A N1QL INSERT statement was executed'}
 
         elif(query_type == 'upsert'):
@@ -192,7 +191,7 @@ class QueryN1QLAuditTests(auditTest, QueryTests):
                                'statement': 'UPSERT INTO default ( KEY, VALUE ) VALUES ("1",{ "order_id": "1", "type": '
                                        '"order", "customer_id":"24601", "total_price": 30.3, "lineitems": '
                                        '[ "11", "12", "13" ] })',
-                               'userAgent': 'Python-httplib2/$Rev: 259 $', 'id': self.eventID,
+                               'userAgent': 'Python-httplib2/0.13.1 (gzip)', 'id': self.eventID,
                                'description': 'A N1QL UPSERT statement was executed'}
 
         elif(query_type == 'delete'):
@@ -207,7 +206,7 @@ class QueryN1QLAuditTests(auditTest, QueryTests):
             expectedResults = {'node': '%s:%s' % (self.servers[1].ip, self.servers[1].port), 'status': 'success', 'isAdHoc': True,
                                'name': 'DELETE statement', 'real_userid': {'source': source, 'user': user},
                                'statement': 'DELETE FROM `travel-sample` WHERE type = "hotel"',
-                               'userAgent': 'Python-httplib2/$Rev: 259 $', 'id': self.eventID,
+                               'userAgent': 'Python-httplib2/0.13.1 (gzip)', 'id': self.eventID,
                                'description': 'A N1QL DELETE statement was executed'}
 
         elif(query_type == 'update'):
@@ -217,7 +216,7 @@ class QueryN1QLAuditTests(auditTest, QueryTests):
             expectedResults = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success', 'isAdHoc': True,
                                'name': 'UPDATE statement', 'real_userid': {'source': source, 'user': user},
                                'statement': 'UPDATE `travel-sample` SET foo = 5',
-                               'userAgent': 'Python-httplib2/$Rev: 259 $', 'id': self.eventID,
+                               'userAgent': 'Python-httplib2/0.13.1 (gzip)', 'id': self.eventID,
                                'description': 'A N1QL UPDATE statement was executed'}
 
         elif(query_type == 'merge'):
@@ -231,7 +230,7 @@ class QueryN1QLAuditTests(auditTest, QueryTests):
                                'statement': 'MERGE INTO `travel-sample` t USING [{"id":"21728"},{"id":"21730"}] source '
                                      'ON KEY "hotel_"|| source.id WHEN MATCHED THEN UPDATE SET t.old_vacancy = t.vacancy'
                                      ', t.vacancy = false RETURNING meta(t).id, t.old_vacancy, t.vacancy',
-                               'userAgent': 'Python-httplib2/$Rev: 259 $', 'id': self.eventID,
+                               'userAgent': 'Python-httplib2/0.13.1 (gzip)', 'id': self.eventID,
                                'description': 'A N1QL MERGE statement was executed'}
 
         elif(query_type == 'grant'):
@@ -241,7 +240,7 @@ class QueryN1QLAuditTests(auditTest, QueryTests):
             expectedResults = {'node':'%s:%s' % (self.master.ip, self.master.port), 'status': 'success', 'isAdHoc': True,
                                'name': 'GRANT ROLE statement', 'real_userid': {'source': source, 'user': user},
                                'statement': 'GRANT query_external_access TO query',
-                               'userAgent': 'Python-httplib2/$Rev: 259 $', 'id': self.eventID,
+                               'userAgent': 'Python-httplib2/0.13.1 (gzip)', 'id': self.eventID,
                                'description': 'A N1QL GRANT ROLE statement was executed'}
 
         elif(query_type == 'revoke'):
@@ -251,14 +250,14 @@ class QueryN1QLAuditTests(auditTest, QueryTests):
             expectedResults = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success', 'isAdHoc': True,
                                'name': 'REVOKE ROLE statement', 'real_userid': {'source': source, 'user': user},
                                'statement': 'REVOKE query_system_catalog FROM query',
-                               'userAgent': 'Python-httplib2/$Rev: 259 $', 'id': self.eventID,
+                               'userAgent': 'Python-httplib2/0.13.1 (gzip)', 'id': self.eventID,
                                'description': 'A N1QL REVOKE ROLE statement was executed'}
 
         elif(query_type == 'no_select'):
             cbqpath = '%scbq' % self.path + " -e %s:%s -u 'no_select' -p 'password' -q " % (self.master.ip, self.n1ql_port)
             query = 'select * from default limit 100'
             self.shell.execute_commands_inside(cbqpath, query, '', '', '', '', '')
-            expectedResults ={'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'fatal', 'isAdHoc': True,
+            expectedResults ={'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'errors', 'isAdHoc': True,
                               'statement': 'select * from default limit 100;',
                               'description': 'A N1QL SELECT statement was executed',
                               'real_userid': {'source': 'local', 'user': 'no_select'},
