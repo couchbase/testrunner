@@ -13,6 +13,12 @@ from membase.helper.cluster_helper import ClusterOperationHelper
 
 class RebalanceInTests(RebalanceBaseTest):
 
+    def suite_setUp(self):
+        pass
+
+    def suite_tearDown(self):
+        pass
+
     def setUp(self):
         super(RebalanceInTests, self).setUp()
 
