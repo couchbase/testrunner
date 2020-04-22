@@ -760,7 +760,7 @@ class GSIAlterIndexesTests(GSIIndexPartitioningTests):
             error = self._alter_index_replicas(index_name=index_name_prefix, num_replicas=expected_num_replicas)
             self.sleep(60)
 
-        self.assertTrue(self.wait_until_indexes_online(), "Indexes never finished building")
+        self.assertTrue(self.wait_until_indexes_online(check_paused_index=True), "Indexes never finished building")
 
         if self.expected_err_msg:
             if self.expected_err_msg not in error[0]:

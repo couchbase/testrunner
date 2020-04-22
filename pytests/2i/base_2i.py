@@ -840,7 +840,7 @@ class BaseSecondaryIndexingTests(QueryTests):
                     is_cluster_healthy = True
         return is_cluster_healthy
 
-    def wait_until_indexes_online(self, timeout=600, defer_build=False):
+    def wait_until_indexes_online(self, timeout=600, defer_build=False, check_paused_index=False):
         rest = RestConnection(self.master)
         init_time = time.time()
         check = False
@@ -852,6 +852,13 @@ class BaseSecondaryIndexingTests(QueryTests):
                 for index_state in index_info.values():
                     if defer_build:
                         if index_state["status"] == "Created":
+                            check = True
+                        else:
+                            check = False
+                            time.sleep(1)
+                            break
+                    elif check_paused_index:
+                        if index_state["status"] == "Paused":
                             check = True
                         else:
                             check = False
