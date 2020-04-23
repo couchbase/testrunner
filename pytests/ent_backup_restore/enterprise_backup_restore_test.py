@@ -2014,19 +2014,21 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         """ remove last 6 chars of offset time in backup name"""
         if self.backups and self.backups[0][-3:] == "_00":
             strip_backupset = [s[:-6] for s in self.backups]
+        if output and output[0]:
+            bk_info = json.loads(output[0])
+            bk_info = bk_info["repos"][0]
+        else:
+            return False, "No output content"
 
-        for line in output:
-            if "entbackup" in line:
-                continue
-            if re.search("\d{4}-\d{2}-\d{2}T\d{2}_\d{2}_\d{2}.\d+", line):
-                backup_name = re.search("\d{4}-\d{2}-\d{2}T\d{2}_\d{2}_\d{2}.\d+", line).group()
+        if bk_info["backups"]:
+            for i in range(0, len(bk_info["backups"])):
                 if self.debug_logs:
-                    print "backup name ", backup_name
-                    print "backup set  ", strip_backupset
-                if backup_name in strip_backupset:
+                    print("backup name ", backup_name)
+                    print("backup set  ", strip_backupset)
+                if backup_name in self.backups:
                     backup_count += 1
-                    self.log.info("{0} matched in list command output".format(backup_name))
-        self.assertEqual(backup_count, len(strip_backupset), "Initial number of backups did not match")
+                    self.log.info("{0} matched in info command output".format(backup_name))
+        self.assertEqual(backup_count, len(self.backups), "Initial number of backups did not match")
         self.log.info("Initial number of backups matched")
         self.backupset.start = randrange(1, self.backupset.number_of_backups)
         self.backupset.end = randrange(self.backupset.start + 1, self.backupset.number_of_backups + 1)
@@ -2037,21 +2039,24 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         if not status:
             self.fail(message)
         backup_count = 0
+        if output and output[0]:
+            bk_info = json.loads(output[0])
+            bk_info = bk_info["repos"][0]
+        else:
+            return False, "No output content"
         """ remove last 6 chars of offset time in backup name"""
         if self.backups and self.backups[0][-3:] == "_00":
             strip_backupset = [s[:-6] for s in self.backups]
 
-        for line in output:
-            if "entbackup" in line:
-                continue
-            if re.search("\d{4}-\d{2}-\d{2}T\d{2}_\d{2}_\d{2}.\d+", line):
-                backup_name = re.search("\d{4}-\d{2}-\d{2}T\d{2}_\d{2}_\d{2}.\d+", line).group()
+        if bk_info["backups"]:
+            for i in range(0, len(bk_info["backups"])):
+                backup_name = bk_info["backups"][i]["date"]
                 if self.debug_logs:
-                    print "backup name ", backup_name
-                    print "backup set  ", strip_backupset
-                if backup_name in strip_backupset:
+                    print("backup name ", backup_name)
+                    print("backup set  ", strip_backupset)
+                if backup_name in self.backups:
                     backup_count += 1
-                    self.log.info("{0} matched in list command output".format(backup_name))
+                    self.log.info("{0} matched in info command output".format(backup_name))
         self.assertEqual(backup_count, len(strip_backupset), "Merged number of backups did not match")
         self.log.info("Merged number of backups matched")
 
@@ -2179,9 +2184,14 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         status, output, message = self.backup_list()
         if not status:
             self.fail(message)
-        for line in output:
-            if re.search("\d{4}-\d{2}-\d{2}T\d{2}_\d{2}_\d{2}.\d+-\d{2}_\d{2}", line):
-                old_backup_name = re.search("\d{4}-\d{2}-\d{2}T\d{2}_\d{2}_\d{2}.\d+-\d{2}_\d{2}", line).group()
+        if output and output[0]:
+            bk_info = json.loads(output[0])
+            bk_info = bk_info["repos"][0]
+        else:
+            return False, "No output content"
+        if bk_info["backups"]:
+            for i in range(0, len(bk_info["backups"])):
+                old_backup_name = bk_info["backups"][i]["date"]
                 self.log.info("Backup name before purge: " + old_backup_name)
         conn.start_couchbase()
         conn.disconnect()
@@ -2192,10 +2202,16 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         status, output, message = self.backup_list()
         if not status:
             self.fail(message)
-        for line in output:
-            if re.search("\d{4}-\d{2}-\d{2}T\d{2}_\d{2}_\d{2}.\d+-\d{2}_\d{2}", line):
-                new_backup_name = re.search("\d{4}-\d{2}-\d{2}T\d{2}_\d{2}_\d{2}.\d+-\d{2}_\d{2}", line).group()
+        if output and output[0]:
+            bk_info = json.loads(output[0])
+            bk_info = bk_info["repos"][0]
+        else:
+            return False, "No output content"
+        if bk_info["backups"]:
+            for i in range(0, len(bk_info["backups"])):
+                new_backup_name = bk_info["backups"][i]["date"]
                 self.log.info("Backup name after purge: " + new_backup_name)
+
         self.assertNotEqual(old_backup_name, new_backup_name,
                             "Old backup name and new backup name are same when purge is used")
         self.log.info("Old backup name and new backup name are not same when purge is used")
