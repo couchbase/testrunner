@@ -172,21 +172,25 @@ class BackupRestoreValidations(BackupRestoreValidationBase):
 
     def validate_compact_lists(self, output_before_compact, output_after_compact, is_approx=False):
         size_match = True
-        for line1, line2 in zip(output_before_compact, output_after_compact):
-            split1 = line1.split(" ")
-            split1 = [s for s in split1 if s]
-            split2 = line2.split(" ")
-            split2 = [s for s in split2 if s]
-            size1 = self._convert_to_kb(split1[0], is_approx)
-            size2 = self._convert_to_kb(split2[0], is_approx)
-            if is_approx:
-                if size1 != size2:
-                    size_match = False
-                    break
-            else:
-                if size1 < size2:
-                    size_match = False
-                    break
+        if output_before_compact and output_before_compact[0]:
+            output_before_compact = json.loads(output_before_compact[0])
+            output_before_compact = output_before_compact["repos"]
+        else:
+            return False, "No output_before_compact content"
+
+        if output_after_compact and output_after_compact[0]:
+            output_after_compact = json.loads(output_after_compact[0])
+            output_after_compact = output_after_compact["repos"]
+        else:
+            return False, "No output_after_compact content"
+        size1 = output_before_compact[0]["size"]
+        size2 = output_after_compact[0]["size"]
+        if is_approx:
+            if size1 != size2:
+                size_match = False
+        else:
+            if size1 < size2:
+                size_match = False
         if not size_match:
             return False, "Size comparison failed after compact - before: {0} after: {1}".format(line1, line2)
         return True, "Compact command validation success"
