@@ -3812,6 +3812,13 @@ class FTSBaseTest(unittest.TestCase):
                         if self.compare_es:
                             if bucket_doc_count == es_index_count:
                                 break
+                            elif retry_count == 0:
+                                self.fail(
+                                    "ES index count not matching with bucket_doc_count. Docs in bucket = %s, docs "
+                                    "in FTS index '%s': %s, docs in ES index: %s " % (
+                                        bucket_doc_count, index.name,
+                                        index_doc_count,
+                                        es_index_count))
                         else:
                             break
 
