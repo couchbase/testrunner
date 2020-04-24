@@ -3511,7 +3511,10 @@ class RemoteMachineShellConnection(KeepRefs):
             info.distribution_type = os_distro
             info.architecture_type = arch
             info.ip = self.ip
-            info.distribution_version = os_version
+            try:
+                info.distribution_version = os_version.decode()
+            except AttributeError:
+                info.distribution_version = os_version
             info.deliverable_type = ext
             info.cpu = self.get_cpu_info(mac=is_mac)
             info.disk = self.get_disk_info(mac=is_mac)
