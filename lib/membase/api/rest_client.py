@@ -2455,13 +2455,40 @@ class RestConnection(object):
                 self._http_request(api, 'DELETE')
 
     '''Load any of the three sample buckets'''
-    def load_sample(self, sample_name):
+    def load_sample(self, sample_name, poll_interval=3, max_wait_time=1200, max_error_retries=3):
         api = '{0}{1}'.format(self.baseUrl, "sampleBuckets/install")
         data = '["{0}"]'.format(sample_name)
         status, content, header = self._http_request(api, 'POST', data)
-        # Sleep to allow the sample bucket to be loaded
-        time.sleep(15)
+        # Allow the sample bucket to be loaded
+        self.wait_until_bucket_loaded(sample_name, poll_interval, max_wait_time, max_error_retries)
         return status
+
+    def wait_until_bucket_loaded(self, bucket_name, poll_interval=3, max_wait_time=1200, max_error_retries=3):
+        max_time = time.time() + float(max_wait_time)
+        is_bucket_loaded = False
+        response = ""
+        api = '{0}{1}'.format(self.baseUrl, "pools/default/buckets/{}".format(bucket_name))
+        previous_doc_count = 0
+        while time.time() < max_time and max_error_retries > 0:
+            time.sleep(poll_interval)
+            status, content, response = self._http_request(api, method='GET')
+            data = json.loads(content)
+            current_doc_count = int(data["basicStats"]["itemCount"])
+            if status:
+                if current_doc_count == previous_doc_count:
+                    is_bucket_loaded = True
+                    break
+                else:
+                    previous_doc_count = current_doc_count
+            else:
+                max_error_retries -= 1
+                log.warning("Something wrong happened while getting bucket {0} items count, retrying.".format(bucket_name))
+                log.warning("Server response is {0}".format(str(response)))
+
+        if not is_bucket_loaded:
+            log.error("Bucket {0} was not loaded completely")
+            log.error("Last response is: {0}".format(str(response)))
+
 
     # figure out the proxy port
     def create_bucket(self, bucket='',
