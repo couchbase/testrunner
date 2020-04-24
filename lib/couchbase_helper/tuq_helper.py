@@ -190,7 +190,7 @@ class N1QLHelper():
                             'is_primary': i['indexes'].get('is_primary', False)} for i in query_response['results']]
         return current_indexes
 
-    def _wait_for_index_online(self, bucket, index_name, timeout=12000):
+    def _wait_for_index_online(self, bucket, index_name, timeout=300, poll_interval=1):
         end_time = time.time() + timeout
         res = {}
         while time.time() < end_time:
@@ -208,7 +208,7 @@ class N1QLHelper():
                 if item['indexes']['keyspace_id'] == bucket_name:
                     if item['indexes']['state'] == "online":
                         return
-            time.sleep(timeout)
+            time.sleep(poll_interval)
         raise Exception('index %s is not online. last response is %s' % (index_name, res))
 
 
