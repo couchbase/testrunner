@@ -2065,16 +2065,38 @@ class RestConnection(object):
             version = MembaseServerVersion(json_parsed['implementationVersion'], json_parsed['componentsVersion'])
         return version
 
-    def get_buckets(self):
-        # get all the buckets
+    def get_buckets(self, num_retries=3, poll_interval=15):
         buckets = []
         api = '{0}{1}'.format(self.baseUrl, 'pools/default/buckets?basic_stats=true')
-        status, content, header = self._http_request(api)
-        json_parsed = json.loads(content)
-        if status:
-            for item in json_parsed:
-                bucketInfo = RestParser().parse_get_bucket_json(item)
-                buckets.append(bucketInfo)
+        buckets_are_received = False
+        status = ""
+        content = ""
+        while num_retries > 0:
+            try:
+                # get all the buckets
+                status, content, header = self._http_request(api)
+                json_parsed = json.loads(content)
+                if status:
+                    for item in json_parsed:
+                        bucketInfo = RestParser().parse_get_bucket_json(item)
+                        buckets.append(bucketInfo)
+                    buckets_are_received = True
+                    break
+                else:
+                    log.error("Response status is: False, response content is: {0}".format(content))
+                    num_retries -= 1
+                    time.sleep(poll_interval)
+            except Exception as e:
+                num_retries -= 1
+                log.error(e)
+                log.error('{0} seconds sleep before calling get_buckets again...'.format(poll_interval))
+                time.sleep(poll_interval)
+
+        if not buckets_are_received:
+            log.error("Could not get buckets list from the following api: {0}".format(api))
+            log.error("Last response status is: {0}".format(status))
+            log.error("Last response content is: {0}".format(content))
+
         return buckets
 
     def get_bucket_by_name(self,bucket_name):
@@ -2433,17 +2455,30 @@ class RestConnection(object):
         b = self.get_bucket(bucket)
         return None if not b else b.vbuckets
 
-    def delete_bucket(self, bucket='default'):
+    def delete_bucket(self, bucket='default', num_retries=3, poll_interval=5):
         api = '%s%s%s' % (self.baseUrl, 'pools/default/buckets/', bucket)
         if isinstance(bucket, Bucket):
             api = '%s%s%s' % (self.baseUrl, 'pools/default/buckets/', bucket.name)
-        status, content, header = self._http_request(api, 'DELETE')
 
-        if int(header['status']) == 500:
-            # According to http://docs.couchbase.com/couchbase-manual-2.5/cb-rest-api/#deleting-buckets
-            # the cluster will return with 500 if it failed to nuke
-            # the bucket on all of the nodes within 30 secs
-            log.warning("Bucket deletion timed out waiting for all nodes")
+        status = False
+        while num_retries > 0:
+            try:
+                status, content, header = self._http_request(api, 'DELETE')
+                if int(header['status']) == 500:
+                    # According to http://docs.couchbase.com/couchbase-manual-2.5/cb-rest-api/#deleting-buckets
+                    # the cluster will return with 500 if it failed to nuke
+                    # the bucket on all of the nodes within 30 secs
+                    log.warning("Bucket deletion timed out waiting for all nodes, retrying...")
+                    num_retries -= 1
+                    time.sleep(poll_interval)
+                else:
+                    break
+            except Exception as e:
+                num_retries -= 1
+                log.error(e)
+                log.error('{0} seconds sleep before calling delete_bucket again...'.format(poll_interval))
+                time.sleep(poll_interval)
+
 
         return status
 
