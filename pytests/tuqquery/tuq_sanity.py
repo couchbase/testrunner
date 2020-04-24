@@ -1771,8 +1771,8 @@ class QuerySanityTests(QueryTests):
 
             tmp_groups = {doc['job_title'] for doc in self.full_list}
             expected_result = [{"job_title" : group,
-                                "names" : {x["name"] for x in self.full_list
-                                               if x["job_title"] == group and x["name"]!= value}}
+                                "names" : [x["name"] for x in self.full_list
+                                               if x["job_title"] == group and x["name"]!= value]}
                                for group in tmp_groups]
             expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
             self._verify_results(actual_result, expected_result)
@@ -1788,8 +1788,8 @@ class QuerySanityTests(QueryTests):
             actual_result = actual_list['results']
             tmp_groups = {doc['job_title'] for doc in self.full_list}
             expected_result = [{"job_title" : group,
-                                "names" : {x["name"] for x in self.full_list
-                                               if x["job_title"] == group and x["name"]!= value1 and x["name"]!=value3}}
+                                "names" : [x["name"] for x in self.full_list
+                                               if x["job_title"] == group and x["name"]!= value1 and x["name"]!=value3]}
                                for group in tmp_groups]
             self._verify_results(actual_result, expected_result)
 
