@@ -18,6 +18,7 @@ log = logging.getLogger()
 class EventingLogging(EventingBaseTest, LogRedactionBase):
     def setUp(self):
         super(EventingLogging, self).setUp()
+        self.rest.set_service_memoryQuota(service='memoryQuota', memoryQuota=1200)
         if self.create_functions_buckets:
             self.bucket_size = 100
             log.info(self.bucket_size)
@@ -111,5 +112,23 @@ class EventingLogging(EventingBaseTest, LogRedactionBase):
                                   redactFileName=redactFileName,
                                   nonredactFileName=nonredactFileName,
                                   logFileName="ns_server.eventing.log")
+
+
+    def test_log_rotation(self):
+        self.load_sample_buckets(self.server, "travel-sample")
+        self.src_bucket_name="travel-sample"
+        body = self.create_save_function_body(self.function_name, "handler_code/logger.js")
+        body['settings']['app_log_max_size']=3768300
+        # deploy a function without any alias
+        self.deploy_function(body)
+        self.verify_eventing_results(self.function_name, 31591)
+        number=self.check_number_of_files()
+        if number ==1:
+            raise Exception("Files not rotated")
+        matched, count=self.check_word_count_eventing_log(self.function_name,"docId:",31591)
+        self.skip_metabucket_check = True
+        if not matched:
+            raise Exception("Not all data logged in file")
+
 
 

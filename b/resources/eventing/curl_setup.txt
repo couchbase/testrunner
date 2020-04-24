@@ -17,6 +17,19 @@
     },
     {
           "httpRequest" : {
+            "method" : "GET",
+            "path" : "/a/b"
+          },
+           "httpResponse" : {
+            "body" : {
+                    "type": "JSON",
+                    "json": "{\"name\":\"vikas\"}",
+                    "contentType": "application/json; charset=utf-8"
+                }
+          }
+    },
+    {
+          "httpRequest" : {
                 "method" : "POST",
                 "path" : "/post",
                 "queryStringParameters": {
@@ -279,6 +292,41 @@
                         "type": "JSON",
                         "json": "{\"name\":\"vikas\"}"
                         }
+          }
+    },
+    {
+          "httpRequest" : {
+            "method" : "POST",
+           "path" : "/json",
+           "body" : {
+		      "type": "JSON",
+               "json": "{\"name\":\"vikas\"}",
+               "contentType": "application/json"
+		    }
+          },
+           "httpResponse" : {
+            "body" : {
+                    "type": "JSON",
+                    "json": "{\"last name\":\"chaudhary\"}",
+                    "contentType": "application/json; charset=utf-8"
+                }
+          }
+    },
+    {
+          "httpRequest" : {
+            "method" : "POST",
+           "path" : "/text",
+           "body" : {
+    			"type": "STRING",
+    			"string": "some_string"
+		    }
+          },
+           "httpResponse" : {
+            "body" : {
+                    "type": "JSON",
+                    "json": "{\"last name\":\"chaudhary\"}",
+                    "contentType": "application/json; charset=utf-8"
+                }
           }
     }
 ]

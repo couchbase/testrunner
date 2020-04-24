@@ -9,6 +9,8 @@ from pytests.eventing.eventing_constants import HANDLER_CODE, HANDLER_CODE_ERROR
 from pytests.eventing.eventing_base import EventingBaseTest
 import logging
 
+from remote.remote_util import RemoteUtilHelper, RemoteMachineShellConnection
+
 log = logging.getLogger()
 
 
@@ -533,3 +535,25 @@ class EventingNegative(EventingBaseTest):
         self.deploy_function(body)
         self.verify_eventing_results(self.function_name, self.docs_per_day * 2016*3, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
+
+    # MB-31140
+    def test_kv_error_type(self):
+        #kv_node = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=False)
+        self.skip_metabucket_check=True
+        body = self.create_save_function_body(self.function_name, 'handler_code/kv_error.js', worker_count=3,execution_timeout=1)
+        self.deploy_function(body)
+        try:
+            # partition the kv node when its processing mutations
+            self.drop_data_to_bucket_from_eventing(self.servers[1])
+            # load some data
+            self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                      batch_size=self.batch_size)
+            self.sleep(700)
+        except Exception:
+            self.reset_firewall(self.servers[1])
+        finally:
+            self.reset_firewall(self.servers[1])
+        matched, count=self.check_word_count_eventing_log(self.function_name,"KVError:",2016)
+        if count == 0:
+            raise Exception("No KV error shown up")
+        #self.undeploy_and_delete_function(body)

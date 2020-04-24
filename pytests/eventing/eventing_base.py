@@ -22,7 +22,7 @@ log = logging.getLogger()
 
 class EventingBaseTest(QueryHelperTests):
     panic_count = 0
-    ### added to ignore error
+    ## added to ignore error
     def suite_setUp(self):
        pass
 
@@ -119,7 +119,7 @@ class EventingBaseTest(QueryHelperTests):
                                   sock_batch_size=1, tick_duration=5000, timer_processing_tick_interval=500,
                                   timer_worker_pool_size=3, worker_count=3, processing_status=True,
                                   cpp_worker_thread_count=1, multi_dst_bucket=False, execution_timeout=20,
-                                  data_chan_size=10000, worker_queue_cap=100000, deadline_timeout=62,language_compatibility='6.5.0'):
+                                  data_chan_size=10000, worker_queue_cap=100000, deadline_timeout=62,language_compatibility='6.5.0',hostpath=None):
         body = {}
         body['appname'] = appname
         script_dir = os.path.dirname(__file__)
@@ -169,9 +169,14 @@ class EventingBaseTest(QueryHelperTests):
             body['depcfg']['buckets'].append({"alias": "src_bucket", "bucket_name": self.src_bucket_name,"access": "rw"})
         body['depcfg']['curl'] = []
         if self.is_curl:
-            body['depcfg']['curl'].append({"hostname": self.hostname, "value": "server", "auth_type": self.auth_type,
-                                           "username": self.curl_username, "password": self.curl_password,
-                                           "allow_cookies": self.cookies})
+            if hostpath != None:
+                body['depcfg']['curl'].append({"hostname": self.hostname+hostpath, "value": "server", "auth_type": self.auth_type,
+                                               "username": self.curl_username, "password": self.curl_password,
+                                               "allow_cookies": self.cookies})
+            else:
+                body['depcfg']['curl'].append(
+                    {"hostname": self.hostname, "value": "server", "auth_type": self.auth_type,
+                     "username": self.curl_username, "password": self.curl_password, "allow_cookies": self.cookies})
             if self.auth_type=="bearer":
                 body['depcfg']['curl'][0]['bearer_key']=self.bearer_key
         body['settings']['language_compatibility']=language_compatibility
@@ -333,7 +338,7 @@ class EventingBaseTest(QueryHelperTests):
         body['settings']['deployment_status'] = True
         body['settings']['processing_status'] = True
         if self.print_eventing_handler_code_in_logs:
-            log.info("Deploying the following handler code : {0} with {1}".format(body['appname'], body['depcfg']))
+            log.info("Deploying the following handler code : {0} with \nbindings: {1} and \nsettings: {2}".format(body['appname'], body['depcfg'] , body['settings']))
             log.info("\n{0}".format(body['appcode']))
         content1 = self.rest.create_function(body['appname'], body)
         log.info("deploy Application : {0}".format(content1))
@@ -742,3 +747,62 @@ class EventingBaseTest(QueryHelperTests):
         self.rest.pause_function_by_name(name)
         if wait_for_pause:
             self.wait_for_handler_state(name, "paused")
+
+    def check_word_count_eventing_log(self,function_name,word,expected_count):
+        eventing_nodes = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
+        array_of_counts = []
+        command = "cat /opt/couchbase/var/lib/couchbase/data/@eventing/"+ function_name +"* | grep -a \""+word+"\" | wc -l"
+        for eventing_node in eventing_nodes:
+            shell = RemoteMachineShellConnection(eventing_node)
+            count, error = shell.execute_non_sudo_command(command)
+            self.log.info("count : {} and error : {} ".format(count,error))
+            if isinstance(count, list):
+                count = int(count[0])
+            else:
+                count = int(count)
+            log.info("Node : {0} , word count on : {1}".format(eventing_node.ip, count))
+            array_of_counts.append(count)
+        count_of_all_words = sum(array_of_counts)
+        log.info("Total count: {}".format(count_of_all_words))
+        if count_of_all_words == expected_count:
+            return True, count_of_all_words
+        return False, count_of_all_words
+
+    def check_number_of_files(self):
+        eventing_nodes = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
+        array_of_counts = []
+        command = "cd /opt/couchbase/var/lib/couchbase/data/@eventing;ls | wc -l"
+        for eventing_node in eventing_nodes:
+            shell = RemoteMachineShellConnection(eventing_node)
+            count, error = shell.execute_non_sudo_command(command)
+            self.log.info("count : {} and error : {} ".format(count, error))
+            if isinstance(count, list):
+                count = int(count[0])
+            else:
+                count = int(count)
+            log.info("Node : {0} , word count on : {1}".format(eventing_node.ip, count))
+            array_of_counts.append(count)
+        count_of_all_files = sum(array_of_counts)
+        log.info("Total count: {}".format(count_of_all_files))
+        return count_of_all_files
+
+    def drop_data_to_bucket_from_eventing(self,server):
+        shell = RemoteMachineShellConnection(server)
+        shell.info = shell.extract_remote_info()
+        if shell.info.type.lower() == "windows":
+            raise Exception("Should not run on windows")
+        o, r = shell.execute_command("/sbin/iptables -A OUTPUT -p tcp --dport 11210 -j DROP")
+        shell.log_command_output(o, r)
+        o, r = shell.execute_command("/sbin/iptables -A INPUT -p tcp --dport 11210 -j DROP")
+        shell.log_command_output(o, r)
+        log.info("enabled firewall on {0}".format(server))
+        o, r = shell.execute_command("/sbin/iptables --list")
+        shell.log_command_output(o, r)
+        shell.disconnect()
+
+    def reset_firewall(self,server):
+        shell = RemoteMachineShellConnection(server)
+        shell.info = shell.extract_remote_info()
+        o, r = shell.execute_command("/sbin/iptables --flush")
+        shell.log_command_output(o, r)
+        shell.disconnect()
