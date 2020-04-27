@@ -3257,6 +3257,10 @@ class RemoteMachineShellConnection:
             ver, err = p.communicate()
         if not err and ver:
             os_distro = "Mac"
+            try:
+                ver = ver.decode()
+            except AttributeError:
+                pass
             os_version = ver
             is_linux_distro = True
             is_mac = True
