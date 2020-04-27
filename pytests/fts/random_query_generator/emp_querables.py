@@ -20,6 +20,17 @@ class EmployeeQuerables:
         else:
             return self.return_unicode(self.get_queryable_full_name())
 
+    def get_queryable_name_range(self, min=True):
+        """
+        Returns a first or last name OR
+        a combination of both
+        """
+        delimit = int(len(FIRST_NAMES)/2)
+        if min:
+            return "%s %s" %(self.get_random_value(sorted(FIRST_NAMES)[:delimit]), self.get_random_value(LAST_NAMES))
+        else:
+            return "%s %s" %(self.get_random_value(sorted(FIRST_NAMES)[delimit:]), self.get_random_value(LAST_NAMES))
+
     def return_unicode(self, text):
         try:
             text = str(text, 'utf-8')
@@ -36,6 +47,16 @@ class EmployeeQuerables:
         Returns a valid dept to be queried
         """
         return self.get_random_value(DEPT)
+
+    def get_queryable_dept_range(self, min=True):
+        """
+        Returns a valid dept to be queried
+        """
+        delimit = int(len(DEPT)/2)
+        if min:
+            return self.get_random_value(sorted(DEPT)[:delimit])
+        else:
+            return self.get_random_value(sorted(DEPT)[delimit:])
 
     def get_queryable_join_date(self, now=False):
         import datetime
@@ -56,6 +77,14 @@ class EmployeeQuerables:
 
     def get_queryable_email(self):
         return "%s@mcdiabetes.com" % self.get_random_value(FIRST_NAMES).lower()
+
+    def get_queryable_email_range(self, min=True):
+        delimit = int(len(FIRST_NAMES)/2)
+
+        if min:
+            return "%s@mcdiabetes.com" % self.get_random_value(sorted(FIRST_NAMES)[:delimit]).lower()
+        else:
+            return "%s@mcdiabetes.com" % self.get_random_value(sorted(FIRST_NAMES)[delimit:]).lower()
 
     def get_queryable_empid(self):
         return random.randint(10000000, 10000100)

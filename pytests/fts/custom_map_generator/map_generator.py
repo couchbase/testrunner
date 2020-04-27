@@ -7,7 +7,7 @@ from TestInput import TestInputSingleton
 EMP_FIELDS = {
     'text': ["name", "dept", "languages_known", "email"],
     'number': ["mutated", "salary"],
-    #'boolean': ["is_manager"],
+    'boolean': ["is_manager"],
     'datetime': ["join_date"],
     'object': ["manages"]  # denote nested fields
 }
@@ -174,13 +174,15 @@ class CustomMapGenerator:
     """
     # Generates an FTS and equivalent ES custom map for emp/wiki datasets
     """
-    def __init__(self, seed=0, dataset="emp", num_custom_analyzers=0,multiple_filters=False, custom_map_add_non_indexed_fields=True):
+    def __init__(self, seed=0, dataset="emp", num_custom_analyzers=0,multiple_filters=False,
+                 custom_map_add_non_indexed_fields=True, text_analyzer=None):
         random.seed(seed)
         self.fts_map = {"types": {}}
         self.es_map = {}
         self.num_field_maps = random.randint(1, 10)
         self.queryable_fields = {}
         self.num_custom_analyzers = num_custom_analyzers
+        self.text_analyzer = text_analyzer
         self.custom_map_add_non_indexed_fields = custom_map_add_non_indexed_fields
         # Holds the list of custom analyzers created by
         # build_custom_analyzer method
@@ -380,6 +382,8 @@ class CustomMapGenerator:
         fts_field_map['type'] = field_type
         if self.num_custom_analyzers:
             analyzer = self.get_random_value(self.custom_analyzers)
+        elif self.text_analyzer:
+            analyzer = self.text_analyzer
         else:
             analyzer = self.get_random_value(ANALYZERS)
         if field_type == "text":

@@ -511,7 +511,7 @@ class FTSIndex:
 
     def __init__(self, cluster, name, source_type='couchbase',
                  source_name=None, index_type='fulltext-index', index_params=None,
-                 plan_params=None, source_params=None, source_uuid=None):
+                 plan_params=None, source_params=None, source_uuid=None, dataset=None):
 
         """
          @param name : name of index/alias
@@ -564,13 +564,16 @@ class FTSIndex:
             self.index_definition['sourceType'] = self._source_type
             self.index_definition['sourceName'] = self._source_name
 
-        self.dataset = TestInputSingleton.input.param("dataset", "emp")
+        self.dataset = dataset
+        if not self.dataset:
+            self.dataset = TestInputSingleton.input.param("dataset", "emp")
 
         # Support for custom map
         self.custom_map = TestInputSingleton.input.param("custom_map", False)
         self.custom_map_add_non_indexed_fields = TestInputSingleton.input.param("custom_map_add_non_indexed_fields",
                                                                                 True)
         self.num_custom_analyzers = TestInputSingleton.input.param("num_custom_analyzers", 0)
+        self.text_analyzer = TestInputSingleton.input.param("text_analyzer", None)
         self.multiple_filters = TestInputSingleton.input.param("multiple_filters", False)
         self.cm_id = TestInputSingleton.input.param("cm_id", 0)
         if self.custom_map:
@@ -660,7 +663,8 @@ class FTSIndex:
         cm_gen = CustomMapGenerator(seed=seed, dataset=self.dataset,
                                     num_custom_analyzers=self.num_custom_analyzers,
                                     multiple_filters=self.multiple_filters,
-                                    custom_map_add_non_indexed_fields=self.custom_map_add_non_indexed_fields)
+                                    custom_map_add_non_indexed_fields=self.custom_map_add_non_indexed_fields,
+                                    text_analyzer=self.text_analyzer)
         fts_map, self.es_custom_map = cm_gen.get_map()
         self.smart_query_fields = cm_gen.get_smart_query_fields()
         print((self.smart_query_fields))

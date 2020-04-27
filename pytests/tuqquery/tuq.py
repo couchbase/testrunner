@@ -9,6 +9,8 @@ import testconstants
 import time
 import traceback
 import collections
+from couchbase_helper.documentgenerator import JsonDocGenerator
+from couchbase_helper.documentgenerator import WikiJSONGenerator
 from subprocess import Popen, PIPE
 from remote.remote_util import RemoteMachineShellConnection
 from couchbase_helper.tuq_generators import JsonGenerator
@@ -27,6 +29,9 @@ import couchbase.subdocument as SD
 from couchbase.n1ql import N1QLQuery, STATEMENT_PLUS, CONSISTENCY_REQUEST, MutationState
 import ast
 from deepdiff import DeepDiff
+from fts.random_query_generator.rand_query_gen import FTSFlexQueryGenerator
+from pytests.fts.fts_base import FTSIndex
+from pytests.fts.random_query_generator.rand_query_gen import DATASET
 
 
 JOIN_INNER = "INNER"
@@ -42,6 +47,7 @@ class QueryTests(BaseTestCase):
                 and str(self.__class__).find('N1qlFTSIntegrationTest') == -1 \
                 and str(self.__class__).find('N1qlFTSIntegrationPhase2Test') == -1 \
                 and str(self.__class__).find('N1qlFTSIntegrationPhase2ClusteropsTest') == -1 \
+                and str(self.__class__).find('FlexIndexTests') == -1 \
                 and str(self.__class__).find('AggregatePushdownRecoveryClass') == -1:
             self.skip_buckets_handle = True
         else:
@@ -133,7 +139,7 @@ class QueryTests(BaseTestCase):
             self.log.info("--> docs_per_day>0..generating TuqGenerators...")
             self.gen_results = TuqGenerators(self.log, self.generate_full_docs_list(self.gens_load))
             self.log.info("--> End: docs_per_day>0..generating TuqGenerators...")
-        if str(self.__class__).find('QueriesUpgradeTests') == -1:
+        if str(self.__class__).find('QueriesUpgradeTests') == -1 and str(self.__class__).find('FlexIndexTests') == -1:
             if not self.analytics:
                 self.log.info("--> start: create_primary_index_for_3_0_and_greater...")
                 self.create_primary_index_for_3_0_and_greater()
@@ -275,6 +281,156 @@ class QueryTests(BaseTestCase):
         cmd = 'curl -s --data pretty=true --data-urlencode "statement@file.txt" ' + url + " -u " + bucket_username + ":" + bucket_password
         os.system(cmd)
         os.remove(filename)
+
+    def _load_emp_dataset(self, op_type="create", expiration=0, start=0,
+                          end=1000):
+        # Load Emp Dataset
+        self.cluster.bucket_flush(self.master)
+
+        if end > 0:
+            self._kv_gen = JsonDocGenerator("emp_",
+                                            encoding="utf-8",
+                                            start=start,
+                                            end=end)
+            gen = copy.deepcopy(self._kv_gen)
+
+            self._load_bucket(self.buckets[0], self.servers[0], gen, op_type,
+                              expiration)
+
+    def _load_wiki_dataset(self, op_type="create", expiration=0, start=0,
+                           end=1000):
+        # Load Emp Dataset
+        #self.cluster.bucket_flush(self.master)
+
+        if end > 0:
+            self._kv_gen = WikiJSONGenerator("wiki_",
+                                             encoding="utf-8",
+                                             start=start,
+                                             end=end)
+            gen = copy.deepcopy(self._kv_gen)
+
+            self._load_bucket(self.buckets[0], self.servers[0], gen, op_type,
+                              expiration)
+
+    def create_fts_index(self, name, source_type='couchbase',
+                         source_name=None, index_type='fulltext-index',
+                         index_params=None, plan_params=None,
+                         source_params=None, source_uuid=None, doc_count=1000, cluster=None):
+        """Create fts index/alias
+        @param node: Node on which index is created
+        @param name: name of the index/alias
+        @param source_type : 'couchbase' or 'files'
+        @param source_name : name of couchbase bucket or "" for alias
+        @param index_type : 'fulltext-index' or 'fulltext-alias'
+        @param index_params :  to specify advanced index mapping;
+                                dictionary overriding params in
+                                INDEX_DEFAULTS.BLEVE_MAPPING or
+                                INDEX_DEFAULTS.ALIAS_DEFINITION depending on
+                                index_type
+        @param plan_params : dictionary overriding params defined in
+                                INDEX_DEFAULTS.PLAN_PARAMS
+        @param source_params: dictionary overriding params defined in
+                                INDEX_DEFAULTS.SOURCE_CB_PARAMS or
+                                INDEX_DEFAULTS.SOURCE_FILE_PARAMS
+        @param source_uuid: UUID of the source, may not be used
+        """
+
+        if not self.custom_map:
+            index_params = {
+                "default_mapping": {
+                    "enabled": True,
+                    "dynamic": True,
+                    "default_analyzer": "keyword"
+                }
+            }
+
+        if not plan_params:
+            plan_params = {'numReplicas': 0}
+
+        fts_index = FTSIndex(
+            cluster,
+            name,
+            source_type,
+            source_name,
+            index_type,
+            index_params,
+            plan_params,
+            source_params,
+            source_uuid,
+            self.dataset
+        )
+        fts_index.create()
+
+        indexed_doc_count = 0
+        retry_count = 10
+        while indexed_doc_count < doc_count and retry_count > 0:
+            try:
+                self.sleep(10)
+                indexed_doc_count = fts_index.get_indexed_doc_count()
+            except KeyError as k:
+                continue
+            retry_count -= 1
+
+        if indexed_doc_count != doc_count:
+            self.fail("FTS indexing did not complete. FTS index count : {0}, Bucket count : {1}".format(indexed_doc_count, doc_count))
+
+        return fts_index
+
+    def update_expected_fts_index_map(self, fts_index):
+        if not fts_index.smart_query_fields:
+            fts_index.smart_query_fields = DATASET.FIELDS["emp"]
+        for f, v in fts_index.smart_query_fields.items():
+            for field in v:
+                if field == "manages_team_size":
+                    field = "manages.team_size"
+                if field == "manages_reports":
+                    field = "manages.reports"
+                if field == "revision_timestamp":
+                    field = "revision.timestamp"
+                if field == "revision_text_text":
+                    field = "`revision.text.#text`"
+                if field == "revision_contributor_username":
+                    field = "revision.contributor.username"
+                if field not in self.expected_fts_index_map.keys():
+                    self.expected_fts_index_map[field] = [fts_index.name]
+                else:
+                    self.expected_fts_index_map[field].append(fts_index.name)
+        if "type" not in self.expected_fts_index_map.keys():
+            self.expected_fts_index_map["type"] = [fts_index.name]
+        else:
+            self.expected_fts_index_map["type"].append(fts_index.name)
+        self.log.info("expected_fts_index_map {0}".format(self.expected_fts_index_map))
+
+    def generate_random_queries(self, fields=None, num_queries=1, query_type=["match"],
+                                seed=0):
+        """
+         Calls FTS-FLex Query Generator for employee dataset
+         @param num_queries: number of queries to return
+         @query_type: a list of different types of queries to generate
+                      like: query_type=["match", "match_phrase","bool",
+                                        "conjunction", "disjunction"]
+        """
+        self.query_gen = FTSFlexQueryGenerator(num_queries, query_type=query_type,
+                                               seed=seed, dataset=self.dataset,
+                                               fields=fields)
+
+    def update_expected_fts_index_map(self, fts_index):
+        if not fts_index.smart_query_fields:
+            fts_index.smart_query_fields = DATASET.FIELDS["emp"]
+        for f, v in fts_index.smart_query_fields.items():
+            for field in v:
+                field = self.query_gen.replace_underscores(field)
+                if field not in self.expected_fts_index_map.keys():
+                    self.expected_fts_index_map[field] = [fts_index.name]
+                else:
+                    self.expected_fts_index_map[field].append(fts_index.name)
+
+        # for type field always have ftx index as expected index
+        if "type" not in self.expected_fts_index_map.keys():
+            self.expected_fts_index_map["type"] = [fts_index.name]
+        else:
+            self.expected_fts_index_map["type"].append(fts_index.name)
+        self.log.info("expected_fts_index_map {0}".format(self.expected_fts_index_map))
 
     def get_index_storage_stats(self, timeout=120, index_map=None):
         api = self.index_baseUrl + 'stats/storage'
