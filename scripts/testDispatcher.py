@@ -25,6 +25,7 @@ import find_rerun_job
 
 POLL_INTERVAL = 60
 SERVER_MANAGER = '172.23.105.177:8081'
+ADDL_SERVER_MANAGER = '172.23.105.177:8081'
 TEST_SUITE_DB = '172.23.105.177'
 TIMEOUT = 60
 SSH_NUM_RETRIES = 3
@@ -78,7 +79,12 @@ def get_available_servers_count(options=None, is_addl_pool=False, os_version="")
         # may want to add OS at some point
         getAvailUrl = getAvailUrl + 'docker?os={0}&poolId={1}'.format(os_version, pool_id)
     else:
-        getAvailUrl = getAvailUrl + '{0}?poolId={1}'.format(os_version, pool_id)
+        if is_addl_pool == True:
+            SM = ADDL_SERVER_MANAGER
+        else:
+            SM = SERVER_MANAGER
+        getAvailUrl = 'http://' + SM + '/getavailablecount/' + '{0}?poolId={1}'.format(os_version,
+                                                                                     pool_id)
 
     print("Connecting {}".format(getAvailUrl))
     count = 0
@@ -99,10 +105,13 @@ def get_servers(options=None, descriptor="", test=None, how_many=0, is_addl_pool
     if options.serverType.lower() == 'docker':
         getServerURL = 'http://' + SERVER_MANAGER + '/getdockers/{0}?count={1}&os={2}&poolId={3}'. \
                            format(descriptor, how_many, os_version, pool_id)
-
     else:
-        getServerURL = 'http://' + SERVER_MANAGER + '/getservers/{0}?count={1}&expiresin={2}&os={3}&poolId={4}'. \
-                           format(descriptor, how_many, test['timeLimit'], os_version, pool_id)
+        if is_addl_pool == True:
+            SM = ADDL_SERVER_MANAGER
+        else:
+            SM = SERVER_MANAGER
+        getServerURL = 'http://' + SM + '/getservers/{0}?count={1}&expiresin={2}&os={3}&poolId={' \
+                        '4}'.format(descriptor, how_many, test['timeLimit'], os_version, pool_id)
     print(('getServerURL', getServerURL))
 
     response, content = httplib2.Http(timeout=TIMEOUT).request(getServerURL, 'GET')
@@ -157,6 +166,7 @@ def is_vm_alive(server="", ssh_username="", ssh_password=""):
 
 def main():
     global SERVER_MANAGER
+    global ADDL_SERVER_MANAGER
     global TIMEOUT
     global SSH_NUM_RETRIES
     global SSH_POLL_INTERVAL
@@ -187,6 +197,8 @@ def main():
                       default=False, action='store_true')
     parser.add_option('-k','--include_tests', dest='include_tests', default=None)
     parser.add_option('-x','--server_manager', dest='SERVER_MANAGER',
+                      default='172.23.105.177:8081')
+    parser.add_option('--addl_server_manager', dest='ADDL_SERVER_MANAGER',
                       default='172.23.105.177:8081')
     parser.add_option('-z', '--timeout', dest='TIMEOUT', default = '60')
     parser.add_option('-w', '--check_vm', dest='check_vm', default="False")
@@ -224,6 +236,8 @@ def main():
 
     if options.SERVER_MANAGER:
         SERVER_MANAGER=options.SERVER_MANAGER
+    if options.ADDL_SERVER_MANAGER:
+        ADDL_SERVER_MANAGER = options.ADDL_SERVER_MANAGER
     if options.TIMEOUT:
         TIMEOUT=int(options.TIMEOUT)
     if options.SSH_POLL_INTERVAL:
