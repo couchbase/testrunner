@@ -1,5 +1,6 @@
 function OnUpdate(doc, meta) {
     var request = {
+    encoding:'JSON',
 	path : 'json',
 	body: {"name":"vikas"}
     };
@@ -20,6 +21,7 @@ function OnUpdate(doc, meta) {
 
 function OnDelete(meta) {
     var request = {
+    encoding:'JSON',
 	path : 'json',
 	body: {"name":"vikas"}
     };

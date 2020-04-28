@@ -307,7 +307,7 @@
            "httpResponse" : {
             "body" : {
                     "type": "JSON",
-                    "json": "{\"last name\":\"chaudhary\"}",
+                    "json": "{\"last_name\":\"chaudhary\"}",
                     "contentType": "application/json; charset=utf-8"
                 }
           }
@@ -315,8 +315,8 @@
     {
           "httpRequest" : {
             "method" : "POST",
-           "path" : "/text",
-           "body" : {
+            "path" : "/text",
+            "body" : {
     			"type": "STRING",
     			"string": "some_string"
 		    }
@@ -324,9 +324,77 @@
            "httpResponse" : {
             "body" : {
                     "type": "JSON",
-                    "json": "{\"last name\":\"chaudhary\"}",
+                    "json": "{\"last_name\":\"chaudhary\"}",
                     "contentType": "application/json; charset=utf-8"
-                }
+            }
           }
+    },
+    {
+        "httpRequest" : {
+        "method" : "POST",
+        "path": "/form",
+        "headers" : {
+          "Content-Type" : [ "application/x-www-form-urlencoded" ]
+        },
+        "body" : {
+          "type" : "PARAMETERS",
+          "parameters" : {
+            "email" : [ "joe.blogs@gmail.com" ],
+            "password" : [ "secure_Password123" ]
+          }
+        }
+      },
+      "httpResponse" : {
+        "body" : "some_response_body",
+        "headers" : {
+          "Content-Type" : [ "text/plain" ]
+        }
+      }
+    },
+    {
+          "httpRequest" : {
+           "method" : "POST",
+           "path" : "/jstring",
+           "body" : {
+              "type": "JSON",
+              "string": "\"some_string\"",
+              "contentType": "application/json"
+           }
+          },
+           "httpResponse" : {
+            "body" : {
+                    "type": "JSON",
+                    "json": "{\"last_name\":\"chaudhary\"}",
+                    "contentType": "application/json; charset=utf-8"
+            }
+          }
+    },
+    {
+        "httpRequest": {
+            "path": "/response/urlencode"
+        },
+        "httpResponse": {
+            "headers": {
+                "content-type": ["application/x-www-form-urlencoded"]
+            },
+            "body": {
+                "type": "STRING",
+                "string": "field1=value1&field2=value2"
+            }
+        }
+    },
+    {
+        "httpRequest": {
+            "path": "/custom/encoding"
+        },
+        "httpResponse": {
+            "headers": {
+                "content-type": ["application/vikas"]
+            },
+            "body": {
+                "type": "STRING",
+                "string": "field1"
+            }
+        }
     }
 ]
