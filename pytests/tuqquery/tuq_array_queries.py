@@ -2,7 +2,7 @@ import json
 import time
 from lib.membase.api.rest_client import RestConnection
 import os
-from tuq import QueryTests
+from .tuq import QueryTests
 from scripts.array_query_generator import ArrayGenerator
 from scripts.array_query_generator_links import ArrayGeneratorLinks
 
