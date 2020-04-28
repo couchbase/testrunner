@@ -441,18 +441,35 @@ class RemoteMachineShellConnection(KeepRefs):
             output, error = self.execute_command(command.format(stop_time))
             self.log_command_output(output, error)
 
-    def stop_membase(self):
+    def stop_membase(self, num_retries=10, poll_interval=1):
         self.extract_remote_info()
+        is_process_stopped = False
         if self.info.type.lower() == 'windows':
             log.info("STOP SERVER")
             o, r = self.execute_command("net stop membaseserver")
             self.log_command_output(o, r)
             o, r = self.execute_command("net stop couchbaseserver")
             self.log_command_output(o, r)
-            self.sleep(10, "Wait to stop service completely")
+            retries = num_retries
+            while retries > 0:
+                if RemoteMachineHelper(self).is_process_running('membaseserver') is None:
+                    is_process_stopped = True
+                    break
+                retries -= 1
+                self.sleep(poll_interval)
         if self.info.type.lower() == "linux":
             o, r = self.execute_command("/etc/init.d/membase-server stop")
             self.log_command_output(o, r)
+            retries = num_retries
+            while num_retries > 0:
+                if RemoteMachineHelper(self).is_process_running('couchbaseserver') is None:
+                    break
+                retries -= 1
+                self.sleep(poll_interval)
+        if not is_process_stopped:
+            log.error("Membase was not stopped on server {0}".format(self.ip))
+        else:
+            log.info("Membase was successfully stopped on server {0}".format(self.ip))
 
     def start_membase(self):
         self.extract_remote_info()
@@ -623,7 +640,7 @@ class RemoteMachineShellConnection(KeepRefs):
             self.log_command_output(o, r)
         return o, r
 
-    def kill_memcached(self):
+    def kill_memcached(self, num_retries=10, poll_interval=2):
         self.extract_remote_info()
         if self.info.type.lower() == 'windows':
             o, r = self.execute_command("taskkill /F /T /IM memcached*")
@@ -636,9 +653,14 @@ class RemoteMachineShellConnection(KeepRefs):
             o, r = self.execute_command("kill -9 $(ps aux | pgrep 'memcached')"
                                                                  , debug=True)
             self.log_command_output(o, r, debug=False)
-            self.sleep(5,"waiting for memcached to start")
-            out,err=self.execute_command('pgrep memcached')
-            log.info("memcached pid:{} and err: {}".format(out,err))
+            while num_retries > 0:
+                self.sleep(poll_interval, "waiting for memcached to start")
+                out,err=self.execute_command('pgrep memcached')
+                if out and out != "":
+                    log.info("memcached pid:{} and err: {}".format(out,err))
+                    break
+                else:
+                    num_retries -= 1
         return o, r
 
     def stop_memcached(self):
@@ -833,6 +855,19 @@ class RemoteMachineShellConnection(KeepRefs):
         if o !=None:
             return True
         return False
+
+    def wait_for_couchbase_started(self, num_retries=5, poll_interval=5,
+                                   message="Waiting for couchbase startup finish."):
+        is_couchbase_started = False
+        while num_retries > 0:
+            is_couchbase_started = self.is_couchbase_running()
+            if is_couchbase_started:
+                break
+            else:
+                self.sleep(timeout=poll_interval, message=message)
+                num_retries -= 1
+        if not is_couchbase_started:
+            log.error("Couchbase server is failed to start!")
 
     def is_moxi_installed(self):
         self.extract_remote_info()
@@ -1682,7 +1717,7 @@ class RemoteMachineShellConnection(KeepRefs):
                 self.execute_command(cmd, debug=False)
         log.info("done compact")
 
-    def set_vbuckets_win(self, build, vbuckets):
+    def set_vbuckets_win(self, build, vbuckets, num_retries=5, poll_interval=5):
         bin_path = WIN_COUCHBASE_BIN_PATH
         bin_path = bin_path.replace("\\", "")
         build = re.sub(r'(?<=[.?!])( +|\d)-', r'', build)
@@ -1723,13 +1758,14 @@ class RemoteMachineShellConnection(KeepRefs):
         self.log_command_output(o, r)
         o, r = self.execute_command(WIN_COUCHBASE_BIN_PATH + "install/cb_winsvc_start_{0}.bat".format(build))
         self.log_command_output(o, r)
-        self.sleep(20, "wait for cb server start completely after reset vbuckets!")
+        self.wait_for_couchbase_started(num_retries=num_retries, poll_interval=poll_interval,
+                                        message="wait for cb server start completely after reset vbuckets!")
 
         """ remove temporary files on slave """
         os.remove(local_file)
         os.remove(des_file)
 
-    def set_fts_query_limit_win(self, build, name, value, ipv6=False):
+    def set_fts_query_limit_win(self, build, name, value, ipv6=False, num_retries=5, poll_interval=5):
         bin_path = WIN_COUCHBASE_BIN_PATH
         bin_path = bin_path.replace("\\", "")
         build = re.sub(r'(?<=[.?!])( +|\d)-', r'', build)
@@ -1773,7 +1809,8 @@ class RemoteMachineShellConnection(KeepRefs):
             cmd += " true"
         o, r = self.execute_command(cmd)
         self.log_command_output(o, r)
-        self.sleep(20, "wait for cb server start completely after setting CBFT_ENV_OPTIONS")
+        self.wait_for_couchbase_started(num_retries=num_retries, poll_interval=poll_interval,
+                                        message="wait for cb server start completely after setting CBFT_ENV_OPTIONS")
 
         """ remove temporary files on slave """
         os.remove(local_file)
@@ -1812,7 +1849,8 @@ class RemoteMachineShellConnection(KeepRefs):
             pass
 
     def couchbase_upgrade(self, build, save_upgrade_config=False, forcefully=False,
-                                            fts_query_limit=None, debug_logs=False):
+                                            fts_query_limit=None, debug_logs=False,
+                                            num_retries=5, poll_interval=2):
         server_type = None
         success = True
         if fts_query_limit is None:
@@ -1878,7 +1916,8 @@ class RemoteMachineShellConnection(KeepRefs):
                             {2}opt/{0}/bin/{0}-server".format(server_type, int(fts_query_limit),
                                                               nonroot_path_start))
                 success &= self.log_command_output(o, e, track_words)
-                self.sleep(5, "wait for server up before stop it.")
+                self.wait_for_couchbase_started(num_retries=num_retries, poll_interval=poll_interval,
+                                                message="wait for server up before stop it.")
                 self.stop_couchbase()
                 self.start_couchbase()
         return output, error
@@ -1893,7 +1932,7 @@ class RemoteMachineShellConnection(KeepRefs):
                     break
         return found
 
-    def couchbase_upgrade_win(self, architecture, windows_name, version):
+    def couchbase_upgrade_win(self, architecture, windows_name, version, startup_retries=5, startup_poll_interval=5):
         task = "upgrade"
         bat_file = "upgrade.bat"
         deleted = False
@@ -1914,6 +1953,7 @@ class RemoteMachineShellConnection(KeepRefs):
             output, error = \
                         self.execute_command("cmd /c schtasks /run /tn upgrademe")
             self.log_command_output(output, error)
+            # todo: TBD
             self.sleep(200, "because upgrade version is {0}".format(output))
             output, error = self.execute_command("cmd /c "
                                       "schtasks /Query /FO LIST /TN upgrademe /V")
@@ -1935,7 +1975,8 @@ class RemoteMachineShellConnection(KeepRefs):
         ended = self.wait_till_process_ended(version[:10])
         if not ended:
             sys.exit("*****  Node %s failed to upgrade  *****" % (self.ip))
-        self.sleep(10, "wait for server to start up completely")
+        self.wait_for_couchbase_started(num_retries=startup_retries, poll_interval=startup_poll_interval,
+                                        message="wait for server to start up completely")
         ct = time.time()
         while time.time() - ct < 10800:
             output, error = self.execute_command("cmd /c "
@@ -1961,7 +2002,8 @@ class RemoteMachineShellConnection(KeepRefs):
     """
     def install_server(self, build, startserver=True, path='/tmp', vbuckets=None,
                        swappiness=10, force=False, openssl='', upr=None, xdcr_upr=None,
-                       fts_query_limit=None, cbft_env_options=None, debug_logs=True):
+                       fts_query_limit=None, cbft_env_options=None, debug_logs=True,
+                       startup_retries=5, startup_poll_interval=5):
 
         log.info('*****install server ***')
         server_type = None
@@ -1997,7 +2039,8 @@ class RemoteMachineShellConnection(KeepRefs):
             ended = self.wait_till_process_ended(build.product_version[:10])
             if not ended:
                 sys.exit("*****  Node %s failed to install  *****" % (self.ip))
-            self.sleep(10, "wait for server to start up completely")
+            self.wait_for_couchbase_started(num_retries=startup_retries, poll_interval=startup_poll_interval,
+                                            message="wait for server to start up completely")
             if vbuckets and int(vbuckets) != 1024:
                 self.set_vbuckets_win(build.version_number, vbuckets)
             if fts_query_limit:
@@ -2216,17 +2259,18 @@ class RemoteMachineShellConnection(KeepRefs):
             self.execute_command("ps aux | grep Archive | awk '{print $2}' | xargs kill -9")
             output, error = self.execute_command("cd ~/Downloads ; hdiutil attach couchbase-server*.dmg")
             extracted = False
-            count = 1
+            num_retries = startup_retries
             if not output:
                 log.info("\n****** waiting to mount dmg file on server: {0}".format(self.ip))
-                while not extracted:
+                while num_retries  > 0:
                     found, error = self.execute_command("ls /Volumes/Couchbase\ Installer*/",
                                                         debug=False)
                     if "Couchbase\ Server.app" not in found:
-                        time.sleep(10)
-                        count += 1
+                        time.sleep(startup_poll_interval)
+                        num_retries -= 1
                     else:
                         extracted = True
+                        break
 
             cmd1 = "cp -R /Volumes/Couchbase*/Couchbase\ Server.app /Applications"
             cmd2 = "sudo xattr -d -r com.apple.quarantine /Applications/Couchbase\ Server.app"
@@ -2391,7 +2435,7 @@ class RemoteMachineShellConnection(KeepRefs):
             if exists:
                 log.error('at {2} file {1} still exists' \
                           .format(remotepath, filename, self.ip))
-                time.sleep(10)
+                time.sleep(2)
             else:
                 log.info('at {2} FILE {1} DOES NOT EXIST ANYMORE!' \
                          .format(remotepath, filename, self.ip))
@@ -2408,7 +2452,7 @@ class RemoteMachineShellConnection(KeepRefs):
             if not exists:
                 log.error('at {2} file {1} does not exist' \
                           .format(remotepath, filename, self.ip))
-                time.sleep(10)
+                time.sleep(2)
             else:
                 log.info('at {2} FILE {1} EXISTS!' \
                          .format(remotepath, filename, self.ip))
@@ -2666,8 +2710,10 @@ class RemoteMachineShellConnection(KeepRefs):
                             sys.exit("****  Node %s failed to uninstall  ****"
                                                               % (self.ip))
                 if full_version[:3] == "2.5":
+                    # todo: probably this is dead code
                     self.sleep(20, "next step is to install")
                 else:
+                    # todo: not sure, what are we waiting for here
                     self.sleep(10, "next step is to install")
                 """ delete binary after uninstall """
                 self.delete_file(WIN_TMP_PATH, build_name)
@@ -2959,6 +3005,7 @@ class RemoteMachineShellConnection(KeepRefs):
                 #self.create_windows_capture_file(task, product, full_version)
                 self.modify_bat_file('/cygdrive/c/automation', bat_file, product, short_version, task)
                 self.stop_schedule_tasks()
+                # todo: move this sleep into stop_schedule_tasks()
                 self.sleep(5, "before running task schedule uninstall")
                 # run schedule task uninstall Couchbase server
                 output, error = self.execute_command("cmd /c schtasks /run /tn removeme")
@@ -3674,12 +3721,31 @@ class RemoteMachineShellConnection(KeepRefs):
                                              .format(data_path.replace("data", "config")))
             self.log_command_output(o, r)
 
-    def stop_couchbase(self):
+    def check_if_windows_service_stopped(self, service_name=None):
+        if service_name:
+            o, r = self.execute_command('sc query {0}'.format(service_name))
+            for res in o:
+                if "STATE" in res:
+                    info = res.split(":")
+                    is_stopped =  "STOPPED" in str(info[1])
+                    return is_stopped
+
+            log.error("Cannot identify service state for service {0}. Host response is: {1}".format(service_name, str(o)))
+            return True
+        log.error("Service name is not specified!")
+        return False
+
+    def stop_couchbase(self, num_retries=5, poll_interval=10):
         self.extract_remote_info()
         if self.info.type.lower() == 'windows':
             o, r = self.execute_command("net stop couchbaseserver")
             self.log_command_output(o, r)
-            self.sleep(10, "Wait to stop service completely")
+            is_server_stopped = False
+            retries = num_retries
+            while not is_server_stopped and retries > 0:
+                self.sleep(poll_interval, "Wait to stop service completely")
+                is_server_stopped = self.check_if_windows_service_stopped("couchbaseserver")
+                retries -= 1
         if self.info.type.lower() == "linux":
             if self.nonroot:
                 log.info("Stop Couchbase Server with non root method")
@@ -5066,6 +5132,7 @@ class RemoteUtilHelper(object):
             shell.unpause_memcached()
             shell.unpause_beam()
             shell.disconnect()
+        # todo: tbd
         time.sleep(10)
 
     @staticmethod
@@ -5073,7 +5140,7 @@ class RemoteUtilHelper(object):
         shell = RemoteMachineShellConnection(server)
         info = shell.extract_remote_info()
         version = RestConnection(server).get_nodes_self().version
-        time.sleep(5)
+        #time.sleep(5)
         hostname = shell.get_full_hostname()
         if version.startswith("1.8.") or version.startswith("2.0"):
             shell.stop_couchbase()
