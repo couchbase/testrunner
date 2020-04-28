@@ -396,5 +396,30 @@
                 "string": "field1"
             }
         }
+    },
+    {
+        "httpRequest": {
+            "path": "/header/missing"
+        },
+        "httpResponse": {
+            "body": {
+                "type": "STRING",
+                "string": "field1"
+            }
+        }
+    },
+    {
+        "httpRequest": {
+            "path": "/response/octate"
+        },
+        "httpResponse": {
+            "headers": {
+                "content-type": ["application/octet-stream"]
+            },
+            "body": {
+                "type": "STRING",
+                "string": "field1"
+            }
+        }
     }
 ]

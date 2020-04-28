@@ -1,6 +1,6 @@
 function OnUpdate(doc, meta) {
     var request = {
-	path : '/custom/encoding'
+	path : '/header/missing'
     };
     try {
     	var response = curl("GET", server, request);
@@ -23,7 +23,7 @@ function OnUpdate(doc, meta) {
 
 function OnDelete(meta) {
     var request = {
-	path : '/custom/encoding'
+	path : '/header/missing'
     };
     try {
     	var response = curl("GET", server, request);
