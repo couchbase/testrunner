@@ -194,7 +194,7 @@ def main():
     parser.add_option('-m','--rerun_params', dest='rerun_params', default='')
     parser.add_option('-i','--retries', dest='retries', default='1')
     parser.add_option('-q', '--fresh_run', dest='fresh_run',
-                      default=False, action='store_true')
+                      default=True, action='store_false')
     parser.add_option('-k','--include_tests', dest='include_tests', default=None)
     parser.add_option('-x','--server_manager', dest='SERVER_MANAGER',
                       default='172.23.105.177:8081')
@@ -574,14 +574,27 @@ def main():
                         dispatch_job = \
                             find_rerun_job.should_dispatch_job(
                                 options.os, testsToLaunch[i][
-                                    'component'], testsToLaunch[i][
-                                    'subcomponent'], options.version)
+                                    'component'], dashboardDescriptor
+                                , options.version)
 
                     if options.noLaunch or not dispatch_job:
                         # free the VMs
                         time.sleep(3)
                         if options.serverType.lower() == 'docker':
-                            pass # figure docker out later
+                            #Docker gets only a single sever from
+                            # get_server. Not hard coding the server
+                            # we get, which as of now is constant,
+                            # but might change in the future.
+                            ipaddr = servers[0]
+                            response, content = httplib2.Http(
+                                timeout=TIMEOUT). \
+                                request(
+                                'http://' + SERVER_MANAGER +
+                                '/releasedockers/' + descriptor +
+                                '?ipaddr=' + ipaddr,
+                                'GET')
+                            print(
+                            'the release response', response, content)
                         else:
                             response, content = httplib2.Http(timeout=TIMEOUT).\
                                 request('http://' + SERVER_MANAGER + '/releaseservers/' + descriptor + '/available', 'GET')
