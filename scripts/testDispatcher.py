@@ -507,6 +507,8 @@ def main():
                         # another waiting dispatcher process could grab them, resulting in lesser vms
                         # for the second dispatcher process
                         if len(servers) != testsToLaunch[i]['serverCount']:
+                            print("Received servers count does not match the expected test server count!")
+                            release_servers(descriptor)
                             continue
 
                     # get additional pool servers as needed
@@ -515,6 +517,12 @@ def main():
                         how_many_addl = testsToLaunch[i]['addPoolServerCount'] - len(addl_servers)
                         addl_servers = get_servers(options=options, descriptor=descriptor, test=testsToLaunch[i], how_many=how_many_addl, is_addl_pool=True, os_version=addPoolServer_os)
                         how_many_addl = testsToLaunch[i]['addPoolServerCount'] - len(addl_servers)
+                        if len(addl_servers) != testsToLaunch[i]['addPoolServerCount']:
+                            print(
+                                "Received additional servers count does not match the expected "
+                                "test additional servers count!")
+                            release_servers(descriptor)
+                            continue
 
                     # and send the request to the test executor
 
@@ -596,9 +604,7 @@ def main():
                             print(
                             'the release response', response, content)
                         else:
-                            response, content = httplib2.Http(timeout=TIMEOUT).\
-                                request('http://' + SERVER_MANAGER + '/releaseservers/' + descriptor + '/available', 'GET')
-                            print('the release response', response, content)
+                            release_servers(descriptor)
                     else:
                         response, content = httplib2.Http(timeout=TIMEOUT).request(url, 'GET')
                         print("Response is: {0}".format(str(response)))
@@ -629,6 +635,11 @@ def main():
         print((i['test'], 'was launched at', i['time']))
     return
 
+
+def release_servers(descriptor):
+    response, content = httplib2.Http(timeout=TIMEOUT).request(
+        'http://' + SERVER_MANAGER + '/releaseservers/' + descriptor + '/available', 'GET')
+    print('the release response', response, content)
 
 if __name__ == "__main__":
     main()
