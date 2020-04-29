@@ -3781,6 +3781,7 @@ class FTSBaseTest(unittest.TestCase):
             prev_count = 0
             es_index_count = 0
             while retry_count > 0:
+                fail = False
                 try:
                     index_doc_count = index.get_indexed_doc_count()
                     bucket_doc_count = index.get_src_bucket_doc_count()
@@ -3789,11 +3790,25 @@ class FTSBaseTest(unittest.TestCase):
                                       % (bucket_doc_count,
                                          index.name,
                                          index_doc_count))
+                        if retry_count == 1:
+                            fail = True
+                            self.fail("FTS index count not matching bucket count even after 20 tries: "
+                                      "Docs in bucket = %s, docs in FTS index '%s': %s" % (bucket_doc_count,
+                                                                                           index.name,
+                                                                                           index_doc_count))
                     else:
                         self.es.update_index('es_index')
                         es_index_count = self.es.get_index_count('es_index')
                         self.log.info("Docs in bucket = %s, docs in FTS index '%s':"
                                       " %s, docs in ES index: %s "
+                                      % (bucket_doc_count,
+                                         index.name,
+                                         index_doc_count,
+                                         es_index_count))
+                        if retry_count == 1:
+                            fail = True
+                            self.fail("FTS/ES index count not matching bucket count even after 20 tries: "
+                                      "Docs in bucket = %s, docs in FTS index '%s': %s, docs in ES index: %s "
                                       % (bucket_doc_count,
                                          index.name,
                                          index_doc_count,
@@ -3812,7 +3827,8 @@ class FTSBaseTest(unittest.TestCase):
                         if self.compare_es:
                             if bucket_doc_count == es_index_count:
                                 break
-                            elif retry_count == 0:
+                            elif retry_count == 1:
+                                fail = True
                                 self.fail(
                                     "ES index count not matching with bucket_doc_count. Docs in bucket = %s, docs "
                                     "in FTS index '%s': %s, docs in ES index: %s " % (
@@ -3829,6 +3845,8 @@ class FTSBaseTest(unittest.TestCase):
                         retry_count -= 1
                 except Exception as e:
                     self.log.info(e)
+                    if fail:
+                        self.fail(e)
                     retry_count -= 1
                 time.sleep(6)
             # now wait for num_mutations_to_index to become zero to handle the pure
