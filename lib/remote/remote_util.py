@@ -463,6 +463,7 @@ class RemoteMachineShellConnection(KeepRefs):
             retries = num_retries
             while num_retries > 0:
                 if RemoteMachineHelper(self).is_process_running('couchbaseserver') is None:
+                    is_process_stopped = True
                     break
                 retries -= 1
                 self.sleep(poll_interval)
