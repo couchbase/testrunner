@@ -51,7 +51,7 @@ class RebalanceInOutTests(RebalanceBaseTest):
 
         self._verify_stats_all_buckets(self.servers[:self.nodes_init], timeout=120)
         self._wait_for_stats_all_buckets(self.servers[:self.nodes_init])
-        self.sleep(20)
+        # self.sleep(20)
         prev_vbucket_stats = self.get_vbucket_seqnos(self.servers[:self.nodes_init], self.buckets)
         prev_failover_stats = self.get_failovers_logs(self.servers[:self.nodes_init], self.buckets)
         disk_replica_dataset, disk_active_dataset = self.get_and_compare_active_replica_data_set_all(
@@ -65,7 +65,7 @@ class RebalanceInOutTests(RebalanceBaseTest):
                                                         perNode=False)
         if self.flusher_total_batch_limit is None:
             self.compare_vbucketseq_failoverlogs(new_vbucket_stats, new_failover_stats)
-            self.sleep(30)
+            # self.sleep(30)
         self.data_analysis_active_replica_all(disk_active_dataset, disk_replica_dataset, result_nodes, self.buckets,
                                               path=None)
         self.verify_unacked_bytes_all_buckets()
@@ -99,7 +99,7 @@ class RebalanceInOutTests(RebalanceBaseTest):
             task.result(self.wait_timeout * 20)
         self._verify_stats_all_buckets(self.servers[:self.nodes_init], timeout=120)
         self._wait_for_stats_all_buckets(self.servers[:self.nodes_init])
-        self.sleep(20)
+        # self.sleep(20)
         prev_vbucket_stats = self.get_vbucket_seqnos(self.servers[:self.nodes_init], self.buckets)
         prev_failover_stats = self.get_failovers_logs(self.servers[:self.nodes_init], self.buckets)
         disk_replica_dataset, disk_active_dataset = self.get_and_compare_active_replica_data_set_all(
@@ -112,12 +112,12 @@ class RebalanceInOutTests(RebalanceBaseTest):
             self.rest.add_node(self.master.rest_username, self.master.rest_password, node.ip, node.port)
         chosen = RebalanceHelper.pick_nodes(self.master, howmany=1)
         # Mark Node for failover
-        self.sleep(30)
         success_failed_over = self.rest.fail_over(chosen[0].id, graceful=False)
+        self.wait_for_failover_or_assert(expected_failover_count=1)
         # Mark Node for full recovery
         if success_failed_over:
             self.rest.set_recovery_type(otpNode=chosen[0].id, recoveryType=recovery_type)
-        self.sleep(30)
+        # self.sleep(30)
         try:
             self.shuffle_nodes_between_zones_and_rebalance(servs_out)
         except Exception as e:
@@ -173,7 +173,7 @@ class RebalanceInOutTests(RebalanceBaseTest):
 
         # Mark Node for failover
         self.rest.fail_over(chosen[0].id, graceful=fail_over)
-
+        self.wait_for_failover_or_assert(expected_failover_count=1)
         # Load data after failover
         self._load_all_buckets(self.master, gen, "update", 0)
         # Validate seq_no snap_start/stop values

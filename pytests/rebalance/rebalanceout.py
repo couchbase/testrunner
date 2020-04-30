@@ -97,6 +97,7 @@ class RebalanceOutTests(RebalanceBaseTest):
         self.compare_vbucketseq_failoverlogs(prev_vbucket_stats, prev_failover_stats)
         # Mark Node for failover
         success_failed_over = self.rest.fail_over(chosen[0].id, graceful=False)
+        self.wait_for_failover_or_assert(expected_failover_count=1)
         # Mark Node for full recovery
         if success_failed_over:
             self.rest.set_recovery_type(otpNode=chosen[0].id, recoveryType="full")
@@ -148,6 +149,7 @@ class RebalanceOutTests(RebalanceBaseTest):
         new_server_list = self.add_remove_servers(self.servers, self.servers[:self.nodes_init], [self.servers[self.nodes_init - 1], chosen[0]], [])
         # Mark Node for failover
         success_failed_over = self.rest.fail_over(chosen[0].id, graceful=fail_over)
+        self.wait_for_failover_or_assert(expected_failover_count=1)
         self.nodes = self.rest.node_statuses()
         self.rest.rebalance(otpNodes=[node.id for node in self.nodes], ejectedNodes=[chosen[0].id, ejectedNode.id])
         self.assertTrue(self.rest.monitorRebalance(stop_if_loop=True), msg="Rebalance failed")

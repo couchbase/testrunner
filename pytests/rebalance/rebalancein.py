@@ -99,7 +99,7 @@ class RebalanceInTests(RebalanceBaseTest):
         chosen = RebalanceHelper.pick_nodes(self.master, howmany=1)
         # Mark Node for failover
         success_failed_over = self.rest.fail_over(chosen[0].id, graceful=False)
-
+        self.wait_for_failover_or_assert(expected_failover_count=1)
         # Perform doc-mutation after node failover
         tasks = self._async_load_all_buckets(
             self.master, gen_update, "update", 0)
@@ -170,7 +170,7 @@ class RebalanceInTests(RebalanceBaseTest):
 
         # Mark Node for failover
         self.rest.fail_over(chosen[0].id, graceful=fail_over)
-
+        self.wait_for_failover_or_assert(expected_failover_count=1)
         # Perform doc-mutation after node failover
         tasks = self._async_load_all_buckets(self.master, gen_update, "update", 0)
         for task in tasks:
