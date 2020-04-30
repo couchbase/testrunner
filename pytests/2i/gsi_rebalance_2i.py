@@ -54,8 +54,15 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
     def tearDown(self):
         super(SecondaryIndexingRebalanceTests, self).tearDown()
 
+    def suite_setUp(self):
+        pass
+
+    def suite_tearDown(self):
+        pass
+
     def test_gsi_rebalance_out_indexer_node(self):
         self.run_operation(phase="before")
+        expected_result = None
         if self.ansi_join:
             expected_result = self.ansi_join_query(stage="pre_rebalance")
         self.sleep(30)
@@ -3030,10 +3037,10 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         prepared = self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_server)['results'][0]
         result_with_prepare = self.n1ql_helper.run_cbq_query(query=prepared, is_prepared=True, server=self.n1ql_server)[
             'results']
-        msg = "Query result with prepare and without doesn't match.\nNo prepare: %s ... %s\nWith prepare: %s ... %s"
-        self.assertTrue(sorted(result_no_prepare) == sorted(result_with_prepare),
-                        msg % (result_no_prepare[:100], result_no_prepare[-100:],
-                               result_with_prepare[:100], result_with_prepare[-100:]))
+        msg = "Query result with prepare and without doesn't match.\nNo prepare: " \
+              "%s \nWith prepare: %s" % (result_no_prepare, result_with_prepare)
+        for item in result_with_prepare:
+            self.assertTrue(item in result_no_prepare, msg)
 
     def _kill_all_processes_cbq(self, server):
         shell = RemoteMachineShellConnection(server)
