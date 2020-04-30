@@ -540,11 +540,12 @@ class EventingNegative(EventingBaseTest):
     def test_kv_error_type(self):
         #kv_node = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=False)
         self.skip_metabucket_check=True
-        body = self.create_save_function_body(self.function_name, 'handler_code/kv_error.js', worker_count=3,execution_timeout=1)
+        body = self.create_save_function_body(self.function_name, 'handler_code/kv_error.js', worker_count=1,execution_timeout=3)
         self.deploy_function(body)
         try:
             # partition the kv node when its processing mutations
             self.drop_data_to_bucket_from_eventing(self.servers[1])
+            self.sleep(10)
             # load some data
             self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                       batch_size=self.batch_size)

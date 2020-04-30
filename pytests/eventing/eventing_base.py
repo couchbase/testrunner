@@ -334,9 +334,10 @@ class EventingBaseTest(QueryHelperTests):
         #     print j["execution_stats"]["on_update_success"]
         #     print j["failure_stats"]["n1ql_op_exception_count"]
 
-    def deploy_function(self, body, deployment_fail=False, wait_for_bootstrap=True,pause_resume=False,pause_resume_number=1):
-        body['settings']['deployment_status'] = True
-        body['settings']['processing_status'] = True
+    def deploy_function(self, body, deployment_fail=False, wait_for_bootstrap=True,pause_resume=False,pause_resume_number=1,
+                        deployment_status=True,processing_status=True):
+        body['settings']['deployment_status'] = deployment_status
+        body['settings']['processing_status'] = processing_status
         if self.print_eventing_handler_code_in_logs:
             log.info("Deploying the following handler code : {0} with \nbindings: {1} and \nsettings: {2}".format(body['appname'], body['depcfg'] , body['settings']))
             log.info("\n{0}".format(body['appcode']))
@@ -793,8 +794,8 @@ class EventingBaseTest(QueryHelperTests):
             raise Exception("Should not run on windows")
         o, r = shell.execute_command("/sbin/iptables -A OUTPUT -p tcp --dport 11210 -j DROP")
         shell.log_command_output(o, r)
-        o, r = shell.execute_command("/sbin/iptables -A INPUT -p tcp --dport 11210 -j DROP")
-        shell.log_command_output(o, r)
+        # o, r = shell.execute_command("/sbin/iptables -A INPUT -p tcp --dport 11210 -j DROP")
+        # shell.log_command_output(o, r)
         log.info("enabled firewall on {0}".format(server))
         o, r = shell.execute_command("/sbin/iptables --list")
         shell.log_command_output(o, r)
