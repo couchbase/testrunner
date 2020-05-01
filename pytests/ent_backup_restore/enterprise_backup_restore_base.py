@@ -2158,11 +2158,11 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                                                   list(bk_file_data[bucket.name].keys()),
                                                   False, False, self, bucket=bucket.name)
                 k = 0
-                bucket_ready = RestHelper(RestConnection(rest).vbucket_map_ready(bucket.name)
+                bucket_ready = RestHelper(RestConnection(rest).vbucket_map_ready(bucket.name))
                 while not bucket_ready and k < 10:
                     if k == 10:
                         self.fail("Bucket {0} is not ready after 10 seconds".format(bucket.name))
-                    bucket_ready = RestHelper(RestConnection(rest).vbucket_map_ready(bucket.name)
+                    bucket_ready = RestHelper(RestConnection(rest).vbucket_map_ready(bucket.name))
                     self.sleep(1, "wait for bucket update new stats")
                     k += 1
 
