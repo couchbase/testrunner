@@ -730,8 +730,11 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                                                 compressionMode=bucket_compression_mode)
                     except Exception as e:
                         if "unable to create bucket" in str(e):
-                            self.sleep(15, "wait for cluster ready if it was reset")
-                            rest_conn.create_bucket(bucket=bucket_name,
+                            ready = RestHelper(RestConnection(self.backupset.restore_cluster_host)).is_ns_server_running()
+                            if not ready:
+                                self.fail("Couchbase Server failed to start")
+                            else:
+                                rest_conn.create_bucket(bucket=bucket_name,
                                                     ramQuotaMB=int(bucket_size) - 1,
                                                     replicaNumber=replicas,
                                                     authType=bucket.authType if bucket.authType else 'none',
@@ -1072,7 +1075,6 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             cli_command_location=self.cli_command_location,
             cb_version=self.cb_version,
             num_shards=num_shards)
-        self.sleep(5)
         conn_bk = RemoteMachineShellConnection(self.backupset.cluster_host)
         conn_bk.pause_memcached(timesleep=8)
         conn_bk.unpause_memcached()
@@ -1119,7 +1121,6 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             cli_command_location=self.cli_command_location,
             cb_version=self.cb_version,
             num_shards=num_shards)
-        self.sleep(10)
         conn = RemoteMachineShellConnection(self.backupset.cluster_host)
         conn.kill_erlang()
         conn.start_couchbase()
@@ -1161,7 +1162,6 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             cli_command_location=self.cli_command_location,
             cb_version=self.cb_version,
             num_shards=num_shards)
-        self.sleep(10)
         conn = RemoteMachineShellConnection(self.backupset.cluster_host)
         conn.stop_couchbase()
         conn.start_couchbase()
@@ -1208,7 +1208,6 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                 cli_command_location=self.cli_command_location,
                 cb_version=self.cb_version,
                 num_shards=num_shards)
-            self.sleep(3)
             conn.kill_erlang(self.os_name)
             output = backup_result.result(timeout=600)
             self.log.info(str(output))
@@ -1337,7 +1336,6 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         """
         data_matched = True
         data_collector = DataCollector()
-        self.sleep(5, "Wait for all shards are written")
         bk_file_data, _ = data_collector.get_kv_dump_from_backup_file(server_host,
                                                                       self.cli_command_location, self.cmd_ext,
                                                                       self.backupset.directory, master_key,
@@ -2159,7 +2157,15 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                 BucketOperationHelper.verify_data(self.backupset.restore_cluster_host,
                                                   list(bk_file_data[bucket.name].keys()),
                                                   False, False, self, bucket=bucket.name)
-                self.sleep(10, "wait for bucket update new stats")
+                k = 0
+                bucket_ready = RestHelper(RestConnection(rest).vbucket_map_ready(bucket.name)
+                while not bucket_ready and k < 10:
+                    if k == 10:
+                        self.fail("Bucket {0} is not ready after 10 seconds".format(bucket.name))
+                    bucket_ready = RestHelper(RestConnection(rest).vbucket_map_ready(bucket.name)
+                    self.sleep(1, "wait for bucket update new stats")
+                    k += 1
+
                 restore_buckets_items = rest.get_buckets_itemCount()
                 if int(restore_buckets_items[bucket.name]) > 0:
                     if self.replace_ttl == "expired" and self.bk_with_ttl is not None:
@@ -2168,12 +2174,9 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         shell.disconnect()
 
     def _verify_bucket_compression_mode(self, restore_bucket_compression_mode):
-        if self.enable_firewall:
-            if self.should_fail:
-                self.log.info("No need to verify.  This is negative test")
-                return
-            else:
-                self.sleep(10)
+        if self.enable_firewall and self.should_fail:
+            self.log.info("No need to verify.  This is negative test")
+            return
         rest = RestConnection(self.backupset.restore_cluster_host)
         cb_version = rest.get_nodes_version()
         if 5.5 > float(cb_version[:3]):
@@ -2761,7 +2764,10 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         self.assertTrue(self._check_output("Merge completed successfully", output),
                         "Merge failed with memcached crash and restart within 180 seconds")
         self.log.info("Merge succeeded with memcached crash and restart within 180 seconds")
-        self.sleep(30)
+        ready = RestHelper(RestConnection(self.backupset.cluster_host)).is_ns_server_running()
+        if not ready:
+            self.fail("Memcached failed to restart")
+
         del self.backups[self.backupset.start - 1:self.backupset.end]
         command = "ls -tr {0}/{1} | tail -1".format(self.backupset.directory, self.backupset.name)
         o, e = conn.execute_command(command)
@@ -2798,7 +2804,10 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         self.assertTrue(self._check_output("Merge completed successfully", output),
                         "Merge failed with erlang crash and restart within 180 seconds")
         self.log.info("Merge succeeded with erlang crash and restart within 180 seconds")
-        self.sleep(30)
+        ready = RestHelper(RestConnection(self.backupset.cluster_host)).is_ns_server_running()
+        if not ready:
+            self.fail("Erlang failed to restart")
+
         del self.backups[self.backupset.start - 1:self.backupset.end]
         command = "ls -tr {0}/{1} | tail -1".format(self.backupset.directory, self.backupset.name)
         o, e = conn.execute_command(command)
@@ -2835,7 +2844,10 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         self.assertTrue(self._check_output("Merge completed successfully", output),
                         "Merge failed with couchbase stop and start within 180 seconds")
         self.log.info("Merge succeeded with couchbase stop and start within 180 seconds")
-        self.sleep(30)
+        ready = RestHelper(RestConnection(self.backupset.cluster_host)).is_ns_server_running()
+        if not ready:
+            self.fail("cb server failed to restart")
+
         del self.backups[self.backupset.start - 1:self.backupset.end]
         command = "ls -tr {0}/{1} | tail -1".format(self.backupset.directory, self.backupset.name)
         o, e = conn.execute_command(command)
@@ -2885,7 +2897,10 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         serv_out = serv_out[serv_out.__len__() - self.nodes_out:]
         cluster_healthy = RestHelper(rest).is_cluster_healthy()
         if not cluster_healthy:
-            self.sleep(15, "wait for cluster ready")
+            ready = RestHelper(rest).is_ns_server_running()
+            if not ready:
+                self.fail("cluster is not ready")
+
         rebalance = self.cluster.async_rebalance(self.cluster_to_backup,
                                                  serv_in, serv_out)
         return rebalance
@@ -3339,7 +3354,9 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
             shell.stop_couchbase()
             shell.start_couchbase()
 
-            self.sleep(60)
+            ready = RestHelper(rest).is_ns_server_running()
+            if not ready:
+                self.fail("CB server failed to start")
             shell.disconnect()
 
     def create_indexes(self):
