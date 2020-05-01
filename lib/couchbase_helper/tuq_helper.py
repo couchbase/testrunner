@@ -244,8 +244,7 @@ class N1QLHelper():
         if check:
             actual_result = self._gen_dict(n1ql_result)
 
-        actual_result = sorted(actual_result)
-        expected_result = sorted(sql_result)
+        expected_result = sql_result
 
         if len(actual_result) != len(expected_result):
             extra_msg = self._get_failure_message(expected_result, actual_result)
@@ -271,9 +270,10 @@ class N1QLHelper():
                     extra_msg = self._get_failure_message(expected_result, actual_result)
                     raise Exception(msg+"\n "+extra_msg)
         else:
-            if self._sort_data(actual_result) != self._sort_data(expected_result):
-                extra_msg = self._get_failure_message(expected_result, actual_result)
-                raise Exception(msg+"\n "+extra_msg)
+            diffs = DeepDiff(actual_result, expected_result, ignore_order=True)
+            if diffs:
+                self.log.info("-->actual vs expected diffs found:{}".format(diffs))
+                raise Exception(msg)
 
     def _sort_data(self, result):
         new_data = []
@@ -295,16 +295,16 @@ class N1QLHelper():
             actual_result = []
         if check:
             actual_result = self._gen_dict(n1ql_result)
-        actual_result = sorted(actual_result)
-        expected_result = sorted(sql_result)
+
+        expected_result = sql_result
 
         if len(actual_result) != len(expected_result):
             extra_msg = self._get_failure_message(expected_result, actual_result)
             raise Exception("Results are incorrect. Actual num %s. Expected num: %s.:: %s \n" % (len(actual_result), len(expected_result), extra_msg))
-        if not self._result_comparison_analysis(actual_result, expected_result):
-            msg = "The number of rows match but the results mismatch, please check"
-            extra_msg = self._get_failure_message(expected_result, actual_result)
-            raise Exception(msg+"\n "+extra_msg)
+        diffs = DeepDiff(actual_result, expected_result, ignore_order=True)
+        if diffs:
+            self.log.info("-->actual vs expected diffs found:{}".format(diffs))
+            raise Exception("-->actual vs expected diffs found:{}".format(diffs))
 
     def _get_failure_message(self, expected_result, actual_result):
         if expected_result is None:

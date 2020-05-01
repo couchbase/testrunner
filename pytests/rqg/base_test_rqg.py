@@ -288,11 +288,10 @@ class BaseRQGTests(BaseTestCase):
                                                        server=self.advise_server)
         if len(advise_result["results"][0]["advice"]["adviseinfo"]) == 0:
             return
-        if "index recommendation at this time" not in str(
-                str(advise_result["results"][0]["advice"]["adviseinfo"][0]["recommended_indexes"])):
-            if "indexes" in advise_result["results"][0]["advice"]["adviseinfo"][0][
+        if "index recommendation at this time" not in str(advise_result["results"][0]["advice"]["adviseinfo"]["recommended_indexes"]):
+            if "indexes" in advise_result["results"][0]["advice"]["adviseinfo"][
                 "recommended_indexes"].keys():
-                for index_statement_array in advise_result["results"][0]["advice"]["adviseinfo"][0]["recommended_indexes"]["indexes"]:
+                for index_statement_array in advise_result["results"][0]["advice"]["adviseinfo"]["recommended_indexes"]["indexes"]:
                     index_statement = index_statement_array["index_statement"]
                     if index_statement != "":
                         self.n1ql_helper.wait_for_all_indexes_online()
@@ -304,9 +303,9 @@ class BaseRQGTests(BaseTestCase):
                             if "already exists" in str(ex):
                                 continue
 
-            if "covering_indexes" in advise_result["results"][0]["advice"]["adviseinfo"][0][
+            if "covering_indexes" in advise_result["results"][0]["advice"]["adviseinfo"][
                 "recommended_indexes"].keys():
-                for index_statement_array in advise_result["results"][0]["advice"]["adviseinfo"][0]["recommended_indexes"]["covering_indexes"]:
+                for index_statement_array in advise_result["results"][0]["advice"]["adviseinfo"]["recommended_indexes"]["covering_indexes"]:
                     index_statement = index_statement_array["index_statement"]
                     if index_statement != "":
                         self.n1ql_helper.wait_for_all_indexes_online()

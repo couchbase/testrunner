@@ -993,10 +993,10 @@ class BaseRQGQueryHelper(object):
             projection = " "+table_map[list(table_map.keys())[0]]["alias_name"]+".* "
             new_sql = new_sql.replace("OUTER_BUCKET_NAME.*", projection)
         if "BUCKET_NAME.*" in new_sql:
-            projection = " "+table_map[table_map.keys()[0]]["alias_name"]+".* "
+            projection = " "+table_map[list(table_map.keys())[0]]["alias_name"]+".* "
             new_sql = new_sql.replace("BUCKET_NAME.*", projection)
         if "OUTER_BUCKET_NAME" in new_sql:
-            projection = " "+table_map[table_map.keys()[0]]+" "+table_map[table_map.keys()[0]]["outer_alias_name"]+" "
+            projection = " "+table_map[list(table_map.keys())[0]]+" "+table_map[list(table_map.keys())[0]]["outer_alias_name"]+" "
             new_sql = new_sql.replace("OUTER_BUCKET_NAME.*", projection)
         if "ORDER_BY_SEL_VAL" in sql:
             select_field_names_list = self.extract_field_names(sql_map['select_from'], all_field_names)
@@ -1601,10 +1601,10 @@ class BaseRQGQueryHelper(object):
     def _update_sql_template_to_values(self, target_table="simple_table", source_table="copy_simple_table", sql="", table_map={}):
         tokens = sql.split("WHERE")
         new_sql = " UPDATE {0} ".format(list(table_map.keys())[0])
-        list = []
+        token_list = []
         for field in tokens[0].split("SET")[1].split(","):
-            list.append(self._covert_field_template_for_update(field, table_map))
-        new_sql += " SET " + ",".join(list)
+            token_list.append(self._covert_field_template_for_update(field, table_map))
+        new_sql += " SET " + ",".join(token_list)
         new_sql += " WHERE "+self._convert_condition_template_to_value(tokens[1], table_map)
         return {"sql_query": new_sql, "n1ql_query": self._gen_sql_to_nql(new_sql)}
 
