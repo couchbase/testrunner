@@ -438,9 +438,35 @@ def main():
     print(currentExecutorParams)
     summary = []
     servers = []
+    total_jobs_count = len(testsToLaunch)
+    job_index = 1
+    total_servers_being_used = 0
+    total_addl_servers_being_used = 0
+
+    if options.noLaunch:
+        print("\n -- No launch selected -- \n")
 
     while len(testsToLaunch) > 0:
         try:
+            print("\n\n *** Dispatching job#{} of {} with {} servers (total={}) and {} "
+                  "additional "
+              "servers(total={}) :  {}-{} \n".
+              format(job_index,
+                     total_jobs_count,
+                     testsToLaunch[0]['serverCount'],
+                     total_servers_being_used,
+                     testsToLaunch[0]['addPoolServerCount'],
+                     total_addl_servers_being_used,
+                     testsToLaunch[0]['component'],
+                     testsToLaunch[0]['subcomponent'],
+                     ))
+
+            if options.noLaunch:
+                total_servers_being_used += testsToLaunch[0]['serverCount']
+                total_addl_servers_being_used += testsToLaunch[0]['addPoolServerCount']
+                testsToLaunch.pop(0)
+                job_index += 1
+                continue
             # this bit is Docker/VM dependent
             serverCount = get_available_servers_count(options=options, os_version=options.os)
             print("Server count={}".format(serverCount))
@@ -610,6 +636,9 @@ def main():
                         print("Response is: {0}".format(str(response)))
                         print("Content is: {0}".format(str(content)))
 
+                    total_servers_being_used += testsToLaunch[0]['serverCount']
+                    total_addl_servers_being_used += testsToLaunch[0]['addPoolServerCount']
+                    job_index += 1
                     testsToLaunch.pop(i)
                     summary.append( {'test':descriptor, 'time':time.asctime( time.localtime(time.time()) ) } )
                     if options.noLaunch:
@@ -630,15 +659,20 @@ def main():
             time.sleep(POLL_INTERVAL)
     # endwhile
 
-    print('\n\n\ndone, everything is launched')
-    for i in summary:
-        print((i['test'], 'was launched at', i['time']))
+    if not options.noLaunch:
+        print('\n\n\ndone, everything is launched')
+        for i in summary:
+            print((i['test'], 'was launched at', i['time']))
+    else:
+        print("\n Done!")
+
     return
 
 
 def release_servers(descriptor):
-    response, content = httplib2.Http(timeout=TIMEOUT).request(
-        'http://' + SERVER_MANAGER + '/releaseservers/' + descriptor + '/available', 'GET')
+    release_url = "http://{}/releaseservers/{}/available".format(SERVER_MANAGER, descriptor)
+    print('Release URL: {} '.format(release_url))
+    response, content = httplib2.Http(timeout=TIMEOUT).request(release_url, 'GET')
     print('the release response', response, content)
 
 if __name__ == "__main__":
