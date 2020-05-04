@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 import subprocess
@@ -13,12 +14,12 @@ from pytests.eventing.eventing_constants import HANDLER_CODE
 from remote.remote_util import RemoteMachineShellConnection
 from testconstants import COUCHBASE_DATA_PATH, WIN_COUCHBASE_DATA_PATH_RAW, WIN_TMP_PATH_RAW, LINUX_ROOT_PATH, \
     WIN_ROOT_PATH, WIN_TMP_PATH, STANDARD_BUCKET_PORT
-from upgrade.newupgradebasetest import NewUpgradeBaseTest
+#from upgrade.newupgradebasetest import NewUpgradeBaseTest
 
 log = logging.getLogger()
 
 
-class EventingTools(EventingBaseTest, EnterpriseBackupRestoreBase, NewUpgradeBaseTest):
+class EventingTools(EventingBaseTest, EnterpriseBackupRestoreBase):
     def setUp(self):
         super(EventingTools, self).setUp()
         self.rest.set_service_memoryQuota(service='memoryQuota', memoryQuota=500)
@@ -387,6 +388,132 @@ class EventingTools(EventingBaseTest, EnterpriseBackupRestoreBase, NewUpgradeBas
         # delete the function
         self._couchbase_cli_eventing(eventing_node, "Function_396275055_test_export_function", "delete",
                                      "SUCCESS: Request to delete the function was accepted")
+
+    def test_export_rest_import_cli(self):
+        shell = RemoteMachineShellConnection(self.servers[0])
+        info = shell.extract_remote_info().type.lower()
+        if info == 'linux':
+            self.cli_command_location = testconstants.LINUX_COUCHBASE_BIN_PATH
+        elif info == 'windows':
+            self.cmd_ext = ".exe"
+            self.cli_command_location = testconstants.WIN_COUCHBASE_BIN_PATH_RAW
+        elif info == 'mac':
+            self.cli_command_location = testconstants.MAC_COUCHBASE_BIN_PATH
+        else:
+            raise Exception("OS not supported.")
+        # create the json file need on the node
+        eventing_node = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
+        remote_client = RemoteMachineShellConnection(eventing_node)
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE, worker_count=3)
+        self.deploy_function(body,wait_for_bootstrap=False,deployment_status=False,processing_status=False)
+        # export the function that we have created
+        output = self.rest.export_function(self.function_name)
+        self.log.info("exported function: {}".format(output))
+        # delete the function
+        self._couchbase_cli_eventing(eventing_node, self.function_name, "delete",
+                                     "SUCCESS: Request to delete the function was accepted")
+        # create the json file need on the node
+        eventing_node = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
+        remote_client = RemoteMachineShellConnection(eventing_node)
+        remote_client.write_remote_file_single_quote("/root", "test_export_function.json", json.dumps(output, indent = 4) )
+        # import the function from cli
+        self._couchbase_cli_eventing(eventing_node, self.function_name, "import",
+                                     "SUCCESS: Events imported",
+                                     file_name="test_export_function.json")
+        # deploy the function
+        self._couchbase_cli_eventing(eventing_node, self.function_name,
+                                     "deploy --boundary from-now",
+                                     "SUCCESS: Request to deploy the function was accepted")
+        self.wait_for_handler_state(self.function_name, "deployed")
+        # load some data in the source bucket
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        # verify result
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016,
+                                     skip_stats_validation=True)
+        # pause function
+        self._couchbase_cli_eventing(eventing_node, self.function_name, "pause",
+                                     "SUCCESS: Function was paused")
+        self.wait_for_handler_state(self.function_name, "paused")
+        # delete all documents
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size, op_type='delete')
+        # resume function
+        self._couchbase_cli_eventing(eventing_node, self.function_name, "resume",
+                                     "SUCCESS: Function was resumed")
+        self.wait_for_handler_state(self.function_name, "deployed")
+        # verify result
+        self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+        # undeploy the function
+        self._couchbase_cli_eventing(eventing_node, self.function_name, "undeploy",
+                                     "SUCCESS: Request to undeploy the function was accepted")
+        self.wait_for_handler_state(self.function_name, "undeployed")
+        # delete the function
+        self._couchbase_cli_eventing(eventing_node, self.function_name, "delete",
+                                     "SUCCESS: Request to delete the function was accepted")
+
+    def test_export_cli_import_rest(self):
+        shell = RemoteMachineShellConnection(self.servers[0])
+        info = shell.extract_remote_info().type.lower()
+        if info == 'linux':
+            self.cli_command_location = testconstants.LINUX_COUCHBASE_BIN_PATH
+        elif info == 'windows':
+            self.cmd_ext = ".exe"
+            self.cli_command_location = testconstants.WIN_COUCHBASE_BIN_PATH_RAW
+        elif info == 'mac':
+            self.cli_command_location = testconstants.MAC_COUCHBASE_BIN_PATH
+        else:
+            raise Exception("OS not supported.")
+        # create the json file need on the node
+        eventing_node = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
+        # create and save function
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE,
+                                              worker_count=3)
+        self.deploy_function(body, wait_for_bootstrap=False, deployment_status=False, processing_status=False)
+        # export via cli
+        self._couchbase_cli_eventing(eventing_node, self.function_name, "export",
+                                     "SUCCESS: Function exported to: "+self.function_name+".json",
+                                     file_name=self.function_name+".json")
+        # delete the function
+        self._couchbase_cli_eventing(eventing_node, self.function_name, "delete",
+                                     "SUCCESS: Request to delete the function was accepted")
+        # read exported function
+        eventing_node = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=False)
+        remote_client = RemoteMachineShellConnection(eventing_node)
+        script_dir = os.path.dirname(__file__)
+        abs_file_path = os.path.join(script_dir, "exported_functions/")
+        output=remote_client.copy_file_remote_to_local("/root/"+self.function_name+".json",abs_file_path+"exported.json")
+        self.log.info("exported function: {}".format(json.dumps(output,indent=4)))
+        fh = open(abs_file_path+"exported.json", "r")
+        body = fh.read()
+        self.log.info("body {}".format(body))
+        self.rest.import_function(body)
+        #deploy function
+        self.deploy_handler_by_name(self.function_name)
+        # load some data in the source bucket
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        # verify result
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        # pause function
+        self._couchbase_cli_eventing(eventing_node, self.function_name, "pause", "SUCCESS: Function was paused")
+        self.wait_for_handler_state(self.function_name, "paused")
+        # delete all documents
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size, op_type='delete')
+        # resume function
+        self._couchbase_cli_eventing(eventing_node, self.function_name, "resume", "SUCCESS: Function was resumed")
+        self.wait_for_handler_state(self.function_name, "deployed")
+        # verify result
+        self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+        # undeploy the function
+        self._couchbase_cli_eventing(eventing_node, self.function_name, "undeploy",
+                                     "SUCCESS: Request to undeploy the function was accepted")
+        self.wait_for_handler_state(self.function_name, "undeployed")
+        # delete the function
+        self._couchbase_cli_eventing(eventing_node, self.function_name, "delete",
+                                     "SUCCESS: Request to delete the function was accepted")
+
 
     def _couchbase_cli_eventing(self, host, function_name, operation, result, file_name=None, name=True):
         remote_client = RemoteMachineShellConnection(host)

@@ -4694,6 +4694,22 @@ class RestConnection(object):
         return export_map
 
     '''
+         Import the Function
+    '''
+
+    def import_function(self, body):
+        authorization = self.get_authorization(self.username, self.password)
+        url = "api/v1/import"
+        api = self.eventing_baseUrl + url
+        headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
+        status, content, header = self._http_request(api, 'POST', headers=headers,
+                                                     params=body)
+
+        if not status:
+            raise Exception(content)
+        return content
+
+    '''
              Ensure that the eventing node is out of bootstrap node
     '''
     def get_deployed_eventing_apps(self):

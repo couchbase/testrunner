@@ -119,7 +119,8 @@ class EventingBaseTest(QueryHelperTests):
                                   sock_batch_size=1, tick_duration=5000, timer_processing_tick_interval=500,
                                   timer_worker_pool_size=3, worker_count=3, processing_status=True,
                                   cpp_worker_thread_count=1, multi_dst_bucket=False, execution_timeout=20,
-                                  data_chan_size=10000, worker_queue_cap=100000, deadline_timeout=62,language_compatibility='6.5.0',hostpath=None):
+                                  data_chan_size=10000, worker_queue_cap=100000, deadline_timeout=62,
+                                  language_compatibility='6.5.0',hostpath=None,validate_ssl=False):
         body = {}
         body['appname'] = appname
         script_dir = os.path.dirname(__file__)
@@ -172,11 +173,11 @@ class EventingBaseTest(QueryHelperTests):
             if hostpath != None:
                 body['depcfg']['curl'].append({"hostname": self.hostname+hostpath, "value": "server", "auth_type": self.auth_type,
                                                "username": self.curl_username, "password": self.curl_password,
-                                               "allow_cookies": self.cookies})
+                                               "allow_cookies": self.cookies,"validate_ssl_certificate": validate_ssl})
             else:
                 body['depcfg']['curl'].append(
                     {"hostname": self.hostname, "value": "server", "auth_type": self.auth_type,
-                     "username": self.curl_username, "password": self.curl_password, "allow_cookies": self.cookies})
+                     "username": self.curl_username, "password": self.curl_password, "allow_cookies": self.cookies,"validate_ssl_certificate": validate_ssl})
             if self.auth_type=="bearer":
                 body['depcfg']['curl'][0]['bearer_key']=self.bearer_key
         body['settings']['language_compatibility']=language_compatibility
