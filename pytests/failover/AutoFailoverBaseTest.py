@@ -372,16 +372,15 @@ class AutoFailoverBaseTest(BaseTestCase):
 
             self.fail("Exception: {}".format(e))
         finally:
-            self.sleep(120, "Sleeping for 2 min for the machines to restart")
             for node in self.server_to_fail:
-                for i in range(0, 2):
+                for i in range(0, 6):
                     try:
                         shell = RemoteMachineShellConnection(node)
                         break
                     except:
                         self.log.info("Unable to connect to the host. "
                                       "Machine has not restarted")
-                        self.sleep(60, "Sleep for another minute and try "
+                        self.sleep(60, "Sleep for couple of minutes and try "
                                        "again")
 
     def stop_memcached(self):
