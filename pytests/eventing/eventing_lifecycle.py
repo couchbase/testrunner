@@ -192,7 +192,7 @@ class EventingLifeCycle(EventingBaseTest):
         pattern = re.compile(r'chrome-devtools://devtools/bundled/js_app.html(.*)')
         while count < 10:
             out2 = self.rest.get_eventing_debugger_url(self.function_name)
-            matched = re.match(pattern, out2)
+            matched = re.match(pattern, out2.decode('utf-8'))
             if matched:
                 log.info("Got debugger url : {0}{1}".format(matched.group(0), matched.group(1)))
                 match = True
@@ -229,7 +229,7 @@ class EventingLifeCycle(EventingBaseTest):
         pattern = re.compile(r'chrome-devtools://devtools/bundled/js_app.html(.*)')
         while count < 10:
             out2 = self.rest.get_eventing_debugger_url(self.function_name)
-            matched = re.match(pattern, out2)
+            matched = re.match(pattern, out2.decode('utf-8'))
             if matched:
                 log.info("Got debugger url : {0}{1}".format(matched.group(0), matched.group(1)))
                 match = True
@@ -336,7 +336,7 @@ class EventingLifeCycle(EventingBaseTest):
         pattern = re.compile(r'chrome-devtools://devtools/bundled/js_app.html(.*)')
         while count < 10:
             out2 = self.rest.get_eventing_debugger_url(self.function_name)
-            matched = re.match(pattern, out2)
+            matched = re.match(pattern, out2.decode('utf-8'))
             if matched:
                 log.info("Got debugger url : {0}{1}".format(matched.group(0), matched.group(1)))
                 match = True
@@ -371,7 +371,7 @@ class EventingLifeCycle(EventingBaseTest):
         pattern = re.compile(r'chrome-devtools://devtools/bundled/js_app.html(.*)')
         while count < 10:
             out2 = self.rest.get_eventing_debugger_url(self.function_name)
-            matched = re.match(pattern, out2)
+            matched = re.match(pattern, out2.decode('utf-8'))
             if matched:
                 log.info("Got debugger url : {0}{1}".format(matched.group(0), matched.group(1)))
                 match = True

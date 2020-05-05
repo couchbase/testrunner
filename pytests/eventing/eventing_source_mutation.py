@@ -118,6 +118,7 @@ class EventingSourceMutation(EventingBaseTest):
                 pass
             else:
                 raise Exception("No inter handler recursion observed")
+        self.undeploy_function(body1)
 
 
     def test_pause_resume_with_source_bucket_mutation(self):
@@ -153,6 +154,7 @@ class EventingSourceMutation(EventingBaseTest):
         self.bucket_compaction()
         self.resume_function(body)
         self.verify_eventing_results(self.function_name,3,skip_stats_validation=True)
+        self.undeploy_and_delete_function(body)
 
     #MB-34912
     def cycle_check_bypass(self):
@@ -176,5 +178,7 @@ class EventingSourceMutation(EventingBaseTest):
         except Exception as ex:
             if "ERR_INTER_FUNCTION_RECURSION" in str(ex):
                 raise Exception("Inter handler recursion observed even for allow_interbucket_recursion=true")
+        self.undeploy_and_delete_function(body)
+        self.undeploy_and_delete_function(body1)
 
 

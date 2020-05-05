@@ -422,8 +422,8 @@ class EventingNegative(EventingBaseTest):
             self.deploy_function(body)
             self.fail("application is deployed for insert on source bucket")
         except Exception as e:
-            if "Can not execute DML query on bucket" not in str(e):
-                log.info(str(e))
+            log.info(str(e))
+            if "ERR_HANDLER_COMPILATION" not in str(e):
                 self.fail("Not correct exception thrown")
 
     def test_n1ql_with_wrong_query(self):

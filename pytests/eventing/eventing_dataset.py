@@ -376,6 +376,7 @@ class EventingDataset(EventingBaseTest):
             crc = bucket.lookup_in(docid, SD.exists('_eventing.crc', xattr=True))
             if fiid_value != fiid['_eventing.fiid'] or crc_value !=crc['_eventing.crc']:
                 self.fail("fiid {} or crc {} values are not same:".format(fiid,crc))
+        self.undeploy_and_delete_function(body)
 
 
     def test_read_cas_bucket_op(self):

@@ -120,6 +120,7 @@ class EventingConcurrency(EventingBaseTest):
                   batch_size=self.batch_size, op_type='delete')
         # Wait for eventing to catch up with all the delete mutations
         self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+        self.undeploy_and_delete_function(body)
 
     def test_xdcr_and_indexing_with_eventing(self):
         rest_src = RestConnection(self.servers[0])
