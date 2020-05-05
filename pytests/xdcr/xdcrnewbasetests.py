@@ -276,8 +276,6 @@ class NodeHelper:
         elif shell.extract_remote_info().type.lower() == OS.LINUX:
             o, r = shell.execute_command(COMMAND.REBOOT)
         shell.log_command_output(o, r)
-        # wait for restart and warmup on all server
-        time.sleep(wait_timeout * 5)
         # disable firewall on these nodes
         NodeHelper.disable_firewall(server)
         # wait till server is ready after warmup
@@ -304,9 +302,7 @@ class NodeHelper:
         """Warmp up server
         """
         shell = RemoteMachineShellConnection(server)
-        shell.stop_couchbase()
-        time.sleep(5)
-        shell.start_couchbase()
+        shell.restart_couchbase()
         shell.disconnect()
 
     @staticmethod
@@ -326,7 +322,7 @@ class NodeHelper:
             if str(output).lower().find("running") != -1:
                 # self.log.info("Couchbase service is running")
                 return
-            time.sleep(10)
+            self.wait_interval(10, "Waiting for couchbase service to start")
         raise Exception(
             "Couchbase service is not running after {0} seconds".format(
                 wait_time))
@@ -345,7 +341,6 @@ class NodeHelper:
                             NodeHelper._log.info(
                                 "Warmed up: %s items on %s on %s" %
                                 (mc.stats("warmup")["ep_warmup_key_count"], bucket, server))
-                            time.sleep(10)
                             break
                         elif mc.stats()["ep_warmup_thread"] == "running":
                             NodeHelper._log.info(
@@ -357,7 +352,7 @@ class NodeHelper:
                             break
                     except Exception as e:
                         NodeHelper._log.info(e)
-                        time.sleep(10)
+                        self.wait_interval(10, "Still warming up..")
                 if mc.stats()["ep_warmup_thread"] == "running":
                     NodeHelper._log.info(
                             "ERROR: ep_warmup_thread's status not complete")
@@ -383,7 +378,7 @@ class NodeHelper:
                 break
             except ServerUnavailableException:
                 num += 1
-                time.sleep(10)
+                self.wait_interval(10, "Waiting for node {} restart".format(server.ip))
 
     @staticmethod
     def kill_erlang(server):
@@ -439,8 +434,7 @@ class NodeHelper:
             if count > 0 or timeout == 0:
                 break
             else:
-                NodeHelper._log.info("Waiting {0}s for {1} to appear in {2} ..".format(timeout, search_str, log_name))
-                time.sleep(timeout)
+                self.wait_interval(timeout, "Waiting {0}s for {1} to appear in {2} ..".format(timeout, search_str, log_name))
             iter += 1
         shell.disconnect()
         NodeHelper._log.info(count)
@@ -948,7 +942,7 @@ class XDCReplication:
         self.__validate_start_audit_event()
         #if within this 10s for pipeline updater if we try to create another replication, it doesn't work until the previous pipeline is updated.
         # but better to have this 10s sleep between replications.
-        time.sleep(10)
+        #time.sleep(10)
 
     def __verify_pause(self):
         """Verify if replication is paused"""
@@ -1843,8 +1837,7 @@ class CouchbaseCluster:
         [task.result() for task in tasks]
 
         if wait_for_expiration and expiration:
-            self.__log.info("Waiting for expiration of updated items")
-            time.sleep(expiration)
+            self.wait_interval(expiration, "Waiting for expiration of updated items")
 
     def run_expiry_pager(self, val=10):
         """Run expiry pager process and set interval to 10 seconds
@@ -1857,8 +1850,7 @@ class CouchbaseCluster:
                 "exp_pager_stime",
                 val,
                 bucket)
-            self.__log.info("wait for expiry pager to run on all these nodes")
-        time.sleep(val)
+            self.wait_interval(val, "wait for expiry pager to run on all these nodes")
 
     def async_create_views(
             self, design_doc_name, views, bucket=BUCKET_NAME.DEFAULT):
@@ -2169,7 +2161,7 @@ class CouchbaseCluster:
     def failover(self, num_nodes=1, graceful=False):
         self.__async_failover(num_nodes=num_nodes, graceful=graceful).result()
 
-    def failover_and_rebalance_master(self, graceful=False, rebalance=True,master=True):
+    def failover_and_rebalance_master(self, graceful=False, rebalance=True, master=True):
         """Failover master node
         @param graceful: True if graceful failover else False
         @param rebalance: True if do rebalance operation after failover.
@@ -2177,10 +2169,13 @@ class CouchbaseCluster:
         task = self.__async_failover(master, graceful=graceful)
         task.result()
         if graceful:
-            # wait for replica update
-            time.sleep(60)
-            # use rebalance stats to monitor failover
-            RestConnection(self.__master_node).monitorRebalance()
+            timeout = time.time() + 60
+            while time.time() < timeout:
+                # use rebalance stats to monitor failover
+                if RestConnection(self.__master_node).monitorRebalance():
+                    break
+                else:
+                    self.wait_interval(10, "Waiting for rebalance to complete")
         if rebalance:
             self.rebalance_failover_nodes()
         self.__master_node = self.__nodes[0]
@@ -2198,9 +2193,13 @@ class CouchbaseCluster:
             graceful=graceful)
         task.result()
         if graceful:
-            time.sleep(60)
-            # use rebalance stats to monitor failover
-            RestConnection(self.__master_node).monitorRebalance()
+            timeout = time.time() + 60
+            while time.time() < timeout:
+                # use rebalance stats to monitor failover
+                if RestConnection(self.__master_node).monitorRebalance():
+                    break
+                else:
+                    self.wait_interval(10, "Waiting for rebalance to complete")
         if rebalance:
             self.rebalance_failover_nodes()
 
@@ -2370,6 +2369,11 @@ class CouchbaseCluster:
         for task in tasks:
             task.result(timeout)
 
+    # Sleep for interval seconds between polls, while waiting for event to complete
+    def wait_interval(self, timeout=1, message=""):
+        self.log.info("sleep for {0} secs. {1} ...".format(timeout, message))
+        time.sleep(timeout)
+
     def verify_items_count(self, timeout=600):
         """Wait for actual bucket items count reach to the count on bucket kv_store.
         """
@@ -2395,10 +2399,9 @@ class CouchbaseCluster:
                     for node in nodes:
                         active_keys += node["interestingStats"]["curr_items"]
                 if active_keys != items:
-                        self.__log.warning("Not Ready: vb_active_curr_items %s == "
+                        self.wait_interval(5, "Not Ready: vb_active_curr_items %s == "
                                 "%s expected on %s, %s bucket"
                                  % (active_keys, items, self.__name, bucket.name))
-                        time.sleep(5)
                         if time.time() > end_time:
                             self.__log.error(
                             "ERROR: Timed-out waiting for active item count to match")
@@ -2432,10 +2435,9 @@ class CouchbaseCluster:
                     for node in nodes:
                         replica_keys += node["interestingStats"]["vb_replica_curr_items"]
                 if replica_keys != items:
-                    self.__log.warning("Not Ready: vb_replica_curr_items %s == "
+                    self.wait_interval(5, "Not Ready: vb_replica_curr_items %s == "
                             "%s expected on %s, %s bucket"
                              % (replica_keys, items, self.__name, bucket.name))
-                    time.sleep(3)
                     if time.time() > end_time:
                         self.__log.error(
                         "ERROR: Timed-out waiting for replica item count to match")
@@ -2542,13 +2544,12 @@ class CouchbaseCluster:
         for bucket in buckets:
             try:
                 mutations = int(rest.get_dcp_queue_size(bucket.name))
-                self.__log.info(
-                    "Current dcp queue size on %s for %s is %s" %
-                    (self.__name, bucket.name, mutations))
                 if mutations == 0:
                     buckets.remove(bucket)
                 else:
-                    time.sleep(5)
+                    self.wait_interval(5,
+                        "Current dcp queue size on %s for %s is %s" %
+                        (self.__name, bucket.name, mutations))
                     end_time = end_time - 5
             except Exception as e:
                 self.__log.error(e)
@@ -2562,9 +2563,6 @@ class CouchbaseCluster:
         """Wait for Outbound mutations to reach 0.
         @return: True if mutations reached to 0 else False.
         """
-        self.__log.info(
-            "Waiting for Outbound mutation to be zero on cluster node: %s" %
-            self.__master_node.ip)
         curr_time = time.time()
         end_time = curr_time + timeout
         rest = RestConnection(self.__master_node)
@@ -2583,7 +2581,9 @@ class CouchbaseCluster:
                     found = found + 1
             if found == len(self.__buckets):
                 break
-            time.sleep(5)
+            self.wait_interval(5,
+                "Waiting for Outbound mutation to be zero on cluster node: %s" %
+                self.__master_node.ip)
             end_time = end_time - 5
         else:
             # MB-9707: Updating this code from fail to warning to avoid test
@@ -2593,6 +2593,11 @@ class CouchbaseCluster:
                 "Timeout occurs while waiting for mutations to be replicated")
             return False
         return True
+
+    # Sleep for interval seconds between polls, while waiting for event to complete
+    def wait_interval(self, timeout=1, message=""):
+        self.log.info("sleep for {0} secs. {1} ...".format(timeout, message))
+        time.sleep(timeout)
 
     def pause_all_replications(self, verify=False):
         for remote_cluster_ref in self.__remote_clusters:
@@ -3320,7 +3325,7 @@ class XDCRNewBaseTest(unittest.TestCase):
             self.log.info("Batched deletes sent to cluster(s)")
 
         if self._wait_for_expiration and self._expires:
-            self.sleep(
+            self.wait_interval(
                 self._expires,
                 "Waiting for expiration of updated items")
 
@@ -3362,7 +3367,6 @@ class XDCRNewBaseTest(unittest.TestCase):
     def setup_xdcr_and_load(self):
         self.setup_xdcr()
         self.load_data_topology()
-        self.sleep(10)
 
     def setup_xdcr_async_load(self):
         self.setup_xdcr()
@@ -3605,7 +3609,7 @@ class XDCRNewBaseTest(unittest.TestCase):
                         if _count1 == _count2:
                             self.log.info("Replication caught up for bucket {0}: {1}".format(bucket.name, _count1))
                             break
-                        self.sleep(60, "Bucket: {0}, count in one cluster : {1} items, another : {2}. "
+                        self.wait_interval(60, "Bucket: {0}, count in one cluster : {1} items, another : {2}. "
                                        "Waiting for replication to catch up ..".
                                    format(bucket.name, _count1, _count2))
                     else:
@@ -3634,7 +3638,7 @@ class XDCRNewBaseTest(unittest.TestCase):
                         if _count1 == _count2:
                             self.log.info("Replication caught up for bucket {0}: {1}".format(bucket.name, _count1))
                             break
-                        self.sleep(60, "Bucket: {0}, count in one cluster : {1} items, another : {2}. "
+                        self.wait_interval(60, "Bucket: {0}, count in one cluster : {1} items, another : {2}. "
                                        "Waiting for replication to catch up ..".
                                    format(bucket.name, _count1, _count2))
                     else:
@@ -3642,7 +3646,8 @@ class XDCRNewBaseTest(unittest.TestCase):
                                 "bucket. on source cluster:{2}, on dest:{3}".\
                             format(timeout, bucket.name, _count1, _count2))
 
-    def sleep(self, timeout=1, message=""):
+    # Sleep for interval seconds between polls, while waiting for event to complete
+    def wait_interval(self, timeout=1, message=""):
         self.log.info("sleep for {0} secs. {1} ...".format(timeout, message))
         time.sleep(timeout)
 
@@ -3693,7 +3698,6 @@ class XDCRNewBaseTest(unittest.TestCase):
             # and query will be "select count from default where filter_exp1 AND filter_exp2"
             if repl['filterExpression']:
                 exp_in_brackets = '( ' + str(repl['filterExpression']) + ' )'
-            else:
                 if bucket in self.filter_exp.keys():
                     self.filter_exp[bucket].add(exp_in_brackets)
                 else:
@@ -3824,7 +3828,6 @@ class XDCRNewBaseTest(unittest.TestCase):
                 shell.disconnect()
                 return
             else:
-                self.log.warning("couchbase service is not running. {0}".format(output))
-                self.sleep(10)
+                self.wait_interval(10, "Waiting for couchbase service to be running. {0}".format(output))
         shell.disconnect()
         self.fail("Couchbase service is not running after {0} seconds".format(wait_time))
