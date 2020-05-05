@@ -2369,6 +2369,11 @@ class CouchbaseCluster:
         for task in tasks:
             task.result(timeout)
 
+    #quick fix, need to replace all occurances of self.sleep with wait_interval
+    def sleep(self, timeout=1, message=""):
+        self.log.info("sleep for {0} secs. {1} ...".format(timeout, message))
+        time.sleep(timeout)
+
     # Sleep for interval seconds between polls, while waiting for event to complete
     def wait_interval(self, timeout=1, message=""):
         self.log.info("sleep for {0} secs. {1} ...".format(timeout, message))
