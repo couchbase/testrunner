@@ -1010,7 +1010,11 @@ class BaseTestCase(unittest.TestCase):
                                 only_store_hash=True, batch_size=1, pause_secs=1, timeout_secs=30,
                                 proxy_client=None, collection=None):
         tasks = []
-        if kv_gen.isGenerator():
+        use_to_check_generator = kv_gen
+        if isinstance(kv_gen, list):
+            # Assuming all generators in list are of the same type
+            use_to_check_generator = kv_gen[0]
+        if use_to_check_generator.isGenerator():
             for bucket in self.buckets:
                 gen = copy.deepcopy(kv_gen)
                 try :
@@ -1039,6 +1043,7 @@ class BaseTestCase(unittest.TestCase):
                     else:
                         self._load_memcached_bucket(server, gen, bucket.name, collection)
         else:
+            # Java SDK Client
             for bucket in self.buckets:
                 tasks.append(self.cluster.async_load_gen_docs(server, bucket, kv_gen, pause_secs=1,
                         timeout_secs=300))
@@ -1074,7 +1079,11 @@ class BaseTestCase(unittest.TestCase):
            Load bucket to DGM if params active_resident_threshold is passed
         """
         if self.active_resident_threshold < 100.0:
-            if kv_gen.isGenerator():
+            use_to_check_generator = kv_gen
+            if isinstance(kv_gen, list):
+                # Assuming all generators in list are of the same type
+                use_to_check_generator = kv_gen[0]
+            if use_to_check_generator.isGenerator():
                 stats_all_buckets = {}
                 for bucket in self.buckets:
                     stats_all_buckets[bucket.name] = StatsCommon()
