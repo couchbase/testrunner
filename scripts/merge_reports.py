@@ -31,11 +31,16 @@ def filter_fields(testname):
     return line
 
 def compare_with_sort(dict, key):
+    key_split = key.split(',')
+    key = '%s,%s' % (key_split[0], ','.join(sorted(key_split[1:])))
     for k in dict.keys():
-        if "".join(sorted(k)) == "".join(sorted(key)):
-            return True
+        test_case_split = k.split(',')
+        test_case = "%s,%s" % (test_case_split[0],
+                               ",".join(sorted(test_case_split[1:])))
+        if key == test_case:
+            return True, k
 
-    return False
+    return False, None
 
 
 def merge_reports(filespath):
@@ -85,8 +90,10 @@ def merge_reports(filespath):
                     tcerror = tc.getElementsByTagName("error")
 
                     tcname_filtered = filter_fields(tcname)
-                    if compare_with_sort(tests, tcname_filtered):
-                        testcase = tests[tcname_filtered]
+                    test_case_present, key = compare_with_sort(tests,
+                                                               tcname_filtered)
+                    if test_case_present:
+                        testcase = tests[key]
                         testcase['name'] = tcname
                     else:
                         testcase['name'] = tcname
@@ -94,8 +101,10 @@ def merge_reports(filespath):
                     testcase['error'] = ""
                     if tcerror:
                         testcase['error']  = str(tcerror[0].firstChild.nodeValue)
-
-                    tests[tcname_filtered] = testcase
+                    if test_case_present:
+                        tests[key] = testcase
+                    else:
+                        tests[tcname_filtered] = testcase
                 testsuite['tests'] = tests
                 testsuites[tsname] = testsuite
     try:
