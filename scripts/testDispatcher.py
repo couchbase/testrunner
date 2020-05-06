@@ -663,6 +663,11 @@ def main():
         print('\n\n\ndone, everything is launched')
         for i in summary:
             print((i['test'], 'was launched at', i['time']))
+        print("\n\n *** Dispatched total {} jobs using total {} servers and {} additional "
+              "servers "
+              "\n".format(total_jobs_count,
+                          total_servers_being_used,
+                          total_addl_servers_being_used ))
     else:
         print("\n Done!")
 
