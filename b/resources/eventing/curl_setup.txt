@@ -421,5 +421,19 @@
                 "string": "field1"
             }
         }
+    },
+    {
+    "httpRequest": {
+        "path": "/response/urlencode/string"
+    },
+    "httpResponse": {
+        "headers": {
+            "content-type": ["application/x-www-form-urlencoded"]
+        },
+        "body": {
+            "type": "STRING",
+            "string": "field1"
+        }
+        }
     }
 ]
