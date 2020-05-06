@@ -1,5 +1,6 @@
 from .gsi_index_partitioning import GSIIndexPartitioningTests
 import time
+from membase.helper.bucket_helper import BucketOperationHelper
 
 class GSIPartialPartitioningTests(GSIIndexPartitioningTests):
     def suite_setup(self):
@@ -42,7 +43,11 @@ class GSIPartialPartitioningTests(GSIIndexPartitioningTests):
         pass
 
     def tearDown(self):
-        pass
+        BucketOperationHelper.delete_all_buckets_or_assert(self.servers, self)
+        # Adding sleep due to MB-37067, once resolved, remove this sleep and delete_all_buckets
+        self.sleep(120)
+        super(GSIPartialPartitioningTests, self).tearDown()
+
 
     # Create an index and verify the replicas
     def _create_index_query(self, index_statement='', index_name=''):

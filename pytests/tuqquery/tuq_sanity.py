@@ -1870,8 +1870,8 @@ class QuerySanityTests(QueryTests):
             actual_result = actual_list['results']
             tmp_groups = {doc['job_title'] for doc in self.full_list}
             expected_result = [{"job_title" : group,
-                                "names" : {x["name"] for x in self.full_list
-                                               if x["job_title"] == group}}
+                                "names" : [x["name"] for x in self.full_list
+                                               if x["job_title"] == group]}
                                for group in tmp_groups]
             self._verify_results(actual_result, expected_result)
 
@@ -1950,8 +1950,8 @@ class QuerySanityTests(QueryTests):
             actual_result = actual_list['results']
             tmp_groups = {doc['job_title'] for doc in self.full_list}
             expected_result = [{"job_title" : group,
-                                "emp_job" : {x["name"] for x in self.full_list
-                                           if x["job_title"] == group}}
+                                "emp_job" : [x["name"] for x in self.full_list
+                                           if x["job_title"] == group]}
                                for group in tmp_groups]
             self._verify_results(actual_result, expected_result)
 
@@ -1962,8 +1962,8 @@ class QuerySanityTests(QueryTests):
             actual_result = actual_list['results']
             tmp_groups = {doc['job_title'] for doc in self.full_list}
             expected_result = [{"job_title" : group,
-                                "emp_job" : set([x["name"] for x in self.full_list
-                                           if x["job_title"] == group]  + ['employee-50'] + ['employee-51'])}
+                                "emp_job" : [x["name"] for x in self.full_list
+                                           if x["job_title"] == group] + ['employee-50'] + ['employee-51']}
                                for group in tmp_groups]
             self._verify_results(actual_result, expected_result)
 
@@ -1973,8 +1973,8 @@ class QuerySanityTests(QueryTests):
             actual_list = self.run_cbq_query()
             actual_result = actual_list['results']
             expected_result = [{"job_title" : group,
-                                "emp_job" : set([x["name"] for x in self.full_list
-                                           if x["job_title"] == group] + ['employee-47'])}
+                                "emp_job" : [x["name"] for x in self.full_list
+                                           if x["job_title"] == group] + ['employee-47']}
                                for group in tmp_groups]
             self._verify_results(actual_result, expected_result)
 
@@ -2026,8 +2026,8 @@ class QuerySanityTests(QueryTests):
                                    key=lambda doc: (doc['job_title']))
             tmp_groups = {doc['job_title'] for doc in self.full_list}
             expected_result = [{"job_title" : group,
-                                "emp_job" : {x["test_rate"] for x in self.full_list
-                                             if x["job_title"] == group}}
+                                "emp_job" : [x["test_rate"] for x in self.full_list
+                                             if x["job_title"] == group]}
                                for group in tmp_groups]
             expected_result = sorted(expected_result, key=lambda doc: (doc['job_title']))
             self._verify_results(actual_result, expected_result)
@@ -4091,8 +4091,8 @@ class QuerySanityTests(QueryTests):
 
             actual_list = self.run_cbq_query()
             actual_result = actual_list['results']
-            expected_result = [{"test_r" : doc["test_rate"] // 2,
-                                "compare" : (doc["test_rate"] // 2) > 2}
+            expected_result = [{"test_r" : doc["test_rate"] / 2,
+                                "compare" : (doc["test_rate"] / 2) > 2}
                                for doc in self.full_list]
             self._verify_results(actual_result, expected_result)
 
@@ -4117,7 +4117,7 @@ class QuerySanityTests(QueryTests):
             self.query = "select name, join_date as date from %s let join_date = reverse(tostr(join_yr)) || '-' || reverse(tostr(join_mo)) order by name, meta().id limit 10" % (bucket.name)
             actual_list2 = self.run_cbq_query()
             actual_result2 = actual_list2['results']
-            expected_result2 = [{'date': '1102-01', 'name': 'employee-9'}, {'date': '1102-01', 'name': 'employee-9'}, {'date': '1102-01', 'name': 'employee-9'}, {'date': '1102-01', 'name': 'employee-9'}, {'date': '1102-01', 'name': 'employee-9'}, {'date': '1102-01', 'name': 'employee-9'}, {'date': '0102-11', 'name': 'employee-4'}, {'date': '0102-11', 'name': 'employee-4'}, {'date': '0102-11', 'name': 'employee-4'}, {'date': '0102-11', 'name': 'employee-4'}]
+            expected_result2 =[{"date": "1102-9","name": "employee-1"},{"date": "1102-9","name": "employee-1"},{"date": "1102-9","name": "employee-1"},{"date": "1102-9","name": "employee-1"},{"date": "1102-9","name": "employee-1"},{"date": "1102-9","name": "employee-1"},{"date": "0102-4","name": "employee-1"},{"date": "0102-4","name": "employee-1"},{"date": "0102-4","name": "employee-1"},{"date": "0102-4","name": "employee-1"}]
             self._verify_results(actual_result2, expected_result2)
 
     def test_letting(self):
