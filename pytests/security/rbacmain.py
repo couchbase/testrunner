@@ -132,7 +132,7 @@ class rbacmain:
         else:
             temp_dict =  expected['permissionSet']
 
-        for permission in temp_dict.keys():
+        for permission in list(temp_dict.keys()):
             if "[<bucket_name>]" in permission:
                 new_key = permission.replace("<bucket_name>", bucket_name)
                 temp_dict[new_key] = temp_dict.pop(permission)
