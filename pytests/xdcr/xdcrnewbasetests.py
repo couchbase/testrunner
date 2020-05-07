@@ -2369,15 +2369,13 @@ class CouchbaseCluster:
         for task in tasks:
             task.result(timeout)
 
-    #quick fix, need to replace all occurances of self.sleep with wait_interval
     def sleep(self, timeout=1, message=""):
         self.log.info("sleep for {0} secs. {1} ...".format(timeout, message))
         time.sleep(timeout)
 
     # Sleep for interval seconds between polls, while waiting for event to complete
     def wait_interval(self, timeout=1, message=""):
-        self.log.info("sleep for {0} secs. {1} ...".format(timeout, message))
-        time.sleep(timeout)
+        self.sleep(timeout, message)
 
     def verify_items_count(self, timeout=600):
         """Wait for actual bucket items count reach to the count on bucket kv_store.
@@ -2599,10 +2597,13 @@ class CouchbaseCluster:
             return False
         return True
 
-    # Sleep for interval seconds between polls, while waiting for event to complete
-    def wait_interval(self, timeout=1, message=""):
+    def sleep(self, timeout=1, message=""):
         self.log.info("sleep for {0} secs. {1} ...".format(timeout, message))
         time.sleep(timeout)
+
+    # Sleep for interval seconds between polls, while waiting for event to complete
+    def wait_interval(self, timeout=1, message=""):
+        self.sleep(timeout, message)
 
     def pause_all_replications(self, verify=False):
         for remote_cluster_ref in self.__remote_clusters:
@@ -3651,10 +3652,13 @@ class XDCRNewBaseTest(unittest.TestCase):
                                 "bucket. on source cluster:{2}, on dest:{3}".\
                             format(timeout, bucket.name, _count1, _count2))
 
-    # Sleep for interval seconds between polls, while waiting for event to complete
-    def wait_interval(self, timeout=1, message=""):
+    def sleep(self, timeout=1, message=""):
         self.log.info("sleep for {0} secs. {1} ...".format(timeout, message))
         time.sleep(timeout)
+
+    # Sleep for interval seconds between polls, while waiting for event to complete
+    def wait_interval(self, timeout=1, message=""):
+        self.sleep(timeout, message)
 
     def __execute_query(self, server, query):
         try:
