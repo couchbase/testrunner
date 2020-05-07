@@ -4,7 +4,7 @@ from mc_bin_client import MemcachedClient, MemcachedError
 from membase.api.rest_client import RestConnection
 from remote.remote_util import RemoteMachineShellConnection
 
-AUTH_SUCCESS = ""
+AUTH_SUCCESS = b''
 AUTH_FAILURE = "Auth error"
 
 class SaslTest(BaseTestCase):
@@ -41,7 +41,8 @@ class SaslTest(BaseTestCase):
             else:
                 self.fail("Invalid auth mechanism {0}".format(self.auth_mech))
         except MemcachedError as e:
-            ret = e[0].split(' for vbucket')[0]
+            if "Auth error" in str(e):
+                ret = "Auth error"
         client.close()
         return ret
 
