@@ -195,7 +195,7 @@ class BucketConfig(BaseTestCase):
             time.sleep(10)
             shell.start_couchbase()
             shell.disconnect()
-        time.sleep(30)
+        ClusterOperationHelper.wait_for_ns_servers_or_assert(servers, self, wait_if_warmup=True)
 
     # REBOOT
     def _reboot_server(self):
@@ -213,7 +213,7 @@ class BucketConfig(BaseTestCase):
                     shell.disconnect()
                     self.log.info("Node {0} is being stopped".format(server.ip))
 
-                    time.sleep(120)
+                    ClusterOperationHelper.wait_for_ns_servers_or_assert([server], self, wait_if_warmup=True)
                     shell = RemoteMachineShellConnection(server)
                     command = "/sbin/iptables -F"
                     o, r = shell.execute_command(command)
@@ -222,7 +222,7 @@ class BucketConfig(BaseTestCase):
                     self.log.info("Node {0} backup".format(server.ip))
         finally:
             self.log.info("Warming-up servers ..")
-            time.sleep(100)
+            ClusterOperationHelper.wait_for_ns_servers_or_assert(self.servers, self, wait_if_warmup=True)
 
 
 

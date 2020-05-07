@@ -30,6 +30,17 @@ class OpsChangeCasTests(BucketConfig):
     def tearDown(self):
         super(OpsChangeCasTests, self).tearDown()
 
+    def check_rebalance_complete(self):
+        for i in range(0, 6):
+            try:
+                shell = RemoteMachineShellConnection(self.master)
+                break
+            except:
+                self.log.info("Unable to connect to the host. "
+                              "Machine has not restarted")
+                self.sleep(60, "Sleep for couple of minutes and try "
+                               "again")
+
     def test_meta_rebalance_out(self):
         KEY_NAME = 'key1'
 
@@ -111,7 +122,7 @@ class OpsChangeCasTests(BucketConfig):
         rebalance = self.cluster.async_rebalance(self.servers[:], [], [self.master])
 
         rebalance.result()
-        time.sleep(60)
+        self.check_rebalance_complete()
 
         replica_CAS = mc_replica.getMeta(KEY_NAME)[4]
         #print 'replica CAS {0}'.format(replica_CAS)
@@ -200,7 +211,7 @@ class OpsChangeCasTests(BucketConfig):
         # reboot nodes
         self._reboot_server()
 
-        time.sleep(60)
+        self.check_rebalance_complete()
         # verify the CAS is good
         client = VBucketAwareMemcached(rest, self.bucket)
         mc_active = client.memcached(KEY_NAME)
@@ -753,7 +764,7 @@ class OpsChangeCasTests(BucketConfig):
 
         rebalance = self.cluster.async_rebalance(self.servers[-1:], [], [self.master])
         rebalance.result()
-        time.sleep(120)
+        self.check_rebalance_complete()
         replica_CAS = mc_replica.getMeta(key)[4]
         get_meta_resp = mc_replica.getMeta(key, request_extended_meta_data=False)
         #print 'replica CAS {0}'.format(replica_CAS)
@@ -828,7 +839,7 @@ class OpsChangeCasTests(BucketConfig):
         rebalance = self.cluster.async_rebalance(self.servers[:], [], [self.master])
 
         rebalance.result()
-        time.sleep(120)
+        self.check_rebalance_complete()
         replica_CAS = mc_replica.getMeta(key)[4]
         get_meta_resp = mc_replica.getMeta(key, request_extended_meta_data=False)
         #print 'replica CAS {0}'.format(replica_CAS)
