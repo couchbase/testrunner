@@ -13,6 +13,7 @@ from membase.api.rest_client import RestConnection, RestHelper
 log = logging.getLogger(__name__)
 QUERY_TEMPLATE = "SELECT {0} FROM %s "
 
+
 class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
     def setUp(self):
         super(UpgradeSecondaryIndex, self).setUp()
@@ -45,6 +46,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
         else:
             self.multi_create_index(buckets = self.buckets,
                                     query_definitions=self.load_query_definitions)
+        self.skip_metabucket_check = True
 
     def tearDown(self):
         self.upgrade_servers = self.servers

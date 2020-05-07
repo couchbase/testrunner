@@ -1131,7 +1131,7 @@ class RemoteMachineShellConnection(KeepRefs):
                                      " rm -f * ; mv $D/* . ; rmdir $D".format(filename)
             if "suse" in self.info.distribution_type.lower():
                 command1 += "; cd /var/cache/zypper/RPMS/; rm -rf couchbase-server*"
-            command_root = "cd /tmp;wget -q -O {0} {1};cd /tmp;ls -lh".format(filename, url)
+            command_root = "cd /tmp;wget -nc -q -O {0} {1};cd /tmp;ls -lh".format(filename, url)
             file_location = "/tmp"
             output, error = self.execute_command_raw(command1, debug=False)
             self.log_command_output(output, error, debug=False)
@@ -1162,7 +1162,7 @@ class RemoteMachineShellConnection(KeepRefs):
                     output, error = self.execute_command("ls -lh ")
                     self.log_command_output(output, error)
                     output, error = self.execute_command_raw('cd {2}; pwd;'
-                                                             ' wget -q -O {0} {1};ls -lh'
+                                                             ' wget -nc -q -O {0} {1};ls -lh'
                                                              .format(filename, url,
                                                                      self.nr_home_path))
                     self.log_command_output(output, error)
@@ -1171,13 +1171,13 @@ class RemoteMachineShellConnection(KeepRefs):
                     self.log_command_output(output, error)
             else:
                 log.info('get md5 sum for local and remote')
-                output, error = self.execute_command_raw('cd /tmp ; rm -f *.md5 *.md5l ; wget -q -O {1}.md5 {0}.md5 ; md5sum {1} > {1}.md5l'.format(url, filename))
+                output, error = self.execute_command_raw('cd /tmp ; rm -f *.md5 *.md5l ; wget -nc -q -O {1}.md5 {0}.md5 ; md5sum {1} > {1}.md5l'.format(url, filename))
                 self.log_command_output(output, error)
                 if str(error).find('No such file or directory') != -1 and latest_url != '':
                     url = latest_url
-                    output, error = self.execute_command_raw('cd /tmp ; rm -f *.md5 *.md5l ; wget -q -O {1}.md5 {0}.md5 ; md5sum {1} > {1}.md5l'.format(url, filename))
+                    output, error = self.execute_command_raw('cd /tmp ; rm -f *.md5 *.md5l ; wget -nc -q -O {1}.md5 {0}.md5 ; md5sum {1} > {1}.md5l'.format(url, filename))
                 log.info('comparing md5 sum and downloading if needed')
-                output, error = self.execute_command_raw('cd /tmp;diff {0}.md5 {0}.md5l || wget -q -O {0} {1};rm -f *.md5 *.md5l'.format(filename, url))
+                output, error = self.execute_command_raw('cd /tmp;diff {0}.md5 {0}.md5l || wget -nc -q -O {0} {1};rm -f *.md5 *.md5l'.format(filename, url))
                 self.log_command_output(output, error)
             # check if the file exists there now ?
             if self.nonroot:

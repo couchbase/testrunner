@@ -216,7 +216,7 @@ class NewUpgradeBaseTest(QueryHelperTests, EventingBaseTest, FTSBaseTest):
                         shell.execute_command("systemctl daemon-reload", debug=False)
                         shell.start_server()
                     else:
-                        log.error("Couchbase-server did not start...")
+                        self.log.error("Couchbase-server did not start...")
                 shell.disconnect()
                 if not success:
                     sys.exit("some nodes were not install successfully!")
