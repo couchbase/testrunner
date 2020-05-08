@@ -20,7 +20,7 @@ class Collections_CLI(object):
 
     def create_scope_collection(self, bucket, scope, collection):
         self.cli.create_scope(bucket, scope)
-        self.cli.create_collection(bucket, scope, collection)
+        return self.cli.create_collection(bucket, scope, collection)
 
     def delete_scope_collection(self, bucket, scope, collection):
         self.cli.delete_collection(bucket, scope, collection)

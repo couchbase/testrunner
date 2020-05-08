@@ -176,8 +176,7 @@ class CouchbaseCLI:
 
     def create_scope(self, bucket="default", scope="scope0"):
         remote_client = RemoteMachineShellConnection(self.server)
-        options = " --bucket " + str(bucket)
-        options += "--create-scope" + str(scope)
+        options = f" --bucket {str(bucket)} --create-scope {str(scope)}"
         stdout, stderr = remote_client.execute_couchbase_cli("collection-manage", self.hostname,
                                                              options)
         remote_client.disconnect()
@@ -185,17 +184,15 @@ class CouchbaseCLI:
 
     def create_collection(self, bucket="default", scope="scope0", collection="mycollection0"):
         remote_client = RemoteMachineShellConnection(self.server)
-        options = " --bucket " + str(bucket)
-        options += "--create-collection" + str(scope) + '.' + str(collection)
+        options = f" --bucket {str(bucket)} --create-collection {str(scope)}.{str(collection)}"
         stdout, stderr = remote_client.execute_couchbase_cli("collection-manage", self.hostname,
                                                              options)
         remote_client.disconnect()
-        return self._was_success(stdout, "Scope {} created in bucket {}".format(scope, bucket))
+        return self._was_success(stdout, "Collection created")
 
     def delete_collection(self, bucket="default", scope='_default', collection='_default'):
         remote_client = RemoteMachineShellConnection(self.server)
-        options = " --bucket " + str(bucket)
-        options += "--drop-collection" + str(scope) + '.' + str(collection)
+        options = f" --bucket {str(bucket)} --drop-collection {str(scope)}.{str(collection)}"
         stdout, stderr = remote_client.execute_couchbase_cli("collection-manage", self.hostname,
                                                              options)
         remote_client.disconnect()
@@ -203,8 +200,7 @@ class CouchbaseCLI:
 
     def delete_scope(self, scope, bucket="default"):  # scope should be passed as default scope can not be deleted
         remote_client = RemoteMachineShellConnection(self.server)
-        options = " --bucket " + str(bucket)
-        options += "--drop-scope" + str(scope)
+        options = f" --bucket {str(bucket)} --drop-scope {str(scope)}"
         stdout, stderr = remote_client.execute_couchbase_cli("collection-manage", self.hostname,
                                                              options)
         remote_client.disconnect()
@@ -212,8 +208,7 @@ class CouchbaseCLI:
 
     def get_bucket_scopes(self, bucket):
         remote_client = RemoteMachineShellConnection(self.server)
-        options = " --bucket " + str(bucket)
-        options += " --list-scopes"
+        options = f" --bucket {str(bucket)} --list-scopes"
         stdout, stderr = remote_client.execute_couchbase_cli("collection-manage", self.hostname,
                                                              options)
         remote_client.disconnect()
@@ -691,6 +686,6 @@ class CouchbaseCLI:
         """
 
         for line in stdout:
-            if line == "SUCCESS: " + message:
+            if line.startswith("SUCCESS:"):
                 return True
         return False

@@ -35,6 +35,108 @@ class N1QLHelper():
         if self.full_docs_list and len(self.full_docs_list) > 0:
             self.gen_results = TuqGenerators(self.log, self.full_docs_list)
 
+    def create_collection(self, server=None, keyspace="default", bucket_name="", scope_name="", collection_name="",
+                          poll_interval=1, timeout=30):
+        if not bucket_name:
+            raise Exception("Bucket name cannot be empty!")
+
+        if not scope_name:
+            scope_name = "_default"
+
+        query = f"create collection {keyspace}:{bucket_name}.{scope_name}.{collection_name}"
+        try:
+            self.run_cbq_query(query=query, server=server)
+        except CBQError as e:
+            raise e
+        collection_created = self.wait_till_collection_created(server=server, bucket_name=bucket_name, scope_name=scope_name,
+                                          collection_name=collection_name, poll_interval=poll_interval, timeout=timeout)
+        return collection_created
+
+    def create_scope(self, server=None, keyspace="default", bucket_name="", scope_name="", poll_interval=1, timeout=30):
+        if not bucket_name:
+            raise Exception("Bucket name cannot be empty!")
+
+        query = f"create scope {keyspace}:{bucket_name}.{scope_name}"
+        self.run_cbq_query(server=server, query=query)
+        scope_created = self.wait_till_scope_created(server=server, bucket_name=bucket_name, scope_name=scope_name,
+                                                     poll_interval=poll_interval, timeout=timeout)
+        return scope_created
+
+    def delete_collection(self, server=None, keyspace="", bucket_name="", scope_name="", collection_name="",
+                          poll_interval=1, timeout=30):
+        objects = RestConnection(server).get_scope_collections(bucket_name, scope_name)
+        if not collection_name in objects:
+            self.log.info(f"Cannot find specified collection {keyspace}:{bucket_name}.{scope_name}.{collection_name}. Nothing to delete, returning.")
+            return
+
+        query = f"drop collection {keyspace}:{bucket_name}.{scope_name}.{collection_name}"
+        self.run_cbq_query(server=server, query=query)
+        self.wait_till_collection_dropped(server, bucket_name, scope_name, collection_name, poll_interval, timeout)
+
+    def delete_scope(self, server=None, keyspace="", bucket_name="", scope_name="", poll_interval=1, timeout=30):
+        objects = RestConnection(server).get_scope_collections(bucket_name, scope_name)
+        if scope_name not in objects:
+            self.log.info(f"Cannot find specified scope {keyspace}:{bucket_name}.{scope_name}. Nothing to delete, returning.")
+            return
+
+        query = f"drop scope {keyspace}:{bucket_name}.{scope_name}"
+        self.run_cbq_query(query=query)
+        self.wait_till_scope_dropped(server, bucket_name, scope_name, poll_interval, timeout)
+
+    def wait_till_scope_dropped(self, server=None, bucket_name="", scope_name="", poll_interval=1, timeout=30):
+        start_time = time.time()
+        scope_dropped = False
+        while time.time() < start_time + timeout:
+            # todo: get_bucket_scopes(bucket_name) function seems suspicious, need to investigate
+            objects = RestConnection(server).get_bucket_scopes(bucket_name)
+            if scope_name in objects:
+                time.sleep(poll_interval)
+            else:
+                scope_dropped = True
+                break
+        return scope_dropped
+
+    def wait_till_collection_dropped(self, server=None, bucket_name="", scope_name="", collection_name="",
+                                     poll_interval=1, timeout=30):
+        start_time = time.time()
+        collection_dropped = False
+        while time.time() < start_time + timeout:
+            # todo: get_scope_collections(bucket_name, scope_name) function seems suspicious, need to investigate
+            objects = RestConnection(server).get_scope_collections(bucket_name, scope_name)
+            if collection_name in objects:
+                time.sleep(poll_interval)
+            else:
+                collection_dropped = True
+                break
+        return collection_dropped
+
+    def wait_till_scope_created(self, server=None, bucket_name="", scope_name="", poll_interval=1, timeout=30):
+        start_time = time.time()
+        scope_created = False
+        while time.time() < start_time + timeout:
+            # todo: get_bucket_scopes(bucket_name) function seems suspicious, need to investigate
+            objects = RestConnection(server).get_bucket_scopes(bucket_name)
+            if not scope_name in objects:
+                time.sleep(poll_interval)
+            else:
+                scope_created = True
+                break
+        return scope_created
+
+    def wait_till_collection_created(self, server=None, bucket_name=None, scope_name=None, collection_name=None,
+                                     poll_interval=1, timeout=30):
+        start_time = time.time()
+        collection_created = False
+        while time.time() < start_time + timeout:
+            # todo: get_scope_collections(bucket_name, scope_name) function seems suspicious, need to investigate
+            objects = RestConnection(server).get_scope_collections(bucket_name, scope_name)
+            if not collection_name in objects:
+                time.sleep(poll_interval)
+            else:
+                collection_created = True
+                break
+        return collection_created
+
     def killall_tuq_process(self):
         self.shell.execute_command("killall cbq-engine")
         self.shell.execute_command("killall tuqtng")
@@ -127,7 +229,7 @@ class N1QLHelper():
         else:
             if server.ip == "127.0.0.1":
                 self.n1ql_port = server.n1ql_port
-            if self.input.tuq_client and "client" in self.input.tuq_client:
+            if self.input and self.input.tuq_client and "client" in self.input.tuq_client:
                 server = self.tuq_client
         if self.n1ql_port is None or self.n1ql_port == '':
             self.n1ql_port = self.input.param("n1ql_port", 8093)

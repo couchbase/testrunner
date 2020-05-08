@@ -29,12 +29,13 @@ class Collections_Rest(object):
         self.rest.delete_collection(bucket, scope, collection)
         self.delete_scope(bucket, scope)
 
-    def create_scope_collection(self, scope_num, collection_num, bucket="default"):
-        for s in range(1, scope_num):
-            scope = "scope_" + str(s)
-            self.create_scope(bucket, scope)
-            for c in range(1, collection_num):
-                self.create_collection(bucket, scope, "collection_" + str(c))
+    # we already have create_scope_collection() function
+    #def create_scope_collection(self, scope_num, collection_num, bucket="default"):
+    #    for s in range(1, scope_num):
+    #        scope = "scope_" + str(s)
+    #        self.create_scope(bucket, scope)
+    #        for c in range(1, collection_num):
+    #            self.create_collection(bucket, scope, "collection_" + str(c))
 
     class CollectionFactory(threading.Thread):
         def __init__(self, bucket, scope, collection, rest):
