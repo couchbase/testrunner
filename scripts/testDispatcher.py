@@ -471,7 +471,8 @@ def main():
                                           testsToLaunch[i]['mode'], testsToLaunch[i]['timeLimit'])
                 url = url + '&dispatcher_params=' + urllib.parse.urlencode(
                     {"parameters": currentExecutorParams})
-                # optional add [-docker] [-Jenkins extension]
+                # optional add [-docker] [-Jenkins extension] - TBD duplicate
+                launchStringBaseF = launchStringBase
                 if options.serverType.lower() == 'docker':
                     launchStringBaseF = launchStringBase + '-docker'
                 if options.test:
@@ -479,11 +480,10 @@ def main():
                 #     if options.framework.lower() == "jython":
                 framework = testsToLaunch[i]['framework']
                 if framework != 'testrunner':
-                    launchStringBaseF = launchStringBase + "-" + framework
+                    launchStringBaseF = launchStringBaseF + "-" + framework
                 elif options.jenkins is not None:
-                    launchStringBaseF = launchStringBase + '-' + options.jenkins
-                else:
-                    launchStringBaseF = launchStringBase
+                    launchStringBaseF = launchStringBaseF + '-' + options.jenkins
+
                 url = launchStringBaseF + url
 
                 print('\n', time.asctime(time.localtime(time.time())), 'launching ', url)
@@ -643,6 +643,7 @@ def main():
                             print(s)
 
                     # optional add [-docker] [-Jenkins extension]
+                    launchStringBaseF = launchStringBase
                     if options.serverType.lower() == 'docker':
                         launchStringBaseF = launchStringBase + '-docker'
                     if options.test:
@@ -650,11 +651,9 @@ def main():
                     #     if options.framework.lower() == "jython":
                     framework = testsToLaunch[i]['framework']
                     if framework != 'testrunner':
-                        launchStringBaseF = launchStringBase + "-" + framework
+                        launchStringBaseF = launchStringBaseF + "-" + framework
                     elif options.jenkins is not None:
-                        launchStringBaseF = launchStringBase + '-' + options.jenkins
-                    else:
-                        launchStringBaseF = launchStringBase
+                        launchStringBaseF = launchStringBaseF + '-' + options.jenkins
                     url = launchStringBaseF + url
 
                     print('\n', time.asctime( time.localtime(time.time()) ), 'launching ', url)
