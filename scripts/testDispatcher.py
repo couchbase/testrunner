@@ -376,7 +376,8 @@ def main():
                             'slave': slave,
                             'owner': owner,
                             'mailing_list': mailing_list,
-                            'mode': mode
+                            'mode': mode,
+                            'framework': framework
                         })
                 else:
                     print((data['component'], data['subcomponent'], ' is not supported in this release'))
@@ -389,27 +390,16 @@ def main():
             print(data)
 
     print('tests to launch:')
-    for i in testsToLaunch: print((i['component'], i['subcomponent']))
+    for i in testsToLaunch: print(i['component'], i['subcomponent'], '-->', i['framework'])
     print('\n\n')
 
     launchStringBase = str(options.jenkins_server_url) + '/job/' + str(options.launch_job)
 
 
-    # optional add [-docker] [-Jenkins extension]
-    if options.serverType.lower() == 'docker':
-        launchStringBase = launchStringBase + '-docker'
-    if options.test:
-        launchStringBase = launchStringBase + '-test'
-    #     if options.framework.lower() == "jython":
-    if framework == "jython":
-        launchStringBase = launchStringBase + '-jython'
-    if framework == "TAF":
-        launchStringBase = launchStringBase + '-TAF'
-    elif options.jenkins is not None:
-        launchStringBase = launchStringBase + '-' + options.jenkins
+
 
     # this are VM/Docker dependent - or maybe not
-    launchString = launchStringBase + '/buildWithParameters?token=test_dispatcher&' + \
+    launchString =  '/buildWithParameters?token=test_dispatcher&' + \
                         'version_number={0}&confFile={1}&descriptor={2}&component={3}&subcomponent={4}&' + \
                          'iniFile={5}&parameters={6}&os={7}&initNodes={' \
                          '8}&installParameters={9}&branch={10}&slave={' \
@@ -448,20 +438,55 @@ def main():
 
     while len(testsToLaunch) > 0:
         try:
-            print("\n\n *** Dispatching job#{} of {} with {} servers (total={}) and {} "
-                  "additional "
-              "servers(total={}) :  {}-{} \n".
-              format(job_index,
-                     total_jobs_count,
-                     testsToLaunch[0]['serverCount'],
-                     total_servers_being_used,
-                     testsToLaunch[0]['addPoolServerCount'],
-                     total_addl_servers_being_used,
-                     testsToLaunch[0]['component'],
-                     testsToLaunch[0]['subcomponent'],
-                     ))
+            if not options.noLaunch:
+                print("\n\n *** Before dispatch, checking for the servers to run a  test suite\n")
+            else:
+                i = 0
+                print("\n\n *** Dispatching job#{} of {} with {} servers (total={}) and {} "
+                      "additional "
+                      "servers(total={}) :  {}-{} with {}\n".format(job_index, total_jobs_count,
+                                                                    testsToLaunch[i]['serverCount'],
+                                                                    total_servers_being_used,
+                                                                    testsToLaunch[i][
+                                                                        'addPoolServerCount'],
+                                                                    total_addl_servers_being_used,
+                                                                    testsToLaunch[i]['component'],
+                                                                    testsToLaunch[i][
+                                                                        'subcomponent'],
+                                                                    testsToLaunch[i][
+                                                                        'framework'], ))
+                # sample data as it is a noLaunch to get the general URL
+                descriptor = "descriptor"
+                dashboardDescriptor = "dashboardDescriptor"
+                parameters = "parameters"
+                url = launchString.format(options.version, testsToLaunch[i]['confFile'], descriptor,
+                                          testsToLaunch[i]['component'], dashboardDescriptor,
+                                          testsToLaunch[i]['iniFile'],
+                                          urllib.parse.quote(parameters), options.os,
+                                          testsToLaunch[i]['initNodes'],
+                                          testsToLaunch[i]['installParameters'], options.branch,
+                                          testsToLaunch[i]['slave'],
+                                          urllib.parse.quote(testsToLaunch[i]['owner']),
+                                          urllib.parse.quote(testsToLaunch[i]['mailing_list']),
+                                          testsToLaunch[i]['mode'], testsToLaunch[i]['timeLimit'])
+                url = url + '&dispatcher_params=' + urllib.parse.urlencode(
+                    {"parameters": currentExecutorParams})
+                # optional add [-docker] [-Jenkins extension]
+                if options.serverType.lower() == 'docker':
+                    launchStringBaseF = launchStringBase + '-docker'
+                if options.test:
+                    launchStringBaseF = launchStringBase + '-test'
+                #     if options.framework.lower() == "jython":
+                framework = testsToLaunch[i]['framework']
+                if framework != 'testrunner':
+                    launchStringBaseF = launchStringBase + "-" + framework
+                elif options.jenkins is not None:
+                    launchStringBaseF = launchStringBase + '-' + options.jenkins
+                else:
+                    launchStringBaseF = launchStringBase
+                url = launchStringBaseF + url
 
-            if options.noLaunch:
+                print('\n', time.asctime(time.localtime(time.time())), 'launching ', url)
                 total_servers_being_used += testsToLaunch[0]['serverCount']
                 total_addl_servers_being_used += testsToLaunch[0]['addPoolServerCount']
                 testsToLaunch.pop(0)
@@ -495,6 +520,21 @@ def main():
                         i = i + 1
 
                 if haveTestToLaunch:
+                    print("\n\n *** Dispatching job#{} of {} with {} servers (total={}) and {} "
+                          "additional "
+                          "servers(total={}) :  {}-{} with {}\n".format(job_index, total_jobs_count,
+                                                                        testsToLaunch[i][
+                                                                            'serverCount'],
+                                                                        total_servers_being_used,
+                                                                        testsToLaunch[i][
+                                                                            'addPoolServerCount'],
+                                                                        total_addl_servers_being_used,
+                                                                        testsToLaunch[i][
+                                                                            'component'],
+                                                                        testsToLaunch[i][
+                                                                            'subcomponent'],
+                                                                        testsToLaunch[i][
+                                                                            'framework'], ))
                     # build the dashboard descriptor
                     dashboardDescriptor = urllib.parse.quote(testsToLaunch[i]['subcomponent'])
                     if options.dashboardReportedParameters is not None:
@@ -601,6 +641,21 @@ def main():
                         for s in unreachable_servers:
                             response, content = httplib2.Http(timeout=TIMEOUT).request('http://' + SERVER_MANAGER + '/releaseip/' + s + '/ssh_failed', 'GET')
                             print(s)
+
+                    # optional add [-docker] [-Jenkins extension]
+                    if options.serverType.lower() == 'docker':
+                        launchStringBaseF = launchStringBase + '-docker'
+                    if options.test:
+                        launchStringBaseF = launchStringBase + '-test'
+                    #     if options.framework.lower() == "jython":
+                    framework = testsToLaunch[i]['framework']
+                    if framework != 'testrunner':
+                        launchStringBaseF = launchStringBase + "-" + framework
+                    elif options.jenkins is not None:
+                        launchStringBaseF = launchStringBase + '-' + options.jenkins
+                    else:
+                        launchStringBaseF = launchStringBase
+                    url = launchStringBaseF + url
 
                     print('\n', time.asctime( time.localtime(time.time()) ), 'launching ', url)
                     dispatch_job = True
