@@ -3,7 +3,7 @@ from lib.membase.api.rest_client import RestConnection, RestHelper
 from lib.testconstants import STANDARD_BUCKET_PORT
 from pytests.eventing.eventing_constants import HANDLER_CODE, HANDLER_CODE_CURL
 from pytests.eventing.eventing_base import EventingBaseTest
-import logging,json,os
+import logging, json, os
 
 log = logging.getLogger()
 
@@ -79,7 +79,7 @@ class EventingSettings(EventingBaseTest):
                   batch_size=self.batch_size)
         # Wait for eventing to catch up with all the update mutations and verify results after rebalance
         if self.is_sbm:
-            self.verify_eventing_results(self.function_name,2*self.docs_per_day * 2016, skip_stats_validation=True)
+            self.verify_eventing_results(self.function_name, 2*self.docs_per_day * 2016, skip_stats_validation=True)
         else:
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         # delete json documents
@@ -87,7 +87,7 @@ class EventingSettings(EventingBaseTest):
                   batch_size=self.batch_size, op_type='delete')
         # Wait for eventing to catch up with all the delete mutations and verify results
         if self.is_sbm:
-            self.verify_eventing_results(self.function_name,self.docs_per_day * 2016, skip_stats_validation=True)
+            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         else:
             self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
@@ -106,7 +106,7 @@ class EventingSettings(EventingBaseTest):
                   batch_size=self.batch_size)
         # dynamically change the log level
         # currently this is the only setting that can be dynamically modified when a function is deployed
-        for i in xrange(5):
+        for i in range(5):
             for log_level in ['TRACE', 'INFO', 'ERROR', 'WARNING', 'DEBUG']:
                 body['settings']['log_level'] = log_level
                 log.info("Changing log level to {0}".format(log_level))
@@ -114,7 +114,7 @@ class EventingSettings(EventingBaseTest):
                 self.sleep(5)
         # Wait for eventing to catch up with all the update mutations and verify results after rebalance
         if self.is_sbm:
-            self.verify_eventing_results(self.function_name,2*self.docs_per_day * 2016, skip_stats_validation=True)
+            self.verify_eventing_results(self.function_name, 2*self.docs_per_day * 2016, skip_stats_validation=True)
         else:
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         # delete json documents
@@ -122,9 +122,9 @@ class EventingSettings(EventingBaseTest):
                   batch_size=self.batch_size, op_type='delete')
         # Wait for eventing to catch up with all the delete mutations and verify results
         if self.is_sbm:
-            self.verify_eventing_results(self.function_name,self.docs_per_day * 2016, skip_stats_validation=True)
+            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         else:
-            self.verify_eventing_results(self.function_name,0, skip_stats_validation=True)
+            self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
         # This sleep is intentionally added, undeploy takes some time to cleanup the eventing-consumer's
         self.sleep(60)
@@ -156,7 +156,7 @@ class EventingSettings(EventingBaseTest):
         self.deploy_function(body)
         # Wait for eventing to catch up with all the delete mutations and verify results
         if self.is_sbm:
-            self.verify_eventing_results(self.function_name,2*self.docs_per_day * 2016, skip_stats_validation=True)
+            self.verify_eventing_results(self.function_name, 2*self.docs_per_day * 2016, skip_stats_validation=True)
         else:
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         # delete json documents
@@ -164,7 +164,7 @@ class EventingSettings(EventingBaseTest):
                   batch_size=self.batch_size, op_type='delete')
         # Wait for eventing to catch up with all the delete mutations and verify results
         if self.is_sbm:
-            self.verify_eventing_results(self.function_name,self.docs_per_day * 2016, skip_stats_validation=True)
+            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         else:
             self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
@@ -173,13 +173,13 @@ class EventingSettings(EventingBaseTest):
         # load documents
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
-        body = self.create_save_function_body(self.function_name,self.handler_code)
+        body = self.create_save_function_body(self.function_name, self.handler_code)
         # remove alias before deploying
         del body['depcfg']['buckets']
         # deploy a function without any alias
         self.deploy_function(body)
         # make sure no doc in destination bucket
-        self.verify_eventing_results(self.function_name,0, skip_stats_validation=True)
+        self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         # pause the function
         self.pause_function(body)
         #update bucket settings
@@ -189,7 +189,7 @@ class EventingSettings(EventingBaseTest):
         body1['settings']['description'] = "Adding a new description"
         body1['depcfg']['buckets'] = []
         body1['depcfg']['buckets'].append({"alias": self.dst_bucket_name, "bucket_name": self.dst_bucket_name})
-        self.rest.update_function(body['appname'],body1)
+        self.rest.update_function(body['appname'], body1)
         # update all documents
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size, op_type='update')
@@ -251,7 +251,7 @@ class EventingSettings(EventingBaseTest):
         self.deploy_function(body)
         # Wait for eventing to catch up with all the delete mutations and verify results
         if self.is_sbm:
-            self.verify_eventing_results(self.function_name,2*self.docs_per_day * 2016, skip_stats_validation=True)
+            self.verify_eventing_results(self.function_name, 2*self.docs_per_day * 2016, skip_stats_validation=True)
         else:
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)

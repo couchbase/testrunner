@@ -9,6 +9,8 @@ from pytests.eventing.eventing_constants import HANDLER_CODE, HANDLER_CODE_ERROR
 from pytests.eventing.eventing_base import EventingBaseTest
 import logging
 
+from remote.remote_util import RemoteUtilHelper, RemoteMachineShellConnection
+
 log = logging.getLogger()
 
 
@@ -149,10 +151,10 @@ class EventingNegative(EventingBaseTest):
             self.pause_function(body)
         # delete source, metadata and destination buckets when eventing is processing_mutations
         for bucket in self.buckets:
-                self.log.info("deleting bucket: %s",bucket.name)
+                self.log.info("deleting bucket: %s", bucket.name)
                 self.rest.delete_bucket(bucket.name)
         # Wait for function to get undeployed automatically
-        self.wait_for_handler_state(body['appname'],"undeployed")
+        self.wait_for_handler_state(body['appname'], "undeployed")
         # Delete the function
         self.delete_function(body)
         self.sleep(60)
@@ -174,7 +176,7 @@ class EventingNegative(EventingBaseTest):
             self.log.info("deleting bucket: %s", bucket.name)
             self.rest.delete_bucket(bucket.name)
         # Wait for function to get undeployed automatically
-        self.wait_for_handler_state(body['appname'],"undeployed")
+        self.wait_for_handler_state(body['appname'], "undeployed")
         # Delete the function
         self.delete_function(body)
         self.sleep(60)
@@ -192,17 +194,19 @@ class EventingNegative(EventingBaseTest):
         # delete source, metadata and destination buckets when eventing is processing_mutations
         for bucket in self.buckets:
             if bucket.name == "src_bucket":
-                self.log.info("deleting bucket: %s",bucket.name)
+                self.log.info("deleting bucket: %s", bucket.name)
                 self.rest.delete_bucket(bucket.name)
         # Wait for function to get undeployed automatically
-        self.wait_for_handler_state(body['appname'],"undeployed")
+        self.wait_for_handler_state(body['appname'], "undeployed")
         # Delete the function
         self.delete_function(body)
-        self.sleep(60)
+        self.sleep(10)
         # check if all the eventing-consumers are cleaned up
         # Validation of any issues like panic will be taken care by teardown method
         self.assertTrue(self.check_if_eventing_consumers_are_cleaned_up(),
                         msg="eventing-consumer processes are not cleaned up even after undeploying the function")
+        # needs to remove when MB-38787 fixed
+        self.skip_metabucket_check=True
 
     # MB-29533 and MB-31545
     def test_metadata_bucket_delete_when_eventing_is_processing_mutations(self):
@@ -213,10 +217,10 @@ class EventingNegative(EventingBaseTest):
         # delete source, metadata and destination buckets when eventing is processing_mutations
         for bucket in self.buckets:
             if bucket.name == "metadata":
-                self.log.info("deleting bucket: %s",bucket.name)
+                self.log.info("deleting bucket: %s", bucket.name)
                 self.rest.delete_bucket(bucket.name)
         # Wait for function to get undeployed automatically
-        self.wait_for_handler_state(body['appname'],"undeployed")
+        self.wait_for_handler_state(body['appname'], "undeployed")
         # Delete the function
         self.delete_function(body)
         self.sleep(60)
@@ -224,6 +228,7 @@ class EventingNegative(EventingBaseTest):
         # Validation of any issues like panic will be taken care by teardown method
         self.assertTrue(self.check_if_eventing_consumers_are_cleaned_up(),
                         msg="eventing-consumer processes are not cleaned up even after undeploying the function")
+        self.skip_metabucket_check=True
 
     def test_undeploy_when_function_is_still_in_bootstrap_state(self):
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
@@ -366,6 +371,7 @@ class EventingNegative(EventingBaseTest):
                   batch_size=self.batch_size)
         body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_ON_UPDATE)
         self.rest.create_function(body['appname'], body)
+        self.deploy_function(body,wait_for_bootstrap=False)
         try:
             self.pause_function(body)
             self.fail("application is paused even before deployment")
@@ -373,6 +379,8 @@ class EventingNegative(EventingBaseTest):
             if "ERR_APP_NOT_BOOTSTRAPPED" not in str(e):
                 log.info(str(e))
                 self.fail("Not correct exception thrown")
+        self.wait_for_handler_state(body['appname'],"deployed")
+        self.undeploy_and_delete_function(body)
 
     def test_delete_when_resume_in_progress(self):
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
@@ -380,7 +388,7 @@ class EventingNegative(EventingBaseTest):
         body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_ON_UPDATE)
         self.deploy_function(body)
         self.pause_function(body)
-        self.resume_function(body,wait_for_resume=False)
+        self.resume_function(body, wait_for_resume=False)
         try:
             self.delete_function(body)
             self.fail("application is paused even before deployment")
@@ -388,6 +396,23 @@ class EventingNegative(EventingBaseTest):
             if "ERR_APP_NOT_UNDEPLOYED" not in str(e):
                 log.info(str(e))
                 self.fail("Not correct exception thrown")
+        self.wait_for_handler_state(body['appname'],"deployed")
+        self.undeploy_and_delete_function(body)
+
+    def test_delete_paused_handler(self):
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        body = self.create_save_function_body(self.function_name, HANDLER_CODE.BUCKET_OPS_ON_UPDATE)
+        self.deploy_function(body)
+        self.pause_function(body)
+        try:
+            self.delete_function(body)
+            self.fail("application is paused even before deployment")
+        except Exception as e:
+            if "ERR_APP_NOT_UNDEPLOYED" not in str(e):
+                log.info(str(e))
+                self.fail("Not correct exception thrown")
+        self.undeploy_function(body)
 
     def test_n1ql_DML_with_source_bucket(self):
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
@@ -397,8 +422,8 @@ class EventingNegative(EventingBaseTest):
             self.deploy_function(body)
             self.fail("application is deployed for insert on source bucket")
         except Exception as e:
-            if "Can not execute DML query on bucket" not in str(e):
-                log.info(str(e))
+            log.info(str(e))
+            if "ERR_HANDLER_COMPILATION" not in str(e):
                 self.fail("Not correct exception thrown")
 
     def test_n1ql_with_wrong_query(self):
@@ -472,3 +497,64 @@ class EventingNegative(EventingBaseTest):
         except Exception as e:
             if "ERR_APP_ALREADY_DEPLOYED" not in str(e):
                 raise Exception("Feed boundary updated when app is deployed")
+        self.undeploy_and_delete_function(body)
+
+    #MB-31140
+    def test_eventing_error_type(self):
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        body = self.create_save_function_body(self.function_name, 'handler_code/eventing_error.js', worker_count=1)
+        self.deploy_function(body)
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        self.undeploy_and_delete_function(body)
+
+
+    #MB-31140
+    def test_n1ql_error_type(self):
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        body = self.create_save_function_body(self.function_name, 'handler_code/n1ql_error.js', worker_count=1)
+        self.deploy_function(body)
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        self.undeploy_and_delete_function(body)
+
+    #MB-31140
+    def test_curl_error_type(self):
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        body = self.create_save_function_body(self.function_name, 'handler_code/curl_error.js', worker_count=1)
+        self.deploy_function(body)
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        self.undeploy_and_delete_function(body)
+
+    #MB-35750
+    def test_non_json(self):
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        body = self.create_save_function_body(self.function_name, 'handler_code/non_json.js', worker_count=1)
+        self.deploy_function(body)
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016*3, skip_stats_validation=True)
+        self.undeploy_and_delete_function(body)
+
+    # MB-31140
+    def test_kv_error_type(self):
+        #kv_node = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=False)
+        self.skip_metabucket_check=True
+        body = self.create_save_function_body(self.function_name, 'handler_code/kv_error.js', worker_count=1,execution_timeout=3)
+        self.deploy_function(body)
+        try:
+            # partition the kv node when its processing mutations
+            self.drop_data_to_bucket_from_eventing(self.servers[1])
+            self.sleep(10)
+            # load some data
+            self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                      batch_size=self.batch_size)
+            self.sleep(700)
+        except Exception:
+            self.reset_firewall(self.servers[1])
+        finally:
+            self.reset_firewall(self.servers[1])
+        matched, count=self.check_word_count_eventing_log(self.function_name,"KVError:",2016)
+        if count == 0:
+            raise Exception("No KV error shown up")
+        #self.undeploy_and_delete_function(body)

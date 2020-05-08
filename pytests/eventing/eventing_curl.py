@@ -38,10 +38,10 @@ class EventingCurl(EventingBaseTest):
             self.gens_load = self.generate_docs(self.docs_per_day)
             self.expiry = 3
             self.handler_code = self.input.param('handler_code', 'bucket_op_curl')
-            self.curl_username= self.input.param('curl_user',None)
-            self.curl_password= self.input.param('curl_password',None)
-            self.auth_type= self.input.param('auth_type','no-auth')
-            self.url= self.input.param('path',None)
+            self.curl_username= self.input.param('curl_user', None)
+            self.curl_password= self.input.param('curl_password', None)
+            self.auth_type= self.input.param('auth_type', 'no-auth')
+            self.url= self.input.param('path', None)
             if self.handler_code == 'bucket_op_curl':
                 self.handler_code = HANDLER_CODE_CURL.BUCKET_OP_WITH_CURL
 
@@ -52,14 +52,14 @@ class EventingCurl(EventingBaseTest):
         def test_curl_get(self):
             self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                       batch_size=self.batch_size)
-            temp_handler=self.get_handler_code(self.handler_code,self.url)
+            temp_handler=self.get_handler_code(self.handler_code, self.url)
             body = self.create_save_function_body(self.function_name, temp_handler, worker_count=3)
             self.deploy_function(body)
             # Wait for eventing to catch up with all the create mutations and verify results
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016,skip_stats_validation=True)
+            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
             self.undeploy_and_delete_function(body)
 
-        def get_handler_code(self,handler_code,url):
+        def get_handler_code(self, handler_code, url):
             script_dir = os.path.dirname(__file__)
             abs_file_path = os.path.join(script_dir, handler_code)
             fh = open(abs_file_path, "r")
@@ -97,11 +97,11 @@ class EventingCurl(EventingBaseTest):
                                                   worker_count=3)
             self.deploy_function(body)
             # Wait for eventing to catch up with all the create mutations and verify results
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016,skip_stats_validation=True)
+            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
             # delete json documents
             self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                       batch_size=self.batch_size, op_type='delete')
-            self.verify_eventing_results(self.function_name, 0,skip_stats_validation=True)
+            self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
             self.undeploy_and_delete_function(body)
 
 
@@ -117,12 +117,12 @@ class EventingCurl(EventingBaseTest):
             task.result()
             self.resume_function(body)
             # Wait for eventing to catch up with all the create mutations and verify results
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016,skip_stats_validation=True)
+            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
             # delete json documents
             self.load(gen_load_del, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                       batch_size=self.batch_size, op_type='delete')
-            self.pause_resume_n(body,1)
-            self.verify_eventing_results(self.function_name, 0,skip_stats_validation=True)
+            self.pause_resume_n(body, 1)
+            self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
             self.undeploy_and_delete_function(body)
 
 
@@ -139,15 +139,15 @@ class EventingCurl(EventingBaseTest):
                                                   worker_count=3)
             self.deploy_function(body)
             # Wait for eventing to catch up with all the create mutations and verify results
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016,skip_stats_validation=True)
+            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
             # delete json documents
             self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                       batch_size=self.batch_size, op_type='delete')
-            self.verify_eventing_results(self.function_name, 0,skip_stats_validation=True)
+            self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
             self.undeploy_and_delete_function(body)
 
         def test_curl_takes_more_time(self):
-            body = self.create_save_function_body(self.function_name, self.handler_code, worker_count=3,execution_timeout=5)
+            body = self.create_save_function_body(self.function_name, self.handler_code, worker_count=3, execution_timeout=5)
             self.deploy_function(body)
             self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                       batch_size=self.batch_size)
@@ -227,6 +227,33 @@ class EventingCurl(EventingBaseTest):
             self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                       batch_size=self.batch_size, op_type='delete')
             self.verify_eventing_results(self.function_name, 0,skip_stats_validation=True)
+            self.undeploy_and_delete_function(body)
+
+        def test_curl_parent_binding(self):
+            self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                      batch_size=self.batch_size)
+            self.hostname = self.hostname[:-1]
+            body = self.create_save_function_body(self.function_name, "handler_code/curl/bucket_op_curl_get_parent.js", worker_count=3,hostpath="/a/b/")
+            self.deploy_function(body)
+            # Wait for eventing to catch up with all the create mutations and verify results
+            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+            # delete json documents
+            self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                      batch_size=self.batch_size, op_type='delete')
+            self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+            self.undeploy_and_delete_function(body)
+
+        def test_bad_ssl_cert(self):
+            self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                      batch_size=self.batch_size)
+            body = self.create_save_function_body(self.function_name, "handler_code/curl/bad_ssl_cert.js",validate_ssl=True)
+            self.deploy_function(body)
+            # Wait for eventing to catch up with all the create mutations and verify results
+            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+            # delete json documents
+            self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                      batch_size=self.batch_size, op_type='delete')
+            self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
             self.undeploy_and_delete_function(body)
 
 
