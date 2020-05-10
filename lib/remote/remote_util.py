@@ -255,53 +255,10 @@ class RemoteMachineShellConnection(KeepRefs):
         self.remote = (self.ip != "localhost" and self.ip != "127.0.0.1")
         self.port = serverInfo.port
         self._ssh_client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        msg = 'connecting to {0} with username:{1} '
-        log.info(msg.format(serverInfo.ip, serverInfo.ssh_username))
-        # added attempts for connection because of PID check failed.
-        # RNG must be re-initialized after fork() error
-        # That's a paramiko bug
-        max_attempts_connect = 2
-        attempt = 0
-        while True:
-            try:
-                if self.remote and serverInfo.ssh_key == '':
-                    self._ssh_client.connect(hostname=serverInfo.ip.replace('[', '').replace(']', ''),
-                                             username=serverInfo.ssh_username,
-                                             password=serverInfo.ssh_password)
-                elif self.remote:
-                    self._ssh_client.connect(hostname=serverInfo.ip.replace('[', '').replace(']', ''),
-                                             username=serverInfo.ssh_username,
-                                             key_filename=serverInfo.ssh_key)
-                break
-            except paramiko.AuthenticationException:
-                log.error("Authentication failed")
-                if exit_on_failure:
-                    exit(1)
-                else:
-                    break
-            except paramiko.BadHostKeyException:
-                log.error("Invalid Host key")
-                if exit_on_failure:
-                    exit(1)
-                else:
-                    break
 
-            except Exception as e:
-                if str(e).find('PID check failed. RNG must be re-initialized') != -1 and\
-                        attempt != max_attempts_connect:
-                    log.error("Can't establish SSH session to node {1} :\
-                              {0}. Will try again in 1 sec".format(e, self.ip))
-                    attempt += 1
-                    time.sleep(1)
-                else:
-                    log.error("Can't establish SSH session to node {1} :\
-                                                   {0}".format(e, self.ip))
-                    if exit_on_failure:
-                        exit(1)
-                    else:
-                        break
+        self.ssh_connect_with_retries(serverInfo.ip, serverInfo.ssh_username, serverInfo.ssh_password,
+                                      serverInfo.ssh_key, exit_on_failure)
 
-        log.info("Connected to {0}".format(serverInfo.ip))
         """ self.info.distribution_type.lower() == "ubuntu" """
         self.cmd_ext = ""
         self.bin_path = LINUX_COUCHBASE_BIN_PATH
@@ -325,34 +282,56 @@ class RemoteMachineShellConnection(KeepRefs):
         if self.info.distribution_type.lower() == "mac":
             log.info("This is Mac Server.  Skip re-connect to it as %s" % user)
             return
-        max_attempts_connect = 2
+        self.ssh_connect_with_retries(self.ip, user, self.password, self.ssh_key)
+
+
+    def ssh_connect_with_retries(self, ip, ssh_username, ssh_password, ssh_key,
+                                 exit_on_failure = False, max_attempts_connect = 5,
+                                 backoff_time = 10):
+        # Retries with exponential backoff delay
         attempt = 0
-        while True:
+        is_ssh_ok = False
+        while not is_ssh_ok and attempt < max_attempts_connect:
+            attempt += 1
+            log.info(
+                "SSH Connecting to {} with username:{}, attempt#{} of {}".format(
+                    ip, ssh_username, attempt, max_attempts_connect))
             try:
-                log.info("Connect to node: %s as user: %s" % (self.ip, user))
-                if self.remote and self.ssh_key == '':
-                    self._ssh_client.connect(hostname=self.ip.replace('[', '').replace(']', ''),
-                                             username=user,
-                                             password=self.password)
-                break
+                if self.remote and ssh_key == '':
+                    self._ssh_client.connect(
+                        hostname=ip.replace('[', '').replace(']', ''),
+                        username=ssh_username, password=ssh_password)
+                elif self.remote:
+                    self._ssh_client.connect(
+                        hostname=ip.replace('[', '').replace(']', ''),
+                        username=ssh_username, key_filename=ssh_key)
+                is_ssh_ok = True
             except paramiko.AuthenticationException:
-                log.error("Authentication for root failed")
-                exit(1)
+                log.error(
+                    "Can't establish SSH (Authentication failed) session to node {} : {}".format(
+                        self.ip, e))
             except paramiko.BadHostKeyException:
-                log.error("Invalid Host key")
-                exit(1)
+                log.error(
+                    "Can't establish SSH (Invalid host key) session to node {} : {}".format(self.ip,
+                                                                                            e))
             except Exception as e:
-                if str(e).find('PID check failed. RNG must be re-initialized') != -1 and\
-                        attempt != max_attempts_connect:
-                    log.error("Can't establish SSH session to node {1} as root:\
-                              {0}. Will try again in 1 sec".format(e, self.ip))
-                    attempt += 1
-                    time.sleep(1)
-                else:
-                    log.error("Can't establish SSH session to node {1} :\
-                                                   {0}".format(e, self.ip))
-                    exit(1)
-        log.info("Connected to {0} as {1}".format(self.ip, user))
+                log.error(
+                    "Can't establish SSH session (unknown reason) to node {} : {}".format(self.ip,
+                                                                                          e))
+                if attempt < max_attempts_connect:
+                    log.info("Retrying with exponential back off delay for {} secs.".format(
+                        backoff_time))
+                    time.sleep(backoff_time)
+                    backoff_time *= 2
+
+        if not is_ssh_ok:
+            log.error(
+                "-->No SSH connectivity to {} even after {} times!\n".format(self.ip, attempt))
+            if exit_on_failure:
+                exit(1)
+            else:
+                return
+        log.info("SSH Connected to {} as {}".format(ip, ssh_username))
 
     def sleep(self, timeout=1, message=""):
         log.info("{0}:sleep for {1} secs. {2} ...".format(self.ip, timeout, message))
