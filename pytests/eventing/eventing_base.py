@@ -183,23 +183,23 @@ class EventingBaseTest(QueryHelperTests):
         body['settings']['language_compatibility']=language_compatibility
         return body
 
-    def wait_for_bootstrap_to_complete(self, name, iterations=20):
+    def wait_for_bootstrap_to_complete(self, name, iterations=120):
         result = self.rest.get_deployed_eventing_apps()
         count = 0
         while name not in result and count < iterations:
-            self.sleep(30, message="Waiting for eventing node to come out of bootstrap state...")
+            self.sleep(5, message="Waiting for eventing node to come out of bootstrap state...")
             count += 1
             result = self.rest.get_deployed_eventing_apps()
         if count == iterations:
             raise Exception(
                 'Eventing took lot of time to come out of bootstrap state or did not successfully bootstrap')
 
-    def wait_for_undeployment(self, name, iterations=20):
-        self.sleep(30, message="Waiting for undeployment of function...")
+    def wait_for_undeployment(self, name, iterations=120):
+        self.sleep(5, message="Waiting for undeployment of function...")
         result = self.rest.get_running_eventing_apps()
         count = 0
         while name in result and count < iterations:
-            self.sleep(30, message="Waiting for undeployment of function...")
+            self.sleep(5, message="Waiting for undeployment of function...")
             count += 1
             result = self.rest.get_running_eventing_apps()
         if count == iterations:
@@ -326,7 +326,7 @@ class EventingBaseTest(QueryHelperTests):
         return actual_dcp_mutations
 
     def eventing_stats(self):
-        self.sleep(30)
+        self.sleep(5)
         content=self.rest.get_all_eventing_stats()
         js=json.loads(content)
         log.info("execution stats: {0}".format(js))
@@ -644,13 +644,13 @@ class EventingBaseTest(QueryHelperTests):
             self.resume_function(body)
 
 
-    def wait_for_handler_state(self, name,status,iterations=20):
-        self.sleep(20, message="Waiting for {} to {}...".format(name, status))
+    def wait_for_handler_state(self, name,status,iterations=120):
+        self.sleep(5, message="Waiting for {} to {}...".format(name, status))
         result = self.rest.get_composite_eventing_status()
         count = 0
         composite_status = None
         while composite_status != status and count < iterations:
-            self.sleep(20, "Waiting for {} to {}...".format(name, status))
+            self.sleep(5, "Waiting for {} to {}...".format(name, status))
             result = self.rest.get_composite_eventing_status()
             for i in range(len(result['apps'])):
                 if result['apps'][i]['name'] == name:
@@ -662,7 +662,7 @@ class EventingBaseTest(QueryHelperTests):
     def setup_curl(self,):
         o=os.system('python3 scripts/curl_setup.py start')
         self.log.info("=== started docker container =======".format(o))
-        self.sleep(10)
+        self.sleep(5)
         if o!=0:
             self.log.info("script result {}".format(o))
             raise Exception("unable to start docker")
@@ -682,7 +682,7 @@ class EventingBaseTest(QueryHelperTests):
         except ImportError as e:
             o = os.system("python3 scripts/install_docker.py docker")
             self.log.info("docker installation done: {}".format(o))
-            self.sleep(30)
+            self.sleep(5)
             try:
                 import docker
             except ImportError as e:
@@ -695,7 +695,7 @@ class EventingBaseTest(QueryHelperTests):
                              -X POST http://{0}:8091/sampleBuckets/install \
                           -d '["{1}"]'""".format(server.ip, bucketName))
         shell.disconnect()
-        self.sleep(20)
+        self.sleep(5)
 
     def check_eventing_rebalance(self):
         status=self.rest.get_eventing_rebalance_status()
