@@ -99,6 +99,12 @@ class DateTimeFunctionClass(QueryTests):
                     actual_result = self.run_cbq_query(query)
                     query = 'SELECT LENGTH("{0}")'.format(expected_format)
                     expected_result = self.run_cbq_query(query)
+                    if actual_result["results"][0]["$1"] != expected_result["results"][0]["$1"]:
+                        query = 'SELECT ' + date_format_query
+                        str_actual_result = self.run_cbq_query(query)
+                        query = 'SELECT "{0}"'.format(expected_format)
+                        str_expected_result = self.run_cbq_query(query)
+                        self.log.info("Test is failed. Actual result is {0}, expected result is {1}.".format(str_actual_result, str_expected_result))
                     self.assertEqual(actual_result["results"][0]["$1"], expected_result["results"][0]["$1"],
                                      "Results mismatch for query {0}".format(date_format_query))
 
