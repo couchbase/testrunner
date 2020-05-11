@@ -50,10 +50,17 @@ class SecretsMgmtTests(BaseTestCase):
             shell.disconnect()
         super(SecretsMgmtTests, self).tearDown()
 
+    def suite_setUp(self):
+        self.log.info("---------------Suite Setup---------------")
+
+    def suite_tearDown(self):
+        self.log.info("---------------Suite Teardown---------------")
+
     def print_memcached_ip(self):
         shell = RemoteMachineShellConnection(self.master)
         o, _ = shell.execute_command("ps aux | grep 'memcached'  | awk '{print $2}'")
-        mem_pid = o[0]
+        if o:
+            mem_pid = o[0]
         shell.disconnect()
 
     def test_evn_variable(self):

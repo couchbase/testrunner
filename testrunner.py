@@ -555,7 +555,7 @@ class StoppableThreadWithResult(Thread):
 
 
 def runtests(names, options, arg_i, arg_p, runtime_test_params):
-    log.info("\nNumber of tests to be executed: " + str(len(names)))
+    log.info("\nNumber of tests initially selected before GROUP filters: " + str(len(names)))
     BEFORE_SUITE = "suite_setUp"
     AFTER_SUITE = "suite_tearDown"
     xunit = XUnitTestResult()
@@ -587,6 +587,8 @@ def runtests(names, options, arg_i, arg_p, runtime_test_params):
        hanging_threads_test_interval = int(TestInputSingleton.input.param("test_interval", 1000))
        monitoring_thread = start_monitoring(seconds_frozen=hanging_threads_frozen_time, test_interval=hanging_threads_test_interval) 
 
+    logs_folder="."
+    test_exec_count=0
     for name in names:
         start_time = time.time()
         argument_split = [a.strip() for a in re.split("[,]?([^,=]+)=", name)[1:]]
@@ -613,9 +615,11 @@ def runtests(names, options, arg_i, arg_p, runtime_test_params):
                 set(runtime_test_params["EXCLUDE_GROUP"].split(";")).issubset(set(params["GROUP"].split(";"))):
                     print(("test '{0}' skipped, is in an excluded group".format(name)))
                     continue
-
+        log.info("--> Running test: {}".format(name))
+        test_exec_count += 1
         # Create Log Directory
         logs_folder = os.path.join(root_log_dir, "test_%s" % case_number)
+        log.info("Logs folder: {}".format(logs_folder))
         os.mkdir(logs_folder)
         test_log_file = os.path.join(logs_folder, "test.log")
         log_config_filename = r'{0}'.format(os.path.join(logs_folder, "test.logging.conf"))
@@ -743,13 +747,15 @@ def runtests(names, options, arg_i, arg_p, runtime_test_params):
             print("test fails, all of the following tests will be skipped!!!")
             break
 
-    after_suite_name = "%s.%s" % (name[:name.rfind('.')], AFTER_SUITE)
-    try:
-        print(("Run after suite setup for %s" % name))
-        suite = unittest.TestLoader().loadTestsFromName(after_suite_name)
-        result = unittest.TextTestRunner(verbosity=2).run(suite)
-    except AttributeError as ex:
-        pass
+    print("\n*** Tests executed count: {}\n".format(test_exec_count))
+    if test_exec_count>0:
+        after_suite_name = "%s.%s" % (name[:name.rfind('.')], AFTER_SUITE)
+        try:
+            print(("Run after suite setup for %s" % name))
+            suite = unittest.TestLoader().loadTestsFromName(after_suite_name)
+            result = unittest.TextTestRunner(verbosity=2).run(suite)
+        except AttributeError as ex:
+            pass
     if "makefile" in TestInputSingleton.input.test_params:
         # print out fail for those tests which failed and do sys.exit() error code
         fail_count = 0
@@ -785,7 +791,6 @@ def runtests(names, options, arg_i, arg_p, runtime_test_params):
                     pass
 
     return results, xunit, "{0}{2}report-{1}".format(os.path.dirname(logs_folder), str_time, os.sep)
-
 
 
 def filter_fields(testname):
