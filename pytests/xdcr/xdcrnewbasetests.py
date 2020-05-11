@@ -261,28 +261,13 @@ class NodeHelper:
 
     @staticmethod
     def reboot_server(server, test_case, wait_timeout=60):
-        """Reboot a server and wait for couchbase server to run.
-        @param server: server object, which needs to be rebooted.
-        @param test_case: test case object, since it has assert() function
-                        which is used by wait_for_ns_servers_or_assert
-                        to throw assertion.
-        @param wait_timeout: timeout to whole reboot operation.
-        """
-        # self.log.info("Rebooting server '{0}'....".format(server.ip))
-        shell = RemoteMachineShellConnection(server)
-        if shell.extract_remote_info().type.lower() == OS.WINDOWS:
-            o, r = shell.execute_command(
-                "{0} -r -f -t 0".format(COMMAND.SHUTDOWN))
-        elif shell.extract_remote_info().type.lower() == OS.LINUX:
-            o, r = shell.execute_command(COMMAND.REBOOT)
-        shell.log_command_output(o, r)
+        remote_client = RemoteMachineShellConnection(server)
+        remote_client.reboot_node()
+        remote_client.disconnect()
+        # wait for restart and warmup on all node
+        ClusterOperationHelper.wait_for_ns_servers_or_assert([server], test_case, wait_if_warmup=True)
         # disable firewall on these nodes
         NodeHelper.disable_firewall(server)
-        # wait till server is ready after warmup
-        ClusterOperationHelper.wait_for_ns_servers_or_assert(
-            [server],
-            test_case,
-            wait_if_warmup=True)
 
     @staticmethod
     def enable_firewall(
@@ -322,7 +307,7 @@ class NodeHelper:
             if str(output).lower().find("running") != -1:
                 # self.log.info("Couchbase service is running")
                 return
-            self.wait_interval(10, "Waiting for couchbase service to start")
+            time.sleep(10)
         raise Exception(
             "Couchbase service is not running after {0} seconds".format(
                 wait_time))
@@ -341,6 +326,7 @@ class NodeHelper:
                             NodeHelper._log.info(
                                 "Warmed up: %s items on %s on %s" %
                                 (mc.stats("warmup")["ep_warmup_key_count"], bucket, server))
+                            time.sleep(10)
                             break
                         elif mc.stats()["ep_warmup_thread"] == "running":
                             NodeHelper._log.info(
@@ -352,7 +338,7 @@ class NodeHelper:
                             break
                     except Exception as e:
                         NodeHelper._log.info(e)
-                        self.wait_interval(10, "Still warming up..")
+                        time.sleep(10)
                 if mc.stats()["ep_warmup_thread"] == "running":
                     NodeHelper._log.info(
                             "ERROR: ep_warmup_thread's status not complete")
@@ -378,7 +364,7 @@ class NodeHelper:
                 break
             except ServerUnavailableException:
                 num += 1
-                self.wait_interval(10, "Waiting for node {} restart".format(server.ip))
+                time.sleep(10)
 
     @staticmethod
     def kill_erlang(server):
@@ -434,7 +420,8 @@ class NodeHelper:
             if count > 0 or timeout == 0:
                 break
             else:
-                self.wait_interval(timeout, "Waiting {0}s for {1} to appear in {2} ..".format(timeout, search_str, log_name))
+                NodeHelper._log.info("Waiting {0}s for {1} to appear in {2} ..".format(timeout, search_str, log_name))
+                time.sleep(timeout)
             iter += 1
         shell.disconnect()
         NodeHelper._log.info(count)
@@ -1837,7 +1824,8 @@ class CouchbaseCluster:
         [task.result() for task in tasks]
 
         if wait_for_expiration and expiration:
-            self.wait_interval(expiration, "Waiting for expiration of updated items")
+            self.__log.info("Waiting for expiration of updated items")
+            time.sleep(expiration)
 
     def run_expiry_pager(self, val=10):
         """Run expiry pager process and set interval to 10 seconds
@@ -1850,7 +1838,8 @@ class CouchbaseCluster:
                 "exp_pager_stime",
                 val,
                 bucket)
-            self.wait_interval(val, "wait for expiry pager to run on all these nodes")
+            self.__log.info("wait for expiry pager to run on all these nodes")
+        time.sleep(val)
 
     def async_create_views(
             self, design_doc_name, views, bucket=BUCKET_NAME.DEFAULT):
@@ -2169,13 +2158,10 @@ class CouchbaseCluster:
         task = self.__async_failover(master, graceful=graceful)
         task.result()
         if graceful:
-            timeout = time.time() + 60
-            while time.time() < timeout:
-                # use rebalance stats to monitor failover
-                if RestConnection(self.__master_node).monitorRebalance():
-                    break
-                else:
-                    self.wait_interval(10, "Waiting for rebalance to complete")
+            # wait for replica update
+            time.sleep(60)
+            # use rebalance stats to monitor failover
+            RestConnection(self.__master_node).monitorRebalance()
         if rebalance:
             self.rebalance_failover_nodes()
         self.__master_node = self.__nodes[0]
@@ -2193,13 +2179,9 @@ class CouchbaseCluster:
             graceful=graceful)
         task.result()
         if graceful:
-            timeout = time.time() + 60
-            while time.time() < timeout:
-                # use rebalance stats to monitor failover
-                if RestConnection(self.__master_node).monitorRebalance():
-                    break
-                else:
-                    self.wait_interval(10, "Waiting for rebalance to complete")
+            time.sleep(60)
+            # use rebalance stats to monitor failover
+            RestConnection(self.__master_node).monitorRebalance()
         if rebalance:
             self.rebalance_failover_nodes()
 
@@ -2402,9 +2384,10 @@ class CouchbaseCluster:
                     for node in nodes:
                         active_keys += node["interestingStats"]["curr_items"]
                 if active_keys != items:
-                        self.wait_interval(5, "Not Ready: vb_active_curr_items %s == "
+                        self.__log.warning("Not Ready: vb_active_curr_items %s == "
                                 "%s expected on %s, %s bucket"
                                  % (active_keys, items, self.__name, bucket.name))
+                        time.sleep(5)
                         if time.time() > end_time:
                             self.__log.error(
                             "ERROR: Timed-out waiting for active item count to match")
@@ -2438,9 +2421,10 @@ class CouchbaseCluster:
                     for node in nodes:
                         replica_keys += node["interestingStats"]["vb_replica_curr_items"]
                 if replica_keys != items:
-                    self.wait_interval(5, "Not Ready: vb_replica_curr_items %s == "
+                    self.__log.warning("Not Ready: vb_replica_curr_items %s == "
                             "%s expected on %s, %s bucket"
                              % (replica_keys, items, self.__name, bucket.name))
+                    time.sleep(3)
                     if time.time() > end_time:
                         self.__log.error(
                         "ERROR: Timed-out waiting for replica item count to match")
@@ -2547,12 +2531,13 @@ class CouchbaseCluster:
         for bucket in buckets:
             try:
                 mutations = int(rest.get_dcp_queue_size(bucket.name))
+                self.__log.info(
+                    "Current dcp queue size on %s for %s is %s" %
+                    (self.__name, bucket.name, mutations))
                 if mutations == 0:
                     buckets.remove(bucket)
                 else:
-                    self.wait_interval(5,
-                        "Current dcp queue size on %s for %s is %s" %
-                        (self.__name, bucket.name, mutations))
+                    time.sleep(5)
                     end_time = end_time - 5
             except Exception as e:
                 self.__log.error(e)
@@ -2584,9 +2569,7 @@ class CouchbaseCluster:
                     found = found + 1
             if found == len(self.__buckets):
                 break
-            self.wait_interval(5,
-                "Waiting for Outbound mutation to be zero on cluster node: %s" %
-                self.__master_node.ip)
+            time.sleep(5)
             end_time = end_time - 5
         else:
             # MB-9707: Updating this code from fail to warning to avoid test
