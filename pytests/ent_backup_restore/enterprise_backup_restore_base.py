@@ -1751,7 +1751,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                 break
         rest = RestConnection(self.backupset.restore_cluster_host)
         kv_quota = rest.init_node()
-        self.log.info("Done reset node")
+        self.log.info("Done reset restore node")
         if len(self.input.clusters[1]) > 1:
             num_servers = len(self.backupset.restore_cluster) - 1
             self.cluster.rebalance(
@@ -1759,6 +1759,14 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                 self.backupset.restore_cluster[1:num_servers],
                 [],
                 services=self.services)
+        count = 0
+        while count < 4:
+            reb_status = rest._rebalance_progress_status()
+            if "running" in reb_status:
+                self.sleep(2)
+                count += 1
+            if count == 4:
+                self.fail("Status still shows running after rebalance complete 8 seconds")
         return kv_quota
 
     def _collect_logs(self):
