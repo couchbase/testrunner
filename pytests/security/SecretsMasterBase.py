@@ -65,7 +65,7 @@ class SecretsMasterBase():
 
     def set_password(self,host,new_password):
         rest = RestConnection(host)
-        status = rest._set_secrets_password(new_password)
+        status = self.execute_cli(host,new_password)
         log.info ("Status of set password command is - {0}".format(status))
     
     #Execute cli to set master password, and provide input
@@ -75,7 +75,7 @@ class SecretsMasterBase():
         chan = shell._ssh_client.invoke_shell()
         buff = ''
         while not buff.endswith('# '):
-            resp = chan.recv(9999)
+            resp = chan.recv(9999).decode('utf-8')
             buff += resp
 
         # ssh and wait for commmand prompt
@@ -87,7 +87,7 @@ class SecretsMasterBase():
         resp2= chan.recv(9999)
         chan.send(new_password + "\n")
         time.sleep(10)
-        resp3= chan.recv(9999)
+        resp3= chan.recv(9999).decode('utf-8')
         if (resp3.find('SUCCESS: New master password set') > 0):
             return True
         else:
@@ -100,13 +100,13 @@ class SecretsMasterBase():
         chan = shell._ssh_client.invoke_shell()
         buff = ''
         while not buff.endswith('# '):
-            resp = chan.recv(9999)
+            resp = chan.recv(9999).decode('utf-8')
             buff += resp
 
         # ssh and wait for commmand prompt
         chan.send(cmd + "\n")
         time.sleep(10)
-        resp = chan.recv(9999)
+        resp = chan.recv(9999).decode('utf-8')
 
         if (resp.find('SUCCESS: Data key rotated') > 0):
             return True
@@ -176,7 +176,7 @@ class SecretsMasterBase():
         chan = shell._ssh_client.invoke_shell()
         buff = ''
         while not buff.endswith('# '):
-            resp = chan.recv(9999)
+            resp = chan.recv(9999).decode('utf-8')
             buff += resp
 
         # ssh and wait for commmand prompt
@@ -184,12 +184,12 @@ class SecretsMasterBase():
 
         buff = ""
         time.sleep(10)
-        resp = chan.recv(9999)
+        resp = chan.recv(9999).decode('utf-8')
         if (resp.find('Enter master password:') > 0):
             chan.send(password + "\n")
 
         time.sleep(10)
-        resp = chan.recv(9999)
+        resp = chan.recv(9999).decode('utf-8')
         log.info ("Response for password prompt - {0}".format(resp))
         if (resp.find('Password accepted. Node started booting.') > 0):
             log.info("node has started")
@@ -207,12 +207,12 @@ class SecretsMasterBase():
         buff = ''
         i=1
         while not buff.endswith('# '):
-            resp = chan.recv(9999)
+            resp = chan.recv(9999).decode('utf-8')
             buff += resp
         # ssh and wait for commmand prompt
         chan.send(cmd + "\n")
         time.sleep(10)
-        resp = chan.recv(9999)
+        resp = chan.recv(9999).decode('utf-8')
         if (resp.find('Enter master password:') > 0):
             while (i <= retries_number):
                 log.info ("number of retries - {0}".format(i))
@@ -222,7 +222,7 @@ class SecretsMasterBase():
                     pass_string = incorrect_pass
                 chan.send(pass_string + "\n")
                 time.sleep(10)
-                resp = chan.recv(9999)
+                resp = chan.recv(9999).decode('utf-8')
                 log.info ("response from shell is  - {0}".format(resp))
                 if (input_correct_pass) and retries_number == i:
                     if (resp.find("SUCCESS: Password accepted. Node started booting.") > 0):
@@ -256,7 +256,7 @@ class SecretsMasterBase():
         chan = shell.invoke_shell()
         buff = ''
         while not buff.endswith('# '):
-            resp = chan.recv(9999)
+            resp = chan.recv(9999).decode('utf-8')
             buff += resp
             # print(resp)
 
@@ -266,7 +266,7 @@ class SecretsMasterBase():
         buff = ''
 
         while not buff.endswith('Please enter master password:'):
-            resp = chan.recv(9999)
+            resp = chan.recv(9999).decode('utf-8')
             buff += resp
 
         # Send the password and wait for a prompt.
@@ -275,11 +275,11 @@ class SecretsMasterBase():
         if retry:
             chan.send(incorrect_master_password + '\n')
             buff = ''
-            resp = chan.recv(9999)
+            resp = chan.recv(9999).decode('utf-8')
             if (resp.find("Incorrect password") > 0):
                 response = chan.send(incorrect_master_password + '\n')
                 time.sleep(10)
-                resp = chan.recv(9999)
+                resp = chan.recv(9999).decode('utf-8')
                 if (resp.find("Incorrect password") > 0):
                     log.info ("Incorrect Password from program for the second time")
                 response = chan.send(incorrect_master_password + '\n')
