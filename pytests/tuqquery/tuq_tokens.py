@@ -244,11 +244,11 @@ class TokenTests(QueryTests):
             self.query = "explain select min(addr) from `beer-sample` unnest address as addr"
             actual_result = self.run_cbq_query()
             plan = self.ExplainPlanHelper(actual_result)
-            self.assertEqual(plan['~children'][0]['index'], idx4)
+            self.assertEqual(plan['~children'][0]['scans'][0]['scan']['index'], idx4)
             self.query = "explain select count(a) from `beer-sample` unnest address as a"
             actual_result = self.run_cbq_query()
             plan = self.ExplainPlanHelper(actual_result)
-            self.assertEqual(plan['~children'][0]['index'], idx4)
+            self.assertEqual(plan['~children'][0]['scans'][0]['scan']['index'], idx4)
             self.query = "explain select * from `beer-sample` where any place in address satisfies " \
                          "place LIKE '100 %' end"
             actual_result = self.run_cbq_query()
