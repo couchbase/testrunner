@@ -204,7 +204,7 @@ def main():
     parser.add_option('-w', '--check_vm', dest='check_vm', default="False")
     parser.add_option('--ssh_poll_interval', dest='SSH_POLL_INTERVAL', default="20")
     parser.add_option('--ssh_num_retries', dest='SSH_NUM_RETRIES', default="3")
-
+    parser.add_option('--job_params', dest='job_params', default=None)
 
     # set of parameters for testing purposes.
     #TODO: delete them after successful testing
@@ -485,6 +485,8 @@ def main():
                     launchStringBaseF = launchStringBaseF + '-' + options.jenkins
 
                 url = launchStringBaseF + url
+                if options.job_params:
+                    url = update_url_with_job_params(url, options.job_params)
 
                 print('\n', time.asctime(time.localtime(time.time())), 'launching ', url)
                 total_servers_being_used += testsToLaunch[0]['serverCount']
@@ -656,6 +658,8 @@ def main():
                         launchStringBaseF = launchStringBaseF + '-' + options.jenkins
                     url = launchStringBaseF + url
 
+                    if options.job_params:
+                        url = update_url_with_job_params(url, options.job_params)
                     print('\n', time.asctime( time.localtime(time.time()) ), 'launching ', url)
                     dispatch_job = True
                     if not options.fresh_run:
@@ -727,6 +731,38 @@ def main():
 
     return
 
+def update_url_with_job_params(url, job_params):
+    dict = {}
+    newurl=''
+    url_keys_values = url.split('&')
+    for param_key in url_keys_values:
+        param_index = param_key.find('=', 1)
+        rparam_name = param_key[0:param_index]
+        if param_index < 0:
+            rparam_value = ''
+        else:
+            rparam_value = param_key[param_index + 1:]
+        dict[rparam_name] = rparam_value
+
+    param_keys_values = job_params.split('&')
+    for param_key in param_keys_values:
+        param_index = param_key.find('=', 1)
+        rparam_name = param_key[0:param_index]
+        if param_index < 0:
+            rparam_value = ''
+        else:
+            rparam_value = param_key[param_index + 1:]
+        dict[rparam_name] = urllib.parse.urlencode({rparam_name: rparam_value})
+
+    print(dict)
+    for key in dict:
+        if newurl=='':
+            newurl = key + "=" + dict[key]
+        elif dict[key].startswith(key+"="):
+            newurl += '&' + dict[key]
+        else:
+            newurl += '&' + key + "=" + dict[key]
+    return newurl
 
 def release_servers(descriptor):
     release_url = "http://{}/releaseservers/{}/available".format(SERVER_MANAGER, descriptor)
