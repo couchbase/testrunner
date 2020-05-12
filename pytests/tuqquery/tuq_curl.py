@@ -359,7 +359,7 @@ class QueryCurlTests(QueryTests):
         query = "select curl("+ url + ")"
         curl = self.shell.execute_commands_inside(self.cbqpath,query,'', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
-        self.assertEqual(actual_curl['results'][0]['$1'], expected_curl)
+        self.assertEqual(sorted(actual_curl['results'][0]['$1']), sorted(expected_curl))
 
     '''Test external endpoints in a the from field of a query
         -select * from curl result
