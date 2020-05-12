@@ -182,7 +182,7 @@ class QueriesViewsTests(QuerySanityTests):
         self.query = "SELECT * FROM default WHERE join_day = 5 OR ( join_day = 10 AND join_mo = 10 )"
         result = self.run_cbq_query()
         self.assertTrue(result['metrics']['resultCount'] == result_count)
-        self.assertTrue(len(plan['~children'][0]['scans'][1]['spans'][0]['range']) == 2)
+        self.assertTrue(len(plan['~children'][0]['spans']) == 2)
 
         self.query = "DROP INDEX default.%s USING %s" % (idx, self.index_type)
 
