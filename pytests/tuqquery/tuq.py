@@ -32,6 +32,7 @@ from deepdiff import DeepDiff
 from fts.random_query_generator.rand_query_gen import FTSFlexQueryGenerator
 from pytests.fts.fts_base import FTSIndex
 from pytests.fts.random_query_generator.rand_query_gen import DATASET
+from pytests.fts.fts_base import CouchbaseCluster
 
 
 JOIN_INNER = "INNER"
@@ -315,7 +316,7 @@ class QueryTests(BaseTestCase):
     def create_fts_index(self, name, source_type='couchbase',
                          source_name=None, index_type='fulltext-index',
                          index_params=None, plan_params=None,
-                         source_params=None, source_uuid=None, doc_count=1000, cluster=None):
+                         source_params=None, source_uuid=None, doc_count=1000):
         """Create fts index/alias
         @param node: Node on which index is created
         @param name: name of the index/alias
@@ -334,7 +335,7 @@ class QueryTests(BaseTestCase):
                                 INDEX_DEFAULTS.SOURCE_FILE_PARAMS
         @param source_uuid: UUID of the source, may not be used
         """
-
+        self.cbcluster = CouchbaseCluster(name='cluster', nodes=self.servers, log=self.log)
         if not self.custom_map:
             index_params = {
                 "default_mapping": {
@@ -348,7 +349,7 @@ class QueryTests(BaseTestCase):
             plan_params = {'numReplicas': 0}
 
         fts_index = FTSIndex(
-            cluster,
+            self.cbcluster,
             name,
             source_type,
             source_name,
@@ -375,31 +376,6 @@ class QueryTests(BaseTestCase):
             self.fail("FTS indexing did not complete. FTS index count : {0}, Bucket count : {1}".format(indexed_doc_count, doc_count))
 
         return fts_index
-
-    def update_expected_fts_index_map(self, fts_index):
-        if not fts_index.smart_query_fields:
-            fts_index.smart_query_fields = DATASET.FIELDS["emp"]
-        for f, v in fts_index.smart_query_fields.items():
-            for field in v:
-                if field == "manages_team_size":
-                    field = "manages.team_size"
-                if field == "manages_reports":
-                    field = "manages.reports"
-                if field == "revision_timestamp":
-                    field = "revision.timestamp"
-                if field == "revision_text_text":
-                    field = "`revision.text.#text`"
-                if field == "revision_contributor_username":
-                    field = "revision.contributor.username"
-                if field not in self.expected_fts_index_map.keys():
-                    self.expected_fts_index_map[field] = [fts_index.name]
-                else:
-                    self.expected_fts_index_map[field].append(fts_index.name)
-        if "type" not in self.expected_fts_index_map.keys():
-            self.expected_fts_index_map["type"] = [fts_index.name]
-        else:
-            self.expected_fts_index_map["type"].append(fts_index.name)
-        self.log.info("expected_fts_index_map {0}".format(self.expected_fts_index_map))
 
     def generate_random_queries(self, fields=None, num_queries=1, query_type=["match"],
                                 seed=0):

@@ -1,7 +1,6 @@
 from .tuq import QueryTests
 from pytests.fts.random_query_generator.rand_query_gen import DATASET
 from collections import Mapping, Sequence, Set, deque
-from pytests.fts.fts_base import CouchbaseCluster
 
 class FlexIndexTests(QueryTests):
 
@@ -24,7 +23,6 @@ class FlexIndexTests(QueryTests):
         self.custom_map = self.input.param("custom_map", False)
         self.bucket_name = self.input.param("bucket_name", 'default')
         self.flex_query_option = self.input.param("flex_query_option", "flex_use_fts_query")
-        self.cbcluster = CouchbaseCluster(name='cluster', nodes=self.servers, log=self.log)
         self.log.info("==============  FlexIndexTests setup has completed ==============")
 
     def tearDown(self):
@@ -339,9 +337,9 @@ class FlexIndexTests(QueryTests):
         self._load_emp_dataset(end=self.num_items)
 
         fts_index_1 = self.create_fts_index(
-            name="custom_index_1", source_name=self.bucket_name,cluster=self.cbcluster)
+            name="custom_index_1", source_name=self.bucket_name)
         fts_index_2 = self.create_fts_index(
-            name="custom_index_2", source_name=self.bucket_name,cluster=self.cbcluster)
+            name="custom_index_2", source_name=self.bucket_name)
         self.log.info("Editing custom index with new map...")
         fts_index_2.generate_new_custom_map(seed=fts_index_2.cm_id+10)
         fts_index_2.index_definition['uuid'] = fts_index_2.get_uuid()

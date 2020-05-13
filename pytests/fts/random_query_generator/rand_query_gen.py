@@ -99,16 +99,17 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
     def construct_fields(self):
         all_fields = {}
         if self.dataset == "emp":
-            all_fields = DATASET.FIELDS['emp']
+            all_fields = copy.deepcopy(DATASET.FIELDS['emp'])
         elif self.dataset == "wiki":
-            all_fields = DATASET.FIELDS['wiki']
+            all_fields = copy.deepcopy(DATASET.FIELDS['wiki'])
         elif self.dataset == "all" or self.dataset == "default":
             fields_set = set()
             for _, fields in DATASET.FIELDS.items():
                 fields_set |= set(fields.keys())
             for v in fields_set:
                 all_fields[v] = []
-            for _, fields in DATASET.FIELDS.items():
+            all_dataset = copy.deepcopy(DATASET.FIELDS)
+            for _, fields in all_dataset.items():
                 all_fields['str'] += fields['str']
                 all_fields['date'] += fields['date']
                 all_fields['num'] += fields['num']
