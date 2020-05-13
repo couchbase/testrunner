@@ -63,7 +63,7 @@ class SecondaryIndexingClusterOpsTests(BaseSecondaryIndexingTests):
         #Remove bucket and recreate it
         for bucket in self.buckets:
             self.rest.flush_bucket(bucket.name)
-        self.sleep(30)
+        self.sleep(120)
         rollback_exception = True
         query_try_count = 0
         while rollback_exception and query_try_count < 10:
