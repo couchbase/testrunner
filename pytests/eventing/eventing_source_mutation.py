@@ -181,4 +181,12 @@ class EventingSourceMutation(EventingBaseTest):
         self.undeploy_and_delete_function(body)
         self.undeploy_and_delete_function(body1)
 
-
+    def test_runtime_recursion(self):
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        body = self.create_save_function_body(self.function_name, 'handler_code/runtime_recursion_sbm.js', worker_count=3)
+        self.deploy_function(body)
+        matched, count=self.check_word_count_eventing_log(self.function_name,"Run time recursion from SBM for id:",1,return_count_only=True)
+        if count > 1:
+            self.fail("Seeing runtime recusrion in logs {}".format(count))
+        self.undeploy_and_delete_function(body)
