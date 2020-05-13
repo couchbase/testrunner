@@ -203,7 +203,7 @@ class FlexIndexTests(QueryTests):
                 final_hint = use_fts_hint
 
         if self.flex_query_option == "flex_use_gsi_query" or self.flex_query_option == "flex_use_fts_gsi_query":
-            if self.use_index_name_in_query:
+            if self.use_index_name_in_query and expected_gsi_index:
                 for index in expected_gsi_index:
                     if final_hint == "":
                         final_hint = "{0} {1}". format(index, use_gsi_hint)
