@@ -26,7 +26,7 @@ function timerCallback(context) {
     var docID = context.docID;
     while (true) {
     try {
-        var query = INSERT INTO dst_bucket ( KEY, VALUE ) VALUES ( $docID ,'timerCallback');
+        var query = UPSERT INTO dst_bucket ( KEY, VALUE ) VALUES ( $docID ,'timerCallback');
         break;
     } catch (e) {
         log(e);
