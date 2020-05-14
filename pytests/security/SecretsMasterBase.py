@@ -80,13 +80,13 @@ class SecretsMasterBase():
 
         # ssh and wait for commmand prompt
         chan.send(cmd + "\n")
-        time.sleep(10)
+        time.sleep(5)
         resp1 = chan.recv(9999)
         chan.send(new_password + "\n")
-        time.sleep(10)
+        time.sleep(5)
         resp2= chan.recv(9999)
         chan.send(new_password + "\n")
-        time.sleep(10)
+        time.sleep(5)
         resp3= chan.recv(9999).decode('utf-8')
         if (resp3.find('SUCCESS: New master password set') > 0):
             return True
@@ -105,7 +105,7 @@ class SecretsMasterBase():
 
         # ssh and wait for commmand prompt
         chan.send(cmd + "\n")
-        time.sleep(10)
+        time.sleep(5)
         resp = chan.recv(9999).decode('utf-8')
 
         if (resp.find('SUCCESS: Data key rotated') > 0):
@@ -183,12 +183,12 @@ class SecretsMasterBase():
         chan.send(cmd + "\n")
 
         buff = ""
-        time.sleep(10)
+        time.sleep(5)
         resp = chan.recv(9999).decode('utf-8')
         if (resp.find('Enter master password:') > 0):
             chan.send(password + "\n")
 
-        time.sleep(10)
+        time.sleep(5)
         resp = chan.recv(9999).decode('utf-8')
         log.info ("Response for password prompt - {0}".format(resp))
         if (resp.find('Password accepted. Node started booting.') > 0):
@@ -211,7 +211,7 @@ class SecretsMasterBase():
             buff += resp
         # ssh and wait for commmand prompt
         chan.send(cmd + "\n")
-        time.sleep(10)
+        time.sleep(5)
         resp = chan.recv(9999).decode('utf-8')
         if (resp.find('Enter master password:') > 0):
             while (i <= retries_number):
@@ -221,7 +221,7 @@ class SecretsMasterBase():
                 else:
                     pass_string = incorrect_pass
                 chan.send(pass_string + "\n")
-                time.sleep(10)
+                time.sleep(5)
                 resp = chan.recv(9999).decode('utf-8')
                 log.info ("response from shell is  - {0}".format(resp))
                 if (input_correct_pass) and retries_number == i:
