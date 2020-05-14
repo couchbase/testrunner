@@ -1064,7 +1064,7 @@ class FTSFlexQueryGenerator(FTSESQueryGenerator):
             fieldname = self.get_random_value(self.fields['str'])
             match_str = eval("self.get_queryable_%s()" % fieldname)
             # due to bug# MB-38690
-            if match_str == "email":
+            if fieldname == "email":
                 pos = random.randint(1, len(match_str) - 5)
             else:
                 pos = random.randint(1, len(match_str) - 1)
