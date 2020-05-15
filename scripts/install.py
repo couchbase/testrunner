@@ -474,7 +474,7 @@ class MembaseServerInstaller(Installer):
         if type == "windows":
             build = self.build_url(params)
             remote_client.download_binary_in_win(build.url, params["version"])
-            success = remote_client.install_server_win(build, params["version"], \
+            success = remote_client.install_server_win(build, params["version"],
                                                        vbuckets=vbuckets)
         else:
             downloaded = remote_client.download_build(build)
@@ -483,8 +483,8 @@ class MembaseServerInstaller(Installer):
                           .format(build.url, params["server"].ip))
                 return False
             path = server.data_path or '/tmp'
-            success &= remote_client.install_server(build, path=path, vbuckets=vbuckets, \
-                                                    swappiness=swappiness, openssl=openssl)
+            success = remote_client.install_server(build, path=path, vbuckets=vbuckets,
+                                                   swappiness=swappiness, openssl=openssl)
             ready = RestHelper(RestConnection(params["server"])).is_ns_server_running(60)
             if not ready:
                 log.error("membase-server did not start...")

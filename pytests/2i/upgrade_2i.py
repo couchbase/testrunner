@@ -75,7 +75,6 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
         upgrade_threads = self._async_update(self.upgrade_to, self.servers)
         for upgrade_thread in upgrade_threads:
             upgrade_thread.join()
-        self.sleep(120)
         self.add_built_in_server_user()
         ops_map = self.generate_operation_map("before")
         if "create_index" in ops_map and not self.build_index_after_create:
@@ -95,8 +94,7 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
                                                  get_all_nodes=True)
         for node in nodes:
             self._verify_indexer_storage_mode(node)
-        self.multi_query_using_index(buckets=self.buckets,
-                    query_definitions=self.load_query_definitions)
+        self.multi_query_using_index(buckets=self.buckets, query_definitions=self.load_query_definitions)
         try:
             self._execute_prepare_statement(prepare_statements)
         except Exception as ex:
@@ -851,48 +849,49 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
         rest = RestConnection(indexer_node)
         rest.set_index_settings({"indexer.numPartitions": 2})
 
-        create_partitioned_index1_query = "CREATE INDEX partitioned_idx1 ON default(name, age, join_yr) partition by hash(name, age, join_yr) USING GSI;"
-        create_index1_query = "CREATE INDEX non_partitioned_idx1 ON default(name, age, join_yr) USING GSI;"
-
-        try:
-            self.n1ql_helper.run_cbq_query(query=create_partitioned_index1_query, server=self.n1ql_node)
-            self.n1ql_helper.run_cbq_query(query=create_index1_query, server=self.n1ql_node)
-        except Exception as ex:
-            self.log.info(str(ex))
-            self.fail(
-                "index creation failed with error : {0}".format(str(ex)))
-
-        # Scans
         queries = []
+        for bucket in self.buckets:
+            create_partitioned_index1_query = f"CREATE INDEX partitioned_idx1 ON {bucket.name}(name, age, join_yr) " \
+                                              f"partition by hash(name, age, join_yr) USING GSI;"
+            create_index1_query = f"CREATE INDEX non_partitioned_idx1 ON {bucket.name}(name, age, join_yr) USING GSI;"
 
-        # 1. Small lookup query with equality predicate on the partition key
-        query_details = {}
-        query_details["query"] = "select name, age, join_yr from default USE INDEX ({0}) where name='Kala'"
-        query_details["partitioned_idx_name"] = "partitioned_idx1"
-        query_details["non_partitioned_idx_name"] = "non_partitioned_idx1"
-        queries.append(query_details)
+            try:
+                self.n1ql_helper.run_cbq_query(query=create_partitioned_index1_query, server=self.n1ql_node)
+                self.n1ql_helper.run_cbq_query(query=create_index1_query, server=self.n1ql_node)
+            except Exception as ex:
+                self.log.info(str(ex))
+                self.fail(
+                    "index creation failed with error : {0}".format(str(ex)))
 
-        # 2. Pagination query with equality predicate on the partition key
-        query_details = {}
-        query_details["query"] = "select name, age, join_yr from default USE INDEX ({0}) where name is not missing AND age=50 offset 0 limit 10"
-        query_details["partitioned_idx_name"] = "partitioned_idx1"
-        query_details["non_partitioned_idx_name"] = "non_partitioned_idx1"
-        queries.append(query_details)
+            # Scans
 
-        # 3. Large aggregated query
-        query_details = {}
-        query_details["query"] = "select count(name), age from default USE INDEX ({0}) where name is not missing group by age"
-        query_details["partitioned_idx_name"] = "partitioned_idx1"
-        query_details["non_partitioned_idx_name"] = "non_partitioned_idx1"
-        queries.append(query_details)
+            # 1. Small lookup query with equality predicate on the partition key
+            query_details = {"query": f"select name, age, join_yr from {bucket.name} USE INDEX" +
+                                      " ({0}) where name='Kala'",
+                             "partitioned_idx_name": "partitioned_idx1",
+                             "non_partitioned_idx_name": "non_partitioned_idx1"}
+            queries.append(query_details)
 
-        # 4. Scan with large result sets
-        query_details = {}
-        query_details[
-            "query"] = "select name, age, join_yr from default USE INDEX ({0}) where name is not missing AND age > 50"
-        query_details["partitioned_idx_name"] = "partitioned_idx1"
-        query_details["non_partitioned_idx_name"] = "non_partitioned_idx1"
-        queries.append(query_details)
+            # 2. Pagination query with equality predicate on the partition key
+            query_details = {
+                "query": f"select name, age, join_yr from {bucket.name} USE INDEX" +
+                         " ({0}) where name is not missing AND age=50 offset 0 limit 10",
+                "partitioned_idx_name": "partitioned_idx1", "non_partitioned_idx_name": "non_partitioned_idx1"}
+            queries.append(query_details)
+
+            # 3. Large aggregated query
+            query_details = {
+                "query": f"select count(name), age from {bucket.name} USE INDEX" +
+                         " ({0}) where name is not missing group by age",
+                "partitioned_idx_name": "partitioned_idx1", "non_partitioned_idx_name": "non_partitioned_idx1"}
+            queries.append(query_details)
+
+            # 4. Scan with large result sets
+            query_details = {
+                "query": f"select name, age, join_yr from {bucket.name} USE INDEX" +
+                         " ({0}) where name is not missing AND age > 50",
+                "partitioned_idx_name": "partitioned_idx1", "non_partitioned_idx_name": "non_partitioned_idx1"}
+            queries.append(query_details)
 
         failed_queries = []
         for query_details in queries:
@@ -900,12 +899,15 @@ class UpgradeSecondaryIndex(BaseSecondaryIndexingTests, NewUpgradeBaseTest):
                 query_partitioned_index = query_details["query"].format(query_details["partitioned_idx_name"])
                 query_non_partitioned_index = query_details["query"].format(query_details["non_partitioned_idx_name"])
 
-                result_partitioned_index = self.n1ql_helper.run_cbq_query(query=query_partitioned_index, server=self.n1ql_node)["results"]
-                result_non_partitioned_index = self.n1ql_helper.run_cbq_query(query=query_non_partitioned_index, server=self.n1ql_node)["results"]
+                result_partitioned_index = self.n1ql_helper.run_cbq_query(query=query_partitioned_index,
+                                                                          server=self.n1ql_node)["results"]
+                result_non_partitioned_index = self.n1ql_helper.run_cbq_query(query=query_non_partitioned_index,
+                                                                              server=self.n1ql_node)["results"]
 
                 if sorted(result_partitioned_index) != sorted(result_non_partitioned_index):
                     failed_queries.append(query_partitioned_index)
-                    log.warning("*** This query does not return same results for partitioned and non-partitioned indexes.")
+                    log.warning("*** This query does not return same results for partitioned and non-partitioned "
+                                "indexes.")
             except Exception as ex:
                 log.info(str(ex))
         msg = "Some scans did not yield the same results for partitioned index and non-partitioned indexes"

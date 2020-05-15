@@ -1048,7 +1048,7 @@ class RemoteMachineShellConnection(KeepRefs):
         file_status = False
         if self.info.type.lower() == 'windows':
             self.terminate_processes(self.info, [s for s in WIN_PROCESSES_KILLED])
-            self.terminate_processes(self.info, \
+            self.terminate_processes(self.info,
                                      [s + "-*" for s in COUCHBASE_FROM_VERSION_3])
             self.disable_firewall()
             remove_words = ["-rel", ".exe"]
@@ -2335,7 +2335,7 @@ class RemoteMachineShellConnection(KeepRefs):
             log.info("install new couchbase-release repo at node {0}" \
                                                              .format(self.ip))
             self.execute_command("rm -rf /tmp/couchbase-release*")
-            self.execute_command("cd /tmp; wget {0}".format(CB_RELEASE_APT_GET_REPO))
+            self.execute_command("cd /tmp; wget -nc {0}".format(CB_RELEASE_APT_GET_REPO))
             output, error = self.execute_command("yes | dpkg -i /tmp/couchbase-release*")
             self.log_command_output(output, error)
             output, error = self.execute_command("dpkg --get-selections |\
@@ -2372,7 +2372,7 @@ class RemoteMachineShellConnection(KeepRefs):
             log.info("install new couchbase-release repo at node {0}" \
                                                              .format(self.ip))
             self.execute_command("rm -rf /tmp/couchbase-release*")
-            self.execute_command("cd /tmp; wget {0}".format(CB_RELEASE_YUM_REPO))
+            self.execute_command("cd /tmp; wget -nc {0}".format(CB_RELEASE_YUM_REPO))
             output, error = self.execute_command("yes | rpm -i /tmp/couchbase-release*")
             self.log_command_output(output, error)
             output, error = self.execute_command("rpm -qa | grep couchbase")

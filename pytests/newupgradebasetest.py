@@ -341,22 +341,19 @@ class NewUpgradeBaseTest(QueryHelperTests, EventingBaseTest, FTSBaseTest):
         return appropriate_build
 
     def _upgrade(self, upgrade_version, server, queue=None, skip_init=False, info=None,
-                       save_upgrade_config=False, fts_query_limit=None, debug_logs=False):
+                 save_upgrade_config=False, fts_query_limit=None, debug_logs=False):
         try:
             remote = RemoteMachineShellConnection(server)
             appropriate_build = self._get_build(server, upgrade_version, remote, info=info)
             self.assertTrue(appropriate_build.url,
                             msg="unable to find build {0}".format(upgrade_version))
-            self.assertTrue(remote.download_build(appropriate_build),
-                                          "Build wasn't downloaded!")
-            o, e = remote.couchbase_upgrade(appropriate_build,\
-                                            save_upgrade_config=save_upgrade_config,\
+            self.assertTrue(remote.download_build(appropriate_build), "Build wasn't downloaded!")
+            o, e = remote.couchbase_upgrade(appropriate_build,
+                                            save_upgrade_config=save_upgrade_config,
                                             forcefully=self.is_downgrade,
                                             fts_query_limit=fts_query_limit, debug_logs=debug_logs)
             self.log.info("upgrade {0} to version {1} is completed".format(server.ip, upgrade_version))
-            """ remove this line when bug MB-11807 fixed """
-            if self.is_ubuntu:
-                remote.start_server()
+            remote.start_server()
             """ remove end here """
             if 5.0 > float(self.initial_version[:3]) and self.is_centos7:
                 remote.execute_command("systemctl daemon-reload")
