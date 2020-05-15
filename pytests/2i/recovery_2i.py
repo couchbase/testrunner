@@ -777,7 +777,7 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         data_nodes = self.get_kv_nodes()
         self.assertTrue(len(data_nodes) == 2, "This test require a cluster of 2 nodes")
         bucket_name = self.buckets[0].name
-        index_name = self.get_index_map()[bucket_name].keys()[0]
+        index_name = list(self.get_index_map()[bucket_name])[0]
         index_node = self.get_nodes_from_services_map(service_type="index",
                                                       get_all_nodes=False)
         rest = RestConnection(index_node)
@@ -861,7 +861,7 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         MB36444
         """
         bucket_name = self.buckets[0].name
-        index_name = self.get_index_map()[bucket_name].keys()[0]
+        index_name = list(self.get_index_map()[bucket_name])[0]
         data_nodes = self.get_kv_nodes()
         self.assertTrue(len(data_nodes) >= 3, "Can't run this with less than 3 KV nodes")
         # Blocking node B firewall
@@ -1054,7 +1054,7 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         MB-35663
         """
         bucket_name = self.buckets[0].name
-        index_name = self.get_index_map()[bucket_name].keys()[0]
+        index_name = list(self.get_index_map()[bucket_name])[0]
         # Blocking node B firewall
         data_nodes = self.get_kv_nodes()
         self.assertTrue(len(data_nodes) >= 3, "Can't run this with less than 3 KV nodes")
