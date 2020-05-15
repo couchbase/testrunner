@@ -1,7 +1,7 @@
 import random
 from lib.couchbase_helper.data import FIRST_NAMES, LAST_NAMES, LANGUAGES, DEPT
 
-class EmployeeQuerables:
+class EmployeeQuerables(object):
 
     def get_random_value(self, list):
         return list[random.randint(0, len(list)-1)]

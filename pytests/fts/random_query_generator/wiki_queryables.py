@@ -1,7 +1,7 @@
 import random
 from lib.couchbase_helper.wiki.en_wiki_querables import TITLES, USERNAMES, USER_IDS
 
-class WikiQuerables:
+class WikiQuerables(object):
 
     def get_random_value(self, list):
         return list[random.randint(0, len(list)-1)]

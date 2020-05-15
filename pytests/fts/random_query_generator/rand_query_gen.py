@@ -901,7 +901,7 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
 class FTSFlexQueryGenerator(FTSESQueryGenerator):
 
     def __init__(self, num_queries=1, query_type=None, seed=0, dataset="emp", fields=None):
-        super().__init__(num_queries, query_type=None, fields=None, dataset=dataset)
+        super(FTSFlexQueryGenerator, self).__init__(num_queries, query_type=None, fields=None, dataset=dataset)
         self.queries_to_generate = num_queries
         self.iterator = 0
         self.fts_flex_queries = []
