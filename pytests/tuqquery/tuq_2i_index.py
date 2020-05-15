@@ -4910,9 +4910,8 @@ class QueriesIndexTests(QueryTests):
                 if self.DGM:
                     self.get_dgm_for_plasma(indexer_nodes=[self.server], memory_quota=400)
                 for ind in range(self.num_indexes):
-                    index_name = "coveringindex{0}" % ind
-                    self.query = "CREATE INDEX {0} ON {1}(name, join_day)  USING {2}".format(
-                        index_name, query_bucket, self.index_type)
+                    index_name = "coveringindex{0}".format(ind)
+                    self.query = "CREATE INDEX {0} ON {1}(name, join_day)  USING {2}".format(index_name, query_bucket, self.index_type)
                     self.run_cbq_query()
                     self._wait_for_index_online(bucket, index_name)
                     created_indexes.append(index_name)
