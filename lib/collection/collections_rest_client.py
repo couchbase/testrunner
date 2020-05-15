@@ -19,23 +19,45 @@ class Collections_Rest(object):
         self.rest.delete_collection(bucket, scope, collection)
 
     def delete_scope(self, scope, bucket="default"):
-        self.rest.delete_scope(bucket, scope)
+        return self.rest.delete_scope(bucket, scope)
 
+    # Create collection in scope
+    # scope: scope name
+    # collection: collection name
+    # bucket: bucket name
+    # params: collection parameters (eg: expiry)
     def create_scope_collection(self, bucket, scope, collection, params=None):
-        self.create_scope(bucket, scope)
-        self.create_collection(bucket, scope, collection, params)
+        if self.create_scope(bucket, scope):
+            if self.create_collection(bucket, scope, collection, params):
+                return True
+        return False
+
+    # Create n scopes and collections
+    # scope_num: Number of scopes
+    # collection_num: Number of collections per scope
+    # scope_prefix: Scope name, will be appended with "_count"
+    # collection_prefix: Collection name, will be appended with "_count"
+    # bucket: bucket name
+    # params: collection parameters (eg: expiry)
+    def create_scope_collection_count(self, scope_num, collection_num,
+                                      scope_prefix="scope", collection_prefix="collection",
+                                      bucket="default", params=None):
+        try:
+            for s in range(1, scope_num):
+                scope = scope_prefix + '_' + str(s)
+                self.create_scope(bucket, scope)
+                for c in range(1, collection_num):
+                    self.create_collection(bucket, scope, collection_prefix + '_' + str(c), params)
+        except Exception as e:
+            self.log.error(e.message())
+            return False
+        return True
 
     def delete_scope_collection(self, bucket, scope, collection):
-        self.rest.delete_collection(bucket, scope, collection)
-        self.delete_scope(bucket, scope)
-
-    # we already have create_scope_collection() function
-    #def create_scope_collection(self, scope_num, collection_num, bucket="default"):
-    #    for s in range(1, scope_num):
-    #        scope = "scope_" + str(s)
-    #        self.create_scope(bucket, scope)
-    #        for c in range(1, collection_num):
-    #            self.create_collection(bucket, scope, "collection_" + str(c))
+        if self.rest.delete_collection(bucket, scope, collection):
+            if self.delete_scope(bucket, scope):
+                return True
+        return False
 
     class CollectionFactory(threading.Thread):
         def __init__(self, bucket, scope, collection, rest):

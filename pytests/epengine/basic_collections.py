@@ -4,12 +4,14 @@ from couchbase_helper.documentgenerator import BlobGenerator
 from mc_bin_client import MemcachedError, MemcachedClient
 from collection.collections_rest_client import Collections_Rest
 from collection.collections_cli_client import Collections_CLI
+from collection.collections_stats import Collections_Stats
 
 from TestInput import TestInputSingleton, TestInputServer
 from membase.api.rest_client import RestConnection
 from couchbase_helper.cluster import Cluster
 import logger
 import time
+import re
 
 from lib.couchbase_helper.documentgenerator import SDKDataLoader
 
@@ -27,13 +29,14 @@ class basic_collections(BaseTestCase):
         self.master = self.servers[0]
         self.use_rest = self.input.param("use_rest", True)
         self.use_cli = self.input.param("use_cli", False)
-        self.num_items = self.input.param("items", 100000)
+        self.num_items = self.input.param("items", 1000)
         self.value_size = self.input.param("value_size", 512)
         self.rest = Collections_Rest(self.master)
         self.cli = Collections_CLI(self.master)
         #self.cli.enable_dp()
         self.conn = RestConnection(self.master)
-        #self.conn.delete_all_buckets()
+        self.stat = Collections_Stats(self.master)
+        self.conn.delete_all_buckets()
         time.sleep(5)
         try:
             self.conn.create_bucket(bucket=self.default_bucket_name,
@@ -44,8 +47,7 @@ class basic_collections(BaseTestCase):
         time.sleep(5)
 
     def tearDown(self):
-        pass
-        #self.conn.delete_all_buckets()
+        self.conn.delete_all_buckets()
 
     def suite_tearDown(self):
         pass
@@ -53,7 +55,7 @@ class basic_collections(BaseTestCase):
     def test_valid_scope_name(self):
         # epengine.basic_collections.basic_collections.test_valid_scope_name
         # bucket is created, create scope with valid and invalid names
-        valid_scope_names = ["MYSCPOE", "MY_SCOPE", "MY-Scope_27%", "Scope_With-Largename_81%Scope%abcdef1234",
+        valid_scope_names = ["MY_SCOPE", "MYSCOPE", "Scope__With--Exactly__30--Char", "Scope_With-Less_Than-30_Chars",
                              "8a", "A", "a", "aaa9999%"]
         for name in valid_scope_names:
             if self.use_rest:
@@ -69,7 +71,7 @@ class basic_collections(BaseTestCase):
                 self.fail("Scope creation failed, name={}".format(name))
 
     def test_invalid_scope_name(self):
-        invalid_scope_names = ["$scope", "%scope", "_myscope", "{scope", "s{[]/,.", "scope!@#^&*()", "!SCOPE"]
+        invalid_scope_names = ["$scope", "%scope", "_myscope", "{scope", "s{[]/,.", "scope!@#^&*()", "!SCOPE", "Scope_With-Largename_81%Scope%abcdef1234"]
         for name in invalid_scope_names:
             try:
                 if self.use_rest:
@@ -191,6 +193,8 @@ class basic_collections(BaseTestCase):
         load = time.time()
         self.log.info("Done loading {} collections in bucket {} in {}s"
                       .format(self.collection_num, self.bucket_name, round(load - create)))
+        for bkt in self.buckets:
+            print(self.stat.get_collection_stats(bkt))
 
     def test_load_collections_in_scope(self):
         pass
@@ -230,3 +234,9 @@ class basic_collections(BaseTestCase):
 
         except MemcachedError as exp:
             self.fail("Exception with setting and getting the key in collections {0}".format(exp))
+
+    def test_collection_doc_count(self):
+        self.test_load_collections_in_bucket()
+        self.buckets = self.conn.get_buckets()
+        for bkt in self.buckets:
+            print(self.stat.get_collection_stats(bkt))

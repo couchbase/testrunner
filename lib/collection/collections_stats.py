@@ -1,9 +1,8 @@
 from lib.remote.remote_util import RemoteMachineShellConnection
-import lib.logger
+
 
 class Collections_Stats(object):
     def __init__(self, node):
-        self.log = lib.logger.Logger.get_logger()
         self.shell = RemoteMachineShellConnection(node)
 
     def get_collection_stats(self, bucket):

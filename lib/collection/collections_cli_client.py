@@ -7,24 +7,48 @@ class Collections_CLI(object):
         self.cli = CouchbaseCLI(node)
 
     def create_collection(self, bucket="default", scope="scope0", collection="mycollection0"):
-        return self.cli.create_collection(bucket, scope, collection)
+        status, content, success = self.cli.create_collection(bucket, scope, collection)
+        if success:
+            self.log.info("Collection created {}->{}->{}".format(bucket, scope, collection))
+        else:
+            raise Exception("Create collection failed : status:{0},content:{1}".format(status, content))
+        return success
 
     def create_scope(self, bucket="default", scope="scope0"):
-        return self.cli.create_scope(bucket, scope)
+        status, content, success = self.cli.create_scope(bucket, scope)
+        if success:
+            self.log.info("Scope created {}->{}".format(bucket, scope))
+        else:
+            raise Exception("Create scope failed : status:{0},content:{1}".format(status, content))
+        return success
 
     def delete_collection(self, bucket="default", scope='_default', collection='_default'):
-        return self.cli.delete_collection(bucket, scope, collection)
+        status, content, success = self.cli.delete_collection(bucket, scope, collection)
+        if success:
+            self.log.info("Collection dropped {}->{}->{}".format(bucket, scope, collection))
+        else:
+            raise Exception("Drop collection failed : status:{0},content:{1}".format(status, content))
+        return success
 
     def delete_scope(self, scope, bucket="default"):
-        return self.cli.delete_scope(bucket, scope)
+        status, content, success = self.cli.delete_scope(bucket, scope)
+        if success:
+            self.log.info("Scope dropped {}->{}".format(bucket, scope))
+        else:
+            raise Exception("Drop scope failed : status:{0},content:{1}".format(status, content))
+        return success
 
     def create_scope_collection(self, bucket, scope, collection):
-        self.cli.create_scope(bucket, scope)
-        return self.cli.create_collection(bucket, scope, collection)
+        if self.cli.create_scope(bucket, scope):
+            if self.cli.create_collection(bucket, scope, collection):
+                return True
+        return False
 
     def delete_scope_collection(self, bucket, scope, collection):
-        self.cli.delete_collection(bucket, scope, collection)
-        self.cli.delete_scope(bucket, scope)
+        if self.cli.delete_collection(bucket, scope, collection):
+            if self.cli.delete_scope(bucket, scope):
+                return True
+        return False
 
     def get_bucket_scopes(self, bucket):
         return self.cli.get_bucket_scopes(bucket)

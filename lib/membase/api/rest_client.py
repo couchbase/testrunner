@@ -595,7 +595,7 @@ class RestConnection(object):
             raise Exception("unable to get random document/key for bucket %s" % (bucket))
         return json_parsed
 
-    def create_scope(self, bucket, scope, params):
+    def create_scope(self, bucket, scope, params=None):
         api = self.baseUrl + 'pools/default/buckets/%s/collections' % (bucket)
         body = {'name': scope}
         if params:
@@ -604,15 +604,12 @@ class RestConnection(object):
         headers = self._create_headers()
         status, content, header = self._http_request(api, 'POST', params=params, headers=headers)
         log.info("{0} with params: {1}".format(api, params))
-        error_message = "Scope with this name already exists"
-        if not status and error_message in str(content):
-            status = True
-            log.info("Scope {} already exists, moving on".format(scope))
         if status:
             json_parsed = json.loads(content)
             log.info("Scope created {}->{} {}".format(bucket, scope, json_parsed))
         else:
             raise Exception("Create scope failed : status:{0},content:{1}".format(status, content))
+        return status
 
     def create_collection(self, bucket, scope, collection, params=None):
         api = self.baseUrl + 'pools/default/buckets/%s/collections/%s' % (bucket, scope)
@@ -628,6 +625,7 @@ class RestConnection(object):
             log.info("Collection created {}->{}->{} manifest:{}".format(bucket, scope, collection, json_parsed))
         else:
             raise Exception("Create collection failed : status:{0},content:{1}".format(status, content))
+        return status
 
     def _parse_manifest(self, bucket, extract=None):
         if isinstance(bucket, Bucket):
