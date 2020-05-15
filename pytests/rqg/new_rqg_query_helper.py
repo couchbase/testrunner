@@ -924,9 +924,9 @@ class RQGQueryHelperNew(BaseRQGQueryHelper):
                 query_map['indexes'][key]['definition'] = query_map['indexes'][key]['definition'].replace("simple_table", database + "_" + "simple_table")
         return query_map
 
-    def _random_sample(self, list):
-        size_of_sample = random.choice(list(range(1, len(list) + 1)))
-        random_sample = [list[i] for i in random.sample(range(len(list)), size_of_sample)]
+    def _random_sample(self, sample_list):
+        size_of_sample = random.choice(list(range(1, len(sample_list) + 1)))
+        random_sample = [list[i] for i in random.sample(range(len(sample_list)), size_of_sample)]
         return random_sample
 
     def _random_constant(self, field=None):

@@ -474,6 +474,11 @@ class N1QLHelper():
         sql_result = self._gen_dict_n1ql_func_result(sql_result)
         if len(sql_result) == 0 and len(n1ql_result) == 0:
             return
+        i = 0
+        for result in n1ql_result:
+            if ".0" in str(result):
+                n1ql_result[i] = int(result)
+            i = i + 1
         diffs = DeepDiff(n1ql_result, sql_result, ignore_order=True)
         if diffs:
             self.log.info("-->actual vs expected diffs found:{0}".format(diffs))
