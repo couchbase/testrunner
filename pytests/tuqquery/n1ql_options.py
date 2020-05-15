@@ -12,13 +12,13 @@ class OptionsTests(QueryTests):
 
     def tearDown(self):
         super(OptionsTests, self).tearDown()
-        if hasattr(self, 'shell'):
-            o = self.shell.execute_command("ps -aef| grep cbq-engine")
-            if len(o):
-                for cbq_engine in o[0]:
-                    if cbq_engine.find('grep') == -1:
-                        pid = [item for item in cbq_engine.split(' ') if item][1]
-                        self.shell.execute_command("kill -9 %s" % pid)
+        #if hasattr(self, 'shell'):
+        #    o = self.shell.execute_command("ps -aef| grep cbq-engine")
+        #    if len(o):
+        #        for cbq_engine in o[0]:
+        #            if cbq_engine.find('grep') == -1:
+        #                pid = [item for item in cbq_engine.split(' ') if item][1]
+        #                self.shell.execute_command("kill -9 %s" % pid)
 
     def suite_tearDown(self):
         super(OptionsTests, self).suite_tearDown()

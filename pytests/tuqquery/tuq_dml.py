@@ -12,17 +12,17 @@ class DMLQueryTests(QueryTests):
         self.directory = self.input.param("directory", "/tmp/tuq_data")
         self.named_prepare = self.input.param("named_prepare", None)
         # Temp process shutdown to debug MB-16888
-        self.log.info("-" * 100)
-        self.log.info(self.shell.execute_command("ps aux | grep cbq"))
-        self.log.info(self.shell.execute_command("ps aux | grep indexer"))
-        for bucket in self.buckets:
-            self.cluster.bucket_flush(self.master, bucket=bucket,
-                                      timeout=self.wait_timeout * 5)
-        self.shell.execute_command("killall -9 cbq-engine")
-        self.shell.execute_command("killall -9 indexer")
-        self.sleep(60, 'wait for indexer')
-        self.log.info(self.shell.execute_command("ps aux | grep indexer"))
-        self.log.info(self.shell.execute_command("ps aux | grep cbq"))
+        #self.log.info("-" * 100)
+        #self.log.info(self.shell.execute_command("ps aux | grep cbq"))
+        #self.log.info(self.shell.execute_command("ps aux | grep indexer"))
+        #for bucket in self.buckets:
+        #    self.cluster.bucket_flush(self.master, bucket=bucket,
+        #                              timeout=self.wait_timeout * 5)
+        #self.shell.execute_command("killall -9 cbq-engine")
+        #self.shell.execute_command("killall -9 indexer")
+        #self.sleep(60, 'wait for indexer')
+        #self.log.info(self.shell.execute_command("ps aux | grep indexer"))
+        #self.log.info(self.shell.execute_command("ps aux | grep cbq"))
         self.query_buckets = self.get_query_buckets(check_all_buckets=True)
         if len(self.query_buckets) > 1:
             self.bucket0 = self.query_buckets[0]
