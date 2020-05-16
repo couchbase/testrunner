@@ -14,6 +14,7 @@ import traceback
 import collections
 from couchbase_helper.documentgenerator import JsonDocGenerator
 from couchbase_helper.documentgenerator import WikiJSONGenerator
+from couchbase_helper.documentgenerator import NapaDataLoader
 from subprocess import Popen, PIPE
 from remote.remote_util import RemoteMachineShellConnection
 from couchbase_helper.tuq_generators import JsonGenerator
@@ -300,6 +301,21 @@ class QueryTests(BaseTestCase):
 
         if end > 0:
             self._kv_gen = JsonDocGenerator("emp_",
+                                            encoding="utf-8",
+                                            start=start,
+                                            end=end)
+            gen = copy.deepcopy(self._kv_gen)
+
+            self._load_bucket(self.buckets[0], self.servers[0], gen, op_type,
+                              expiration)
+
+    def _load_napa_dataset(self, op_type="create", expiration=0, start=0,
+                          end=1000):
+        # Load Emp Dataset
+        self.cluster.bucket_flush(self.master)
+
+        if end > 0:
+            self._kv_gen = NapaDataLoader("napa_",
                                             encoding="utf-8",
                                             start=start,
                                             end=end)
