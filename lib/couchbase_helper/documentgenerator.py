@@ -6,7 +6,7 @@ from string import ascii_uppercase
 from string import ascii_lowercase
 from string import digits
 import gzip
-from testconstants import DEWIKI, ENWIKI, ESWIKI, FRWIKI
+from testconstants import DEWIKI, ENWIKI, ESWIKI, FRWIKI, NAPADATASET
 from data import FIRST_NAMES, LAST_NAMES, DEPT, LANGUAGES
 
 class KVGenerator(object):
@@ -611,4 +611,154 @@ class GeoSpatialDataLoader(KVGenerator):
             pass
         self.itr += 1
         return self.name+str(self.itr),\
+               json.dumps(doc, indent=3).encode(self.encoding, "ignore")
+
+class NapaDataLoader(KVGenerator):
+
+    def __init__(self, name, encoding="utf-8", op_type="create",
+                 *args, **kwargs):
+
+        """Napa doc loader
+
+        gen = NapaDataLoader(prefix,"encoding="utf-8",
+                                start=0,end=1000)
+        Args:
+            prefix: prefix for key
+            encoding: utf-8/ascii/utf-16 encoding of JSON doc
+            *args: A list for each argument in the template
+            *kwargs: Special constrains for the document generator
+
+
+        Sample napa doc:
+
+        {
+          "_id": "1019_ycsb",
+          "doc_id": 1019,
+          "gid": "f9d57c4b-b6f6-5ef6-9c77-e4e2a1e3e823",
+          "index": 1,
+          "routing_number": 15073,
+          "company_name": "Wisozk, Casper and Moore",
+          "company_code": "HOF44",
+          "first_name": "Kaden",
+          "middle_name": "Terry",
+          "last_name": "Monahan",
+          "age": 41,
+          "ballance_current": "$8166.76",
+          "ballance_average": "$2294.65",
+          "picture": "https://www.gravatar.com/avatar/cc8a0fed5b51679b0f96044c6b41d0bd",
+          "phone": "(748) 317-8602",
+          "dob": "2020-02-15",
+          "email": "Larue_Labadie@hotmail.com",
+          "isActive": false,
+          "address": {
+            "street": "7826 Schinner Forges Port",
+            "city": "West Merlinstad",
+            "zip": "04380",
+            "country": "Germany",
+            "applicationId": 12,
+            "deviceTypeId": 9,
+            "deviceStatus": 0,
+            "ecpdId": "3",
+            "activationDate": "2020-04-18T18:36:40.752Z"
+          },
+          "devices": [
+            "504062-023",
+            "504798-457",
+            "521716-476",
+            "861229-804"
+          ],
+          "children": [
+            {
+              "first_name": "Titus",
+              "gender": null,
+              "age": 9
+            },
+            {
+              "first_name": "Meta",
+              "gender": "M",
+              "age": 10
+            },
+            {
+              "first_name": "Emmanuelle",
+              "gender": "F",
+              "age": 11
+            },
+            {
+              "first_name": "Hope",
+              "gender": "M",
+              "age": 13
+            },
+            {
+              "first_name": "Monserrat",
+              "gender": "M",
+              "age": 7
+            }
+          ]
+        }
+
+
+        """
+
+        self.args = args
+        self.name = name
+        self.gen_docs = {}
+        self.encoding = encoding
+
+        size = 0
+        if not len(self.args) == 0:
+            size = 1
+            for arg in self.args:
+                size *= len(arg)
+
+        KVGenerator.__init__(self, name, 0, size)
+        random.seed(0)
+
+        if 'start' in kwargs:
+            self.start = int(kwargs['start'])
+            self.itr = int(kwargs['start'])
+        if 'end' in kwargs:
+            self.end = int(kwargs['end'])
+
+        if op_type == "create":
+            self.read_from_napa_dump()
+        elif op_type == "delete":
+            # for deletes, just keep/return empty docs with just type field
+            for count in range(self.start, self.end):
+                self.gen_docs[count] = {'type': 'napa'}
+
+    def read_from_napa_dump(self):
+        count = 0
+        done = False
+        while not done:
+            try:
+                with gzip.open("lib/couchbase_helper/napa/napa_dataset.txt.gz", "r") as f:
+                    for doc in f:
+                        self.gen_docs[count] = doc
+                        if count >= self.end:
+                            f.close()
+                            done = True
+                            break
+                        count += 1
+                    f.close()
+            except IOError:
+                print("Unable to find file lib/couchbase_helper/napa/"
+                       "napa_dataset.txt.gz. Downloading from {0}...".format(NAPADATASET))
+                import urllib
+                urllib.URLopener().retrieve(
+                    NAPADATASET,
+                    "lib/couchbase_helper/napa/napa_dataset.txt.gz")
+                print("Download complete!")
+
+    def __next__(self):
+        if self.itr >= self.end:
+            raise StopIteration
+        doc = {}
+        try:
+            doc = eval(self.gen_docs[self.itr])
+        except TypeError:
+            # happens with 'delete' gen
+            pass
+        doc['type'] = 'napa'
+        self.itr += 1
+        return self.name+str(10000+self.itr), \
                json.dumps(doc, indent=3).encode(self.encoding, "ignore")

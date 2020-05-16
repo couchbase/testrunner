@@ -25,9 +25,9 @@ class WikiQuerables(object):
         """
         delimit = int(len(TITLES)/2)
         if min:
-            return self.return_unicode(self.get_random_value(sorted(TITLES)[:delimit])).encode('utf-8')
+            return self.return_unicode(self.get_random_value(sorted(TITLES)[:delimit]))
         else:
-            return self.return_unicode(self.get_random_value(sorted(TITLES)[delimit:])).encode('utf-8')
+            return self.return_unicode(self.get_random_value(sorted(TITLES)[delimit:]))
 
     def get_queryable_revision_text_text_range(self, min=True):
         """

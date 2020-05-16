@@ -1006,29 +1006,29 @@ class FTSFlexQueryGenerator(FTSESQueryGenerator):
         flex_query_predicate_list = []
 
         fieldname = self.get_random_value(self.fields['str'])
-        str1 = eval("self.get_queryable_%s_range" % fieldname + "()")
-        str2 = eval("self.get_queryable_%s_range" % fieldname + "(min=False)")
+        str1 = eval("self.get_queryable_%s_range" % fieldname + "()").encode('utf-8')
+        str2 = eval("self.get_queryable_%s_range" % fieldname + "(min=False)").encode('utf-8')
 
         flex_query_predicate = "( {0} > \"{1}\" and {0} < \"{2}\")".format(fieldname, str1, str2)
         flex_query_predicate_list.append(flex_query_predicate)
 
         fieldname = self.get_random_value(self.fields['str'])
-        str1 = eval("self.get_queryable_%s_range" % fieldname + "()")
-        str2 = eval("self.get_queryable_%s_range" % fieldname + "(min=False)")
+        str1 = eval("self.get_queryable_%s_range" % fieldname + "()").encode('utf-8')
+        str2 = eval("self.get_queryable_%s_range" % fieldname + "(min=False)").encode('utf-8')
 
         flex_query_predicate = "( {0} >= \"{1}\" and {0} <= \"{2}\")".format(fieldname, str1, str2)
         flex_query_predicate_list.append(flex_query_predicate)
 
         fieldname = self.get_random_value(self.fields['str'])
-        str1 = eval("self.get_queryable_%s_range" % fieldname + "()")
-        str2 = eval("self.get_queryable_%s_range" % fieldname + "(min=False)")
+        str1 = eval("self.get_queryable_%s_range" % fieldname + "()").encode('utf-8')
+        str2 = eval("self.get_queryable_%s_range" % fieldname + "(min=False)").encode('utf-8')
 
         flex_query_predicate = "( {0} >= \"{1}\" and {0} < \"{2}\")".format(fieldname, str1, str2)
         flex_query_predicate_list.append(flex_query_predicate)
 
         fieldname = self.get_random_value(self.fields['str'])
-        str1 = eval("self.get_queryable_%s_range" % fieldname + "()")
-        str2 = eval("self.get_queryable_%s_range" % fieldname + "(min=False)")
+        str1 = eval("self.get_queryable_%s_range" % fieldname + "()").encode('utf-8')
+        str2 = eval("self.get_queryable_%s_range" % fieldname + "(min=False)").encode('utf-8')
 
         flex_query_predicate = "( {0} > \"{1}\" and {0} <= \"{2}\")".format(fieldname, str1, str2)
         flex_query_predicate_list.append(flex_query_predicate)
@@ -1039,7 +1039,7 @@ class FTSFlexQueryGenerator(FTSESQueryGenerator):
         flex_query_predicate_list = []
         for x in range(5):
             fieldname = self.get_random_value(self.fields['str'])
-            match_str = eval("self.get_queryable_%s()" % fieldname)
+            match_str = eval("self.get_queryable_%s()" % fieldname).encode('utf-8')
             flex_query_predicate = "( {0} = \"{1}\")".format(fieldname, match_str)
             flex_query_predicate_list.append(flex_query_predicate)
 
@@ -1050,8 +1050,8 @@ class FTSFlexQueryGenerator(FTSESQueryGenerator):
 
         for x in range(5):
             fieldname = self.get_random_value(self.fields['str'])
-            str1 = eval("self.get_queryable_%s_range" % fieldname + "()")
-            str2 = eval("self.get_queryable_%s_range" % fieldname + "(min=False)")
+            str1 = eval("self.get_queryable_%s_range" % fieldname + "()").encode('utf-8')
+            str2 = eval("self.get_queryable_%s_range" % fieldname + "(min=False)").encode('utf-8')
             flex_query_predicate = "( {0} between \"{1}\" and \"{2}\")".format(fieldname, str1, str2)
             flex_query_predicate_list.append(flex_query_predicate)
 
@@ -1062,7 +1062,7 @@ class FTSFlexQueryGenerator(FTSESQueryGenerator):
 
         for x in range(5):
             fieldname = self.get_random_value(self.fields['str'])
-            match_str = eval("self.get_queryable_%s()" % fieldname)
+            match_str = eval("self.get_queryable_%s()" % fieldname).encode('utf-8')
             # due to bug# MB-38690
             if fieldname == "email":
                 pos = random.randint(1, len(match_str) - 5)

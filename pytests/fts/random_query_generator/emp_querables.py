@@ -27,9 +27,11 @@ class EmployeeQuerables(object):
         """
         delimit = int(len(FIRST_NAMES)/2)
         if min:
-            return "%s %s" %(self.get_random_value(sorted(FIRST_NAMES)[:delimit]), self.get_random_value(LAST_NAMES))
+            return self.return_unicode("%s %s" %(self.get_random_value(sorted(FIRST_NAMES)[:delimit]),
+                                                 self.get_random_value(LAST_NAMES)))
         else:
-            return "%s %s" %(self.get_random_value(sorted(FIRST_NAMES)[delimit:]), self.get_random_value(LAST_NAMES))
+            return self.return_unicode("%s %s" %(self.get_random_value(sorted(FIRST_NAMES)[delimit:]),
+                                                 self.get_random_value(LAST_NAMES)))
 
     def return_unicode(self, text):
         try:

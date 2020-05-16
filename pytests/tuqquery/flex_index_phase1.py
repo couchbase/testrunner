@@ -3,7 +3,6 @@ from pytests.fts.random_query_generator.rand_query_gen import DATASET
 from collections import Mapping, Sequence, Set, deque
 import json
 
-
 class FlexIndexTests(QueryTests):
 
     users = {}
@@ -57,9 +56,15 @@ class FlexIndexTests(QueryTests):
             return False
 
         if len(flex_result) != len(gsi_result):
+            self.log.info("length of results of GSI and Flex query differs, GSI query results : {0}, "
+                          "Flex query results : {1}", len(gsi_result), len(flex_result))
             return False
-        else:
-            return True
+
+        if sorted(flex_result) != sorted(gsi_result):
+            self.log.info("Sort of results of GSI and Flex query differs")
+            return False
+
+        return True
 
     def get_gsi_fields_partial_sargability(self):
         fts_fields = self.query_gen.fields
@@ -132,6 +137,44 @@ class FlexIndexTests(QueryTests):
                     expected_indexes.append(index)
 
         return list(set(expected_indexes))
+
+    def run_query_and_validate(self, query_list):
+        failed_to_run_query = []
+        not_found_index_in_response = []
+        result_mismatch = []
+        iteration = 1
+
+        for query in query_list:
+            query_num = iteration
+            iteration += 1
+            self.log.info("======== Running Query # {0} =======".format(query_num))
+            flex_query = query.format("USE INDEX (USING FTS, USING GSI)")
+            gsi_query = query.format("")
+            explain_query = "explain " + flex_query
+            self.log.info("Query : {0}".format(explain_query))
+            try:
+                result = self.run_cbq_query(explain_query)
+            except Exception as e:
+                self.log.info("Failed to run query")
+                self.log.error(e)
+                failed_to_run_query.append(query_num)
+                continue
+            try:
+                self.assertTrue(self.check_if_expected_index_exist(result, ["default_index"]))
+            except Exception as e:
+                self.log.info("Failed to find fts index name in plan query")
+                self.log.error(e)
+                not_found_index_in_response.append(query_num)
+                continue
+
+            if not self.compare_results_with_gsi(flex_query, gsi_query):
+                self.log.error("Result mismatch found")
+                result_mismatch.append(query_num)
+
+            self.log.info("======== Done =======")
+
+        return failed_to_run_query, not_found_index_in_response, result_mismatch
+
 
     def run_queries_and_validate(self):
         iteration = 1
@@ -264,7 +307,6 @@ class FlexIndexTests(QueryTests):
         else:
             self.log.info("All {0} queries passed".format(len(self.query_gen.fts_flex_queries)))
 
-
     def test_flex_default_typemapping(self):
 
         self._load_emp_dataset(end=self.num_items/2)
@@ -367,4 +409,53 @@ class FlexIndexTests(QueryTests):
         else:
             self.log.info("All {0} queries passed".format(len(self.query_gen.fts_flex_queries)))
 
+    def test_flex_with_napa_dataset(self):
 
+        self._load_napa_dataset(end=self.num_items)
+
+        fts_index = self.create_fts_index(
+            name="default_index", source_name=self.bucket_name, doc_count=self.num_items)
+        if not self.is_index_present("default", "primary_gsi_index"):
+            self.run_cbq_query("create primary index primary_gsi_index on default")
+
+        query_list = ['SELECT META().id FROM `default` {0} WHERE address.ecpdId="1" ORDER BY META().id LIMIT 100',
+                      'SELECT META().id, email FROM `default` {0} WHERE address.ecpdId="3" OR address.applicationId=300'
+                      ' ORDER BY email LIMIT 10',
+                      'SELECT META().id, address.applicationId FROM `default` {0} WHERE address.ecpdId="3" AND'
+                      ' address.deviceTypeId=9 ORDER BY address.applicationId LIMIT 100',
+                      'SELECT META().id FROM `default` {0} WHERE (address.ecpdId="3" OR address.applicationId=300) AND '
+                      '(address.deviceTypeId=9 OR address.deviceStatus=0) LIMIT 100',
+                      'SELECT META().id, address.applicationId FROM `default` {0} WHERE address.applicationId = 1 AND '
+                      'address.deviceTypeId=9 AND address.deviceStatus=0 ORDER BY address.applicationId LIMIT 100',
+                      'SELECT META().id FROM `default` {0} WHERE address.deviceTypeId=9 AND address.deviceStatus=0'
+                      ' LIMIT 100',
+                      'SELECT META().id FROM `default` {0} WHERE address.deviceStatus=0 LIMIT 100',
+                      'SELECT META().id, address.activationDate FROM `default` {0} WHERE address.ecpdId="1" ORDER BY'
+                      ' address.activationDate LIMIT 100',
+                      'SELECT META().id FROM default {0} WHERE ( ( ( ( ( email LIKE "A%") OR '
+                      '( ANY v IN devices SATISFIES v LIKE "2%" END)) OR '
+                      '( first_name > "Karianne" AND first_name <= "Qarianne")) OR ( routing_number = 12160)) OR '
+                      '( address.activationDate BETWEEN "1995-10-10T21:22:00" AND "2020-05-09T20:08:02.462692")) '
+                      'ORDER BY address.city LIMIT 100',
+                      'SELECT META().id, company_name FROM default {0} WHERE (( email = "Aaron.Jaskolski18@yahoo.com") '
+                      'AND ( ANY v IN children SATISFIES v.first_name = "Raven" END)) OR '
+                      '(( company_code > "IMWW" AND company_code <= "D3IHO") AND ( routing_number = 67473) OR '
+                      '( address.activationDate BETWEEN "2019-10-10T21:22:00" AND "2020-05-09T20:08:02.462692")) '
+                      'ORDER BY address.activationDate OFFSET 500 LIMIT 100',
+                      'SELECT first_name, last_name, email FROM default {0} WHERE '
+                      '( ( SOME v IN children SATISFIES v.first_name LIKE "R%" END) AND '
+                      '( age > 20 AND age < 40)) OR '
+                      '(( dob BETWEEN "1994-12-08T01:19:00" AND "2020-05-09T20:08:02.469127") AND isActive = FALSE) '
+                      'OR (address.deviceTypeId > 3 AND ISNUMBER(address.deviceTypeId)) '
+                      'ORDER BY address.activationDate OFFSET 500 LIMIT 100',
+                      'SELECT first_name, last_name, email, address.country FROM default {0} WHERE '
+                      'ANY c IN children SATISFIES c.gender = "F" AND (c.age > 5 AND c.age <15) '
+                      'OR c.first_name LIKE "a%" END ORDER BY address.country OFFSET 500 LIMIT 100']
+
+        failed_to_run_query, not_found_index_in_response, result_mismatch = self.run_query_and_validate(query_list)
+        if failed_to_run_query or not_found_index_in_response or result_mismatch:
+            self.fail("Found queries not runnable: {0} or required index not found in the query resonse: {1} "
+                      "or flex query and gsi query results not matching: {2}"
+                      .format(failed_to_run_query, not_found_index_in_response, result_mismatch))
+        else:
+            self.log.info("All {0} queries passed".format(len(query_list)))
