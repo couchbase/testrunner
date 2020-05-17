@@ -143,17 +143,25 @@ class RQGPostgresClient(PostgresClient):
     def _convert_to_mysql_json_compatible_val(self, value, type):
         if "16" == str(type): # boolean
             return value
-        if "1700" == str(type): # numeric
+        if str(type) in ["1700", "701", "23", "20"]: # numeric
             if value is None:
                 return None
             else:
                 if "." in str(value):
-                    return float(str(value))
+                    right_part = str(value).split(".")[1]
+                    while len(right_part) > 1:
+                        if right_part[len(right_part)-1:] == "0":
+                            right_part = right_part[:len(right_part)-1]
+                        else:
+                            break
+                    if right_part == "0":
+                        return int(str(str(value).split(".")[0]))
+                    return float(str(str(value).split(".")[0]+"."+right_part))
                 else:
                     try:
                         return int(str(value))
                     except ValueError as e:
-                        print(("####### INVALID NUMBER ::"+str(value)+":: "))
+                        print(("####### INVALID NUMBER ::" + str(value) + ":: "))
         if "1114" == str(type): # datetime
             return str(value)
 

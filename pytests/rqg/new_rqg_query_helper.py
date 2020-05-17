@@ -1301,13 +1301,13 @@ class RQGQueryHelperNew(BaseRQGQueryHelper):
         if 'WINDOW_ORDER_START' in sql:
             sql_map['window_order'] = sql[sql.find('WINDOW_ORDER_START')+len('WINDOW_ORDER_START'):sql.find('WINDOW_ORDER_END')]
             if sql_map['window_function_name'].strip() in ['RANK', 'DENSE_RANK', 'PERCENT_RANK', 'CUME_DIST', 'LAG', 'NTILE', 'LEAD'] and sql_map['window_order'].strip() == '':
-                sql_map['window_order'] = ' ORDER BY DECIMAL_FIELD1 '
+                sql_map['window_order'] = ' ORDER BY DECIMAL_FIELD1, CHAR_FIELD1 '
 
             n1ql_map['window_order'] = sql[sql.find('WINDOW_ORDER_START') + len('WINDOW_ORDER_START'):sql.find(
                 'WINDOW_ORDER_END')]
             if n1ql_map['window_function_name'].strip() in ['RANK', 'DENSE_RANK', 'PERCENT_RANK', 'CUME_DIST', 'LAG',
                                                            'NTILE', 'LEAD'] and n1ql_map['window_order'].strip() == '':
-                n1ql_map['window_order'] = ' ORDER BY DECIMAL_FIELD1 '
+                n1ql_map['window_order'] = ' ORDER BY DECIMAL_FIELD1, CHAR_FIELD1 '
 
         if 'WINDOW_FRAME_START' in sql:
             sql_map['window_frame'] = sql[sql.find('WINDOW_FRAME_START')+len('WINDOW_FRAME_START'):sql.find('WINDOW_FRAME_END')]
@@ -1315,14 +1315,14 @@ class RQGQueryHelperNew(BaseRQGQueryHelper):
                 sql_map['window_frame'] = ''
             if sql_map['window_function_name'].strip() in ['FIRST_VALUE', 'LAST_VALUE', 'NTH_VALUE', 'ARRAY_AGG', 'VAR_POP', 'VAR_SAMP', 'AVG', 'STDDEV_POP', 'MIN',
                                                            'STDDEV_SAMP', 'COUNT', 'COUNTN', 'STDDEV', 'MAX', 'VARIANCE', 'MEAN', 'SUM'] and sql_map['window_order'].strip() == '':
-                sql_map['window_order'] = ' ORDER BY DECIMAL_FIELD1 '
+                sql_map['window_order'] = ' ORDER BY DECIMAL_FIELD1, CHAR_FIELD1 '
 
             n1ql_map['window_frame'] = sql[sql.find('WINDOW_FRAME_START')+len('WINDOW_FRAME_START'):sql.find('WINDOW_FRAME_END')]
             if n1ql_map['window_function_name'].strip() in ['ROW_NUMBER', 'LEAD', 'CUME_DIST', 'LAG', 'PERCENT_RANK', 'DENSE_RANK', 'NTILE', 'RANK']:
                 n1ql_map['window_frame'] = ''
             if n1ql_map['window_function_name'].strip() in ['FIRST_VALUE', 'LAST_VALUE', 'NTH_VALUE', 'ARRAY_AGG', 'VAR_POP', 'VAR_SAMP', 'AVG', 'STDDEV_POP', 'MIN',
                                                             'STDDEV_SAMP', 'COUNT', 'COUNTN', 'STDDEV', 'MAX', 'VARIANCE', 'MEAN', 'SUM'] and n1ql_map['window_order'].strip() == '':
-                n1ql_map['window_order'] = ' ORDER BY DECIMAL_FIELD1 '
+                n1ql_map['window_order'] = ' ORDER BY DECIMAL_FIELD1, CHAR_FIELD1 '
 
         if 'WINDOW_FRAME_EXCLUSION_START' in sql:
             sql_map['window_frame_exclusion'] = sql[sql.find('WINDOW_FRAME_EXCLUSION_START')+len('WINDOW_FRAME_EXCLUSION_START'):sql.find('WINDOW_FRAME_EXCLUSION_END')]
