@@ -706,7 +706,7 @@ class FTSIndex:
 
     def build_custom_index_params(self, index_params):
         if self.index_type == "fulltext-index":
-            mapping = INDEX_DEFAULTS.BLEVE_MAPPING
+            mapping = copy.deepcopy(INDEX_DEFAULTS.BLEVE_MAPPING)
             if self.custom_map:
                 if not TestInputSingleton.input.param("default_map", False):
                     mapping['mapping']['default_mapping']['enabled'] = False
