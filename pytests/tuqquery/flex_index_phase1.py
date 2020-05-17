@@ -1,6 +1,8 @@
 from .tuq import QueryTests
 from pytests.fts.random_query_generator.rand_query_gen import DATASET
 from collections import Mapping, Sequence, Set, deque
+import json
+
 
 class FlexIndexTests(QueryTests):
 
@@ -9,10 +11,8 @@ class FlexIndexTests(QueryTests):
     def suite_setUp(self):
         super(FlexIndexTests, self).suite_setUp()
 
-
     def setUp(self):
         super(FlexIndexTests, self).setUp()
-        #self._load_test_buckets()
 
         self.log.info("==============  FlexIndexTests setuAp has started ==============")
         self.log_config_info()
@@ -106,11 +106,11 @@ class FlexIndexTests(QueryTests):
             if isinstance(nodevalue, Mapping):
                 for k, v in nodevalue.items():
                     queue.extend([(k, v)])
-            elif isinstance(nodevalue, (Sequence, Set)) and not isinstance(nodevalue, str):
+            elif isinstance(nodevalue, (Sequence, Set)) and not isinstance(nodevalue, basestring):
                 queue.extend(nodevalue)
             else:
-                if nodekey == "index" and nodevalue not in index_names:
-                    index_names.append(nodevalue)
+                if nodekey == u"index" and nodevalue not in index_names:
+                    index_names.append(str(nodevalue))
         return index_names
 
     def check_if_expected_index_exist(self, result, expected_indexes):
@@ -150,6 +150,8 @@ class FlexIndexTests(QueryTests):
             flex_query = self.get_runnable_flex_query(flex_query_ph, expected_fts_index, expected_gsi_index)
             if self.flex_query_option == "flex_use_gsi_query":
                 expected_gsi_index.append("primary_gsi_index")
+            flex_query = json.loads(json.dumps(flex_query, ensure_ascii=False)).encode('utf-8')
+            gsi_query = json.loads(json.dumps(gsi_query, ensure_ascii=False)).encode('utf-8')
             explain_query = "explain " + flex_query
             self.log.info("Query : {0}".format(explain_query))
             try:

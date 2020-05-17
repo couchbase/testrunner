@@ -1,5 +1,6 @@
 import random
 from lib.couchbase_helper.wiki.en_wiki_querables import TITLES, USERNAMES, USER_IDS
+import json
 
 class WikiQuerables(object):
 
@@ -24,9 +25,9 @@ class WikiQuerables(object):
         """
         delimit = int(len(TITLES)/2)
         if min:
-            return self.return_unicode(self.get_random_value(sorted(TITLES)[:delimit]))
+            return self.return_unicode(self.get_random_value(sorted(TITLES)[:delimit])).encode('utf-8')
         else:
-            return self.return_unicode(self.get_random_value(sorted(TITLES)[delimit:]))
+            return self.return_unicode(self.get_random_value(sorted(TITLES)[delimit:])).encode('utf-8')
 
     def get_queryable_revision_text_text_range(self, min=True):
         """

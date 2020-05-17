@@ -1051,7 +1051,6 @@ class FTSFlexQueryGenerator(FTSESQueryGenerator):
             fieldname = self.get_random_value(self.fields['str'])
             str1 = eval("self.get_queryable_%s_range" % fieldname + "()")
             str2 = eval("self.get_queryable_%s_range" % fieldname + "(min=False)")
-
             flex_query_predicate = "( {0} between \"{1}\" and \"{2}\")".format(fieldname, str1, str2)
             flex_query_predicate_list.append(flex_query_predicate)
 
