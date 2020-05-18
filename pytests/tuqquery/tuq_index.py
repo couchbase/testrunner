@@ -186,8 +186,7 @@ class QueriesViewsTests(QuerySanityTests):
                      " WHERE join_day = 5 OR ( join_day = 10 AND join_mo = 10 )"
         result = self.run_cbq_query()
         self.assertTrue(result['metrics']['resultCount'] == result_count)
-        # TODO Need to fix the assert statement for Cheshire Cat
-        self.assertTrue(len(plan['~children'][0]['scans'][1]['spans'][0]['range']) == 2)
+        self.assertTrue(len(plan['~children'][0]['spans']) == 2)
 
         self.query = "DROP INDEX %s ON %s USING %s" % (idx, self.query_buckets[0], self.index_type)
 
