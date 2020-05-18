@@ -48,6 +48,7 @@ class QUERY_TYPE:
         'str': ["match", "bool", "match_phrase",
                 "prefix", "wildcard", "query_string",
                 "conjunction", "disjunction", "term_range"],
+        'bool': [],
         'num': ["numeric_range"],
         'date': ["date_range"]
     }
