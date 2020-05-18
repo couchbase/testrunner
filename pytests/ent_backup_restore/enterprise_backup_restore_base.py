@@ -2492,14 +2492,6 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                              self.input.clusters[0][1].ip, services=bk_cluster_services[0])
             rebalance = self.cluster.async_rebalance(self.cluster_to_restore, [], [])
             rebalance.result()
-            count = 0
-            while count < 4:
-                reb_st = rest_rs._rebalance_progress_status()
-                if "running" in reb_st:
-                    self.sleep(2, "wait rebalance to complete")
-                    count += 1
-                if count == 4:
-                    self.fail("Status still shows running after rebalance complete 8 seconds")
         else:
             self.log.info("No availabe node to create cluster.")
 
