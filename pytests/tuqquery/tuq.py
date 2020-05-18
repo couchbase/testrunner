@@ -783,7 +783,7 @@ class QueryTests(BaseTestCase):
 
     def drop_index(self, bucket, index):
         collection_name = self.get_collection_name(bucket)
-        self.run_cbq_query("drop index %s ON %s" % (index, collection_name))
+        self.run_cbq_query("drop index %s ON `%s`" % (index, collection_name))
         self.wait_for_index_drop(bucket, index)
 
     def drop_primary_index(self, bucket, index):

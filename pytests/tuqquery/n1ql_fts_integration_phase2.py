@@ -294,11 +294,11 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
             self._create_fts_index(index_name='idx_beer_sample_fts', doc_count=7303, source_name=self.sample_bucket)
             n1ql_query = "select meta().id from {0} where search({0}, {{\"query\":{{\"field\": \"state\", \"match\":" \
                          "\"California\"}}, \"size\": 10000, \"sort\": [\"_id\"]}}, {{\"".format(self.query_bucket) + \
-                         test_name + "\": " + str(option_val) + "}})"
+                         test_name + "\": " + str(option_val) + "})"
             if test_name == "size":
                 n1ql_query = "select meta().id from {0} where search({0}, {{\"query\":{{\"field\": \"state\"," \
                              " \"match\":\"California\"}}, \"sort\": [\"_id\"], \"".format(self.query_bucket) + \
-                             test_name + "\":" + str(option_val) + "}})"
+                             test_name + "\":" + str(option_val) + "})"
             if test_name == 'size':
                 fts_request_str = "{\"query\":{\"field\": \"state\", \"match\":\"California\"}, \"size\":" + \
                                   str(option_val) + ", \"sort\": [\"_id\"]}"
@@ -1366,13 +1366,17 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
             self.rest.load_sample(self.sample_bucket)
             self.wait_for_buckets_status({self.sample_bucket: "healthy"}, 5, 120)
             self.wait_for_bucket_docs({self.sample_bucket: 7303}, 5, 120)
-
+        self.wait_for_all_indexes_online()
+        self.sleep(10, "wait after indexes are online")
         if not self.is_index_present(self.sample_bucket, "beer_sample_code_idx"):
             self.run_cbq_query("create index beer_sample_code_idx on {0} (code)".format(self.query_bucket))
+            self.wait_for_all_indexes_online()
+            self.sleep(10, "wait after indexes are online")
         if not self.is_index_present(self.sample_bucket, "beer_sample_brewery_id_idx"):
             self.run_cbq_query("create index beer_sample_brewery_id_idx on {0} (brewery_id)".format(
                 self.query_bucket))
-        self.wait_for_all_indexes_online()
+            self.wait_for_all_indexes_online()
+            self.sleep(10, "wait after indexes are online")
 
     def _create_fts_index(self, index_name='', doc_count=0, source_name=''):
         fts_index_type = self.input.param("fts_index_type", "scorch")

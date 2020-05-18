@@ -51,7 +51,7 @@ class N1qlFTSIntegrationPhase2ClusteropsTest(QueryTests):
         if fts_node is None:
             self.log("Cannot find fts child node!")
 
-        n1ql_query = "select meta().id from {0} where search({0}, {{\"query\":{{\"field\":\"state\"," \
+        n1ql_query = "select meta().id from `{0}` where search(`{0}`, {{\"query\":{{\"field\":\"state\"," \
                      " \"match\":\"California\"}}, \"size\":1000}})".format(self.sample_bucket)
         fts_request = {"query": {"field": "state", "match": "California"}, "size": 1000}
         n1ql_results = self.run_cbq_query(n1ql_query, server=n1ql_node)['results']
@@ -83,7 +83,7 @@ class N1qlFTSIntegrationPhase2ClusteropsTest(QueryTests):
         number_of_replicas = self.input.param("num_replicas", 0)
         self._update_replica_for_fts_index(fts_idx, number_of_replicas)
         self.sleep(60)
-        n1ql_query = "select meta().id from {0} where search({0}, {{\"query\":{{\"field\":\"state\"," \
+        n1ql_query = "select meta().id from `{0}` where search(`{0}`, {{\"query\":{{\"field\":\"state\"," \
                      " \"match\":\"California\"}}, \"size\":10000}})".format(self.sample_bucket)
         n1ql_results = self.run_cbq_query(n1ql_query)['results']
         n1ql_doc_ids_before_failover = []
@@ -105,9 +105,9 @@ class N1qlFTSIntegrationPhase2ClusteropsTest(QueryTests):
         self.load_test_buckets()
         self.cbcluster = CouchbaseCluster(name='cluster', nodes=self.servers, log=self.log)
         self._create_fts_index(index_name="idx_beer_sample_fts", doc_count=7303, source_name=self.sample_bucket)
-        self.run_cbq_query("drop index beer_primary on {0}".format(self.sample_bucket))
+        self.run_cbq_query("drop index beer_primary on `{0}`".format(self.sample_bucket))
 
-        n1ql_query = "select meta().id from {0} where search({0}, {{\"query\":{{\"field\":\"state\", " \
+        n1ql_query = "select meta().id from `{0}` where search(`{0}`, {{\"query\":{{\"field\":\"state\", " \
                      "\"match\":\"California\"}}, \"size\":10000}})".format(self.sample_bucket)
         n1ql_results_before_failover = self.run_cbq_query(n1ql_query)['results']
         n1ql_doc_ids_before_failover = []
@@ -131,7 +131,7 @@ class N1qlFTSIntegrationPhase2ClusteropsTest(QueryTests):
         number_of_replicas = self.input.param("num_replicas", 0)
         self._update_replica_for_fts_index(fts_idx, number_of_replicas)
         self.sleep(60)
-        n1ql_query = "select meta().id from {0} where search({0}, {{\"query\":{{\"field\":\"state\", " \
+        n1ql_query = "select meta().id from `{0}` where search(`{0}`, {{\"query\":{{\"field\":\"state\", " \
                      "\"match\":\"California\"}}, \"size\":10000}})".format(self.sample_bucket)
         n1ql_results = self.run_cbq_query(n1ql_query)['results']
         n1ql_doc_ids_before_rebalance = []
@@ -154,7 +154,7 @@ class N1qlFTSIntegrationPhase2ClusteropsTest(QueryTests):
         self.cbcluster = CouchbaseCluster(name='cluster', nodes=self.servers, log=self.log)
         fts_idx = self._create_fts_index(index_name="idx_beer_sample_fts", doc_count=7303,
                                          source_name=self.sample_bucket)
-        n1ql_query = "select meta().id from {0} where search({0}, {{\"query\":{{\"field\":\"state\"," \
+        n1ql_query = "select meta().id from `{0}` where search(`{0}`, {{\"query\":{{\"field\":\"state\"," \
                      " \"match\":\"California\"}}, \"size\":10000}})".format(self.sample_bucket)
         default_results = self.run_cbq_query(n1ql_query)
         self._update_partiotions_for_fts_index(fts_idx, partitions_number)
