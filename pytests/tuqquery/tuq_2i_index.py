@@ -3686,8 +3686,8 @@ class QueriesIndexTests(QueryTests):
                              'in object_pairs(`data`) end)))'.format(query_bucket)
                 self.run_cbq_query()
                 created_indexes.append('rec1-3_record_by_index_map')
-                self.query = 'insert into {0} (KEY, VALUE) VALUES ("test",{{"type":"testType","indexMap":' \
-                             '{{"key1":"val1", "key2":"val2"}},"data":{{"foo":"bar"}})'.format(query_bucket)
+                self.query = 'insert into {0} '.format(query_bucket) + '(KEY, VALUE) VALUES ("test",{"type":"testType","indexMap":' \
+                             '{"key1":"val1", "key2":"val2"},"data":{"foo":"bar"}})'
                 self.run_cbq_query()
                 self.query = 'explain SELECT r AS doc, meta(r).cas AS revision FROM {0} AS r ' \
                              'WHERE any i in object_pairs(indexMap) satisfies i = {{ "name":"key1", "value":"val1"}} ' \
@@ -3703,8 +3703,7 @@ class QueriesIndexTests(QueryTests):
                              'AND any i in object_pairs(indexMap) satisfies i = {{ "name":"key2", "val":"val2"}} ' \
                              'end LIMIT 100'.format(query_bucket)
                 actual_result = self.run_cbq_query()
-                # self.assertTrue(sorted(actual_result['results'][0]['doc']) == (['data', 'indexMap', 'type']))
-                diffs = DeepDiff(actual_result['results'][0]['doc'], (['data', 'indexMap', 'type']), ignore_order=True)
+                diffs = DeepDiff(actual_result['results'][0]['doc'], ({'data': {'foo': 'bar'}, 'indexMap': {'key1': 'val1', 'key2': 'val2'}, 'type': 'testType'}), ignore_order=True)
                 if diffs:
                     self.assertTrue(False, diffs)
                 self.query = 'explain SELECT r AS doc, meta(r).cas AS revision FROM {0} AS r WHERE every i in' \
@@ -3720,8 +3719,7 @@ class QueriesIndexTests(QueryTests):
                              'any i in object_pairs(indexMap) satisfies i = {{ "name":"key2", "val":"val2"}} ' \
                              'end LIMIT 100'.format(query_bucket)
                 actual_result = self.run_cbq_query()
-                # self.assertTrue(sorted(actual_result['results'][0]['doc']) == (['data', 'indexMap', 'type']))
-                diffs = DeepDiff(actual_result['results'][0]['doc'], (['data', 'indexMap', 'type']), ignore_order=True)
+                diffs = DeepDiff(actual_result['results'][0]['doc'], ({'data': {'foo': 'bar'}, 'indexMap': {'key1': 'val1', 'key2': 'val2'}, 'type': 'testType'}), ignore_order=True)
                 if diffs:
                     self.assertTrue(False, diffs)
                 self.query = 'explain SELECT r AS doc, meta(r).cas AS revision FROM {0} AS r WHERE ' \
@@ -3737,8 +3735,7 @@ class QueriesIndexTests(QueryTests):
                              'or every i in object_pairs(indexMap) satisfies i = {{ "name":"key2", "val":"val2"}} end' \
                              ' LIMIT 100'.format(query_bucket)
                 actual_result = self.run_cbq_query()
-                # self.assertTrue(sorted(actual_result['results'][0]['doc']) == (['data', 'indexMap', 'type']))
-                diffs = DeepDiff(actual_result['results'][0]['doc'], (['data', 'indexMap', 'type']), ignore_order=True)
+                diffs = DeepDiff(actual_result['results'][0]['doc'], ({'data': {'foo': 'bar'}, 'indexMap': {'key1': 'val1', 'key2': 'val2'}, 'type': 'testType'}), ignore_order=True)
                 if diffs:
                     self.assertTrue(False, diffs)
                 self.query = 'explain SELECT r AS doc, meta(r).cas AS revision FROM {0} AS r WHERE some and' \
@@ -3750,16 +3747,15 @@ class QueriesIndexTests(QueryTests):
                 self.assertTrue(plan['~children'][0]['~children'][0]['#operator'] == 'IntersectScan')
                 self.assertTrue(
                     plan['~children'][0]['~children'][0]['scans'][0]['scan']['index'] == 'rec1-1_record_by_index_map')
-                self.query = 'insert into {0} (KEY, VALUE) VALUES ("test1",{{"type":"testType",' \
-                             '"indexMap":{{"key1":"val1"}},"data":{{"foo":"bar"}})'.format(query_bucket)
+                self.query = 'insert into {0} '.format(query_bucket) + '(KEY, VALUE) VALUES ("test1",{"type":"testType",' \
+                             '"indexMap":{"key1":"val1"},"data":{"foo":"bar"}})'
                 self.run_cbq_query()
                 self.query = 'SELECT r AS doc, meta(r).cas AS revision FROM {0} AS r WHERE SOME AND' \
                              ' EVERY i in object_pairs(indexMap) satisfies i = {{ "name":"key1", "val":"val1"}} end ' \
                              'AND SOME AND EVERY i in object_pairs(data) satisfies i = {{"name":"foo", "val":"bar"}} ' \
                              'end LIMIT 100'.format(query_bucket)
                 actual_result = self.run_cbq_query()
-                # self.assertTrue(sorted(actual_result['results'][0]['doc']) == (['data', 'indexMap', 'type']))
-                diffs = DeepDiff(actual_result['results'][0]['doc'], (['data', 'indexMap', 'type']), ignore_order=True)
+                diffs = DeepDiff(actual_result['results'][0]['doc'], ({'data': {'foo': 'bar'}, 'indexMap': {'key1': 'val1'}, 'type': 'testType'}), ignore_order=True)
                 if diffs:
                     self.assertTrue(False, diffs)
                 self.query = 'explain SELECT r AS doc, meta(r).cas AS revision FROM {0} AS r ' \
@@ -3776,8 +3772,7 @@ class QueriesIndexTests(QueryTests):
                              'end AND any j in object_pairs(indexMap) satisfies j = ' \
                              '{{ "name":"key2", "val":"val2"}} end LIMIT 100'.format(query_bucket)
                 actual_result = self.run_cbq_query()
-                # self.assertTrue(sorted(actual_result['results'][0]['doc']) == (['data', 'indexMap', 'type']))
-                diffs = DeepDiff(actual_result['results'][0]['doc'], (['data', 'indexMap', 'type']), ignore_order=True)
+                diffs = DeepDiff(actual_result['results'][0]['doc'], ({'data': {'foo': 'bar'}, 'indexMap': {'key1': 'val1', 'key2': 'val2'}, 'type': 'testType'}), ignore_order=True)
                 if diffs:
                     self.assertTrue(False, diffs)
                 self.query = 'explain SELECT r AS doc, meta(r).cas AS revision FROM {0} AS r ' \
@@ -3794,7 +3789,7 @@ class QueriesIndexTests(QueryTests):
                 self.run_cbq_query()
             finally:
                 for idx in created_indexes:
-                    self.query = "DROP INDEX {1} ON {0} USING {2}".format(query_bucket, idx, self.index_type)
+                    self.query = "DROP INDEX `{0}`.`{1}` USING {2}".format(query_bucket, idx, self.index_type)
                     self.run_cbq_query()
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
 
@@ -4418,7 +4413,7 @@ class QueriesIndexTests(QueryTests):
         for bucket in self.buckets:
             query_bucket = self.get_collection_name(bucket.name)
             for ind in range(self.num_indexes):
-                index_name = f"indexwitharraysum{ind}"
+                index_name = "indexwitharraysum{0}".format(ind)
                 self.query = "CREATE INDEX {0} ON {1}(department, DISTINCT ARRAY round(v.memory + v.RAM) FOR v " \
                              "in VMs END ) where join_yr=2012 USING {2}".format(index_name, query_bucket,
                                                                                 self.index_type)
@@ -4461,7 +4456,7 @@ class QueriesIndexTests(QueryTests):
         for bucket in self.buckets:
             query_bucket = self.get_collection_name(bucket.name)
             for ind in range(self.num_indexes):
-                index_name = f"indexwitharraysum{ind}"
+                index_name = "indexwitharraysum{0}".format(ind)
                 self.query = "CREATE INDEX {0} ON {1}(name,join_yr, DISTINCT ARRAY round(v.memory + v.RAM) " \
                              "FOR v in VMs END ) where join_yr=2012 USING {2}".format(index_name, query_bucket,
                                                                                       self.index_type)
@@ -4566,7 +4561,7 @@ class QueriesIndexTests(QueryTests):
             query_bucket = self.get_collection_name(bucket.name)
             try:
                 idx = "arrayidx_delete"
-                self.query = "CREATE INDEX {0} ON {1}( DISTINCT ARRAY v FOR v in {2} END) USING {2}".format(
+                self.query = "CREATE INDEX {0} ON {1}( DISTINCT ARRAY v FOR v in {2} END) USING {3}".format(
                     idx, query_bucket, "join_yr", self.index_type)
                 create_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
@@ -6985,7 +6980,7 @@ class QueriesIndexTests(QueryTests):
         for bucket in self.buckets:
             query_bucket = self.get_collection_name(bucket.name)
             for ind in range(self.num_indexes):
-                index_name = f"indexwitharraysum{ind}"
+                index_name = "indexwitharraysum{0}".format(ind)
                 self.query = "CREATE INDEX {0} ON {1}(department, DISTINCT ARRAY round(v.memory + v.RAM) FOR v in" \
                              " tokens(VMs) END ) where join_yr=2012 USING {2}".format(index_name,
                                                                                       query_bucket, self.index_type)
@@ -7495,7 +7490,7 @@ class QueriesIndexTests(QueryTests):
                              "order BY name limit 10"
                 actual_result1 = self.run_cbq_query()
 
-                self.query = "select name from {0} use index({0}) WHERE ANY i within tokens({1}.hobbies) " \
+                self.query = "select name from {0} use index({1}) WHERE ANY i within tokens({0}.hobbies) " \
                              "SATISFIES i = 'bhangra' END ".format(query_bucket, idx2) + \
                              "order BY name limit 10"
                 actual_result2 = self.run_cbq_query()
