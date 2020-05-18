@@ -60,7 +60,7 @@ class QueriesIndexTests(QueryTests):
             self.run_cbq_query()
             time.sleep(15)
             idx2 = "idx_name"
-            self.query = "CREATE INDEX {0} ON {1}(name)".format(idx, query_bucket)
+            self.query = "CREATE INDEX {0} ON {1}(name)".format(idx2, query_bucket)
             self.run_cbq_query()
             time.sleep(15)
             created_indexes.append(idx)
@@ -370,7 +370,7 @@ class QueriesIndexTests(QueryTests):
                 self.run_cbq_query()
                 created_indexes.remove(idx)
                 self.query = "CREATE INDEX {0} ON {1} ( VMs[0].RAM = 11 and join_yr = 2010  )" \
-                             " USING {2}".format(idx, query_bucket, self.index_type)
+                             " USING {2}".format(idx2, query_bucket, self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx2)
                 self._verify_results(actual_result['results'], [])
@@ -480,7 +480,7 @@ class QueriesIndexTests(QueryTests):
                 actual_result = self.run_cbq_query()
                 expected_result = [{'id': 'k01', '$1': True}, {'id': 'k02', '$1': True},
                                    {'id': 'k03', '$1': False}, {'id': 'k04', '$1': 'null'},
-                                   {'id': 'query-testemployee10153.1877827-0', '$1': 'employee-9'}]
+                                   {'id': 'query-testemployee10153.187782713003-0', '$1': 'employee-9'}]
                 # self.assertTrue(actual_result['results'] == expected_result)
                 diffs = DeepDiff(actual_result['results'], expected_result, ignore_order=True)
                 if diffs:
@@ -499,8 +499,8 @@ class QueriesIndexTests(QueryTests):
                 self.query = 'SELECT meta().id, IFNULL(IsSpecial,b,2,3) from {0} limit 5'.format(query_bucket)
                 actual_result = self.run_cbq_query()
                 expected_result = [{'id': 'k01'}, {'id': 'k02', '$1': True}, {'id': 'k03', '$1': False},
-                                   {'id': 'k04', '$1': 'null'}, {'id': 'query-testemployee10153.1877827-0'}]
-                self.assertTrue(actual_result['results'] == expected_result)
+                                   {'id': 'k04', '$1': 'null'}, {'id': 'query-testemployee10153.187782713003-0'}]
+                self.assertTrue(actual_result['results'] == expected_result, )
                 self.query = 'EXPLAIN SELECT name from {0} where IFNULL(IsSpecial,b,name) = null and' \
                              ' join_day> 1'.format(query_bucket)
                 actual_result = self.run_cbq_query()
@@ -515,7 +515,7 @@ class QueriesIndexTests(QueryTests):
                 self.query = 'SELECT meta().id, MISSINGIF(IsSpecial,b) from {0} limit 5'.format(query_bucket)
                 actual_result = self.run_cbq_query()
                 expected_result = [{'id': 'k01'}, {'id': 'k02'}, {'id': 'k03', '$1': False},
-                                   {'id': 'k04', '$1': 'null'}, {'id': 'query-testemployee10153.1877827-0'}]
+                                   {'id': 'k04', '$1': 'null'}, {'id': 'query-testemployee10153.187782713003-0'}]
                 self.assertTrue(actual_result['results'] == expected_result)
                 self.query = 'EXPLAIN SELECT name from {0} where MISSINGIF(IsSpecial,b) = TRUE' \
                              ' and join_day> 1'.format(query_bucket)
@@ -531,7 +531,7 @@ class QueriesIndexTests(QueryTests):
                 self.query = 'SELECT meta().id, NULLIF(IsSpecial,b) from {0} limit 5'.format(query_bucket)
                 actual_result = self.run_cbq_query()
                 expected_result = [{'id': 'k01'}, {'id': 'k02', '$1': None}, {'id': 'k03', '$1': False},
-                                   {'id': 'k04', '$1': 'null'}, {'id': 'query-testemployee10153.1877827-0'}]
+                                   {'id': 'k04', '$1': 'null'}, {'id': 'query-testemployee10153.187782713003-0'}]
                 self.assertTrue(actual_result['results'] == expected_result)
                 self.query = 'EXPLAIN SELECT name from {0} where NULLIF(IsSpecial,b)' \
                              ' IS null and join_day> 1'.format(query_bucket)
@@ -549,7 +549,7 @@ class QueriesIndexTests(QueryTests):
                 actual_result = self.run_cbq_query()
                 expected_result = [{'id': 'k01', '$1': True}, {'id': 'k02', '$1': True},
                                    {'id': 'k03', '$1': False}, {'id': 'k04', '$1': 'null'},
-                                   {'id': 'query-testemployee10153.1877827-0', '$1': 'employee-9'}]
+                                   {'id': 'query-testemployee10153.187782713003-0', '$1': 'employee-9'}]
                 self.assertTrue(actual_result['results'] == expected_result)
                 self.query = 'EXPLAIN SELECT name from {0} where IFMISSINGORNULL(IsSpecial,b,name,2,3)' \
                              ' IS NULL and join_day> 1'.format(query_bucket)
@@ -717,11 +717,11 @@ class QueriesIndexTests(QueryTests):
                 expected_result = self.run_cbq_query()
                 self.assertTrue(actual_result['results'] == expected_result['results'])
                 self.query = 'select join_day from {0} where meta().id ' \
-                             'in ["query-testemployee10153.1877827-0","",' \
+                             'in ["query-testemployee10153.187782713003-0","",' \
                              '"query-testemployee10194.855617-0"] order by meta().id'.format(query_bucket)
                 actual_result = self.run_cbq_query()
                 self.query = 'select join_day from {0} use index(`#primary`) where meta().id in ' \
-                             '["query-testemployee10153.1877827-0","","query-testemployee10194.855617-0"]' \
+                             '["query-testemployee10153.187782713003-0","","query-testemployee10194.855617-0"]' \
                              ' order by meta().id'.format(query_bucket)
                 expected_result = self.run_cbq_query()
                 self.assertTrue(actual_result['results'] == expected_result['results'])
@@ -1422,7 +1422,7 @@ class QueriesIndexTests(QueryTests):
                 'standard_bucket0': {'tasks_points': {'task1': 1, 'task2': 1}, 'name': 'employee-9',
                                      'mutated': 0, 'skills': ['skill2010', 'skill2011'], 'join_day': 9,
                                      'email': '9-mail@couchbase.com', 'test_rate': 10.1, 'join_mo': 10,
-                                     'join_yr': 2011, '_id': 'query-testemployee10153.1877827-0',
+                                     'join_yr': 2011, '_id': 'query-testemployee10153.187782713003-0',
                                      'VMs': [{'RAM': 10, 'os': 'ubuntu', 'name': 'vm_10', 'memory': 10},
                                              {'RAM': 10, 'os': 'windows', 'name': 'vm_11', 'memory': 10}],
                                      'job_title': 'Engineer'}}])
@@ -1878,14 +1878,14 @@ class QueriesIndexTests(QueryTests):
                 idx5 = "nested_idx5"
                 self.query = ' CREATE INDEX {0} ON {1}((distinct ' \
                              '(array (i.RAM) for i in VMs end))) '.format(idx5, query_bucket) + \
-                             'WHERE (_id = "query-testemployee10153.1877827-0")'
+                             'WHERE (_id = "query-testemployee10153.187782713003-0")'
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx5)
                 self._verify_results(actual_result['results'], [])
                 created_indexes.append(idx5)
 
                 self.query = 'explain SELECT VMs FROM {0}  WHERE ANY i IN VMs SATISFIES i.RAM = 10 END AND' \
-                             ' _id="query-testemployee10153.1877827-0"'.format(query_bucket)
+                             ' _id="query-testemployee10153.187782713003-0"'.format(query_bucket)
                 actual_result = self.run_cbq_query()
                 plan = self.ExplainPlanHelper(actual_result)
                 self.assertTrue(plan['~children'][0]['scan']['index'] == idx5)
@@ -2011,13 +2011,13 @@ class QueriesIndexTests(QueryTests):
             actual_result1 = None
             try:
                 for ind in range(self.num_indexes):
-                    index_name = "coveringindexwithwhere{0}" % ind
+                    index_name = f"coveringindexwithwhere{ind}"
                     self.query = "CREATE INDEX {0} ON {1}(email, VMs) where join_day > 10 " \
                                  "USING {2}".format(index_name, query_bucket, self.index_type)
                     self.run_cbq_query()
                     self._wait_for_index_online(bucket, index_name)
                     created_indexes.append(index_name)
-                    index_name2 = "shortcoveringindex{0}" % ind
+                    index_name2 = f"shortcoveringindex{ind}"
                     self.query = "CREATE INDEX {0} ON {1}(email) where join_day > 10 " \
                                  "USING {2}".format(index_name2, query_bucket, self.index_type)
                     self.run_cbq_query()
@@ -2941,7 +2941,7 @@ class QueriesIndexTests(QueryTests):
                 expected_result = self.run_cbq_query()
                 self.assertTrue(actual_result['results'] == expected_result['results'])
                 self.assertTrue(actual_result['results'] == [{'$1': self.docs_per_day * 2016}])
-                self.query = "select count(1) from {0} use index(`#primary`) WHERE meta().id like '{0}'  ".format(
+                self.query = "select count(1) from {0} use index(`#primary`) WHERE meta().id like '{1}'  ".format(
                     query_bucket, 'query-test%')
                 result = self.run_cbq_query()
                 # self.assertEqual(sorted(actual_result['results']), sorted(result['results']))
@@ -3607,10 +3607,10 @@ class QueriesIndexTests(QueryTests):
                         query_bucket, 'query-testemployee10%')
                     result = self.run_cbq_query()
                     diffs = DeepDiff(actual_result['results'], result['results'], ignore_order=True)
-                    if diffs:
-                        self.assertTrue(False, diffs)
                     self.query = "DROP PRIMARY INDEX ON {0}".format(query_bucket)
                     self.run_cbq_query()
+                    if diffs:
+                        self.assertTrue(False, diffs)
 
     def test_dynamic_names(self):
         self.fail_if_no_buckets()
@@ -4418,7 +4418,7 @@ class QueriesIndexTests(QueryTests):
         for bucket in self.buckets:
             query_bucket = self.get_collection_name(bucket.name)
             for ind in range(self.num_indexes):
-                index_name = "indexwitharraysum{0}" % ind
+                index_name = f"indexwitharraysum{ind}"
                 self.query = "CREATE INDEX {0} ON {1}(department, DISTINCT ARRAY round(v.memory + v.RAM) FOR v " \
                              "in VMs END ) where join_yr=2012 USING {2}".format(index_name, query_bucket,
                                                                                 self.index_type)
@@ -4461,7 +4461,7 @@ class QueriesIndexTests(QueryTests):
         for bucket in self.buckets:
             query_bucket = self.get_collection_name(bucket.name)
             for ind in range(self.num_indexes):
-                index_name = "indexwitharraysum{0}" % ind
+                index_name = f"indexwitharraysum{ind}"
                 self.query = "CREATE INDEX {0} ON {1}(name,join_yr, DISTINCT ARRAY round(v.memory + v.RAM) " \
                              "FOR v in VMs END ) where join_yr=2012 USING {2}".format(index_name, query_bucket,
                                                                                       self.index_type)
@@ -4667,13 +4667,13 @@ class QueriesIndexTests(QueryTests):
             query_bucket = self.get_collection_name(bucket.name)
             try:
                 for ind in range(self.num_indexes):
-                    idx_name = "tuq_index1{0}" % ind
+                    idx_name = f"tuq_index1{ind}"
                     self.query = "CREATE INDEX {0} ON {1}(a)  USING GSI".format(idx_name, query_bucket)
                     actual_result = self.run_cbq_query()
                     self._wait_for_index_online(bucket, idx_name)
                     self._verify_results(actual_result['results'], [])
                     created_indexes.append(idx_name)
-                    idx_name = "tuq_index2{0}" % ind
+                    idx_name = f"tuq_index2{ind}"
                     self.query = "CREATE INDEX {0} ON {1}(b)  USING GSI".format(idx_name, query_bucket)
                     actual_result = self.run_cbq_query()
                     self._wait_for_index_online(bucket, idx_name)
@@ -4893,7 +4893,7 @@ class QueriesIndexTests(QueryTests):
     def test_covering_meta(self):
         self.fail_if_no_buckets()
         query_bucket = self.get_collection_name('default')
-        self.query = 'CREATE INDEX `iy` ON ((distinct (array (`v`.`os`) for `v` in `VMs` end)))'.format(query_bucket)
+        self.query = 'CREATE INDEX `iy` ON {0}((distinct (array (`v`.`os`) for `v` in `VMs` end)))'.format(query_bucket)
         self.run_cbq_query()
         self.query = 'EXPLAIN SELECT meta().id from {0} WHERE ANY v IN VMs SATISFIES v.os = "ubuntu" END'.format(
             query_bucket)
@@ -4956,7 +4956,7 @@ class QueriesIndexTests(QueryTests):
                 if self.DGM:
                     self.get_dgm_for_plasma(indexer_nodes=[self.server], memory_quota=400)
                 for ind in range(self.num_indexes):
-                    index_name = "index{0}" % ind
+                    index_name = f"index{ind}"
                     self.query = "CREATE INDEX {0} ON {1}(name)  USING {2}".format(index_name, query_bucket,
                                                                                    self.index_type)
                     self.run_cbq_query()
@@ -4982,7 +4982,7 @@ class QueriesIndexTests(QueryTests):
                 if self.DGM:
                     self.get_dgm_for_plasma(indexer_nodes=[self.server], memory_quota=400)
                 for ind in range(self.num_indexes):
-                    index_name = "coveringindexwithwhere{0}" % ind
+                    index_name = f"coveringindexwithwhere{ind}"
                     self.query = "CREATE INDEX {0} ON {1}(email, VMs, join_day) where join_day > 10 USING {2}".format(
                         index_name, query_bucket, self.index_type)
                     self.run_cbq_query()
@@ -5029,7 +5029,7 @@ class QueriesIndexTests(QueryTests):
                 if self.DGM:
                     self.get_dgm_for_plasma(indexer_nodes=[self.server], memory_quota=400)
                 for ind in range(self.num_indexes):
-                    index_name = "coveringindexwithlimit{0}" % ind
+                    index_name = f"coveringindexwithlimit{ind}"
                     self.query = "CREATE INDEX {0} ON {1}(skills[0], join_yr, VMs[0].os,name) " \
                                  "where join_yr =2010 USING {2}".format(index_name, query_bucket, self.index_type)
                     self.run_cbq_query()
@@ -5070,7 +5070,7 @@ class QueriesIndexTests(QueryTests):
             query_bucket = self.get_collection_name(bucket.name)
             try:
                 for ind in range(self.num_indexes):
-                    index_name = "coveringindexwithgroupby{0}" % ind
+                    index_name = f"coveringindexwithgroupby{ind}"
                     self.query = "CREATE INDEX {0} ON {1}(join_yr,name) where join_yr >2009 USING {2}".format(
                         index_name, query_bucket, self.index_type)
                     self.run_cbq_query()
@@ -5107,7 +5107,7 @@ class QueriesIndexTests(QueryTests):
             query_bucket = self.get_collection_name(bucket.name)
             try:
                 for ind in range(self.num_indexes):
-                    index_name = "coveringindexwithgroupbyhaving{0}" % ind
+                    index_name = f"coveringindexwithgroupbyhaving{ind}"
                     self.query = "CREATE INDEX {0} ON {1}(job_title,join_mo,test_rate) USING {2}".format(
                         index_name, query_bucket, self.index_type)
                     self.run_cbq_query()
@@ -5156,7 +5156,7 @@ class QueriesIndexTests(QueryTests):
             query_bucket = self.get_collection_name(bucket.name)
             try:
                 for ind in range(self.num_indexes):
-                    index_name = "coveringindexwithgroupbyletting{0}" % ind
+                    index_name = f"coveringindexwithgroupbyletting{ind}"
                     self.query = "CREATE INDEX {0} ON {1}(join_mo,test_rate) USING {2}".format(
                         index_name, query_bucket, self.index_type)
                     self.run_cbq_query()
@@ -5190,8 +5190,8 @@ class QueriesIndexTests(QueryTests):
             query_bucket = self.get_collection_name(bucket.name)
             for ind in index_name_prefix_list:
                 for attr in ['join_day', 'join_mo']:
-                    ind_name = '{0}_{0}'.format(ind, attr)
-                    self.query = "CREATE INDEX {0} ON {1}({2})  USING {2}".format(ind_name,
+                    ind_name = '{0}_{1}'.format(ind, attr)
+                    self.query = "CREATE INDEX {0} ON {1}({2})  USING {3}".format(ind_name,
                                                                                   query_bucket, attr, self.index_type)
                     self.run_cbq_query()
                     self._wait_for_index_online(bucket, ind_name)
@@ -5202,11 +5202,11 @@ class QueriesIndexTests(QueryTests):
                 for ind in created_indexes:
                     if "covering" in ind:
                         if "join_day" in ind:
-                            self.query = 'EXPLAIN SELECT join_day FROM {0}  USE INDEX({0} using {0}) WHERE join_day>2'.format(
+                            self.query = 'EXPLAIN SELECT join_day FROM {0}  USE INDEX({1} using {2}) WHERE join_day>2'.format(
                                 query_bucket, ind, self.index_type)
                             self.check_explain_covering_index(ind)
                         elif "join_mo" in ind:
-                            self.query = 'EXPLAIN SELECT join_mo FROM {0}  USE INDEX({0} using {0}) WHERE join_mo>3'.format(
+                            self.query = 'EXPLAIN SELECT join_mo FROM {0}  USE INDEX({1} using {2}) WHERE join_mo>3'.format(
                                 query_bucket, ind, self.index_type)
                             self.check_explain_covering_index(ind)
                     else:
@@ -5250,7 +5250,7 @@ class QueriesIndexTests(QueryTests):
         for bucket in self.buckets:
             query_bucket = self.get_collection_name(bucket.name)
             for ind in range(self.num_indexes):
-                index_name = "coveringindexwithceil{0}" % ind
+                index_name = f"coveringindexwithceil{ind}"
                 self.query = "CREATE INDEX {0} ON {1}(name,test_rate)  USING {2}".format(
                     index_name, query_bucket, self.index_type)
                 self.run_cbq_query()
@@ -5288,7 +5288,7 @@ class QueriesIndexTests(QueryTests):
         for bucket in self.buckets:
             query_bucket = self.get_collection_name(bucket.name)
             for ind in range(self.num_indexes):
-                index_name = "coveringindexwithfloor{0}" % ind
+                index_name = f"coveringindexwithfloor{ind}"
                 self.query = "CREATE INDEX {0} ON {1}(name,test_rate)  USING {2}".format(
                     index_name, query_bucket, self.index_type)
                 self.run_cbq_query()
@@ -5330,7 +5330,7 @@ class QueriesIndexTests(QueryTests):
         for bucket in self.buckets:
             query_bucket = self.get_collection_name(bucket.name)
             for ind in range(self.num_indexes):
-                index_name = "coveringindexwithgreatest{0}" % ind
+                index_name = f"coveringindexwithgreatest{ind}"
                 self.query = "CREATE INDEX {0} ON {1}(name,skills[0], skills[1])  USING {2}".format(
                     index_name, query_bucket, self.index_type)
                 self.run_cbq_query()
@@ -5376,7 +5376,7 @@ class QueriesIndexTests(QueryTests):
         for bucket in self.buckets:
             query_bucket = self.get_collection_name(bucket.name)
             for ind in range(self.num_indexes):
-                index_name = "coveringindexwithleast{0}" % ind
+                index_name = f"coveringindexwithleast{ind}"
                 self.query = "CREATE INDEX {0} ON {1}(name,skills[0], skills[1])  USING {2}".format(
                     index_name, query_bucket, self.index_type)
                 self.run_cbq_query()
@@ -5427,12 +5427,12 @@ class QueriesIndexTests(QueryTests):
         for bucket in self.buckets:
             query_bucket = self.get_collection_name(bucket.name)
             for ind in range(self.num_indexes):
-                index_name = "coveringindexwithmin{0}" % ind
+                index_name = f"coveringindexwithmin{ind}"
                 self.query = "CREATE INDEX {0} ON {1}(job_title,join_mo,test_rate)  USING {2}".format(
                     index_name, query_bucket, self.index_type)
                 self.run_cbq_query()
                 created_indexes.append(index_name)
-                index_name2 = "coveringindexwithcontains{0}" % ind
+                index_name2 = f"coveringindexwithcontains{ind}"
                 self.query = "CREATE INDEX {0} ON {1}(test_rate)  USING {2}".format(index_name2, query_bucket,
                                                                                     self.index_type)
                 self.run_cbq_query()
@@ -5538,7 +5538,7 @@ class QueriesIndexTests(QueryTests):
         for bucket in self.buckets:
             query_bucket = self.get_collection_name(bucket.name)
             for ind in range(self.num_indexes):
-                index_name = "coveringindexwithmax{0}" % ind
+                index_name = f"coveringindexwithmax{ind}"
                 self.query = "CREATE INDEX {0} ON {1}(job_title,join_mo,test_rate)  USING {2}".format(
                     index_name, query_bucket, self.index_type)
                 self.run_cbq_query()
@@ -5596,9 +5596,9 @@ class QueriesIndexTests(QueryTests):
         for bucket in self.buckets:
             query_bucket = self.get_collection_name(bucket.name)
             for ind in range(self.num_indexes):
-                index_name = "coveringindexwitharraydistinct{0}" % ind
-                self.query = "1(join_mo,job_title,test_rate,name)  USING {2}".format(
-                    index_name, query_bucket, self.index_type)
+                index_name = f"coveringindexwitharraydistinct{ind}"
+                self.query = f"CREATE INDEX {index_name} on {query_bucket}(join_mo,job_title,test_rate,name) " \
+                             f"USING {self.index_type}"
                 self.run_cbq_query()
                 created_indexes.append(index_name)
         for bucket in self.buckets:
@@ -5646,7 +5646,7 @@ class QueriesIndexTests(QueryTests):
         for bucket in self.buckets:
             query_bucket = self.get_collection_name(bucket.name)
             for ind in range(self.num_indexes):
-                index_name = "coveringindexwitharraylength{0}" % ind
+                index_name = f"coveringindexwitharraylength{ind}"
                 self.query = "CREATE INDEX {0} ON {1}(join_mo,job_title,name)  USING {2}".format(
                     index_name, query_bucket, self.index_type)
                 self.run_cbq_query()
@@ -5695,7 +5695,7 @@ class QueriesIndexTests(QueryTests):
         for bucket in self.buckets:
             query_bucket = self.get_collection_name(bucket.name)
             for ind in range(self.num_indexes):
-                index_name = "coveringindexwitharrayappend{0}" % ind
+                index_name = f"coveringindexwitharrayappend{ind}"
                 self.query = "CREATE INDEX {0} ON {1}(join_mo,job_title,name) USING {2}".format(
                     index_name, query_bucket, self.index_type)
                 self.run_cbq_query()
@@ -5745,7 +5745,7 @@ class QueriesIndexTests(QueryTests):
         for bucket in self.buckets:
             query_bucket = self.get_collection_name(bucket.name)
             for ind in range(self.num_indexes):
-                index_name = "coveringindexwitharrayconcat{0}" % ind
+                index_name = f"coveringindexwitharrayconcat{ind}"
                 self.query = "CREATE INDEX {0} ON {1}(join_mo,job_title,name,email)  USING {2}".format(
                     index_name, query_bucket, self.index_type)
                 self.run_cbq_query()
@@ -5779,7 +5779,7 @@ class QueriesIndexTests(QueryTests):
         for bucket in self.buckets:
             query_bucket = self.get_collection_name(bucket.name)
             for ind in range(self.num_indexes):
-                index_name = "coveringindexwitharrayprepend{0}" % ind
+                index_name = f"coveringindexwitharrayprepend{ind}"
                 self.query = "CREATE INDEX {0} ON {1}(join_mo,job_title,test_rate)  USING {2}".format(
                     index_name, query_bucket, self.index_type)
                 self.run_cbq_query()
@@ -5813,7 +5813,7 @@ class QueriesIndexTests(QueryTests):
         for bucket in self.buckets:
             query_bucket = self.get_collection_name(bucket.name)
             for ind in range(self.num_indexes):
-                index_name = "coveringindexwitharrayremove{0}" % ind
+                index_name = f"coveringindexwitharrayremove{ind}"
                 self.query = "CREATE INDEX {0} ON {1}(join_mo,job_title,name)  USING {2}".format(
                     index_name, query_bucket, self.index_type)
                 self.run_cbq_query()
@@ -5863,7 +5863,7 @@ class QueriesIndexTests(QueryTests):
         for bucket in self.buckets:
             query_bucket = self.get_collection_name(bucket.name)
             for ind in range(self.num_indexes):
-                index_name = "coveringindexwitharrayavg{0}" % ind
+                index_name = f"coveringindexwitharrayavg{ind}"
                 self.query = "CREATE INDEX {0} ON {1}(join_mo,job_title,test_rate)  USING {2}".format(
                     index_name, query_bucket, self.index_type)
                 self.run_cbq_query()
@@ -5911,7 +5911,7 @@ class QueriesIndexTests(QueryTests):
         for bucket in self.buckets:
             query_bucket = self.get_collection_name(bucket.name)
             for ind in range(self.num_indexes):
-                index_name = "coveringindexwitharraycontains{0}" % ind
+                index_name = f"coveringindexwitharraycontains{ind}"
                 self.query = "CREATE INDEX {0} ON {1}(join_mo,job_title,name)  USING {2}".format(
                     index_name, query_bucket, self.index_type)
                 self.run_cbq_query()
@@ -5955,7 +5955,7 @@ class QueriesIndexTests(QueryTests):
         for bucket in self.buckets:
             query_bucket = self.get_collection_name(bucket.name)
             for ind in range(self.num_indexes):
-                index_name = "coveringindexwitharraycount{0}" % ind
+                index_name = f"coveringindexwitharraycount{ind}"
                 self.query = "CREATE INDEX {0} ON {1}(join_mo,job_title,name)  USING {2}".format(
                     index_name, query_bucket, self.index_type)
                 self.run_cbq_query()
@@ -5989,7 +5989,7 @@ class QueriesIndexTests(QueryTests):
         for bucket in self.buckets:
             query_bucket = self.get_collection_name(bucket.name)
             for ind in range(self.num_indexes):
-                index_name = "coveringindexwitharraydistinct{0}" % ind
+                index_name = f"coveringindexwitharraydistinct{ind}"
                 self.query = "CREATE INDEX {0} ON {1}(join_mo,job_title,name)  USING {2}".format(
                     index_name, query_bucket, self.index_type)
                 self.run_cbq_query()
@@ -6035,7 +6035,7 @@ class QueriesIndexTests(QueryTests):
         for bucket in self.buckets:
             query_bucket = self.get_collection_name(bucket.name)
             for ind in range(self.num_indexes):
-                index_name = "coveringindexwitharraymax{0}" % ind
+                index_name = f"coveringindexwitharraymax{ind}"
                 self.query = "CREATE INDEX {0} ON {1}(join_mo,job_title,test_rate)  USING {2}".format(
                     index_name, query_bucket, self.index_type)
                 self.run_cbq_query()
@@ -6083,7 +6083,7 @@ class QueriesIndexTests(QueryTests):
         for bucket in self.buckets:
             query_bucket = self.get_collection_name(bucket.name)
             for ind in range(self.num_indexes):
-                index_name = "coveringindexwitharraysum{0}" % ind
+                index_name = f"coveringindexwitharraysum{ind}"
                 self.query = "CREATE INDEX {0} ON {1}(join_mo,job_title,test_rate)  USING {2}".format(
                     index_name, query_bucket, self.index_type)
                 self.run_cbq_query()
@@ -6131,7 +6131,7 @@ class QueriesIndexTests(QueryTests):
         for bucket in self.buckets:
             query_bucket = self.get_collection_name(bucket.name)
             for ind in range(self.num_indexes):
-                index_name = "coveringindexforsubquery{0}" % ind
+                index_name = f"coveringindexforsubquery{ind}"
                 self.query = "CREATE INDEX {0} ON {1}(job_title)  USING {2}".format(index_name, query_bucket,
                                                                                     self.index_type)
                 self.run_cbq_query()
@@ -6200,7 +6200,7 @@ class QueriesIndexTests(QueryTests):
         for bucket in self.buckets:
             query_bucket = self.get_collection_name(bucket.name)
             for ind in range(self.num_indexes):
-                index_name = "coveringindexwitharraymin{0}" % ind
+                index_name = f"coveringindexwitharraymin{ind}"
                 self.query = "CREATE INDEX {0} ON {1}(join_mo,job_title,test_rate)  USING {2}".format(
                     index_name, query_bucket, self.index_type)
                 self.run_cbq_query()
@@ -6250,7 +6250,7 @@ class QueriesIndexTests(QueryTests):
         for bucket in self.buckets:
             query_bucket = self.get_collection_name(bucket.name)
             for ind in range(self.num_indexes):
-                index_name = "coveringindexwitharrayput{0}" % ind
+                index_name = f"coveringindexwitharrayput{ind}"
                 self.query = "CREATE INDEX {0} ON {1}(join_mo,job_title,name)  USING {2}".format(
                     index_name, query_bucket, self.index_type)
                 self.run_cbq_query()
@@ -6313,7 +6313,7 @@ class QueriesIndexTests(QueryTests):
         for bucket in self.buckets:
             query_bucket = self.get_collection_name(bucket.name)
             for ind in range(self.num_indexes):
-                index_name = "coveringindexwitharrayreplace{0}" % ind
+                index_name = f"coveringindexwitharrayreplace{ind}"
                 self.query = "CREATE INDEX {0} ON {1}(join_mo,job_title,name)  USING {2}".format(
                     index_name, query_bucket, self.index_type)
                 self.run_cbq_query()
@@ -6361,7 +6361,7 @@ class QueriesIndexTests(QueryTests):
         for bucket in self.buckets:
             query_bucket = self.get_collection_name(bucket.name)
             for ind in range(self.num_indexes):
-                index_name = "coveringindexwitharraysort{0}" % ind
+                index_name = f"coveringindexwitharraysort{ind}"
                 self.query = "CREATE INDEX {0} ON {1}(join_mo,job_title,test_rate)  USING {2}".format(
                     index_name, query_bucket, self.index_type)
                 self.run_cbq_query()
@@ -6411,7 +6411,7 @@ class QueriesIndexTests(QueryTests):
         for bucket in self.buckets:
             query_bucket = self.get_collection_name(bucket.name)
             for ind in range(self.num_indexes):
-                index_name = "coveringindexwithpolylength{0}" % ind
+                index_name = f"coveringindexwithpolylength{ind}"
                 self.query = "CREATE INDEX {0} ON {1}(join_mo,tasks_points,VMs,skills)  USING {2}".format(
                     index_name, query_bucket, self.index_type)
                 self.run_cbq_query()
@@ -6511,7 +6511,7 @@ class QueriesIndexTests(QueryTests):
         for bucket in self.buckets:
             query_bucket = self.get_collection_name(bucket.name)
             for ind in range(self.num_indexes):
-                index_name = "coveringindexwithsubstr{0}" % ind
+                index_name = f"coveringindexwithsubstr{ind}"
                 self.query = "CREATE INDEX {0} ON {1}(_id,join_mo)  USING {2}".format(index_name, query_bucket,
                                                                                       self.index_type)
                 self.run_cbq_query()
@@ -6985,7 +6985,7 @@ class QueriesIndexTests(QueryTests):
         for bucket in self.buckets:
             query_bucket = self.get_collection_name(bucket.name)
             for ind in range(self.num_indexes):
-                index_name = "indexwitharraysum{0}" % ind
+                index_name = f"indexwitharraysum{ind}"
                 self.query = "CREATE INDEX {0} ON {1}(department, DISTINCT ARRAY round(v.memory + v.RAM) FOR v in" \
                              " tokens(VMs) END ) where join_yr=2012 USING {2}".format(index_name,
                                                                                       query_bucket, self.index_type)

@@ -75,6 +75,7 @@ class QueryTests(BaseTestCase):
         self.test_buckets = self.input.param('test_buckets', 'default')
         self.sample_bucket = self.input.param('sample_bucket', None)
         self.sample_bucket_index = self.input.param('sample_bucket_index', None)
+        self.users = self.input.param("users", None)
 
         self.use_rest = self.input.param("use_rest", True)
         self.hint_index = self.input.param("hint", None)

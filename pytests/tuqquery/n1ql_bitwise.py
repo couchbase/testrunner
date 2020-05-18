@@ -6,13 +6,12 @@ from TestInput import TestInputSingleton
 class QueryBitwiseTests(QueryTests):
     def setUp(self):
         super(QueryBitwiseTests, self).setUp()
-        users = TestInputSingleton.input.param("users", None)
         self.all_buckets = TestInputSingleton.input.param("all_buckets", False)
         self.inp_users = []
-        if users:
-            self.inp_users = eval(eval(users))
+        if self.users:
+            self.inp_users = eval(eval(self.users))
+            self.create_users()
 
-        self.create_users()
         self.users = self.get_user_list()
         self.roles = self.get_user_role_list()
         self.query_buckets = self.get_query_buckets(check_all_buckets=True)
