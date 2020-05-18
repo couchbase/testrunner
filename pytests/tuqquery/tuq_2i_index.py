@@ -2147,9 +2147,7 @@ class QueriesIndexTests(QueryTests):
                              " AND  NOT (department = 'Manager') order by department limit 10"
 
                 expected_result = self.run_cbq_query()
-                # self.assertTrue(sorted(actual_result['results']) == sorted(expected_result['results']))
-                self.assertTrue(sorted(actual_result['results'], key=(lambda x: x['name'])) == \
-                                sorted(expected_result['results'], key=(lambda x: x['name'])))
+                self.assertEqual(actual_result['results'], expected_result['results'])
 
                 str1 = [{"region2": "International", "region1": "South"}, {"region2": "South"}]
                 self.query = "explain select meta().id from {0} " \
@@ -2170,12 +2168,10 @@ class QueriesIndexTests(QueryTests):
                              " AND  NOT (department = 'Manager') order BY meta().id limit 10"
 
                 expected_result = self.run_cbq_query()
-                # self.assertTrue(sorted(actual_result['results']) == sorted(expected_result['results']))
-                self.assertTrue(sorted(actual_result['results'], key=(lambda x: x['name'])) == \
-                                sorted(expected_result['results'], key=(lambda x: x['name'])))
+                self.assertEqual(actual_result['results'], expected_result['results'])
             finally:
                 for idx in created_indexes:
-                    self.query = "DROP INDEX {1} ON {0} USING {2}".format(query_bucket, idx, self.index_type)
+                    self.query = "DROP INDEX `{0}`.`{1}` USING {2}".format(query_bucket, idx, self.index_type)
                     actual_result = self.run_cbq_query()
                     self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
@@ -7855,16 +7851,16 @@ class QueriesIndexTests(QueryTests):
                 created_indexes.remove(idx2)
 
                 idx3 = "idxjoin_yr2"
-                self.query = 'CREATE INDEX {0} ON {1}( all ARRAY v FOR v within tokens({0},{{"names":true,' \
-                             '"case":"lower"}}) END) USING {0}'.format(idx3, query_bucket, "join_yr", self.index_type)
+                self.query = 'CREATE INDEX {0} ON {1}( all ARRAY v FOR v within tokens({2},{{"names":true,' \
+                             '"case":"lower"}}) END) USING {3}'.format(idx3, query_bucket, "join_yr", self.index_type)
                 create_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx3)
                 self._verify_results(create_result['results'], [])
                 created_indexes.append(idx3)
                 self.assertTrue(self._is_index_in_list(bucket, idx3), "Index is not in list")
                 idx4 = "idxVM2"
-                self.query = 'CREATE INDEX {0} ON {1}( aLL ARRAY x.RAM FOR x within tokens({0},{{"names":true,' \
-                             '"case":"lower"}}) END) USING {0}'.format(idx4, query_bucket, "VMs", self.index_type)
+                self.query = 'CREATE INDEX {0} ON {1}( aLL ARRAY x.RAM FOR x within tokens({2},{{"names":true,' \
+                             '"case":"lower"}}) END) USING {3}'.format(idx4, query_bucket, "VMs", self.index_type)
                 create_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx4)
                 self._verify_results(create_result['results'], [])
@@ -7891,7 +7887,7 @@ class QueriesIndexTests(QueryTests):
                 self.assertTrue(result2 == idx4 or result2 == idx3)
 
                 idx5 = "idxtokens1"
-                self.query = 'CREATE INDEX {0} ON {1}( all ARRAY v FOR v within tokens({0})  END) USING {0}'.format(
+                self.query = 'CREATE INDEX {0} ON {1}( all ARRAY v FOR v within tokens({2})  END) USING {3}'.format(
 
                     idx5, query_bucket, "join_yr", self.index_type)
                 create_result = self.run_cbq_query()
@@ -7921,8 +7917,8 @@ class QueriesIndexTests(QueryTests):
                 self.assertTrue(self._is_index_in_list(bucket, idx6), "Index is not in list")
 
                 idx7 = "idxVM3"
-                self.query = 'CREATE INDEX {0} ON {1}( aLL ARRAY x.RAM FOR x within tokens({0},{{"names":true,' \
-                             '"case":"lower"}}) END) USING {0}'.format(idx7, query_bucket, "VMs", self.index_type)
+                self.query = 'CREATE INDEX {0} ON {1}( aLL ARRAY x.RAM FOR x within tokens({2},{{"names":true,' \
+                             '"case":"lower"}}) END) USING {3}'.format(idx7, query_bucket, "VMs", self.index_type)
                 create_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx7)
                 self._verify_results(create_result['results'], [])
@@ -7955,7 +7951,7 @@ class QueriesIndexTests(QueryTests):
                     self.assertTrue(False, diffs)
             finally:
                 for idx in created_indexes:
-                    self.query = "DROP INDEX {1} ON {0} USING {2}".format(query_bucket, idx, self.index_type)
+                    self.query = "DROP INDEX `{0}`.`{1}` USING {2}".format(query_bucket, idx, self.index_type)
                     actual_result = self.run_cbq_query()
                     self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
