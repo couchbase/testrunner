@@ -400,6 +400,8 @@ class CustomMapGenerator:
         es_field_map['store'] = False
         #if is_indexed:
         es_field_map['index'] = 'analyzed'
+        if field_type == "boolean":
+            es_field_map['index'] = 'not_analyzed'
         #else:
         #    es_field_map['index'] = 'no'
         if field_type == "text":
