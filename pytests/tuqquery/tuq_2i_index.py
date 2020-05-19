@@ -1418,14 +1418,22 @@ class QueriesIndexTests(QueryTests):
             self.query = 'select {0},{1} from {1} left outer join {0} on key ("{1}" || {0}.chkey) for {1} ' \
                          'order by meta({0}).id limit 2'.format(query_bucket, std_bucket)
             actual_result = self.run_cbq_query()
-            self.assertTrue(actual_result['results'] == [{'standard_bucket0': {'y': 9, 'x': 1, 'z': 999}}, {
-                'standard_bucket0': {'tasks_points': {'task1': 1, 'task2': 1}, 'name': 'employee-9',
-                                     'mutated': 0, 'skills': ['skill2010', 'skill2011'], 'join_day': 9,
-                                     'email': '9-mail@couchbase.com', 'test_rate': 10.1, 'join_mo': 10,
-                                     'join_yr': 2011, '_id': 'query-testemployee10153.187782713003-0',
-                                     'VMs': [{'RAM': 10, 'os': 'ubuntu', 'name': 'vm_10', 'memory': 10},
-                                             {'RAM': 10, 'os': 'windows', 'name': 'vm_11', 'memory': 10}],
-                                     'job_title': 'Engineer'}}])
+            self.assertTrue(actual_result['results'] == [{'standard_bucket0': {'y': 9, 'x': 1, 'z': 999}},
+                                                         {'standard_bucket0': {'tasks_points': {'task1': 1, 'task2': 1},
+                                                                               'name': 'employee-9',
+                                                                               'mutated': 0,
+                                                                               'skills': ['skill2010', 'skill2011'],
+                                                                               'join_day': 9,
+                                                                               'email': '9-mail@couchbase.com',
+                                                                               'test_rate': 10.1,
+                                                                               'join_mo': 10,
+                                                                               'join_yr': 2011,
+                                                                               '_id': 'query-testemployee10153.187782713003-0',
+                                                                               'VMs': [{'RAM': 10, 'os': 'ubuntu',
+                                                                                        'name': 'vm_10', 'memory': 10},
+                                                                                       {'RAM': 10, 'os': 'windows',
+                                                                                        'name': 'vm_11', 'memory': 10}],
+                                                                               'job_title': 'Engineer'}}])
             self.query = 'delete from {0} use keys("parent1")'.format(query_bucket)
             self.run_cbq_query()
             self.query = 'delete from {0} use keys("child1")'.format(std_bucket)

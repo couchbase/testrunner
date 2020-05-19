@@ -12,17 +12,17 @@ class DMLQueryTests(QueryTests):
         self.directory = self.input.param("directory", "/tmp/tuq_data")
         self.named_prepare = self.input.param("named_prepare", None)
         # Temp process shutdown to debug MB-16888
-        #self.log.info("-" * 100)
-        #self.log.info(self.shell.execute_command("ps aux | grep cbq"))
-        #self.log.info(self.shell.execute_command("ps aux | grep indexer"))
-        #for bucket in self.buckets:
+        # self.log.info("-" * 100)
+        # self.log.info(self.shell.execute_command("ps aux | grep cbq"))
+        # self.log.info(self.shell.execute_command("ps aux | grep indexer"))
+        # for bucket in self.buckets:
         #    self.cluster.bucket_flush(self.master, bucket=bucket,
         #                              timeout=self.wait_timeout * 5)
-        #self.shell.execute_command("killall -9 cbq-engine")
-        #self.shell.execute_command("killall -9 indexer")
-        #self.sleep(60, 'wait for indexer')
-        #self.log.info(self.shell.execute_command("ps aux | grep indexer"))
-        #self.log.info(self.shell.execute_command("ps aux | grep cbq"))
+        # self.shell.execute_command("killall -9 cbq-engine")
+        # self.shell.execute_command("killall -9 indexer")
+        # self.sleep(60, 'wait for indexer')
+        # self.log.info(self.shell.execute_command("ps aux | grep indexer"))
+        # self.log.info(self.shell.execute_command("ps aux | grep cbq"))
         self.query_buckets = self.get_query_buckets(check_all_buckets=True)
         if len(self.query_buckets) > 1:
             self.bucket0 = self.query_buckets[0]
@@ -83,9 +83,10 @@ class DMLQueryTests(QueryTests):
         expected_item_value = None
         self._common_check('key_null%s' % str(uuid.uuid4())[:5], expected_item_value)
 
-    def test_insert_non_doc_long(self):
-        expected_item_value = 123
-        self._common_check('key_null%s' % str(uuid.uuid4())[:1] * 256, expected_item_value)
+    # duplicate definition
+    # def test_insert_non_doc_long(self):
+    #     expected_item_value = 123
+    #     self._common_check('key_null%s' % str(uuid.uuid4())[:1] * 256, expected_item_value)
 
     def test_insert_non_doc_long(self):
         prefix = str(uuid.uuid4())[:4]
@@ -165,7 +166,8 @@ class DMLQueryTests(QueryTests):
                 if v is None:
                     inserted = 'null'
                 values += '("%s", %s),' % (k, inserted)
-            self.query = 'insert into %s (key , value) VALUES %s RETURNING name as new_name' % (query_bucket, values[:-1])
+            self.query = 'insert into %s (key , value) VALUES %s RETURNING name as new_name' % (
+            query_bucket, values[:-1])
             actual_result = self.run_cbq_query()
             # modified to support the alias
             expected_item_values = [{'new_name': 'return_%s' % v} for v in range(10)]
@@ -470,7 +472,8 @@ class DMLQueryTests(QueryTests):
                 self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
         for query_bucket, bucket in zip(self.query_buckets, self.buckets):
             self.query = 'select * from %s as  %s use keys [%s]' % (query_bucket, bucket.name,
-                                                                    ','.join(['"%s_%s"' % (prefix, i) for i in range(num_docs)]))
+                                                                    ','.join(['"%s_%s"' % (prefix, i) for i in
+                                                                              range(num_docs)]))
             actual_result = self.run_cbq_query()
             expected_result = [{bucket.name: {'name': doc['name']}} for doc in values[:num_docs]]
             actual_result = actual_result['results']
@@ -487,11 +490,13 @@ class DMLQueryTests(QueryTests):
         self.fail_if_no_buckets()
         for query_bucket in self.query_buckets:
             for i in range(num_docs):
-                self.query = 'insert into %s (key "%s_%s", value {"name": name}) select name from %s use keys ["%s"]' % (query_bucket, prefix, str(i), query_bucket, keys[i])
+                self.query = 'insert into %s (key "%s_%s", value {"name": name}) select name from %s use keys ["%s"]' % (
+                query_bucket, prefix, str(i), query_bucket, keys[i])
                 actual_result = self.run_cbq_query()
                 self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
         for query_bucket, bucket in zip(self.query_buckets, self.buckets):
-            self.query = 'select * from %s %s use keys [%s]' % (query_bucket, bucket.name, ','.join(['"%s_%s"' % (prefix, i) for i in range(num_docs)]))
+            self.query = 'select * from %s %s use keys [%s]' % (
+            query_bucket, bucket.name, ','.join(['"%s_%s"' % (prefix, i) for i in range(num_docs)]))
             actual_result = self.run_cbq_query()
             expected_result = [{bucket.name: {'name': doc['name']}} for doc in values[:num_docs]]
             # print("--> expected_result:{}".format(expected_result))
@@ -931,7 +936,7 @@ class DMLQueryTests(QueryTests):
         self.fail_if_no_buckets()
         for query_bucket in self.query_buckets:
             self.query = 'delete from %s use index(%s using %s) where job_title="Engineer"' % (
-            query_bucket, idx_name, self.index_type)
+                query_bucket, idx_name, self.index_type)
             actual_result = self.run_cbq_query()
             self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
         self._keys_are_deleted(keys_to_delete)
@@ -942,7 +947,7 @@ class DMLQueryTests(QueryTests):
         self.doc1 = {"type": "abc"}
         self.doc2 = {"type": "def"}
         self.query = 'INSERT into %s (key , value) VALUES ("%s", %s),("%s",%s)' % (
-        self.bucket1, self.key1, self.doc1, self.key2, self.doc2)
+            self.bucket1, self.key1, self.doc1, self.key2, self.doc2)
         actual_result = self.run_cbq_query()
         self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
         self.assertEqual(actual_result["metrics"]["mutationCount"], 2, "Mutation Count is correct")
@@ -963,7 +968,8 @@ class DMLQueryTests(QueryTests):
 
         self.assertTrue(len(self.buckets) >= 2, 'Test needs at least 2 buckets')
         keys, _ = self._insert_gen_keys(self.num_items, prefix='merge_delete')
-        self.query = 'MERGE INTO %s USING %s sd on key meta().id when matched then delete where meta(sd).id = "%s"' % (self.bucket0, self.bucket1, keys[0])
+        self.query = 'MERGE INTO %s USING %s sd on key meta().id when matched then delete where meta(sd).id = "%s"' % (
+        self.bucket0, self.bucket1, keys[0])
         actual_result = self.run_cbq_query()
         self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
         self.assertEqual(actual_result['metrics']['mutationCount'], 1, 'Merge deleted more data than intended')
@@ -976,7 +982,7 @@ class DMLQueryTests(QueryTests):
         self.assertTrue(len(self.buckets) >= 2, 'Test needs at least 2 buckets')
         keys, _ = self._insert_gen_keys(self.num_items, prefix='merge_delete')
         query = 'MERGE INTO %s USING %s on key meta().id when matched then delete where meta(%s).id = "%s"' % (
-        self.bucket0, self.bucket1, self.bucket1, keys[0])
+            self.bucket0, self.bucket1, self.bucket1, keys[0])
         prepared = self.run_cbq_query(query='PREPARE %s' % query)['results'][0]
         actual_result = self.run_cbq_query(query=prepared, is_prepared=True)
         self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
@@ -989,7 +995,7 @@ class DMLQueryTests(QueryTests):
         self.assertTrue(len(self.buckets) >= 2, 'Test needs at least 2 buckets')
         keys, _ = self._insert_gen_keys(self.num_items, prefix='delete_match')
         self.query = 'MERGE INTO %s USING %s on key meta().id when matched then delete limit 1' % (
-        self.bucket0, self.bucket1)
+            self.bucket0, self.bucket1)
         actual_result = self.run_cbq_query()
         self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
         self.assertEqual(actual_result['metrics']['mutationCount'], 1, 'Merge deleted more data than intended')
@@ -998,7 +1004,7 @@ class DMLQueryTests(QueryTests):
         self.assertTrue(len(self.buckets) >= 2, 'Test needs at least 2 buckets')
         keys, _ = self._insert_gen_keys(self.num_items, prefix='merge_delete_where')
         self.query = 'MERGE INTO %s USING %s s0 on key meta().id when matched then delete where meta(s0).id = "%s" AND s0.name = "%s"' % (
-        self.bucket0, self.bucket1, keys[0], "employee-1")
+            self.bucket0, self.bucket1, keys[0], "employee-1")
         actual_result = self.run_cbq_query()
         self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
         self.assertEqual(actual_result['metrics']['mutationCount'], 1, 'Merge deleted more data than intended')
@@ -1020,7 +1026,7 @@ class DMLQueryTests(QueryTests):
         self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
         new_name = 'edit'
         self.query = 'MERGE INTO %s b1 USING %s b2 on key name when matched then update set b1.name="%s"' % (
-        self.bucket0, self.bucket1, new_name)
+            self.bucket0, self.bucket1, new_name)
         actual_result = self.run_cbq_query()
         self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
         self.query = 'SELECT name FROM %s' % (self.bucket0)
@@ -1040,7 +1046,7 @@ class DMLQueryTests(QueryTests):
         actual_result = self.run_cbq_query()
         self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
         self.query = 'MERGE INTO %s b1 USING %s b2 on key name when matched then update unset b1.name' % (
-        self.bucket0, self.bucket1)
+            self.bucket0, self.bucket1)
         actual_result = self.run_cbq_query()
         self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
         self.query = 'SELECT * FROM %s ' % (self.bucket0)
@@ -1139,7 +1145,7 @@ class DMLQueryTests(QueryTests):
         self.fail_if_no_buckets()
         for query_bucket in self.query_buckets:
             self.query = 'update %s use keys %s set name="%s", join_day=%s' % (
-            query_bucket, keys_to_update, updated_value, updated_value_int)
+                query_bucket, keys_to_update, updated_value, updated_value_int)
             actual_result = self.run_cbq_query()
             self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
             self.query = 'select name, join_day from %s use keys %s' % (query_bucket, keys_to_update)
@@ -1202,7 +1208,7 @@ class DMLQueryTests(QueryTests):
         self.fail_if_no_buckets()
         for query_bucket in self.query_buckets:
             self.query = 'update %s set name="%s" where join_day=1 returning element name' % (
-            query_bucket, updated_value)
+                query_bucket, updated_value)
             actual_result = self.run_cbq_query()
             self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
             self.query = 'select name from %s where join_day=1' % query_bucket
@@ -1218,7 +1224,7 @@ class DMLQueryTests(QueryTests):
         self.fail_if_no_buckets()
         for query_bucket in self.query_buckets:
             self.query = 'update %s set name="%s" where join_day between 1 and 2 returning name' % (
-            query_bucket, updated_value)
+                query_bucket, updated_value)
             actual_result = self.run_cbq_query()
             self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
             self.query = 'select name from %s where join_day between 1 and 2' % query_bucket
@@ -1250,7 +1256,7 @@ class DMLQueryTests(QueryTests):
         self.fail_if_no_buckets()
         for query_bucket in self.query_buckets:
             self.query = 'update %s use keys %s set vm.os="%s" for vm in VMs END returning VMs' % (
-            query_bucket, keys_to_update, updated_value)
+                query_bucket, keys_to_update, updated_value)
             actual_result = self.run_cbq_query()
             self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
             self.query = 'select VMs from %s use keys %s' % (query_bucket, keys_to_update)
@@ -1268,7 +1274,7 @@ class DMLQueryTests(QueryTests):
         self.fail_if_no_buckets()
         for query_bucket in self.query_buckets:
             self.query = 'update %s use keys %s set vm.os="%s" for vm in VMs END returning VMs' % (
-            query_bucket, keys_to_update, updated_value)
+                query_bucket, keys_to_update, updated_value)
             actual_result = self.run_cbq_query()
             self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
             self.query = 'select VMs from %s use keys %s' % (query_bucket, keys_to_update)
@@ -1286,7 +1292,7 @@ class DMLQueryTests(QueryTests):
         self.fail_if_no_buckets()
         for query_bucket in self.query_buckets:
             self.query = 'update %s use keys %s set vm.os="%s" for vm in VMs when vm.os="ubuntu" END returning VMs' % (
-            query_bucket, keys_to_update, updated_value)
+                query_bucket, keys_to_update, updated_value)
             actual_result = self.run_cbq_query()
             self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
             self.query = 'select VMs from %s use keys %s' % (query_bucket, keys_to_update)
@@ -1297,7 +1303,7 @@ class DMLQueryTests(QueryTests):
 
     def update_keys_clause_hints(self):
         num_docs = self.input.param('num_docs', 10)
-        keys, _ = self._insert_gen_keys(num_docs, prefix='update_keys_hints %s' % str(uuid.uuid4())[:4])
+        keys, _ = self._insert_gen_keys(num_docs, prefix='update_keys_hints_%s' % str(uuid.uuid4())[:4])
         updated_value = 'new_name'
         index_name = 'idx_name'
         self.fail_if_no_buckets()
@@ -1306,12 +1312,13 @@ class DMLQueryTests(QueryTests):
             self.run_cbq_query()
             self._wait_for_index_online(bucket, index_name)
             self.query = 'update %s use index(%s using %s) set name="%s"' % (
-            query_bucket, index_name, self.index_type, updated_value)
+                query_bucket, index_name, self.index_type, updated_value)
             actual_result = self.run_cbq_query()
             self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
-            self.query = 'select name from %s use index(%s using %s)' % (query_bucket, index_name, self.index_type)
+            self.query = 'select distinct name from %s use index(%s using %s)' % (query_bucket, index_name,
+                                                                                  self.index_type)
             actual_result = self.run_cbq_query()
-            self.assertEqual(actual_result['results'], [{'name': updated_value}] * num_docs, 'Names were not changed')
+            self.assertEqual(actual_result['results'], [{"name": "new_name"}], 'Names were not changed')
             self.query = "DROP INDEX %s ON %s USING %s" % (index_name, query_bucket, self.index_type)
             self.run_cbq_query()
 
@@ -1326,21 +1333,21 @@ class DMLQueryTests(QueryTests):
             self.run_cbq_query()
             self._wait_for_index_online(bucket, index_name)
             self.query = 'update %s use index(%s using %s) set name="%s" where join_day=1 returning name' % (
-            query_bucket, index_name, self.index_type, updated_value)
+                query_bucket, index_name, self.index_type, updated_value)
             actual_result = self.run_cbq_query()
             self.assertEqual(actual_result['status'], 'success', 'Query was not run successfully')
             self.query = 'select name from %s use index(%s using %s) where join_day=1' % (
-            query_bucket, index_name, self.index_type)
+                query_bucket, index_name, self.index_type)
             actual_result = self.run_cbq_query()
             self.assertFalse([doc for doc in actual_result['results'] if doc['name'] != updated_value],
                              'Names were not changed')
             self.query = "DROP INDEX %s ON %s USING %s" % (index_name, query_bucket, self.index_type)
             self.run_cbq_query()
 
-    ########################################################################################################################
+    ###################################################################################################################
     #
     # WITH INDEX
-    #######################################################################################################################
+    ###################################################################################################################
 
     def test_with_hints(self):
         indexes = []
@@ -1359,7 +1366,7 @@ class DMLQueryTests(QueryTests):
         try:
             for indx in indexes:
                 fn = getattr(self, method_name)
-                if ("update_where_hints" in str(fn) or "update_keys_clause_hints" in str(fn)):
+                if "update_where_hints" in str(fn) or "update_keys_clause_hints" in str(fn):
                     fn()
                 else:
                     fn(indx)
