@@ -73,6 +73,8 @@ class QueryTests(BaseTestCase):
                                            password=self.master.rest_password)
         self.query_buckets = None
         self.test_buckets = self.input.param('test_buckets', 'default')
+        if (self.test_buckets == "default") & (self.default_bucket == False) :
+            self.test_buckets = None
         self.sample_bucket = self.input.param('sample_bucket', None)
         self.sample_bucket_index = self.input.param('sample_bucket_index', None)
         self.users = self.input.param("users", None)
@@ -2323,17 +2325,21 @@ class QueryTests(BaseTestCase):
         query buckets/scope/collection namespace
         sample_buckets: Provide the list of name of sample buckets for which queries would be running
         """
-        query_bucket = self.test_buckets.split(',')
         collections_namespace = []
         bucket_list = []
-        for item in query_bucket:
-            if ':' in item:
-                _, temp_split = item.split(':')
-                new_list = temp_split.split('.')
-                bucket_list.append(new_list[0])
-            else:
-                bucket_list.append(item)
-            collections_namespace.append(self.get_collection_name(item))
+
+        if self.test_buckets:
+            query_bucket = self.test_buckets.split(',')
+
+            for item in query_bucket:
+                if ':' in item:
+                    _, temp_split = item.split(':')
+                    new_list = temp_split.split('.')
+                    bucket_list.append(new_list[0])
+                else:
+                    bucket_list.append(item)
+                collections_namespace.append(self.get_collection_name(item))
+
         if deferred_bucket:
             d_buckets = deferred_bucket.split(',')
             for item in d_buckets:
@@ -2352,6 +2358,9 @@ class QueryTests(BaseTestCase):
             for bucket in self.buckets:
                 if bucket.name not in bucket_list:
                     collections_namespace.append(self.get_collection_name(bucket.name))
+
+        self.log.info("xxxxxx - - - All buckets - - - xxxxxx")
+        self.log.info(collections_namespace)
         return collections_namespace
 
     def get_collection_name(self, bucket_name=None):

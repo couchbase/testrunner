@@ -21,6 +21,7 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
         self.query_buckets = self.get_query_buckets(sample_buckets=[self.sample_bucket])
         self.query_bucket = self.query_buckets[1]
         self._load_test_buckets()
+        self.users = {}
 
         self.log.info("==============  N1qlFTSIntegrationPhase2Test setup has started ==============")
         self.log_config_info()

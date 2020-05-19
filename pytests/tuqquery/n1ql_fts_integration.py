@@ -266,6 +266,7 @@ class N1qlFTSIntegrationTest(QueryTests):
 
     def setUp(self):
         super(N1qlFTSIntegrationTest, self).setUp()
+        self.users = {}
         self._init_nodes()
         self._load_test_data(number_of_records=self.test_bucket_size)
         self._open_curl_access()
@@ -598,8 +599,9 @@ class N1qlFTSIntegrationTest(QueryTests):
         idx_result_node4_after_rebalance = self._run_query_against_node(self.servers[3], self.test_fts_query)
         alias_result_node4_after_rebalance = self._run_query_against_node(self.servers[3], self.test_fts_alias_query)
 
-        self.assertEuqals(idx_result_node2_before_failover == idx_result_node4_after_rebalance and
+        self.assertEqual(idx_result_node2_before_failover == idx_result_node4_after_rebalance and
                           idx_result_node2_before_failover == alias_result_node4_after_rebalance, True, "Results after rebalance are not the same.")
+
 
 
     ''' Non-parameterized prepared statement call against fts and non-fts nodes. '''

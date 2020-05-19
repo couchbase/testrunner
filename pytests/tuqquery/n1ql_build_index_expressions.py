@@ -44,14 +44,14 @@ class QueryBuildIndexExpressionsTests(QueryTests):
             self.wait_for_index_status(self.query_bucket, index, "online")
         num_indexes_online = self.get_index_count(self.query_bucket, 'online')
         self.assertEqual(num_indexes_online, initial_num_indexes_online + 5)
-        results = self.run_cbq_query("BUILD index on {0}(ix9, ix6, ix6, ix7, ix6, ix6, ix8, ix8, ix8, ix9)")
+        results = self.run_cbq_query("BUILD index on {0}(ix9, ix6, ix6, ix7, ix6, ix6, ix8, ix8, ix8, ix9)".format(self.query_bucket))
         build_index_status = results['status']
         self.assertEqual(build_index_status, 'success')
         for index in ['ix6', 'ix7', 'ix8', 'ix9']:
             self.wait_for_index_status(self.query_bucket, index, "online")
         num_indexes_online = self.get_index_count(self.query_bucket, 'online')
         self.assertEqual(num_indexes_online, initial_num_indexes_online + 9)
-        results = self.run_cbq_query("BUILD index on {0}(ix10, ix10, ix10, ix10, ix10, ix10, ix10, ix10, ix10, ix10)")
+        results = self.run_cbq_query("BUILD index on {0}(ix10, ix10, ix10, ix10, ix10, ix10, ix10, ix10, ix10, ix10)".format(self.query_bucket))
         build_index_status = results['status']
         self.assertEqual(build_index_status, 'success')
         for index in ['ix10']:
@@ -62,7 +62,7 @@ class QueryBuildIndexExpressionsTests(QueryTests):
     def test_build_index_with_strings(self):
         initial_num_indexes_online = self.get_index_count(self.query_bucket, 'online')
         self.assertTrue(initial_num_indexes_online == 0 or initial_num_indexes_online == 1)
-        results = self.run_cbq_query("BUILD index on {0}('ix1', 'ix2', 'ix3', 'ix4', 'ix5')")
+        results = self.run_cbq_query("BUILD index on {0}('ix1', 'ix2', 'ix3', 'ix4', 'ix5')".format(self.query_bucket))
         build_index_status = results['status']
         self.assertEqual(build_index_status, 'success')
         for index in ['ix1', 'ix2', 'ix3', 'ix4', 'ix5']:
@@ -70,7 +70,7 @@ class QueryBuildIndexExpressionsTests(QueryTests):
         num_indexes_online = self.get_index_count(self.query_bucket, 'online')
         self.assertEqual(num_indexes_online, initial_num_indexes_online + 5)
         results = self.run_cbq_query("BUILD index on {0}('ix9', 'ix6', 'ix6', 'ix7', 'ix6', 'ix6', 'ix8', 'ix8', "
-                                     "'ix8', 'ix9')")
+                                     "'ix8', 'ix9')".format(self.query_bucket))
         build_index_status = results['status']
         self.assertEqual(build_index_status, 'success')
         for index in ['ix6', 'ix7', 'ix8', 'ix9']:
@@ -78,7 +78,7 @@ class QueryBuildIndexExpressionsTests(QueryTests):
         num_indexes_online = self.get_index_count(self.query_bucket, 'online')
         self.assertEqual(num_indexes_online, initial_num_indexes_online + 9)
         results = self.run_cbq_query("BUILD index on {0}('ix10', 'ix10', 'ix10', 'ix10', 'ix10', 'ix10', 'ix10', "
-                                     "'ix10', 'ix10', 'ix10')")
+                                     "'ix10', 'ix10', 'ix10')".format(self.query_bucket))
         build_index_status = results['status']
         self.assertEqual(build_index_status, 'success')
         for index in ['ix10']:
@@ -134,7 +134,7 @@ class QueryBuildIndexExpressionsTests(QueryTests):
             self.wait_for_index_status(self.query_bucket, index, "online")
         num_indexes_online = self.get_index_count(self.query_bucket, 'online')
         self.assertEqual(num_indexes_online, initial_num_indexes_online + 5)
-        results = self.run_cbq_query("BUILD index on default((SELECT RAW name FROM system:indexes WHERE keyspace_id = "
+        results = self.run_cbq_query("BUILD index on {0}((SELECT RAW name FROM system:indexes WHERE keyspace_id = "
                                      "'{0}' AND state = 'deferred' and name in ['ix9', 'ix6']), "
                                      "(SELECT RAW name FROM system:indexes WHERE keyspace_id = '{0}' AND state = "
                                      "'deferred' and name in ['ix7']), "
@@ -146,7 +146,7 @@ class QueryBuildIndexExpressionsTests(QueryTests):
             self.wait_for_index_status(self.query_bucket, index, "online")
         num_indexes_online = self.get_index_count(self.query_bucket, 'online')
         self.assertEqual(num_indexes_online, initial_num_indexes_online + 9)
-        results = self.run_cbq_query("BUILD index on default((select raw 'ix10' from default limit 10))")
+        results = self.run_cbq_query("BUILD index on {0}((select raw 'ix10' from default limit 10))".format(self.query_bucket))
         build_index_status = results['status']
         self.assertEqual(build_index_status, 'success')
         for index in ['ix10']:
@@ -185,7 +185,7 @@ class QueryBuildIndexExpressionsTests(QueryTests):
     def test_build_index_many_expressions(self):
         initial_num_indexes_online = self.get_index_count(self.query_bucket, 'online')
         self.assertTrue(initial_num_indexes_online == 0 or initial_num_indexes_online == 1)
-        results = self.run_cbq_query("BUILD index on default((select raw 'ix10' from default))")
+        results = self.run_cbq_query("BUILD index on {0}((select raw 'ix10' from default))".format(self.query_bucket))
         build_index_status = results['status']
         self.assertEqual(build_index_status, 'success')
         for index in ['ix10']:
@@ -196,7 +196,7 @@ class QueryBuildIndexExpressionsTests(QueryTests):
     def test_build_index_invalid_index(self):
         initial_num_indexes_online = self.get_index_count(self.query_bucket, 'online')
         self.assertTrue(initial_num_indexes_online == 0 or initial_num_indexes_online == 1)
-        results = self.run_cbq_query("BUILD index on {0}(ix1, ix2, ix3, ix4, ix5)")
+        results = self.run_cbq_query("BUILD index on {0}(ix1, ix2, ix3, ix4, ix5)".format(self.query_bucket))
         build_index_status = results['status']
         self.assertEqual(build_index_status, 'success')
         for index in ['ix1', 'ix2', 'ix3', 'ix4', 'ix5']:
@@ -206,7 +206,7 @@ class QueryBuildIndexExpressionsTests(QueryTests):
 
         # index already built
         try:
-            results = self.run_cbq_query("BUILD index on {0}(ix6, ix6, ix6, ix1)")
+            results = self.run_cbq_query("BUILD index on {0}(ix6, ix6, ix6, ix1)".format(self.query_bucket))
         except Exception as ex:
             self.log.info(str(ex))
             self.assertTrue('Index ix1 is already built' in str(ex))
@@ -218,7 +218,7 @@ class QueryBuildIndexExpressionsTests(QueryTests):
         self.assertEqual(num_indexes_online, initial_num_indexes_online + 5)
 
         try:
-            results = self.run_cbq_query("BUILD index on {0}(['ix6', 'ix6', 'ix6', 'ix1'])")
+            results = self.run_cbq_query("BUILD index on {0}(['ix6', 'ix6', 'ix6', 'ix1'])".format(self.query_bucket))
         except Exception as ex:
             self.log.info(str(ex))
             self.assertTrue('Index ix1 is already built' in str(ex))
@@ -231,7 +231,7 @@ class QueryBuildIndexExpressionsTests(QueryTests):
 
         # index doesnt exist
         try:
-            results = self.run_cbq_query("BUILD index on {0}(ix6, ix6, ix6, ix16)")
+            results = self.run_cbq_query("BUILD index on {0}(ix6, ix6, ix6, ix16)".format(self.query_bucket))
         except Exception as ex:
             self.log.info(str(ex))
             self.assertTrue('GSI index ix16 not found' in str(ex))
@@ -243,7 +243,7 @@ class QueryBuildIndexExpressionsTests(QueryTests):
         self.assertEqual(num_indexes_online, initial_num_indexes_online + 5)
 
         try:
-            results = self.run_cbq_query("BUILD index on {0}(['ix6', 'ix6', 'ix6', 'ix16'])")
+            results = self.run_cbq_query("BUILD index on {0}(['ix6', 'ix6', 'ix6', 'ix16'])".format(self.query_bucket))
         except Exception as ex:
             self.log.info(str(ex))
             self.assertTrue('GSI index ix16 not found' in str(ex))
