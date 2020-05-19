@@ -366,10 +366,13 @@ class EventingN1QL(EventingBaseTest):
         self.sleep(30)
         stats = self.rest.get_all_eventing_stats()
         log.info("Stats {0}".format(json.dumps(stats, sort_keys=True, indent=4)))
-        if stats[0]["lcb_exception_stats"]["23"]==1:
+        if stats[0]["failure_stats"]["timeout_count"] !=1:
+            if stats[0]["lcb_exception_stats"]["23"]==1:
+                pass
+            else:
+                raise Exception("Timeout not happened for the long running query")
+        elif stats[0]["failure_stats"]["timeout_count"] ==1:
             pass
-        else:
-            raise Exception("Timeout not happened for the long running query")
         self.undeploy_and_delete_function(body)
 
 
@@ -401,11 +404,12 @@ class EventingN1QL(EventingBaseTest):
                                               dcp_stream_boundary="everything", execution_timeout=60)
         self.deploy_function(body)
         self.verify_eventing_results(self.function_name, 2016, skip_stats_validation=True)
-        body = self.create_save_function_body(self.function_name+"_check", "handler_code/check_for_expiry.js",
+        body1 = self.create_save_function_body(self.function_name+"_check", "handler_code/check_for_expiry.js",
                                               dcp_stream_boundary="everything", execution_timeout=60,multi_dst_bucket=True)
-        self.deploy_function(body)
+        self.deploy_function(body1)
         self.verify_eventing_results(self.function_name, 2016,bucket=self.dst_bucket_name1, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
+        self.undeploy_and_delete_function(body1)
 
     def test_n1ql_with_ttl(self):
         dst_bucket = self.rest.get_bucket(self.dst_bucket_name)
