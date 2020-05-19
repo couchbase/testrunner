@@ -1761,10 +1761,12 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                 services=self.services)
         count = 0
         while count < 4:
-            reb_status = rest._rebalance_progress_status()
-            if "running" in reb_status:
-                self.sleep(2)
+            reb_status = rest._rebalance_status_and_progress()
+            if reb_status != "none":
+                self.sleep(2, "wait rebalance to complete")
                 count += 1
+            else:
+                break
             if count == 4:
                 self.fail("Status still shows running after rebalance complete 8 seconds")
         return kv_quota
@@ -2492,6 +2494,16 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                              self.input.clusters[0][1].ip, services=bk_cluster_services[0])
             rebalance = self.cluster.async_rebalance(self.cluster_to_restore, [], [])
             rebalance.result()
+            count = 0
+            while count < 4:
+                reb_st, _ = rest_rs._rebalance_status_and_progress()
+                if reb_st != "none":
+                    self.sleep(2, "wait rebalance to complete")
+                    count += 1
+                else:
+                    break
+                if count == 4:
+                    self.fail("Status still shows running after rebalance complete 8 seconds")
         else:
             self.log.info("No availabe node to create cluster.")
 
