@@ -101,6 +101,7 @@ class BaseRQGTests(BaseTestCase):
             self.use_secondary_index = self.run_query_with_secondary or self.run_explain_with_hints
             self.check_explain_plan = self.input.param("explain_plan", False)
             self.index_limit = self.input.param("index_limit", 5)
+            self.float_round_level = self.input.param("float_round_level", 0)
 
             self.advise_server = self.input.advisor
             self.advise_buckets = ["bucket_01", "bucket_02", "bucket_03", "bucket_04", "bucket_05", "bucket_06", "bucket_07", "bucket_08", "bucket_09", "bucket_10"]
@@ -1478,3 +1479,11 @@ class BaseRQGTests(BaseTestCase):
                                       char_value, orderid1, qty1, price1, primary_key_value, orderid2, qty2,
                                       price2, primary_key_value)
             self.n1ql_helper.run_cbq_query(query=n1ql_insert_template, server=self.n1ql_server)
+
+    def _round_float_results(self, results, round_level=0):
+        if round_level > 0:
+            for res in results:
+                for key in res.keys():
+                    if isinstance(res[key], float):
+                        res[key] = round(res[key], round_level)
+        return results

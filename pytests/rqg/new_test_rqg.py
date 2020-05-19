@@ -290,7 +290,7 @@ class RQGTestsNew(BaseRQGTests):
                 self.log.info(" N1QL QUERY :: {0}".format(prepared_query))
                 actual_result = self.n1ql_query_runner_wrapper(n1ql_query=prepared_query, server=self.n1ql_server, query_params=query_params, scan_consistency="request_plus")
             n1ql_result = actual_result["results"]
-
+            self._round_float_results(n1ql_result, self.float_round_level)
             # Run SQL Query
             sql_result = expected_result
 
@@ -305,7 +305,7 @@ class RQGTestsNew(BaseRQGTests):
                 if self.aggregate_pushdown:
                     sql_result = client._gen_json_from_results_repeated_columns(columns, rows)
                 else:
-                    sql_result = client._gen_json_from_results(columns, rows)
+                    sql_result = client._gen_json_from_results(columns, rows, self.float_round_level)
             client._close_connection()
             self.log.info(" result from n1ql query returns {0} items".format(len(n1ql_result)))
             self.log.info(" result from sql query returns {0} items".format(len(sql_result)))
