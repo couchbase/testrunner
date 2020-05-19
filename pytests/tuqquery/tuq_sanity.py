@@ -1531,12 +1531,11 @@ class QuerySanityTests(QueryTests):
             0] + ' d let name1 = substr(name[0].FirstName,0,10) WHERE name1 = "employeefi"'
         res = self.run_cbq_query()
         plan = self.ExplainPlanHelper(res)
-        self.assertTrue(plan['~children'][2]['~child']['~children'] == [
+        self.assertEqual(plan['~children'][2]['~child']['~children'], [
             {'#operator': 'Let', 'bindings': [{'var': 'name1',
                                                'expr': 'substr0((((`d`.`name`)[0]).`FirstName`), 0, 10)'}]},
             {'#operator': 'Filter', 'condition': '(`name1` = "employeefi")'},
-            {'#operator': 'InitialProject', 'result_terms': [{'expr': '`name1`'}]},
-            {'#operator': 'FinalProject'}])
+            {'#operator': 'InitialProject', 'result_terms': [{'expr': '`name1`'}]}])
 
         self.query = 'select name1 from ' + self.query_buckets[
             0] + ' d let name1 = substr(name[0].FirstName,0,10) WHERE name1 = "employeefi" limit 2'
@@ -1546,15 +1545,14 @@ class QuerySanityTests(QueryTests):
             0] + ' d let name1 = substr(name[0].FirstName,0,10) WHERE name[0].MiddleName = "employeefirstname-4"'
         res = self.run_cbq_query()
         plan = self.ExplainPlanHelper(res)
-        self.assertTrue(plan['~children'][2]['~child']['~children'] ==
+        self.assertEqual(plan['~children'][2]['~child']['~children'],
                         [{'#operator': 'Filter',
                           'condition': '((((`d`.`name`)[0]).`MiddleName`) = "employeefirstname-4")'},
                          {'#operator': 'Let', 'bindings': [
                              {'var': 'name1', 'expr': 'substr0((((`d`.`name`)[0]).`FirstName`), 0, 10)'}]},
-                         {'#operator': 'InitialProject', 'result_terms': [{'expr': '`name1`'}]},
-                         {'#operator': 'FinalProject'}])
+                         {'#operator': 'InitialProject', 'result_terms': [{'expr': '`name1`'}]}])
         self.query = 'select name1 from ' + self.query_buckets[0] + \
-                     'let name1 = substr(name[0].FirstName,0,10) WHERE name[0].MiddleName = "employeefirstname-4" ' \
+                     ' let name1 = substr(name[0].FirstName,0,10) WHERE name[0].MiddleName = "employeefirstname-4" ' \
                      'limit 10 '
         res = self.run_cbq_query()
         self.assertTrue(res['results'] == [])

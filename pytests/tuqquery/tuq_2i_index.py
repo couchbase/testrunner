@@ -344,8 +344,7 @@ class QueriesIndexTests(QueryTests):
         query_bucket = self.query_buckets[0]
         self.query = "select pairs(self) from {0} order by meta().id limit 1".format(query_bucket)
         actual_result = self.run_cbq_query()
-        print("actual={} vs {}".format(actual_result['metrics']['resultSize'], "3608"))
-        self.assertTrue(actual_result['metrics']['resultSize'] == 3608)
+        self.assertEqual(actual_result['metrics']['resultSize'], 3597)
 
     def test_index_missing_null(self):
         self.fail_if_no_buckets()
@@ -2215,8 +2214,8 @@ class QueriesIndexTests(QueryTests):
                 if self.DGM:
                     self.get_dgm_for_plasma(indexer_nodes=[self.server], memory_quota=400)
                 idx = "unnest_idx"
-                self.query = "CREATE INDEX {0} ON {1}( DISTINCT ARRAY ( ALL array j for j in i end) FOR i in {0} END," \
-                             "department,tasks,name) USING {2}".format(idx, query_bucket, "tasks", self.index_type)
+                self.query = "CREATE INDEX {0} ON {1}( DISTINCT ARRAY ( ALL array j for j in i end) FOR i in {2} END," \
+                             "department,tasks,name) USING {3}".format(idx, query_bucket, "tasks", self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
                 self._verify_results(actual_result['results'], [])
@@ -2245,12 +2244,10 @@ class QueriesIndexTests(QueryTests):
                              "AND  NOT ({0}.department = 'Manager') order BY {0}.name limit 10".format(query_bucket)
                 expected_result = self.run_cbq_query()
 
-                # self.assertEqual(sorted(actual_result['results']), sorted(expected_result['results']))
-                self.assertEqual(sorted(actual_result['results'], key=(lambda x: x['name'])),
-                                 sorted(expected_result['results'], key=(lambda x: x['name'])))
+                self.assertEqual(actual_result['results'],expected_result['results'])
             finally:
                 for idx in created_indexes:
-                    self.query = "DROP INDEX {1} ON {0} USING {2}".format(query_bucket, idx, self.index_type)
+                    self.query = "DROP INDEX `{0}`.`{1}` USING {2}".format(query_bucket, idx, self.index_type)
                     actual_result = self.run_cbq_query()
                     self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
@@ -2433,7 +2430,7 @@ class QueriesIndexTests(QueryTests):
             try:
                 idx = "nested_idx_attr_nest"
                 self.query = "CREATE INDEX {0} ON {1}( ALL ARRAY ( DISTINCT array j.region1 for j in i.Marketing end)" \
-                             " FOR i in {0} END,tasks,name) USING {2}".format(idx, query_bucket,
+                             " FOR i in {2} END,tasks,name) USING {3}".format(idx, query_bucket,
                                                                               "tasks", self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
@@ -2453,13 +2450,12 @@ class QueriesIndexTests(QueryTests):
                              "IN i.Marketing SATISFIES j.region1='South' end) END ".format(query_bucket) + \
                              "order BY name limit 10"
                 expected_result = self.run_cbq_query()
-                # self.assertTrue(sorted(actual_result['results']) == sorted(expected_result['results']))
                 diffs = DeepDiff(actual_result['results'], expected_result['results'], ignore_order=True)
                 if diffs:
                     self.assertTrue(False, diffs)
             finally:
                 for idx in created_indexes:
-                    self.query = "DROP INDEX {1} ON {0} USING {2}".format(query_bucket, idx, self.index_type)
+                    self.query = "DROP INDEX `{0}`.`{1}` USING {2}".format(query_bucket, idx, self.index_type)
                     actual_result = self.run_cbq_query()
                     self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
@@ -2813,14 +2809,14 @@ class QueriesIndexTests(QueryTests):
                 actual_result = self.run_cbq_query()
                 # actual_result = sorted(actual_result['results'])
                 self.query = "select name from {0} use index (`#primary`) WHERE department = 'Support' and ANY i IN " \
-                             "{0}.hobbies.hobby SATISFIES i = 'art' END".format(query_bucket) + "order BY name limit 10"
+                             "{0}.hobbies.hobby SATISFIES i = 'art' END ".format(query_bucket) + "order BY name limit 10"
                 expected_result = self.run_cbq_query()
                 diffs = DeepDiff(actual_result['results'], expected_result['results'], ignore_order=True)
                 if diffs:
                     self.assertTrue(False, diffs)
             finally:
                 for idx in created_indexes:
-                    self.query = "DROP INDEX {1} ON {0} USING {2}".format(query_bucket, idx, self.index_type)
+                    self.query = "DROP INDEX `{0}`.`{1}` USING {2}".format(query_bucket, idx, self.index_type)
                     actual_result = self.run_cbq_query()
                     self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
@@ -2851,14 +2847,14 @@ class QueriesIndexTests(QueryTests):
                 actual_result = self.run_cbq_query()
                 # actual_result = sorted(actual_result['results'])
                 self.query = "select name from {0} use index (`#primary`) WHERE department = 'Support' and ANY i IN " \
-                             "{0}.hobbies.hobby SATISFIES i = 'art' END".format(query_bucket) + "order BY name limit 10"
+                             "{0}.hobbies.hobby SATISFIES i = 'art' END ".format(query_bucket) + "order BY name limit 10"
                 expected_result = self.run_cbq_query()
                 diffs = DeepDiff(actual_result['results'], expected_result['results'], ignore_order=True)
                 if diffs:
                     self.assertTrue(False, diffs)
             finally:
                 for idx in created_indexes:
-                    self.query = "DROP INDEX {1} ON {0} USING {2}".format(query_bucket, idx, self.index_type)
+                    self.query = "DROP INDEX `{0}`.`{1}` USING {2}".format(query_bucket, idx, self.index_type)
                     actual_result = self.run_cbq_query()
                     self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
@@ -3836,8 +3832,8 @@ class QueriesIndexTests(QueryTests):
             query_bucket = self.get_collection_name(bucket.name)
             try:
                 idx = "idx"
-                self.query = "CREATE INDEX {0} ON {1}( all array i FOR i in {0} END) WHERE (department = 'Support') " \
-                             "USING {2}".format(idx, query_bucket, "hobbies.hobby", self.index_type)
+                self.query = "CREATE INDEX {0} ON {1}( all array i FOR i in {2} END) WHERE (department = 'Support') " \
+                             "USING {3}".format(idx, query_bucket, "hobbies.hobby", self.index_type)
                 actual_result = self.run_cbq_query()
                 self._wait_for_index_online(bucket, idx)
                 self._verify_results(actual_result['results'], [])
@@ -3863,7 +3859,7 @@ class QueriesIndexTests(QueryTests):
                     self.assertTrue(False, diffs)
             finally:
                 for idx in created_indexes:
-                    self.query = "DROP INDEX {1} ON {0} USING {2}".format(query_bucket, idx, self.index_type)
+                    self.query = "DROP INDEX `{0}`.`{1}` USING {2}".format(query_bucket, idx, self.index_type)
                     actual_result = self.run_cbq_query()
                     self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
@@ -3964,7 +3960,7 @@ class QueriesIndexTests(QueryTests):
                 self.assertTrue(actual_result2 == actual_result3)
             finally:
                 for idx in created_indexes:
-                    self.query = "DROP INDEX {1} ON {0} USING {2}".format(query_bucket, idx, self.index_type)
+                    self.query = "DROP INDEX `{0}`.`{1}` USING {2}".format(query_bucket, idx, self.index_type)
                     actual_result = self.run_cbq_query()
                     self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
@@ -4029,15 +4025,15 @@ class QueriesIndexTests(QueryTests):
                 created_indexes.append(idx)
                 self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
                 self.query = "EXPLAIN select * from {0}  WHERE ANY v IN VMs SATISFIES " \
-                             "REGEXP_LIKE(v.os,{0}) = 1 END".format(query_bucket, "'ub%'") + "order BY name limit 10"
+                             "REGEXP_LIKE(v.os,{1}) = 1 END ".format(query_bucket, "'ub%'") + "order BY name limit 10"
                 actual_result = self.run_cbq_query()
                 plan = self.ExplainPlanHelper(actual_result)
                 self.assertTrue(plan['~children'][0]['~children'][0]['#operator'] == 'DistinctScan',
-                                "Union Scan is not being used")
+                                "Distinct Scan is not being used")
                 result1 = plan['~children'][0]['~children'][0]['scan']['index']
                 self.assertTrue(result1 == idx)
                 self.query = "select * from {0} use index(`#primary`)  WHERE ANY v IN VMs SATISFIES " \
-                             "REGEXP_LIKE(v.os,{0}) = 1  END  ".format(query_bucket, "'ub%'") + "order BY name limit 10"
+                             "REGEXP_LIKE(v.os,{1}) = 1  END  ".format(query_bucket, "'ub%'") + "order BY name limit 10"
                 self.query = "select * from {0}  WHERE ANY v IN VMs SATISFIES REGEXP_LIKE(v.os,{0}) = 1 END  ".format(
                     query_bucket, "'ub%'") + "order BY name limit 10"
                 actual_result = self.run_cbq_query()
@@ -4047,7 +4043,7 @@ class QueriesIndexTests(QueryTests):
                     self.assertTrue(False, diffs)
             finally:
                 for idx in created_indexes:
-                    self.query = "DROP INDEX {1} ON {0} USING {2}".format(query_bucket, idx, self.index_type)
+                    self.query = "DROP INDEX `{0}`.`{1}` USING {2}".format(query_bucket, idx, self.index_type)
                     actual_result = self.run_cbq_query()
                     self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
@@ -4069,22 +4065,22 @@ class QueriesIndexTests(QueryTests):
                 created_indexes.append(idx)
                 self.assertTrue(self._is_index_in_list(bucket, idx), "Index is not in list")
                 self.query = "EXPLAIN select VMs from {0}  WHERE ANY v IN VMs SATISFIES " \
-                             "REGEXP_LIKE(v.os,{0}) = 1 END  ".format(query_bucket, "'ub%'") + "limit 10"
+                             "REGEXP_LIKE(v.os,{1}) = 1 END  ".format(query_bucket, "'ub%'") + "limit 10"
                 actual_result = self.run_cbq_query()
                 plan = self.ExplainPlanHelper(actual_result)
                 self.assertTrue("covers" in str(plan))
-                self.query = "select VMs from {0}  WHERE ANY v IN VMs SATISFIES REGEXP_LIKE(v.os,{0}) = 1 END  ".format(
+                self.query = "select VMs from {0}  WHERE ANY v IN VMs SATISFIES REGEXP_LIKE(v.os,{1}) = 1 END  ".format(
                     query_bucket, "'ub%'") + "limit 10"
                 actual_result = self.run_cbq_query()
                 self.query = "select VMs from {0} use index(`#primary`)  WHERE ANY v IN VMs SATISFIES " \
-                             "REGEXP_LIKE(v.os,{0}) = 1  END  ".format(query_bucket, "'ub%'") + "limit 10"
+                             "REGEXP_LIKE(v.os,{1}) = 1  END  ".format(query_bucket, "'ub%'") + "limit 10"
                 expected_result = self.run_cbq_query()
                 diffs = DeepDiff(actual_result['results'], expected_result['results'], ignore_order=True)
                 if diffs:
                     self.assertTrue(False, diffs)
             finally:
                 for idx in created_indexes:
-                    self.query = "DROP INDEX {1} ON {0} USING {2}".format(query_bucket, idx, self.index_type)
+                    self.query = "DROP INDEX `{0}`.`{1}` USING {2}".format(query_bucket, idx, self.index_type)
                     actual_result = self.run_cbq_query()
                     self._verify_results(actual_result['results'], [])
                     self.assertFalse(self._is_index_in_list(bucket, idx), "Index is in list")
