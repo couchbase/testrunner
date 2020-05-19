@@ -246,12 +246,9 @@ class EventingDataset(EventingBaseTest):
             bucket.mutate_in(docid, SD.upsert('my2', {'value': 2}, xattr=True))
             bucket.mutate_in(docid, SD.upsert('fax', '775-867-5309'))
         self.verify_eventing_results(self.function_name, 3, skip_stats_validation=True)
+        self.sleep(60)
         # add new multiple xattrs , delete old xattrs and delete the documents
         for docid in ['customer123', 'customer1234', 'customer12345']:
-            bucket.mutate_in(docid, SD.upsert('my3', {'value': 3}, xattr=True))
-            bucket.mutate_in(docid, SD.upsert('my4', {'value': 4}, xattr=True))
-            bucket.mutate_in(docid, SD.remove('my3', xattr=True))
-            bucket.mutate_in(docid, SD.remove('my4', xattr=True))
             bucket.remove(docid)
         self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
