@@ -3244,23 +3244,22 @@ class QuerySanityTests(QueryTests):
         self.fail_if_no_buckets()
         for query_bucket, bucket in zip(self.query_buckets, self.buckets):
             for ind in ind_list:
-                index_name = "coveringindex%s" % ind
+                index_name = "coveringindex{0}".format(ind)
                 if ind == "one":
-                    self.query = "CREATE INDEX %s ON %s(name, email, join_mo)  USING %s" % (index_name, query_bucket,
+                    self.query = "CREATE INDEX {0} ON {1}(name, email, join_mo)  USING {2}".format(index_name, query_bucket,
                                                                                             self.index_type)
                 elif ind == "two":
-                    self.query = "CREATE INDEX %s ON %s(email, join_mo) USING %s" % (index_name, query_bucket,
-                                                                                     self.index_type)
+                    self.query = "CREATE INDEX {0} ON {1}(email, join_mo) USING {2}".format(index_name, query_bucket, self.index_type)
                 self.run_cbq_query()
                 self._wait_for_index_online(bucket, index_name)
                 created_indexes.append(index_name)
         for query_bucket in self.query_buckets:
-            self.query = "explain select name from %s where name is not null union select email from %s where email " \
-                         "is not null and join_mo >2 " % (query_bucket, query_bucket)
+            self.query = "explain select name from {0} where name is not null union select email from {0} where email " \
+                         "is not null and join_mo >2 ".format(query_bucket)
             if self.covering_index:
                 self.check_explain_covering_index(index_name[0])
-            self.query = "select name from %s where name is not null union select email from %s where email is not " \
-                         "null and join_mo >2" % (query_bucket, query_bucket)
+            self.query = "select name from {0} where name is not null union select email from {0} where email is not " \
+                         "null and join_mo >2".format(query_bucket)
             actual_list = self.run_cbq_query()
             actual_result = actual_list['results']
             expected_result = [{"name": doc["name"]} for doc in self.full_list]
@@ -3268,16 +3267,19 @@ class QuerySanityTests(QueryTests):
             expected_result = [dict(y) for y in set(tuple(x.items()) for x in expected_result)]
             self._verify_results(actual_result, expected_result)
             for index_name in created_indexes:
-                self.query = "DROP INDEX %s ON %s USING %s" % (index_name, query_bucket, self.index_type)
+                self.query = "DROP INDEX {0} ON {1} USING {2}".format(index_name, query_bucket, self.index_type)
                 self.run_cbq_query()
-            self.query = "CREATE PRIMARY INDEX ON %s" % query_bucket
+            self.query = "CREATE PRIMARY INDEX ON {0}".format(query_bucket)
             self.run_cbq_query()
             self.sleep(15, 'wait for index')
-            self.query = "select name from %s where name is not null union select email from %s where email is not " \
-                         "null and join_mo >2" % (query_bucket, query_bucket)
+            self.query = "select name from {0} where name is not null union select email from {0} where email is not " \
+                         "null and join_mo >2".format(query_bucket)
             result = self.run_cbq_query()
-            self.assertEqual(actual_result, sorted(result['results']))
-            self.query = "DROP PRIMARY INDEX ON %s" % query_bucket
+            diffs = DeepDiff(actual_result, result['results'], ignore_order=True)
+            if diffs:
+                self.assertTrue(False, diffs)
+            #self.assertEqual(actual_result, sorted(result['results']))
+            self.query = "DROP PRIMARY INDEX ON {0}".format(query_bucket)
             self.run_cbq_query()
 
     def test_union_aggr_fns(self):
@@ -3578,23 +3580,19 @@ class QuerySanityTests(QueryTests):
         self.fail_if_no_buckets()
         for query_bucket, bucket in zip(self.query_buckets, self.buckets):
             for ind in ind_list:
-                index_name = "coveringindex%s" % ind
+                index_name = "coveringindex{0}".format(ind)
                 if ind == "one":
-                    self.query = "CREATE INDEX %s ON %s(job_title, name)  USING %s" % (
-                        index_name, query_bucket, self.index_type)
+                    self.query = "CREATE INDEX {0} ON {1}(job_title, name)  USING {2}".format(index_name, query_bucket, self.index_type)
                 elif ind == "two":
-                    self.query = "CREATE INDEX %s ON %s(join_day, name)  USING %s" % (
-                        index_name, query_bucket, self.index_type)
+                    self.query = "CREATE INDEX {0} ON {1}(join_day, name)  USING {2}".format(index_name, query_bucket, self.index_type)
                 self.run_cbq_query()
                 self._wait_for_index_online(bucket, index_name)
                 created_indexes.append(index_name)
         for query_bucket, bucket in zip(self.query_buckets, self.buckets):
-            self.query = "explain select name from %s where job_title='Engineer' intersect select name from %s s " \
-                         "where s.join_day>5" % (query_bucket, query_bucket)
+            self.query = "explain select name from {0} where job_title='Engineer' intersect select name from {0} s where s.join_day>5".format(query_bucket)
             if self.covering_index:
                 self.check_explain_covering_index(index_name)
-            self.query = "select name from %s where job_title='Engineer' intersect select name from %s s where " \
-                         "s.join_day>5" % (query_bucket, query_bucket)
+            self.query = "select name from {0} where job_title='Engineer' intersect select name from {0} s where s.join_day>5".format(query_bucket)
             actual_list = self.run_cbq_query()
             actual_result = actual_list['results']
             expected_result = [{"name": doc["name"]}
@@ -3603,19 +3601,18 @@ class QuerySanityTests(QueryTests):
             self._verify_results(actual_result, expected_result)
 
             for ind in ind_list:
-                index_name = "coveringindex%s" % ind
-                self.query = "DROP INDEX %s ON %s USING %s" % (index_name, query_bucket, self.index_type)
+                index_name = "coveringindex{0}".format(ind)
+                self.query = "DROP INDEX {0} ON {1} USING {2}".format(index_name, query_bucket, self.index_type)
                 self.run_cbq_query()
-            self.query = "CREATE PRIMARY INDEX ON %s" % query_bucket
+            self.query = "CREATE PRIMARY INDEX ON {0}".format(query_bucket)
             self.run_cbq_query()
             self._wait_for_index_online(bucket, '#primary')
-            self.query = "select name from %s where job_title='Engineer' intersect select name from %s s where " \
-                         "s.join_day>5" % (query_bucket, query_bucket)
+            self.query = "select name from {0} where job_title='Engineer' intersect select name from {0} s where s.join_day>5".format(query_bucket, query_bucket)
             expected_list = self.run_cbq_query()
             diffs = DeepDiff(actual_result, expected_list['results'], ignore_order=True)
             if diffs:
                 self.assertTrue(False, diffs)
-            self.query = "DROP PRIMARY INDEX ON %s" % query_bucket
+            self.query = "DROP PRIMARY INDEX ON {0}".format(query_bucket)
             self.run_cbq_query()
 
     def test_intersect_all(self):

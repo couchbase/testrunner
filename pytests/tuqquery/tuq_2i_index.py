@@ -52,17 +52,18 @@ class QueriesIndexTests(QueryTests):
             self.cluster.bucket_delete(self.master, bucket=bucket, timeout=180000)
         rest = RestConnection(self.master)
         rest.load_sample(self.sample_bucket)
+        self.wait_for_all_indexes_online()
         created_indexes = []
         query_bucket = self.get_collection_name('`{0}`'.format(self.sample_bucket))
         try:
             idx = "idx_abv"
             self.query = "CREATE INDEX {0} ON {1}(abv)".format(idx, query_bucket)
             self.run_cbq_query()
-            time.sleep(15)
+            self.wait_for_all_indexes_online()
             idx2 = "idx_name"
             self.query = "CREATE INDEX {0} ON {1}(name)".format(idx2, query_bucket)
             self.run_cbq_query()
-            time.sleep(15)
+            self.wait_for_all_indexes_online()
             created_indexes.append(idx)
             created_indexes.append(idx2)
             self.query = "explain select * from {0} where name like 'A%' and" \
@@ -4969,7 +4970,7 @@ class QueriesIndexTests(QueryTests):
                 if self.DGM:
                     self.get_dgm_for_plasma(indexer_nodes=[self.server], memory_quota=400)
                 for ind in range(self.num_indexes):
-                    index_name = f"coveringindexwithwhere{ind}"
+                    index_name = "coveringindexwithwhere{0}".format(ind)
                     self.query = "CREATE INDEX {0} ON {1}(email, VMs, join_day) where join_day > 10 USING {2}".format(
                         index_name, query_bucket, self.index_type)
                     self.run_cbq_query()
@@ -5000,7 +5001,6 @@ class QueriesIndexTests(QueryTests):
                     self.query = "select email,join_day from {0} where email ".format(query_bucket) + \
                                  "LIKE '%@%.%' and VMs[0].RAM > 5 and join_day > 10"
                     result = self.run_cbq_query()
-                    # self.assertEqual(sorted(actual_result['results']), sorted(result['results']))
                     diffs = DeepDiff(actual_result['results'], result['results'], ignore_order=True)
                     if diffs:
                         self.assertTrue(False, diffs)
@@ -5016,7 +5016,7 @@ class QueriesIndexTests(QueryTests):
                 if self.DGM:
                     self.get_dgm_for_plasma(indexer_nodes=[self.server], memory_quota=400)
                 for ind in range(self.num_indexes):
-                    index_name = f"coveringindexwithlimit{ind}"
+                    index_name = "coveringindexwithlimit{0}".format(ind)
                     self.query = "CREATE INDEX {0} ON {1}(skills[0], join_yr, VMs[0].os,name) " \
                                  "where join_yr =2010 USING {2}".format(index_name, query_bucket, self.index_type)
                     self.run_cbq_query()
@@ -5057,7 +5057,7 @@ class QueriesIndexTests(QueryTests):
             query_bucket = self.get_collection_name(bucket.name)
             try:
                 for ind in range(self.num_indexes):
-                    index_name = f"coveringindexwithgroupby{ind}"
+                    index_name = "coveringindexwithgroupby{0}".format(ind)
                     self.query = "CREATE INDEX {0} ON {1}(join_yr,name) where join_yr >2009 USING {2}".format(
                         index_name, query_bucket, self.index_type)
                     self.run_cbq_query()
@@ -5583,9 +5583,8 @@ class QueriesIndexTests(QueryTests):
         for bucket in self.buckets:
             query_bucket = self.get_collection_name(bucket.name)
             for ind in range(self.num_indexes):
-                index_name = f"coveringindexwitharraydistinct{ind}"
-                self.query = f"CREATE INDEX {index_name} on {query_bucket}(join_mo,job_title,test_rate,name) " \
-                             f"USING {self.index_type}"
+                index_name = "coveringindexwitharraydistinct{0}".format(ind)
+                self.query = "CREATE INDEX {0} on {1}(join_mo,job_title,test_rate,name) USING {2}".format(index_name,query_bucket,self.index_type)
                 self.run_cbq_query()
                 created_indexes.append(index_name)
         for bucket in self.buckets:
