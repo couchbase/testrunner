@@ -15,7 +15,7 @@ class QueryBitwiseTests(QueryTests):
         self.users = self.get_user_list()
         self.roles = self.get_user_role_list()
         self.query_buckets = self.get_query_buckets(check_all_buckets=True)
-        self.query_bucket = self.query_bucket[0]
+        self.query_bucket = self.query_buckets[0]
 
     def suite_setUp(self):
         super(QueryBitwiseTests, self).suite_setUp()
