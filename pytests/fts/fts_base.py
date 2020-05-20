@@ -3125,9 +3125,7 @@ class FTSBaseTest(unittest.TestCase):
                 .format(self.__case_number, self._testMethodName))
 
     def __is_test_failed(self):
-        return (hasattr(self, '_resultForDoCleanups')
-                and len(self._resultForDoCleanups.failures
-                        or self._resultForDoCleanups.errors)) \
+        return ( hasattr(self, '_outcome') and len(self._outcome.errors)) \
                or (hasattr(self, '_exc_info')
                    and self._exc_info()[1] is not None)
 
@@ -3184,11 +3182,8 @@ class FTSBaseTest(unittest.TestCase):
             self._setup_node_secret("")
 
         if self._input.param("negative_test", False):
-            if hasattr(self, '_resultForDoCleanups') \
-                    and len(self._resultForDoCleanups.failures
-                            or self._resultForDoCleanups.errors):
-                self._resultForDoCleanups.failures = []
-                self._resultForDoCleanups.errors = []
+            if hasattr(self, '_outcome') and self._outcome.errors[1][1]:
+                self._outcome.errors = []
                 self.log.info("This is marked as a negative test and contains "
                               "errors as expected, hence not failing it")
             else:
