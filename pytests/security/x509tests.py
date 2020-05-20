@@ -871,9 +871,9 @@ class x509tests(BaseTestCase):
             output = x509main()._execute_command_clientcert(host.ip, url='/query/service', port=18093, headers='--http1.1', client_cert=True, curl=True, verb='GET', data="statement='create index idx1 on default(name)'")
         else:
             output = x509main()._execute_command_clientcert(host.ip, url='/query/service', port=18093, headers='--http1.1 -u Administrator:password ', client_cert=False, curl=True, verb='GET', data="statement='create index idx1 on default(name)'")
-        
+
         self.assertEqual(json.loads(output)['status'], "success", "Create Index Failed on port 18093")
-        
+
         output = x509main()._execute_command_clientcert(host.ip, url='/query/service', port=8093, headers='--http1.1 -u Administrator:password ', client_cert=False, curl=True, verb='GET', plain_curl=True, data="statement='create index idx2 on default(name)'")
         self.assertEqual(json.loads(output)['status'], "success", "Create Index Failed on port 8093")
 
@@ -898,11 +898,11 @@ class x509tests(BaseTestCase):
         else:
             output = x509main()._execute_command_clientcert(host.ip, url='/api/index/default_idx', port=18094, headers=" -XPUT -H \"Content-Type: application/json\" -u Administrator:password ",
                                                             client_cert=False, curl=True, verb='GET', data="'" + json.dumps(idx) + "'")
-        self.assertEqual(json.loads(output), {"status":"ok"}, "Issue with creating FTS index with client Cert")
+        self.assertEqual(json.loads(output)['status'], "ok", "Issue with creating FTS index with client Cert")
         
         output = x509main()._execute_command_clientcert(host.ip, url='/api/index/default_idx01', port=8094, headers=" -XPUT -H \"Content-Type: application/json\" -u Administrator:password ",
                                                         client_cert=False, curl=True, verb='GET', data="'" + json.dumps(idx) + "'", plain_curl=True)
-        self.assertEqual(json.loads(output), {"status":"ok"}, "Issue with creating FTS index with client Cert")
+        self.assertEqual(json.loads(output)['status'], "ok", "Issue with creating FTS index with client Cert")
         
         if self.client_cert_state == 'enable':
             output = x509main()._execute_command_clientcert(host.ip, url='/api/index/default_idx', port=18094, headers=" -H \"Content-Type: application/json\" ",
@@ -910,11 +910,11 @@ class x509tests(BaseTestCase):
         else:
             output = x509main()._execute_command_clientcert(host.ip, url='/api/index/default_idx', port=18094, headers=" -H \"Content-Type: application/json\" -u Administrator:password ",
                                                             client_cert=False, curl=True, verb='DELETE')
-        self.assertEqual(json.loads(output), {"status":"ok"}, "Issue with deleteing FTS index with client Cert")
+        self.assertEqual(json.loads(output)['status'], "ok", "Issue with deleteing FTS index with client Cert")
         
         output = x509main()._execute_command_clientcert(host.ip, url='/api/index/default_idx01', port=8094, headers=" -H \"Content-Type: application/json\" -u Administrator:password ",
                                                         client_cert=False, curl=True, verb='DELETE', plain_curl=True)
-        self.assertEqual(json.loads(output), {"status":"ok"}, "Issue with deleteing FTS index on 8094")
+        self.assertEqual(json.loads(output)['status'], "ok", "Issue with deleteing FTS index on 8094")
             
         ''' - Check with FTS team on this        
         if self.client_cert_state == 'enable':
