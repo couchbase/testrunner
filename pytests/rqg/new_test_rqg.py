@@ -319,7 +319,9 @@ class RQGTestsNew(BaseRQGTests):
                         return {"success": True, "result": "Pass"}
                 return {"success": False, "result": str("different results")}
             try:
-                self.n1ql_helper._verify_results_rqg(subquery, aggregate, sql_result=sql_result, n1ql_result=n1ql_result, hints=hints, aggregate_pushdown=self.aggregate_pushdown)
+                self.n1ql_helper._verify_results_rqg(subquery, aggregate, sql_result=sql_result, n1ql_result=n1ql_result,
+                                                     hints=hints, aggregate_pushdown=self.aggregate_pushdown,
+                                                     window_function_test=self.window_function_test, delta=self.delta)
             except Exception as ex:
                 self.log.info(ex)
                 traceback.print_exc()

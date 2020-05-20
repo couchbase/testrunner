@@ -102,6 +102,8 @@ class BaseRQGTests(BaseTestCase):
             self.check_explain_plan = self.input.param("explain_plan", False)
             self.index_limit = self.input.param("index_limit", 5)
             self.float_round_level = self.input.param("float_round_level", 0)
+            self.delta = self.input.param("delta", 0)
+            self.window_function_test = self.input.param("window_function_test", False)
 
             self.advise_server = self.input.advisor
             self.advise_buckets = ["bucket_01", "bucket_02", "bucket_03", "bucket_04", "bucket_05", "bucket_06", "bucket_07", "bucket_08", "bucket_09", "bucket_10"]
@@ -785,7 +787,9 @@ class BaseRQGTests(BaseTestCase):
                         return {"success": True, "result": "Pass"}
                 return {"success": False, "result": str("different results")}
             try:
-                self.n1ql_helper._verify_results_rqg(subquery, aggregate, sql_result=sql_result, n1ql_result=n1ql_result, hints=hints, aggregate_pushdown=self.aggregate_pushdown)
+                self.n1ql_helper._verify_results_rqg(subquery, aggregate, sql_result=sql_result, n1ql_result=n1ql_result,
+                                                     hints=hints, aggregate_pushdown=self.aggregate_pushdown,
+                                                     window_function_test=self.window_function_test, delta=self.delta)
             except Exception as ex:
                 self.log.info(ex)
                 traceback.print_exc()

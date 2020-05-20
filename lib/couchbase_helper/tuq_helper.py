@@ -327,7 +327,8 @@ class N1QLHelper():
             self.log.info("-->actual vs expected diffs found:{}".format(diffs))
             raise Exception(msg)
 
-    def _verify_results_rqg(self, subquery, aggregate=False, n1ql_result=[], sql_result=[], hints=["a1"], aggregate_pushdown=False):
+    def _verify_results_rqg(self, subquery, aggregate=False, n1ql_result=[], sql_result=[], hints=["a1"],
+                            aggregate_pushdown=False, window_function_test=False, delta=0):
         new_n1ql_result = []
         for result in n1ql_result:
             if result != {}:
@@ -371,6 +372,20 @@ class N1QLHelper():
                     print("expected result is %s" % expected_result)
                     extra_msg = self._get_failure_message(expected_result, actual_result)
                     raise Exception(msg+"\n "+extra_msg)
+        elif window_function_test:
+            for x, y in zip(actual_result, expected_result):
+                if not x['wf']:
+                    x['wf'] = 0
+                if not y['wf']:
+                    y['wf'] = 0
+                max_val = max([x['wf'], y['wf']])
+                min_val = min([x['wf'], y['wf']])
+                diff = max_val - min_val
+                if x['char_field1'] != y['char_field1'] or x['decimal_field1'] != y['decimal_field1'] or diff > delta:
+                    print("actual_result is %s" % x)
+                    print("expected result is %s" % y)
+                    extra_msg = self._get_failure_message(expected_result, actual_result)
+                    raise Exception(msg + "\n " + extra_msg)
         else:
             diffs = DeepDiff(actual_result, expected_result, ignore_order=True)
             if diffs:
