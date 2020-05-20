@@ -11,7 +11,7 @@ from couchbase.cluster import Cluster, ClusterOptions
 from couchbase_core.cluster import PasswordAuthenticator
 from couchbase.exceptions import CouchbaseException, BucketNotFoundException, AuthenticationException
 from mc_bin_client import MemcachedError
-from couchbase_core.n1ql import N1QLQuery, N1QLRequest
+from couchbase.cluster import _N1QLQuery
 import couchbase_core
 import sys
 import json
@@ -69,9 +69,9 @@ class SDKClient(object):
 
     def _createConn(self):
         try:
-            cluster = Cluster(self.connection_string, ClusterOptions(PasswordAuthenticator(self.bucket, 'password')))
+            self.cluster = Cluster(self.connection_string, ClusterOptions(PasswordAuthenticator(self.bucket, 'password')))
             #cluster.authenticate(PasswordAuthenticator(self.bucket, 'password'))
-            self.cb = cluster.bucket(self.bucket)
+            self.cb = self.cluster.bucket(self.bucket)
             self.default_collection = self.cb.default_collection()
         except BucketNotFoundException:
              raise
@@ -79,10 +79,10 @@ class SDKClient(object):
             # Try using default user created by the tests, if any, in case there is no user with bucket name in the
             # cluster.
             try:
-                cluster = Cluster(self.connection_string,
+                self.cluster = Cluster(self.connection_string,
                                   ClusterOptions(PasswordAuthenticator("cbadminbucket", 'password')),
                                   bucket_class=CouchbaseBucket)
-                self.cb = cluster.bucket(self.bucket)
+                self.cb = self.cluster.bucket(self.bucket)
                 self.default_collection = self.cb.default_collection()
             except AuthenticationException:
                 raise
@@ -807,13 +807,13 @@ class SDKClient(object):
 
     def n1ql_query(self, statement, prepared=False):
         try:
-            return N1QLQuery(statement, prepared)
+            return _N1QLQuery(statement, prepared)
         except CouchbaseException as e:
             raise
 
     def n1ql_request(self, query):
         try:
-            return N1QLRequest(query, self.cb)
+            return self.cluster.query(query)
         except CouchbaseException as e:
             raise
 
