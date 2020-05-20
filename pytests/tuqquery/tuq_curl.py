@@ -2,6 +2,7 @@ from .tuq import QueryTests
 from membase.api.rest_client import RestConnection
 from remote.remote_util import RemoteMachineShellConnection
 from security.rbac_base import RbacBase
+from deepdiff import DeepDiff
 
 SOURCE_CB_PARAMS = {
     "authUser": "default",
@@ -57,7 +58,7 @@ class QueryCurlTests(QueryTests):
         self.query_bucket = self.query_buckets[0]
         self.sample_bucket = self.query_buckets[1]
         self.bucket0 = self.query_buckets[2]
-        self.sample_bucket = self.sample_bucket.replace('`beer-sample`', r'\`beer-sample\`')
+        self.sample_bucket = self.sample_bucket.replace('`beer-sample`', '\`beer-sample\`')
 
     def suite_setUp(self):
         super(QueryCurlTests, self).suite_setUp()
@@ -307,7 +308,7 @@ class QueryCurlTests(QueryTests):
 
     def test_update_curl(self):
         query = 'select meta().id from ' + self.query_bucket + ' limit 1'
-        n1ql_query = "select d.join_yr from ' + self.query_bucket + ' d where d.join_yr == 2010 limit 1"
+        n1ql_query = "select d.join_yr from " + self.query_bucket + " d where d.join_yr == 2010 limit 1"
         result = self.run_cbq_query(query)
         docid = result['results'][0]['id']
         update_query = "update  " + self.query_bucket + " use keys '" + docid + "' set name ="
@@ -407,7 +408,9 @@ class QueryCurlTests(QueryTests):
         query = "select curl(" + url + ")"
         curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
-        self.assertEqual(actual_curl['results'][0]['$1'], expected_curl)
+        diffs = DeepDiff(actual_curl['results'][0]['$1'], expected_curl, ignore_order=True)
+        if diffs:
+            self.assertTrue(False, diffs)
 
     '''Test external endpoints in a the from field of a query
         -select * from curl result
@@ -468,7 +471,9 @@ class QueryCurlTests(QueryTests):
         query = "select curl(" + url + ")"
         curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
-        self.assertEqual(actual_curl['results'][0]['$1'], expected_curl)
+        diffs = DeepDiff(actual_curl['results'][0]['$1'], expected_curl, ignore_order=True)
+        if diffs:
+            self.assertTrue(False, diffs)
 
     '''MB-22128 giving a header without giving data would cause an empty result set'''
 
@@ -482,12 +487,16 @@ class QueryCurlTests(QueryTests):
         query = "select * from curl(" + url + ") result"
         curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
-        self.assertEqual(actual_curl['results'][0]['result'], expected_curl)
+        diffs = DeepDiff(actual_curl['results'][0]['result'], expected_curl, ignore_order=True)
+        if diffs:
+            self.assertTrue(False, diffs)
 
         query = "select * from curl(" + url + ",{'header':'Content-Type: application/json'}) result"
         curl = self.shell.execute_commands_inside(self.cbqpath, query, '', '', '', '', '')
         actual_curl = self.convert_to_json(curl)
-        self.assertEqual(actual_curl['results'][0]['result'], expected_curl)
+        diffs = DeepDiff(actual_curl['results'][0]['$1'], expected_curl, ignore_order=True)
+        if diffs:
+            self.assertTrue(False, diffs)
 
     '''MB-22291 Test to make sure that endpoints returning an array of JSON docs work, also tests the user-agent option'''
 
@@ -889,8 +898,8 @@ class QueryCurlTests(QueryTests):
 
     def test_protected_bucket_noauth(self):
         bucket_tag = self.bucket0.replace('default:', '')
-        error_msg = "UserdoesnothavecredentialstorunSELECTqueriesonthe " + bucket_tag + "bucket." \
-                    "Addrolequery_selecton " + bucket_tag + "toallowthequerytorun."
+        error_msg = "UserdoesnothavecredentialstorunSELECTqueriesonthe" + bucket_tag + "bucket." \
+                    "Addrolequery_selecton" + bucket_tag + "toallowthequerytorun."
         # The query that curl will send to couchbase
         n1ql_query = 'select * from ' + self.bucket0 + '  limit 5'
         # This is the query that the cbq-engine will execute
@@ -1134,8 +1143,7 @@ class QueryCurlTests(QueryTests):
         self.assertEqual(json_curl['results'][0]['$1']['errors'][0]['msg'], error_msg)
 
         error_msg = "UserdoesnothavecredentialstorunDELETEqueriesonthedefaultbucket." \
-                    "Addrolequery_deleteon=" \
-                    "toallowthequerytorun."
+                    "Addrolequery_deleteondefaulttoallowthequerytorun."
         options = "{'data':'statement=delete from " + self.query_bucket + " use keys \\\"" + docid + "\\\"" \
                                                                                                      "returning meta().id, * '})"
         curl = self.shell.execute_commands_inside(cbqpath, curl_query + options, '', '', '', '', '')
