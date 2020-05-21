@@ -24,10 +24,10 @@ class EventingBaseTest(QueryHelperTests):
     panic_count = 0
     ## added to ignore error
     def suite_setUp(self):
-       pass
+        pass
 
     def suite_tearDown(self):
-       pass
+        pass
 
 
     def setUp(self):
@@ -330,10 +330,7 @@ class EventingBaseTest(QueryHelperTests):
         content=self.rest.get_all_eventing_stats()
         js=json.loads(content)
         log.info("execution stats: {0}".format(js))
-        # for j in js:
-        #     print j["function_name"]
-        #     print j["execution_stats"]["on_update_success"]
-        #     print j["failure_stats"]["n1ql_op_exception_count"]
+        return  js
 
     def deploy_function(self, body, deployment_fail=False, wait_for_bootstrap=True,pause_resume=False,pause_resume_number=1,
                         deployment_status=True,processing_status=True):
@@ -750,7 +747,7 @@ class EventingBaseTest(QueryHelperTests):
         if wait_for_pause:
             self.wait_for_handler_state(name, "paused")
 
-    def check_word_count_eventing_log(self,function_name,word,expected_count):
+    def check_word_count_eventing_log(self,function_name,word,expected_count,return_count_only=False):
         eventing_nodes = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
         array_of_counts = []
         command = "cat /opt/couchbase/var/lib/couchbase/data/@eventing/"+ function_name +"* | grep -a \""+word+"\" | wc -l"
@@ -766,6 +763,8 @@ class EventingBaseTest(QueryHelperTests):
             array_of_counts.append(count)
         count_of_all_words = sum(array_of_counts)
         log.info("Total count: {}".format(count_of_all_words))
+        if return_count_only:
+            return True, count_of_all_words
         if count_of_all_words == expected_count:
             return True, count_of_all_words
         return False, count_of_all_words
@@ -808,3 +807,15 @@ class EventingBaseTest(QueryHelperTests):
         o, r = shell.execute_command("/sbin/iptables --flush")
         shell.log_command_output(o, r)
         shell.disconnect()
+
+    def get_stats_value(self,name,expression):
+        eventing_nodes = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
+        total_count=0
+        for eventing_node in eventing_nodes:
+            rest_conn = RestConnection(eventing_node)
+            stats = rest_conn.get_all_eventing_stats()
+            keys=expression.split(".")
+            for stat in stats:
+                if stat["function_name"] == name:
+                    total_count=total_count + stat[keys[0]][keys[1]]
+        return total_count

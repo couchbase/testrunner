@@ -8,7 +8,7 @@ from membase.helper.cluster_helper import ClusterOperationHelper
 class EventingSanity(EventingBaseTest):
     def setUp(self):
         super(EventingSanity, self).setUp()
-        self.rest.set_service_memoryQuota(service='memoryQuota', memoryQuota=700)
+        self.rest.set_service_memoryQuota(service='memoryQuota', memoryQuota=900)
         if self.create_functions_buckets:
             self.bucket_size = 200
             log.info(self.bucket_size)
@@ -269,4 +269,34 @@ class EventingSanity(EventingBaseTest):
                   batch_size=self.batch_size, op_type='delete')
         # Wait for eventing to catch up with all the delete mutations and verify results
         self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+        self.undeploy_and_delete_function(body)
+
+    def test_expired_mutation(self):
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size, exp=1)
+        # set expiry pager interval
+        ClusterOperationHelper.flushctl_set(self.master, "exp_pager_stime", 1, bucket=self.src_bucket_name)
+        body = self.create_save_function_body(self.function_name, "handler_code/bucket_op_expired.js", worker_count=3)
+        self.deploy_function(body)
+        # Wait for eventing to catch up with all the expiry mutations and verify results
+        self.verify_eventing_results(self.function_name, 0, on_delete=True,skip_stats_validation=True)
+        self.undeploy_and_delete_function(body)
+
+    def test_cancel_timer(self):
+        bucket_params = self._create_bucket_params(server=self.server, size=self.bucket_size, replicas=0)
+        self.cluster.create_standard_bucket(name=self.dst_bucket_name1, port=STANDARD_BUCKET_PORT + 1,
+                                            bucket_params=bucket_params)
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size)
+        body = self.create_save_function_body(self.function_name, "handler_code/cancel_timer.js")
+        body['depcfg']['buckets'].append({"alias": self.dst_bucket_name1, "bucket_name": self.dst_bucket_name1})
+        self.deploy_function(body)
+        # Wait for eventing to catch up with all the update mutations and verify results
+        #self.verify_eventing_results(self.function_name, self.docs_per_day * 2016)
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size, op_type='delete')
+        # Wait for eventing to catch up with all the delete mutations and verify results
+        self.verify_eventing_results(self.function_name,self.docs_per_day * 2016, skip_stats_validation=True,bucket=self.dst_bucket_name1)
+        self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+        self.assertEqual(self.get_stats_value(self.function_name,"execution_stats.timer_cancel_counter"),self.docs_per_day * 2016)
         self.undeploy_and_delete_function(body)
