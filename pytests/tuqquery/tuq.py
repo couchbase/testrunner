@@ -88,11 +88,9 @@ class QueryTests(BaseTestCase):
         self.ipv6 = self.input.param("ipv6", False)
         self.n1ql_port = self.input.param("n1ql_port", 8093)
         self.analytics = self.input.param("analytics", False)
-        self.query_context = self.input.param("query_context", None)
         self.dataset = getattr(self, 'dataset', self.input.param("dataset", "default"))
         self.primary_indx_type = self.input.param("primary_indx_type", 'GSI')
         self.index_type = self.input.param("index_type", 'GSI')
-        self.skip_primary_index_for_collection = self.input.param("skip_primary_index_for_collection", False)
         self.skip_primary_index = self.input.param("skip_primary_index", False)
         self.primary_indx_drop = self.input.param("primary_indx_drop", False)
         self.monitoring = self.input.param("monitoring", False)
@@ -155,7 +153,7 @@ class QueryTests(BaseTestCase):
             self.gen_results = TuqGenerators(self.log, self.generate_full_docs_list(self.gens_load))
             self.log.info("--> End: docs_per_day>0..generating TuqGenerators...")
         if str(self.__class__).find('QueriesUpgradeTests') == -1 and str(self.__class__).find('FlexIndexTests') == -1:
-            if not self.analytics and self.skip_primary_index_for_collection:
+            if not self.analytics:
                 self.log.info("--> start: create_primary_index_for_3_0_and_greater...")
                 self.create_primary_index_for_3_0_and_greater()
                 self.log.info("--> End: create_primary_index_for_3_0_and_greater...")

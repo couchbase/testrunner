@@ -4,19 +4,19 @@ import logger
 import threading
 
 
-class CollectionsRest(object):
+class Collections_Rest(object):
     def __init__(self, node):
         self.log = logger.Logger.get_logger()
         self.rest = RestConnection(node)
 
     def create_collection(self, bucket="default", scope="scope0", collection="mycollection0", params=None):
-        return self.rest.create_collection(bucket, scope, collection, params)
+        self.rest.create_collection(bucket, scope, collection, params)
 
     def create_scope(self, bucket="default", scope="scope0", params=None):
-        return self.rest.create_scope(bucket, scope, params)
+        self.rest.create_scope(bucket, scope, params)
 
     def delete_collection(self, bucket="default", scope='_default', collection='_default'):
-        return self.rest.delete_collection(bucket, scope, collection)
+        self.rest.delete_collection(bucket, scope, collection)
 
     def delete_scope(self, scope, bucket="default"):
         return self.rest.delete_scope(bucket, scope)
@@ -49,7 +49,7 @@ class CollectionsRest(object):
                 for c in range(1, collection_num):
                     self.create_collection(bucket, scope, collection_prefix + '_' + str(c), params)
         except Exception as e:
-            self.log.error(str(e))
+            self.log.error(e.message())
             return False
         return True
 

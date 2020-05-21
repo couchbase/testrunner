@@ -30,7 +30,7 @@ from membase.api.exception import N1QLQueryException, DropIndexException, Create
     AutoFailoverException
 from remote.remote_util import RemoteMachineShellConnection, RemoteUtilHelper
 from couchbase_helper.documentgenerator import BatchedDocumentGenerator
-from collection.collections_rest_client import CollectionsRest
+from collection.collections_rest_client import Collections_Rest
 from TestInput import TestInputServer, TestInputSingleton
 from testconstants import MIN_KV_QUOTA, INDEX_QUOTA, FTS_QUOTA, COUCHBASE_FROM_4DOT6, \
     THROUGHPUT_CONCURRENCY, ALLOW_HTP, CBAS_QUOTA, COUCHBASE_FROM_VERSION_4, \
@@ -435,9 +435,9 @@ class CollectionCreateTask(Task):
             self.set_exception(error)
             return
         try:
-            CollectionsRest(self.server).create_collection(bucket=self.bucket_name, scope=self.scope_name,
-                                                           collection=self.collection_name,
-                                                           params=self.collection_params)
+            Collections_Rest(self.server).create_collection(bucket=self.bucket_name, scope=self.scope_name,
+                                                                  collection=self.collection_name,
+                                                                  params=self.collection_params)
             self.state = CHECKING
             task_manager.schedule(self)
 
@@ -467,8 +467,8 @@ class CollectionDeleteTask(Task):
             self.set_exception(error)
             return
         try:
-            CollectionsRest(self.server).delete_collection(bucket=self.bucket_name, scope=self.scope_name,
-                                                           collection=self.collection_name)
+            Collections_Rest(self.server).delete_collection(bucket=self.bucket_name, scope=self.scope_name,
+                                                                  collection=self.collection_name)
             self.state = CHECKING
             task_manager.schedule(self)
 
@@ -499,9 +499,9 @@ class ScopeCollectionCreateTask(Task):
             self.set_exception(error)
             return
         try:
-            CollectionsRest(self.server).create_scope_collection(bucket=self.bucket_name, scope=self.scope_name,
-                                                                 collection=self.collection_name,
-                                                                 params=self.collection_params)
+            Collections_Rest(self.server).create_scope_collection(bucket=self.bucket_name, scope=self.scope_name,
+                                                                  collection=self.collection_name,
+                                                                  params=self.collection_params)
             self.state = CHECKING
             task_manager.schedule(self)
 
@@ -531,8 +531,8 @@ class ScopeCollectionDeleteTask(Task):
             self.set_exception(error)
             return
         try:
-            CollectionsRest(self.server).delete_scope_collection(bucket=self.bucket_name, scope=self.scope_name,
-                                                                 collection=self.collection_name)
+            Collections_Rest(self.server).delete_scope_collection(bucket=self.bucket_name, scope=self.scope_name,
+                                                                  collection=self.collection_name)
             self.state = CHECKING
             task_manager.schedule(self)
 
@@ -562,8 +562,8 @@ class ScopeCreateTask(Task):
             self.set_exception(error)
             return
         try:
-            CollectionsRest(self.server).create_scope(bucket=self.bucket_name, scope=self.scope_name,
-                                                      params=self.scope_params)
+            Collections_Rest(self.server).create_scope(bucket=self.bucket_name, scope=self.scope_name,
+                                                                  params=self.scope_params)
             self.state = CHECKING
             task_manager.schedule(self)
 
@@ -592,7 +592,7 @@ class ScopeDeleteTask(Task):
             self.set_exception(error)
             return
         try:
-            CollectionsRest(self.server).delete_scope(bucket=self.bucket_name, scope=self.scope_name)
+            Collections_Rest(self.server).delete_scope(bucket=self.bucket_name, scope=self.scope_name)
             self.state = CHECKING
             task_manager.schedule(self)
 

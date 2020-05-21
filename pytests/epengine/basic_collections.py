@@ -1,19 +1,22 @@
-import time
-
-import logger
 from basetestcase import BaseTestCase
-from collection.collections_cli_client import CollectionsCLI
-from collection.collections_rest_client import CollectionsRest
-from collection.collections_stats import CollectionsStats
-from couchbase_helper.cluster import Cluster
-from lib.couchbase_helper.documentgenerator import SDKDataLoader
+
+from couchbase_helper.documentgenerator import BlobGenerator
 from mc_bin_client import MemcachedError, MemcachedClient
+from collection.collections_rest_client import Collections_Rest
+from collection.collections_cli_client import Collections_CLI
+from collection.collections_stats import Collections_Stats
+
+from TestInput import TestInputSingleton, TestInputServer
 from membase.api.rest_client import RestConnection
+from couchbase_helper.cluster import Cluster
+import logger
+import time
+import re
 
-from TestInput import TestInputSingleton
+from lib.couchbase_helper.documentgenerator import SDKDataLoader
 
 
-class BasicCollections(BaseTestCase):
+class basic_collections(BaseTestCase):
 
     def suite_setUp(self):
         pass
@@ -28,29 +31,29 @@ class BasicCollections(BaseTestCase):
         self.use_cli = self.input.param("use_cli", False)
         self.num_items = self.input.param("items", 1000)
         self.value_size = self.input.param("value_size", 512)
-        self.rest = CollectionsRest(self.master)
-        self.cli = CollectionsCLI(self.master)
-        # self.cli.enable_dp()
+        self.rest = Collections_Rest(self.master)
+        self.cli = Collections_CLI(self.master)
+        #self.cli.enable_dp()
         self.conn = RestConnection(self.master)
-        self.stat = CollectionsStats(self.master)
+        self.stat = Collections_Stats(self.master)
         self.conn.delete_all_buckets()
         time.sleep(5)
         try:
             self.conn.create_bucket(bucket=self.default_bucket_name,
-                                    ramQuotaMB=256,
-                                    proxyPort=11220)
+                               ramQuotaMB=256,
+                               proxyPort=11220)
         except Exception as e:
             pass
         time.sleep(5)
 
     def tearDown(self):
-         self.conn.delete_all_buckets()
+        self.conn.delete_all_buckets()
 
     def suite_tearDown(self):
         pass
 
     def test_valid_scope_name(self):
-        # epengine.basic_collections.BasicCollections.test_valid_scope_name
+        # epengine.basic_collections.basic_collections.test_valid_scope_name
         # bucket is created, create scope with valid and invalid names
         valid_scope_names = ["MY_SCOPE", "MYSCOPE", "Scope__With--Exactly__30--Char", "Scope_With-Less_Than-30_Chars",
                              "8a", "A", "a", "aaa9999%"]
@@ -84,6 +87,7 @@ class BasicCollections(BaseTestCase):
             else:
                 self.log.info("Scope creation failed as expected for name={}".format(name))
 
+
     def test_valid_collection_name(self):
         scope_name = "myscope"
         self.rest.create_scope(scope=scope_name, bucket=self.default_bucket_name)
@@ -111,15 +115,15 @@ class BasicCollections(BaseTestCase):
 
         invalid_collection_names = ["$collection", "%collection", "_mycollection",
                                     "{collection", "s{[]/,.",
-                                    "collection!@#^&*()", "!COLLECTIONS"]
+                                   "collection!@#^&*()", "!COLLECTIONS"]
         for name in invalid_collection_names:
             try:
                 if self.use_rest:
                     self.rest.create_collection(scope=scope_name, collection=name,
-                                                bucket=self.default_bucket_name)
+                                                         bucket=self.default_bucket_name)
                 elif self.use_cli:
                     self.cli.create_collection(scope=scope_name, collection=name,
-                                               bucket=self.default_bucket_name)
+                                                        bucket=self.default_bucket_name)
             except:
                 pass
 
@@ -148,18 +152,16 @@ class BasicCollections(BaseTestCase):
     def test_bulk_create_from_map(self):
         import time
         start = time.time()
-        # TODO
+        #TODO
         self.log.info("{} scopes with {} collections each created in {} s"
                       .format(self.scope_num, self.collection_num, round(time.time() - start)))
 
     def test_delete_default_collection(self):
-        # epengine.basic_collections.BasicCollections.test_delete_default_collection
+        # epengine.basic_collections.basic_collections.test_delete_default_collection
         if self.use_rest:
             status = self.rest.delete_collection(self.default_bucket_name, "_default", "_default")
         elif self.use_cli:
             status = self.cli.delete_collection(self.default_bucket_name, "_default", "_default")
-        else:
-            raise Exception("Choose either REST or CLI")
         if status is True:
             self.log.fail("default collection deleted!")
         else:
@@ -201,13 +203,13 @@ class BasicCollections(BaseTestCase):
         pass
 
     def test_memecached_basic_api(self):
-        # epengine.basic_collections.BasicCollections.test_memecached_basic_api
+        # epengine.basic_collections.basic_collections.test_memecached_basic_api
         scope_name = "ScopeWith30CharactersinName123"
-        collection_name = "CollectionsWithLargeNamechecki"
+        Collection_name = "CollectionsWithLargeNamechecki"
         self.rest.create_scope(scope=scope_name)
-        self.rest.create_collection(scope=scope_name, collection=collection_name, bucket=self.default_bucket_name)
+        self.rest.create_collection(scope=scope_name, collection=Collection_name, bucket=self.default_bucket_name)
 
-        collection = scope_name + "." + collection_name
+        collection = scope_name + "." + Collection_name
         self.log.info("collection name is {}".format(collection))
 
         self.sleep(10)

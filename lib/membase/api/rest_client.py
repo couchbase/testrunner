@@ -3664,8 +3664,6 @@ class RestConnection(object):
                 log.info('query params : {0}'.format(params))
             api = "http://%s:%s/query?%s" % (self.ip, port, params)
 
-        if query_params['query_context']:
-            log.info(f"Running Query with query_context: {query_params['query_context']}")
         status, content, header = self._http_request(api, 'POST', timeout=timeout, headers=headers)
         try:
             return json.loads(content)

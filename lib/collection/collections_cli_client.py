@@ -1,8 +1,7 @@
 from couchbase_cli import CouchbaseCLI
 import logger
 
-
-class CollectionsCLI(object):
+class Collections_CLI(object):
     def __init__(self, node):
         self.log = logger.Logger.get_logger()
         self.cli = CouchbaseCLI(node)
