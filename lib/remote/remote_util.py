@@ -3290,7 +3290,11 @@ class RemoteMachineShellConnection(KeepRefs):
             stdout.close()
             stderro.close()
         if debug:
-            log.info('command executed successfully')
+            if len(error):
+                log.info('command executed with {} but got an error {} ...'.format(
+                    self.username, str(error)[:400]))
+            else:
+                log.info('command executed successfully with {}'.format(self.username))
         return output, error
 
     def execute_non_sudo_command(self, command, info=None, debug=True, use_channel=False):

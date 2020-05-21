@@ -36,6 +36,7 @@ class RestHelper(object):
         self.rest = rest_connection
 
     def is_ns_server_running(self, timeout_in_seconds=360):
+        log.info("-->is_ns_server_running?")
         end_time = time.time() + timeout_in_seconds
         while time.time() <= end_time:
             try:
@@ -901,6 +902,7 @@ class RestConnection(object):
         log.debug("Executing {0} request for following api {1} with Params: {2}  and Headers: {3}"\
                                                                 .format(method, api, params, headers))
         count = 1
+        t1 = 3
         while True:
             try:
                 try:
@@ -951,8 +953,9 @@ class RestConnection(object):
                 if time.time() > end_time:
                     log.error("Tried ta connect {0} times".format(count))
                     raise ServerUnavailableException(ip=self.ip)
-            time.sleep(3)
+            time.sleep(t1)
             count += 1
+            t1 *= 2
 
     def init_cluster(self, username='Administrator', password='password', port='8091'):
         log.info("--> in init_cluster...{},{},{}".format(username,password,port))

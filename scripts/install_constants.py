@@ -59,6 +59,13 @@ DEFAULT_CLI_PATH = \
                               "MACOS_VERSIONS"] + "/Contents/Resources/couchbase-core/bin/couchbase-cli",
         "WINDOWS_SERVER": DEFAULT_INSTALL_DIR["WINDOWS_SERVER"] + "/bin/couchbase-cli"
     }
+DEFAULT_NONROOT_CLI_PATH = \
+    {
+        "LINUX_DISTROS": DEFAULT_NONROOT_INSTALL_DIR["LINUX_DISTROS"] + "bin/couchbase-cli",
+        "MACOS_VERSIONS": DEFAULT_NONROOT_INSTALL_DIR[
+                              "MACOS_VERSIONS"] + "/Contents/Resources/couchbase-core/bin/couchbase-cli",
+        "WINDOWS_SERVER": DEFAULT_NONROOT_INSTALL_DIR["WINDOWS_SERVER"] + "/bin/couchbase-cli"
+    }
 
 WGET_CMD = "cd {0}; wget -Nq {1}"
 CURL_CMD = "curl {0} -o {1} -z {1} -s -m 30"
@@ -203,11 +210,11 @@ NON_ROOT_CMDS = {
         "cleanup": "ls -td " + DOWNLOAD_DIR["WINDOWS_SERVER"] + "couchbase*.msi | awk 'NR>" + RETAIN_NUM_BINARIES_AFTER_INSTALL + "' | xargs rm -f"
     },
     "rpm": {
-        "pre_install": None,
+        "pre_install":
+            "ls -l "+DEFAULT_NONROOT_INSTALL_DIR["LINUX_DISTROS"]+"bin/",
         "uninstall":
-            "systemctl stop couchbase-server; " +
-            "rpm -e couchbase-server; " +
-            "rm -rf " + DEFAULT_INSTALL_DIR["LINUX_DISTROS"] + " > /dev/null && echo 1 || echo 0; " +
+            DEFAULT_NONROOT_INSTALL_DIR["LINUX_DISTROS"]+"bin/couchbase-server -k; kill -9 `ps "
+                                                         "-ef |egrep couchbase|cut -f3 -d' '`; " +
             "rm -rf " + DEFAULT_NONROOT_INSTALL_DIR["LINUX_DISTROS"] + " > /dev/null && echo 1 || echo 0; ",
         "install":
             "cd " + NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "; " 
@@ -219,9 +226,7 @@ NON_ROOT_CMDS = {
             "cd " + NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "/opt/couchbase/; " 
             "./bin/install/reloc.sh `pwd`  > /dev/null && echo 1 || echo 0; ",
         "post_install": NON_ROOT_DOWNLOAD_DIR["LINUX_DISTROS"] + "opt/couchbase/bin/couchbase-server \-- -noinput -detached",
-        "post_install_retry":
-            "systemctl daemon-reexec; "
-            "systemctl restart couchbase-server",
+        "post_install_retry": None,
         "init": None,
         "cleanup": "rm -f *-diag.zip"
     }

@@ -219,12 +219,20 @@ class NodeHelper:
                 print_result_and_exit("Unable to set fts_query_limit on {0}".format(self.ip))
 
     def _get_cli_path(self):
-        if self.get_os() in install_constants.LINUX_DISTROS:
-            return install_constants.DEFAULT_CLI_PATH["LINUX_DISTROS"]
-        elif self.get_os() in install_constants.MACOS_VERSIONS:
-            return install_constants.DEFAULT_CLI_PATH["MACOS_VERSIONS"]
-        elif self.get_os() in install_constants.WINDOWS_SERVER:
-            return install_constants.DEFAULT_CLI_PATH["WINDOWS_SERVER"]
+        if self.nonroot:
+            if self.get_os() in install_constants.LINUX_DISTROS:
+                return install_constants.DEFAULT_NONROOT_CLI_PATH["LINUX_DISTROS"]
+            elif self.get_os() in install_constants.MACOS_VERSIONS:
+                return install_constants.DEFAULT_NONROOT_CLI_PATH["MACOS_VERSIONS"]
+            elif self.get_os() in install_constants.WINDOWS_SERVER:
+                return install_constants.DEFAULT_NONROOT_CLI_PATH["WINDOWS_SERVER"]
+        else:
+            if self.get_os() in install_constants.LINUX_DISTROS:
+                return install_constants.DEFAULT_CLI_PATH["LINUX_DISTROS"]
+            elif self.get_os() in install_constants.MACOS_VERSIONS:
+                return install_constants.DEFAULT_CLI_PATH["MACOS_VERSIONS"]
+            elif self.get_os() in install_constants.WINDOWS_SERVER:
+                return install_constants.DEFAULT_CLI_PATH["WINDOWS_SERVER"]
 
     def _set_ip_version(self):
         if params["enable_ipv6"]:
