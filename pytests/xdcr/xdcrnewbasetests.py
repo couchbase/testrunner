@@ -23,11 +23,12 @@ from scripts.collect_server_info import cbcollectRunner
 from scripts import collect_data_files
 from tasks.future import TimeoutError
 
-from couchbase_helper.documentgenerator import BlobGenerator, DocumentGenerator
+from couchbase_helper.documentgenerator import BlobGenerator, DocumentGenerator, SDKDataLoader
 from lib.membase.api.exception import XDCRException
 from security.auditmain import audit
 from security.rbac_base import RbacBase
-
+from collection.collections_rest_client import Collections_Rest
+from collection.collections_stats import Collections_Stats
 
 class RenameNodeException(XDCRException):
 
@@ -1052,7 +1053,8 @@ class XDCReplication:
 
 class CouchbaseCluster:
 
-    def __init__(self, name, nodes, log, use_hostname=False, sdk_compression=True):
+    def __init__(self, name, nodes, log, use_hostname=False, sdk_compression=True,
+                 use_java_sdk=False, scope_num=2, collection_num=2):
         """
         @param name: Couchbase cluster name. e.g C1, C2 to distinguish in logs.
         @param nodes: list of server objects (read from ini file).
@@ -1076,6 +1078,9 @@ class CouchbaseCluster:
         self.__clusterop = Cluster()
         self.__kv_gen = {}
         self.sdk_compression = sdk_compression
+        self.use_java_sdk = use_java_sdk
+        self.scope_num = scope_num
+        self.collection_num = collection_num
 
     def __str__(self):
         return "Couchbase Cluster: %s, Master Ip: %s" % (
@@ -1446,6 +1451,10 @@ class CouchbaseCluster:
                 maxttl=maxttl
             ))
 
+        if self.use_java_sdk:
+            Collections_Rest(self.__master_node).async_create_scope_collection(
+                self.scope_num, self.collection_num, BUCKET_NAME.DEFAULT)
+
     def get_buckets(self):
         return self.__buckets
 
@@ -1504,7 +1513,7 @@ class CouchbaseCluster:
                           kv_store=1, flag=0, only_store_hash=True,
                           batch_size=1000, pause_secs=1, timeout_secs=30):
         """Load data asynchronously on given bucket. Function don't wait for
-        load data to finish, return immidiately.
+        load data to finish, return immediately.
         @param bucket: bucket where to load data.
         @param num_items: number of items to load
         @param value_size: size of the one item.
@@ -1524,12 +1533,11 @@ class CouchbaseCluster:
             seed,
             value_size,
             end=num_items)
-
         gen = copy.deepcopy(self.__kv_gen[OPS.CREATE])
-        task = self.__clusterop.async_load_gen_docs(
-            self.__master_node, bucket.name, gen, bucket.kvs[kv_store],
-            OPS.CREATE, exp, flag, only_store_hash, batch_size, pause_secs,
-            timeout_secs, compression=self.sdk_compression)
+        task = self.__clusterop.async_load_gen_docs(self.__master_node, bucket.name, gen,
+                                                    bucket.kvs[kv_store],OPS.CREATE, exp,
+                                                    flag, only_store_hash, batch_size, pause_secs,
+                                                    timeout_secs, compression=self.sdk_compression)
         return task
 
     def load_bucket(self, bucket, num_items, value_size=512, exp=0,
@@ -1569,17 +1577,19 @@ class CouchbaseCluster:
         @param timeout_secs: timeout
         @return: task objects list
         """
-        seed = "%s-key-" % self.__name
-        self.__kv_gen[
-            OPS.CREATE] = BlobGenerator(
-            seed,
-            seed,
-            value_size,
-            start=0,
-            end=num_items)
+        if self.use_java_sdk:
+            gen = SDKDataLoader(num_ops=num_items, percent_create=100)
+        else:
+            seed = "%s-key-" % self.__name
+            gen = self.__kv_gen[
+                OPS.CREATE] = BlobGenerator(
+                seed,
+                seed,
+                value_size,
+                start=0,
+                end=num_items)
         tasks = []
         for bucket in self.__buckets:
-            gen = copy.deepcopy(self.__kv_gen[OPS.CREATE])
             tasks.append(
                 self.__clusterop.async_load_gen_docs(
                     self.__master_node, bucket.name, gen, bucket.kvs[kv_store],
@@ -1751,51 +1761,53 @@ class CouchbaseCluster:
         @param expiration: time for expire items
         @return: task object list
         """
-        raise_if(
-            OPS.CREATE not in self.__kv_gen,
-            XDCRException(
-                "Data is not loaded in cluster.Load data before update/delete")
-        )
         tasks = []
-        for bucket in self.__buckets:
-            if op_type == OPS.UPDATE:
-                if isinstance(self.__kv_gen[OPS.CREATE], BlobGenerator):
-                    self.__kv_gen[OPS.UPDATE] = BlobGenerator(
-                        self.__kv_gen[OPS.CREATE].name,
-                        self.__kv_gen[OPS.CREATE].seed,
-                        self.__kv_gen[OPS.CREATE].value_size,
-                        start=0,
-                        end=int(self.__kv_gen[OPS.CREATE].end * (float)(perc) / 100))
-                elif isinstance(self.__kv_gen[OPS.CREATE], DocumentGenerator):
-                    self.__kv_gen[OPS.UPDATE] = DocumentGenerator(
-                        self.__kv_gen[OPS.CREATE].name,
-                        self.__kv_gen[OPS.CREATE].template,
-                        self.__kv_gen[OPS.CREATE].args,
-                        start=0,
-                        end=int(self.__kv_gen[OPS.CREATE].end * (float)(perc) / 100))
-                gen = copy.deepcopy(self.__kv_gen[OPS.UPDATE])
-            elif op_type == OPS.DELETE:
-                if isinstance(self.__kv_gen[OPS.CREATE], BlobGenerator):
-                    self.__kv_gen[OPS.DELETE] = BlobGenerator(
-                        self.__kv_gen[OPS.CREATE].name,
-                        self.__kv_gen[OPS.CREATE].seed,
-                        self.__kv_gen[OPS.CREATE].value_size,
-                        start=int((self.__kv_gen[OPS.CREATE].end) * (float)(
-                            100 - perc) // 100),
-                        end=self.__kv_gen[OPS.CREATE].end)
-                elif isinstance(self.__kv_gen[OPS.CREATE], DocumentGenerator):
-                    self.__kv_gen[OPS.DELETE] = DocumentGenerator(
-                        self.__kv_gen[OPS.CREATE].name,
-                        self.__kv_gen[OPS.CREATE].template,
-                        self.__kv_gen[OPS.CREATE].args,
-                        start=0,
-                        end=int(self.__kv_gen[OPS.CREATE].end * (float)(perc) / 100))
-                gen = copy.deepcopy(self.__kv_gen[OPS.DELETE])
-            else:
-                raise XDCRException("Unknown op_type passed: %s" % op_type)
+        if not self.use_java_sdk:
+            raise_if(
+                OPS.CREATE not in self.__kv_gen,
+                XDCRException(
+                    "Data is not loaded in cluster.Load data before update/delete")
+            )
+            for bucket in self.__buckets:
+                if op_type == OPS.UPDATE:
+                    if isinstance(self.__kv_gen[OPS.CREATE], BlobGenerator):
+                        self.__kv_gen[OPS.UPDATE] = BlobGenerator(
+                            self.__kv_gen[OPS.CREATE].name,
+                            self.__kv_gen[OPS.CREATE].seed,
+                            self.__kv_gen[OPS.CREATE].value_size,
+                            start=0,
+                            end=int(self.__kv_gen[OPS.CREATE].end * (float)(perc) / 100))
+                    elif isinstance(self.__kv_gen[OPS.CREATE], DocumentGenerator):
+                        self.__kv_gen[OPS.UPDATE] = DocumentGenerator(
+                            self.__kv_gen[OPS.CREATE].name,
+                            self.__kv_gen[OPS.CREATE].template,
+                            self.__kv_gen[OPS.CREATE].args,
+                            start=0,
+                            end=int(self.__kv_gen[OPS.CREATE].end * (float)(perc) / 100))
+                    gen = copy.deepcopy(self.__kv_gen[OPS.UPDATE])
+                elif op_type == OPS.DELETE:
+                    if isinstance(self.__kv_gen[OPS.CREATE], BlobGenerator):
+                        self.__kv_gen[OPS.DELETE] = BlobGenerator(
+                            self.__kv_gen[OPS.CREATE].name,
+                            self.__kv_gen[OPS.CREATE].seed,
+                            self.__kv_gen[OPS.CREATE].value_size,
+                            start=int((self.__kv_gen[OPS.CREATE].end) * (float)(
+                                100 - perc) // 100),
+                            end=self.__kv_gen[OPS.CREATE].end)
+                    elif isinstance(self.__kv_gen[OPS.CREATE], DocumentGenerator):
+                        self.__kv_gen[OPS.DELETE] = DocumentGenerator(
+                            self.__kv_gen[OPS.CREATE].name,
+                            self.__kv_gen[OPS.CREATE].template,
+                            self.__kv_gen[OPS.CREATE].args,
+                            start=0,
+                            end=int(self.__kv_gen[OPS.CREATE].end * (float)(perc) / 100))
+                    gen = copy.deepcopy(self.__kv_gen[OPS.DELETE])
+                else:
+                    raise XDCRException("Unknown op_type passed: %s" % op_type)
 
             self.__log.info("At bucket '{0}' @ {1}: operation: {2}, key range {3} - {4}".
                        format(bucket.name, self.__name, op_type, gen.start, gen.end))
+
             tasks.append(
                 self.__clusterop.async_load_gen_docs(
                     self.__master_node,
@@ -1807,6 +1819,19 @@ class CouchbaseCluster:
                     batch_size=1000,
                     compression=self.sdk_compression)
             )
+        else:
+            for bucket in self.__buckets:
+                num_items = Collections_Stats(self.__master_node).\
+                    get_collection_item_count(bucket, "_default", "default")
+                gen = SDKDataLoader(num_ops=num_items, percent_create=0, percent_update=30,
+                                    percent_delete=30)
+                tasks.append(
+                    self.__clusterop.async_load_gen_docs(
+                        self.__master_node,
+                        bucket.name,
+                        gen)
+                )
+
         return tasks
 
     def update_delete_data(
@@ -2743,7 +2768,9 @@ class XDCRNewBaseTest(unittest.TestCase):
             self.__cb_clusters.append(
                 CouchbaseCluster(
                     "C%s" % counter, cluster_nodes,
-                    self.log, use_hostanames, sdk_compression=sdk_compression))
+                    self.log, use_hostanames, sdk_compression=sdk_compression,
+                    use_java_sdk=self._use_java_sdk, scope_num=self._scope_num,
+                    collection_num=self._collection_num))
             counter += 1
 
         self.__cleanup_previous()
@@ -2852,6 +2879,9 @@ class XDCRNewBaseTest(unittest.TestCase):
         self._evict_with_compactor = self._input.param("evict_with_compactor", False)
         self._replicator_role = self._input.param("replicator_role", False)
         self._replicator_all_buckets = self._input.param("replicator_all_buckets", False)
+        self._use_java_sdk = self._input.param("java_sdk_client", False)
+        self._scope_num = self._input.param("scope_num", 2)
+        self._collection_num = self._input.param("collection_num", 2)
 
     def __initialize_error_count_dict(self):
         """
@@ -3027,6 +3057,7 @@ class XDCRNewBaseTest(unittest.TestCase):
                 eviction_policy=self.__eviction_policy,
                 bucket_priority=bucket_priority, lww=self.__lww,
                 maxttl=maxttl)
+
 
     def create_buckets_on_cluster(self, cluster_name):
         # if mixed priority is set by user, set high priority for sasl and
@@ -3710,6 +3741,65 @@ class XDCRNewBaseTest(unittest.TestCase):
                               dest_count, dest_master.ip,
                               self.filter_exp))
 
+    def _check_lists_match(self, list1, list2):
+        list_diff = [i for i in list1 + list2 if i not in list1 or i not in list2]
+        if not list_diff:
+            return True
+        return False
+
+    def verify_mapping(self, src_master, dest_master):
+        src_rest = Collections_Rest(src_master)
+        dest_rest = Collections_Rest(dest_master)
+        src_scopes = []
+        dest_scopes = []
+        #Assuming implicit mapping
+        for bucket in RestConnection(src_master).get_buckets():
+            src_scopes = src_rest.get_bucket_scopes(bucket)
+            dest_scopes = dest_rest.get_bucket_scopes(bucket)
+            if self._check_lists_match(src_scopes, dest_scopes):
+                self.log.info("Scope mapping verified for bucket {}. On src: {}, On dest {}"
+                              .format(bucket, src_scopes, dest_scopes))
+            else:
+                self.fail("Scope mapping not as expected for bucket {}. On src: {}, On dest {}"
+                          .format(bucket, src_scopes, dest_scopes))
+            for scope in src_scopes:
+                src_collections = src_rest.get_scope_collections(bucket, scope)
+                dest_collections = dest_rest.get_scope_collections(bucket, scope)
+                if self._check_lists_match(src_collections, dest_collections):
+                    self.log.info("Collection mapping verified for bucket {} -> scope {}. On src: {}, On dest {}"
+                                  .format(bucket, scope, src_collections, dest_collections))
+                else:
+                    self.log.warning("Collection mapping not as expected for bucket {} -> scope {}. On src: {}, On dest {}"
+                                     .format(bucket, scope, src_collections, dest_collections))
+
+
+    def verify_collection_doc_count(self, src, dest):
+        src_rest = Collections_Rest(src)
+        dest_rest = Collections_Rest(dest)
+        src_stat = Collections_Stats(src)
+        dest_stat = Collections_Stats(dest)
+        # Assuming implicit mapping
+        for bucket in RestConnection(src).get_buckets():
+            src_scopes = src_rest.get_bucket_scopes(bucket)
+            dest_scopes = dest_rest.get_bucket_scopes(bucket)
+            for scope in src_scopes:
+                src_collections = src_rest.get_scope_collections(bucket, scope)
+                dest_collections = dest_rest.get_scope_collections(bucket, scope)
+                for collection in src_collections:
+                    src_count = src_stat.get_collection_item_count(bucket, scope, collection)
+                    dest_count = dest_stat.get_collection_item_count(bucket, scope, collection)
+                    if src_count == dest_count:
+                        self.log.info("Collection item count on src {} = dest {} for "
+                                      "bucket {}->scope {}-> collection {}"
+                                      .format(src_count, dest_count, bucket, scope,
+                                              collection))
+                    else:
+                        self.fail("Collection item count on src {} != dest {} for "
+                                      "bucket {}->scope {}-> collection {}"
+                                      .format(src_count, dest_count, bucket, scope,
+                                              collection))
+
+
     def verify_results(self, skip_verify_data=[], skip_verify_revid=[]):
         """Verify data between each couchbase and remote clusters.
         Run below steps for each source and destination cluster..
@@ -3722,12 +3812,18 @@ class XDCRNewBaseTest(unittest.TestCase):
         """
         skip_key_validation = self._input.param("skip_key_validation", False)
         skip_meta_validation = self._input.param("skip_meta_validation", True)
+        if self._use_java_sdk:
+            skip_mirroring_validation = False
+            skip_collection_key_validation = False
+            skip_key_validation = True
         src_dcp_queue_drained = False
         dest_dcp_queue_drained = False
         src_active_passed = False
         src_replica_passed = False
         dest_active_passed = False
         dest_replica_passed = False
+        src_cluster = None
+        dest_cluster = None
         self.__merge_all_buckets()
         for cb_cluster in self.__cb_clusters:
             for remote_cluster_ref in cb_cluster.get_remote_clusters():
@@ -3740,7 +3836,6 @@ class XDCRNewBaseTest(unittest.TestCase):
                            # only need to do compaction on the source cluster, evictions are propagated to the remote
                            # cluster
                            src_cluster.get_cluster().compact_bucket(src_cluster.get_master_node(), b)
-
                     else:
                         src_cluster.run_expiry_pager()
                         dest_cluster.run_expiry_pager()
@@ -3756,6 +3851,10 @@ class XDCRNewBaseTest(unittest.TestCase):
                 except Exception as e:
                     # just log any exception thrown, do not fail test
                     self.log.error(e)
+                if not skip_mirroring_validation :
+                    self.verify_mapping(src_cluster.get_master_node(), dest_cluster.get_master_node())
+                if not skip_collection_key_validation:
+                    self.verify_collection_doc_count(src_cluster.get_master_node(), dest_cluster.get_master_node())
                 if not skip_key_validation:
                     try:
                         if len(src_cluster.get_nodes()) > 1:

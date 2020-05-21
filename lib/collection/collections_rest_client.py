@@ -43,10 +43,10 @@ class CollectionsRest(object):
                                       scope_prefix="scope", collection_prefix="collection",
                                       bucket="default", params=None):
         try:
-            for s in range(1, scope_num):
+            for s in range(1, scope_num + 1):
                 scope = scope_prefix + '_' + str(s)
                 self.create_scope(bucket, scope)
-                for c in range(1, collection_num):
+                for c in range(1, collection_num + 1):
                     self.create_collection(bucket, scope, collection_prefix + '_' + str(c), params)
         except Exception as e:
             self.log.error(str(e))
@@ -73,10 +73,10 @@ class CollectionsRest(object):
     # Multithreaded for bulk creation
     def async_create_scope_collection(self, scope_num, collection_num, bucket="default"):
         tasks = []
-        for s in range(1, scope_num):
+        for s in range(1, scope_num + 1):
             scope = "scope_" + str(s)
             self.create_scope(bucket, scope)
-            for c in range(1, collection_num):
+            for c in range(1, collection_num + 1):
                 task = self.CollectionFactory(bucket, scope, "collection_" + str(c), self.rest)
                 task.start()
                 tasks.append(task)

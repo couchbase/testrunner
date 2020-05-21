@@ -652,7 +652,7 @@ class GeoSpatialDataLoader(KVGenerator):
 
 class SDKDataLoader(object):
     # type: (int, int, int, int, str, int, str, str, list, list, str, bool)
-    def __init__(self, num_ops, percent_create, percent_update, percent_delete, load_pattern="uniform",
+    def __init__(self, num_ops, percent_create, percent_update=0, percent_delete=0, load_pattern="uniform",
                   start_seq_num=1, key_prefix="doc_", key_suffix="_",
                  scope="_default", collection="default", json_template="Person", print_sdk_logs="info"):
         #TODO : doc_size, batch_size, pause_secs, timeout, expiry

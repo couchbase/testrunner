@@ -26,7 +26,7 @@ class BasicCollections(BaseTestCase):
         self.master = self.servers[0]
         self.use_rest = self.input.param("use_rest", True)
         self.use_cli = self.input.param("use_cli", False)
-        self.num_items = self.input.param("items", 1000)
+        self.num_items = self.input.param("items", 100)
         self.value_size = self.input.param("value_size", 512)
         self.rest = CollectionsRest(self.master)
         self.cli = CollectionsCLI(self.master)
@@ -148,28 +148,28 @@ class BasicCollections(BaseTestCase):
     def test_bulk_create_from_map(self):
         import time
         start = time.time()
-        # TODO
+        #TODO
         self.log.info("{} scopes with {} collections each created in {} s"
                       .format(self.scope_num, self.collection_num, round(time.time() - start)))
 
     def test_delete_default_collection(self):
         # epengine.basic_collections.BasicCollections.test_delete_default_collection
         if self.use_rest:
-            status = self.rest.delete_collection(self.default_bucket_name, "_default", "_default")
+            status = self.rest.delete_collection(self.default_bucket_name, "_default", "default")
         elif self.use_cli:
-            status = self.cli.delete_collection(self.default_bucket_name, "_default", "_default")
+            status = self.cli.delete_collection(self.default_bucket_name, "_default", "default")
         else:
             raise Exception("Choose either REST or CLI")
-        if status is True:
-            self.log.fail("default collection deleted!")
+        if status is False:
+            self.log.fail("Failed to delete default collection!")
         else:
-            self.log.info("default collection delete failed as expected")
+            self.log.info("Default collection delete passed")
 
     def test_load_collections_in_bucket(self):
         import time
         start = time.time()
-        self.scope_num = self.input.param("num_scopes", 5)
-        self.collection_num = self.input.param("num_collections", 5)
+        self.scope_num = self.input.param("num_scopes", 2)
+        self.collection_num = self.input.param("num_collections", 2)
         self.bucket_name = self.input.param("bucket", self.default_bucket_name)
         try:
             self.rest.async_create_scope_collection(self.scope_num, self.collection_num, self.bucket_name)
@@ -237,4 +237,13 @@ class BasicCollections(BaseTestCase):
         self.test_load_collections_in_bucket()
         self.buckets = self.conn.get_buckets()
         for bkt in self.buckets:
-            print(self.stat.get_collection_stats(bkt))
+            bkt_scopes = self.rest.get_bucket_scopes(bkt)
+            print(bkt_scopes)
+            for scope in bkt_scopes:
+                print("Items in {}->{} = {}".format(bkt, scope,
+                                                    self.stat.get_scope_item_count(bkt, scope)))
+                bkt_collections = self.rest.get_scope_collections(bkt, scope)
+                for collection in bkt_collections:
+                    print("Items in {}->{}->{} = {}"
+                          .format(bkt, scope, collection,
+                                  self.stat.get_collection_item_count(bkt, scope, collection)))

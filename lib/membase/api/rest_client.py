@@ -628,26 +628,32 @@ class RestConnection(object):
             raise Exception("Create collection failed : status:{0},content:{1}".format(status, content))
         return status
 
-    def _parse_manifest(self, bucket, extract=None):
+    def get_bucket_manifest(self, bucket):
         if isinstance(bucket, Bucket):
             bucket = bucket.name
         api = '{0}{1}{2}{3}'.format(self.baseUrl, 'pools/default/buckets/', bucket, '/collections')
         status, content, header = self._http_request(api)
         if status:
-            manifest = json.loads(content)
+            return json.loads(content)
+        else:
+            raise Exception(
+                "Cannot get manifest for bucket {}: status:{}, content:{}".format(bucket, status, content))
+
+    def _parse_manifest(self, bucket, extract=None):
+        try:
+            manifest = self.get_bucket_manifest(bucket)
             scopes = []
             collections = []
             for scope in manifest["scopes"]:
-                scopes.append(scope['name'])
-                for collection in scope['collections']:
-                    collections.append(collection['name'])
+                scopes.append(scope["name"])
+                for collection in scope["collections"]:
+                    collections.append(collection["name"])
             if extract == "scopes":
                 return scopes
             elif extract == "collections":
                 return collections
-        else:
-            raise Exception(
-                "Cannot get {0} for bucket {1} : status:{2},content:{3}".format(extract, bucket, status, content))
+        except Exception as e:
+            raise Exception("Cannot extract {} for bucket {} from manifest {}".format(extract, bucket, e.message))
 
     def get_bucket_scopes(self, bucket):
         return self._parse_manifest(bucket, "scopes")
@@ -656,12 +662,8 @@ class RestConnection(object):
         return self._parse_manifest(bucket, "collections")
 
     def get_scope_collections(self, bucket, scope):
-        if isinstance(bucket, Bucket):
-            bucket = bucket.name
-        api = '{0}{1}{2}{3}'.format(self.baseUrl, 'pools/default/buckets/', bucket, '/collections')
-        status, content, header = self._http_request(api)
-        manifest = json.loads(content)
-        if status:
+        try:
+            manifest = self.get_bucket_manifest(bucket)
             scope_found = False
             collections_in_scope = []
             for scopes in manifest["scopes"]:
@@ -672,9 +674,8 @@ class RestConnection(object):
             if not scope_found:
                 log.error("Cannot get collections for scope {} because it does not exist".format(scope))
             return collections_in_scope
-        else:
-            raise Exception("Cannot get collections for bucket {0} : status:{1},content:{2}".
-                            format(bucket, status, content))
+        except Exception as e:
+            raise Exception("Cannot get collections for bucket {}-> scope{} {}".format(bucket, scope, e.message))
 
     def delete_scope(self, bucket, scope):
         api = self.baseUrl + 'pools/default/buckets/%s/collections/%s' % (bucket, scope)

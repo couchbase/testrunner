@@ -171,7 +171,7 @@ class Cluster(object):
         if isinstance(generator, list):
                 _task = LoadDocumentsGeneratorsTask(server, bucket, generator, kv_store, op_type, exp, flag,
                                                     only_store_hash, batch_size, compression=compression, collection=collection)
-        # Load using javs sdk client
+        # Load using java sdk client
         elif not generator.isGenerator():
                 _task = SDKLoadDocumentsTask(server, bucket, generator, pause_secs, timeout_secs)
         else:
