@@ -6,24 +6,29 @@ class CollectionsN1QL(object):
     def __init__(self, node):
         self.log = logger.Logger.get_logger()
         self.node = node
+        self.use_rest = True
         self.n1ql_helper = N1QLHelper(use_rest=True, log=self.log)
 
     def create_collection(self, keyspace="default", bucket_name="", scope_name="", collection_name="", poll_interval=1, timeout=30):
+        self.n1ql_helper.use_rest = self.use_rest
         return self.n1ql_helper.create_collection(server=self.node, keyspace=keyspace, bucket_name=bucket_name,
                                            scope_name=scope_name, collection_name=collection_name,
                                            poll_interval=poll_interval, timeout=timeout)
 
     def create_scope(self, keyspace="default", bucket_name="", scope_name="", poll_interval=1, timeout=30):
+        self.n1ql_helper.use_rest = self.use_rest
         return self.n1ql_helper.create_scope(server=self.node, keyspace=keyspace, bucket_name=bucket_name, scope_name=scope_name,
                                       poll_interval=poll_interval, timeout=timeout)
 
     def delete_collection(self, keyspace="default", bucket_name="", scope_name="", collection_name="",
                         poll_interval=1, timeout=30):
+        self.n1ql_helper.use_rest = self.use_rest
         return self.n1ql_helper.delete_collection(server=self.node, keyspace=keyspace, bucket_name=bucket_name,
                                            scope_name=scope_name, collection_name=collection_name,
                                            poll_interval=poll_interval, timeout=timeout)
 
     def delete_scope(self, keyspace="default", bucket_name="", scope_name="", poll_interval=1, timeout=30):
+        self.n1ql_helper.use_rest = self.use_rest
         return self.n1ql_helper.delete_scope(server=self.node, keyspace=keyspace, bucket_name=bucket_name,
                                       scope_name=scope_name, poll_interval=poll_interval, timeout=timeout)
 

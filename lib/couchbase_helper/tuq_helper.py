@@ -231,6 +231,9 @@ class N1QLHelper():
                 self.n1ql_port = server.n1ql_port
             if self.input and self.input.tuq_client and "client" in self.input.tuq_client:
                 server = self.tuq_client
+
+        rest = RestConnection(server)
+
         if self.n1ql_port is None or self.n1ql_port == '':
             self.n1ql_port = self.input.param("n1ql_port", 8093)
             if not self.n1ql_port:
@@ -241,6 +244,8 @@ class N1QLHelper():
             if bucket.saslPassword:
                 cred_params['creds'].append({'user': 'local:%s' % bucket.name, 'pass': bucket.saslPassword})
         query_params.update(cred_params)
+
+        result = ""
         if self.use_rest:
             query_params = {}
             if scan_consistency:
@@ -252,27 +257,24 @@ class N1QLHelper():
             result = RestConnection(server).query_tool(query, self.n1ql_port, query_params=query_params, is_prepared = is_prepared, verbose = verbose)
         else:
             shell = RemoteMachineShellConnection(server)
-            url = "'http://%s:8093/query/service'" % server.ip
-            cmd = "%s/cbq  -engine=http://%s:8093/" % (testconstants.LINUX_COUCHBASE_BIN_PATH, server.ip)
+            cmd = f"{testconstants.LINUX_COUCHBASE_BIN_PATH}/cbq  -engine=http://{server.ip}:8093/ -u {rest.username} -p {rest.password} "
             query = query.replace('"', '\\"')
             if "#primary" in query:
                 query = query.replace("'#primary'", '\\"#primary\\"')
-            query = "select curl('POST', " + url + ", {'data' : 'statement=%s'})" % query
-            print(query)
             output = shell.execute_commands_inside(cmd, query, "", "", "", "", "")
-            print("-"*128)
-            print(output)
-            new_curl = json.dumps(output[47:])
-            string_curl = json.loads(new_curl)
-            result = json.loads(string_curl)
-            print(result)
+            output = output[output.find('{"requestID":'):]
+            try:
+                result = json.loads(output)
+            except Exception as ex:
+                self.log.error(f"CANNOT LOAD QUERY RESULT IN JSON: {ex}" )
+                self.log.error("INCORRECT DOCUMENT IS: " + str(output))
         if isinstance(result, str) or 'errors' in result:
             error_result = str(result)
             length_display = len(error_result)
             if length_display > 500:
                 error_result = error_result[:500]
             raise CBQError(error_result, server.ip)
-        self.log.info("TOTAL ELAPSED TIME: %s" % result["metrics"]["elapsedTime"])
+        self.log.info(f"TOTAL ELAPSED TIME: {result['metrics']['elapsedTime']}")
         return result
 
     def wait_for_all_indexes_online(self):

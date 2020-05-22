@@ -1,5 +1,4 @@
 from .tuq import QueryTests
-from collection.collections_rest_client import Collections_Rest
 from membase.api.exception import CBQError
 from membase.helper.bucket_helper import BucketOperationHelper
 from collection.collections_cli_client import Collections_CLI
@@ -34,6 +33,739 @@ class QueryCollectionsDDLTests(QueryTests):
         },
     """
     tests_objects = {
+        "massive_test":{
+            "buckets": [{"name": "bucket1",
+                        "scopes": [{"name": "scope1",
+                                    "collections":[{"name": "collection1"}, {"name": "collection2"},
+                                                   {"name": "collection3"}, {"name": "collection4"},
+                                                   {"name": "collection5"}, {"name": "collection6"},
+                                                   {"name": "collection7"}, {"name": "collection8"},
+                                                   {"name": "collection9"}, {"name": "collection10"}]
+                                    },
+                                   {"name": "scope2",
+                                    "collections":[{"name": "collection1"}, {"name": "collection2"},
+                                                   {"name": "collection3"}, {"name": "collection4"},
+                                                   {"name": "collection5"}, {"name": "collection6"},
+                                                   {"name": "collection7"}, {"name": "collection8"},
+                                                   {"name": "collection9"}, {"name": "collection10"}]
+                                    },
+                                   {"name": "scope3",
+                                    "collections":[{"name": "collection1"}, {"name": "collection2"},
+                                                   {"name": "collection3"}, {"name": "collection4"},
+                                                   {"name": "collection5"}, {"name": "collection6"},
+                                                   {"name": "collection7"}, {"name": "collection8"},
+                                                   {"name": "collection9"}, {"name": "collection10"}]
+                                    },
+                                   {"name": "scope4",
+                                    "collections":[{"name": "collection1"}, {"name": "collection2"},
+                                                   {"name": "collection3"}, {"name": "collection4"},
+                                                   {"name": "collection5"}, {"name": "collection6"},
+                                                   {"name": "collection7"}, {"name": "collection8"},
+                                                   {"name": "collection9"}, {"name": "collection10"}]
+                                    },
+                                   {"name": "scope5",
+                                    "collections":[{"name": "collection1"}, {"name": "collection2"},
+                                                   {"name": "collection3"}, {"name": "collection4"},
+                                                   {"name": "collection5"}, {"name": "collection6"},
+                                                   {"name": "collection7"}, {"name": "collection8"},
+                                                   {"name": "collection9"}, {"name": "collection10"}]
+                                    },
+                                   {"name": "scope6",
+                                    "collections":[{"name": "collection1"}, {"name": "collection2"},
+                                                   {"name": "collection3"}, {"name": "collection4"},
+                                                   {"name": "collection5"}, {"name": "collection6"},
+                                                   {"name": "collection7"}, {"name": "collection8"},
+                                                   {"name": "collection9"}, {"name": "collection10"}]
+                                    },
+                                   {"name": "scope7",
+                                    "collections":[{"name": "collection1"}, {"name": "collection2"},
+                                                   {"name": "collection3"}, {"name": "collection4"},
+                                                   {"name": "collection5"}, {"name": "collection6"},
+                                                   {"name": "collection7"}, {"name": "collection8"},
+                                                   {"name": "collection9"}, {"name": "collection10"}]
+                                    },
+                                   {"name": "scope8",
+                                    "collections":[{"name": "collection1"}, {"name": "collection2"},
+                                                   {"name": "collection3"}, {"name": "collection4"},
+                                                   {"name": "collection5"}, {"name": "collection6"},
+                                                   {"name": "collection7"}, {"name": "collection8"},
+                                                   {"name": "collection9"}, {"name": "collection10"}]
+                                    },
+                                   {"name": "scope9",
+                                    "collections":[{"name": "collection1"}, {"name": "collection2"},
+                                                   {"name": "collection3"}, {"name": "collection4"},
+                                                   {"name": "collection5"}, {"name": "collection6"},
+                                                   {"name": "collection7"}, {"name": "collection8"},
+                                                   {"name": "collection9"}, {"name": "collection10"}]
+                                    },
+                                   {"name": "scope10",
+                                    "collections":[{"name": "collection1"}, {"name": "collection2"},
+                                                   {"name": "collection3"}, {"name": "collection4"},
+                                                   {"name": "collection5"}, {"name": "collection6"},
+                                                   {"name": "collection7"}, {"name": "collection8"},
+                                                   {"name": "collection9"}, {"name": "collection10"}]
+                                    },
+                                  ]
+                        },
+                        {"name": "bucket2",
+                         "scopes": [{"name": "scope1",
+                                     "collections": [{"name": "collection1"}, {"name": "collection2"},
+                                                     {"name": "collection3"}, {"name": "collection4"},
+                                                     {"name": "collection5"}, {"name": "collection6"},
+                                                     {"name": "collection7"}, {"name": "collection8"},
+                                                     {"name": "collection9"}, {"name": "collection10"}]
+                                     },
+                                    {"name": "scope2",
+                                     "collections": [{"name": "collection1"}, {"name": "collection2"},
+                                                     {"name": "collection3"}, {"name": "collection4"},
+                                                     {"name": "collection5"}, {"name": "collection6"},
+                                                     {"name": "collection7"}, {"name": "collection8"},
+                                                     {"name": "collection9"}, {"name": "collection10"}]
+                                     },
+                                    {"name": "scope3",
+                                     "collections": [{"name": "collection1"}, {"name": "collection2"},
+                                                     {"name": "collection3"}, {"name": "collection4"},
+                                                     {"name": "collection5"}, {"name": "collection6"},
+                                                     {"name": "collection7"}, {"name": "collection8"},
+                                                     {"name": "collection9"}, {"name": "collection10"}]
+                                     },
+                                    {"name": "scope4",
+                                     "collections": [{"name": "collection1"}, {"name": "collection2"},
+                                                     {"name": "collection3"}, {"name": "collection4"},
+                                                     {"name": "collection5"}, {"name": "collection6"},
+                                                     {"name": "collection7"}, {"name": "collection8"},
+                                                     {"name": "collection9"}, {"name": "collection10"}]
+                                     },
+                                    {"name": "scope5",
+                                     "collections": [{"name": "collection1"}, {"name": "collection2"},
+                                                     {"name": "collection3"}, {"name": "collection4"},
+                                                     {"name": "collection5"}, {"name": "collection6"},
+                                                     {"name": "collection7"}, {"name": "collection8"},
+                                                     {"name": "collection9"}, {"name": "collection10"}]
+                                     },
+                                    {"name": "scope6",
+                                     "collections": [{"name": "collection1"}, {"name": "collection2"},
+                                                     {"name": "collection3"}, {"name": "collection4"},
+                                                     {"name": "collection5"}, {"name": "collection6"},
+                                                     {"name": "collection7"}, {"name": "collection8"},
+                                                     {"name": "collection9"}, {"name": "collection10"}]
+                                     },
+                                    {"name": "scope7",
+                                     "collections": [{"name": "collection1"}, {"name": "collection2"},
+                                                     {"name": "collection3"}, {"name": "collection4"},
+                                                     {"name": "collection5"}, {"name": "collection6"},
+                                                     {"name": "collection7"}, {"name": "collection8"},
+                                                     {"name": "collection9"}, {"name": "collection10"}]
+                                     },
+                                    {"name": "scope8",
+                                     "collections": [{"name": "collection1"}, {"name": "collection2"},
+                                                     {"name": "collection3"}, {"name": "collection4"},
+                                                     {"name": "collection5"}, {"name": "collection6"},
+                                                     {"name": "collection7"}, {"name": "collection8"},
+                                                     {"name": "collection9"}, {"name": "collection10"}]
+                                     },
+                                    {"name": "scope9",
+                                     "collections": [{"name": "collection1"}, {"name": "collection2"},
+                                                     {"name": "collection3"}, {"name": "collection4"},
+                                                     {"name": "collection5"}, {"name": "collection6"},
+                                                     {"name": "collection7"}, {"name": "collection8"},
+                                                     {"name": "collection9"}, {"name": "collection10"}]
+                                     },
+                                    {"name": "scope10",
+                                     "collections": [{"name": "collection1"}, {"name": "collection2"},
+                                                     {"name": "collection3"}, {"name": "collection4"},
+                                                     {"name": "collection5"}, {"name": "collection6"},
+                                                     {"name": "collection7"}, {"name": "collection8"},
+                                                     {"name": "collection9"}, {"name": "collection10"}]
+                                     },
+                                    ]
+                         },
+                        {"name": "bucket3",
+                         "scopes": [{"name": "scope1",
+                                     "collections": [{"name": "collection1"}, {"name": "collection2"},
+                                                     {"name": "collection3"}, {"name": "collection4"},
+                                                     {"name": "collection5"}, {"name": "collection6"},
+                                                     {"name": "collection7"}, {"name": "collection8"},
+                                                     {"name": "collection9"}, {"name": "collection10"}]
+                                     },
+                                    {"name": "scope2",
+                                     "collections": [{"name": "collection1"}, {"name": "collection2"},
+                                                     {"name": "collection3"}, {"name": "collection4"},
+                                                     {"name": "collection5"}, {"name": "collection6"},
+                                                     {"name": "collection7"}, {"name": "collection8"},
+                                                     {"name": "collection9"}, {"name": "collection10"}]
+                                     },
+                                    {"name": "scope3",
+                                     "collections": [{"name": "collection1"}, {"name": "collection2"},
+                                                     {"name": "collection3"}, {"name": "collection4"},
+                                                     {"name": "collection5"}, {"name": "collection6"},
+                                                     {"name": "collection7"}, {"name": "collection8"},
+                                                     {"name": "collection9"}, {"name": "collection10"}]
+                                     },
+                                    {"name": "scope4",
+                                     "collections": [{"name": "collection1"}, {"name": "collection2"},
+                                                     {"name": "collection3"}, {"name": "collection4"},
+                                                     {"name": "collection5"}, {"name": "collection6"},
+                                                     {"name": "collection7"}, {"name": "collection8"},
+                                                     {"name": "collection9"}, {"name": "collection10"}]
+                                     },
+                                    {"name": "scope5",
+                                     "collections": [{"name": "collection1"}, {"name": "collection2"},
+                                                     {"name": "collection3"}, {"name": "collection4"},
+                                                     {"name": "collection5"}, {"name": "collection6"},
+                                                     {"name": "collection7"}, {"name": "collection8"},
+                                                     {"name": "collection9"}, {"name": "collection10"}]
+                                     },
+                                    {"name": "scope6",
+                                     "collections": [{"name": "collection1"}, {"name": "collection2"},
+                                                     {"name": "collection3"}, {"name": "collection4"},
+                                                     {"name": "collection5"}, {"name": "collection6"},
+                                                     {"name": "collection7"}, {"name": "collection8"},
+                                                     {"name": "collection9"}, {"name": "collection10"}]
+                                     },
+                                    {"name": "scope7",
+                                     "collections": [{"name": "collection1"}, {"name": "collection2"},
+                                                     {"name": "collection3"}, {"name": "collection4"},
+                                                     {"name": "collection5"}, {"name": "collection6"},
+                                                     {"name": "collection7"}, {"name": "collection8"},
+                                                     {"name": "collection9"}, {"name": "collection10"}]
+                                     },
+                                    {"name": "scope8",
+                                     "collections": [{"name": "collection1"}, {"name": "collection2"},
+                                                     {"name": "collection3"}, {"name": "collection4"},
+                                                     {"name": "collection5"}, {"name": "collection6"},
+                                                     {"name": "collection7"}, {"name": "collection8"},
+                                                     {"name": "collection9"}, {"name": "collection10"}]
+                                     },
+                                    {"name": "scope9",
+                                     "collections": [{"name": "collection1"}, {"name": "collection2"},
+                                                     {"name": "collection3"}, {"name": "collection4"},
+                                                     {"name": "collection5"}, {"name": "collection6"},
+                                                     {"name": "collection7"}, {"name": "collection8"},
+                                                     {"name": "collection9"}, {"name": "collection10"}]
+                                     },
+                                    {"name": "scope10",
+                                     "collections": [{"name": "collection1"}, {"name": "collection2"},
+                                                     {"name": "collection3"}, {"name": "collection4"},
+                                                     {"name": "collection5"}, {"name": "collection6"},
+                                                     {"name": "collection7"}, {"name": "collection8"},
+                                                     {"name": "collection9"}, {"name": "collection10"}]
+                                     },
+                                    ]
+                         },
+                        {"name": "bucket4",
+                         "scopes": [{"name": "scope1",
+                                     "collections": [{"name": "collection1"}, {"name": "collection2"},
+                                                     {"name": "collection3"}, {"name": "collection4"},
+                                                     {"name": "collection5"}, {"name": "collection6"},
+                                                     {"name": "collection7"}, {"name": "collection8"},
+                                                     {"name": "collection9"}, {"name": "collection10"}]
+                                     },
+                                    {"name": "scope2",
+                                     "collections": [{"name": "collection1"}, {"name": "collection2"},
+                                                     {"name": "collection3"}, {"name": "collection4"},
+                                                     {"name": "collection5"}, {"name": "collection6"},
+                                                     {"name": "collection7"}, {"name": "collection8"},
+                                                     {"name": "collection9"}, {"name": "collection10"}]
+                                     },
+                                    {"name": "scope3",
+                                     "collections": [{"name": "collection1"}, {"name": "collection2"},
+                                                     {"name": "collection3"}, {"name": "collection4"},
+                                                     {"name": "collection5"}, {"name": "collection6"},
+                                                     {"name": "collection7"}, {"name": "collection8"},
+                                                     {"name": "collection9"}, {"name": "collection10"}]
+                                     },
+                                    {"name": "scope4",
+                                     "collections": [{"name": "collection1"}, {"name": "collection2"},
+                                                     {"name": "collection3"}, {"name": "collection4"},
+                                                     {"name": "collection5"}, {"name": "collection6"},
+                                                     {"name": "collection7"}, {"name": "collection8"},
+                                                     {"name": "collection9"}, {"name": "collection10"}]
+                                     },
+                                    {"name": "scope5",
+                                     "collections": [{"name": "collection1"}, {"name": "collection2"},
+                                                     {"name": "collection3"}, {"name": "collection4"},
+                                                     {"name": "collection5"}, {"name": "collection6"},
+                                                     {"name": "collection7"}, {"name": "collection8"},
+                                                     {"name": "collection9"}, {"name": "collection10"}]
+                                     },
+                                    {"name": "scope6",
+                                     "collections": [{"name": "collection1"}, {"name": "collection2"},
+                                                     {"name": "collection3"}, {"name": "collection4"},
+                                                     {"name": "collection5"}, {"name": "collection6"},
+                                                     {"name": "collection7"}, {"name": "collection8"},
+                                                     {"name": "collection9"}, {"name": "collection10"}]
+                                     },
+                                    {"name": "scope7",
+                                     "collections": [{"name": "collection1"}, {"name": "collection2"},
+                                                     {"name": "collection3"}, {"name": "collection4"},
+                                                     {"name": "collection5"}, {"name": "collection6"},
+                                                     {"name": "collection7"}, {"name": "collection8"},
+                                                     {"name": "collection9"}, {"name": "collection10"}]
+                                     },
+                                    {"name": "scope8",
+                                     "collections": [{"name": "collection1"}, {"name": "collection2"},
+                                                     {"name": "collection3"}, {"name": "collection4"},
+                                                     {"name": "collection5"}, {"name": "collection6"},
+                                                     {"name": "collection7"}, {"name": "collection8"},
+                                                     {"name": "collection9"}, {"name": "collection10"}]
+                                     },
+                                    {"name": "scope9",
+                                     "collections": [{"name": "collection1"}, {"name": "collection2"},
+                                                     {"name": "collection3"}, {"name": "collection4"},
+                                                     {"name": "collection5"}, {"name": "collection6"},
+                                                     {"name": "collection7"}, {"name": "collection8"},
+                                                     {"name": "collection9"}, {"name": "collection10"}]
+                                     },
+                                    {"name": "scope10",
+                                     "collections": [{"name": "collection1"}, {"name": "collection2"},
+                                                     {"name": "collection3"}, {"name": "collection4"},
+                                                     {"name": "collection5"}, {"name": "collection6"},
+                                                     {"name": "collection7"}, {"name": "collection8"},
+                                                     {"name": "collection9"}, {"name": "collection10"}]
+                                     },
+                                    ]
+                         },
+                        {"name": "bucket5",
+                         "scopes": [{"name": "scope1",
+                                     "collections": [{"name": "collection1"}, {"name": "collection2"},
+                                                     {"name": "collection3"}, {"name": "collection4"},
+                                                     {"name": "collection5"}, {"name": "collection6"},
+                                                     {"name": "collection7"}, {"name": "collection8"},
+                                                     {"name": "collection9"}, {"name": "collection10"}]
+                                     },
+                                    {"name": "scope2",
+                                     "collections": [{"name": "collection1"}, {"name": "collection2"},
+                                                     {"name": "collection3"}, {"name": "collection4"},
+                                                     {"name": "collection5"}, {"name": "collection6"},
+                                                     {"name": "collection7"}, {"name": "collection8"},
+                                                     {"name": "collection9"}, {"name": "collection10"}]
+                                     },
+                                    {"name": "scope3",
+                                     "collections": [{"name": "collection1"}, {"name": "collection2"},
+                                                     {"name": "collection3"}, {"name": "collection4"},
+                                                     {"name": "collection5"}, {"name": "collection6"},
+                                                     {"name": "collection7"}, {"name": "collection8"},
+                                                     {"name": "collection9"}, {"name": "collection10"}]
+                                     },
+                                    {"name": "scope4",
+                                     "collections": [{"name": "collection1"}, {"name": "collection2"},
+                                                     {"name": "collection3"}, {"name": "collection4"},
+                                                     {"name": "collection5"}, {"name": "collection6"},
+                                                     {"name": "collection7"}, {"name": "collection8"},
+                                                     {"name": "collection9"}, {"name": "collection10"}]
+                                     },
+                                    {"name": "scope5",
+                                     "collections": [{"name": "collection1"}, {"name": "collection2"},
+                                                     {"name": "collection3"}, {"name": "collection4"},
+                                                     {"name": "collection5"}, {"name": "collection6"},
+                                                     {"name": "collection7"}, {"name": "collection8"},
+                                                     {"name": "collection9"}, {"name": "collection10"}]
+                                     },
+                                    {"name": "scope6",
+                                     "collections": [{"name": "collection1"}, {"name": "collection2"},
+                                                     {"name": "collection3"}, {"name": "collection4"},
+                                                     {"name": "collection5"}, {"name": "collection6"},
+                                                     {"name": "collection7"}, {"name": "collection8"},
+                                                     {"name": "collection9"}, {"name": "collection10"}]
+                                     },
+                                    {"name": "scope7",
+                                     "collections": [{"name": "collection1"}, {"name": "collection2"},
+                                                     {"name": "collection3"}, {"name": "collection4"},
+                                                     {"name": "collection5"}, {"name": "collection6"},
+                                                     {"name": "collection7"}, {"name": "collection8"},
+                                                     {"name": "collection9"}, {"name": "collection10"}]
+                                     },
+                                    {"name": "scope8",
+                                     "collections": [{"name": "collection1"}, {"name": "collection2"},
+                                                     {"name": "collection3"}, {"name": "collection4"},
+                                                     {"name": "collection5"}, {"name": "collection6"},
+                                                     {"name": "collection7"}, {"name": "collection8"},
+                                                     {"name": "collection9"}, {"name": "collection10"}]
+                                     },
+                                    {"name": "scope9",
+                                     "collections": [{"name": "collection1"}, {"name": "collection2"},
+                                                     {"name": "collection3"}, {"name": "collection4"},
+                                                     {"name": "collection5"}, {"name": "collection6"},
+                                                     {"name": "collection7"}, {"name": "collection8"},
+                                                     {"name": "collection9"}, {"name": "collection10"}]
+                                     },
+                                    {"name": "scope10",
+                                     "collections": [{"name": "collection1"}, {"name": "collection2"},
+                                                     {"name": "collection3"}, {"name": "collection4"},
+                                                     {"name": "collection5"}, {"name": "collection6"},
+                                                     {"name": "collection7"}, {"name": "collection8"},
+                                                     {"name": "collection9"}, {"name": "collection10"}]
+                                     },
+                                    ]
+                         },
+                        {"name": "bucket6",
+                         "scopes": [{"name": "scope1",
+                                     "collections": [{"name": "collection1"}, {"name": "collection2"},
+                                                     {"name": "collection3"}, {"name": "collection4"},
+                                                     {"name": "collection5"}, {"name": "collection6"},
+                                                     {"name": "collection7"}, {"name": "collection8"},
+                                                     {"name": "collection9"}, {"name": "collection10"}]
+                                     },
+                                    {"name": "scope2",
+                                     "collections": [{"name": "collection1"}, {"name": "collection2"},
+                                                     {"name": "collection3"}, {"name": "collection4"},
+                                                     {"name": "collection5"}, {"name": "collection6"},
+                                                     {"name": "collection7"}, {"name": "collection8"},
+                                                     {"name": "collection9"}, {"name": "collection10"}]
+                                     },
+                                    {"name": "scope3",
+                                     "collections": [{"name": "collection1"}, {"name": "collection2"},
+                                                     {"name": "collection3"}, {"name": "collection4"},
+                                                     {"name": "collection5"}, {"name": "collection6"},
+                                                     {"name": "collection7"}, {"name": "collection8"},
+                                                     {"name": "collection9"}, {"name": "collection10"}]
+                                     },
+                                    {"name": "scope4",
+                                     "collections": [{"name": "collection1"}, {"name": "collection2"},
+                                                     {"name": "collection3"}, {"name": "collection4"},
+                                                     {"name": "collection5"}, {"name": "collection6"},
+                                                     {"name": "collection7"}, {"name": "collection8"},
+                                                     {"name": "collection9"}, {"name": "collection10"}]
+                                     },
+                                    {"name": "scope5",
+                                     "collections": [{"name": "collection1"}, {"name": "collection2"},
+                                                     {"name": "collection3"}, {"name": "collection4"},
+                                                     {"name": "collection5"}, {"name": "collection6"},
+                                                     {"name": "collection7"}, {"name": "collection8"},
+                                                     {"name": "collection9"}, {"name": "collection10"}]
+                                     },
+                                    {"name": "scope6",
+                                     "collections": [{"name": "collection1"}, {"name": "collection2"},
+                                                     {"name": "collection3"}, {"name": "collection4"},
+                                                     {"name": "collection5"}, {"name": "collection6"},
+                                                     {"name": "collection7"}, {"name": "collection8"},
+                                                     {"name": "collection9"}, {"name": "collection10"}]
+                                     },
+                                    {"name": "scope7",
+                                     "collections": [{"name": "collection1"}, {"name": "collection2"},
+                                                     {"name": "collection3"}, {"name": "collection4"},
+                                                     {"name": "collection5"}, {"name": "collection6"},
+                                                     {"name": "collection7"}, {"name": "collection8"},
+                                                     {"name": "collection9"}, {"name": "collection10"}]
+                                     },
+                                    {"name": "scope8",
+                                     "collections": [{"name": "collection1"}, {"name": "collection2"},
+                                                     {"name": "collection3"}, {"name": "collection4"},
+                                                     {"name": "collection5"}, {"name": "collection6"},
+                                                     {"name": "collection7"}, {"name": "collection8"},
+                                                     {"name": "collection9"}, {"name": "collection10"}]
+                                     },
+                                    {"name": "scope9",
+                                     "collections": [{"name": "collection1"}, {"name": "collection2"},
+                                                     {"name": "collection3"}, {"name": "collection4"},
+                                                     {"name": "collection5"}, {"name": "collection6"},
+                                                     {"name": "collection7"}, {"name": "collection8"},
+                                                     {"name": "collection9"}, {"name": "collection10"}]
+                                     },
+                                    {"name": "scope10",
+                                     "collections": [{"name": "collection1"}, {"name": "collection2"},
+                                                     {"name": "collection3"}, {"name": "collection4"},
+                                                     {"name": "collection5"}, {"name": "collection6"},
+                                                     {"name": "collection7"}, {"name": "collection8"},
+                                                     {"name": "collection9"}, {"name": "collection10"}]
+                                     },
+                                    ]
+                         },
+                        {"name": "bucket7",
+                         "scopes": [{"name": "scope1",
+                                     "collections": [{"name": "collection1"}, {"name": "collection2"},
+                                                     {"name": "collection3"}, {"name": "collection4"},
+                                                     {"name": "collection5"}, {"name": "collection6"},
+                                                     {"name": "collection7"}, {"name": "collection8"},
+                                                     {"name": "collection9"}, {"name": "collection10"}]
+                                     },
+                                    {"name": "scope2",
+                                     "collections": [{"name": "collection1"}, {"name": "collection2"},
+                                                     {"name": "collection3"}, {"name": "collection4"},
+                                                     {"name": "collection5"}, {"name": "collection6"},
+                                                     {"name": "collection7"}, {"name": "collection8"},
+                                                     {"name": "collection9"}, {"name": "collection10"}]
+                                     },
+                                    {"name": "scope3",
+                                     "collections": [{"name": "collection1"}, {"name": "collection2"},
+                                                     {"name": "collection3"}, {"name": "collection4"},
+                                                     {"name": "collection5"}, {"name": "collection6"},
+                                                     {"name": "collection7"}, {"name": "collection8"},
+                                                     {"name": "collection9"}, {"name": "collection10"}]
+                                     },
+                                    {"name": "scope4",
+                                     "collections": [{"name": "collection1"}, {"name": "collection2"},
+                                                     {"name": "collection3"}, {"name": "collection4"},
+                                                     {"name": "collection5"}, {"name": "collection6"},
+                                                     {"name": "collection7"}, {"name": "collection8"},
+                                                     {"name": "collection9"}, {"name": "collection10"}]
+                                     },
+                                    {"name": "scope5",
+                                     "collections": [{"name": "collection1"}, {"name": "collection2"},
+                                                     {"name": "collection3"}, {"name": "collection4"},
+                                                     {"name": "collection5"}, {"name": "collection6"},
+                                                     {"name": "collection7"}, {"name": "collection8"},
+                                                     {"name": "collection9"}, {"name": "collection10"}]
+                                     },
+                                    {"name": "scope6",
+                                     "collections": [{"name": "collection1"}, {"name": "collection2"},
+                                                     {"name": "collection3"}, {"name": "collection4"},
+                                                     {"name": "collection5"}, {"name": "collection6"},
+                                                     {"name": "collection7"}, {"name": "collection8"},
+                                                     {"name": "collection9"}, {"name": "collection10"}]
+                                     },
+                                    {"name": "scope7",
+                                     "collections": [{"name": "collection1"}, {"name": "collection2"},
+                                                     {"name": "collection3"}, {"name": "collection4"},
+                                                     {"name": "collection5"}, {"name": "collection6"},
+                                                     {"name": "collection7"}, {"name": "collection8"},
+                                                     {"name": "collection9"}, {"name": "collection10"}]
+                                     },
+                                    {"name": "scope8",
+                                     "collections": [{"name": "collection1"}, {"name": "collection2"},
+                                                     {"name": "collection3"}, {"name": "collection4"},
+                                                     {"name": "collection5"}, {"name": "collection6"},
+                                                     {"name": "collection7"}, {"name": "collection8"},
+                                                     {"name": "collection9"}, {"name": "collection10"}]
+                                     },
+                                    {"name": "scope9",
+                                     "collections": [{"name": "collection1"}, {"name": "collection2"},
+                                                     {"name": "collection3"}, {"name": "collection4"},
+                                                     {"name": "collection5"}, {"name": "collection6"},
+                                                     {"name": "collection7"}, {"name": "collection8"},
+                                                     {"name": "collection9"}, {"name": "collection10"}]
+                                     },
+                                    {"name": "scope10",
+                                     "collections": [{"name": "collection1"}, {"name": "collection2"},
+                                                     {"name": "collection3"}, {"name": "collection4"},
+                                                     {"name": "collection5"}, {"name": "collection6"},
+                                                     {"name": "collection7"}, {"name": "collection8"},
+                                                     {"name": "collection9"}, {"name": "collection10"}]
+                                     },
+                                    ]
+                         },
+                        {"name": "bucket8",
+                         "scopes": [{"name": "scope1",
+                                     "collections": [{"name": "collection1"}, {"name": "collection2"},
+                                                     {"name": "collection3"}, {"name": "collection4"},
+                                                     {"name": "collection5"}, {"name": "collection6"},
+                                                     {"name": "collection7"}, {"name": "collection8"},
+                                                     {"name": "collection9"}, {"name": "collection10"}]
+                                     },
+                                    {"name": "scope2",
+                                     "collections": [{"name": "collection1"}, {"name": "collection2"},
+                                                     {"name": "collection3"}, {"name": "collection4"},
+                                                     {"name": "collection5"}, {"name": "collection6"},
+                                                     {"name": "collection7"}, {"name": "collection8"},
+                                                     {"name": "collection9"}, {"name": "collection10"}]
+                                     },
+                                    {"name": "scope3",
+                                     "collections": [{"name": "collection1"}, {"name": "collection2"},
+                                                     {"name": "collection3"}, {"name": "collection4"},
+                                                     {"name": "collection5"}, {"name": "collection6"},
+                                                     {"name": "collection7"}, {"name": "collection8"},
+                                                     {"name": "collection9"}, {"name": "collection10"}]
+                                     },
+                                    {"name": "scope4",
+                                     "collections": [{"name": "collection1"}, {"name": "collection2"},
+                                                     {"name": "collection3"}, {"name": "collection4"},
+                                                     {"name": "collection5"}, {"name": "collection6"},
+                                                     {"name": "collection7"}, {"name": "collection8"},
+                                                     {"name": "collection9"}, {"name": "collection10"}]
+                                     },
+                                    {"name": "scope5",
+                                     "collections": [{"name": "collection1"}, {"name": "collection2"},
+                                                     {"name": "collection3"}, {"name": "collection4"},
+                                                     {"name": "collection5"}, {"name": "collection6"},
+                                                     {"name": "collection7"}, {"name": "collection8"},
+                                                     {"name": "collection9"}, {"name": "collection10"}]
+                                     },
+                                    {"name": "scope6",
+                                     "collections": [{"name": "collection1"}, {"name": "collection2"},
+                                                     {"name": "collection3"}, {"name": "collection4"},
+                                                     {"name": "collection5"}, {"name": "collection6"},
+                                                     {"name": "collection7"}, {"name": "collection8"},
+                                                     {"name": "collection9"}, {"name": "collection10"}]
+                                     },
+                                    {"name": "scope7",
+                                     "collections": [{"name": "collection1"}, {"name": "collection2"},
+                                                     {"name": "collection3"}, {"name": "collection4"},
+                                                     {"name": "collection5"}, {"name": "collection6"},
+                                                     {"name": "collection7"}, {"name": "collection8"},
+                                                     {"name": "collection9"}, {"name": "collection10"}]
+                                     },
+                                    {"name": "scope8",
+                                     "collections": [{"name": "collection1"}, {"name": "collection2"},
+                                                     {"name": "collection3"}, {"name": "collection4"},
+                                                     {"name": "collection5"}, {"name": "collection6"},
+                                                     {"name": "collection7"}, {"name": "collection8"},
+                                                     {"name": "collection9"}, {"name": "collection10"}]
+                                     },
+                                    {"name": "scope9",
+                                     "collections": [{"name": "collection1"}, {"name": "collection2"},
+                                                     {"name": "collection3"}, {"name": "collection4"},
+                                                     {"name": "collection5"}, {"name": "collection6"},
+                                                     {"name": "collection7"}, {"name": "collection8"},
+                                                     {"name": "collection9"}, {"name": "collection10"}]
+                                     },
+                                    {"name": "scope10",
+                                     "collections": [{"name": "collection1"}, {"name": "collection2"},
+                                                     {"name": "collection3"}, {"name": "collection4"},
+                                                     {"name": "collection5"}, {"name": "collection6"},
+                                                     {"name": "collection7"}, {"name": "collection8"},
+                                                     {"name": "collection9"}, {"name": "collection10"}]
+                                     },
+                                    ]
+                         },
+                        {"name": "bucket9",
+                         "scopes": [{"name": "scope1",
+                                     "collections": [{"name": "collection1"}, {"name": "collection2"},
+                                                     {"name": "collection3"}, {"name": "collection4"},
+                                                     {"name": "collection5"}, {"name": "collection6"},
+                                                     {"name": "collection7"}, {"name": "collection8"},
+                                                     {"name": "collection9"}, {"name": "collection10"}]
+                                     },
+                                    {"name": "scope2",
+                                     "collections": [{"name": "collection1"}, {"name": "collection2"},
+                                                     {"name": "collection3"}, {"name": "collection4"},
+                                                     {"name": "collection5"}, {"name": "collection6"},
+                                                     {"name": "collection7"}, {"name": "collection8"},
+                                                     {"name": "collection9"}, {"name": "collection10"}]
+                                     },
+                                    {"name": "scope3",
+                                     "collections": [{"name": "collection1"}, {"name": "collection2"},
+                                                     {"name": "collection3"}, {"name": "collection4"},
+                                                     {"name": "collection5"}, {"name": "collection6"},
+                                                     {"name": "collection7"}, {"name": "collection8"},
+                                                     {"name": "collection9"}, {"name": "collection10"}]
+                                     },
+                                    {"name": "scope4",
+                                     "collections": [{"name": "collection1"}, {"name": "collection2"},
+                                                     {"name": "collection3"}, {"name": "collection4"},
+                                                     {"name": "collection5"}, {"name": "collection6"},
+                                                     {"name": "collection7"}, {"name": "collection8"},
+                                                     {"name": "collection9"}, {"name": "collection10"}]
+                                     },
+                                    {"name": "scope5",
+                                     "collections": [{"name": "collection1"}, {"name": "collection2"},
+                                                     {"name": "collection3"}, {"name": "collection4"},
+                                                     {"name": "collection5"}, {"name": "collection6"},
+                                                     {"name": "collection7"}, {"name": "collection8"},
+                                                     {"name": "collection9"}, {"name": "collection10"}]
+                                     },
+                                    {"name": "scope6",
+                                     "collections": [{"name": "collection1"}, {"name": "collection2"},
+                                                     {"name": "collection3"}, {"name": "collection4"},
+                                                     {"name": "collection5"}, {"name": "collection6"},
+                                                     {"name": "collection7"}, {"name": "collection8"},
+                                                     {"name": "collection9"}, {"name": "collection10"}]
+                                     },
+                                    {"name": "scope7",
+                                     "collections": [{"name": "collection1"}, {"name": "collection2"},
+                                                     {"name": "collection3"}, {"name": "collection4"},
+                                                     {"name": "collection5"}, {"name": "collection6"},
+                                                     {"name": "collection7"}, {"name": "collection8"},
+                                                     {"name": "collection9"}, {"name": "collection10"}]
+                                     },
+                                    {"name": "scope8",
+                                     "collections": [{"name": "collection1"}, {"name": "collection2"},
+                                                     {"name": "collection3"}, {"name": "collection4"},
+                                                     {"name": "collection5"}, {"name": "collection6"},
+                                                     {"name": "collection7"}, {"name": "collection8"},
+                                                     {"name": "collection9"}, {"name": "collection10"}]
+                                     },
+                                    {"name": "scope9",
+                                     "collections": [{"name": "collection1"}, {"name": "collection2"},
+                                                     {"name": "collection3"}, {"name": "collection4"},
+                                                     {"name": "collection5"}, {"name": "collection6"},
+                                                     {"name": "collection7"}, {"name": "collection8"},
+                                                     {"name": "collection9"}, {"name": "collection10"}]
+                                     },
+                                    {"name": "scope10",
+                                     "collections": [{"name": "collection1"}, {"name": "collection2"},
+                                                     {"name": "collection3"}, {"name": "collection4"},
+                                                     {"name": "collection5"}, {"name": "collection6"},
+                                                     {"name": "collection7"}, {"name": "collection8"},
+                                                     {"name": "collection9"}, {"name": "collection10"}]
+                                     },
+                                    ]
+                         },
+                        {"name": "bucket10",
+                         "scopes": [{"name": "scope1",
+                                     "collections": [{"name": "collection1"}, {"name": "collection2"},
+                                                     {"name": "collection3"}, {"name": "collection4"},
+                                                     {"name": "collection5"}, {"name": "collection6"},
+                                                     {"name": "collection7"}, {"name": "collection8"},
+                                                     {"name": "collection9"}, {"name": "collection10"}]
+                                     },
+                                    {"name": "scope2",
+                                     "collections": [{"name": "collection1"}, {"name": "collection2"},
+                                                     {"name": "collection3"}, {"name": "collection4"},
+                                                     {"name": "collection5"}, {"name": "collection6"},
+                                                     {"name": "collection7"}, {"name": "collection8"},
+                                                     {"name": "collection9"}, {"name": "collection10"}]
+                                     },
+                                    {"name": "scope3",
+                                     "collections": [{"name": "collection1"}, {"name": "collection2"},
+                                                     {"name": "collection3"}, {"name": "collection4"},
+                                                     {"name": "collection5"}, {"name": "collection6"},
+                                                     {"name": "collection7"}, {"name": "collection8"},
+                                                     {"name": "collection9"}, {"name": "collection10"}]
+                                     },
+                                    {"name": "scope4",
+                                     "collections": [{"name": "collection1"}, {"name": "collection2"},
+                                                     {"name": "collection3"}, {"name": "collection4"},
+                                                     {"name": "collection5"}, {"name": "collection6"},
+                                                     {"name": "collection7"}, {"name": "collection8"},
+                                                     {"name": "collection9"}, {"name": "collection10"}]
+                                     },
+                                    {"name": "scope5",
+                                     "collections": [{"name": "collection1"}, {"name": "collection2"},
+                                                     {"name": "collection3"}, {"name": "collection4"},
+                                                     {"name": "collection5"}, {"name": "collection6"},
+                                                     {"name": "collection7"}, {"name": "collection8"},
+                                                     {"name": "collection9"}, {"name": "collection10"}]
+                                     },
+                                    {"name": "scope6",
+                                     "collections": [{"name": "collection1"}, {"name": "collection2"},
+                                                     {"name": "collection3"}, {"name": "collection4"},
+                                                     {"name": "collection5"}, {"name": "collection6"},
+                                                     {"name": "collection7"}, {"name": "collection8"},
+                                                     {"name": "collection9"}, {"name": "collection10"}]
+                                     },
+                                    {"name": "scope7",
+                                     "collections": [{"name": "collection1"}, {"name": "collection2"},
+                                                     {"name": "collection3"}, {"name": "collection4"},
+                                                     {"name": "collection5"}, {"name": "collection6"},
+                                                     {"name": "collection7"}, {"name": "collection8"},
+                                                     {"name": "collection9"}, {"name": "collection10"}]
+                                     },
+                                    {"name": "scope8",
+                                     "collections": [{"name": "collection1"}, {"name": "collection2"},
+                                                     {"name": "collection3"}, {"name": "collection4"},
+                                                     {"name": "collection5"}, {"name": "collection6"},
+                                                     {"name": "collection7"}, {"name": "collection8"},
+                                                     {"name": "collection9"}, {"name": "collection10"}]
+                                     },
+                                    {"name": "scope9",
+                                     "collections": [{"name": "collection1"}, {"name": "collection2"},
+                                                     {"name": "collection3"}, {"name": "collection4"},
+                                                     {"name": "collection5"}, {"name": "collection6"},
+                                                     {"name": "collection7"}, {"name": "collection8"},
+                                                     {"name": "collection9"}, {"name": "collection10"}]
+                                     },
+                                    {"name": "scope10",
+                                     "collections": [{"name": "collection1"}, {"name": "collection2"},
+                                                     {"name": "collection3"}, {"name": "collection4"},
+                                                     {"name": "collection5"}, {"name": "collection6"},
+                                                     {"name": "collection7"}, {"name": "collection8"},
+                                                     {"name": "collection9"}, {"name": "collection10"}]
+                                     },
+                                    ]
+                         }
+            ]
+        },
         "single_scope":{
             "buckets": [
                 {
@@ -516,7 +1248,12 @@ class QueryCollectionsDDLTests(QueryTests):
         self.log.info("==============  QueryCollectionsDDLTests setup has started ==============")
         self.log_config_info()
         bucket_type = self.input.param("bucket_type", self.bucket_type)
+
         self.collections_helper = CollectionsN1QL(self.master)
+        self.cli_client = Collections_CLI(self.master)
+        self.rest_client = Collections_Rest(self.master)
+
+
         eviction_policy = "noEviction" if bucket_type == "ephemeral" else self.eviction_policy
         self.bucket_params = self._create_bucket_params(server=self.master, size=100,
                                                             replicas=self.num_replicas, bucket_type=bucket_type,
@@ -822,8 +1559,7 @@ class QueryCollectionsDDLTests(QueryTests):
         keyspace_name = "default"
 
         self.cluster.create_standard_bucket(bucket_name, 11222, self.bucket_params)
-        cli_client = Collections_CLI(self.master)
-        collection_created = cli_client.create_scope_collection(bucket=bucket_name, scope=scope_name, collection=collection_name)
+        collection_created = self.cli_client.create_scope_collection(bucket=bucket_name, scope=scope_name, collection=collection_name)
         if collection_created:
             self.collections_helper.delete_collection(keyspace=keyspace_name, bucket_name=bucket_name, scope_name=scope_name, collection_name=collection_name)
 
@@ -840,8 +1576,7 @@ class QueryCollectionsDDLTests(QueryTests):
         keyspace_name = "default"
 
         self.cluster.create_standard_bucket(bucket_name, 11222, self.bucket_params)
-        rest_client = Collections_Rest(self.master)
-        rest_client.create_scope_collection(bucket=bucket_name, scope=scope_name, collection=collection_name)
+        self.rest_client.create_scope_collection(bucket=bucket_name, scope=scope_name, collection=collection_name)
         self.collections_helper.delete_collection(keyspace=keyspace_name, bucket_name=bucket_name, scope_name=scope_name, collection_name=collection_name)
 
         objects = self.rest.get_scope_collections(bucket_name, scope_name)
@@ -887,8 +1622,7 @@ class QueryCollectionsDDLTests(QueryTests):
         scope_name = "scope1"
 
         self.cluster.create_standard_bucket(bucket_name, 11222, self.bucket_params)
-        cli_client = Collections_CLI(self.master)
-        scope_created = cli_client.create_scope(bucket=bucket_name, scope=scope_name)
+        scope_created = self.cli_client.create_scope(bucket=bucket_name, scope=scope_name)
         if scope_created:
             self.collections_helper.delete_scope(keyspace=keyspace_name, bucket_name=bucket_name, scope_name=scope_name)
 
@@ -904,8 +1638,7 @@ class QueryCollectionsDDLTests(QueryTests):
         scope_name = "scope1"
 
         self.cluster.create_standard_bucket(bucket_name, 11222, self.bucket_params)
-        rest_client = Collections_Rest(self.master)
-        rest_client.create_scope(bucket=bucket_name, scope=scope_name)
+        self.rest_client.create_scope(bucket=bucket_name, scope=scope_name)
 
         self.collections_helper.delete_scope(keyspace=keyspace_name, bucket_name=bucket_name, scope_name=scope_name)
 
@@ -913,7 +1646,7 @@ class QueryCollectionsDDLTests(QueryTests):
         if scope_name in objects:
             self.assertEquals(True, False, "Scope still exists after scope drop.")
 
-    def test_drop_scope(self):
+    def test_drop_scope_cascade(self):
         bucket_name = "bucket1"
         scope_name = "scope1"
         collection_name = "collection1"
@@ -950,6 +1683,134 @@ class QueryCollectionsDDLTests(QueryTests):
         #check that collection document is dropped
         result = self.run_cbq_query(f"select count(*) as cnt from {bucket_name}")['results'][0]['cnt']
         self.assertEquals(result, 0, "Collection document was not deleted after scope drop")
+
+    def test_create_n1ql_collection_in_cli_scope(self):
+        bucket_name = "bucket1"
+        scope_name = "scope1"
+        collection_name = "collection1"
+
+        self.cluster.create_standard_bucket(bucket_name, 11222, self.bucket_params)
+        scope_created = self.cli_client.create_scope(bucket=bucket_name, scope=scope_name)
+        if scope_created:
+            self.collections_helper.create_collection(bucket_name=bucket_name, scope_name=scope_name, collection_name=collection_name)
+            scope_collections = self.rest.get_scope_collections(bucket_name, scope_name)
+            if not collection_name in scope_collections:
+                self.assertEquals(True, False, "Cannot create collection via N1QL in a scope created via CLI.")
+        else:
+            self.assertEquals(True, False, "Failed to create scope using CLI. Test is failed")
+
+    def test_create_n1ql_collection_in_rest_scope(self):
+        bucket_name = "bucket1"
+        scope_name = "scope1"
+        collection_name = "collection1"
+
+        self.cluster.create_standard_bucket(bucket_name, 11222, self.bucket_params)
+        self.rest_client.create_scope(bucket=bucket_name, scope=scope_name)
+
+        self.collections_helper.create_collection(bucket_name=bucket_name, scope_name=scope_name, collection_name=collection_name)
+        scope_collections = self.rest.get_scope_collections(bucket_name, scope_name)
+        if not collection_name in scope_collections:
+            self.assertEquals(True, False, "Cannot create collection via N1QL in a scope created via REST. Test is failed.")
+
+    def test_recreate_collection(self):
+        bucket_name = "bucket1"
+        scope_name = "scope1"
+        collection_name = "collection1"
+        objects = {"buckets": [{"name": f"{bucket_name}", "scopes": [{"name": f"{scope_name}", "collections":[{"name": f"{collection_name}"}]}]}]}
+        self.collections_helper.create_bucket_scope_collection_multi_structure(cluster=self.cluster, existing_buckets=self.buckets,
+                                                           bucket_params=self.bucket_params, data_structure=objects)
+        self.run_cbq_query(
+            "INSERT INTO " + bucket_name + "." + scope_name + "." + collection_name + " (KEY, VALUE) VALUES ('id1', { 'name' : 'name1' })")
+
+        self.collections_helper.delete_collection(bucket_name=bucket_name, scope_name=scope_name, collection_name=collection_name)
+
+        result = self.collections_helper.create_collection(bucket_name=bucket_name, scope_name=scope_name, collection_name=collection_name)
+        self.assertEquals(result, True, "Cannot re-create collection. Test is failed.")
+
+    def test_recreate_scope(self):
+        bucket_name = "bucket1"
+        scope_name = "scope1"
+        collection_name = "collection1"
+        objects = {"buckets": [{"name": f"{bucket_name}", "scopes": [{"name": f"{scope_name}", "collections":[{"name": f"{collection_name}"}]}]}]}
+        self.collections_helper.create_bucket_scope_collection_multi_structure(cluster=self.cluster, existing_buckets=self.buckets,
+                                                           bucket_params=self.bucket_params, data_structure=objects)
+        self.run_cbq_query(
+            "INSERT INTO " + bucket_name + "." + scope_name + "." + collection_name + " (KEY, VALUE) VALUES ('id1', { 'name' : 'name1' })")
+
+        self.collections_helper.delete_scope(bucket_name=bucket_name, scope_name=scope_name)
+
+        result = self.collections_helper.create_scope(bucket_name=bucket_name, scope_name=scope_name)
+        self.assertEquals(result, True, "Cannot re-create scope. Test is failed.")
+
+    def test_massive_test(self):
+        buckets = ["bucket1", "bucket2", "bucket3", "bucket4", "bucket5", "bucket6", "bucket7", "bucket8", "bucket9", "bucket10"]
+        scopes = ["scope1", "scope2", "scope3", "scope4", "scope5", "scope6", "scope7", "scope8", "scope9", "scope10"]
+        collections = ["collection1", "collection2", "collection3", "collection4", "collection5", "collection6", "collection7", "collection8", "collection9", "collection10"]
+        keyspace_name = "default"
+
+        #create schema
+        self.collections_helper.create_bucket_scope_collection_multi_structure(cluster=self.cluster, existing_buckets=self.buckets,
+                                                           bucket_params=self.bucket_params, data_structure=self.tests_objects["massive_test"])
+        #fill collections:
+        for bucket in buckets:
+            for scope in scopes:
+                for collection in collections:
+                    self.run_cbq_query(
+                        "INSERT INTO " + bucket + "." + scope + "." + collection + " (KEY, VALUE) VALUES ('"+bucket+"_"+scope+"_"+collection+"', { 'name' : '"+bucket+"_"+scope+"_"+collection+"' })")
+
+        #selects
+        for bucket in buckets:
+            for scope in scopes:
+                for collection in collections:
+                    result = self.run_cbq_query(
+                        f"select name from {keyspace_name}:{bucket}.{scope}.{collection} use keys '"+bucket+"_"+scope+"_"+collection+"'")['results'][0]['name']
+                    self.assertEquals(result, bucket+"_"+scope+"_"+collection, f"Data in {keyspace_name}:{bucket}.{scope}.{collection} is incorrect. Test is failed")
+
+    """ Test is invalid until we will start using python SDK 3.0 
+    def test_create_scope_sdk(self):
+
+        bucket_name = "bucket1"
+        scope_name = "scope1"
+        collection_name = "collection1"
+
+        self.cluster.create_standard_bucket(bucket_name, 11222, self.bucket_params)
+
+        from couchbase.cluster import Cluster
+        from couchbase.cluster import PasswordAuthenticator
+        cl = Cluster("couchbase://"+self.master.ip)
+        authenticator = PasswordAuthenticator("Administrator", "password")
+        cl.authenticate(authenticator)
+        cb = cl.open_bucket("bucket1")
+
+
+        scope = cb.scope("scope1")
+        collection = scope.collection("collection1")
+    """
+
+    def test_create_cbq(self):
+        bucket_name = "bucket1"
+        scope_name = "scope1"
+        collection_name = "collection1"
+        keyspace_name = "default"
+
+        self.cluster.create_standard_bucket(bucket_name, 11222, self.bucket_params)
+
+        self.collections_helper.use_rest = False
+        scope_created = self.collections_helper.create_scope(bucket_name=bucket_name, scope_name=scope_name)
+        self.assertEquals(scope_created, True, "Cannot create scope via CBQ console")
+        collection_created = self.collections_helper.create_collection(bucket_name=bucket_name, scope_name=scope_name, collection_name=collection_name)
+        self.assertEquals(collection_created, True, "Cannot create collection via CBQ console")
+
+        #Trying to insert doc into created collection
+        try:
+            self.run_cbq_query("INSERT INTO "+bucket_name+"."+scope_name+"."+collection_name+" (KEY, VALUE) VALUES ('id1', { 'name' : 'name1' })")
+            result = self.run_cbq_query(f"select name from {keyspace_name}:{bucket_name}.{scope_name}.{collection_name} use keys 'id1'")['results'][0]['name']
+            self.assertEquals(result, "name1", "Insert and select results do not match!")
+        except CBQError as e:
+            self.assertEquals(True, False, "Failed to perform insert into collection created via CBQ console")
+        except KeyError as err:
+            self.assertEquals(True, False, "Failed to perform insert into collection created via CBQ console")
+
 
     def _perform_test(self, data_structure={}):
         tests = data_structure["tests"]
