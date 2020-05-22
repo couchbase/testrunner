@@ -18,8 +18,8 @@ class SimpleRequests(BaseTestCase):
     def test_simple_ui_request(self):
         rest = RestConnection(self.master)
         passed = True
-        for api in ["", "versions", "pools", "pools/default", "pools/nodes", "pools/default/overviewStats",
-                    "pools/default/buckets", "pools/default/buckets/@query/stats", "pools/default/nodeServices",
+        for api in ["", "versions", "pools", "pools/default", "pools/nodes", "pools/default/buckets",
+                    "pools/default/buckets/@query/stats", "pools/default/nodeServices",
                     "pools/default/remoteClusters", "pools/default/serverGroups", "pools/default/certificate",
                     "pools/default/settings/memcached/global", "nodeStatuses", "logs", "settings/web",
                     "settings/alerts",
