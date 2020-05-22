@@ -1,7 +1,8 @@
 from lib.remote.remote_util import RemoteMachineShellConnection
 
 
-class Collections_Stats(object):
+
+class CollectionsStats(object):
     def __init__(self, node):
         self.shell = RemoteMachineShellConnection(node)
 

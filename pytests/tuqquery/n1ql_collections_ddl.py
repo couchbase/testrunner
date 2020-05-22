@@ -1,13 +1,13 @@
-from .tuq import QueryTests
+from collection.collections_cli_client import CollectionsCLI
+from collection.collections_n1ql_client import CollectionsN1QL
+from collection.collections_rest_client import CollectionsRest
 from membase.api.exception import CBQError
 from membase.helper.bucket_helper import BucketOperationHelper
-from collection.collections_cli_client import Collections_CLI
-from collection.collections_rest_client import Collections_Rest
-from collection.collections_n1ql_client import CollectionsN1QL
+
+from .tuq import QueryTests
 
 
 class QueryCollectionsDDLTests(QueryTests):
-
     """
     Tests descriptors.
     Format:
@@ -766,12 +766,12 @@ class QueryCollectionsDDLTests(QueryTests):
                          }
             ]
         },
-        "single_scope":{
+        "single_scope": {
             "buckets": [
                 {
                     "name": "bucket1",
                     "scopes": [
-                        {"name": "scope1", "collections":[]}
+                        {"name": "scope1", "collections": []}
                     ]
                 }
             ],
@@ -789,12 +789,12 @@ class QueryCollectionsDDLTests(QueryTests):
                 {
                     "name": "bucket1",
                     "scopes": [
-                        {"name": "scope1", "collections":[]},
-                        {"name": "scope2", "collections":[]}
+                        {"name": "scope1", "collections": []},
+                        {"name": "scope2", "collections": []}
                     ]
                 }
             ],
-            "tests":[
+            "tests": [
                 {
                     "expected_result": "positive",
                     "object_type": "scope",
@@ -814,7 +814,7 @@ class QueryCollectionsDDLTests(QueryTests):
                 {
                     "name": "bucket1",
                     "scopes": [
-                        {"name": "scope1", "collections":[]}
+                        {"name": "scope1", "collections": []}
                     ]
                 },
                 {
@@ -824,7 +824,7 @@ class QueryCollectionsDDLTests(QueryTests):
                     ]
                 }
             ],
-            "tests":[
+            "tests": [
                 {
                     "expected_result": "positive",
                     "object_type": "scope",
@@ -845,7 +845,7 @@ class QueryCollectionsDDLTests(QueryTests):
                     "name": "bucket1",
                     "scopes": [
                         {"name": "scope1",
-                         "collections":[
+                         "collections": [
                              {"name": "collection1"}
                          ]
                          }
@@ -1034,7 +1034,7 @@ class QueryCollectionsDDLTests(QueryTests):
                     ]
                 }
             ],
-            "test_queries":[
+            "test_queries": [
                 {
                     "text": "create scope bucket1.scope1",
                     "expected_error": "Scope with this name already exists"
@@ -1064,7 +1064,7 @@ class QueryCollectionsDDLTests(QueryTests):
                     "scopes": [
                         {"name": "scope1",
                          "collections": [{"name": "collection1"}]
-                        }
+                         }
                     ]
                 }
             ],
@@ -1256,10 +1256,11 @@ class QueryCollectionsDDLTests(QueryTests):
 
         eviction_policy = "noEviction" if bucket_type == "ephemeral" else self.eviction_policy
         self.bucket_params = self._create_bucket_params(server=self.master, size=100,
-                                                            replicas=self.num_replicas, bucket_type=bucket_type,
-                                                            enable_replica_index=self.enable_replica_index,
-                                                            eviction_policy=eviction_policy, lww=self.lww)
-
+                                                        replicas=self.num_replicas, bucket_type=bucket_type,
+                                                        enable_replica_index=self.enable_replica_index,
+                                                        eviction_policy=eviction_policy, lww=self.lww)
+        self.rest_client = CollectionsRest(self.master)
+        self.cli_client = CollectionsCLI(self.master)
         self.log.info("==============  QueryCollectionsDDLTests setup has completed ==============")
 
     def suite_setUp(self):
@@ -1286,8 +1287,10 @@ class QueryCollectionsDDLTests(QueryTests):
         test_data = self.tests_objects[test_name]
 
         test_objects_created, error = \
-            self.collections_helper.create_bucket_scope_collection_multi_structure(cluster=self.cluster, existing_buckets=self.buckets,
-                                                           bucket_params=self.bucket_params, data_structure=test_data)
+            self.collections_helper.create_bucket_scope_collection_multi_structure(cluster=self.cluster,
+                                                                                   existing_buckets=self.buckets,
+                                                                                   bucket_params=self.bucket_params,
+                                                                                   data_structure=test_data)
         if not test_objects_created:
             self.assertEquals(True, False, f"Test objects load is failed: {error}")
         result, message = self._perform_test(test_data)
@@ -1376,7 +1379,7 @@ class QueryCollectionsDDLTests(QueryTests):
         special_chars = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '_', '-', '%']
         tick_chars = ['-', '%']
         bucket_name = 'bucket1'
-        scope_name="_default"
+        scope_name = "_default"
         errors = []
 
         self.cluster.create_standard_bucket(bucket_name, 11222, self.bucket_params)
@@ -1426,7 +1429,7 @@ class QueryCollectionsDDLTests(QueryTests):
                 errors.append(f"Cannot run query: {query} \nError is:{str(err)}")
                 continue
             scope_collections = self.rest.get_scope_collections(bucket_name, scope_name)
-            if not collection_name in scope_collections:
+            if collection_name not in scope_collections:
                 errors.append(f"Cannot create collection {collection_name} in bucket {bucket_name}")
 
         for error in errors:
@@ -1440,8 +1443,10 @@ class QueryCollectionsDDLTests(QueryTests):
 
         test_data = self.negative_tests_objects[test_name]
         test_objects_created, error = \
-            self.collections_helper.create_bucket_scope_collection_multi_structure(cluster=self.cluster, existing_buckets=self.buckets,
-                                                           bucket_params=self.bucket_params, data_structure=test_data)
+            self.collections_helper.create_bucket_scope_collection_multi_structure(cluster=self.cluster,
+                                                                                   existing_buckets=self.buckets,
+                                                                                   bucket_params=self.bucket_params,
+                                                                                   data_structure=test_data)
         if not test_objects_created:
             self.assertEquals(True, False, f"Test objects load is failed: {error}")
 
@@ -1455,7 +1460,6 @@ class QueryCollectionsDDLTests(QueryTests):
                 self.run_cbq_query(test_query["text"])
                 wrong_object_created = True
             except CBQError as err:
-                wrong_object_created = False
                 err_msg = str(err)
                 if expected_error not in err_msg:
                     test_fails.append(f"Unexpected error message found while executing query: {query}"
@@ -1503,7 +1507,6 @@ class QueryCollectionsDDLTests(QueryTests):
             return
 
         self.assertEquals(True, False, "Creation of scope with name _default is successful.")
-
 
     def test_incorrect_scope_naming_not_allowed_symbols_negative(self):
         special_chars = ["~", "!", "#", "$", "^", "&", "*", "(", ")", "-", "+", "=", "{", "[", "}", "]", "|", "\\", ":",
@@ -1559,9 +1562,11 @@ class QueryCollectionsDDLTests(QueryTests):
         keyspace_name = "default"
 
         self.cluster.create_standard_bucket(bucket_name, 11222, self.bucket_params)
-        collection_created = self.cli_client.create_scope_collection(bucket=bucket_name, scope=scope_name, collection=collection_name)
+        collection_created = self.cli_client.create_scope_collection(bucket=bucket_name, scope=scope_name,
+                                                                     collection=collection_name)
         if collection_created:
-            self.collections_helper.delete_collection(keyspace=keyspace_name, bucket_name=bucket_name, scope_name=scope_name, collection_name=collection_name)
+            self.collections_helper.delete_collection(keyspace=keyspace_name, bucket_name=bucket_name,
+                                                      scope_name=scope_name, collection_name=collection_name)
 
             objects = self.rest.get_scope_collections(bucket_name, scope_name)
             if collection_name in objects:
@@ -1576,6 +1581,7 @@ class QueryCollectionsDDLTests(QueryTests):
         keyspace_name = "default"
 
         self.cluster.create_standard_bucket(bucket_name, 11222, self.bucket_params)
+
         self.rest_client.create_scope_collection(bucket=bucket_name, scope=scope_name, collection=collection_name)
         self.collections_helper.delete_collection(keyspace=keyspace_name, bucket_name=bucket_name, scope_name=scope_name, collection_name=collection_name)
 
@@ -1592,20 +1598,26 @@ class QueryCollectionsDDLTests(QueryTests):
         # creating all DB objects
         self.cluster.create_standard_bucket(bucket_name, 11222, self.bucket_params)
         self.collections_helper.create_scope(bucket_name=bucket_name, scope_name=scope_name)
-        self.collections_helper.create_collection(bucket_name=bucket_name, scope_name=scope_name, collection_name=collection_name)
+        self.collections_helper.create_collection(bucket_name=bucket_name, scope_name=scope_name,
+                                                  collection_name=collection_name)
 
         # load document into collection
         try:
-            self.run_cbq_query("INSERT INTO "+bucket_name+"."+scope_name+"."+collection_name+" (KEY, VALUE) VALUES ('id1', { 'name' : 'name1' })")
-            result = self.run_cbq_query(f"select name from {keyspace_name}:{bucket_name}.{scope_name}.{collection_name} use keys 'id1'")['results'][0]['name']
+            self.run_cbq_query(
+                "INSERT INTO " + bucket_name + "." + scope_name + "." + collection_name + "(KEY, VALUE) VALUES ("
+                                                                                          "'id1', { '"
+                                                                                          "name' : 'name1' })")
+            result = self.run_cbq_query(f"select name from {keyspace_name}:{bucket_name}.{scope_name}.{collection_name}"
+                                        f" use keys 'id1'")['results'][0]['name']
             self.assertEquals(result, "name1", "Insert and select results do not match!")
         except CBQError as e:
             self.assertEquals(True, False, "Failed to perform insert into collection")
         except KeyError as err:
             self.assertEquals(True, False, "Failed to perform insert into collection")
 
-        #dropping collection
-        self.collections_helper.delete_collection(keyspace=keyspace_name, bucket_name=bucket_name, scope_name=scope_name, collection_name=collection_name)
+        # dropping collection
+        self.collections_helper.delete_collection(keyspace=keyspace_name, bucket_name=bucket_name,
+                                                  scope_name=scope_name, collection_name=collection_name)
 
         # test that collection is dropped
         objects = self.rest.get_scope_collections(bucket_name, scope_name)
@@ -1638,6 +1650,7 @@ class QueryCollectionsDDLTests(QueryTests):
         scope_name = "scope1"
 
         self.cluster.create_standard_bucket(bucket_name, 11222, self.bucket_params)
+
         self.rest_client.create_scope(bucket=bucket_name, scope=scope_name)
 
         self.collections_helper.delete_scope(keyspace=keyspace_name, bucket_name=bucket_name, scope_name=scope_name)
@@ -1655,32 +1668,37 @@ class QueryCollectionsDDLTests(QueryTests):
         # creating all DB objects
         self.cluster.create_standard_bucket(bucket_name, 11222, self.bucket_params)
         self.collections_helper.create_scope(bucket_name=bucket_name, scope_name=scope_name)
-        self.collections_helper.create_collection(bucket_name=bucket_name, scope_name=scope_name, collection_name=collection_name)
+        self.collections_helper.create_collection(bucket_name=bucket_name, scope_name=scope_name,
+                                                  collection_name=collection_name)
 
         # load document into collection
         try:
-            self.run_cbq_query("INSERT INTO "+bucket_name+"."+scope_name+"."+collection_name+" (KEY, VALUE) VALUES ('id1', { 'name' : 'name1' })")
-            result = self.run_cbq_query(f"select name from {keyspace_name}:{bucket_name}.{scope_name}.{collection_name} use keys 'id1'")['results'][0]['name']
+            self.run_cbq_query(
+                "INSERT INTO " + bucket_name + "." + scope_name + "." + collection_name +
+                " (KEY, VALUE) VALUES ('id1', { 'name' : 'name1' })")
+            result = self.run_cbq_query(
+                f"select name from {keyspace_name}:{bucket_name}.{scope_name}.{collection_name} use keys 'id1'")[
+                'results'][0]['name']
             self.assertEquals(result, "name1", "Insert and select results do not match!")
         except CBQError as e:
             self.assertEquals(True, False, "Failed to perform insert into collection")
         except KeyError as err:
             self.assertEquals(True, False, "Failed to perform insert into collection")
 
-        #dropping scope
+        # dropping scope
         self.collections_helper.delete_scope(keyspace=keyspace_name, bucket_name=bucket_name, scope_name=scope_name)
 
-        #check that collection is dropped
+        # check that collection is dropped
         objects = self.rest.get_scope_collections(bucket_name, scope_name)
         if collection_name in objects:
             self.assertEquals(True, False, "Collection still exists after scope drop.")
 
-        #check that scope is dropped
+        # check that scope is dropped
         objects = self.rest.get_bucket_scopes(bucket_name)
         if scope_name in objects:
             self.assertEquals(True, False, "Scope still exists after scope drop.")
 
-        #check that collection document is dropped
+        # check that collection document is dropped
         result = self.run_cbq_query(f"select count(*) as cnt from {bucket_name}")['results'][0]['cnt']
         self.assertEquals(result, 0, "Collection document was not deleted after scope drop")
 
@@ -1812,7 +1830,9 @@ class QueryCollectionsDDLTests(QueryTests):
             self.assertEquals(True, False, "Failed to perform insert into collection created via CBQ console")
 
 
-    def _perform_test(self, data_structure={}):
+    def _perform_test(self, data_structure=None):
+        if data_structure is None:
+            raise Exception("Empty value for data_structure parameter")
         tests = data_structure["tests"]
         for test in tests:
             object_type = test["object_type"]
@@ -1829,7 +1849,7 @@ class QueryCollectionsDDLTests(QueryTests):
 
     def _create_bucket(self, bucket_name):
         bucket_params = self._create_bucket_params(server=self.master, size=100,
-                                                            replicas=self.num_replicas, bucket_type=self.bucket_type,
-                                                            enable_replica_index=self.enable_replica_index,
-                                                            eviction_policy=self.eviction_policy, lww=self.lww)
+                                                   replicas=self.num_replicas, bucket_type=self.bucket_type,
+                                                   enable_replica_index=self.enable_replica_index,
+                                                   eviction_policy=self.eviction_policy, lww=self.lww)
         self.cluster.create_standard_bucket(bucket_name, 11222, bucket_params)
