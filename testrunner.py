@@ -1019,9 +1019,9 @@ def watcher():
             try:
                 os.kill(child, signal.SIGKILL)
             except OSError:
-                pass
+                sys.exit("Exception occurred in test ran in a forked process.")
         except OSError:
-            pass
+            sys.exit("Exception occurred in test ran in a forked process.")
 
     sys.exit()
 
