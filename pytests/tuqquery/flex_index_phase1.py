@@ -56,8 +56,7 @@ class FlexIndexTests(QueryTests):
             return False
 
         if len(flex_result) != len(gsi_result):
-            self.log.info("length of results of GSI and Flex query differs, GSI query results : {0}, "
-                          "Flex query results : {1}", len(gsi_result), len(flex_result))
+            self.log.info("length of results of GSI and Flex query differs")
             return False
 
         if sorted(flex_result) != sorted(gsi_result):

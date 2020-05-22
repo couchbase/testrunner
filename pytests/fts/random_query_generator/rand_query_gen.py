@@ -153,6 +153,7 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
         query_str = json.dumps(query, ensure_ascii=False)
         for key, val in replace_dict.iteritems():
             query_str = query_str.replace(key, val)
+        query_str = query_str.decode('utf-8', 'ignore')
         return json.loads(query_str, encoding='utf-8')
 
     def construct_queries(self):
@@ -963,6 +964,7 @@ class FTSFlexQueryGenerator(FTSESQueryGenerator):
                 if field in predicate:
                     return True
         return False
+
     def construct_flex_num_queries(self):
             while self.iterator < self.queries_to_generate:
                 fieldname = self.get_random_value(self.query_types)
@@ -1062,13 +1064,18 @@ class FTSFlexQueryGenerator(FTSESQueryGenerator):
 
         for x in range(5):
             fieldname = self.get_random_value(self.fields['str'])
-            match_str = eval("self.get_queryable_%s()" % fieldname).encode('utf-8')
+            match_str = "(text)"
+            meta_list = ['(', '.']
             # due to bug# MB-38690
-            if fieldname == "email":
-                pos = random.randint(1, len(match_str) - 5)
-            else:
-                pos = random.randint(1, len(match_str) - 1)
-            match_str = match_str[:pos] + '%'
+            while any(x in match_str for x in meta_list):
+                match_str = eval("self.get_queryable_%s()" % fieldname).encode('utf-8')
+                # due to bug# MB-38690
+                if fieldname == "email":
+                    pos = random.randint(1, len(match_str) - 5)
+                else:
+                    pos = random.randint(1, len(match_str) - 1)
+                match_str = match_str[:pos]
+            match_str = match_str + '%'
             flex_query_predicate = "( {0} like \"{1}\")".format(fieldname, match_str)
             flex_query_predicate_list.append(flex_query_predicate)
 
