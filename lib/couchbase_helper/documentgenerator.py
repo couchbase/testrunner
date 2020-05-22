@@ -613,6 +613,7 @@ class GeoSpatialDataLoader(KVGenerator):
         return self.name+str(self.itr),\
                json.dumps(doc, indent=3).encode(self.encoding, "ignore")
 
+
 class NapaDataLoader(KVGenerator):
 
     def __init__(self, name, encoding="utf-8", op_type="create",
@@ -749,7 +750,7 @@ class NapaDataLoader(KVGenerator):
                     "lib/couchbase_helper/napa/napa_dataset.txt.gz")
                 print("Download complete!")
 
-    def __next__(self):
+    def next(self):
         if self.itr >= self.end:
             raise StopIteration
         doc = {}
