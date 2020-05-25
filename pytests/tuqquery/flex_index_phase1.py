@@ -401,7 +401,7 @@ class FlexIndexTests(QueryTests):
         gsi_fields = self.get_gsi_fields_partial_sargability()
         self.create_gsi_indexes(gsi_fields)
         self.generate_random_queries()
-        failed_to_run_query, not_found_index_in_response, result_mismatch = self.run_queries_and_validate()
+        failed_to_run_query, not_found_index_in_response, result_mismatch = self.run_queries_and_validate(partial_sargability = True)
         self.cbcluster.delete_all_fts_indexes()
 
         if failed_to_run_query or not_found_index_in_response or result_mismatch:
