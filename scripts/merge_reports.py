@@ -28,8 +28,7 @@ def filter_fields(testname):
             line = line + fw.replace(":", "=", 1)
             if fw != testwords[-1]:
                 line = line + ","
-
-    return line
+    return line.rstrip(',')
 
 def compare_with_sort(dict, key):
     key_split = key.split(',')
