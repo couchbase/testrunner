@@ -368,10 +368,19 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
 
     def backup_create(self, del_old_backup=True):
         args = "config --archive {0} --repo {1}".format(self.backupset.directory, self.backupset.name)
+        cbbkmgr_version = RestConnection(self.backupset.backup_host).get_nodes_version()
+        exclude_bucket = " --exclude-data "
+        include_bucket = " --include-data "
+        if cbbkmgr_version[:3] == "6.6":
+            # in 6.6, flags keep the same name with 6.5
+            exclude_bucket = " --exclude-buckets "
+            include_bucket = " --include-buckets "
         if self.backupset.exclude_buckets:
-            args += " --exclude-data \"{0}\"".format(",".join(self.backupset.exclude_buckets))
+            args += " {0} \"{1}\"".format(exclude_bucket,
+                                          ",".join(self.backupset.exclude_buckets))
         if self.backupset.include_buckets:
-            args += " --include-data \"{0}\"".format(",".join(self.backupset.include_buckets))
+            args += " {0} \"{1}\"".format(include_bucket,
+                                          ",".join(self.backupset.include_buckets))
         if self.backupset.disable_bucket_config:
             args += " --disable-bucket-config"
         if self.backupset.disable_views:
