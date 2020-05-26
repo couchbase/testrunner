@@ -101,8 +101,6 @@ class EventingDataset(EventingBaseTest):
         self.deploy_function(body)
         # convert data from binary to json
         # use the same doc-id's as binary to update from binary to json
-        self.cluster.load_gen_docs(self.master, self.src_bucket_name, gen_load_binary_del, self.buckets[0].kvs[1],
-                                   'delete', batch_size=1000, compression=self.sdk_compression)
         self.cluster.load_gen_docs(self.master, self.src_bucket_name, gen_load_json, self.buckets[0].kvs[1], 'create',
                                    batch_size=1000, compression=self.sdk_compression)
         # Wait for eventing to catch up with all the update mutations and verify results
