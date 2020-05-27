@@ -50,15 +50,24 @@ class JavaSDKClient(object):
         self.docker_instance = DockerManager(self.server.ip + '_' + self.bucket)
 
     def params_to_environment(self):
-        _environment = {"CLUSTER": self.server.ip, "BUCKET": self.bucket, "SCOPE": self.params.scope,
-                        "COLLECTION": self.params.collection, "N": self.params.num_ops,
-                        "PC": self.params.percent_create, "PU": self.params.percent_update,
-                        "PD": self.params.percent_delete, "L": self.params.load_pattern,
-                        "DSN": self.params.start_seq_num, "DPX": self.params.key_prefix, "DSX": self.params.key_suffix,
-                        "DT": self.params.json_template, "O": self.params.print_sdk_logs}
-        # _environment["USERNAME"] = self.server.rest_username
-        # _environment["PASSWORD"] = self.server.rest_password
-
+        _environment = {
+                        "CLUSTER": self.server.ip,
+                        "USERNAME": self.server.rest_username or "Administrator",
+                        "PASSWORD": self.server.rest_password or "password",
+                        "BUCKET": self.bucket,
+                        "SCOPE": self.params.scope,
+                        "COLLECTION": self.params.collection,
+                        "N": self.params.num_ops,
+                        "PC": self.params.percent_create,
+                        "PU": self.params.percent_update,
+                        "PD": self.params.percent_delete,
+                        "L": self.params.load_pattern,
+                        "DSN": self.params.start_seq_num,
+                        "DPX": self.params.key_prefix,
+                        "DSX": self.params.key_suffix,
+                        "DT": self.params.json_template,
+                        "O": self.params.print_sdk_logs
+                        }
         return _environment
 
     def do_ops(self):

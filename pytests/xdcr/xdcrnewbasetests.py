@@ -27,8 +27,8 @@ from couchbase_helper.documentgenerator import BlobGenerator, DocumentGenerator,
 from lib.membase.api.exception import XDCRException
 from security.auditmain import audit
 from security.rbac_base import RbacBase
-from collection.collections_rest_client import Collections_Rest
-from collection.collections_stats import Collections_Stats
+from collection.collections_rest_client import CollectionsRest
+from collection.collections_stats import CollectionsStats
 
 class RenameNodeException(XDCRException):
 
@@ -1452,7 +1452,7 @@ class CouchbaseCluster:
             ))
 
         if self.use_java_sdk:
-            Collections_Rest(self.__master_node).async_create_scope_collection(
+            CollectionsRest(self.__master_node).async_create_scope_collection(
                 self.scope_num, self.collection_num, BUCKET_NAME.DEFAULT)
 
     def get_buckets(self):
@@ -1821,7 +1821,7 @@ class CouchbaseCluster:
             )
         else:
             for bucket in self.__buckets:
-                num_items = Collections_Stats(self.__master_node).\
+                num_items = CollectionsStats(self.__master_node).\
                     get_collection_item_count(bucket, "_default", "default")
                 gen = SDKDataLoader(num_ops=num_items, percent_create=0, percent_update=30,
                                     percent_delete=30)
@@ -3748,8 +3748,8 @@ class XDCRNewBaseTest(unittest.TestCase):
         return False
 
     def verify_mapping(self, src_master, dest_master):
-        src_rest = Collections_Rest(src_master)
-        dest_rest = Collections_Rest(dest_master)
+        src_rest = CollectionsRest(src_master)
+        dest_rest = CollectionsRest(dest_master)
         src_scopes = []
         dest_scopes = []
         #Assuming implicit mapping
@@ -3774,10 +3774,10 @@ class XDCRNewBaseTest(unittest.TestCase):
 
 
     def verify_collection_doc_count(self, src, dest):
-        src_rest = Collections_Rest(src)
-        dest_rest = Collections_Rest(dest)
-        src_stat = Collections_Stats(src)
-        dest_stat = Collections_Stats(dest)
+        src_rest = CollectionsRest(src)
+        dest_rest = CollectionsRest(dest)
+        src_stat = CollectionsStats(src)
+        dest_stat = CollectionsStats(dest)
         # Assuming implicit mapping
         for bucket in RestConnection(src).get_buckets():
             src_scopes = src_rest.get_bucket_scopes(bucket)
