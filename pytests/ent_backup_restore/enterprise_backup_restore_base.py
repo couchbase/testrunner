@@ -2189,7 +2189,12 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                 if int(restore_buckets_items[bucket.name]) > 0:
                     if self.replace_ttl == "expired" and self.bk_with_ttl is not None:
                         if sleep_time < 600:
-                            self.fail("Key did not expire after wait more than 10 seconds of ttl")
+                            self.log.info("{0} items still in bucket".format(restore_buckets_items))
+                            self.sleep(10, "wait for items to expire")
+                            restore_buckets_items = rest.get_buckets_itemCount()
+                            self.log.info("{0} items still in bucket".format(restore_buckets_items))
+                            if int(restore_buckets_items[bucket.name]) > 0:
+                                self.fail("Key did not expire after wait more than 20 seconds of ttl")
         shell.disconnect()
 
     def _verify_bucket_compression_mode(self, restore_bucket_compression_mode):
