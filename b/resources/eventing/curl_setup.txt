@@ -18,7 +18,7 @@
     {
           "httpRequest" : {
             "method" : "GET",
-            "path" : "/a/b"
+            "path" : "/a/b/"
           },
            "httpResponse" : {
             "body" : {

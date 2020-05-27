@@ -82,7 +82,7 @@ class EventingBaseTest(QueryHelperTests):
         self.cookies = self.input.param('cookies',False)
         self.bearer_key = self.input.param('bearer_key','')
         if self.hostname=='local':
-            self.insall_dependencies()
+            ##self.insall_dependencies()
             s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             s.connect(("8.8.8.8", 80))
             ip = s.getsockname()[0]
