@@ -2583,7 +2583,7 @@ class BaseTestCase(unittest.TestCase):
 
     def load(self, generators_load, buckets=None, exp=0, flag=0,
              kv_store=1, only_store_hash=True, batch_size=1, pause_secs=1,
-             timeout_secs=30, op_type='create', start_items=0, verify_data=True, scope=None,  collection=None):
+             timeout_secs=30, op_type='create', start_items=0, verify_data=True, scope=None, collection=None):
         if not buckets:
             buckets = self.buckets
         gens_load = {}

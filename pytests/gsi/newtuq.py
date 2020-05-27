@@ -5,6 +5,7 @@ from basetestcase import BaseTestCase
 from couchbase_helper.tuq_helper import N1QLHelper
 from membase.api.rest_client import RestConnection
 
+
 class QueryTests(BaseTestCase):
     def setUp(self):
         super(QueryTests, self).setUp()
@@ -17,12 +18,12 @@ class QueryTests(BaseTestCase):
         for server in self.servers:
             rest = RestConnection(server)
             temp = rest.cluster_status()
-            self.log.info ("Initial status of {0} cluster is {1}".format(server.ip, temp['nodes'][0]['status']))
-            while (temp['nodes'][0]['status'] == 'warmup'):
-                self.log.info ("Waiting for cluster to become healthy")
+            self.log.info("Initial status of {0} cluster is {1}".format(server.ip, temp['nodes'][0]['status']))
+            while temp['nodes'][0]['status'] == 'warmup':
+                self.log.info("Waiting for cluster to become healthy")
                 self.sleep(5)
                 temp = rest.cluster_status()
-            self.log.info ("current status of {0}  is {1}".format(server.ip, temp['nodes'][0]['status']))
+            self.log.info("current status of {0}  is {1}".format(server.ip, temp['nodes'][0]['status']))
 
         indexer_node = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
         # Set indexer storage mode
@@ -86,7 +87,7 @@ class QueryTests(BaseTestCase):
                                       log=self.log, input=self.input, master=self.master)
         self.n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
         self.log.info(self.n1ql_node)
-        #self.n1ql_helper._start_command_line_query(self.n1ql_node)
+        # self.n1ql_helper._start_command_line_query(self.n1ql_node)
         # sleep to avoid race condition during bootstrap
         if self.create_primary_index:
             try:
@@ -109,6 +110,24 @@ class QueryTests(BaseTestCase):
                 #self.n1ql_helper.killall_tuq_process()
         super(QueryTests, self).tearDown()
 
+    def run_query_with_retry(self, query, expected_result=None, is_count_query=False, delay=5, tries=10):
+        attempts = 0
+        res = None
+        while attempts < tries:
+            attempts = attempts + 1
+            try:
+                res = self.n1ql_helper.run_cbq_query(query=query)['results']
+                if expected_result is None:
+                    return res
+                elif is_count_query and res[0]['$1'] == expected_result:
+                    return res[0]['$1']
+                elif res == expected_result:
+                    return res
+                else:
+                    self.sleep(delay, f'incorrect results, sleeping for {delay}')
+            except Exception as ex:
+                raise Exception(f'exception returned: {ex}')
+        return res
 
     def generate_docs(self, num_items, start=0):
         try:
@@ -169,12 +188,12 @@ class QueryTests(BaseTestCase):
     def generate_docs_bigdata(self, docs_per_day, start=0):
         json_generator = JsonGenerator()
         return json_generator.generate_docs_bigdata(docs_per_day=docs_per_day,
-            start=start, value_size=self.value_size)
+                                                    start=start, value_size=self.value_size)
 
     def generate_docs_array(self, num_items=10, start=0):
         json_generator = JsonGenerator()
         return json_generator.generate_all_type_documents_for_gsi(docs_per_day=num_items,
-            start=start)
+                                                                  start=start)
 
     def generate_ops(self, docs_per_day, start=0, method=None):
         gen_docs_map = {}
@@ -184,11 +203,11 @@ class QueryTests(BaseTestCase):
                 isShuffle = True
             if self.dataset != "bigdata":
                 gen_docs_map[key] = method(docs_per_day=self.ops_dist_map[key]["end"],
-                    start=self.ops_dist_map[key]["start"])
+                                           start=self.ops_dist_map[key]["start"])
             else:
                 gen_docs_map[key] = method(value_size=self.value_size,
-                    end=self.ops_dist_map[key]["end"],
-                    start=self.ops_dist_map[key]["start"])
+                                           end=self.ops_dist_map[key]["end"],
+                                           start=self.ops_dist_map[key]["start"])
         return gen_docs_map
 
     def generate_full_docs_list_after_ops(self, gen_docs_map):
@@ -217,7 +236,8 @@ class QueryTests(BaseTestCase):
         if self.scan_consistency == "request_plus":
             verify_data = False
         if self.doc_ops:
-            self.sync_ops_all_buckets(docs_gen_map=self.docs_gen_map, batch_size=self.batch_size, verify_data=verify_data)
+            self.sync_ops_all_buckets(docs_gen_map=self.docs_gen_map, batch_size=self.batch_size,
+                                      verify_data=verify_data)
             self.n1ql_helper.full_docs_list = self.full_docs_list_after_ops
             self.gen_results = TuqGenerators(self.log, self.n1ql_helper.full_docs_list)
 
@@ -233,10 +253,11 @@ class QueryTests(BaseTestCase):
         for server in indexers:
             if server not in self.nodes_out_list:
                 shell = RemoteMachineShellConnection(server)
-                _, dir = RestConnection(server).diag_eval('filename:absname(element(2, application:get_env(ns_server,error_logger_mf_dir))).')
+                _, dir = RestConnection(server).diag_eval(
+                    'filename:absname(element(2, application:get_env(ns_server,error_logger_mf_dir))).')
                 indexer_log = str(dir) + '/indexer.log*'
                 count, err = shell.execute_command("zgrep \"{0}\" {1} | wc -l".
-                                            format(panic_str, indexer_log))
+                                                   format(panic_str, indexer_log))
                 if isinstance(count, list):
                     count = int(count[0])
                 else:
@@ -250,10 +271,11 @@ class QueryTests(BaseTestCase):
         for server in projectors:
             if server not in self.nodes_out_list:
                 shell = RemoteMachineShellConnection(server)
-                _, dir = RestConnection(server).diag_eval('filename:absname(element(2, application:get_env(ns_server,error_logger_mf_dir))).')
+                _, dir = RestConnection(server).diag_eval(
+                    'filename:absname(element(2, application:get_env(ns_server,error_logger_mf_dir))).')
                 projector_log = str(dir) + '/projector.log*'
                 count, err = shell.execute_command("zgrep \"{0}\" {1} | wc -l".
-                                            format(panic_str, projector_log))
+                                                   format(panic_str, projector_log))
                 if isinstance(count, list):
                     count = int(count[0])
                 else:

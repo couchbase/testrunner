@@ -3,6 +3,7 @@ from membase.api.exception import CBQError
 import logger
 import time
 
+
 class CollectionsN1QL(object):
     def __init__(self, node):
         self.log = logger.Logger.get_logger()
@@ -10,32 +11,34 @@ class CollectionsN1QL(object):
         self.use_rest = True
         self.n1ql_helper = N1QLHelper(use_rest=True, log=self.log)
 
-    def create_collection(self, keyspace="default", bucket_name="", scope_name="", collection_name="", poll_interval=1, timeout=30):
+    def create_collection(self, keyspace="default", bucket_name="", scope_name="", collection_name="", poll_interval=1,
+                          timeout=30):
         self.n1ql_helper.use_rest = self.use_rest
         return self.n1ql_helper.create_collection(server=self.node, keyspace=keyspace, bucket_name=bucket_name,
-                                           scope_name=scope_name, collection_name=collection_name,
-                                           poll_interval=poll_interval, timeout=timeout)
+                                                  scope_name=scope_name, collection_name=collection_name,
+                                                  poll_interval=poll_interval, timeout=timeout)
 
     def create_scope(self, keyspace="default", bucket_name="", scope_name="", poll_interval=1, timeout=30):
         self.n1ql_helper.use_rest = self.use_rest
-        result =  self.n1ql_helper.create_scope(server=self.node, keyspace=keyspace, bucket_name=bucket_name, scope_name=scope_name,
-                                      poll_interval=poll_interval, timeout=timeout)
+        result =  self.n1ql_helper.create_scope(server=self.node, keyspace=keyspace, bucket_name=bucket_name,
+                                             scope_name=scope_name,
+                                             poll_interval=poll_interval, timeout=timeout)
         if result:
             # waiting for additional time according to https://issues.couchbase.com/browse/MB-39500
             time.sleep(10)
         return result
 
     def delete_collection(self, keyspace="default", bucket_name="", scope_name="", collection_name="",
-                        poll_interval=1, timeout=30):
+                          poll_interval=1, timeout=30):
         self.n1ql_helper.use_rest = self.use_rest
         return self.n1ql_helper.delete_collection(server=self.node, keyspace=keyspace, bucket_name=bucket_name,
-                                           scope_name=scope_name, collection_name=collection_name,
-                                           poll_interval=poll_interval, timeout=timeout)
+                                                  scope_name=scope_name, collection_name=collection_name,
+                                                  poll_interval=poll_interval, timeout=timeout)
 
     def delete_scope(self, keyspace="default", bucket_name="", scope_name="", poll_interval=1, timeout=30):
         self.n1ql_helper.use_rest = self.use_rest
         return self.n1ql_helper.delete_scope(server=self.node, keyspace=keyspace, bucket_name=bucket_name,
-                                      scope_name=scope_name, poll_interval=poll_interval, timeout=timeout)
+                                             scope_name=scope_name, poll_interval=poll_interval, timeout=timeout)
 
     """
         data_structure format:
@@ -56,7 +59,15 @@ class CollectionsN1QL(object):
             ]
         }            
     """
-    def create_bucket_scope_collection_multi_structure(self, cluster=None, existing_buckets=[], bucket_params={}, data_structure={}):
+
+    def create_bucket_scope_collection_multi_structure(self, cluster=None, existing_buckets=None, bucket_params=None,
+                                                       data_structure=None):
+        if data_structure is None:
+            data_structure = {}
+        if bucket_params is None:
+            bucket_params = {}
+        if existing_buckets is None:
+            existing_buckets = []
         try:
             buckets = data_structure["buckets"]
             for bucket in buckets:
@@ -71,7 +82,7 @@ class CollectionsN1QL(object):
                     collections = scope["collections"]
                     for collection in collections:
                         result = self.create_collection(bucket_name=bucket["name"], scope_name=scope["name"],
-                                               collection_name=collection["name"])
+                                                        collection_name=collection["name"])
                         if not result:
                             return False, f"Collection {collection['name']} creation is failed."
         except CBQError as err:

@@ -28,10 +28,9 @@ class DockerManager(object):
             if b"Exception:" in line:
                 raise Exception("Exception occurred {}".format(line))
 
-    def terminate(self, tag):
+def terminate(self, tag):
         self.client.images.remove(tag)
         self.client.containers.prune()
-
 class JavaSDKClient(object):
     def __init__(self, server, bucket, params):
         self.server = server
