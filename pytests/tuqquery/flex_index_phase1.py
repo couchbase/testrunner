@@ -2,6 +2,8 @@ from .tuq import QueryTests
 from pytests.fts.random_query_generator.rand_query_gen import DATASET
 from collections import Mapping, Sequence, Set, deque
 from deepdiff import DeepDiff
+import json
+import threading
 
 class FlexIndexTests(QueryTests):
 
@@ -24,6 +26,8 @@ class FlexIndexTests(QueryTests):
         self.custom_map = self.input.param("custom_map", False)
         self.bucket_name = self.input.param("bucket_name", 'default')
         self.flex_query_option = self.input.param("flex_query_option", "flex_use_fts_query")
+        self.rebalance_in = self.input.param("rebalance_in", False)
+        self.failover_fts = self.input.param("failover_fts", False)
         self.log.info("==============  FlexIndexTests setup has completed ==============")
 
     def tearDown(self):
@@ -267,6 +271,15 @@ class FlexIndexTests(QueryTests):
 
         return flex_query
 
+    def run_queries_and_validate_clusterops(self):
+        failed_to_run_query, not_found_index_in_response,result_mismatch = self.run_queries_and_validate()
+
+        if failed_to_run_query or not_found_index_in_response:
+            self.fail("Found queries not runnable: {0} or required index not found in the query resonse: {1} "
+                      .format(failed_to_run_query, not_found_index_in_response))
+        else:
+            self.log.info("All {0} queries passed".format(len(self.query_gen.fts_flex_queries)))
+
 
 # ======================== tests =====================================================
 
@@ -463,3 +476,55 @@ class FlexIndexTests(QueryTests):
                       .format(failed_to_run_query, not_found_index_in_response, result_mismatch))
         else:
             self.log.info("All {0} queries passed".format(len(query_list)))
+
+    def test_clusterops_flex_fts_node(self):
+        self._load_emp_dataset(end=self.num_items/2)
+        self._load_wiki_dataset(end=(self.num_items/2))
+
+        fts_index = self.create_fts_index(
+            name="default_index", source_name=self.bucket_name)
+        if not self.is_index_present("default", "primary_gsi_index"):
+            self.run_cbq_query("create primary index primary_gsi_index on default")
+        self.generate_random_queries()
+        fts_index.smart_query_fields = self.query_gen.fields
+        self.update_expected_fts_index_map(fts_index)
+        fts_index.update_num_replicas(2)
+        failed_to_run_query, not_found_index_in_response, result_mismatch = self.run_queries_and_validate()
+
+        if failed_to_run_query or not_found_index_in_response or result_mismatch:
+            self.fail("Found queries not runnable: {0} or required index not found in the query resonse: {1} "
+                      "or flex query and gsi query results not matching: {2}"
+                      .format(failed_to_run_query, not_found_index_in_response, result_mismatch))
+        else:
+            self.log.info("All {0} queries passed".format(len(self.query_gen.fts_flex_queries)))
+
+        thread1 = threading.Thread(name='run_query', target=self.run_queries_and_validate_clusterops)
+        thread1.start()
+        if self.rebalance_in:
+
+            self.log.info("Now rebalancing in fts node while running queries parallely")
+
+            self.assertTrue(len(self.servers) >= self.nodes_in + 1, "Servers are not enough")
+
+            try:
+                self.cluster.async_rebalance(self.servers[:self.nodes_init],
+                                                         [self.servers[self.nodes_init]], [],services=['fts'])
+            except Exception as e:
+                self.fail("Rebalance in failed with {0}".format(str(e)))
+
+        elif self.failover_fts:
+            self.log.info("Now failover fts node while running queries parallely")
+            try:
+                self.cluster.failover(self.servers[:self.nodes_init],
+                                                         [self.servers[self.nodes_init-1]])
+            except Exception as e:
+                self.fail("node failover failed with {0}".format(str(e)))
+        else:
+            self.log.info("Now rebalancing out fts node while running queries parallely")
+            try:
+                self.cluster.async_rebalance(self.servers[:self.nodes_init],
+                                                         [], [self.servers[self.nodes_init-1]],services=['fts'])
+            except Exception as e:
+                self.fail("Rebalance out failed with {0}".format(str(e)))
+
+        thread1.join()
