@@ -3812,6 +3812,8 @@ class XDCRNewBaseTest(unittest.TestCase):
         """
         skip_key_validation = self._input.param("skip_key_validation", False)
         skip_meta_validation = self._input.param("skip_meta_validation", True)
+        skip_mirroring_validation = self._input.param("skip_mirroring_validation", True)
+        skip_collection_key_validation = self._input.param("skip_collection_key_validation", True)
         if self._use_java_sdk:
             skip_mirroring_validation = False
             skip_collection_key_validation = False
