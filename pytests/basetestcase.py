@@ -34,6 +34,12 @@ from security.rbac_base import RbacBase
 from testconstants import MAX_COMPACTION_THRESHOLD
 from testconstants import MIN_COMPACTION_THRESHOLD
 from testconstants import STANDARD_BUCKET_PORT
+from security.SecretsMasterBase import SecretsMasterBase
+from security.IPv6_IPv4_grub_level import IPv6_IPv4
+
+from couchbase_cli import CouchbaseCLI
+import testconstants
+
 
 from TestInput import TestInputSingleton, TestInputServer
 from scripts.java_sdk_setup import JavaSdkSetup
@@ -198,6 +204,9 @@ class BaseTestCase(unittest.TestCase):
             self.enable_secrets = self.input.param("enable_secrets", False)
             self.secret_password = self.input.param("secret_password", 'p@ssw0rd')
             self.skip_log_scan = self.input.param("skip_log_scan", True)
+            self.disable_ipv6_grub = self.input.param("disable_ipv6_grub",False)
+            self.upgrade_addr_family = self.input.param("upgrade_addr_family",None)
+
 
             if self.skip_setup_cleanup:
                 self.buckets = RestConnection(self.master).get_buckets()
@@ -222,6 +231,12 @@ class BaseTestCase(unittest.TestCase):
                           .format(self.case_number, self._testMethodName))
             if not self.skip_buckets_handle and not self.skip_init_check_cbserver:
                 self._cluster_cleanup()
+
+            if self.disable_ipv6_grub:
+                self._disable_ipv6_grub()
+
+            if self.upgrade_addr_family:
+                self._upgrade_addr_family(self.upgrade_addr_family)
 
             shared_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
                                                        replicas=self.num_replicas,
@@ -397,6 +412,7 @@ class BaseTestCase(unittest.TestCase):
             self.log.info("==============  basetestcase setup was finished for test #{0} {1} =============="
                           .format(self.case_number, self._testMethodName))
 
+
             if self.ntonencrypt == 'enable' and not self.x509enable:
                 self.setup_nton_encryption()
 
@@ -533,6 +549,8 @@ class BaseTestCase(unittest.TestCase):
                 ClusterOperationHelper.wait_for_ns_servers_or_assert(self.servers, self)
                 if self.ntonencrypt == 'enable' and not self.x509enable:
                     ntonencryptionBase().disable_nton_cluster(self.servers)
+                if self.input.param("disable_ipv6_grub", False):
+                    self._enable_ipv6_grub()
                 self.log.info("==============  basetestcase cleanup was finished for test #{0} {1} ==============" \
                               .format(self.case_number, self._testMethodName))
         except BaseException:
@@ -3024,3 +3042,15 @@ class BaseTestCase(unittest.TestCase):
     def setup_nton_encryption(self):
         self.log.info('Setting up node to node encyrption from ')
         ntonencryptionBase().setup_nton_cluster(self.servers, clusterEncryptionLevel=self.ntonencrypt_level)
+
+    def _disable_ipv6_grub(self):
+        self.log.info('Disabling IPV6 Stack at Grub Level for all nodes')
+        IPv6_IPv4(self.servers).disable_IPV6_grub_level()
+
+    def _enable_ipv6_grub(self):
+        self.log.info('Enabling IPV6 Stack at Grub Level for all nodes')
+        IPv6_IPv4(self.servers).enable_IPV6_grub_level()
+
+    def _upgrade_addr_family(self,addr_family):
+        self.log.info('Upgrade Address Family to {0}'.format(addr_family))
+        IPv6_IPv4(self.servers).upgrade_addr_family(addr_family)
