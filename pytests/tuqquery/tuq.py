@@ -155,7 +155,7 @@ class QueryTests(BaseTestCase):
             self.gen_results = TuqGenerators(self.log, self.generate_full_docs_list(self.gens_load))
             self.log.info("--> End: docs_per_day>0..generating TuqGenerators...")
         if str(self.__class__).find('QueriesUpgradeTests') == -1 and str(self.__class__).find('FlexIndexTests') == -1:
-            if not self.analytics and self.skip_primary_index_for_collection:
+            if not (self.analytics and self.skip_primary_index_for_collection):
                 self.log.info("--> start: create_primary_index_for_3_0_and_greater...")
                 self.create_primary_index_for_3_0_and_greater()
                 self.log.info("--> End: create_primary_index_for_3_0_and_greater...")
