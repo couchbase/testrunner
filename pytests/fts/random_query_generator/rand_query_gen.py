@@ -183,7 +183,7 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
             es_match_query = {'match': {}}
 
             fieldname = self.get_random_value(self.fields['str'])
-            match_str = eval("self.get_queryable_%s()" % fieldname)
+            match_str = eval("self.get_queryable_%s()" % fieldname).encode('utf-8')
 
             fts_match_query["field"] = fieldname
             fts_match_query["match"] = match_str
@@ -264,9 +264,9 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
         es_match_phrase_query = {'match_phrase': {}}
         fieldname = self.get_random_value(self.fields['text'])
         if fieldname == "name":
-            match_str = eval("self.get_queryable_%s" % fieldname + "(full=True)")
+            match_str = eval("self.get_queryable_%s" % fieldname + "(full=True)").encode('utf-8')
         else:
-            match_str = eval("self.get_queryable_%s()" % fieldname)
+            match_str = eval("self.get_queryable_%s()" % fieldname).encode('utf-8')
         fts_match_phrase_query["field"] = fieldname
         fts_match_phrase_query["match_phrase"] = match_str
         es_match_phrase_query['match_phrase'][fieldname] = match_str
@@ -363,7 +363,7 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
         if not fieldname:
             fieldname = self.get_random_value(self.fields['str'] +
                                               self.fields['text'])
-        str = eval("self.get_queryable_%s" % fieldname + "()")
+        str = eval("self.get_queryable_%s" % fieldname + "()").encode('utf-8')
         terms = str.split(' ')
         return terms[0]
 
@@ -413,7 +413,7 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
             # text/str terms
             fieldname = self.get_random_value(self.fields['str'] +
                                               self.fields['text'])
-            match_str = eval("self.get_queryable_%s" % fieldname + "()")
+            match_str = eval("self.get_queryable_%s" % fieldname + "()").encode('utf-8')
             if ':' or ' ' in match_str:
                 match_str = '\"' + match_str + '\"'
             if bool(random.getrandbits(1)) and not self.smart_queries:
@@ -491,7 +491,7 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
         es_query = {"wildcard": {}}
         fieldname = self.get_random_value(self.fields['str'] +
                                           self.fields['text'])
-        match_str = eval("self.get_queryable_%s" % fieldname + "()")
+        match_str = eval("self.get_queryable_%s" % fieldname + "()").encode('utf-8')
         if bool(random.getrandbits(1)):
             # '*' query
             pos = random.randint(0, len(match_str) - 1)
@@ -516,7 +516,7 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
         fts_query = {}
         es_query = {'regexp': {}}
         fieldname = self.get_random_value(self.fields['text'])
-        match_str = eval("self.get_queryable_regex_%s" % fieldname + "()")
+        match_str = eval("self.get_queryable_regex_%s" % fieldname + "()").encode('utf-8')
         fts_query['field'] = fieldname
         fts_query['regexp'] = match_str
 
@@ -535,7 +535,7 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
         fuzziness = random.randint(0, 2)
         fieldname = self.get_random_value(self.fields['str'] +
                                           self.fields['text'])
-        match_str = eval("self.get_queryable_%s" % fieldname + "()")
+        match_str = eval("self.get_queryable_%s" % fieldname + "()").encode('utf-8')
         if bool(random.getrandbits(1)):
             match_str = match_str[1:]
         else:
