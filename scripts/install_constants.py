@@ -90,7 +90,8 @@ PROCESSES_TO_TERMINATE = ["beam.smp", "memcached", "moxi", "vbucketmigrator", "c
 CMDS = {
     "deb": {
         "uninstall":
-            "dpkg -r couchbase-server; " +
+            "dpkg --purge couchbase-server; kill -9 `ps -ef |egrep couchbase|cut -f3 -d' '`; "
+            "rm /var/lib/dpkg/info/couchbase-server.*; " +
             "rm -rf " + DEFAULT_INSTALL_DIR["LINUX_DISTROS"] + " > /dev/null && echo 1 || echo 0",
         "pre_install": None,
         "install":
