@@ -1424,7 +1424,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                 if restore_file_data[bucket.name]:
                     try:
                         if restore_file_data[bucket.name][key]:
-                            if buckets_data[bucket.name][key] \
+                            if str(buckets_data[bucket.name][key]).replace(" ", "") \
                                     != restore_file_data[bucket.name][key]["Value"]:
                                 if count < 20:
                                     self.log.error("Data does not match at key {0}.\
