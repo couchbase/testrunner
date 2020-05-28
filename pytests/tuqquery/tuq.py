@@ -47,6 +47,7 @@ class QueryTests(BaseTestCase):
     def setUp(self):
         if not self._testMethodName == 'suite_setUp' \
                 and str(self.__class__).find('upgrade_n1qlrbac') == -1 \
+                and str(self.__class__).find("QueryCollectionsClusteropsTests") == -1 \
                 and str(self.__class__).find('n1ql_upgrade') == -1 \
                 and str(self.__class__).find('N1qlFTSIntegrationTest') == -1 \
                 and str(self.__class__).find('N1qlFTSIntegrationPhase2Test') == -1 \
