@@ -21,6 +21,7 @@ from memcached.helper.data_helper import MemcachedClientHelper
 from TestInput import TestInputSingleton
 from scripts.collect_server_info import cbcollectRunner
 from scripts import collect_data_files
+from scripts.java_sdk_setup import JavaSdkSetup
 from tasks.future import TimeoutError
 
 from couchbase_helper.documentgenerator import BlobGenerator, DocumentGenerator, SDKDataLoader
@@ -2880,6 +2881,9 @@ class XDCRNewBaseTest(unittest.TestCase):
         self._replicator_role = self._input.param("replicator_role", False)
         self._replicator_all_buckets = self._input.param("replicator_all_buckets", False)
         self._use_java_sdk = self._input.param("java_sdk_client", False)
+        if self._use_java_sdk:
+            self.log.info("Building docker image with java sdk client")
+            JavaSdkSetup()
         self._scope_num = self._input.param("scope_num", 2)
         self._collection_num = self._input.param("collection_num", 2)
 

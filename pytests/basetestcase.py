@@ -45,6 +45,7 @@ import testconstants
 from lib.ep_mc_bin_client import MemcachedClient
 from lib.mc_bin_client import MemcachedClient as MC_MemcachedClient
 from scripts.collect_server_info import cbcollectRunner
+from scripts.java_sdk_setup import JavaSdkSetup
 
 
 class BaseTestCase(unittest.TestCase):
@@ -416,6 +417,11 @@ class BaseTestCase(unittest.TestCase):
                 if not status:
                     self.sleep(10)
             self.print_cluster_stats()
+
+            self.java_sdk_client = self.input.param("java_sdk_client", False)
+            if self.java_sdk_client:
+                self.log.info("Building docker image with java sdk client")
+                JavaSdkSetup()
         except Exception as e:
             traceback.print_exc()
             self.cluster.shutdown(force=True)
