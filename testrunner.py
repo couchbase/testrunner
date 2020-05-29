@@ -163,11 +163,15 @@ def process_include_or_filter_exclude_tests(filtertype, option, tests, options):
                     tp, tf = parse_testreport_result_xml(passfail[1])
                 else:
                     tp, tf = parse_junit_result_xml(passfail[1])
+                    if not tp and not tf:
+                        tp, tf = parse_testreport_result_xml(passfail[1])
             elif option.startswith("http://") or option.startswith("https://"):
                 tp, tf = parse_testreport_result_xml(option)
                 tests_list=tp+tf
             else:
                 tp, tf = parse_junit_result_xml()
+                if not tp and not tf:
+                    tp, tf = parse_testreport_result_xml()
 
             if option.startswith('failed') and tf:
                 tests_list = tf
@@ -351,7 +355,10 @@ def getNodeText(nodelist):
 
 def parse_testreport_result_xml(filepath=""):
     if filepath.startswith("http://") or filepath.startswith("https://"):
-        url_path = filepath+"/testReport/api/xml?pretty=true"
+        if filepath.endswith(".xml"):
+            url_path = filepath
+        else:
+            url_path = filepath+"/testReport/api/xml?pretty=true"
         jobnamebuild = filepath.split('/')
         if not os.path.exists('logs'):
             os.mkdir('logs')
@@ -803,7 +810,11 @@ def filter_fields(testname):
                 and not fw.startswith("case_number:") \
                 and not fw.startswith("num_nodes:") \
                 and not fw.startswith("spec:"):
-            line = line + fw.replace(":", "=", 1)
+            if not "\":" in fw or "query:" in fw:
+                #log.info("Replacing : with ={}".format(fw))
+                line = line + fw.replace(":", "=", 1)
+            else:
+                line = line + fw
             if fw != testwords[-1]:
                 line = line + ","
 
