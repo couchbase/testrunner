@@ -4,6 +4,8 @@ from collections import Mapping, Sequence, Set, deque
 from deepdiff import DeepDiff
 import json
 import threading
+from pytests.fts.fts_base import CouchbaseCluster
+from membase.api.exception import CBQError
 
 class FlexIndexTests(QueryTests):
 
@@ -28,6 +30,7 @@ class FlexIndexTests(QueryTests):
         self.flex_query_option = self.input.param("flex_query_option", "flex_use_fts_query")
         self.rebalance_in = self.input.param("rebalance_in", False)
         self.failover_fts = self.input.param("failover_fts", False)
+        self.use_fts_query_param = self.input.param("use_fts_query_param", None)
         self.log.info("==============  FlexIndexTests setup has completed ==============")
 
     def tearDown(self):
@@ -44,9 +47,9 @@ class FlexIndexTests(QueryTests):
 
 # ============================ # Utils ===========================================
 
-    def compare_results_with_gsi(self, flex_query, gsi_query):
+    def compare_results_with_gsi(self, flex_query, gsi_query, use_fts_query_param=None):
         try:
-            flex_result = self.run_cbq_query(flex_query)["results"]
+            flex_result = self.run_cbq_query(flex_query, query_params={}, use_fts_query_param=use_fts_query_param)["results"]
             self.log.info("Number of results from flex query: {0} is {1}".format(flex_query, len(flex_result)))
         except Exception as e:
             self.log.info("Failed to run flex query: {0}".format(flex_query))
@@ -54,7 +57,7 @@ class FlexIndexTests(QueryTests):
             return False
 
         try:
-            gsi_result = self.run_cbq_query(gsi_query)["results"]
+            gsi_result = self.run_cbq_query(gsi_query, query_params={}, use_fts_query_param=None)["results"]
             self.log.info("Number of results from gsi query: {0} is {1}".format(gsi_query, len(gsi_result)))
         except Exception as e:
             self.log.info("Failed to run gsi query: {0}".format(gsi_query))
@@ -197,7 +200,10 @@ class FlexIndexTests(QueryTests):
             if self.flex_query_option != "flex_use_gsi_query":
                 expected_fts_index = self.get_expected_indexes(flex_query_ph, self.expected_fts_index_map)
             expected_gsi_index = self.get_expected_indexes(flex_query_ph, self.expected_gsi_index_map)
-            flex_query = self.get_runnable_flex_query(flex_query_ph, expected_fts_index, expected_gsi_index)
+            if self.use_fts_query_param:
+                flex_query = gsi_query
+            else:
+                flex_query = self.get_runnable_flex_query(flex_query_ph, expected_fts_index, expected_gsi_index)
             if self.flex_query_option == "flex_use_gsi_query":
                 expected_gsi_index.append("primary_gsi_index")
             # issue MB-39493
@@ -206,7 +212,7 @@ class FlexIndexTests(QueryTests):
             explain_query = "explain " + flex_query
             self.log.info("Query : {0}".format(explain_query))
             try:
-                result = self.run_cbq_query(explain_query)
+                result = self.run_cbq_query(explain_query, query_params={}, use_fts_query_param=self.use_fts_query_param)
             except Exception as e:
                 self.log.info("Failed to run query")
                 self.log.error(e)
@@ -220,7 +226,7 @@ class FlexIndexTests(QueryTests):
                 not_found_index_in_response.append(query_num)
                 continue
 
-            if not self.compare_results_with_gsi(flex_query, gsi_query):
+            if not self.compare_results_with_gsi(flex_query, gsi_query, self.use_fts_query_param):
                 self.log.error("Result mismatch found")
                 result_mismatch.append(query_num)
 
@@ -528,3 +534,49 @@ class FlexIndexTests(QueryTests):
                 self.fail("Rebalance out failed with {0}".format(str(e)))
 
         thread1.join()
+        self.cbcluster.delete_all_fts_indexes()
+
+    def test_rbac_flex(self):
+        self._load_test_buckets()
+        user = self.input.param("user", '')
+        if user == '':
+            raise Exception("Invalid test configuration! User name should not be empty.")
+
+        self.cbcluster = CouchbaseCluster(name='cluster', nodes=self.servers, log=self.log)
+        self.create_fts_index(name="idx_beer_sample_fts", doc_count=7303, source_name='beer-sample')
+        self._create_user(user, 'beer-sample')
+
+        username = self.users[user]['username']
+        password = self.users[user]['password']
+        query = "select meta().id from `beer-sample` use index (using fts, using gsi) where state = \"California\""
+
+        master_result = self.run_cbq_query(query=query, server=self.master, username=username, password=password)
+        self.assertEquals(master_result['status'], 'success', username+" query run failed on non-fts node")
+
+        self.cbcluster.delete_all_fts_indexes()
+
+    def test_rbac_flex_not_granted_n1ql(self):
+        self._load_test_buckets()
+        user = self.input.param("user", '')
+        if user == '':
+            raise Exception("Invalid test configuration! User name should not be empty.")
+
+        self.cbcluster = CouchbaseCluster(name='cluster', nodes=self.servers, log=self.log)
+        self.create_fts_index(name="idx_beer_sample_fts", doc_count=7303, source_name='beer-sample')
+        self._create_user(user, 'beer-sample')
+
+        username = self.users[user]['username']
+        password = self.users[user]['password']
+        query = "select meta().id from `beer-sample` use index (using fts, using gsi) where state = \"California\""
+
+        try:
+            self.run_cbq_query(query=query, server=self.master, username=username, password=password)
+            self.fail("Could able to run query without n1ql permissions")
+        except CBQError, e:
+            self.log.info(str(e))
+            if not "User does not have credentials to run SELECT queries" in str(e):
+                self.fail("Failed to run query with other CBQ issues: {0}".format(str(e)))
+        except Exception as e:
+            self.fail("Failed to run query with other issues: {0}".format(str(e)))
+
+        self.cbcluster.delete_all_fts_indexes()
