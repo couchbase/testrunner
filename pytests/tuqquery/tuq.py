@@ -379,6 +379,83 @@ class QueryTests(BaseTestCase):
 
         return fts_index
 
+    def _load_test_buckets(self):
+        if self.get_bucket_from_name("beer-sample") is None:
+            self.rest.load_sample("beer-sample")
+            self.wait_for_buckets_status({"beer-sample": "healthy"}, 5, 120)
+            self.wait_for_bucket_docs({"beer-sample": 7303}, 5, 120)
+
+        if not self.is_index_present("beer-sample", "beer_sample_code_idx"):
+            self.run_cbq_query("create index beer_sample_code_idx on `beer-sample` (`beer-sample`.code)")
+        if not self.is_index_present("beer-sample", "beer_sample_brewery_id_idx"):
+            self.run_cbq_query("create index beer_sample_brewery_id_idx on `beer-sample` (`beer-sample`.brewery_id)")
+        self.wait_for_all_indexes_online()
+
+    def _create_user(self, user, bucket_name='default'):
+        user_to_create = None
+        rolelist = None
+        user_role_map = [{
+                'admin_user': [{'id': 'admin_user', 'name': 'admin_user', 'password': 'password'}],
+                'rolelist': [{'id': 'admin_user', 'name': 'admin_user', 'roles': 'admin'}]
+            },
+            {
+                'all_buckets_data_reader_search_admin': [{'id': 'all_buckets_data_reader_search_admin', 'name': 'all_buckets_data_reader_search_admin', 'password': 'password'}],
+                'rolelist': [{'id': 'all_buckets_data_reader_search_admin', 'name': 'all_buckets_data_reader_search_admin', 'roles': 'query_select[*],fts_admin[*],query_external_access'}]
+            },
+            {
+                'all_buckets_data_reader_search_reader':  [{'id': 'all_buckets_data_reader_search_reader', 'name': 'all_buckets_data_reader_search_reader', 'password': 'password'}],
+                'rolelist': [{'id': 'all_buckets_data_reader_search_reader', 'name': 'all_buckets_data_reader_search_reader', 'roles': 'query_select[*],fts_searcher[*],query_external_access'}]
+            },
+            {
+                'test_bucket_data_reader_search_admin': [{'id': 'test_bucket_data_reader_search_admin', 'name': 'test_bucket_data_reader_search_admin', 'password': 'password'}],
+                'rolelist': [{'id': 'test_bucket_data_reader_search_admin', 'name': 'test_bucket_data_reader_search_admin', 'roles': 'query_select['+bucket_name+'],fts_admin['+bucket_name+'],query_external_access'}]
+            },
+            {
+                'test_bucket_data_reader_null': [{'id': 'test_bucket_data_reader_null', 'name': 'test_bucket_data_reader_null', 'password': 'password'}],
+                'rolelist': [{'id': 'test_bucket_data_reader_null', 'name': 'test_bucket_data_reader_null', 'roles': 'query_select['+bucket_name+'],query_external_access'}]
+            },
+            {
+                'test_bucket_data_reader_search_reader': [{'id': 'test_bucket_data_reader_search_reader', 'name': 'test_bucket_data_reader_search_reader', 'password': 'password'}],
+                'rolelist': [{'id': 'test_bucket_data_reader_search_reader', 'name': 'test_bucket_data_reader_search_reader', 'roles': 'query_select['+bucket_name+'],fts_searcher['+bucket_name+'],query_external_access'}]
+            },
+            {
+                'all_buckets_data_reader_null': [{'id': 'all_buckets_data_reader_null', 'name': 'all_buckets_data_reader_null', 'password': 'password'}],
+                'rolelist': [{'id': 'all_buckets_data_reader_null', 'name': 'all_buckets_data_reader_null', 'roles': 'query_select[*],query_external_access'}]
+            },
+            {
+                'all_buckets_null_search_admin': [{'id': 'all_buckets_null_search_admin', 'name': 'all_buckets_null_search_admin', 'password': 'password'}],
+                'rolelist': [{'id': 'all_buckets_null_search_admin', 'name': 'all_buckets_null_search_admin', 'roles': 'fts_admin[*],query_external_access'}]
+            },
+            {
+                'all_buckets_null_null': [{'id': 'all_buckets_null_null', 'name': 'all_buckets_null_null', 'password': 'password'}],
+                'rolelist': [{'id': 'all_buckets_null_null', 'name': 'all_buckets_null_null', 'roles': 'query_external_access'}]
+            },
+            {
+                'all_buckets_null_search_reader': [{'id': 'all_buckets_null_search_reader', 'name': 'all_buckets_null_search_reader', 'password': 'password'}],
+                'rolelist': [{'id': 'all_buckets_null_search_reader', 'name': 'all_buckets_null_search_reader', 'roles': 'fts_searcher[*],query_external_access'}]
+            },
+            {
+                'test_bucket_null_search_admin': [{'id': 'test_bucket_null_search_admin', 'name': 'test_bucket_null_search_admin', 'password': 'password'}],
+                'rolelist': [{'id': 'test_bucket_null_search_admin', 'name': 'test_bucket_null_search_admin', 'roles': 'fts_admin['+bucket_name+'],query_external_access'}]
+            },
+            {
+                'test_bucket_null_search_reader': [{'id': 'test_bucket_null_search_reader', 'name': 'test_bucket_null_search_reader', 'password': 'password'}],
+                'rolelist': [{'id': 'test_bucket_null_search_reader', 'name': 'test_bucket_null_search_reader', 'roles': 'fts_searcher['+bucket_name+'],query_external_access'}]
+            }
+        ]
+
+        for user_info in user_role_map:
+            if user in user_info.keys():
+                user_to_create = user_info[user]
+                rolelist = user_info['rolelist']
+                break
+        if user_to_create and rolelist:
+            RbacBase().create_user_source(user_to_create, 'builtin', self.master)
+            RbacBase().add_user_role(rolelist, RestConnection(self.master), 'builtin')
+            self.users[user] = {'username': user, 'password': 'password'}
+        else:
+            self.fail("{0} looks like an invalid user".format(user))
+
     def generate_random_queries(self, fields=None, num_queries=1, query_type=["match"],
                                 seed=0):
         """
@@ -578,7 +655,7 @@ class QueryTests(BaseTestCase):
                 server = test_dict[test_name].get('server', None)
 
                 # INDEX STAGE
-                
+
                 current_indexes = self.get_parsed_indexes()
                 desired_indexes = self.parse_desired_indexes(index_list)
                 desired_index_set = self.make_hashable_index_set(desired_indexes)
@@ -1113,7 +1190,7 @@ class QueryTests(BaseTestCase):
             json_output_str += s
         return json.loads(json_output_str)
 
-    def run_cbq_query(self, query=None, min_output_size=10, server=None, query_params={}, is_prepared=False, encoded_plan=None, username=None, password=None):
+    def run_cbq_query(self, query=None, min_output_size=10, server=None, query_params={}, is_prepared=False, encoded_plan=None, username=None, password=None, use_fts_query_param=None):
         if query is None:
             query = self.query
         if server is None:
@@ -1130,6 +1207,8 @@ class QueryTests(BaseTestCase):
             if bucket.saslPassword:
                 cred_params['creds'].append({'user': 'local:%s' % bucket.name, 'pass': bucket.saslPassword})
         query_params.update(cred_params)
+        if use_fts_query_param:
+            query_params['use_fts'] = True
         if self.testrunner_client == 'python_sdk' and not is_prepared:
             sdk_cluster = Cluster('couchbase://' + str(server.ip))
             authenticator = PasswordAuthenticator(username, password)
