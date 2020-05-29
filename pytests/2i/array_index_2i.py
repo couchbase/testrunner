@@ -295,7 +295,9 @@ class SecondaryIndexArrayIndexTests(BaseSecondaryIndexingTests):
         self.multi_create_index_using_rest(buckets=self.buckets, query_definitions=self.query_definitions)
         log.info("Flushing bucket {0}...".format(self.buckets[0]))
         self.rest.flush_bucket(self.buckets[0])
-        self.sleep(60)
+        # As per the new implementation in 7.0, need to wait for 3 mins after rollback or recovery for
+        # getting index to be built, so adding 180s of sleep
+        self.sleep(240)
         log.info("Performing Full Table Scan...")
         for query_definition in self.query_definitions:
             self.run_full_table_scan_using_rest(self.buckets[0], query_definition)

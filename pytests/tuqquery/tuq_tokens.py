@@ -10,7 +10,7 @@ class TokenTests(QueryTests):
         self.scan_consistency = self.input.param("scan_consistency", 'REQUEST_PLUS')
         if not self.sample_bucket:
             self.sample_bucket = 'beer-sample'
-        self.query_bucket = self.get_query_buckets(sample_buckets=[self.sample_bucket])[1]
+        self.query_bucket = self.get_query_buckets(sample_buckets=[self.sample_bucket])[0]
 
     def tearDown(self):
         # server = self.master
