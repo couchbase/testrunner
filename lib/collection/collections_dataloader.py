@@ -20,34 +20,20 @@ class DockerManager(object):
                                                      detach=True)
             for line in self.handle.logs(stream=True):
                 print(line.strip())
-            # self.client.remove_container(self.handle.id)
         except ConnectionError as e:
             print('Error connecting to docker service, please start/restart it:', e)
 
-    def _list_containers(self):
-        images = []
-        for image in self.client.images.list():
-            images.append(image.id)
-        return images
-
-    def check_status(self):
-        pass
-
-    def stream_logs(self):
-        pass
-
-    def terminate(self):
-        for container in self._list_images():
-            container.stop()
-
-
+    def terminate(self, tag):
+        self.client.images.remove(tag)
+        self.client.containers.prune()
 
 class JavaSDKClient(object):
     def __init__(self, server, bucket, params):
         self.server = server
         self.bucket = bucket
         self.params = params
-        self.docker_instance = DockerManager(self.server.ip + '_' + self.bucket)
+        self.tag = self.server.ip + '_' + self.bucket
+        self.docker_instance = DockerManager(self.tag)
 
     def params_to_environment(self):
         _environment = {
@@ -74,3 +60,6 @@ class JavaSDKClient(object):
         # 1 docker image per bucket, identified by server_bucket tag
         env = self.params_to_environment()
         self.docker_instance.start(env)
+
+    def cleanup(self):
+        self.docker_instance.terminate("jsc" + ':' + self.tag)

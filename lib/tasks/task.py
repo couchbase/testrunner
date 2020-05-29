@@ -5544,6 +5544,8 @@ class SDKLoadDocumentsTask(Task):
         except Exception as e:
             self.state = FINISHED
             self.set_unexpected_exception(e)
+        finally:
+            self.javasdkclient.cleanup()
 
     def check(self, task_manager):
         self.set_result(True)
