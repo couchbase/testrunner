@@ -557,4 +557,9 @@ class EventingNegative(EventingBaseTest):
         matched, count=self.check_word_count_eventing_log(self.function_name,"KVError:",2016)
         if count == 0:
             raise Exception("No KV error shown up")
-        #self.undeploy_and_delete_function(body)
+        on_update_success=self.get_stats_value(self.function_name, "execution_stats.on_update_success")
+        dcp_mutation_msg_counter=self.get_stats_value(self.function_name, "execution_stats.dcp_mutation_msg_counter")
+        self.log.info("execution_stats.on_update_success: {}".format(on_update_success))
+        self.log.info("execution_stats.on_update_success: {}".format(dcp_mutation_msg_counter))
+        if not (count == on_update_success == dcp_mutation_msg_counter):
+            raise Exception("Kv error don't match with stats")

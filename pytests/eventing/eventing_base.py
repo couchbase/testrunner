@@ -91,6 +91,7 @@ class EventingBaseTest(QueryHelperTests):
             self.log.info("local ip address:{}".format(self.hostname))
             self.setup_curl()
         self.skip_metabucket_check=False
+        self.cancel_timer=self.input.param('cancel_timer', False)
 
     def tearDown(self):
         # catch panics and print it in the test log
