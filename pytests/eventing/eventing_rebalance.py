@@ -101,6 +101,8 @@ class EventingRebalance(EventingBaseTest):
             self.handler_code = HANDLER_CODE_CURL.TIMER_OP_WITH_CURL_DELETE
         elif handler_code == 'timer_op_curl_jenkins':
             self.handler_code = HANDLER_CODE_CURL.TIMER_OP_WITH_CURL_JENKINS
+        elif handler_code == 'cancel_timer':
+            self.handler_code = HANDLER_CODE.CANCEL_TIMER_REBALANCE
         else:
             self.handler_code = HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE
         force_disable_new_orchestration = self.input.param('force_disable_new_orchestration', False)
@@ -148,10 +150,11 @@ class EventingRebalance(EventingBaseTest):
         if self.pause_resume:
             self.resume_function(body)
         # Wait for eventing to catch up with all the update mutations and verify results after rebalance
-        if self.is_sbm:
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016*2, skip_stats_validation=True)
-        else:
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        if not self.cancel_timer:
+            if self.is_sbm:
+                self.verify_eventing_results(self.function_name, self.docs_per_day * 2016*2, skip_stats_validation=True)
+            else:
+                self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         # delete json documents
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size, op_type='delete')
@@ -161,11 +164,14 @@ class EventingRebalance(EventingBaseTest):
             self.resume_function(body)
         # Wait for eventing to catch up with all the delete mutations and verify results
         # This is required to ensure eventing works after rebalance goes through successfully
-        if self.is_sbm and (self.handler_code !=HANDLER_CODE.BUCKET_OP_SOURCE_BUCKET_MUTATION_DELETE and self.handler_code
-                !=HANDLER_CODE.BUCKET_OP_SOURCE_BUCKET_MUTATION_TIMERS_DELETE):
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        if not self.cancel_timer:
+            if self.is_sbm and (self.handler_code !=HANDLER_CODE.BUCKET_OP_SOURCE_BUCKET_MUTATION_DELETE and self.handler_code
+                    !=HANDLER_CODE.BUCKET_OP_SOURCE_BUCKET_MUTATION_TIMERS_DELETE):
+                self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+            else:
+                self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         else:
-            self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
         # Get all eventing nodes
         nodes_out_list = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
@@ -197,10 +203,11 @@ class EventingRebalance(EventingBaseTest):
         if self.pause_resume:
             self.resume_function(body)
         # Wait for eventing to catch up with all the update mutations and verify results after rebalance
-        if self.is_sbm:
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2, skip_stats_validation=True)
-        else:
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        if not self.cancel_timer:
+            if self.is_sbm:
+                self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2, skip_stats_validation=True)
+            else:
+                self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         # delete json documents
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size, op_type='delete')
@@ -210,11 +217,14 @@ class EventingRebalance(EventingBaseTest):
             self.resume_function(body)
         # Wait for eventing to catch up with all the delete mutations and verify results
         # This is required to ensure eventing works after rebalance goes through successfully
-        if self.is_sbm and (self.handler_code != HANDLER_CODE.BUCKET_OP_SOURCE_BUCKET_MUTATION_DELETE and
-                self.handler_code != HANDLER_CODE.BUCKET_OP_SOURCE_BUCKET_MUTATION_TIMERS_DELETE):
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        if not self.cancel_timer:
+            if self.is_sbm and (self.handler_code != HANDLER_CODE.BUCKET_OP_SOURCE_BUCKET_MUTATION_DELETE and
+                    self.handler_code != HANDLER_CODE.BUCKET_OP_SOURCE_BUCKET_MUTATION_TIMERS_DELETE):
+                self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+            else:
+                self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         else:
-            self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
         # Get all eventing nodes
         nodes_out_list = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
@@ -249,10 +259,11 @@ class EventingRebalance(EventingBaseTest):
         if self.pause_resume:
             self.resume_function(body)
         # Wait for eventing to catch up with all the update mutations and verify results after rebalance
-        if self.is_sbm:
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2, skip_stats_validation=True)
-        else:
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        if not self.cancel_timer:
+            if self.is_sbm:
+                self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2, skip_stats_validation=True)
+            else:
+                self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         # delete json documents
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size, op_type='delete')
@@ -262,11 +273,15 @@ class EventingRebalance(EventingBaseTest):
             self.resume_function(body)
         # Wait for eventing to catch up with all the delete mutations and verify results
         # This is required to ensure eventing works after rebalance goes through successfully
-        if self.is_sbm and (self.handler_code != HANDLER_CODE.BUCKET_OP_SOURCE_BUCKET_MUTATION_DELETE and
-                self.handler_code != HANDLER_CODE.BUCKET_OP_SOURCE_BUCKET_MUTATION_TIMERS_DELETE):
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        if not self.cancel_timer:
+            if self.is_sbm and (self.handler_code != HANDLER_CODE.BUCKET_OP_SOURCE_BUCKET_MUTATION_DELETE and
+                    self.handler_code != HANDLER_CODE.BUCKET_OP_SOURCE_BUCKET_MUTATION_TIMERS_DELETE):
+                self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+            else:
+                self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         else:
-            self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+                self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+
         self.undeploy_and_delete_function(body)
         # Get all eventing nodes
         nodes_out_list = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
@@ -299,10 +314,11 @@ class EventingRebalance(EventingBaseTest):
         if self.pause_resume:
             self.resume_function(body)
         # Wait for eventing to catch up with all the update mutations and verify results after rebalance
-        if self.is_sbm:
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2, skip_stats_validation=True)
-        else:
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        if not self.cancel_timer:
+            if self.is_sbm:
+                self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2, skip_stats_validation=True)
+            else:
+                self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         # delete json documents
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size, op_type='delete')
@@ -312,11 +328,14 @@ class EventingRebalance(EventingBaseTest):
             self.resume_function(body)
         # Wait for eventing to catch up with all the delete mutations and verify results
         # This is required to ensure eventing works after rebalance goes through successfully
-        if self.is_sbm and (self.handler_code != HANDLER_CODE.BUCKET_OP_SOURCE_BUCKET_MUTATION_DELETE and
-                            self.handler_code != HANDLER_CODE.BUCKET_OP_SOURCE_BUCKET_MUTATION_TIMERS_DELETE):
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        if not self.cancel_timer:
+            if self.is_sbm and (self.handler_code != HANDLER_CODE.BUCKET_OP_SOURCE_BUCKET_MUTATION_DELETE and
+                                self.handler_code != HANDLER_CODE.BUCKET_OP_SOURCE_BUCKET_MUTATION_TIMERS_DELETE):
+                self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+            else:
+                self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         else:
-            self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+                self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
 
     def test_kv_rebalance_out_when_existing_eventing_node_is_processing_mutations(self):
@@ -341,10 +360,11 @@ class EventingRebalance(EventingBaseTest):
         if self.pause_resume:
             self.resume_function(body)
         # Wait for eventing to catch up with all the update mutations and verify results after rebalance
-        if self.is_sbm:
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2, skip_stats_validation=True)
-        else:
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        if not self.cancel_timer:
+            if self.is_sbm:
+                self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2, skip_stats_validation=True)
+            else:
+                self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         # delete json documents
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size, op_type='delete')
@@ -354,11 +374,14 @@ class EventingRebalance(EventingBaseTest):
             self.resume_function(body)
         # Wait for eventing to catch up with all the delete mutations and verify results
         # This is required to ensure eventing works after rebalance goes through successfully
-        if self.is_sbm and (self.handler_code != HANDLER_CODE.BUCKET_OP_SOURCE_BUCKET_MUTATION_DELETE and
-                            self.handler_code != HANDLER_CODE.BUCKET_OP_SOURCE_BUCKET_MUTATION_TIMERS_DELETE):
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        if not self.cancel_timer:
+            if self.is_sbm and (self.handler_code != HANDLER_CODE.BUCKET_OP_SOURCE_BUCKET_MUTATION_DELETE and
+                                self.handler_code != HANDLER_CODE.BUCKET_OP_SOURCE_BUCKET_MUTATION_TIMERS_DELETE):
+                self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+            else:
+                self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         else:
-            self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+                self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
 
     def test_kv_swap_rebalance_when_existing_eventing_node_is_processing_mutations(self):
@@ -385,10 +408,11 @@ class EventingRebalance(EventingBaseTest):
         if self.pause_resume:
             self.resume_function(body)
         # Wait for eventing to catch up with all the update mutations and verify results after rebalance
-        if self.is_sbm:
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2, skip_stats_validation=True)
-        else:
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        if not self.cancel_timer:
+            if self.is_sbm:
+                self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2, skip_stats_validation=True)
+            else:
+                self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         # delete json documents
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size, op_type='delete')
@@ -398,11 +422,14 @@ class EventingRebalance(EventingBaseTest):
             self.resume_function(body)
         # Wait for eventing to catch up with all the delete mutations and verify results
         # This is required to ensure eventing works after rebalance goes through successfully
-        if self.is_sbm and (self.handler_code != HANDLER_CODE.BUCKET_OP_SOURCE_BUCKET_MUTATION_DELETE and
-                            self.handler_code != HANDLER_CODE.BUCKET_OP_SOURCE_BUCKET_MUTATION_TIMERS_DELETE):
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        if not self.cancel_timer:
+            if self.is_sbm and (self.handler_code != HANDLER_CODE.BUCKET_OP_SOURCE_BUCKET_MUTATION_DELETE and
+                                self.handler_code != HANDLER_CODE.BUCKET_OP_SOURCE_BUCKET_MUTATION_TIMERS_DELETE):
+                self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+            else:
+                self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         else:
-            self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+                self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
 
     def test_rebalance_in_with_different_topologies(self):
@@ -425,10 +452,11 @@ class EventingRebalance(EventingBaseTest):
         if self.pause_resume:
             self.resume_function(body)
         # Wait for eventing to catch up with all the update mutations and verify results after rebalance
-        if self.is_sbm:
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2, skip_stats_validation=True)
-        else:
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        if not self.cancel_timer:
+            if self.is_sbm:
+                self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2, skip_stats_validation=True)
+            else:
+                self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         # delete json documents
         self.load(gen_load_del, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size, op_type='delete')
@@ -438,11 +466,14 @@ class EventingRebalance(EventingBaseTest):
             self.resume_function(body)
         # Wait for eventing to catch up with all the delete mutations and verify results
         # This is required to ensure eventing works after rebalance goes through successfully
-        if self.is_sbm and (self.handler_code != HANDLER_CODE.BUCKET_OP_SOURCE_BUCKET_MUTATION_DELETE and
-                            self.handler_code != HANDLER_CODE.BUCKET_OP_SOURCE_BUCKET_MUTATION_TIMERS_DELETE):
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        if not self.cancel_timer:
+            if self.is_sbm and (self.handler_code != HANDLER_CODE.BUCKET_OP_SOURCE_BUCKET_MUTATION_DELETE and
+                                self.handler_code != HANDLER_CODE.BUCKET_OP_SOURCE_BUCKET_MUTATION_TIMERS_DELETE):
+                self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+            else:
+                self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         else:
-            self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+                self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
 
     def test_rebalance_out_with_different_topologies(self):
@@ -465,10 +496,11 @@ class EventingRebalance(EventingBaseTest):
         if self.pause_resume:
             self.resume_function(body)
         # Wait for eventing to catch up with all the update mutations and verify results after rebalance
-        if self.is_sbm:
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2, skip_stats_validation=True)
-        else:
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        if not self.cancel_timer:
+            if self.is_sbm:
+                self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2, skip_stats_validation=True)
+            else:
+                self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         # delete json documents
         self.load(gen_load_del, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size, op_type='delete')
@@ -478,11 +510,14 @@ class EventingRebalance(EventingBaseTest):
             self.resume_function(body)
         # Wait for eventing to catch up with all the delete mutations and verify results
         # This is required to ensure eventing works after rebalance goes through successfully
-        if self.is_sbm and (self.handler_code != HANDLER_CODE.BUCKET_OP_SOURCE_BUCKET_MUTATION_DELETE and
-                            self.handler_code != HANDLER_CODE.BUCKET_OP_SOURCE_BUCKET_MUTATION_TIMERS_DELETE):
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        if not self.cancel_timer:
+            if self.is_sbm and (self.handler_code != HANDLER_CODE.BUCKET_OP_SOURCE_BUCKET_MUTATION_DELETE and
+                                self.handler_code != HANDLER_CODE.BUCKET_OP_SOURCE_BUCKET_MUTATION_TIMERS_DELETE):
+                self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+            else:
+                self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         else:
-            self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
 
     def test_swap_rebalance_with_different_topologies(self):
@@ -509,10 +544,11 @@ class EventingRebalance(EventingBaseTest):
         if self.pause_resume:
             self.resume_function(body)
         # Wait for eventing to catch up with all the update mutations and verify results after rebalance
-        if self.is_sbm:
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2, skip_stats_validation=True)
-        else:
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        if not self.cancel_timer:
+            if self.is_sbm:
+                self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2, skip_stats_validation=True)
+            else:
+                self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         # delete json documents
         self.load(gen_load_del, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size, op_type='delete')
@@ -522,11 +558,14 @@ class EventingRebalance(EventingBaseTest):
             self.resume_function(body)
         # Wait for eventing to catch up with all the delete mutations and verify results
         # This is required to ensure eventing works after rebalance goes through successfully
-        if self.is_sbm and (self.handler_code != HANDLER_CODE.BUCKET_OP_SOURCE_BUCKET_MUTATION_DELETE and
-                            self.handler_code != HANDLER_CODE.BUCKET_OP_SOURCE_BUCKET_MUTATION_TIMERS_DELETE):
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        if not self.cancel_timer:
+            if self.is_sbm and (self.handler_code != HANDLER_CODE.BUCKET_OP_SOURCE_BUCKET_MUTATION_DELETE and
+                                self.handler_code != HANDLER_CODE.BUCKET_OP_SOURCE_BUCKET_MUTATION_TIMERS_DELETE):
+                self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+            else:
+                self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         else:
-            self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+                self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
 
     def test_autofailover_with_eventing_rebalance(self):
@@ -846,10 +885,11 @@ class EventingRebalance(EventingBaseTest):
         if self.pause_resume:
             self.resume_function(body)
         # Wait for eventing to catch up with all the update mutations and verify results after rebalance
-        if self.is_sbm:
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2, skip_stats_validation=True)
-        else:
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        if not self.cancel_timer:
+            if self.is_sbm:
+                self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2, skip_stats_validation=True)
+            else:
+                self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         # delete json documents
         task1 = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, gen_load_del,
                                                  self.buckets[0].kvs[1], 'delete', compression=self.sdk_compression)
@@ -869,10 +909,13 @@ class EventingRebalance(EventingBaseTest):
             self.resume_function(body)
         # Wait for eventing to catch up with all the delete mutations and verify results
         # This is required to ensure eventing works after rebalance goes through successfully
-        if self.is_sbm:
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        if not self.cancel_timer:
+            if self.is_sbm:
+                self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+            else:
+                self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         else:
-            self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         if self.pause_resume:
             self.pause_function(body)
         # do a swap rebalance
@@ -892,8 +935,11 @@ class EventingRebalance(EventingBaseTest):
         if self.pause_resume:
             self.resume_function(body)
         # Wait for eventing to catch up with all the update mutations and verify results after rebalance
-        if self.is_sbm:
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 3, skip_stats_validation=True)
+        if not self.cancel_timer:
+            if self.is_sbm:
+                self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 3, skip_stats_validation=True)
+            else:
+                self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         else:
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
@@ -926,10 +972,11 @@ class EventingRebalance(EventingBaseTest):
         if self.pause_resume:
             self.resume_function(body)
         # Wait for eventing to catch up with all the update mutations and verify results after rebalance
-        if self.is_sbm:
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2, skip_stats_validation=True)
-        else:
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        if not self.cancel_timer:
+            if self.is_sbm:
+                self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2, skip_stats_validation=True)
+            else:
+                self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         # delete json documents
         task1 = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, gen_load_del,
                                                  self.buckets[0].kvs[1], 'delete', compression=self.sdk_compression)
@@ -945,10 +992,13 @@ class EventingRebalance(EventingBaseTest):
             self.resume_function(body)
         # Wait for eventing to catch up with all the delete mutations and verify results
         # This is required to ensure eventing works after rebalance goes through successfully
-        if self.is_sbm:
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        if not self.cancel_timer:
+            if self.is_sbm:
+                self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+            else:
+                self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         else:
-            self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         all_kv_nodes = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=True)
         # add the previously removed nodes as part of swap rebalance
         for node in to_add_nodes:
@@ -968,8 +1018,11 @@ class EventingRebalance(EventingBaseTest):
         if self.pause_resume:
             self.resume_function(body)
         # Wait for eventing to catch up with all the update mutations and verify results after rebalance
-        if self.is_sbm:
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 3, skip_stats_validation=True)
+        if not self.cancel_timer:
+            if self.is_sbm:
+                self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 3, skip_stats_validation=True)
+            else:
+                self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         else:
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)

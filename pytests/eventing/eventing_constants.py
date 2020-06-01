@@ -60,6 +60,7 @@ class HANDLER_CODE:
     BUCKET_OP_SOURCE_BUCKET_MUTATION_WITH_TIMERS_RECOVERY= 'handler_code/bucket_op_source_bucket_mutation_with_timer_recovery.js'
     BUCKET_OP_SOURCE_BUCKET_MUTATION_DELETE='handler_code/bucket_op_with_source_bucket_mutation_delete.js'
     BUCKET_OP_SOURCE_BUCKET_MUTATION_TIMERS_DELETE='handler_code/bucket_op_source_bucket_mutation_with_timer_delete.js'
+    CANCEL_TIMER_REBALANCE='handler_code/cancel_timer_rebalance.js'
 
 class HANDLER_CODE_CURL:
     BUCKET_OP_WITH_CURL = 'handler_code/curl/bucket_op_curl.js'
