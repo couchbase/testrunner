@@ -977,7 +977,7 @@ class FTSIndex:
     def update_docvalues_email_custom_index(self, new):
         status, index_def = self.get_index_defn()
         self.index_definition = index_def["indexDef"]
-        self.index_definition['params']['mapping']['types']['emp']['properties']['email']['fields'][0][
+        self.index_definition['params']['mapping']['types']['emp']['properties']['join_date']['fields'][0][
             'docvalues'] = new
         self.index_definition['uuid'] = self.get_uuid()
         self.update()
@@ -4269,7 +4269,7 @@ class FTSBaseTest(unittest.TestCase):
         self.dataset = "earthquakes"
         self.log.info("Loading earthquakes.json ...")
         self.async_load_data()
-        #self.sleep(10, "Waiting to load earthquakes.json ...")
+        self.sleep(10, "Waiting to load earthquakes.json ...")
         self.wait_for_indexing_complete()
         return geo_index
 

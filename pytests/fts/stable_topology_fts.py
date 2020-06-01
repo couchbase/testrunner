@@ -1030,21 +1030,21 @@ class StableTopFTS(FTSBaseTest):
                 self.log.info("Hits: %s" % hits)
                 self.log.info("Contents: %s" % contents)
                 score_before_boosting_doc1 = index.get_score_from_query_result_content(
-                    contents=contents, doc_id='emp10000021')
+                    contents=contents, doc_id='emp10000045')
                 score_before_boosting_doc2 = index.get_score_from_query_result_content(
-                    contents=contents, doc_id='emp10000086')
+                    contents=contents, doc_id='emp10000053')
 
                 self.log.info("Scores before boosting:")
                 self.log.info("")
-                self.log.info("emp10000021: %s", score_before_boosting_doc1)
-                self.log.info("emp10000086: %s", score_before_boosting_doc2)
+                self.log.info("emp10000045: %s", score_before_boosting_doc1)
+                self.log.info("emp10000053: %s", score_before_boosting_doc2)
 
         except Exception as err:
             self.log.error(err)
             self.fail("Testcase failed: " + str(err))
 
         if not score_before_boosting_doc1 == score_before_boosting_doc2:
-            self.fail("Testcase failed: Scores for emp10000021 & emp10000086 "
+            self.fail("Testcase failed: Scores for emp10000045 & emp10000053 "
                       "are not equal before boosting")
 
         # Run Query w/o Boosting and compare the scores for Docs emp10000021 &
@@ -1061,14 +1061,14 @@ class StableTopFTS(FTSBaseTest):
             self.log.info("Hits: %s" % hits)
             self.log.info("Contents: %s" % contents)
             score_after_boosting_doc1 = index.get_score_from_query_result_content(
-                contents=contents, doc_id='emp10000021')
+                contents=contents, doc_id='emp10000045')
             score_after_boosting_doc2 = index.get_score_from_query_result_content(
-                contents=contents, doc_id='emp10000086')
+                contents=contents, doc_id='emp10000053')
 
             self.log.info("Scores after boosting:")
             self.log.info("")
-            self.log.info("emp10000021: %s", score_after_boosting_doc1)
-            self.log.info("emp10000086: %s", score_after_boosting_doc2)
+            self.log.info("emp10000045: %s", score_after_boosting_doc1)
+            self.log.info("emp10000053: %s", score_after_boosting_doc2)
             assert score_after_boosting_doc1 == score_after_boosting_doc2
             assert score_before_boosting_doc1 < score_after_boosting_doc1
             assert score_before_boosting_doc2 < score_after_boosting_doc2
