@@ -306,14 +306,16 @@ class RemoteMachineShellConnection(KeepRefs):
                         hostname=ip.replace('[', '').replace(']', ''),
                         username=ssh_username, key_filename=ssh_key)
                 is_ssh_ok = True
-            except paramiko.AuthenticationException:
+            except paramiko.AuthenticationException as ae:
                 log.error(
                     "Can't establish SSH (Authentication failed) session to node {} : {}".format(
-                        self.ip, e))
-            except paramiko.BadHostKeyException:
+                        self.ip, ae))
+                raise Exception(ae)
+            except paramiko.BadHostKeyException as bhke:
                 log.error(
                     "Can't establish SSH (Invalid host key) session to node {} : {}".format(self.ip,
-                                                                                            e))
+                                                                                            bhke))
+                raise Exception(bhke)
             except Exception as e:
                 log.error(
                     "Can't establish SSH session (unknown reason) to node {} : {}".format(self.ip,
