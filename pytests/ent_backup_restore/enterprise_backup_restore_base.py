@@ -1352,16 +1352,19 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         restore_file_data = bk_file_data
         regex_backup_data = {}
         if regex_pattern is not None:
-            pattern = re.compile("%s" % regex_pattern)
+            pattern = re.compile("%s" % regex_pattern.replace(" ",""))
             for bucket in self.buckets:
                 key_in_file_match_regex = 0
                 regex_backup_data[bucket.name] = {}
                 self.log.info("Extract keys with regex pattern '%s' either in key or body"
                               % regex_pattern)
+                max_display = 10
                 for key in restore_file_data[bucket.name]:
                     if self.debug_logs:
-                        print(("key in backup file of bucket %s:  %s" \
-                              % (bucket.name, key)))
+                        if max_display > 0:
+                            print(("key in backup file of bucket %s:  %s" \
+                                  % (bucket.name, key)))
+                            max_display -= 1
                     if validate_keys:
                         if pattern.search(key):
                             regex_backup_data[bucket.name][key] = \
@@ -1369,19 +1372,23 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                             key_in_file_match_regex += 1
                     else:
                         if self.debug_logs:
-                            print(("value of key in backup file  ", \
-                                  restore_file_data[bucket.name][key]))
+                            if max_display > 0:
+                                print(("value of key in backup file  ", \
+                                      restore_file_data[bucket.name][key]))
+                                max_display -= 1
                         if pattern.search(restore_file_data[bucket.name][key]["Value"]):
                             regex_backup_data[bucket.name][key] = \
                                 restore_file_data[bucket.name][key]
                             key_in_file_match_regex += 1
                 if self.debug_logs:
-                    print(("\nKeys and value in backup file of bucket {0} \
-                           that matches pattern '{1}'" \
-                          .format(bucket.name, regex_pattern)))
-                    for x in regex_backup_data[bucket.name]:
-                        print(("key: ", x))
-                        print(("value: ", regex_backup_data[bucket.name][x]["Value"]))
+                    if max_display > 0:
+                        print(("\nKeys and value in backup file of bucket {0} \
+                               that matches pattern '{1}'" \
+                              .format(bucket.name, regex_pattern)))
+                        for x in regex_backup_data[bucket.name]:
+                            print(("key: ", x))
+                            print(("value: ", regex_backup_data[bucket.name][x]["Value"]))
+                        max_display -= 1
                 self.log.info("Total keys matched in bk file of bucket {0} is {1}"
                               .format(bucket.name, key_in_file_match_regex))
                 restore_file_data = regex_backup_data
