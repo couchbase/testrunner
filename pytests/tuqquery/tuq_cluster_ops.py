@@ -315,7 +315,7 @@ class QueriesOpsTests(QuerySanityTests):
             for query_bucket in self.query_buckets:
                 self.run_cbq_query(query="DROP INDEX %s ON %s" % (index_name, query_bucket))
 
-    def test_queries_after_backup_with_2i(self):
+    def test_queries_after_backup_with_gsi(self):
         index_name = "Automation_backup_index"
         method_name = self.input.param('to_run', 'test_any')
         self.couchbase_login_info = "%s:%s" % (self.input.membase_settings.rest_username,

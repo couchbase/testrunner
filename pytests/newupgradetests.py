@@ -10,7 +10,7 @@ from memcached.helper.kvstore import KVStore
 from fts.stable_topology_fts import StableTopFTS
 from pytests.fts.fts_callable import FTSCallable
 from cbas.cbas_functional_tests import CBASFunctionalTests
-# from 2i.indexscans_2i import SecondaryIndexingScanTests
+# from gsi.indexscans_gsi import SecondaryIndexingScanTests
 from testconstants import COUCHBASE_VERSION_2
 from testconstants import COUCHBASE_VERSION_3, COUCHBASE_FROM_VERSION_3
 from testconstants import SHERLOCK_VERSION, COUCHBASE_FROM_SHERLOCK,\

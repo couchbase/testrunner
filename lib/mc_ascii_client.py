@@ -149,7 +149,7 @@ class MemcachedAsciiClient(object):
             raise MemcachedError(-1, error)
         return response
 
-    def set(self, key, exp, flags, val):
+    def set(self, key, exp, flags, val, scope=None, collection=None):
         """Set a value in the memcached server."""
         response = self._doStore("set {0} {1} {2} {3}\r\n{4}\r\n".format(key, flags, exp, len(val), val))
         if response != "STORED":
@@ -229,7 +229,7 @@ class MemcachedAsciiClient(object):
             raise MemcachedError(-1, error)
         return response
 
-    def delete(self, key, cas=0):
+    def delete(self, key, cas=0, scope=None, collection=None):
         """Delete the value for a given key within the memcached server."""
         response = self._doStore("delete {0} {1}\r\n".format(key, cas))
         if response != "DELETED":

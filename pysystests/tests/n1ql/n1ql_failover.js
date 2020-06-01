@@ -1,6 +1,6 @@
 {
-    "name" : "n1ql_2i_test",
-    "desc" : "failover test run for n1ql and 2i",
+    "name" : "n1ql_gsi_test",
+    "desc" : "failover test run for n1ql and gsi",
     "loop" : "",
     "phases" : {
 		        "1" :

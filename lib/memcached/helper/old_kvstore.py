@@ -20,7 +20,7 @@ class ClientKeyValueStore(object):
         self._rlock.release()
         self._wlock.release()
 
-    def delete(self, key):
+    def delete(self, key, scope=None, collection=None):
         self._rlock.acquire()
         self._wlock.acquire()
         if key in self._cache:
@@ -30,7 +30,7 @@ class ClientKeyValueStore(object):
         self._rlock.release()
         self._wlock.release()
 
-    def read(self, key):
+    def read(self, key, scope=None, collection=None):
         item = {}
         self._rlock.acquire()
         if key in self._cache:
@@ -41,7 +41,7 @@ class ClientKeyValueStore(object):
         return item
 
 
-    def keys(self):
+    def keys(self, scope=None, collection=None):
         #dump all the keys
         keys = []
         self._rlock.acquire()
@@ -49,7 +49,7 @@ class ClientKeyValueStore(object):
         self._rlock.release()
         return keys
 
-    def valid_items(self):
+    def valid_items(self, scope=None, collection=None):
         keys = list(self.keys())
         valid_keys = []
         for k in keys:

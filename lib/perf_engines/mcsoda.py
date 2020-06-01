@@ -1475,7 +1475,7 @@ def final_report(cur, store, total_time):
 
 
 def run(cfg, cur, protocol, host_port, user, pswd, stats_collector=None,
-        stores=None, ctl=None, heartbeat=0, why="", bucket="default", backups=None, collection=None):
+        stores=None, ctl=None, heartbeat=0, why="", bucket="default", backups=None, scope=None, collection=None):
     if isinstance(cfg['min-value-size'], str):
         cfg['min-value-size'] = string.split(cfg['min-value-size'], ",")
     if not isinstance(cfg['min-value-size'], list):

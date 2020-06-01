@@ -444,7 +444,7 @@ class ElasticSearchBase(object):
         except Exception as e:
             raise e
 
-    def load_data(self, index_name, document_json, doc_type, doc_id):
+    def load_data(self, index_name, document_json, doc_type, doc_id, scope=None, collection=None):
         """
         index_name : name of index into which the doc is loaded
         document_json: json doc

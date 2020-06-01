@@ -72,7 +72,7 @@ def parse_args(argv):
                            "jenkins_build_url>' (or) 'file=<filename>' (or) '<regular "
                            "expression>' to include tests in the run. Use -g option to search "
                            "entire conf files. e.g. -d 'failed' or -d 'failed=report.xml' or -d "
-                           "'^2i.*nodes_init=2.*'")
+                           "'^gsi.*nodes_init=2.*'")
     tgroup.add_option("-e", "--exclude_tests", dest="exclude_tests",
                       help="Value can be 'failed' (or) 'passed' (or) 'failed=<junit_xml_path (or) "
                            "jenkins_build_url>' (or) 'passed=<junit_xml_path (or) "

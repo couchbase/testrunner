@@ -49,7 +49,7 @@ if [[ -n $3 ]] && [[ $3 == 0 ]] ; then
 else
     test_params=""
 fi
-# this is specifically added to handle the gsi_type param for 2i integration test
+# this is specifically added to handle the gsi_type param for gsi integration test
 if [ ! -z "$5" -a "$5" != " " ]; then
     extra_test_params=" -p $5"
 fi

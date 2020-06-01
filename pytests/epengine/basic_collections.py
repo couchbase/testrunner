@@ -1,6 +1,7 @@
 import time
 
 import logger
+from gsi.newtuq import QueryTests
 from basetestcase import BaseTestCase
 from collection.collections_cli_client import CollectionsCLI
 from collection.collections_rest_client import CollectionsRest
@@ -13,7 +14,7 @@ from membase.api.rest_client import RestConnection
 from TestInput import TestInputSingleton
 
 
-class BasicCollections(BaseTestCase):
+class BasicCollections(QueryTests):
 
     def suite_setUp(self):
         pass
@@ -41,7 +42,9 @@ class BasicCollections(BaseTestCase):
                                     proxyPort=11220)
         except Exception as e:
             pass
-        time.sleep(5)
+        # time.sleep(5)
+        self.skip_load = True
+        super(BasicCollections, self).setUp()
 
     def tearDown(self):
          self.conn.delete_all_buckets()
@@ -207,8 +210,7 @@ class BasicCollections(BaseTestCase):
         self.rest.create_scope(scope=scope_name)
         self.rest.create_collection(scope=scope_name, collection=collection_name, bucket=self.default_bucket_name)
 
-        collection = scope_name + "." + collection_name
-        self.log.info("collection name is {}".format(collection))
+        self.log.info(f"scope name is {scope_name} and collection name is {collection_name}")
 
         self.sleep(10)
 
@@ -226,8 +228,8 @@ class BasicCollections(BaseTestCase):
         self.log.info("get collections completed")
 
         try:
-            mc.set("key", 0, 0, "value", collection=collection)
-            flag, keyx, value = mc.get(key="key", collection=collection)
+            mc.set("key", 0, 0, "value", scope=scope_name, collection=collection_name)
+            flag, keyx, value = mc.get(key="key", scope=scope_name, collection=collection_name)
             print("flag:{} keyx:{} value:{}".format(flag, keyx, value))
 
         except MemcachedError as exp:
@@ -247,3 +249,23 @@ class BasicCollections(BaseTestCase):
                     print("Items in {}->{}->{} = {}"
                           .format(bkt, scope, collection,
                                   self.stat.get_collection_item_count(bkt, scope, collection)))
+
+    def test_load_data_to_collection_using_python_sdk(self):
+        scope = 'test_scope'
+        collection = 'test_collection'
+        for bucket in self.buckets:
+            self.rest.create_scope_collection(bucket=bucket.name, scope=scope, collection=collection)
+            gens_load = self.generate_docs(self.docs_per_day)
+            self.load(gens_load, flag=self.item_flag, verify_data=False, batch_size=1000, scope=scope,
+                      collection=collection)
+
+            count = 0
+            stat = 0
+            while count < 5:
+                stat = self.stat.get_collection_item_count(bucket, scope, collection)
+                if stat == 98784:
+                    break
+                self.sleep(2, "Stat not matching with expected value. Retrying")
+                count += 1
+            else:
+                self.fail(f"Actual docs {stat}, Expected docs 98784")

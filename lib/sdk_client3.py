@@ -3,18 +3,19 @@
 Python based SDK client interface
 
 """
-import crc32
-import time
-from memcached.helper.old_kvstore import ClientKeyValueStore
-from couchbase.bucket import Bucket as CouchbaseBucket
-from couchbase.cluster import Cluster, ClusterOptions
-from couchbase_core.cluster import PasswordAuthenticator
-from couchbase.exceptions import CouchbaseException, BucketNotFoundException, AuthenticationException
-from mc_bin_client import MemcachedError
-from couchbase.cluster import _N1QLQuery
-import couchbase_core
-import sys
 import json
+import sys
+import time
+
+import couchbase_core
+import crc32
+import logger
+from couchbase.cluster import Cluster, ClusterOptions
+from couchbase.cluster import _N1QLQuery
+from couchbase.exceptions import CouchbaseException, BucketNotFoundException, AuthenticationException
+from couchbase_core.cluster import PasswordAuthenticator
+from mc_bin_client import MemcachedError
+from memcached.helper.old_kvstore import ClientKeyValueStore
 
 
 class SDKClient(object):
@@ -22,12 +23,12 @@ class SDKClient(object):
     sdk_disconnections = 0
     """Python SDK Client Implementation for testrunner - master branch Implementation"""
 
-    def __init__(self, bucket, hosts = ["localhost"] , scheme = "couchbase",
-                 ssl_path = None, uhm_options = None, password=None,
-                 quiet=True, certpath = None, transcoder = None, ipv6=False, compression=True):
+    def __init__(self, bucket, hosts=["localhost"], scheme="couchbase",
+                 ssl_path=None, uhm_options=None, password=None,
+                 quiet=True, certpath=None, transcoder=None, ipv6=False, compression=True):
         self.connection_string = \
-            self._createString(scheme = scheme, bucket = bucket, hosts = hosts,
-                               certpath = certpath, uhm_options = uhm_options, ipv6=ipv6, compression=compression)
+            self._createString(scheme=scheme, bucket=bucket, hosts=hosts,
+                               certpath=certpath, uhm_options=uhm_options, ipv6=ipv6, compression=compression)
         self.bucket = bucket
         sys.setrecursionlimit(100)
         self.password = password
@@ -35,11 +36,12 @@ class SDKClient(object):
         self.transcoder = transcoder
         self.default_timeout = 1
         self._createConn()
-        SDKClient.sdk_connections +=1
+        SDKClient.sdk_connections += 1
         couchbase_core.set_json_converters(json.dumps, json.loads)
+        self.log = logger.Logger.get_logger()
 
-    def _createString(self, scheme ="couchbase", bucket = None, hosts = ["localhost"], certpath = None,
-                      uhm_options = "", ipv6=False, compression=True):
+    def _createString(self, scheme="couchbase", bucket=None, hosts=["localhost"], certpath=None,
+                      uhm_options="", ipv6=False, compression=True):
         connection_string = "{0}://{1}".format(scheme, ", ".join(hosts).replace(" ", ""))
         # if bucket != None:
         #     connection_string = "{0}/{1}".format(connection_string, bucket)
@@ -67,21 +69,23 @@ class SDKClient(object):
                 connection_string = "{0}?certpath={1}".format(connection_string, certpath)
         return connection_string
 
-    def _createConn(self):
+    def _createConn(self, username='Administrator', password='password'):
         try:
-            self.cluster = Cluster(self.connection_string, ClusterOptions(PasswordAuthenticator(self.bucket, 'password')))
-            #cluster.authenticate(PasswordAuthenticator(self.bucket, 'password'))
+            self.cluster = Cluster(self.connection_string,
+                                   ClusterOptions(PasswordAuthenticator(username, password)))
+            # cluster.authenticate(PasswordAuthenticator(self.bucket, 'password'))
             self.cb = self.cluster.bucket(self.bucket)
             self.default_collection = self.cb.default_collection()
         except BucketNotFoundException:
-             raise
+            raise
         except AuthenticationException:
             # Try using default user created by the tests, if any, in case there is no user with bucket name in the
             # cluster.
+            username = "cbadminbucket"
+            password = 'password'
             try:
                 self.cluster = Cluster(self.connection_string,
-                                  ClusterOptions(PasswordAuthenticator("cbadminbucket", 'password')),
-                                  bucket_class=CouchbaseBucket)
+                                       ClusterOptions(PasswordAuthenticator(username, password)))
                 self.cb = self.cluster.bucket(self.bucket)
                 self.default_collection = self.cb.default_collection()
             except AuthenticationException:
@@ -95,94 +99,109 @@ class SDKClient(object):
         self.cb.close()
 
     def close(self):
-        SDKClient.sdk_disconnections +=1
+        SDKClient.sdk_disconnections += 1
         self.cb._close()
 
-    def counter_in(self, key, path, delta, create_parents=True, cas=0, ttl=0, persist_to=0, replicate_to=0, collection=None):
+    def counter_in(self, key, path, delta, create_parents=True, cas=0, ttl=0, persist_to=0, replicate_to=0,
+                   scope=None, collection=None):
         try:
             if collection:
-                self.collection_connect(collection)
-                return self.collection.counter_in(key, path, delta, create_parents= create_parents, cas= cas, ttl= ttl, persist_to= persist_to, replicate_to= replicate_to)
+                self.collection_connect(scope, collection)
+                return self.collection.counter_in(key, path, delta, create_parents=create_parents, cas=cas, ttl=ttl,
+                                                  persist_to=persist_to, replicate_to=replicate_to)
             else:
-                return self.default_collection.counter_in(key, path, delta, create_parents= create_parents, cas= cas, ttl= ttl, persist_to= persist_to, replicate_to= replicate_to)
+                return self.default_collection.counter_in(key, path, delta, create_parents=create_parents, cas=cas,
+                                                          ttl=ttl, persist_to=persist_to, replicate_to=replicate_to)
         except CouchbaseException as e:
             raise
 
-    def arrayappend_in(self, key, path, value, create_parents=True, cas=0, ttl=0, persist_to=0, replicate_to=0, collection=None):
+    def arrayappend_in(self, key, path, value, create_parents=True, cas=0, ttl=0, persist_to=0, replicate_to=0,
+                       scope=None, collection=None):
         try:
             if collection:
-                self.collection_connect(collection)
-                return self.collection.arrayappend_in(key, path, value, create_parents=create_parents, cas=cas, ttl=ttl, persist_to=persist_to, replicate_to=replicate_to)
+                self.collection_connect(scope, collection)
+                return self.collection.arrayappend_in(key, path, value, create_parents=create_parents, cas=cas, ttl=ttl,
+                                                      persist_to=persist_to, replicate_to=replicate_to)
             else:
-                return self.default_collection.arrayappend_in(key, path, value, create_parents=create_parents, cas=cas, ttl=ttl, persist_to=persist_to, replicate_to=replicate_to)
+                return self.default_collection.arrayappend_in(key, path, value, create_parents=create_parents, cas=cas,
+                                                              ttl=ttl, persist_to=persist_to, replicate_to=replicate_to)
         except CouchbaseException as e:
             raise
 
-    def arrayprepend_in(self, key, path, value, create_parents=True, cas=0, ttl=0, persist_to=0, replicate_to=0, collection=None):
+    def arrayprepend_in(self, key, path, value, create_parents=True, cas=0, ttl=0, persist_to=0, replicate_to=0,
+                        scope=None, collection=None):
         try:
             if collection:
-                self.collection_connect(collection)
-                return self.collection.arrayprepend_in(key, path, value, create_parents=create_parents, cas=cas, ttl=ttl, persist_to=persist_to, replicate_to=replicate_to)
+                self.collection_connect(scope, collection)
+                return self.collection.arrayprepend_in(key, path, value, create_parents=create_parents, cas=cas,
+                                                       ttl=ttl, persist_to=persist_to, replicate_to=replicate_to)
             else:
-                return self.default_collection.arrayprepend_in(key, path, value, create_parents=create_parents, cas=cas, ttl=ttl, persist_to=persist_to, replicate_to=replicate_to)
+                return self.default_collection.arrayprepend_in(key, path, value, create_parents=create_parents, cas=cas,
+                                                               ttl=ttl, persist_to=persist_to,
+                                                               replicate_to=replicate_to)
         except CouchbaseException as e:
             raise
 
-    def arrayaddunique_in(self, key, path, value, create_parents=True, cas=0, ttl=0, persist_to=0, replicate_to=0, collection=None):
+    def arrayaddunique_in(self, key, path, value, create_parents=True, cas=0, ttl=0, persist_to=0, replicate_to=0,
+                          scope=None, collection=None):
         try:
             if collection:
-                self.collection_connect(collection)
-                return self.collection.addunique_in(key, path, value, create_parents=create_parents, cas=cas, ttl=ttl, persist_to=persist_to, replicate_to=replicate_to)
+                self.collection_connect(scope, collection)
+                return self.collection.addunique_in(key, path, value, create_parents=create_parents, cas=cas, ttl=ttl,
+                                                    persist_to=persist_to, replicate_to=replicate_to)
             else:
-                return self.default_collection.addunique_in(key, path, value, create_parents=create_parents, cas=cas, ttl=ttl, persist_to=persist_to, replicate_to=replicate_to)
+                return self.default_collection.addunique_in(key, path, value, create_parents=create_parents, cas=cas,
+                                                            ttl=ttl, persist_to=persist_to, replicate_to=replicate_to)
         except CouchbaseException as e:
             raise
 
-    def arrayinsert_in(self, key, path, value, cas=0, ttl=0, persist_to=0, replicate_to=0, collection=None):
+    def arrayinsert_in(self, key, path, value, cas=0, ttl=0, persist_to=0, replicate_to=0, scope=None, collection=None):
         try:
             if collection:
-                self.collection_connect(collection)
-                return self.collection.arrayinsert_in(key, path, value, cas=cas, ttl=ttl, persist_to=persist_to, replicate_to=replicate_to)
+                self.collection_connect(scope, collection)
+                return self.collection.arrayinsert_in(key, path, value, cas=cas, ttl=ttl, persist_to=persist_to,
+                                                      replicate_to=replicate_to)
             else:
-                return self.default_collection.arrayinsert_in(key, path, value, cas=cas, ttl=ttl, persist_to=persist_to, replicate_to=replicate_to)
+                return self.default_collection.arrayinsert_in(key, path, value, cas=cas, ttl=ttl, persist_to=persist_to,
+                                                              replicate_to=replicate_to)
         except CouchbaseException as e:
             raise
 
-    def remove_in(self, key, path,  cas=0, ttl=0, collection=None):
+    def remove_in(self, key, path, cas=0, ttl=0, scope=None, collection=None):
         try:
             if collection:
-                self.collection_connect(collection)
-                self.collection.remove_in(key, path, cas = cas, ttl = ttl)
+                self.collection_connect(scope, collection)
+                self.collection.remove_in(key, path, cas=cas, ttl=ttl)
             else:
-                self.default_collection.remove_in(key, path, cas = cas, ttl = ttl)
+                self.default_collection.remove_in(key, path, cas=cas, ttl=ttl)
         except CouchbaseException as e:
             raise
 
-    def mutate_in(self, key, collection=None, *specs, **kwargs):
+    def mutate_in(self, key, scope=None, collection=None, *specs, **kwargs):
         try:
             print("collection is {}".format(collection))
             if collection:
-                self.collection_connect(collection)
+                self.collection_connect(scope, collection)
                 self.collection.mutate_in(key, *specs, **kwargs)
             else:
                 self.default_collection.mutate_in(key, *specs, **kwargs)
         except CouchbaseException as e:
             raise
 
-    def lookup_in(self, key, collection=None, *specs, **kwargs):
+    def lookup_in(self, key, scope=None, collection=None, *specs, **kwargs):
         try:
             if collection:
-                self.collection_connect(collection)
+                self.collection_connect(scope, collection)
                 self.collection.lookup_in(key, *specs, **kwargs)
             else:
                 self.default_collection.lookup_in(key, *specs, **kwargs)
         except CouchbaseException as e:
             raise
 
-    def get_in(self, key, path, collection=None):
+    def get_in(self, key, path, scope=None, collection=None):
         try:
             if collection:
-                self.collection_connect(collection)
+                self.collection_connect(scope, collection)
                 result = self.collection.get_in(key, path)
             else:
                 result = self.default_collection.get_in(key, path)
@@ -190,168 +209,198 @@ class SDKClient(object):
         except CouchbaseException as e:
             raise
 
-    def exists_in(self, key, path, collection=None):
+    def exists_in(self, key, path, scope=None, collection=None):
         try:
             if collection:
-                self.collection_connect(collection)
+                self.collection_connect(scope, collection)
                 self.collection.exists_in(key, path)
             else:
                 self.default_collection.exists_in(key, path)
         except CouchbaseException as e:
             raise
 
-    def replace_in(self, key, path, value, cas=0, ttl=0, persist_to=0, replicate_to=0, collection=None):
+    def replace_in(self, key, path, value, cas=0, ttl=0, persist_to=0, replicate_to=0, scope=None, collection=None):
         try:
             if collection:
-                self.collection_connect(collection)
-                return self.collection.replace_in(key, path, value, cas=cas, ttl=ttl, persist_to=persist_to, replicate_to=replicate_to)
+                self.collection_connect(scope, collection)
+                return self.collection.replace_in(key, path, value, cas=cas, ttl=ttl, persist_to=persist_to,
+                                                  replicate_to=replicate_to)
             else:
-                return self.default_collection.replace_in(key, path, value, cas=cas, ttl=ttl, persist_to=persist_to, replicate_to=replicate_to)
+                return self.default_collection.replace_in(key, path, value, cas=cas, ttl=ttl, persist_to=persist_to,
+                                                          replicate_to=replicate_to)
         except CouchbaseException as e:
             raise
 
-    def insert_in(self, key, path, value, create_parents=True, cas=0, ttl=0, persist_to=0, replicate_to=0, collection=None):
+    def insert_in(self, key, path, value, create_parents=True, cas=0, ttl=0, persist_to=0, replicate_to=0,
+                  scope=None, collection=None):
         try:
             if collection:
-                self.collection_connect(collection)
-                return self.collection.insert_in(key, path, value, create_parents=create_parents, cas=cas, ttl=ttl, persist_to=persist_to, replicate_to=replicate_to)
+                self.collection_connect(scope, collection)
+                return self.collection.insert_in(key, path, value, create_parents=create_parents, cas=cas, ttl=ttl,
+                                                 persist_to=persist_to, replicate_to=replicate_to)
             else:
-                return self.default_collection.insert_in(key, path, value, create_parents=create_parents, cas=cas, ttl=ttl, persist_to=persist_to, replicate_to=replicate_to)
+                return self.default_collection.insert_in(key, path, value, create_parents=create_parents, cas=cas,
+                                                         ttl=ttl, persist_to=persist_to, replicate_to=replicate_to)
         except CouchbaseException as e:
             raise
 
-    def upsert_in(self, key, path, value, create_parents=True, cas=0, ttl=0, persist_to=0, replicate_to=0, collection=None):
+    def upsert_in(self, key, path, value, create_parents=True, cas=0, ttl=0, persist_to=0, replicate_to=0,
+                  scope=None, collection=None):
         try:
             if collection:
-                self.collection_connect(collection)
-                return self.collection.upsert_in(key, path, value, create_parents=create_parents, cas=cas, ttl=ttl, persist_to=persist_to, replicate_to=replicate_to)
+                self.collection_connect(scope, collection)
+                return self.collection.upsert_in(key, path, value, create_parents=create_parents, cas=cas, ttl=ttl,
+                                                 persist_to=persist_to, replicate_to=replicate_to)
             else:
-                return self.default_collection.upsert_in(key, path, value, create_parents=create_parents, cas=cas, ttl=ttl, persist_to=persist_to, replicate_to=replicate_to)
+                return self.default_collection.upsert_in(key, path, value, create_parents=create_parents, cas=cas,
+                                                         ttl=ttl, persist_to=persist_to, replicate_to=replicate_to)
         except CouchbaseException as e:
             raise
 
-    def append(self, key, value, cas=0, format=None, persist_to=0, replicate_to=0, collection=None):
+    def append(self, key, value, cas=0, format=None, persist_to=0, replicate_to=0, scope=None, collection=None):
         try:
             if collection:
-                self.collection_connect(collection)
-                self.collection.append(key, value, cas=cas, format=format, persist_to=persist_to, replicate_to=replicate_to)
+                self.collection_connect(scope, collection)
+                self.collection.append(key, value, cas=cas, format=format, persist_to=persist_to,
+                                       replicate_to=replicate_to)
             else:
-                self.default_collection.append(key, value, cas=cas, format=format, persist_to=persist_to, replicate_to=replicate_to)
+                self.default_collection.append(key, value, cas=cas, format=format, persist_to=persist_to,
+                                               replicate_to=replicate_to)
         except CouchbaseException as e:
             try:
                 time.sleep(10)
                 if collection:
-                    self.collection.append(key, value, cas=cas, format=format, persist_to=persist_to, replicate_to=replicate_to)
+                    self.collection.append(key, value, cas=cas, format=format, persist_to=persist_to,
+                                           replicate_to=replicate_to)
                 else:
-                    self.default_collection.append(key, value, cas=cas, format=format, persist_to=persist_to, replicate_to=replicate_to)
+                    self.default_collection.append(key, value, cas=cas, format=format, persist_to=persist_to,
+                                                   replicate_to=replicate_to)
             except CouchbaseException as e:
                 raise
 
-    def append_multi(self, keys, cas=0, format=None, persist_to=0, replicate_to=0, collection=None):
+    def append_multi(self, keys, cas=0, format=None, persist_to=0, replicate_to=0, scope=None, collection=None):
         try:
             if collection:
-                self.collection_connect(collection)
-                self.collection.append_multi(keys, cas=cas, format=format, persist_to=persist_to, replicate_to=replicate_to)
+                self.collection_connect(scope, collection)
+                self.collection.append_multi(keys, cas=cas, format=format, persist_to=persist_to,
+                                             replicate_to=replicate_to)
             else:
-                self.default_collection.append_multi(keys, cas=cas, format=format, persist_to=persist_to, replicate_to=replicate_to)
+                self.default_collection.append_multi(keys, cas=cas, format=format, persist_to=persist_to,
+                                                     replicate_to=replicate_to)
         except CouchbaseException as e:
             try:
                 time.sleep(10)
                 if collection:
-                    self.collection.append_multi(keys, cas=cas, format=format, persist_to=persist_to, replicate_to=replicate_to)
+                    self.collection.append_multi(keys, cas=cas, format=format, persist_to=persist_to,
+                                                 replicate_to=replicate_to)
                 else:
-                    self.default_collection.append_multi(keys, cas=cas, format=format, persist_to=persist_to, replicate_to=replicate_to)
+                    self.default_collection.append_multi(keys, cas=cas, format=format, persist_to=persist_to,
+                                                         replicate_to=replicate_to)
             except CouchbaseException as e:
                 raise
 
-    def prepend(self, key, value, cas=0, format=None, persist_to=0, replicate_to=0, collection=None):
+    def prepend(self, key, value, cas=0, format=None, persist_to=0, replicate_to=0, scope=None, collection=None):
         try:
             if collection:
-                self.collection_connect(collection)
-                self.collection.prepend(key, value, cas=cas, format=format, persist_to=persist_to, replicate_to=replicate_to)
+                self.collection_connect(scope, collection)
+                self.collection.prepend(key, value, cas=cas, format=format, persist_to=persist_to,
+                                        replicate_to=replicate_to)
             else:
-                self.default_collection.prepend(key, value, cas=cas, format=format, persist_to=persist_to, replicate_to=replicate_to)
+                self.default_collection.prepend(key, value, cas=cas, format=format, persist_to=persist_to,
+                                                replicate_to=replicate_to)
         except CouchbaseException as e:
             try:
                 if collection:
-                    self.collection.prepend(key, value, cas=cas, format=format, persist_to=persist_to, replicate_to=replicate_to)
+                    self.collection.prepend(key, value, cas=cas, format=format, persist_to=persist_to,
+                                            replicate_to=replicate_to)
                 else:
-                    self.default_collection.prepend(key, value, cas=cas, format=format, persist_to=persist_to, replicate_to=replicate_to)
+                    self.default_collection.prepend(key, value, cas=cas, format=format, persist_to=persist_to,
+                                                    replicate_to=replicate_to)
             except CouchbaseException as e:
                 raise
 
-    def prepend_multi(self, keys, cas=0, format=None, persist_to=0, replicate_to=0, collection=None):
+    def prepend_multi(self, keys, cas=0, format=None, persist_to=0, replicate_to=0, scope=None, collection=None):
         try:
             if collection:
-                self.collection_connect(collection)
-                self.collection.prepend_multi(keys, cas=cas, format=format, persist_to=persist_to, replicate_to=replicate_to)
+                self.collection_connect(scope, collection)
+                self.collection.prepend_multi(keys, cas=cas, format=format, persist_to=persist_to,
+                                              replicate_to=replicate_to)
             else:
-                self.default_collection.prepend_multi(keys, cas=cas, format=format, persist_to=persist_to, replicate_to=replicate_to)
+                self.default_collection.prepend_multi(keys, cas=cas, format=format, persist_to=persist_to,
+                                                      replicate_to=replicate_to)
         except CouchbaseException as e:
             try:
                 time.sleep(10)
                 if collection:
-                    self.collection.prepend_multi(keys, cas=cas, format=format, persist_to=persist_to, replicate_to=replicate_to)
+                    self.collection.prepend_multi(keys, cas=cas, format=format, persist_to=persist_to,
+                                                  replicate_to=replicate_to)
                 else:
-                    self.default_collection.prepend_multi(keys, cas=cas, format=format, persist_to=persist_to, replicate_to=replicate_to)
+                    self.default_collection.prepend_multi(keys, cas=cas, format=format, persist_to=persist_to,
+                                                          replicate_to=replicate_to)
             except CouchbaseException as e:
                 raise
 
-    def replace(self, key, value, cas=0, ttl=0, format=None, persist_to=0, replicate_to=0, collection=None):
+    def replace(self, key, value, cas=0, ttl=0, format=None, persist_to=0, replicate_to=0, scope=None, collection=None):
         try:
             if collection:
-                self.collection_connect(collection)
-                self.collection.replace( key, value, cas=cas, ttl=ttl, format=format,
+                self.collection_connect(scope, collection)
+                self.collection.replace(key, value, cas=cas, ttl=ttl, format=format,
                                         persist_to=persist_to, replicate_to=replicate_to)
             else:
-                self.default_collection.replace( key, value, cas=cas, ttl=ttl, format=format,
-                                    persist_to=persist_to, replicate_to=replicate_to)
+                self.default_collection.replace(key, value, cas=cas, ttl=ttl, format=format,
+                                                persist_to=persist_to, replicate_to=replicate_to)
         except CouchbaseException as e:
             try:
                 time.sleep(10)
                 if collection:
-                    self.collection.replace( key, value, cas=cas, ttl=ttl, format=format,
-                                    persist_to=persist_to, replicate_to=replicate_to)
+                    self.collection.replace(key, value, cas=cas, ttl=ttl, format=format,
+                                            persist_to=persist_to, replicate_to=replicate_to)
                 else:
-                    self.default_collection.replace( key, value, cas=cas, ttl=ttl, format=format,
-                                    persist_to=persist_to, replicate_to=replicate_to)
+                    self.default_collection.replace(key, value, cas=cas, ttl=ttl, format=format,
+                                                    persist_to=persist_to, replicate_to=replicate_to)
             except CouchbaseException as e:
                 raise
 
-    def replace_multi(self, keys, cas=0, ttl=0, format=None, persist_to=0, replicate_to=0, collection=None):
+    def replace_multi(self, keys, cas=0, ttl=0, format=None, persist_to=0, replicate_to=0, scope=None, collection=None):
         try:
             if collection:
-                self.collection_connect(collection)
-                self.collection.replace_multi( keys, cas=cas, ttl=ttl, format=format, persist_to=persist_to, replicate_to=replicate_to)
+                self.collection_connect(scope, collection)
+                self.collection.replace_multi(keys, cas=cas, ttl=ttl, format=format, persist_to=persist_to,
+                                              replicate_to=replicate_to)
             else:
-                self.default_collection.replace_multi( keys, cas=cas, ttl=ttl, format=format, persist_to=persist_to, replicate_to=replicate_to)
+                self.default_collection.replace_multi(keys, cas=cas, ttl=ttl, format=format, persist_to=persist_to,
+                                                      replicate_to=replicate_to)
         except CouchbaseException as e:
             try:
                 time.sleep(10)
                 if collection:
-                    self.collection.replace_multi( keys, cas=cas, ttl=ttl, format=format, persist_to=persist_to, replicate_to=replicate_to)
+                    self.collection.replace_multi(keys, cas=cas, ttl=ttl, format=format, persist_to=persist_to,
+                                                  replicate_to=replicate_to)
                 else:
-                    self.default_collection.replace_multi( keys, cas=cas, ttl=ttl, format=format, persist_to=persist_to, replicate_to=replicate_to)
+                    self.default_collection.replace_multi(keys, cas=cas, ttl=ttl, format=format, persist_to=persist_to,
+                                                          replicate_to=replicate_to)
             except CouchbaseException as e:
                 raise
 
-    def cas(self, key, value, cas=0, ttl=0, format=None, collection=None):
+    def cas(self, key, value, cas=0, ttl=0, format=None, scope=None, collection=None):
         if collection:
-            self.collection_connect(collection)
+            self.collection_connect(scope, collection)
             return self.collection.replace(key, value, cas=cas, format=format)
         else:
             return self.default_collection.replace(key, value, cas=cas, format=format)
 
-    def delete(self,key, cas=0, quiet=True, persist_to=0, replicate_to=0, collection=None):
-        self.remove(key, cas=cas, quiet=quiet, persist_to=persist_to, replicate_to=replicate_to, collection=collection)
+    def delete(self, key, cas=0, quiet=True, persist_to=0, replicate_to=0, scope=None, collection=None):
+        self.remove(key, cas=cas, quiet=quiet, persist_to=persist_to, replicate_to=replicate_to)
 
-    def remove(self,key, cas=0, quiet=True, persist_to=0, replicate_to=0, collection=None):
+    def remove(self, key, cas=0, quiet=True, persist_to=0, replicate_to=0, scope=None, collection=None):
         try:
             if collection:
-                self.collection_connect(collection)
-                return self.collection.remove(key, cas=cas, quiet=quiet, persist_to=persist_to, replicate_to=replicate_to)
+                self.collection_connect(scope, collection)
+                return self.collection.remove(key, cas=cas, quiet=quiet, persist_to=persist_to,
+                                              replicate_to=replicate_to)
             else:
-                return self.default_collection.remove(key, cas=cas, quiet=quiet, persist_to=persist_to, replicate_to=replicate_to)
+                return self.default_collection.remove(key, cas=cas, quiet=quiet, persist_to=persist_to,
+                                                      replicate_to=replicate_to)
         except CouchbaseException as e:
             self.remove(key, cas=cas, quiet=quiet, persist_to=persist_to, replicate_to=replicate_to)
             # try:
@@ -364,41 +413,44 @@ class SDKClient(object):
             # except CouchbaseException as e:
             #     raise
 
-    def delete(self, keys, quiet=True, persist_to=0, replicate_to=0, collection=None):
-        return self.remove(self, keys, quiet=quiet, persist_to=persist_to, replicate_to=replicate_to, collection=collection)
+    def delete(self, keys, quiet=True, persist_to=0, replicate_to=0, scope=None, collection=None):
+        return self.remove(self, keys, quiet=quiet, persist_to=persist_to, replicate_to=replicate_to, scope=scope,
+                           collection=collection)
 
-    def remove_multi(self, keys, quiet=True, persist_to=0, replicate_to=0, collection=None):
+    def remove_multi(self, keys, quiet=True, persist_to=0, replicate_to=0, scope=None, collection=None):
         try:
             if collection:
-                self.collection_connect(collection)
+                self.collection_connect(scope, collection)
                 self.collection.remove_multi(keys, quiet=quiet, persist_to=persist_to, replicate_to=replicate_to)
             else:
-                self.default_collection.remove_multi(keys, quiet=quiet, persist_to=persist_to, replicate_to=replicate_to)
+                self.default_collection.remove_multi(keys, quiet=quiet, persist_to=persist_to,
+                                                     replicate_to=replicate_to)
         except CouchbaseException as e:
             try:
                 time.sleep(10)
                 if collection:
                     self.collection.remove_multi(keys, quiet=quiet, persist_to=persist_to, replicate_to=replicate_to)
                 else:
-                    self.default_collection.remove_multi(keys, quiet=quiet, persist_to=persist_to, replicate_to=replicate_to)
+                    self.default_collection.remove_multi(keys, quiet=quiet, persist_to=persist_to,
+                                                         replicate_to=replicate_to)
             except CouchbaseException as e:
                 raise
 
-    def set(self, key, value, cas=0, ttl=0, format=None, persist_to=0, replicate_to=0, collection=None):
+    def set(self, key, value, cas=0, ttl=0, format=None, persist_to=0, replicate_to=0, scope=None, collection=None):
         return self.upsert(key, value, cas=cas, ttl=ttl, format=format, persist_to=persist_to,
-                           replicate_to=replicate_to, collection=collection)
+                           replicate_to=replicate_to, scope=scope, collection=collection)
 
-    def collection_connect(self, collection):
-        coll = collection.split(".")
-        scope = self.cb.scope(coll[0])
-        self.collection = scope.collection(coll[1])
+    def collection_connect(self, scope, collection):
+        scope = self.cb.scope(scope)
+        self.collection = scope.collection(collection)
 
-    def upsert(self, key, value, cas=0, ttl=0, format=None, persist_to=0, replicate_to=0, collection=None):
+    def upsert(self, key, value, cas=0, ttl=0, format=None, persist_to=0, replicate_to=0, scope=None, collection=None):
         try:
             if collection:
-                self.collection_connect(collection)
+                self.collection_connect(scope, collection)
                 rvs = self.collection.upsert(key, value, cas, ttl, format, persist_to, replicate_to)
-                print ("the result for key {} is {} and value is {}".format(key, rvs.__dict__, self.collection.get(key).content_as[str]))
+                # print("the result for key {} is {} and value is {}".format(key, rvs.__dict__,
+                #                                                            self.collection.get(key).content_as[str]))
                 return rvs
             else:
                 return self.default_collection.upsert(key, value, cas, ttl, format, persist_to, replicate_to)
@@ -414,79 +466,90 @@ class SDKClient(object):
             # except CouchbaseException as e:
             #     raise
 
-    def set_multi(self, keys, ttl=0, format=None, persist_to=0, replicate_to=0, collection=None):
+    def set_multi(self, keys, ttl=0, format=None, persist_to=0, replicate_to=0, scope=None, collection=None):
         return self.upsert_multi(keys, ttl=ttl, format=format, persist_to=persist_to,
-                                 replicate_to=replicate_to, collection=collection)
+                                 replicate_to=replicate_to, scope=scope, collection=collection)
 
-    def upsert_mult(self, keys, ttl=0, format=None, persist_to=0, replicate_to=0, collection=None):
-        self.collection_connect(collection)
+    def upsert_mult(self, keys, ttl=0, format=None, persist_to=0, replicate_to=0, scope=None, collection=None):
+        self.collection_connect(scope, collection)
         for key, value in keys.iteritems():
-            self.collection.upsert(key, value, 0, ttl=ttl, format=format, persist_to=persist_to, replicate_to=replicate_to)
+            self.collection.upsert(key, value, 0, ttl=ttl, format=format, persist_to=persist_to,
+                                   replicate_to=replicate_to)
             print(self.collection.get(key))
 
-    def upsert_multi(self, keys, ttl=0, format=None, persist_to=0, replicate_to=0, collection=None):
+    def upsert_multi(self, keys, ttl=0, format=None, persist_to=0, replicate_to=0, scope=None, collection=None):
         try:
             if collection:
-                self.collection_connect(collection)
-                rvs = self.collection.upsert_multi(keys, ttl=ttl, format=format, persist_to=persist_to, replicate_to=replicate_to)
+                self.collection_connect(scope, collection)
+                rvs = self.collection.upsert_multi(keys, ttl=ttl, format=format, persist_to=persist_to,
+                                                   replicate_to=replicate_to)
             else:
-                rvs = self.default_collection.upsert_multi(keys, ttl=ttl, format=format, persist_to=persist_to, replicate_to=replicate_to)
+                rvs = self.default_collection.upsert_multi(keys, ttl=ttl, format=format, persist_to=persist_to,
+                                                           replicate_to=replicate_to)
         except CouchbaseException as exc:
-            print("hit couchbase error for collection {}".format(collection))
-            print("retrying")
-            self.upsert_multi(keys, ttl=0, format=format, persist_to=persist_to, replicate_to=replicate_to)
+            self.log.info(f"hit couchbase error for collection {collection}: {exc}")
+            self.log.info("retrying")
+            self.upsert_multi(keys, ttl=0, format=format, persist_to=persist_to, replicate_to=replicate_to,
+                              scope=scope, collection=collection)
 
             # try:
             #     time.sleep(10)
             #     if collection:
-            #         self.collection_connect(collection)
+            #         self.collection_connect(scope, collection)
             #         self.collection.upsert_multi(keys, ttl=ttl, format=format, persist_to=persist_to, replicate_to=replicate_to)
             #     else:
             #         self.cb.upsert_multi(keys, ttl=ttl, format=format, persist_to=persist_to, replicate_to=replicate_to)
             # except CouchbaseException as e:
             #     raise
 
-    def insert(self, key, value, ttl=0, format=None, persist_to=0, replicate_to=0, collection=None):
+    def insert(self, key, value, ttl=0, format=None, persist_to=0, replicate_to=0, scope=None, collection=None):
         try:
             if collection:
-                self.collection_connect(collection)
-                self.collection.insert(key, value, ttl=ttl, format=format, persist_to=persist_to, replicate_to=replicate_to)
+                self.collection_connect(scope, collection)
+                self.collection.insert(key, value, ttl=ttl, format=format, persist_to=persist_to,
+                                       replicate_to=replicate_to)
             else:
-                self.default_collection.insert(key, value, ttl=ttl, format=format, persist_to=persist_to, replicate_to=replicate_to)
+                self.default_collection.insert(key, value, ttl=ttl, format=format, persist_to=persist_to,
+                                               replicate_to=replicate_to)
         except CouchbaseException as e:
             try:
                 time.sleep(10)
                 if collection:
-                    self.collection.insert(key, value, ttl=ttl, format=format, persist_to=persist_to, replicate_to=replicate_to)
+                    self.collection.insert(key, value, ttl=ttl, format=format, persist_to=persist_to,
+                                           replicate_to=replicate_to)
                 else:
-                    self.default_collection.insert(key, value, ttl=ttl, format=format, persist_to=persist_to, replicate_to=replicate_to)
+                    self.default_collection.insert(key, value, ttl=ttl, format=format, persist_to=persist_to,
+                                                   replicate_to=replicate_to)
             except CouchbaseException as e:
                 raise
 
-    def insert_multi(self, keys,  ttl=0, format=None, persist_to=0, replicate_to=0, collection=None):
+    def insert_multi(self, keys, ttl=0, format=None, persist_to=0, replicate_to=0, scope=None, collection=None):
         print("inside insert multi")
         try:
             if collection:
-                self.collection_connect(collection)
+                self.collection_connect(scope, collection)
                 self.collection.insert_multi(keys, ttl=ttl, format=format, persist_to=persist_to,
                                              replicate_to=replicate_to)
             else:
-                self.default_collection.insert_multi(keys, ttl=ttl, format=format, persist_to=persist_to, replicate_to=replicate_to)
+                self.default_collection.insert_multi(keys, ttl=ttl, format=format, persist_to=persist_to,
+                                                     replicate_to=replicate_to)
         except CouchbaseException as e:
             try:
                 time.sleep(10)
                 if collection:
-                    self.collection_connect(collection)
-                    self.collection.insert_multi(keys, ttl=ttl, format=format, persist_to=persist_to, replicate_to=replicate_to)
+                    self.collection_connect(scope, collection)
+                    self.collection.insert_multi(keys, ttl=ttl, format=format, persist_to=persist_to,
+                                                 replicate_to=replicate_to)
                 else:
-                    self.default_collection.insert_multi(keys, ttl=ttl, format=format, persist_to=persist_to, replicate_to=replicate_to)
+                    self.default_collection.insert_multi(keys, ttl=ttl, format=format, persist_to=persist_to,
+                                                         replicate_to=replicate_to)
             except CouchbaseException as e:
                 raise
 
-    def touch(self, key, ttl = 0, collection=None):
+    def touch(self, key, ttl=0, scope=None, collection=None):
         try:
             if collection:
-                self.collection_connect(collection)
+                self.collection_connect(scope, collection)
                 self.collection.touch(key, ttl=ttl)
             else:
                 self.default_collection.touch(key, ttl=ttl)
@@ -494,17 +557,17 @@ class SDKClient(object):
             try:
                 time.sleep(10)
                 if collection:
-                    self.collection_connect(collection)
+                    self.collection_connect(scope, collection)
                     self.collection.touch(key, ttl=ttl)
                 else:
                     self.default_collection.touch(key, ttl=ttl)
             except CouchbaseException as e:
                 raise
 
-    def touch_multi(self, keys, ttl = 0, collection=None):
+    def touch_multi(self, keys, ttl=0, scope=None, collection=None):
         try:
             if collection:
-                self.collection_connect(collection)
+                self.collection_connect(scope, collection)
                 self.collection.touch_multi(keys, ttl=ttl)
             else:
                 self.default_collection.touch_multi(keys, ttl=ttl)
@@ -512,29 +575,29 @@ class SDKClient(object):
             try:
                 time.sleep(10)
                 if collection:
-                    self.collection_connect(collection)
+                    self.collection_connect(scope, collection)
                     self.collection.touch_multi(keys, ttl=ttl)
                 else:
                     self.default_collection.touch_multi(keys, ttl=ttl)
             except CouchbaseException as e:
                 raise
 
-    def decr(self, key, delta=1, initial=None, ttl=0, collection=None):
-        self.counter(key, delta=-delta, initial=initial, ttl=ttl, collection=collection)
+    def decr(self, key, delta=1, initial=None, ttl=0, scope=None, collection=None):
+        self.counter(key, delta=-delta, initial=initial, ttl=ttl, scope=scope, collection=collection)
 
-    def decr_multi(self, keys, delta=1, initial=None, ttl=0, collection=None):
-        self.counter_multi(keys, delta=-delta, initial=initial, ttl=ttl, collection=collection)
+    def decr_multi(self, keys, delta=1, initial=None, ttl=0, scope=None, collection=None):
+        self.counter_multi(keys, delta=-delta, initial=initial, ttl=ttl, scope=scope, collection=collection)
 
-    def incr(self, key, delta=1, initial=None, ttl=0, collection=None):
-        self.counter(key, delta=delta, initial=initial, ttl=ttl, collection=collection)
+    def incr(self, key, delta=1, initial=None, ttl=0, scope=None, collection=None):
+        self.counter(key, delta=delta, initial=initial, ttl=ttl, scope=scope, collection=collection)
 
-    def incr_multi(self, keys, delta=1, initial=None, ttl=0, collection=None):
-        self.counter_multi(keys, delta=delta, initial=initial, ttl=ttl, collection=collection)
+    def incr_multi(self, keys, delta=1, initial=None, ttl=0, scope=None, collection=None):
+        self.counter_multi(keys, delta=delta, initial=initial, ttl=ttl, scope=scope, collection=collection)
 
-    def counter(self, key, delta=1, initial=None, ttl=0, collection=None):
+    def counter(self, key, delta=1, initial=None, ttl=0, scope=None, collection=None):
         try:
             if collection:
-                self.collection_connect(collection)
+                self.collection_connect(scope, collection)
                 self.collection.counter(key, delta=delta, initial=initial, ttl=ttl)
             else:
                 self.default_collection.counter(key, delta=delta, initial=initial, ttl=ttl)
@@ -547,10 +610,11 @@ class SDKClient(object):
                     self.default_collection.counter(key, delta=delta, initial=initial, ttl=ttl)
             except CouchbaseException as e:
                 raise
-    def counter_multi(self, keys, delta=1, initial=None, ttl=0, collection=None):
+
+    def counter_multi(self, keys, delta=1, initial=None, ttl=0, scope=None, collection=None):
         try:
             if collection:
-                self.collection_connect(collection)
+                self.collection_connect(scope, collection)
                 self.collection.counter_multi(keys, delta=delta, initial=initial, ttl=ttl)
             else:
                 self.default_collection.counter_multi(keys, delta=delta, initial=initial, ttl=ttl)
@@ -564,53 +628,55 @@ class SDKClient(object):
             except CouchbaseException as e:
                 raise
 
-    def get(self, key, ttl=0, quiet=True, replica=False, no_format=False, collection=None):
+    def get(self, key, ttl=0, quiet=True, replica=False, no_format=False, scope=None, collection=None):
         try:
             if collection:
-                self.collection_connect(collection)
+                self.collection_connect(scope, collection)
                 rv = self.collection.get(key, ttl=ttl, quiet=quiet, replica=replica, no_format=no_format)
             else:
                 rv = self.default_collection.get(key, ttl=ttl, quiet=quiet, replica=replica, no_format=no_format)
             return self.__translate_get(rv)
         except CouchbaseException as e:
-            self.get(key, ttl=0, quiet=True, replica=False, no_format=False, collection=None)
+            self.get(key, ttl=0, quiet=True, replica=False, no_format=False, scope=scope, collection=scope)
 
-    def rget(self, key, replica_index=None, quiet=True, collection=None):
+    def rget(self, key, replica_index=None, quiet=True, scope=None, collection=None):
         try:
-            data  = self.rget(key, replica_index=replica_index, quiet=quiet, collection=collection)
+            data = self.rget(key, replica_index=replica_index, quiet=quiet, scope=scope, collection=collection)
             return self.__translate_get(data)
         except CouchbaseException as e:
             try:
                 time.sleep(10)
-                data  = self.rget(key, replica_index=replica_index, quiet=quiet, collection=collection)
+                data = self.rget(key, replica_index=replica_index, quiet=quiet, scope=scope, collection=collection)
                 return self.__translate_get(data)
             except CouchbaseException as e:
                 raise
 
-    def get_multi(self, keys, ttl=0, quiet=True, replica=False, no_format=False, collection=None):
+    def get_multi(self, keys, ttl=0, quiet=True, replica=False, no_format=False, scope=None, collection=None):
         try:
             if collection:
-                self.collection_connect(collection)
+                self.collection_connect(scope, collection)
                 data = self.collection.get_multi(keys, ttl=ttl, quiet=quiet, replica=replica, no_format=no_format)
             else:
-                data = self.default_collection.get_multi(keys, ttl=ttl, quiet=quiet, replica=replica, no_format=no_format)
+                data = self.default_collection.get_multi(keys, ttl=ttl, quiet=quiet, replica=replica,
+                                                         no_format=no_format)
             return self.__translate_get_multi(data)
         except CouchbaseException as e:
             try:
                 time.sleep(10)
                 if collection:
-                    self.collection_connect(collection)
+                    self.collection_connect(scope, collection)
                     data = self.collection.get_multi(keys, ttl=ttl, quiet=quiet, replica=replica, no_format=no_format)
                 else:
-                    data = self.default_collection.get_multi(keys, ttl=ttl, quiet=quiet, replica=replica, no_format=no_format)
+                    data = self.default_collection.get_multi(keys, ttl=ttl, quiet=quiet, replica=replica,
+                                                             no_format=no_format)
                 return self.__translate_get_multi(data)
             except CouchbaseException as e:
                 raise
 
-    def rget_multi(self, key, replica_index=None, quiet=True, collection=None):
+    def rget_multi(self, key, replica_index=None, quiet=True, scope=None, collection=None):
         try:
             if collection:
-                self.collection_connect(collection)
+                self.collection_connect(scope, collection)
                 data = self.collection.rget_multi(key, replica_index=None, quiet=quiet)
             else:
                 data = self.default_collection.rget_multi(key, replica_index=None, quiet=quiet)
@@ -626,155 +692,159 @@ class SDKClient(object):
             except CouchbaseException as e:
                 raise
 
-    def stats(self, keys=None, collection=None):
+    def stats(self, keys=None, scope=None, collection=None):
         try:
             if collection:
-                self.collection_connect(collection)
-                stat_map = self.collection.stats(keys = keys)
+                self.collection_connect(scope, collection)
+                stat_map = self.collection.stats(keys=keys)
             else:
-                stat_map = self.default_collection.stats(keys = keys)
+                stat_map = self.default_collection.stats(keys=keys)
             return stat_map
         except CouchbaseException as e:
             try:
                 time.sleep(10)
                 if collection:
-                    return self.collection.stats(keys = keys)
+                    return self.collection.stats(keys=keys)
                 else:
-                    return self.default_collection.stats(keys = keys)
+                    return self.default_collection.stats(keys=keys)
             except CouchbaseException as e:
                 raise
 
-    def errors(self, clear_existing=True, collection=None):
+    def errors(self, clear_existing=True, scope=None, collection=None):
         try:
             if collection:
-                self.collection_connect(collection)
-                rv = self.collection.errors(clear_existing = clear_existing)
+                self.collection_connect(scope, collection)
+                rv = self.collection.errors(clear_existing=clear_existing)
             else:
-                rv = self.default_collection.errors(clear_existing = clear_existing)
+                rv = self.default_collection.errors(clear_existing=clear_existing)
             return rv
         except CouchbaseException as e:
             raise
 
-    def observe(self, key, master_only=False, collection=None):
+    def observe(self, key, master_only=False, scope=None, collection=None):
         try:
             if collection:
-                self.collection_connect(collection)
-                return self.collection.observe(key, master_only = master_only)
+                self.collection_connect(scope, collection)
+                return self.collection.observe(key, master_only=master_only)
             else:
-                return self.default_collection.observe(key, master_only = master_only)
+                return self.default_collection.observe(key, master_only=master_only)
         except CouchbaseException as e:
             try:
                 time.sleep(10)
                 if collection:
-                    return self.collection.observe(key, master_only = master_only)
+                    return self.collection.observe(key, master_only=master_only)
                 else:
-                    return self.default_collection.observe(key, master_only = master_only)
+                    return self.default_collection.observe(key, master_only=master_only)
             except CouchbaseException as e:
                 raise
 
-    def observe_multi(self, keys, master_only=False, collection=None):
+    def observe_multi(self, keys, master_only=False, scope=None, collection=None):
         try:
             if collection:
-                self.collection_connect(collection)
-                data = self.collection.observe_multi(keys, master_only = master_only)
+                self.collection_connect(scope, collection)
+                data = self.collection.observe_multi(keys, master_only=master_only)
             else:
-                data = self.default_collection.observe_multi(keys, master_only = master_only)
+                data = self.default_collection.observe_multi(keys, master_only=master_only)
             return self.__translate_observe_multi(data)
         except CouchbaseException as e:
             try:
                 time.sleep(10)
                 if collection:
-                    data = self.collection.observe_multi(keys, master_only = master_only)
+                    data = self.collection.observe_multi(keys, master_only=master_only)
                 else:
-                    data = self.default_collection.observe_multi(keys, master_only = master_only)
+                    data = self.default_collection.observe_multi(keys, master_only=master_only)
                 return self.__translate_observe_multi(data)
             except CouchbaseException as e:
                 raise
 
-    def endure(self, key, persist_to=-1, replicate_to=-1, cas=0, check_removed=False, timeout=5.0, interval=0.010, collection=None):
+    def endure(self, key, persist_to=-1, replicate_to=-1, cas=0, check_removed=False, timeout=5.0, interval=0.010,
+               scope=None, collection=None):
         try:
             if collection:
-                self.collection_connect(collection)
+                self.collection_connect(scope, collection)
                 self.collection.endure(key, persist_to=persist_to, replicate_to=replicate_to,
-                               cas=cas, check_removed=check_removed, timeout=timeout, interval=interval)
+                                       cas=cas, check_removed=check_removed, timeout=timeout, interval=interval)
             else:
                 self.default_collection.endure(key, persist_to=persist_to, replicate_to=replicate_to,
-                           cas=cas, check_removed=check_removed, timeout=timeout, interval=interval)
+                                               cas=cas, check_removed=check_removed, timeout=timeout, interval=interval)
         except CouchbaseException as e:
             try:
                 time.sleep(10)
                 if collection:
                     self.collection.endure(key, persist_to=persist_to, replicate_to=replicate_to,
-                    cas=cas, check_removed=check_removed, timeout=timeout, interval=interval)
+                                           cas=cas, check_removed=check_removed, timeout=timeout, interval=interval)
                 else:
                     self.default_collection.endure(key, persist_to=persist_to, replicate_to=replicate_to,
-                           cas=cas, check_removed=check_removed, timeout=timeout, interval=interval)
+                                                   cas=cas, check_removed=check_removed, timeout=timeout,
+                                                   interval=interval)
             except CouchbaseException as e:
                 raise
 
-    def endure_multi(self, keys, persist_to=-1, replicate_to=-1, cas=0, check_removed=False, timeout=5.0, interval=0.010, collection=None):
+    def endure_multi(self, keys, persist_to=-1, replicate_to=-1, cas=0, check_removed=False, timeout=5.0,
+                     interval=0.010, scope=None, collection=None):
         try:
             if collection:
-                self.collection_connect(collection)
+                self.collection_connect(scope, collection)
                 self.collection.endure(keys, persist_to=persist_to, replicate_to=replicate_to,
-                           cas=cas, check_removed=check_removed, timeout=timeout, interval=interval)
+                                       cas=cas, check_removed=check_removed, timeout=timeout, interval=interval)
             else:
                 self.default_collection.endure(keys, persist_to=persist_to, replicate_to=replicate_to,
-                           cas=cas, check_removed=check_removed, timeout=timeout, interval=interval)
+                                               cas=cas, check_removed=check_removed, timeout=timeout, interval=interval)
         except CouchbaseException as e:
             try:
                 time.sleep(10)
                 if collection:
                     self.collection.endure(keys, persist_to=persist_to, replicate_to=replicate_to,
-                               cas=cas, check_removed=check_removed, timeout=timeout, interval=interval)
+                                           cas=cas, check_removed=check_removed, timeout=timeout, interval=interval)
                 else:
                     self.default_collection.endure(keys, persist_to=persist_to, replicate_to=replicate_to,
-                               cas=cas, check_removed=check_removed, timeout=timeout, interval=interval)
+                                                   cas=cas, check_removed=check_removed, timeout=timeout,
+                                                   interval=interval)
             except CouchbaseException as e:
                 raise
 
-    def lock(self, key, ttl=0, collection=None):
+    def lock(self, key, ttl=0, scope=None, collection=None):
         try:
             if collection:
-                self.collection_connect(collection)
-                data = self.collection.lock(key, ttl = ttl)
+                self.collection_connect(scope, collection)
+                data = self.collection.lock(key, ttl=ttl)
             else:
-                data = self.default_collection.lock(key, ttl = ttl)
+                data = self.default_collection.lock(key, ttl=ttl)
             return self.__translate_get(data)
         except CouchbaseException as e:
             try:
                 time.sleep(10)
                 if collection:
-                    data = self.collection.lock(key, ttl = ttl)
+                    data = self.collection.lock(key, ttl=ttl)
                 else:
-                    data = self.default_collection.lock(key, ttl = ttl)
+                    data = self.default_collection.lock(key, ttl=ttl)
                 return self.__translate_get(data)
             except CouchbaseException as e:
                 raise
 
-    def lock_multi(self, keys, ttl=0, collection=None):
+    def lock_multi(self, keys, ttl=0, scope=None, collection=None):
         try:
             if collection:
-                self.collection_connect(collection)
-                data = self.collection.lock_multi(keys, ttl = ttl)
+                self.collection_connect(scope, collection)
+                data = self.collection.lock_multi(keys, ttl=ttl)
             else:
-                data = self.default_collection.lock_multi(keys, ttl = ttl)
+                data = self.default_collection.lock_multi(keys, ttl=ttl)
             return self.__translate_get_multi(data)
         except CouchbaseException as e:
             try:
                 time.sleep(10)
                 if collection:
-                    data = self.collection.lock_multi(keys, ttl = ttl)
+                    data = self.collection.lock_multi(keys, ttl=ttl)
                 else:
-                    data = self.default_collection.lock_multi(keys, ttl = ttl)
+                    data = self.default_collection.lock_multi(keys, ttl=ttl)
                 return self.__translate_get_multi(data)
             except CouchbaseException as e:
                 raise
 
-    def unlock(self, key, ttl=0, collection=None):
+    def unlock(self, key, ttl=0, scope=None, collection=None):
         try:
             if collection:
-                self.collection_connect(collection)
+                self.collection_connect(scope, collection)
                 return self.collection.unlock(key)
             else:
                 return self.default_collection.unlock(key)
@@ -788,10 +858,10 @@ class SDKClient(object):
             except CouchbaseException as e:
                 raise
 
-    def unlock_multi(self, keys, collection=None):
+    def unlock_multi(self, keys, scope=None, collection=None):
         try:
             if collection:
-                self.collection_connect(collection)
+                self.collection_connect(scope, collection)
                 return self.collection.unlock_multi(keys)
             else:
                 return self.default_collection.unlock_multi(keys)
@@ -874,14 +944,13 @@ class SDKClient(object):
         return data.rc, data.success, data.errstr, data.key
 
 
-
 class SDKSmartClient(object):
-      def __init__(self, rest, bucket, compression=True, info = None):
+    def __init__(self, rest, bucket, compression=True, info=None):
         self.rest = rest
         if hasattr(bucket, 'name'):
-            self.bucket=bucket.name
+            self.bucket = bucket.name
         else:
-            self.bucket=bucket
+            self.bucket = bucket
 
         if hasattr(bucket, 'saslPassword'):
             self.saslPassword = bucket.saslPassword
@@ -889,77 +958,75 @@ class SDKSmartClient(object):
             bucket_info = rest.get_bucket(bucket)
             self.saslPassword = bucket_info.saslPassword
 
-
         if rest.ip == "127.0.0.1":
             self.host = "{0}:{1}".format(rest.ip, rest.port)
             self.scheme = "http"
         else:
             self.host = rest.ip
             self.scheme = "couchbase"
-        self.client = SDKClient(self.bucket, hosts = [self.host], scheme = self.scheme, password = self.saslPassword,
+        self.client = SDKClient(self.bucket, hosts=[self.host], scheme=self.scheme, password=self.saslPassword,
                                 compression=compression)
 
-      def reset(self, compression=True, rest=None):
-        self.client = SDKClient(self.bucket, hosts = [self.host], scheme = self.scheme, password = self.saslPassword,
+    def reset(self, compression=True, rest=None):
+        self.client = SDKClient(self.bucket, hosts=[self.host], scheme=self.scheme, password=self.saslPassword,
                                 compression=compression)
 
-      def memcached(self, key):
+    def memcached(self, key):
         return self.client
 
-      def mutate_in(self, key, collection=None, *specs, **kwargs):
-          self.mutate_in(key, collection, *specs, **kwargs)
+    def mutate_in(self, key, scope=None, collection=None, *specs, **kwargs):
+        self.mutate_in(key, scope, collection, *specs, **kwargs)
 
-      def upsert(self, key, value, cas=0, ttl=0, format=None, persist_to=0, replicate_to=0, collection=None):
-          rc =  self.client.upsert(key, value, cas, ttl, format, persist_to, replicate_to, collection)
+    def upsert(self, key, value, cas=0, ttl=0, format=None, persist_to=0, replicate_to=0, scope=None, collection=None):
+        rc = self.client.upsert(key, value, cas, ttl, format, persist_to, replicate_to, scope, collection)
 
-      def insert(self, key, value, ttl, collection=None):
-          rc =  self.client.insert(key, value, ttl=ttl, collection=collection)
+    def insert(self, key, value, ttl, scope=None, collection=None):
+        rc = self.client.insert(key, value, ttl=ttl, scope=scope, collection=collection)
 
-      def set(self, key, ttl, flags, value, collection=None):
-          rc =  self.client.set(key, value, ttl=ttl, collection=collection)
+    def set(self, key, ttl, flags, value, scope=None, collection=None):
+        rc = self.client.set(key, value, ttl=ttl, scope=scope, collection=collection)
 
-      def append(self, key, value, collection=None):
-          return self.client.set(key, value, collection=collection)
+    def append(self, key, value, scope=None, collection=None):
+        return self.client.set(key, value, scope=scope, collection=collection)
 
-      def observe(self, key, collection=None):
-          return self.client.observe(key, collection=collection)
+    def observe(self, key, scope=None, collection=None):
+        return self.client.observe(key, scope=scope, collection=collection)
 
-      def get(self, key, collection=None):
-          return self.client.get(key, collection=collection)
+    def get(self, key, scope=None, collection=None):
+        return self.client.get(key, scope=scope, collection=collection)
 
-      def getr(self, key, replica_index=0, collection=None):
-          return self.client.rget(key, replica_index=replica_index, collection=collection)
+    def getr(self, key, replica_index=0, scope=None, collection=None):
+        return self.client.rget(key, replica_index=replica_index, scope=scope, collection=collection)
 
-      def setMulti(self, exp, flags, key_val_dic, pause = None, timeout = 5.0, parallel=None, collection=None):
-          try:
-                self.client.cb.timeout = timeout
+    def setMulti(self, exp, flags, key_val_dic, pause=None, timeout=5.0, parallel=None, scope=None, collection=None):
+        try:
+            self.client.cb.timeout = timeout
 
-                # return self.client.upsert_multi(key_val_dic, ttl = exp)
-                return self.client.upsert_multi(key_val_dic, ttl = exp, collection=collection)
-          finally:
-                self.client.cb.timeout = self.client.default_timeout
+            # return self.client.upsert_multi(key_val_dic, ttl = exp)
+            return self.client.upsert_multi(key_val_dic, ttl=exp, scope=scope, collection=collection)
+        finally:
+            self.client.cb.timeout = self.client.default_timeout
 
-      def getMulti(self, keys_lst, pause = None, timeout_sec = 5.0, parallel=None, collection=None):
-          try:
-              self.client.cb.timeout = timeout_sec
-              map = self.client.get_multi(keys_lst, collection=collection)
-              return map
-          finally:
-              self.client.cb.timeout = self.client.default_timeout
+    def getMulti(self, keys_lst, pause=None, timeout_sec=5.0, parallel=None, scope=None, collection=None):
+        try:
+            self.client.cb.timeout = timeout_sec
+            map = self.client.get_multi(keys_lst, scope=scope, collection=collection)
+            return map
+        finally:
+            self.client.cb.timeout = self.client.default_timeout
 
+    def getrMulti(self, keys_lst, replica_index=None, pause=None, timeout_sec=5.0, parallel=None, scope=None, collection=None):
+        try:
+            self.client.cb.timeout = timeout_sec
+            map = self.client.rget_multi(keys_lst, replica_index=replica_index, scope=scope, collection=collection)
+            return map
+        finally:
+            self.client.cb.timeout = self.client.default_timeout
 
-      def getrMulti(self, keys_lst, replica_index= None, pause = None, timeout_sec = 5.0, parallel=None, collection=None):
-          try:
-              self.client.cb.timeout = timeout_sec
-              map = self.client.rget_multi(keys_lst, replica_index = replica_index, collection=collection)
-              return map
-          finally:
-              self.client.cb.timeout = self.client.default_timeout
+    def delete(self, key, scope=None, collection=None):
+        return self.client.remove(key, scope=scope, collection=collection)
 
-      def delete(self, key, collection=None):
-          return self.client.remove(key, collection=collection)
-      
-      def _send_op(self, func, *args):
+    def _send_op(self, func, *args):
         backoff = .001
         while True:
             try:
@@ -973,8 +1040,8 @@ class SDKSmartClient(object):
                     raise error
             except (EOFError, IOError, socket.error) as error:
                 raise MemcachedError(ERR_NOT_MY_VBUCKET, "Connection reset with error: {0}".format(error))
-      
-      def generic_request(self, func, *args):
+
+    def generic_request(self, func, *args):
         key = args[0]
         vb_error = 0
         while True:
@@ -982,8 +1049,7 @@ class SDKSmartClient(object):
                 return self._send_op(func, *args)
             except MemcachedError as error:
                 raise error
-     
-            
+
 
 class SDKBasedKVStoreAwareSmartClient(SDKSmartClient):
     def __init__(self, rest, bucket, kv_store=None, info=None, store_enabled=True):
@@ -992,13 +1058,13 @@ class SDKBasedKVStoreAwareSmartClient(SDKSmartClient):
         self.store_enabled = store_enabled
         self._rlock = threading.Lock()
 
-    def set(self, key, value, ttl=-1, collection=None):
+    def set(self, key, value, ttl=-1, scope=None, collection=None):
         self._rlock.acquire()
         try:
             if ttl >= 0:
-                self.memcached(key).set(key, ttl, 0, value, collection=collection)
+                self.memcached(key).set(key, ttl, 0, value, scope=scope, collection=collection)
             else:
-                self.memcached(key).set(key, 0, 0, value, collection=collection)
+                self.memcached(key).set(key, 0, 0, value, scope=scope, collection=collection)
 
             if self.store_enabled:
                 self.kv_store.write(key, hashlib.md5(value).digest(), ttl)
@@ -1017,6 +1083,7 @@ class SDKBasedKVStoreAwareSmartClient(SDKSmartClient):
     """
     " retrieve meta data of document from disk
     """
+
     def get_doc_metadata(self, num_vbuckets, key):
         vid = crc32.crc32_hash(key) & (num_vbuckets - 1)
 
@@ -1031,11 +1098,10 @@ class SDKBasedKVStoreAwareSmartClient(SDKSmartClient):
 
         return metadatastats
 
-
-    def delete(self, key, collection=None):
+    def delete(self, key, scope=None, collection=None):
         try:
             self._rlock.acquire()
-            opaque, cas, data = self.memcached(key).delete(key, collection=collection)
+            opaque, cas, data = self.memcached(key).delete(key, scope=scope, collection=collection)
             if self.store_enabled:
                 self.kv_store.delete(key)
             self._rlock.release()
@@ -1068,7 +1134,7 @@ class SDKBasedKVStoreAwareSmartClient(SDKSmartClient):
 
     def get_key_check_status(self, key, status):
         item = self.kv_get(key)
-        if(item is not None  and item["status"] == status):
+        if item is not None and item["status"] == status:
             return item
         else:
             msg = "key {0} is not valid".format(key)
