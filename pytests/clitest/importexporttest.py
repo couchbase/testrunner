@@ -1257,12 +1257,12 @@ class ImportExportTests(CliBaseTest):
                     bucket_data[len(bucket_data) - 1] = \
                     bucket_data[len(bucket_data) - 1].replace("]", "")
                 if self.debug_logs:
-                    print(("\nsource data  \n", src_data))
-                    print(("\nbucket data  \n", bucket_data))
+                    print("\nsource data  \n", src_data)
+                    print("\nbucket data  \n", bucket_data)
                 self.log.info("Compare source data and bucket data")
                 for x in range(0, len(bucket_data)):
                     k = json.loads(bucket_data[x])
-                    bucket_data[x] = '{"name":"' + k["name"]+ '","age":' + str(k["age"]) + ',"index":"' + k["index"]+ '","body":"' + k["body"]+ '"}'
+                    bucket_data[x] = '{"name":"' + k["name"]+ '","age":' + str(k["age"]) + ',"index":' + str(k["index"]) + ',"body":"' + k["body"]+ '"}'
                 if sorted(src_data) == sorted(bucket_data):
                     self.log.info("Import data match bucket data")
                     if os.path.exists("/tmp/%s" % self.master.ip):
