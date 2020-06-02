@@ -954,7 +954,7 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
 
         username = self.users[user]['username']
         password = self.users[user]['password']
-        query = "select meta().id from {0} where search({0}, \"state:California\")"
+        query = "select meta().id from {0} where search({0}, \"state:California\")".format(self.query_bucket)
 
         master_result = self.run_cbq_query(query=query, server=self.master, username=username, password=password)
         self.assertEqual(master_result['status'], 'success', username + " query run failed on non-fts node")
@@ -1024,7 +1024,7 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
                                 else:
                                     n1ql_query = "select meta().id from {0} where search({0}, {{\"query\": " \
                                                  "{{\"field\": \"state\", \"match\": " \
-                                                 "\"California\"}}) ".format(self.query_bucket) + outer_sort_expression
+                                                 "\"California\"}}}}) ".format(self.query_bucket) + outer_sort_expression
                                     n1ql_results = self.run_cbq_query(n1ql_query)['results']
 
                                     search_doc_ids = []
@@ -1048,7 +1048,7 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
 
         scan_val = self.input.param("scan_type", '')
         count_before_update = self.run_cbq_query("select count(*) from {0} where search({0},"
-                                                 " \"state:California\")")['results'][0]
+                                                 " \"state:California\")".format(self.query_bucket))['results'][0]
         self.scan_consistency = scan_val
 
         update_query = "update {0} set state='Califffornia' where meta().id in ( select raw meta().id from {0} b " \
