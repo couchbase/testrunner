@@ -92,6 +92,7 @@ class EventingBaseTest(QueryHelperTests):
             self.setup_curl()
         self.skip_metabucket_check=False
         self.cancel_timer=self.input.param('cancel_timer', False)
+        self.is_expired=self.input.param('is_expired', False)
 
     def tearDown(self):
         # catch panics and print it in the test log
