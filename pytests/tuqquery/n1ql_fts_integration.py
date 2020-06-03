@@ -702,8 +702,7 @@ class N1qlFTSIntegrationTest(QueryTests):
                 n1ql_result = self.run_cbq_query(query=n1ql_query, server=node, username=username, password=password)
                 diffs = DeepDiff(fts_result['results'], n1ql_result['results'], ignore_order=True)
                 if diffs:
-                    self.log.info("Diffs: "+diffs)
-                    return False
+                    self.assertTrue(False, diffs)
 
         return True
 
