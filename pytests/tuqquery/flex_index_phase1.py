@@ -572,7 +572,7 @@ class FlexIndexTests(QueryTests):
         try:
             self.run_cbq_query(query=query, server=self.master, username=username, password=password)
             self.fail("Could able to run query without n1ql permissions")
-        except CBQError, e:
+        except CBQError as e:
             self.log.info(str(e))
             if not "User does not have credentials to run SELECT queries" in str(e):
                 self.fail("Failed to run query with other CBQ issues: {0}".format(str(e)))
