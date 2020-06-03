@@ -6,6 +6,7 @@ from lib.remote.remote_util import RemoteMachineShellConnection
 from lib.testconstants import STANDARD_BUCKET_PORT
 from pytests.eventing.eventing_constants import HANDLER_CODE, HANDLER_CODE_CURL
 from pytests.eventing.eventing_base import EventingBaseTest
+from membase.helper.cluster_helper import ClusterOperationHelper
 import logging
 
 log = logging.getLogger()
@@ -103,11 +104,16 @@ class EventingRebalance(EventingBaseTest):
             self.handler_code = HANDLER_CODE_CURL.TIMER_OP_WITH_CURL_JENKINS
         elif handler_code == 'cancel_timer':
             self.handler_code = HANDLER_CODE.CANCEL_TIMER_REBALANCE
+        elif handler_code == 'bucket_op_expired':
+            self.handler_code = HANDLER_CODE.BUCKET_OP_EXPIRED
         else:
             self.handler_code = HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE
         force_disable_new_orchestration = self.input.param('force_disable_new_orchestration', False)
         if force_disable_new_orchestration:
             self.rest.diag_eval("ns_config:set(force_disable_new_orchestration, true).")
+        if self.is_expired:
+            # set expiry pager interval
+            ClusterOperationHelper.flushctl_set(self.master, "exp_pager_stime", 60, bucket=self.src_bucket_name)
 
     def tearDown(self):
         try:
@@ -136,8 +142,12 @@ class EventingRebalance(EventingBaseTest):
                                               cpp_worker_thread_count=cpp_worker_thread_count)
         self.deploy_function(body)
         # load data
-        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                  batch_size=self.batch_size)
+        if not self.is_expired:
+            self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                      batch_size=self.batch_size)
+        else:
+            self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                      batch_size=self.batch_size,exp=30)
         if self.pause_resume:
             self.pause_function(body)
         # rebalance in a eventing node when eventing is processing mutations
@@ -156,8 +166,9 @@ class EventingRebalance(EventingBaseTest):
             else:
                 self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         # delete json documents
-        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                  batch_size=self.batch_size, op_type='delete')
+        if not self.is_expired:
+            self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                      batch_size=self.batch_size, op_type='delete')
         if self.pause_resume:
             self.pause_function(body)
             self.sleep(30)
@@ -190,8 +201,12 @@ class EventingRebalance(EventingBaseTest):
                                               cpp_worker_thread_count=cpp_worker_thread_count)
         self.deploy_function(body)
         # load data
-        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                  batch_size=self.batch_size)
+        if not self.is_expired:
+            self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                      batch_size=self.batch_size)
+        else:
+            self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                      batch_size=self.batch_size, exp=30)
         if self.pause_resume:
             self.pause_function(body)
         # rebalance out a eventing node when eventing is processing mutations
@@ -209,8 +224,9 @@ class EventingRebalance(EventingBaseTest):
             else:
                 self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         # delete json documents
-        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                  batch_size=self.batch_size, op_type='delete')
+        if not self.is_expired:
+            self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                      batch_size=self.batch_size, op_type='delete')
         if self.pause_resume:
             self.pause_function(body)
             self.sleep(30)
@@ -244,8 +260,12 @@ class EventingRebalance(EventingBaseTest):
                                               cpp_worker_thread_count=cpp_worker_thread_count)
         self.deploy_function(body)
         # load data
-        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                  batch_size=self.batch_size)
+        if not self.is_expired:
+            self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                      batch_size=self.batch_size)
+        else:
+            self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                      batch_size=self.batch_size, exp=30)
         if self.pause_resume:
             self.pause_function(body)
         # swap rebalance an eventing node when eventing is processing mutations
@@ -265,8 +285,9 @@ class EventingRebalance(EventingBaseTest):
             else:
                 self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         # delete json documents
-        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                  batch_size=self.batch_size, op_type='delete')
+        if not self.is_expired:
+            self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                      batch_size=self.batch_size, op_type='delete')
         if self.pause_resume:
             self.pause_function(body)
             self.sleep(30)
@@ -300,8 +321,12 @@ class EventingRebalance(EventingBaseTest):
                                               cpp_worker_thread_count=cpp_worker_thread_count)
         self.deploy_function(body)
         # load data
-        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                  batch_size=self.batch_size)
+        if not self.is_expired:
+            self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                      batch_size=self.batch_size)
+        else:
+            self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                      batch_size=self.batch_size, exp=60)
         if self.pause_resume:
             self.pause_function(body)
         # rebalance in a kv node when eventing is processing mutations
@@ -320,8 +345,9 @@ class EventingRebalance(EventingBaseTest):
             else:
                 self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         # delete json documents
-        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                  batch_size=self.batch_size, op_type='delete')
+        if not self.is_expired:
+            self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                      batch_size=self.batch_size, op_type='delete')
         if self.pause_resume:
             self.pause_function(body)
             self.sleep(30)
@@ -347,8 +373,12 @@ class EventingRebalance(EventingBaseTest):
                                               cpp_worker_thread_count=cpp_worker_thread_count)
         self.deploy_function(body)
         # load data
-        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                  batch_size=self.batch_size)
+        if not self.is_expired:
+            self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                      batch_size=self.batch_size)
+        else:
+            self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                      batch_size=self.batch_size, exp=60)
         if self.pause_resume:
             self.pause_function(body)
         # rebalance out kv node when eventing is processing mutations
@@ -366,8 +396,9 @@ class EventingRebalance(EventingBaseTest):
             else:
                 self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         # delete json documents
-        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                  batch_size=self.batch_size, op_type='delete')
+        if not self.is_expired:
+            self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                      batch_size=self.batch_size, op_type='delete')
         if self.pause_resume:
             self.pause_function(body)
             self.sleep(30)
@@ -393,8 +424,12 @@ class EventingRebalance(EventingBaseTest):
                                               cpp_worker_thread_count=cpp_worker_thread_count)
         self.deploy_function(body)
         # load data
-        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                  batch_size=self.batch_size)
+        if not self.is_expired:
+            self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                      batch_size=self.batch_size)
+        else:
+            self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                      batch_size=self.batch_size, exp=60)
         if self.pause_resume:
             self.pause_function(body)
         # swap rebalance kv node when eventing is processing mutations
@@ -414,8 +449,9 @@ class EventingRebalance(EventingBaseTest):
             else:
                 self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         # delete json documents
-        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                  batch_size=self.batch_size, op_type='delete')
+        if not self.is_expired:
+            self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                      batch_size=self.batch_size, op_type='delete')
         if self.pause_resume:
             self.pause_function(body)
             self.sleep(30)
@@ -438,8 +474,12 @@ class EventingRebalance(EventingBaseTest):
         body = self.create_save_function_body(self.function_name, self.handler_code)
         self.deploy_function(body)
         # load some data
-        task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
-                                                self.buckets[0].kvs[1], 'create', compression=self.sdk_compression)
+        if not self.is_expired:
+            task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
+                                                    self.buckets[0].kvs[1], 'create', compression=self.sdk_compression)
+        else:
+            task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
+                                                    self.buckets[0].kvs[1], 'create', compression=self.sdk_compression,exp=60)
         if self.pause_resume:
             self.pause_function(body)
         # rebalance in a node
@@ -458,8 +498,9 @@ class EventingRebalance(EventingBaseTest):
             else:
                 self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         # delete json documents
-        self.load(gen_load_del, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                  batch_size=self.batch_size, op_type='delete')
+        if not self.is_expired:
+            self.load(gen_load_del, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                      batch_size=self.batch_size, op_type='delete')
         if self.pause_resume:
             self.pause_function(body)
             self.sleep(30)
@@ -482,8 +523,12 @@ class EventingRebalance(EventingBaseTest):
         body = self.create_save_function_body(self.function_name, self.handler_code)
         self.deploy_function(body)
         # load some data
-        task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
-                                                self.buckets[0].kvs[1], 'create', compression=self.sdk_compression)
+        if not self.is_expired:
+            task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
+                                                    self.buckets[0].kvs[1], 'create', compression=self.sdk_compression)
+        else:
+            task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
+                                                    self.buckets[0].kvs[1], 'create', compression=self.sdk_compression,exp=60)
         if self.pause_resume:
             self.pause_function(body)
         nodes_out_list = self.servers[self.server_out]
@@ -502,8 +547,9 @@ class EventingRebalance(EventingBaseTest):
             else:
                 self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         # delete json documents
-        self.load(gen_load_del, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                  batch_size=self.batch_size, op_type='delete')
+        if not self.is_expired:
+            self.load(gen_load_del, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                      batch_size=self.batch_size, op_type='delete')
         if self.pause_resume:
             self.pause_function(body)
             self.sleep(30)
@@ -527,8 +573,12 @@ class EventingRebalance(EventingBaseTest):
         body = self.create_save_function_body(self.function_name, self.handler_code)
         self.deploy_function(body)
         # load some data
-        task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
-                                                self.buckets[0].kvs[1], 'create', compression=self.sdk_compression)
+        if not self.is_expired:
+            task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
+                                                    self.buckets[0].kvs[1], 'create', compression=self.sdk_compression)
+        else:
+            task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
+                                                    self.buckets[0].kvs[1], 'create', compression=self.sdk_compression,exp=60)
         if self.pause_resume:
             self.pause_function(body)
         nodes_out_list = self.servers[self.server_out]
@@ -550,8 +600,9 @@ class EventingRebalance(EventingBaseTest):
             else:
                 self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         # delete json documents
-        self.load(gen_load_del, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                  batch_size=self.batch_size, op_type='delete')
+        if not self.is_expired:
+            self.load(gen_load_del, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                      batch_size=self.batch_size, op_type='delete')
         if self.pause_resume:
             self.pause_function(body)
             self.sleep(30)
@@ -870,8 +921,12 @@ class EventingRebalance(EventingBaseTest):
                                               cpp_worker_thread_count=cpp_worker_thread_count)
         self.deploy_function(body)
         # load data
-        task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
-                                                self.buckets[0].kvs[1], 'create', compression=self.sdk_compression)
+        if not self.is_expired:
+            task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
+                                                    self.buckets[0].kvs[1], 'create', compression=self.sdk_compression)
+        else:
+            task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
+                                                    self.buckets[0].kvs[1], 'create', compression=self.sdk_compression,exp=60)
         if self.pause_resume:
             self.pause_function(body)
         # rebalance in a eventing nodes when eventing is processing mutations
@@ -891,8 +946,9 @@ class EventingRebalance(EventingBaseTest):
             else:
                 self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         # delete json documents
-        task1 = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, gen_load_del,
-                                                 self.buckets[0].kvs[1], 'delete', compression=self.sdk_compression)
+        if not self.is_expired:
+            task1 = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, gen_load_del,
+                                                     self.buckets[0].kvs[1], 'delete', compression=self.sdk_compression)
         if self.pause_resume:
             self.pause_function(body)
         # Get all eventing nodes
@@ -904,7 +960,8 @@ class EventingRebalance(EventingBaseTest):
         reached1 = RestHelper(self.rest).rebalance_reached(retry_count=150)
         self.assertTrue(reached1, "rebalance failed, stuck or did not complete")
         rebalance1.result()
-        task1.result()
+        if not self.is_expired:
+            task1.result()
         if self.pause_resume:
             self.resume_function(body)
         # Wait for eventing to catch up with all the delete mutations and verify results
@@ -925,8 +982,12 @@ class EventingRebalance(EventingBaseTest):
             self.rest.add_node(self.master.rest_username, self.master.rest_password, node.ip, node.port,
                                services=["eventing"])
         # load data
-        task2 = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, gen_load_create,
-                                                 self.buckets[0].kvs[1], 'create', compression=self.sdk_compression)
+        if not self.is_expired:
+            task2 = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
+                                                    self.buckets[0].kvs[1], 'create', compression=self.sdk_compression)
+        else:
+            task2 = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
+                                                    self.buckets[0].kvs[1], 'create', compression=self.sdk_compression,exp=60)
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], all_eventing_nodes)
         reached = RestHelper(self.rest).rebalance_reached(retry_count=150)
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
@@ -956,8 +1017,12 @@ class EventingRebalance(EventingBaseTest):
                                               cpp_worker_thread_count=cpp_worker_thread_count)
         self.deploy_function(body)
         # load data
-        task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
-                                                self.buckets[0].kvs[1], 'create', compression=self.sdk_compression)
+        if not self.is_expired:
+            task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
+                                                    self.buckets[0].kvs[1], 'create', compression=self.sdk_compression)
+        else:
+            task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
+                                                    self.buckets[0].kvs[1], 'create', compression=self.sdk_compression,exp=60)
         if self.pause_resume:
             self.pause_function(body)
         # rebalance in a multiple 2 kv nodes when eventing is processing mutations
@@ -978,8 +1043,9 @@ class EventingRebalance(EventingBaseTest):
             else:
                 self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         # delete json documents
-        task1 = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, gen_load_del,
-                                                 self.buckets[0].kvs[1], 'delete', compression=self.sdk_compression)
+        if not self.is_expired:
+            task1 = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, gen_load_del,
+                                                     self.buckets[0].kvs[1], 'delete', compression=self.sdk_compression)
         if self.pause_resume:
             self.pause_function(body)
         to_remove_nodes = to_add_nodes
@@ -987,7 +1053,8 @@ class EventingRebalance(EventingBaseTest):
         reached1 = RestHelper(self.rest).rebalance_reached(retry_count=150)
         self.assertTrue(reached1, "rebalance failed, stuck or did not complete")
         rebalance1.result()
-        task1.result()
+        if not self.is_expired:
+            task1.result()
         if self.pause_resume:
             self.resume_function(body)
         # Wait for eventing to catch up with all the delete mutations and verify results
@@ -1005,8 +1072,12 @@ class EventingRebalance(EventingBaseTest):
             self.rest.add_node(self.master.rest_username, self.master.rest_password, node.ip, node.port,
                                services=["kv"])
         # load data
-        task2 = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, gen_load_create,
-                                                 self.buckets[0].kvs[1], 'create', compression=self.sdk_compression)
+        if not self.is_expired:
+            task2 = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
+                                                    self.buckets[0].kvs[1], 'create', compression=self.sdk_compression)
+        else:
+            task2 = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
+                                                    self.buckets[0].kvs[1], 'create', compression=self.sdk_compression,exp=60)
         if self.pause_resume:
             self.pause_function(body)
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], all_kv_nodes[1:3])
