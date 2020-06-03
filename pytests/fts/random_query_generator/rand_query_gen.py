@@ -958,8 +958,8 @@ class FTSFlexQueryGenerator(FTSESQueryGenerator):
                 query_types += QUERY_TYPE.N1QL_QUERY_TYPES[field_type]
         return list(set(query_types))
 
-    def check_for_emp_in_predicate(self, predicate):
-        for k, field_list in DATASET.FIELDS["emp"].items():
+    def check_for_dataset_in_predicate(self, predicate, dataset):
+        for k, field_list in DATASET.FIELDS[dataset].items():
             for field in field_list:
                 if field in predicate:
                     return True
@@ -983,11 +983,20 @@ class FTSFlexQueryGenerator(FTSESQueryGenerator):
         if self.dataset == "default":
             return [""]
         if self.dataset == "all":
+            type_map_list = []
             #commenting due to bug
             #type_map_list = ['(type = \"emp\" or type = \"wiki\") and ', 'type = \"emp\" or type = \"wiki\" and ']
-            type_map_list = ['(type = \"emp\" or type = \"wiki\") and ']
-            if self.check_for_emp_in_predicate(predicate):
-                type_map_list.append("type = \"emp\" and ")
+            #bug: MB-39517
+            if "mutated" in predicate and not (predicate.count("OR") >= 1):
+                type_map_list.append('(type = "emp" or type = "wiki") and ')
+            if self.check_for_dataset_in_predicate(predicate, "emp") \
+                    and not (predicate.count("OR") >= 1 and self.check_for_dataset_in_predicate(predicate, "wiki")):
+                type_map_list.append('type = "emp" and ')
+
+            if self.check_for_dataset_in_predicate(predicate, "wiki") \
+                    and not (predicate.count("OR") >= 1 and self.check_for_dataset_in_predicate(predicate, "emp")):
+                type_map_list.append('type = "wiki" and ')
+
             return type_map_list
         else:
             return ['type = \"{0}\" and '.format(self.dataset)]
@@ -1254,6 +1263,18 @@ class FTSFlexQueryGenerator(FTSESQueryGenerator):
             pos = random.randint(1, len(match_str) - 1)
             match_str = match_str[:pos] + '%'
             flex_query_predicate_list.append("( SOME v IN {0} SATISFIES v like \"{1}\" END)".format(fieldname, match_str))
+
+        for x in range(5):
+            fieldname = self.get_random_value(self.fields['array'])
+            match_str = self.get_term(fieldname)
+            flex_query_predicate_list.append("( ANY AND EVERY v IN {0} SATISFIES v = \"{1}\" END)".format(fieldname, match_str))
+
+        for x in range(5):
+            fieldname = self.get_random_value(self.fields['array'])
+            match_str = self.get_term(fieldname)
+            pos = random.randint(1, len(match_str) - 1)
+            match_str = match_str[:pos] + '%'
+            flex_query_predicate_list.append("( ANY AND EVERY v IN {0} SATISFIES v like \"{1}\" END)".format(fieldname, match_str))
 
         return flex_query_predicate_list
 

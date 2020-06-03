@@ -313,6 +313,27 @@ class FlexIndexTests(QueryTests):
 
         fts_index = self.create_fts_index(
             name="custom_index", source_name=self.bucket_name)
+        # make sure mutated is indexed in both the type mappings to test the bug: MB-39517
+        mutated_field_def = {
+            'dynamic': False,
+            'enabled': True,
+            'properties': {},
+            'fields': [
+                {
+                    'include_in_all': True,
+                    'include_term_vectors': False,
+                    'index': True,
+                    'name': 'mutated',
+                    'store': False,
+                    'type': 'number',
+                    'analyzer': ''
+                }
+            ]
+        }
+        fts_index.index_definition['params']['mapping']['types']['emp']['properties']['mutated'] = mutated_field_def
+        fts_index.index_definition['params']['mapping']['types']['wiki']['properties']['mutated'] = mutated_field_def
+        fts_index.index_definition['uuid'] = fts_index.get_uuid()
+        fts_index.update()
         self.generate_random_queries(fts_index.smart_query_fields)
         self.update_expected_fts_index_map(fts_index)
         if not self.is_index_present("default", "primary_gsi_index"):
