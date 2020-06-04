@@ -2,8 +2,8 @@ import re, copy, json, subprocess
 from random import randrange, randint
 from threading import Thread
 
-from collection.collections_cli_client import Collections_CLI
-from collection.collections_rest_client import Collections_Rest
+from collection.collections_cli_client import CollectionsCLI
+from collection.collections_rest_client import CollectionsRest
 from collection.collections_n1ql_client import CollectionsN1QL
 from lib.couchbase_helper.documentgenerator import SDKDataLoader
 
@@ -69,6 +69,7 @@ class EnterpriseBackupRestoreCollectionTest(EnterpriseBackupRestoreCollectionBas
             conn.terminate_processes(conn.info, ["cbbackupmgr"])
             conn.disconnect()
         self.bucket_helper = BucketOperationHelper()
+        self.bucket_map_collection = ""
 
     def tearDown(self):
         super(EnterpriseBackupRestoreCollectionTest, self).tearDown()
@@ -85,12 +86,17 @@ class EnterpriseBackupRestoreCollectionTest(EnterpriseBackupRestoreCollectionBas
         self.log.info("*** create collection in all buckets")
         self.log.info("*** start to load items to all buckets")
         self.active_resident_threshold = 100
-        self.__load_all_buckets(self.backupset.cluster_host)
+        self.load_all_buckets(self.backupset.cluster_host)
         self.log.info("*** done to load items to all buckets")
         self.ops_type = self.input.param("ops-type", "update")
         self.expected_error = self.input.param("expected_error", None)
         self.create_scope_cluster_host()
-        self.create_collection_cluster_host()
+        self.create_collection_cluster_host(self.backupset.col_per_scope)
+        backup_scopes = self.get_bucket_scope_cluster_host()
+        backup_collections = self.get_bucket_collection_cluster_host()
+        col_stats = self.get_collection_stats_cluster_host()
+        for backup_scope in backup_scopes:
+            bk_scope_id = self.get_scopes_id_cluster_host(backup_scope)
         if self.auto_failover:
             self.log.info("Enabling auto failover on " + str(self.backupset.cluster_host))
             rest_conn = RestConnection(self.backupset.cluster_host)
@@ -99,7 +105,7 @@ class EnterpriseBackupRestoreCollectionTest(EnterpriseBackupRestoreCollectionBas
         for i in range(1, self.backupset.number_of_backups + 1):
             if self.ops_type == "update":
                 self.log.info("*** start to update items in all buckets")
-                self.__load_all_buckets(self.backupset.cluster_host, ratio=0.1)
+                self.load_all_buckets(self.backupset.cluster_host, ratio=0.1)
                 self.log.info("*** done update items in all buckets")
             self.sleep(10)
             self.log.info("*** start to validate backup cluster")
@@ -134,6 +140,13 @@ class EnterpriseBackupRestoreCollectionTest(EnterpriseBackupRestoreCollectionBas
             self.backupset.start = start
             self.backupset.end = end
             self.log.info("*** start restore validation")
+            data_map_collection = []
+            for scope in backup_scopes:
+                if "default" in scope:
+                    continue
+                data_map_collection.append(self.buckets[0].name + "." + scope + "=" + \
+                                           self.buckets[0].name + "." + scope)
+            self.bucket_map_collection = ",".join(data_map_collection)
             self.backup_restore_validate(compare_uuid=False,
                                          seqno_compare_function=">=",
                                          expected_error=self.expected_error)
@@ -146,6 +159,9 @@ class EnterpriseBackupRestoreCollectionTest(EnterpriseBackupRestoreCollectionBas
                 else:
                     end = randrange(start, self.backupset.number_of_backups + 1)
             restored["{0}/{1}".format(start, end)] = ""
+        restore_scopes = self.get_bucket_scope_restore_cluster_host()
+        restore_collections = self.get_bucket_collection_restore_cluster_host()
+        self.verify_collections_in_restore_cluster_host()
 
     def _kill_cbbackupmgr(self):
         """

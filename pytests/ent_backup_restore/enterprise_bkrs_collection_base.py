@@ -3,9 +3,9 @@ import os, shutil, ast, re, subprocess
 import json
 import random
 import urllib.request, urllib.parse, urllib.error, datetime
-from collection.collections_cli_client import Collections_CLI
-from collection.collections_rest_client import Collections_Rest
-from collection.collections_stats import Collections_Stats
+from collection.collections_cli_client import CollectionsCLI
+from collection.collections_rest_client import CollectionsRest
+from collection.collections_stats import CollectionsStats
 from collection.collections_n1ql_client import CollectionsN1QL
 from lib.couchbase_helper.documentgenerator import SDKDataLoader
 
@@ -260,6 +260,8 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
         self.backupset.bucket_backup = self.input.param("bucket-backup", None)
         self.backupset.backup_to_compact = self.input.param("backup-to-compact", 0)
         self.backupset.map_buckets = self.input.param("map-buckets", None)
+        self.backupset.map_data_collection = self.input.param("map_data_collection", False)
+        self.backupset.col_per_scope = self.input.param("col_per_scope", 1)
         self.backupset.delete_old_bucket = self.input.param("delete-old-bucket", False)
         self.add_node_services = self.input.param("add-node-services", "kv")
         self.backupset.backup_compressed = \
@@ -295,16 +297,16 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
             self.restore_services = ["kv"]
         self.per_node = self.input.param("per_node", True)
 
-        self.rest_bk = Collections_Rest(self.backupset.cluster_host)
-        self.cli_bk = Collections_CLI(self.backupset.cluster_host)
+        self.rest_bk = CollectionsRest(self.backupset.cluster_host)
+        self.cli_bk = CollectionsCLI(self.backupset.cluster_host)
         #self.cli.enable_dp()
         self.conn_bk = RestConnection(self.backupset.cluster_host)
-        self.stat_bk = Collections_Stats(self.backupset.cluster_host)
+        self.stat_bk = CollectionsStats(self.backupset.cluster_host)
 
-        self.rest_rs = Collections_Rest(self.backupset.restore_cluster_host)
-        self.cli_rs = Collections_CLI(self.backupset.restore_cluster_host)
+        self.rest_rs = CollectionsRest(self.backupset.restore_cluster_host)
+        self.cli_rs = CollectionsCLI(self.backupset.restore_cluster_host)
         self.conn_rs = RestConnection(self.backupset.restore_cluster_host)
-        self.stat_rs = Collections_Stats(self.backupset.restore_cluster_host)
+        self.stat_rs = CollectionsStats(self.backupset.restore_cluster_host)
         self.backupset.scopes = None
         self.backupset.collections = None
 
@@ -409,7 +411,7 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
             else:
                 self.cli_bk.delete_scope("scope{0}".format(x), bucket=bucket_name)
 
-    def create_collection_cluster_host(self, num_collection=2):
+    def create_collection_cluster_host(self, num_collection=1):
         bucket_name = self.buckets[0].name
         scopes = self.get_bucket_scope_cluster_host()
         if scopes:
@@ -424,7 +426,7 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
                         self.cli_bk.create_collection(bucket=bucket_name, scope=scope,
                                                    collection="mycollection_{0}_{1}".format(scope, x))
 
-    def delete_collection_cluster_host(self, num_collection=2):
+    def delete_collection_cluster_host(self, num_collection=1):
         bucket_name = self.buckets[0].name
         for x in range(num_collection):
             if self.use_rest:
@@ -451,6 +453,58 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
         else:
             scopes = self.cli_bk.get_bucket_scopes(bucket_name)
         return scopes
+
+    def create_scope_restore_cluster_host(self, num_scope=2):
+        bucket_name = self.buckets[0].name
+        for x in range(num_scope):
+            if self.use_rest:
+                self.rest_rs.create_scope(bucket=bucket_name, scope="scope{0}".format(x),
+                                              params=None)
+            else:
+                self.cli_rs.create_collection(bucket=bucket_name, scope="scope{0}".format(x))
+
+    def delete_scope_restore_cluster_host(self, num_scope=2):
+        bucket_name = self.buckets[0].name
+        for x in range(num_scope):
+            if self.use_rest:
+                self.rest_rs.delete_scope("scope{0}".format(x), bucket=bucket_name)
+            else:
+                self.cli_rs.delete_scope("scope{0}".format(x), bucket=bucket_name)
+
+    def create_collection_restore_cluster_host(self, num_collection=1):
+        bucket_name = self.buckets[0].name
+        scopes = self.get_bucket_scope_cluster_host()
+        if scopes:
+            for x in range(num_collection):
+                for scope in scopes:
+                    if bucket_name in scope:
+                        continue
+                    if self.use_rest:
+                        self.rest_rs.create_collection(bucket=bucket_name, scope=scope,
+                                                   collection="mycollection_{0}_{1}".format(scope, x))
+                    else:
+                        self.cli_rs.create_collection(bucket=bucket_name, scope=scope,
+                                                   collection="mycollection_{0}_{1}".format(scope, x))
+
+    def delete_collection_restore_cluster_host(self, num_collection=2):
+        bucket_name = self.buckets[0].name
+        for x in range(num_collection):
+            if self.use_rest:
+                self.rest_rs.delete_collection(bucket=bucket_name, scope="_{0}".format(bucket_name),
+                                                   collection="_{0}".format(bucket_name))
+            else:
+                self.cli_rs.delete_collection(bucket=bucket_name, scope="_{0}".format(bucket_name),
+                                                  collection="_{0}".format(bucket_name))
+
+    def create_scope_collection_restore_cluster_host(self, num_scope_collection=2):
+        bucket_name = self.buckets[0].name
+        for x in range(num_collection):
+            if self.use_rest:
+                self.rest_rs.create_scope_collection(bucket_name, "scope{0}".format(x),
+                                                     "mycollection{0}".format(x))
+            else:
+                self.cli_rs.create_scope_collection(bucket_name, "scope{0}".format(x),
+                                                    "mycollection{0}".format(x))
 
     def get_bucket_scope_restore_cluster_host(self):
         bucket_name = self.buckets[0].name
@@ -498,8 +552,19 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
                 self.fail("Collection {0} failed to restore".format(restore_collection))
 
     def get_collection_stats_cluster_host(self):
-        bucket_name = self.buckets[0].name
-        return self.stat_bk.get_collection_stats(bucket_name)
+        bucket = self.buckets[0]
+        return self.stat_bk.get_collection_stats(bucket)
+
+    def get_scopes_id_cluster_host(self, scope):
+        bucket = self.buckets[0]
+        return self.stat_bk.get_scope_id(bucket, scope)
+
+    def get_collections_id_cluster_host(self, scope, collection):
+        bucket = self.buckets[0]
+        return self.stat_bk.get_collection_id(bucket, scope, collection)
+
+    def load_all_buckets(self, cluster=None, item_size=125, ratio=0.9, command_options=""):
+        return self.__load_all_buckets(cluster, item_size, ratio, command_options)
 
     def __load_all_buckets(self, cluster=None, item_size=125, ratio=0.9, command_options=""):
         if not cluster:
@@ -928,7 +993,7 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
                 reset_cluster_count += 1
             bucket_maps = ",".join(buckets)
         if self.backupset.map_buckets:
-            args += " --map-buckets %s " % bucket_maps
+            args += " --map-data %s " % bucket_maps
         user_env = ""
         password_env = ""
         if self.backupset.user_env:
@@ -972,6 +1037,8 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
                 args += " --replace-ttl-with {0}".format(self.replace_ttl_with)
             else:
                 args += " --replace-ttl {0}".format(self.replace_ttl)
+        if self.backupset.map_data_collection:
+            args += " --map-data %s " % self.bucket_map_collection
         command = "{3} {2} {0}/cbbackupmgr {1}".format(self.cli_command_location, args,
                                                        password_env, user_env)
         output, error = shell.execute_command_raw(command)
@@ -997,7 +1064,6 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
         if accepted_errs:
             if not self.should_fail:
                 if not self.restore_should_fail and not eventing_service_in:
-                    self.sleep(20000)
                     self.fail("Failed to restore cluster")
             else:
                 self.log.info("This test is for negative test")
@@ -2381,5 +2447,7 @@ class Backupset:
         self.date_range = ''
         self.scopes = None
         self.collections = None
+        self.map_data_collection = False
+        self.col_per_scope = 1
 
 
