@@ -22,6 +22,7 @@ class FlexIndexTests(QueryTests):
         self.use_index_name_in_query = bool(self.input.param("use_index_name_in_query", True))
         self.expected_gsi_index_map = {}
         self.expected_fts_index_map = {}
+        self.gsi_fields = []
         self.custom_map = self.input.param("custom_map", False)
         self.bucket_name = self.input.param("bucket_name", 'default')
         self.flex_query_option = self.input.param("flex_query_option", "flex_use_fts_query")
@@ -74,7 +75,6 @@ class FlexIndexTests(QueryTests):
     def get_gsi_fields_partial_sargability(self):
         fts_fields = self.query_gen.fields
         available_fields = DATASET.CONSOLIDATED_FIELDS
-        gsi_fields = []
         for field in available_fields:
             field_found = False
             for k, v in fts_fields.items():
@@ -82,13 +82,13 @@ class FlexIndexTests(QueryTests):
                     field_found = True
                     break
             if not field_found:
-                gsi_fields.append(field)
-        return list(set(gsi_fields))
+                self.gsi_fields.append(field)
+        self.gsi_fields = list(set(self.gsi_fields))
 
-    def create_gsi_indexes(self, gsi_fields):
+    def create_gsi_indexes(self):
         count = 0
         self.expected_gsi_index_map = {}
-        for field in gsi_fields:
+        for field in self.gsi_fields:
             field = self.query_gen.replace_underscores(field)
             field_proxy = field
             #handling array fields
@@ -102,6 +102,13 @@ class FlexIndexTests(QueryTests):
                 self.expected_gsi_index_map[field_proxy] = [gsi_index_name]
                 count += 1
         self.log.info("expected_gsi_index_map {0}".format(self.expected_gsi_index_map))
+
+    def check_if_predicate_has_gsi_field(self, query):
+        for field in self.gsi_fields:
+            field = self.query_gen.replace_underscores(field)
+            if field in query.decode('utf-8', 'ignore'):
+                return True
+        return False
 
     def get_all_indexnames_from_response(self, response_json):
         queue = deque([response_json])
@@ -204,7 +211,9 @@ class FlexIndexTests(QueryTests):
             flex_query = json.loads(json.dumps(flex_query, ensure_ascii=False)).encode('utf-8')
             gsi_query = json.loads(json.dumps(gsi_query, ensure_ascii=False)).encode('utf-8')
             # issue MB-39493
-            if partial_sargability and self.flex_query_option == "flex_use_fts_query" and flex_query.count("OR") > 1:
+            if (partial_sargability and self.flex_query_option == "flex_use_fts_query" and flex_query.count("OR") > 1) \
+                    or (self.check_if_predicate_has_gsi_field(flex_query) and
+                        self.flex_query_option == "flex_use_fts_query" and flex_query.count("OR") >= 1):
                expected_gsi_index.append("primary_gsi_index")
             explain_query = "explain " + flex_query
             self.log.info("Query : {0}".format(explain_query))
@@ -381,8 +390,8 @@ class FlexIndexTests(QueryTests):
         self.update_expected_fts_index_map(fts_index)
         if not self.is_index_present("default", "primary_gsi_index"):
             self.run_cbq_query("create primary index primary_gsi_index on default")
-        gsi_fields = self.get_gsi_fields_partial_sargability()
-        self.create_gsi_indexes(gsi_fields)
+        self.get_gsi_fields_partial_sargability()
+        self.create_gsi_indexes()
         self.generate_random_queries()
         failed_to_run_query, not_found_index_in_response, result_mismatch = self.run_queries_and_validate(partial_sargability = True)
         self.cbcluster.delete_all_fts_indexes()
@@ -405,8 +414,8 @@ class FlexIndexTests(QueryTests):
         if not self.is_index_present("default", "primary_gsi_index"):
             self.run_cbq_query("create primary index primary_gsi_index on default")
         self.generate_random_queries(fts_index.smart_query_fields)
-        gsi_fields = self.get_gsi_fields_partial_sargability()
-        self.create_gsi_indexes(gsi_fields)
+        self.get_gsi_fields_partial_sargability()
+        self.create_gsi_indexes()
         self.generate_random_queries()
         failed_to_run_query, not_found_index_in_response, result_mismatch = self.run_queries_and_validate()
         self.cbcluster.delete_all_fts_indexes()
@@ -437,8 +446,8 @@ class FlexIndexTests(QueryTests):
         if not self.is_index_present("default", "primary_gsi_index"):
             self.run_cbq_query("create primary index primary_gsi_index on default")
 
-        gsi_fields = self.get_gsi_fields_partial_sargability()
-        self.create_gsi_indexes(gsi_fields)
+        self.get_gsi_fields_partial_sargability()
+        self.create_gsi_indexes()
         self.generate_random_queries()
         failed_to_run_query, not_found_index_in_response, result_mismatch = self.run_queries_and_validate(partial_sargability = True)
         self.cbcluster.delete_all_fts_indexes()
