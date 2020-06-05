@@ -81,6 +81,8 @@ class EventingRecovery(EventingBaseTest):
             self.handler_code = HANDLER_CODE_CURL.TIMER_OP_WITH_CURL_PUT
         elif handler_code == 'timer_op_curl_delete':
             self.handler_code = HANDLER_CODE_CURL.TIMER_OP_WITH_CURL_DELETE_RECOVERY
+        elif handler_code == 'cancel_timer':
+            self.handler_code = HANDLER_CODE.CANCEL_TIMER_RECOVERY
         else:
             self.handler_code = HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE_RECOVERY
 
@@ -107,10 +109,11 @@ class EventingRecovery(EventingBaseTest):
         self.wait_for_handler_state(body['appname'], "deployed")
         self.sleep(30)
         # Wait for eventing to catch up with all the update mutations and verify results
-        if self.is_sbm:
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2, skip_stats_validation=True)
-        else:
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        if not self.cancel_timer:
+            if self.is_sbm:
+                self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2, skip_stats_validation=True)
+            else:
+                self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         if self.pause_resume:
             self.pause_function(body)
         # delete all documents
@@ -122,10 +125,13 @@ class EventingRecovery(EventingBaseTest):
         self.kill_consumer(eventing_node)
         self.wait_for_handler_state(body['appname'], "deployed")
         # Wait for eventing to catch up with all the delete mutations and verify results
-        if self.is_sbm:
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        if not self.cancel_timer:
+            if self.is_sbm:
+                self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+            else:
+                self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         else:
-            self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
         # intentionally added , as it requires some time for eventing-consumers to shutdown
         self.sleep(60)
@@ -154,10 +160,11 @@ class EventingRecovery(EventingBaseTest):
         else:
             self.wait_for_handler_state(body['appname'], "deployed")
         # Wait for eventing to catch up with all the update mutations and verify results
-        if self.is_sbm:
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2, skip_stats_validation=True)
-        else:
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        if not self.cancel_timer:
+            if self.is_sbm:
+                self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2, skip_stats_validation=True)
+            else:
+                self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         if self.pause_resume:
             self.pause_function(body)
         # delete all documents
@@ -172,10 +179,13 @@ class EventingRecovery(EventingBaseTest):
             self.wait_for_handler_state(body['appname'], "deployed")
         # Wait for eventing to catch up with all the delete mutations and verify results
         # See MB-30772
-        if self.is_sbm:
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        if not self.cancel_timer:
+            if self.is_sbm:
+                self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+            else:
+                self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         else:
-            self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
         # intentionally added , as it requires some time for eventing-consumers to shutdown
         self.sleep(60)
