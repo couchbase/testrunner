@@ -18,10 +18,15 @@ class DockerManager(object):
             self.handle = self.client.containers.run("jsc:" + self.tag,
                                                      environment=self.environment,
                                                      detach=True)
-            for line in self.handle.logs(stream=True):
-                print(line.strip())
+            self.stream_logs()
+            self.terminate()
         except ConnectionError as e:
             print('Error connecting to docker service, please start/restart it:', e)
+
+    def stream_logs(self):
+        for line in self.handle.logs(stream=True):
+            if b"Exception:" in line:
+                raise Exception("Exception occurred {}".format(line))
 
     def terminate(self, tag):
         self.client.images.remove(tag)
@@ -38,8 +43,8 @@ class JavaSDKClient(object):
     def params_to_environment(self):
         _environment = {
                         "CLUSTER": self.server.ip,
-                        "USERNAME": self.server.rest_username or "Administrator",
-                        "PASSWORD": self.server.rest_password or "password",
+                        "USERNAME": self.params.username,
+                        "PASSWORD": self.params.password,
                         "BUCKET": self.bucket,
                         "SCOPE": self.params.scope,
                         "COLLECTION": self.params.collection,

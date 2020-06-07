@@ -5520,7 +5520,52 @@ class NodeMonitorsAnalyserTask(Task):
         else:
             raise Exception("Monitors not working correctly")
 
+# Runs java sdk client directly on slave
 class SDKLoadDocumentsTask(Task):
+    def __init__(self, server, bucket, sdk_docloader, pause_secs, timeout_secs):
+        Task.__init__(self, "SDKLoadDocumentsTask")
+        self.server = server
+        if isinstance(bucket, Bucket):
+            self.bucket = bucket.name
+        else:
+            self.bucket = bucket
+        self.params = sdk_docloader
+        self.pause_secs = pause_secs
+        self.timeout_secs = timeout_secs
+
+    def execute(self, task_manager):
+        import subprocess
+        command = "java -jar java_sdk_client/collections/target/javaclient/javaclient.jar " \
+                  "-i {0} -u {1} -p {2} -b {3} -s {4} -c {5} " \
+                  "-n {6} -pc {7} -pu {8} -pd {9} -l {10} " \
+                  "-dsn {11} -dpx {12} -dt {13} -o {14} 2>/dev/null".format(self.server.ip, self.params.username,
+                                                                self.params.password, self.bucket, self.params.scope,
+                                                                self.params.collection, self.params.num_ops,
+                                                                self.params.percent_create, self.params.percent_update,
+                                                                self.params.percent_delete, self.params.load_pattern,
+                                                                self.params.start_seq_num, self.params.key_prefix,
+                                                                self.params.json_template, self.params.print_sdk_logs)
+        print(command)
+        try:
+            proc = subprocess.Popen(command, stdout=subprocess.PIPE, shell=True)
+            out = proc.communicate(timeout=300)
+            if proc.returncode != 0:
+                raise Exception("Exception in java sdk client to {}:{}\n{}".format(self.server.ip, self.bucket, out))
+        except Exception as e:
+            proc.terminate()
+            self.state = FINISHED
+            self.set_exception(e)
+        proc.terminate()
+        self.state = FINISHED
+        self.set_result(True)
+
+    def check(self, task_manager):
+        self.set_result(True)
+        self.state = FINISHED
+        task_manager.schedule(self)
+
+# Runs java sdk client on a docker container on slave
+class DockerSDKLoadDocumentsTask(Task):
     def __init__(self, server, bucket, sdk_docloader, pause_secs, timeout_secs):
         Task.__init__(self, "SDKLoadDocumentsTask")
         self.server = server
@@ -5540,10 +5585,10 @@ class SDKLoadDocumentsTask(Task):
             self.javasdkclient.do_ops()
             self.state = CHECKING
             task_manager.schedule(self)
-        # catch and set all unexpected exceptions
         except Exception as e:
             self.state = FINISHED
-            self.set_unexpected_exception(e)
+            self.set_exception(Exception("Exception while loading data to {}:{}"
+                                         .format(self.server.ip, self.bucket)))
         finally:
             self.javasdkclient.cleanup()
 
