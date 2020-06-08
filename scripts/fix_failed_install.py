@@ -10,7 +10,7 @@ if len(sys.argv) < 4:
 poolId = sys.argv[1]
 username = sys.argv[2]
 password = sys.argv[3]
-cb = Bucket('couchbase://172.23.105.177/QE-server-pool')
+cb = Bucket('couchbase://172.23.104.162/QE-server-pool')
 
 
 def ssh_exec_cmd(ssh, server, cmds):

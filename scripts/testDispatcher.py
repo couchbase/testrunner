@@ -24,9 +24,9 @@ import find_rerun_job
 # need a timeout param
 
 POLL_INTERVAL = 60
-SERVER_MANAGER = '172.23.105.177:8081'
-ADDL_SERVER_MANAGER = '172.23.105.177:8081'
-TEST_SUITE_DB = '172.23.105.177'
+SERVER_MANAGER = '172.23.104.162:8081'
+ADDL_SERVER_MANAGER = '172.23.104.162:8081'
+TEST_SUITE_DB = '172.23.104.162'
 TIMEOUT = 60
 SSH_NUM_RETRIES = 3
 SSH_POLL_INTERVAL = 20
@@ -197,9 +197,9 @@ def main():
                       default=True, action='store_false')
     parser.add_option('-k','--include_tests', dest='include_tests', default=None)
     parser.add_option('-x','--server_manager', dest='SERVER_MANAGER',
-                      default='172.23.105.177:8081')
+                      default='172.23.104.162:8081')
     parser.add_option('--addl_server_manager', dest='ADDL_SERVER_MANAGER',
-                      default='172.23.105.177:8081')
+                      default='172.23.104.162:8081')
     parser.add_option('-z', '--timeout', dest='TIMEOUT', default = '60')
     parser.add_option('-w', '--check_vm', dest='check_vm', default="False")
     parser.add_option('--ssh_poll_interval', dest='SSH_POLL_INTERVAL', default="20")
