@@ -20,9 +20,9 @@ from couchbase.n1ql import N1QLQuery
 # need a timeout param
 
 POLL_INTERVAL = 60
-SERVER_MANAGER = '172.23.105.177:8081'
-TEST_SUITE_DB = '172.23.105.177'
-
+SERVER_MANAGER = '172.23.104.162:8081'
+TEST_SUITE_DB = '172.23.104.162'
+TIMEOUT = 60
 
 def getNumberOfServers( iniFile):
     f = open(iniFile)
@@ -60,7 +60,19 @@ def main():
     parser.add_option('-u','--url', dest='url', default=None)
     parser.add_option('-j','--jenkins', dest='jenkins', default=None)
     parser.add_option('-b','--branch', dest='branch', default='master')
+    parser.add_option('-g','--cherrypick', dest='cherrypick', default=None)
+    # whether to use production version of a test_suite_executor or test version
+    parser.add_option('-l','--launch_job', dest='launch_job', default='test_suite_executor')
+    parser.add_option('-f','--jenkins_server_url', dest='jenkins_server_url', default='http://qa.sc.couchbase.com')
+    parser.add_option('-m','--retry_params', dest='retry_params', default='')
+    parser.add_option('-i','--retries', dest='retries', default='1')
+    parser.add_option('-k','--include_tests', dest='include_tests', default=None)
+    parser.add_option('-x','--server_manager', dest='SERVER_MANAGER',
+                      default='172.23.104.162:8081')
+    parser.add_option('-z', '--timeout', dest='TIMEOUT', default = '60')
 
+    # set of parameters for testing purposes.
+    #TODO: delete them after successful testing
     # dashboardReportedParameters is of the form param1=abc,param2=def
     parser.add_option('-d','--dashboardReportedParameters', dest='dashboardReportedParameters', default=None)
 
