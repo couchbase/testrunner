@@ -20,8 +20,8 @@ from couchbase.n1ql import N1QLQuery
 # need a timeout param
 
 POLL_INTERVAL = 60
-SERVER_MANAGER = '172.23.105.177:8081'
-TEST_SUITE_DB = '172.23.105.177'
+SERVER_MANAGER = '172.23.104.162:8081'
+TEST_SUITE_DB = '172.23.104.162'
 TIMEOUT = 60
 
 def getNumberOfServers( iniFile):
@@ -68,7 +68,7 @@ def main():
     parser.add_option('-i','--retries', dest='retries', default='1')
     parser.add_option('-k','--include_tests', dest='include_tests', default=None)
     parser.add_option('-x','--server_manager', dest='SERVER_MANAGER',
-                      default='172.23.105.177:8081')
+                      default='172.23.104.162:8081')
     parser.add_option('-z', '--timeout', dest='TIMEOUT', default = '60')
 
     # set of parameters for testing purposes.
