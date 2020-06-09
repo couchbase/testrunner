@@ -93,6 +93,8 @@ class EventingBaseTest(QueryHelperTests):
         self.skip_metabucket_check=False
         self.cancel_timer=self.input.param('cancel_timer', False)
         self.is_expired=self.input.param('is_expired', False)
+        self.print_app_log=self.input.param('print_app_log', False)
+        self.print_go_routine=self.input.param('print_go_routine', False)
 
     def tearDown(self):
         # catch panics and print it in the test log
@@ -276,7 +278,12 @@ class EventingBaseTest(QueryHelperTests):
                 log.debug("Full Stats for Node {0} is \n{1} ".format(eventing_node.ip, json.dumps(full_out,
                                                                                                 sort_keys=True,
                                                                                                 indent=4)))
+            self.print_document_count_via_index(bucket)
+            self.print_timer_alarm_context()
             if stats_dst["curr_items"] < expected_dcp_mutations:
+                self.skip_metabucket_check=True
+                if self.print_app_log:
+                    self.print_app_logs(name)
                 raise Exception(
                     "missing data in destination bucket. Current : {0} "
                     "Expected : {1}  dcp_backlog : {2}  TIMERS_IN_PAST : {3} lcb_exceptions : {4}".format(stats_dst["curr_items"],
@@ -284,6 +291,9 @@ class EventingBaseTest(QueryHelperTests):
                                                                                  total_dcp_backlog,
                                                                                  timers_in_past,lcb))
             elif stats_dst["curr_items"] > expected_dcp_mutations and not expected_duplicate:
+                self.skip_metabucket_check = True
+                if self.print_app_log:
+                    self.print_app_logs(name)
                 raise Exception(
                     "duplicated data in destination bucket which is not expected. Current : {0} "
                     "Expected : {1}  dcp_backlog : {2}  TIMERS_IN_PAST : {3} lcb_exceptions : {4}".format(stats_dst["curr_items"],
@@ -357,6 +367,8 @@ class EventingBaseTest(QueryHelperTests):
 
 
     def undeploy_and_delete_function(self, body):
+        if self.print_app_log:
+            self.print_app_logs(body['appname'])
         self.undeploy_function(body)
         self.sleep(5)
         self.delete_function(body)
@@ -584,13 +596,14 @@ class EventingBaseTest(QueryHelperTests):
                                                                                       indent=4)))
 
     def print_go_routine_dump_from_all_eventing_nodes(self):
-        eventing_nodes = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
-        for eventing_node in eventing_nodes:
-            rest_conn = RestConnection(eventing_node)
-            out = rest_conn.get_eventing_go_routine_dumps()
-            log.info("Go routine dumps for Node {0} is \n{1} ======================================================"
-                     "============================================================================================="
-                     "\n\n".format(eventing_node.ip, out))
+        if self.print_go_routine:
+            eventing_nodes = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
+            for eventing_node in eventing_nodes:
+                rest_conn = RestConnection(eventing_node)
+                out = rest_conn.get_eventing_go_routine_dumps()
+                log.info("Go routine dumps for Node {0} is \n{1} ======================================================"
+                         "============================================================================================="
+                         "\n\n".format(eventing_node.ip, out))
 
     def verify_source_bucket_mutation(self,doc_count,deletes=False,timeout=600,bucket=None):
         if bucket == None:
@@ -821,3 +834,34 @@ class EventingBaseTest(QueryHelperTests):
                 if stat["function_name"] == name:
                     total_count=total_count + stat[keys[0]][keys[1]]
         return total_count
+
+    def print_app_logs(self,name):
+        content = self.rest.get_app_logs(name)
+        self.log.info("================== {} ============================================================".format(name))
+        self.log.info(content)
+        self.log.info("================== App logs end ===============================================================")
+
+    def print_timer_alarm_context(self):
+        alarm_query="select RAW count(0) from metadata where meta().id like 'eventing:%:al%'"
+        context_query="select RAW count(0) from metadata where meta().id like 'eventing:%:cx%'"
+        alarm = self.n1ql_helper.run_cbq_query(query=alarm_query, server=self.n1ql_node)
+        self.log.info("================== alarm documents in metadata ================================================")
+        self.log.info(alarm)
+        self.log.info("===============================================================================================")
+        context = self.n1ql_helper.run_cbq_query(query=context_query, server=self.n1ql_node)
+        self.log.info("================== context documents in metadata  =============================================")
+        self.log.info(context)
+        self.log.info("===============================================================================================")
+
+    def print_document_count_via_index(self,bucket):
+        query="select RAW count(*) from "+bucket
+        result_set = self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_node)
+        self.log.info("================== number of doc in {} via index ===========================".format(bucket))
+        self.log.info(result_set['results'])
+        self.log.info("===============================================================================================")
+
+
+
+
+
+
