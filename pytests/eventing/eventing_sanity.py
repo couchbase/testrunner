@@ -26,6 +26,10 @@ class EventingSanity(EventingBaseTest):
         self.expiry = 3
         query = "create primary index on {}".format(self.src_bucket_name)
         self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_node)
+        query = "create primary index on {}".format(self.dst_bucket_name)
+        self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_node)
+        query = "create primary index on {}".format(self.metadata_bucket_name)
+        self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_node)
 
     def tearDown(self):
         super(EventingSanity, self).tearDown()
@@ -286,11 +290,15 @@ class EventingSanity(EventingBaseTest):
         bucket_params = self._create_bucket_params(server=self.server, size=self.bucket_size, replicas=0)
         self.cluster.create_standard_bucket(name=self.dst_bucket_name1, port=STANDARD_BUCKET_PORT + 1,
                                             bucket_params=bucket_params)
+        query = "create primary index on {}".format(self.dst_bucket_name1)
+        self.n1ql_helper.run_cbq_query(query=query, server=self.n1ql_node)
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
                   batch_size=self.batch_size)
         body = self.create_save_function_body(self.function_name, "handler_code/cancel_timer.js")
         body['depcfg']['buckets'].append({"alias": self.dst_bucket_name1, "bucket_name": self.dst_bucket_name1})
         self.deploy_function(body)
+        # print timer context and alarm
+        self.print_timer_alarm_context()
         # Wait for eventing to catch up with all the update mutations and verify results
         #self.verify_eventing_results(self.function_name, self.docs_per_day * 2016)
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,

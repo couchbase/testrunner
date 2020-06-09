@@ -4970,6 +4970,18 @@ class RestConnection(object):
         if status:
             return content
 
+    '''
+              Get application logs
+    '''
+    def get_app_logs(self,handler_name):
+        authorization = base64.encodestring('%s:%s' % (self.username, self.password))
+        url = "getAppLog?aggregate=true&name="+handler_name
+        api = self.eventing_baseUrl + url
+        headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
+        status, content, header = self._http_request(api, 'GET', headers=headers)
+        if status:
+            return content
+
     def create_function(self, name, body):
         authorization = self.get_authorization(self.username, self.password)
         url = "api/v1/functions/" + name
