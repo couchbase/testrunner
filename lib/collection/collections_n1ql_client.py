@@ -1,6 +1,7 @@
 from couchbase_helper.tuq_helper import N1QLHelper
 from membase.api.exception import CBQError
 import logger
+import time
 
 class CollectionsN1QL(object):
     def __init__(self, node):
@@ -17,8 +18,12 @@ class CollectionsN1QL(object):
 
     def create_scope(self, keyspace="default", bucket_name="", scope_name="", poll_interval=1, timeout=30):
         self.n1ql_helper.use_rest = self.use_rest
-        return self.n1ql_helper.create_scope(server=self.node, keyspace=keyspace, bucket_name=bucket_name, scope_name=scope_name,
+        result =  self.n1ql_helper.create_scope(server=self.node, keyspace=keyspace, bucket_name=bucket_name, scope_name=scope_name,
                                       poll_interval=poll_interval, timeout=timeout)
+        if result:
+            # waiting for additional time according to https://issues.couchbase.com/browse/MB-39500
+            time.sleep(10)
+        return result
 
     def delete_collection(self, keyspace="default", bucket_name="", scope_name="", collection_name="",
                         poll_interval=1, timeout=30):
@@ -72,3 +77,20 @@ class CollectionsN1QL(object):
         except CBQError as err:
             return False, str(err)
         return True, ""
+
+    def find_object_in_all_keyspaces(self, type=None, name=None, bucket=None, scope=None):
+        path = ""
+        if type == 'scope':
+            path = f"default:{bucket}.{name}"
+        else:
+            path = f"default:{bucket}.{scope}.{name}"
+
+        query = f"select count(*) from system:all_keyspaces where path='{path}'"
+        result = self.n1ql_helper.run_cbq_query(query)
+
+        if result['results'][0]['$1'] == 0:
+            return False, f"Object {path} is not found in system:all_keyspaces."
+        elif result['results'][0]['$1'] > 1:
+            return False, f" More than one object {path} is found in system:all_keyspaces."
+        else:
+            return True, ""
