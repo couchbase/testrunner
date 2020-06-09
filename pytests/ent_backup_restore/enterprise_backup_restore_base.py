@@ -1672,14 +1672,18 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         command = "{0}/{1}".format(self.cli_command_location, cmd)
         output, error = shell.execute_command(command)
         shell.log_command_output(output, error)
-
         for bucket in buckets:
             index_found = 0
             if len(output) > 1:
                 for name in self.gsi_names:
                     mesg = "GSI index {0} created in restore cluster as expected".format(name)
+                    index_name_path =  "Index:{0}/{1}".format(bucket.name, name)
+                    version = RestConnection(
+                              self.backupset.restore_cluster_host).get_nodes_version()
+                    if version[:1] >= "7":
+                        index_name_path =  "Index:{0}/_{0}/_{0}/{1}".format(bucket.name, name)
                     for x in output:
-                        if "Index:{0}/{1}".format(bucket.name, name) in x:
+                        if index_name_path in x:
                             index_found += 1
                             self.log.info(mesg)
             if index_found < len(self.gsi_names):

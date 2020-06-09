@@ -2409,6 +2409,11 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             5. Operation after upgrade cluster
             6. Restores data and validates
         """
+        if self.initial_version[:1] == "5" and self.upgrade_versions[0][:1] >= "7":
+            self.log.error("\n\n\n*** ERROR: Direct upgrade from {0} to {1} does not support.\
+                            Test will skip\n\n"\
+                           .format(self.initial_version[:5], self.upgrade_versions[0][:5]))
+            return
         servers = copy.deepcopy(self.servers)
         self.vbuckets = self.initial_vbuckets
         if len(servers) != 4:
@@ -2455,8 +2460,6 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         initial_compression_mode = "off"
         if 5.5 > float(cb_version[:3]):
             self.compression_mode = initial_compression_mode
-        if cb_version[:5] in COUCHBASE_FROM_4DOT6:
-            self.cluster_flag = "--cluster"
 
         rest.create_bucket(bucket='default', ramQuotaMB=512,
                            compressionMode=self.compression_mode)
