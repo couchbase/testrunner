@@ -9,6 +9,7 @@ from lib.membase.api.rest_client import RestConnection
 from lib.remote.remote_util import RemoteMachineShellConnection
 from lib.testconstants import STANDARD_BUCKET_PORT
 from lib.memcached.helper.data_helper import MemcachedClientHelper
+from membase.helper.cluster_helper import ClusterOperationHelper
 from pytests.eventing.eventing_constants import HANDLER_CODE, HANDLER_CODE_CURL
 from pytests.eventing.eventing_base import EventingBaseTest
 import logging
@@ -47,19 +48,6 @@ class EventingRecovery(EventingBaseTest):
         elif handler_code == 'bucket_op_with_cron_timers':
             self.handler_code = HANDLER_CODE.BUCKET_OPS_WITH_CRON_TIMERS_RECOVERY
         elif handler_code == 'n1ql_op_with_timers':
-            # index is required for delete operation through n1ql
-            self.n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
-            self.n1ql_helper = N1QLHelper(shell=self.shell,
-                                          max_verify=self.max_verify,
-                                          buckets=self.buckets,
-                                          item_flag=self.item_flag,
-                                          n1ql_port=self.n1ql_port,
-                                          full_docs_list=self.full_docs_list,
-                                          log=self.log, input=self.input,
-                                          master=self.master,
-                                          use_rest=True
-                                          )
-            self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
             self.handler_code = HANDLER_CODE.N1QL_OPS_WITH_TIMERS
         elif handler_code == 'source_bucket_mutation':
             self.handler_code = HANDLER_CODE.BUCKET_OP_WITH_SOURCE_BUCKET_MUTATION_RECOVERY
@@ -83,8 +71,20 @@ class EventingRecovery(EventingBaseTest):
             self.handler_code = HANDLER_CODE_CURL.TIMER_OP_WITH_CURL_DELETE_RECOVERY
         elif handler_code == 'cancel_timer':
             self.handler_code = HANDLER_CODE.CANCEL_TIMER_RECOVERY
+        elif handler_code == 'bucket_op_expired':
+            self.handler_code = HANDLER_CODE.BUCKET_OP_EXPIRED_RECOVERY
         else:
             self.handler_code = HANDLER_CODE.DELETE_BUCKET_OP_ON_DELETE_RECOVERY
+        # index is required for delete operation through n1ql
+        self.n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
+        self.n1ql_helper = N1QLHelper(shell=self.shell, max_verify=self.max_verify, buckets=self.buckets,
+                                      item_flag=self.item_flag, n1ql_port=self.n1ql_port,
+                                      full_docs_list=self.full_docs_list, log=self.log, input=self.input,
+                                      master=self.master, use_rest=True)
+        self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
+        if self.is_expired:
+            # set expiry pager interval
+            ClusterOperationHelper.flushctl_set(self.master, "exp_pager_stime", 60, bucket=self.src_bucket_name)
 
     def tearDown(self):
         super(EventingRecovery, self).tearDown()
@@ -100,8 +100,12 @@ class EventingRecovery(EventingBaseTest):
         if self.pause_resume:
             self.pause_function(body)
         # load some data
-        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                  batch_size=self.batch_size)
+        if not self.is_expired:
+            self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                      batch_size=self.batch_size)
+        else:
+            self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                      batch_size=self.batch_size,exp=60)
         if self.pause_resume:
             self.resume_function(body)
         # kill eventing consumer when eventing is processing mutations
@@ -117,8 +121,9 @@ class EventingRecovery(EventingBaseTest):
         if self.pause_resume:
             self.pause_function(body)
         # delete all documents
-        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                  batch_size=self.batch_size, op_type='delete')
+        if not self.is_expired:
+            self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                      batch_size=self.batch_size, op_type='delete')
         if self.pause_resume:
             self.resume_function(body)
         # kill eventing consumer when eventing is processing mutations
@@ -150,8 +155,12 @@ class EventingRecovery(EventingBaseTest):
         if self.pause_resume:
             self.pause_function(body)
         # load some data
-        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                  batch_size=self.batch_size)
+        if not self.is_expired:
+            self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                      batch_size=self.batch_size)
+        else:
+            self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                      batch_size=self.batch_size,exp=60)
         # kill eventing producer when eventing is processing mutations
         self.kill_producer(eventing_node)
         if self.pause_resume:
@@ -168,8 +177,9 @@ class EventingRecovery(EventingBaseTest):
         if self.pause_resume:
             self.pause_function(body)
         # delete all documents
-        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                  batch_size=self.batch_size, op_type='delete')
+        if not  self.is_expired:
+            self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                      batch_size=self.batch_size, op_type='delete')
         # kill eventing producer when eventing is processing mutations
         self.kill_producer(eventing_node)
         if self.pause_resume:
@@ -205,8 +215,12 @@ class EventingRecovery(EventingBaseTest):
         if self.pause_resume:
             self.pause_function(body)
         # load some data
-        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                  batch_size=self.batch_size)
+        if not self.is_expired:
+            self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                      batch_size=self.batch_size)
+        else:
+            self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                      batch_size=self.batch_size,exp=60)
         # kill memcached on kv and eventing when eventing is processing mutations
         for node in [kv_node, eventing_node]:
             self.kill_memcached_service(node)
@@ -221,8 +235,9 @@ class EventingRecovery(EventingBaseTest):
         if self.pause_resume:
             self.pause_function(body)
         # delete all documents
-        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                  batch_size=self.batch_size, op_type='delete')
+        if not self.is_expired:
+            self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                      batch_size=self.batch_size, op_type='delete')
         # kill memcached on kv and eventing when eventing is processing mutations
         for node in [kv_node, eventing_node]:
             self.kill_memcached_service(node)
@@ -252,8 +267,12 @@ class EventingRecovery(EventingBaseTest):
         if self.pause_resume:
             self.pause_function(body)
         # load some data
-        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                  batch_size=self.batch_size)
+        if not self.is_expired:
+            self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                      batch_size=self.batch_size)
+        else:
+            self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                      batch_size=self.batch_size,exp=120)
         # kill erlang on eventing when eventing is processing mutations
         for node in [eventing_node]:
             self.print_eventing_stats_from_all_eventing_nodes()
@@ -270,8 +289,9 @@ class EventingRecovery(EventingBaseTest):
         if self.pause_resume:
             self.pause_function(body)
         # delete all documents
-        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                  batch_size=self.batch_size, op_type='delete')
+        if not self.is_expired:
+            self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                      batch_size=self.batch_size, op_type='delete')
         # kill erlang on kv and eventing when eventing is processing mutations
         for node in [eventing_node]:
             self.print_eventing_stats_from_all_eventing_nodes()
@@ -280,10 +300,13 @@ class EventingRecovery(EventingBaseTest):
             self.wait_for_handler_state(body['appname'], "paused")
             self.resume_function(body)
         # Wait for eventing to catch up with all the delete mutations and verify results
-        if self.is_sbm:
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        if not self.cancel_timer:
+            if self.is_sbm:
+                self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+            else:
+                self.verify_eventing_results(self.function_name,0, skip_stats_validation=True)
         else:
-            self.verify_eventing_results(self.function_name,0, skip_stats_validation=True)
+            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
         # intentionally added , as it requires some time for eventing-consumers to shutdown
         self.sleep(60)
@@ -303,8 +326,12 @@ class EventingRecovery(EventingBaseTest):
         if self.pause_resume:
             self.pause_function(body)
         # load some data
-        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                  batch_size=self.batch_size)
+        if not self.is_expired:
+            self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                      batch_size=self.batch_size)
+        else:
+            self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                      batch_size=self.batch_size,exp=120)
         # kill erlang on kv when eventing is processing mutations
         for node in [kv_node]:
             self.print_eventing_stats_from_all_eventing_nodes()
@@ -313,16 +340,18 @@ class EventingRecovery(EventingBaseTest):
             self.wait_for_handler_state(body['appname'], "paused")
             self.resume_function(body)
         # Wait for eventing to catch up with all the update mutations and verify results
-        if self.is_sbm:
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2, skip_stats_validation=True)
-        else:
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        if not self.cancel_timer:
+            if self.is_sbm:
+                self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2, skip_stats_validation=True)
+            else:
+                self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         # pause handler
         if self.pause_resume:
             self.pause_function(body)
         # delete all documents
-        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                  batch_size=self.batch_size, op_type='delete')
+        if not self.is_expired:
+            self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                      batch_size=self.batch_size, op_type='delete')
         # kill erlang on kv when eventing is processing mutations
         for node in [kv_node]:
             self.print_eventing_stats_from_all_eventing_nodes()
@@ -331,10 +360,13 @@ class EventingRecovery(EventingBaseTest):
             self.wait_for_handler_state(body['appname'], "paused")
             self.resume_function(body)
         # Wait for eventing to catch up with all the delete mutations and verify results
-        if self.is_sbm:
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        if not self.cancel_timer:
+            if self.is_sbm:
+                self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+            else:
+                self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         else:
-            self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
         # intentionally added , as it requires some time for eventing-consumers to shutdown
         self.sleep(60)
@@ -351,8 +383,13 @@ class EventingRecovery(EventingBaseTest):
                                            "username": self.curl_username, "password": self.curl_password,"cookies": self.cookies})
         self.deploy_function(body)
         # load some data
-        task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
+        if not self.is_expired:
+            task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
                                                 self.buckets[0].kvs[1], 'create', compression=self.sdk_compression)
+        else:
+            task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
+                                                    self.buckets[0].kvs[1], 'create', compression=self.sdk_compression,
+                                                    exp=120)
         # pause handler
         if self.pause_resume:
             self.pause_function(body)
@@ -363,27 +400,33 @@ class EventingRecovery(EventingBaseTest):
         if self.pause_resume:
             self.resume_function(body)
         # Wait for eventing to catch up with all the update mutations and verify results
-        if self.is_sbm:
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2, skip_stats_validation=True)
-        else:
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        if not self.cancel_timer:
+            if self.is_sbm:
+                self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2, skip_stats_validation=True)
+            else:
+                self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         # delete all documents
-        task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, gen_load_non_json_del,
-                                                self.buckets[0].kvs[1], 'delete', compression=self.sdk_compression)
+        if not self.is_expired:
+            task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, gen_load_non_json_del,
+                                                    self.buckets[0].kvs[1], 'delete', compression=self.sdk_compression)
         # pause handler
         if self.pause_resume:
             self.pause_function(body)
         # reboot eventing node when it is processing mutations
         self.reboot_server(eventing_node)
-        task.result()
+        if not self.is_expired:
+            task.result()
         # pause handler
         if self.pause_resume:
             self.resume_function(body)
         # Wait for eventing to catch up with all the delete mutations and verify results
-        if self.is_sbm:
-            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+        if not self.cancel_timer:
+            if self.is_sbm:
+                self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
+            else:
+                self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         else:
-            self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
         # intentionally added , as it requires some time for eventing-consumers to shutdown
         self.sleep(60)

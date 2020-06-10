@@ -63,6 +63,7 @@ class HANDLER_CODE:
     CANCEL_TIMER_REBALANCE='handler_code/cancel_timer_rebalance.js'
     BUCKET_OP_EXPIRED='handler_code/bucket_op_expired.js'
     CANCEL_TIMER_RECOVERY='handler_code/cancel_timer_recovery.js'
+    BUCKET_OP_EXPIRED_RECOVERY='handler_code/bucket_op_expired_recovery.js'
 
 class HANDLER_CODE_CURL:
     BUCKET_OP_WITH_CURL = 'handler_code/curl/bucket_op_curl.js'
