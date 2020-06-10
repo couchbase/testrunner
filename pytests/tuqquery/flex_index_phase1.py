@@ -13,6 +13,23 @@ class FlexIndexTests(QueryTests):
     def suite_setUp(self):
         super(FlexIndexTests, self).suite_setUp()
 
+    def runTest(self):
+        pass
+
+    def init_flex_object(self, test_object):
+        self.log = test_object.log
+        self.master = test_object.master
+        self.input = test_object.input
+        self.buckets = test_object.buckets
+        self.testrunner_client = test_object.testrunner_client
+        self.use_rest = test_object.use_rest
+        self.scan_consistency = test_object.scan_consistency
+        self.hint_index = test_object.hint_index
+        self.n1ql_port = test_object.n1ql_port
+        self.analytics = test_object.analytics
+        self.named_prepare = test_object.named_prepare
+        self.servers = test_object.servers
+
     def setUp(self):
         super(FlexIndexTests, self).setUp()
 

@@ -1,6 +1,7 @@
 import threading
 from tuq import QueryTests
 from upgrade.newupgradebasetest import NewUpgradeBaseTest
+from .flex_index_phase1 import FlexIndexTests
 from remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection
 from couchbase.cluster import Cluster
@@ -27,6 +28,8 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
         self.load(self.gens_load, flag=self.item_flag)
         self.bucket_doc_map = {"default": 2016, "standard_bucket0": 2016}
         self.bucket_status_map = {"default": "healthy", "standard_bucket0": "healthy"}
+        self.custom_map = self.input.param("custom_map", False)
+        self.fts_index_type = self.input.param("fts_index_type", None)
 
         # feature specific setup
         if self.feature == "ansi-joins":
@@ -72,7 +75,7 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
     def tearDown(self):
         self.log.info("==============  QueriesUpgradeTests tearDown has started ==============")
         self.upgrade_servers = self.servers
-        if hasattr(self, 'upgrade_versions'):
+        if hasattr(self, 'upgrade_versions') and not self.initial_version:
             self.log.info("checking upgrade version")
             upgrade_major = self.upgrade_versions[0][0]
             self.log.info("upgrade major version: " + str(upgrade_major))
@@ -230,7 +233,7 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
                 th.join()
             rebalance = self.cluster.async_rebalance(participating_servers,
                                                      [server], [],
-                                                     services=['kv,n1ql,index'])
+                                                     services=['kv,n1ql,index,fts'])
             rebalance.result()
 
     def online_upgrade_with_failover(self, upgrade_servers):
@@ -284,6 +287,8 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
             self.run_backfill_upgrade_test(phase)
         elif feature == "curl-whitelist":
             self.run_curl_whitelist_upgrade_test(phase)
+        elif feature == "flex-index":
+            self.run_flex_index_upgrade_test(phase)
         else:
             self.fail("FAIL: feature {0} not found".format(feature))
 
@@ -296,6 +301,35 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
             self.run_test_basic_join()
         else:
             self.fail("FAIL: (ansi-join) invalid phase: {0}".format(phase))
+
+    def run_flex_index_upgrade_test(self, phase):
+        ft_object = FlexIndexTests()
+        ft_object.init_flex_object(self)
+        flex_query_list = ["select meta().id from default {0} where name = 'employee-6'"]
+        if phase == "pre-upgrade":
+            self.log.info("running pre-upgrade test for flex index")
+            self.create_fts_index(
+                name="default_index", source_name="default", doc_count=2016, index_storage_type=self.fts_index_type)
+        elif phase == "mixed-mode":
+            self.log.info("running mixed-mode test for flex index")
+            failed_to_run_query, not_found_index_in_response, result_mismatch = ft_object.run_query_and_validate(flex_query_list)
+            if failed_to_run_query or not_found_index_in_response or result_mismatch:
+                self.fail("Found queries not runnable: {0} or required index not found in the query resonse: {1} "
+                          "or flex query and gsi query results not matching: {2}"
+                          .format(failed_to_run_query, not_found_index_in_response, result_mismatch))
+            else:
+                self.log.info("All queries passed")
+        elif phase == "post-upgrade":
+            self.log.info("running post-upgrade test for flex index")
+            failed_to_run_query, not_found_index_in_response, result_mismatch = ft_object.run_query_and_validate(flex_query_list)
+            if failed_to_run_query or not_found_index_in_response or result_mismatch:
+                self.fail("Found queries not runnable: {0} or required index not found in the query resonse: {1} "
+                          "or flex query and gsi query results not matching: {2}"
+                          .format(failed_to_run_query, not_found_index_in_response, result_mismatch))
+            else:
+                self.log.info("All queries passed")
+        else:
+            self.fail("FAIL: (flex index) invalid phase: {0}".format(phase))
 
     def run_xattrs_upgrade_test(self, phase):
         if phase == "pre-upgrade":

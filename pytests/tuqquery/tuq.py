@@ -318,7 +318,7 @@ class QueryTests(BaseTestCase):
     def create_fts_index(self, name, source_type='couchbase',
                          source_name=None, index_type='fulltext-index',
                          index_params=None, plan_params=None,
-                         source_params=None, source_uuid=None, doc_count=1000):
+                         source_params=None, source_uuid=None, doc_count=1000, index_storage_type=None):
         """Create fts index/alias
         @param node: Node on which index is created
         @param name: name of the index/alias
@@ -340,6 +340,9 @@ class QueryTests(BaseTestCase):
         self.cbcluster = CouchbaseCluster(name='cluster', nodes=self.servers, log=self.log)
         if not self.custom_map:
             index_params = {
+                "default_analyzer": "keyword",
+                "default_datetime_parser": "dateTimeOptional",
+                "default_field": "_all",
                 "default_mapping": {
                     "enabled": True,
                     "dynamic": True,
@@ -360,7 +363,8 @@ class QueryTests(BaseTestCase):
             plan_params,
             source_params,
             source_uuid,
-            self.dataset
+            self.dataset,
+            index_storage_type
         )
         fts_index.create()
 

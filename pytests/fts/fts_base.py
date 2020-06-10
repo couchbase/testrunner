@@ -505,7 +505,7 @@ class FTSIndex:
 
     def __init__(self, cluster, name, source_type='couchbase',
                  source_name=None, index_type='fulltext-index', index_params=None,
-                 plan_params=None, source_params=None, source_uuid=None, dataset=None):
+                 plan_params=None, source_params=None, source_uuid=None, dataset=None, index_storage_type=None):
 
         """
          @param name : name of index/alias
@@ -533,7 +533,10 @@ class FTSIndex:
         self._source_name = source_name
         self._one_time = False
         self.index_type = index_type
-        self.index_storage_type = TestInputSingleton.input.param("index_type", None)
+        if not index_storage_type:
+            self.index_storage_type = TestInputSingleton.input.param("index_type", None)
+        else:
+            self.index_storage_type = index_storage_type
         self.num_pindexes = 0
         self.index_definition = {
             "type": "fulltext-index",
