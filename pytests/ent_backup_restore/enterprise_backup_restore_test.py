@@ -1454,7 +1454,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.enable_firewall = True
         try:
             output, error = self.backup_cluster()
-            self.assertTrue(self._check_output("connect: connection refused", output),
+            self.assertTrue(self._check_output("connection refused", output),
                             "Expected error not thrown by backup cluster when firewall enabled")
         finally:
             self.log.info("Disabling firewall on cluster host to take backup")

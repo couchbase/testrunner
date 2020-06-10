@@ -13,7 +13,7 @@ from ent_backup_restore.validation_helpers.backup_restore_validations \
     import BackupRestoreValidations
 from membase.helper.bucket_helper import BucketOperationHelper
 from membase.helper.cluster_helper import ClusterOperationHelper
-from remote.remote_util import RemoteMachineShellConnection
+from remote.remote_util import RemoteUtilHelper, RemoteMachineShellConnection
 from membase.api.rest_client import RestHelper, RestConnection, \
     Bucket as CBBucket
 from couchbase_helper.document import View
@@ -843,12 +843,20 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         eventing_service_in = False
         errs_check = ["Unable to process value", "Error restoring cluster",
                       "Expected argument for option"]
+        disable_firewall = False
+        if self.enable_firewall:
+            rs_conn = RemoteMachineShellConnection(self.backupset.restore_cluster_host)
+            rs_conn.disable_firewall()
+            rs_conn.disconnect()
+            disable_firewall = True
         rest_rs = RestConnection(self.backupset.restore_cluster_host)
         rs_cluster_services = list(rest_rs.get_nodes_services().values())
         for srv in rs_cluster_services:
             if "eventing" in srv:
                 eventing_service_in = True
                 errs_check.append("User needs one of the following permissions: cluster.eventing")
+        if disable_firewall:
+            RemoteUtilHelper.enable_firewall(self.backupset.restore_cluster_host)
         accepted_errs = False
         for err in errs_check:
             if self._check_output(err, output):
@@ -858,7 +866,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         if accepted_errs:
             if not self.should_fail:
                 if not self.restore_should_fail and not eventing_service_in:
-                    self.fail("Failed to restore cluster")
+                    if not self.enable_firewall:
+                        self.fail("Failed to restore cluster")
             else:
                 self.log.info("This test is for negative test")
         res = output
