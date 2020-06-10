@@ -19,8 +19,13 @@ class RbacN1QL(QueryTests):
             self.inp_users = eval(eval(users))
         self.users = self.get_user_list()
         self.roles = self.get_user_role_list()
-        self.query_buckets = self.get_query_buckets(check_all_buckets=True)
-        self.query_bucket = self.query_buckets[0]
+        if self.bucket_name != "default":
+            self.rest.create_bucket(bucket=self.bucket_name, ramQuotaMB=100)
+            self.query_bucket = self.bucket_name
+            self.run_cbq_query(query="CREATE PRIMARY INDEX ON `{0}`".format(self.bucket_name))
+        else:
+            self.query_buckets = self.get_query_buckets(check_all_buckets=True)
+            self.query_bucket = self.query_buckets[0]
 
     def tearDown(self):
         super(RbacN1QL, self).tearDown()
@@ -30,7 +35,7 @@ class RbacN1QL(QueryTests):
         # self.shell.execute_command("killall cbq-engine")
         self.grant_role()
         shell = RemoteMachineShellConnection(self.master)
-        cmd = "{4} -u {0}:{1} http://{2}:8093/query/service -d 'statement=SELECT * from {3} " \
+        cmd = "{4} -u {0}:{1} http://{2}:8093/query/service -d 'statement=SELECT * from `{3}` " \
               "LIMIT 10'".format(self.users[0]['id'], self.users[0]['password'], self.master.ip,
                                  self.query_bucket, self.curl_path)
         output, error = shell.execute_command(cmd)
@@ -52,7 +57,7 @@ class RbacN1QL(QueryTests):
         old_name = "employee-14"
         new_name = "employee-14-2"
         cmd = "{6} -u {0}:{1} http://{2}:8093/query/service -d " \
-              "'statement=UPDATE {3} a set name = '{4}' where name = '{5}'" \
+              "'statement=UPDATE `{3}` a set name = '{4}' where name = '{5}'" \
               " limit 1'".format(self.users[0]['id'], self.users[0]['password'], self.master.ip,
                                  self.query_bucket, new_name, old_name, self.curl_path)
         output, error = shell.execute_command(cmd)
@@ -67,7 +72,7 @@ class RbacN1QL(QueryTests):
         self.grant_role()
         shell = RemoteMachineShellConnection(self.master)
         cmd = "%s -u %s:%s http://%s:8093/query/service -d " \
-              "'statement=INSERT INTO %s (KEY, VALUE) VALUES(\"1\", { \"value1\": " \
+              "'statement=INSERT INTO `%s` (KEY, VALUE) VALUES(\"1\", { \"value1\": " \
               "\"one1\" })'" % (self.curl_path, self.users[0]['id'], self.users[0]['password'], self.master.ip,
                                 self.query_bucket)
         output, error = shell.execute_command(cmd)
@@ -83,7 +88,7 @@ class RbacN1QL(QueryTests):
         shell = RemoteMachineShellConnection(self.master)
         del_name = "employee-14"
         cmd = "{5} -u {0}:{1} http://{2}:8093/query/service -d " \
-              "'statement=DELETE FROM {3} a WHERE name = '{4}''". \
+              "'statement=DELETE FROM `{3}` a WHERE name = '{4}''". \
             format(self.users[0]['id'], self.users[0]['password'], self.master.ip, self.query_bucket,
                    del_name, self.curl_path)
         output, error = shell.execute_command(cmd)
@@ -98,7 +103,7 @@ class RbacN1QL(QueryTests):
         self.grant_role()
         shell = RemoteMachineShellConnection(self.master)
         cmd = "%s -u %s:%s http://%s:8093/query/service -d " \
-              "'statement=UPSERT INTO %s (KEY, VALUE) VALUES(\"1\", { \"value1\": \"one1\" }) " \
+              "'statement=UPSERT INTO `%s` (KEY, VALUE) VALUES(\"1\", { \"value1\": \"one1\" }) " \
               "RETURNING *'" % (self.curl_path, self.users[0]['id'], self.users[0]['password'],
                                 self.master.ip, self.query_bucket)
         output, error = shell.execute_command(cmd)
@@ -113,7 +118,7 @@ class RbacN1QL(QueryTests):
         self.grant_role()
         shell = RemoteMachineShellConnection(self.master)
         cmd = "%s -u %s:%s http://%s:8093/query/service -d " \
-              "'statement=MERGE INTO %s b1 USING %s b2 ON KEY b2.%s WHEN NOT MATCHED THEN " \
+              "'statement=MERGE INTO `%s` b1 USING `%s` b2 ON KEY b2.%s WHEN NOT MATCHED THEN " \
               "INSERT { \"value1\": \"one1\" }'" % (self.curl_path, self.users[0]['id'], self.users[0]['password'],
                                                     self.master.ip, self.query_bucket, self.query_bucket, 'name')
         output, error = shell.execute_command(cmd)
@@ -123,7 +128,7 @@ class RbacN1QL(QueryTests):
         self.log.info("Query executed successfully")
         # test for joins with subquery
         cmd = "%s -u %s:%s http://%s:8093/query/service -d " \
-              "'statement=SELECT b1.b1id,b2.name FROM (select d.*,meta(d).id b1id from %s d) b1 JOIN %s b2 " \
+              "'statement=SELECT b1.b1id,b2.name FROM (select d.*,meta(d).id b1id from `%s` d) b1 JOIN %s b2 " \
               "ON KEYS  b1.docid where b1.b1id > 1' " % \
               (self.curl_path, self.users[0]['id'], self.users[0]['password'], self.master.ip, self.query_bucket,
                self.query_bucket)
@@ -136,7 +141,7 @@ class RbacN1QL(QueryTests):
         # test for joins
         cmd = "%s -u %s:%s http://%s:8093/query/service -d " \
               "'statement= SELECT employee.name, employee.tasks_ids, new_project.project " \
-              "FROM %s as employee JOIN %s as new_project " \
+              "FROM `%s` as employee JOIN %s as new_project " \
               "ON KEYS employee.tasks_ids '" % \
               (self.curl_path, self.users[0]['id'], self.users[0]['password'], self.master.ip, self.query_bucket,
                self.query_bucket)
@@ -149,7 +154,7 @@ class RbacN1QL(QueryTests):
         self.run_cbq_query()
         # test for nest
         cmd = "%s -u %s:%s http://%s:8093/query/service -d " \
-              "'statement= SELECT meta(b1).id b1id from %s b1 NEST %s b2 ON KEY b2.docid FOR b1 " \
+              "'statement= SELECT meta(b1).id b1id from `%s` b1 NEST `%s` b2 ON KEY b2.docid FOR b1 " \
               "WHERE meta(b1).id > 1 '" % \
               (self.curl_path, self.users[0]['id'], self.users[0]['password'], self.master.ip, self.query_bucket,
                self.query_bucket)
@@ -159,10 +164,10 @@ class RbacN1QL(QueryTests):
                         format(self.query_bucket, self.query_bucket, self.users[0]['id']))
         self.log.info("Query executed successfully")
 
-        self.query = "create index idxbidirec2 on %s(join_day)" % self.query_bucket
+        self.query = "create index idxbidirec2 on `%s`(join_day)" % self.query_bucket
         actual_result = self.run_cbq_query()
         cmd = "%s -u %s:%s http://%s:8093/query/service -d " \
-              "'statement= SELECT employee.name, employee.join_day FROM %s as employee inner JOIN %s as new_project " \
+              "'statement= SELECT employee.name, employee.join_day FROM `%s` as employee inner JOIN `%s` as new_project " \
               " ON KEY new_project.join_day FOR employee where new_project.join_day is not null '" % \
               (self.curl_path, self.users[0]['id'], self.users[0]['password'], self.master.ip, self.query_bucket,
                self.query_bucket)
@@ -177,12 +182,12 @@ class RbacN1QL(QueryTests):
         self.grant_role()
         shell = RemoteMachineShellConnection(self.master)
         cmd = "%s -u %s:%s http://%s:8093/query/service -d " \
-              "'statement=CREATE INDEX `age-index` ON %s(age)'" % \
+              "'statement=CREATE INDEX `age-index` ON `%s`(age)'" % \
               (self.curl_path, self.users[0]['id'], self.users[0]['password'], self.master.ip, self.query_bucket)
         output, error = shell.execute_command(cmd)
         shell.log_command_output(output, error)
         cmd = "%s -u %s:%s http://%s:8093/query/service -d " \
-              "'statement=CREATE INDEX `age-index2` ON %s(age)  USING GSI WITH {\"defer_build\":true}'" % \
+              "'statement=CREATE INDEX `age-index2` ON `%s`(age)  USING GSI WITH {\"defer_build\":true}'" % \
               (self.curl_path, self.users[0]['id'], self.users[0]['password'], self.master.ip, self.query_bucket)
         output, error = shell.execute_command(cmd)
         shell.log_command_output(output, error)
@@ -196,7 +201,7 @@ class RbacN1QL(QueryTests):
                             format(self.query_bucket, self.users[0]['id']))
             self.log.info("Create Query executed successfully")
         cmd = "%s -u %s:%s http://%s:8093/query/service -d " \
-              "'statement=BUILD INDEX ON %s(`age-index2`) USING GSI'" % \
+              "'statement=BUILD INDEX ON `%s`(`age-index2`) USING GSI'" % \
               (self.curl_path, self.users[0]['id'], self.users[0]['password'], self.master.ip, self.query_bucket)
         output, error = shell.execute_command(cmd)
         shell.log_command_output(output, error)
@@ -230,7 +235,7 @@ class RbacN1QL(QueryTests):
         self.grant_role()
         shell = RemoteMachineShellConnection(self.master)
         cmd = "%s -u %s:%s http://%s:8093/query/service -d " \
-              "'statement=CREATE INDEX `age-index` ON %s(age) USING GSI'" % \
+              "'statement=CREATE INDEX `age-index` ON `%s`(age) USING GSI'" % \
               (self.curl_path, self.users[0]['id'], self.users[0]['password'], self.master.ip, self.query_bucket)
         output, error = shell.execute_command(cmd)
         shell.log_command_output(output, error)
@@ -243,7 +248,7 @@ class RbacN1QL(QueryTests):
                             format(self.query_bucket, self.users[0]['id']))
             self.log.info("Create Query executed successfully")
         cmd = "%s -u %s:%s http://%s:8093/query/service -d " \
-              "'statement=DROP INDEX %s.`age-index` USING GSI'" % \
+              "'statement=DROP INDEX `%s`.`age-index` USING GSI'" % \
               (self.curl_path, self.users[0]['id'], self.users[0]['password'], self.master.ip, self.query_bucket)
         output, error = shell.execute_command(cmd)
         shell.log_command_output(output, error)
@@ -262,7 +267,7 @@ class RbacN1QL(QueryTests):
         self.grant_role()
         shell = RemoteMachineShellConnection(self.master)
         cmd = "%s -u %s:%s http://%s:8093/query/service -d " \
-              "'statement=CREATE INDEX `age-index` ON %s(age) USING GSI WITH {\"nodes\":\"%s\"}'" % \
+              "'statement=CREATE INDEX `age-index` ON `%s`(age) USING GSI WITH {\"nodes\":\"%s\"}'" % \
               (self.curl_path, self.master.rest_username, self.master.rest_password,
                self.master.ip, self.query_bucket, self.master.ip + ":" + self.master.port)
         output, error = shell.execute_command(cmd)
@@ -278,7 +283,7 @@ class RbacN1QL(QueryTests):
                             format(self.query_bucket, self.users[0]['id']))
             self.log.info("Create Query executed successfully")
         cmd = "%s -u %s:%s http://%s:8093/query/service -d " \
-              "'statement=ALTER INDEX %s.`age-index` WITH {\"action\":\"move\", \"nodes\":\"%s\"}'" % \
+              "'statement=ALTER INDEX `%s`.`age-index` WITH {\"action\":\"move\", \"nodes\":\"%s\"}'" % \
               (self.curl_path, self.users[0]['id'], self.users[0]['password'],
                self.master.ip, self.query_bucket, self.servers[1].ip + ":" + self.servers[1].port)
         output, error = shell.execute_command(cmd)
@@ -312,7 +317,7 @@ class RbacN1QL(QueryTests):
         roles = ["select", "insert", "update", "delete"]
         assigned_role = self.get_user_role_list()[0]['roles']
         for role in roles:
-            self.query = 'grant {0} on {1} to {2}'.format(role, 'default', 'test')
+            self.query = 'grant {0} on `{1}` to {2}'.format(role, 'default', 'test')
             res = self.curl_with_roles(self.query)
             if (assigned_role == 'cluster_admin' or assigned_role == 'ro_admin' or assigned_role == 'bucket_full_access'
                     or assigned_role == 'bucket_admin' or assigned_role == 'views_admin' or assigned_role == 'replication_admin'
@@ -322,7 +327,7 @@ class RbacN1QL(QueryTests):
                     or assigned_role == 'data_writer'):
                 self.assertTrue(str(res).find("'code': 13014") != -1)
             if (assigned_role == 'admin'):
-                cmd = "%s -u %s:%s http://%s:8093/query/service -d 'statement= SELECT * FROM %s limit 1'" \
+                cmd = "%s -u %s:%s http://%s:8093/query/service -d 'statement= SELECT * FROM `%s` limit 1'" \
                       % (self.curl_path, 'test', 'password', self.master.ip, 'default')
                 output, error = shell.execute_command(cmd)
                 shell.log_command_output(output, error)
@@ -338,7 +343,7 @@ class RbacN1QL(QueryTests):
         assigned_role = self.get_user_role_list()[0]['roles']
 
         for role in roles:
-            self.query = 'revoke {0} on {1} from {2}'.format(role, 'default', 'test')
+            self.query = 'revoke {0} on `{1}` from {2}'.format(role, 'default', 'test')
             res = self.curl_with_roles(self.query)
             if (assigned_role == 'cluster_admin' or assigned_role == 'ro_admin' or assigned_role == 'bucket_full_access'
                     or assigned_role == 'bucket_admin' or assigned_role == 'views_admin' or assigned_role == 'replication_admin'
@@ -348,7 +353,7 @@ class RbacN1QL(QueryTests):
                     or assigned_role == 'data_writer'):
                 self.assertTrue(str(res).find("'code': 13014") != -1)
             if (assigned_role == 'admin'):
-                cmd = "%s -u %s:%s http://%s:8093/query/service -d 'statement= SELECT * FROM %s limit 1'" \
+                cmd = "%s -u %s:%s http://%s:8093/query/service -d 'statement= SELECT * FROM `%s` limit 1'" \
                       % (self.curl_path, 'test', 'password', self.master.ip, 'default')
                 output, error = shell.execute_command(cmd)
                 shell.log_command_output(output, error)
@@ -361,7 +366,7 @@ class RbacN1QL(QueryTests):
         self.grant_role()
         shell = RemoteMachineShellConnection(self.master)
         if "delete" in self.roles[0]['roles']:
-            cmd = "{0} -u {1}:{2} http://{3}:8093/query/service -d 'statement=PREPARE delete from {4} LIMIT 10'". \
+            cmd = "{0} -u {1}:{2} http://{3}:8093/query/service -d 'statement=PREPARE delete from `{4}` LIMIT 10'". \
                 format(self.curl_path, self.users[0]['id'], self.users[0]['password'], self.master.ip,
                        self.query_bucket)
             output, error = shell.execute_command(cmd)
@@ -370,7 +375,7 @@ class RbacN1QL(QueryTests):
                             format(self.query_bucket, self.users[0]['id']))
             self.log.info("Prepare query executed successfully")
         elif "update" in self.roles[0]['roles']:
-            cmd = "{0} -u {1}:{2} http://{3}:8093/query/service -d 'statement=PREPARE UPDATE {4} a set name = 'test1' where name = 'test''". \
+            cmd = "{0} -u {1}:{2} http://{3}:8093/query/service -d 'statement=PREPARE UPDATE `{4}` a set name = 'test1' where name = 'test''". \
                 format(self.curl_path, self.users[0]['id'], self.users[0]['password'], self.master.ip,
                        self.query_bucket)
             output, error = shell.execute_command(cmd)
@@ -379,7 +384,7 @@ class RbacN1QL(QueryTests):
                             format(self.query_bucket, self.users[0]['id']))
             self.log.info("Prepare query executed successfully")
         elif "insert" in self.roles[0]['roles']:
-            cmd = "{0} -u {1}:{2} http://{3}:8093/query/service -d 'statement=PREPARE INSERT INTO {4} values(\"k051\", 123  )'". \
+            cmd = "{0} -u {1}:{2} http://{3}:8093/query/service -d 'statement=PREPARE INSERT INTO `{4}` values(\"k051\", 123  )'". \
                 format(self.curl_path, self.users[0]['id'], self.users[0]['password'], self.master.ip,
                        self.query_bucket)
             output, error = shell.execute_command(cmd)
@@ -388,7 +393,7 @@ class RbacN1QL(QueryTests):
                             format(self.query_bucket, self.users[0]['id']))
             self.log.info("Prepare query executed successfully")
         else:
-            cmd = "{0} -u {1}:{2} http://{3}:8093/query/service -d 'statement=PREPARE SELECT * from {4} LIMIT 10'". \
+            cmd = "{0} -u {1}:{2} http://{3}:8093/query/service -d 'statement=PREPARE SELECT * from `{4}` LIMIT 10'". \
                 format(self.curl_path, self.users[0]['id'], self.users[0]['password'], self.master.ip,
                        self.query_bucket)
             output, error = shell.execute_command(cmd)
@@ -404,7 +409,7 @@ class RbacN1QL(QueryTests):
         shell = RemoteMachineShellConnection(self.master)
         gen_load = BlobGenerator('infer', 'infer-', self.value_size, end=self.num_items)
         self._load_all_buckets(self.master, gen_load, "create", 10, flag=self.item_flag)
-        cmd = "%s -u %s:%s http://%s:8093/query/service -d 'statement=INFER %s WITH {\"sample_size\":10,\"num_sample_values\":0}'" % \
+        cmd = "%s -u %s:%s http://%s:8093/query/service -d 'statement=INFER `%s` WITH {\"sample_size\":10,\"num_sample_values\":0}'" % \
               (self.curl_path, self.users[0]['id'], self.users[0]['password'], self.master.ip, self.query_bucket)
         output, error = shell.execute_command(cmd)
         shell.log_command_output(output, error)
@@ -423,7 +428,7 @@ class RbacN1QL(QueryTests):
         self.grant_role()
         shell = RemoteMachineShellConnection(self.master)
         if "delete" in self.roles[0]['roles']:
-            cmd = "{0} -u {1}:{2} http://{3}:8093/query/service -d 'statement=EXPLAIN delete from {4}'". \
+            cmd = "{0} -u {1}:{2} http://{3}:8093/query/service -d 'statement=EXPLAIN delete from `{4}`'". \
                 format(self.curl_path, self.users[0]['id'], self.users[0]['password'], self.master.ip,
                        self.query_bucket)
             output, error = shell.execute_command(cmd)
@@ -431,7 +436,7 @@ class RbacN1QL(QueryTests):
                             format(self.query_bucket, self.users[0]['id']))
             self.log.info("Explain query executed successfully")
         elif "insert" in self.roles[0]['roles']:
-            cmd = "{0} -u {1}:{2} http://{3}:8093/query/service -d 'statement=EXPLAIN INSERT INTO {4} values(\"k051\", 123  )'". \
+            cmd = "{0} -u {1}:{2} http://{3}:8093/query/service -d 'statement=EXPLAIN INSERT INTO `{4}` values(\"k051\", 123  )'". \
                 format(self.curl_path, self.users[0]['id'], self.users[0]['password'], self.master.ip,
                        self.query_bucket)
             output, error = shell.execute_command(cmd)
@@ -439,7 +444,7 @@ class RbacN1QL(QueryTests):
                             format(self.query_bucket, self.users[0]['id']))
             self.log.info("Explain query executed successfully")
         elif "update" in self.roles[0]['roles']:
-            cmd = "{0} -u {1}:{2} http://{3}:8093/query/service -d 'statement=EXPLAIN UPDATE {4} a set name = \"test1\" where name = \"test\"'". \
+            cmd = "{0} -u {1}:{2} http://{3}:8093/query/service -d 'statement=EXPLAIN UPDATE `{4}` a set name = \"test1\" where name = \"test\"'". \
                 format(self.curl_path, self.users[0]['id'], self.users[0]['password'], self.master.ip,
                        self.query_bucket)
             output, error = shell.execute_command(cmd)
@@ -447,7 +452,7 @@ class RbacN1QL(QueryTests):
                             format(self.query_bucket, self.users[0]['id']))
             self.log.info("Explain query executed successfully")
         else:
-            cmd = "{0} -u {1}:{2} http://{3}:8093/query/service -d 'statement=EXPLAIN SELECT * from {4} LIMIT 10'". \
+            cmd = "{0} -u {1}:{2} http://{3}:8093/query/service -d 'statement=EXPLAIN SELECT * from `{4}` LIMIT 10'". \
                 format(self.curl_path, self.users[0]['id'], self.users[0]['password'], self.master.ip,
                        self.query_bucket)
             output, error = shell.execute_command(cmd)
@@ -576,7 +581,7 @@ class RbacN1QL(QueryTests):
         old_name = "employee-14"
         new_name = "employee-14-2"
         cmd = "{6} -u {0}:{1} http://{2}:8093/query/service -d " \
-              "'statement=UPDATE {3} a set name = '{4}' where name = '{5}' limit 1'". \
+              "'statement=UPDATE `{3}` a set name = '{4}' where name = '{5}' limit 1'". \
             format(self.users[0]['id'], self.users[0]['password'], self.master.ip, self.query_bucket, new_name,
                    old_name, self.curl_path)
         output, error = shell.execute_command(cmd)
@@ -593,7 +598,7 @@ class RbacN1QL(QueryTests):
         old_name = "employee-14"
         new_name = "employee-14-2"
         cmd = "{6} -u {0}:{1} http://{2}:8093/query/service -d " \
-              "'statement=UPDATE {3} a set name = '{4}' where name = '{5}' limit 1'". \
+              "'statement=UPDATE `{3}` a set name = '{4}' where name = '{5}' limit 1'". \
             format(self.users[0]['id'], self.users[0]['password'], self.master.ip, self.query_bucket, new_name,
                    old_name, self.curl_path)
         output, error = shell.execute_command(cmd)
@@ -630,8 +635,8 @@ class RbacN1QL(QueryTests):
         self.grant_role(role="query_select(default)")
         shell = RemoteMachineShellConnection(self.master)
         cmd = "%s -u %s:%s http://%s:8093/query/service -d " \
-              "'statement=INSERT INTO %s (KEY UUID(), VALUE _name)" \
-              " SELECT _name FROM %s _name WHERE age > 10'" % \
+              "'statement=INSERT INTO `%s` (KEY UUID(), VALUE _name)" \
+              " SELECT _name FROM `%s` _name WHERE age > 10'" % \
               (self.curl_path, self.users[0]['id'], self.users[0]['password'], self.master.ip, self.query_bucket,
                self.query_bucket)
         output, error = shell.execute_command(cmd)
@@ -647,8 +652,8 @@ class RbacN1QL(QueryTests):
         self.grant_role(role="query_select(default)")
         shell = RemoteMachineShellConnection(self.master)
         cmd = "%s -u %s:%s http://%s:8093/query/service -d " \
-              "'statement=UPSERT INTO %s (KEY UUID(), VALUE _name)" \
-              " SELECT _name FROM %s _name WHERE age > 10'" % \
+              "'statement=UPSERT INTO `%s` (KEY UUID(), VALUE _name)" \
+              " SELECT _name FROM `%s` _name WHERE age > 10'" % \
               (self.curl_path, self.users[0]['id'], self.users[0]['password'], self.master.ip, self.query_bucket,
                self.query_bucket)
         output, error = shell.execute_command(cmd)
@@ -665,7 +670,7 @@ class RbacN1QL(QueryTests):
         shell = RemoteMachineShellConnection(self.master)
         new_name = "employee-14-2"
         cmd = "{6} -u {0}:{1} http://{2}:8093/query/service -d " \
-              "'statement=UPDATE {3} a set name = '{4}' WHERE name IN (SELECT name FROM {5} WHERE age > 10)'". \
+              "'statement=UPDATE `{3}` a set name = '{4}' WHERE name IN (SELECT name FROM `{5}` WHERE age > 10)'". \
             format(self.users[0]['id'], self.users[0]['password'], self.master.ip, self.query_bucket, new_name,
                    self.query_bucket, self.curl_path)
         output, error = shell.execute_command(cmd)
@@ -681,7 +686,7 @@ class RbacN1QL(QueryTests):
         self.grant_role(role="query_select(default)")
         shell = RemoteMachineShellConnection(self.master)
         cmd = "{5} -u {0}:{1} http://{2}:8093/query/service -d " \
-              "'statement=DELETE FROM {3} a WHERE name IN (SELECT name FROM {4} WHERE age > 10)'". \
+              "'statement=DELETE FROM `{3}` a WHERE name IN (SELECT name FROM `{4}` WHERE age > 10)'". \
             format(self.users[0]['id'], self.users[0]['password'], self.master.ip, self.query_bucket, self.query_bucket,
                    self.curl_path)
         output, error = shell.execute_command(cmd)
@@ -696,8 +701,8 @@ class RbacN1QL(QueryTests):
         self.grant_role()
         shell = RemoteMachineShellConnection(self.master)
         cmd = "%s -u %s:%s http://%s:8093/query/service -d " \
-              "'statement=INSERT INTO %s (KEY UUID(), VALUE _name)" \
-              " SELECT _name FROM %s _name WHERE age > 10'" % \
+              "'statement=INSERT INTO `%s` (KEY UUID(), VALUE _name)" \
+              " SELECT _name FROM `%s` _name WHERE age > 10'" % \
               (self.curl_path, self.users[0]['id'], self.users[0]['password'], self.master.ip, self.query_bucket,
                self.query_bucket)
         output, error = shell.execute_command(cmd)
@@ -715,7 +720,7 @@ class RbacN1QL(QueryTests):
         shell = RemoteMachineShellConnection(self.master)
         new_name = "employee-14-2"
         cmd = "{6} -u {0}:{1} http://{2}:8093/query/service -d " \
-              "'statement=UPDATE {3} a set name = '{4}' WHERE name IN (SELECT name FROM {5} WHERE age > 10)'". \
+              "'statement=UPDATE `{3}` a set name = '{4}' WHERE name IN (SELECT name FROM `{5}` WHERE age > 10)'". \
             format(self.users[0]['id'], self.users[0]['password'], self.master.ip, self.query_bucket, new_name,
                    self.query_bucket, self.curl_path)
         output, error = shell.execute_command(cmd)
@@ -732,7 +737,7 @@ class RbacN1QL(QueryTests):
         self.grant_role()
         shell = RemoteMachineShellConnection(self.master)
         cmd = "{5} -u {0}:{1} http://{2}:8093/query/service -d " \
-              "'statement=DELETE FROM {3} a WHERE name IN (SELECT name FROM {4} WHERE age > 10)'". \
+              "'statement=DELETE FROM `{3}` a WHERE name IN (SELECT name FROM `{4}` WHERE age > 10)'". \
             format(self.users[0]['id'], self.users[0]['password'], self.master.ip, self.query_bucket, self.query_bucket,
                    self.curl_path)
         output, error = shell.execute_command(cmd)
@@ -750,8 +755,8 @@ class RbacN1QL(QueryTests):
         self.grant_role(role="query_select(bucket0)")
         shell = RemoteMachineShellConnection(self.master)
         cmd = "%s -u %s:%s http://%s:8093/query/service -d " \
-              "'statement=INSERT INTO %s (KEY UUID(), VALUE _name)" \
-              " SELECT _name FROM %s _name WHERE age > 10'" % \
+              "'statement=INSERT INTO `%s` (KEY UUID(), VALUE _name)" \
+              " SELECT _name FROM `%s` _name WHERE age > 10'" % \
               (self.curl_path, self.users[0]['id'], self.users[0]['password'], self.master.ip, self.buckets[1].name,
                self.query_bucket)
         output, error = shell.execute_command(cmd)
@@ -767,8 +772,8 @@ class RbacN1QL(QueryTests):
         self.grant_role()
         shell = RemoteMachineShellConnection(self.master)
         cmd = "%s -u %s:%s http://%s:8093/query/service -d " \
-              "'statement=INSERT INTO %s (KEY UUID(), VALUE _name)" \
-              " SELECT _name FROM %s _name WHERE age > 10'" % \
+              "'statement=INSERT INTO `%s` (KEY UUID(), VALUE _name)" \
+              " SELECT _name FROM `%s` _name WHERE age > 10'" % \
               (self.curl_path, self.users[0]['id'], self.users[0]['password'], self.master.ip, self.buckets[1].name,
                self.query_bucket)
         output, error = shell.execute_command(cmd)
@@ -786,8 +791,8 @@ class RbacN1QL(QueryTests):
         self.grant_role(role="query_select(bucket0)")
         shell = RemoteMachineShellConnection(self.master)
         cmd = "%s -u %s:%s http://%s:8093/query/service -d " \
-              "'statement=UPSERT INTO %s (KEY UUID(), VALUE _name)" \
-              " SELECT _name FROM %s _name WHERE age > 10'" % \
+              "'statement=UPSERT INTO `%s` (KEY UUID(), VALUE _name)" \
+              " SELECT _name FROM `%s` _name WHERE age > 10'" % \
               (self.curl_path, self.users[0]['id'], self.users[0]['password'], self.master.ip, self.buckets[1].name,
                self.query_bucket)
         output, error = shell.execute_command(cmd)
@@ -803,8 +808,8 @@ class RbacN1QL(QueryTests):
         self.grant_role()
         shell = RemoteMachineShellConnection(self.master)
         cmd = "%s -u %s:%s http://%s:8093/query/service -d " \
-              "'statement=UPSERT INTO %s (KEY UUID(), VALUE _name)" \
-              " SELECT _name FROM %s _name WHERE age > 10'" % \
+              "'statement=UPSERT INTO `%s` (KEY UUID(), VALUE _name)" \
+              " SELECT _name FROM `%s` _name WHERE age > 10'" % \
               (self.curl_path, self.users[0]['id'], self.users[0]['password'], self.master.ip, self.buckets[1].name,
                self.query_bucket)
         output, error = shell.execute_command(cmd)
@@ -823,7 +828,7 @@ class RbacN1QL(QueryTests):
         shell = RemoteMachineShellConnection(self.master)
         new_name = "employee-14-2"
         cmd = "{6} -u {0}:{1} http://{2}:8093/query/service -d " \
-              "'statement=UPDATE {3} a set name = '{4}' WHERE name IN (SELECT name FROM {5} WHERE age > 10)'". \
+              "'statement=UPDATE `{3}` a set name = '{4}' WHERE name IN (SELECT name FROM `{5}` WHERE age > 10)'". \
             format(self.users[0]['id'], self.users[0]['password'], self.master.ip, self.buckets[1].name, new_name,
                    self.query_bucket, self.curl_path)
         output, error = shell.execute_command(cmd)
@@ -840,7 +845,7 @@ class RbacN1QL(QueryTests):
         shell = RemoteMachineShellConnection(self.master)
         new_name = "employee-14-2"
         cmd = "{6} -u {0}:{1} http://{2}:8093/query/service -d " \
-              "'statement=UPDATE {3} a set name = '{4}' WHERE name IN (SELECT name FROM {5} WHERE age > 10)'". \
+              "'statement=UPDATE `{3}` a set name = '{4}' WHERE name IN (SELECT name FROM `{5}` WHERE age > 10)'". \
             format(self.users[0]['id'], self.users[0]['password'], self.master.ip, self.buckets[1].name, new_name,
                    self.query_bucket, self.curl_path)
         output, error = shell.execute_command(cmd)
@@ -858,7 +863,7 @@ class RbacN1QL(QueryTests):
         self.grant_role(role="query_select(bucket0)")
         shell = RemoteMachineShellConnection(self.master)
         cmd = "{5} -u {0}:{1} http://{2}:8093/query/service -d " \
-              "'statement=DELETE FROM {3} a WHERE name IN (SELECT name FROM {4} WHERE age > 10)'". \
+              "'statement=DELETE FROM `{3}` a WHERE name IN (SELECT name FROM `{4}` WHERE age > 10)'". \
             format(self.users[0]['id'], self.users[0]['password'], self.master.ip, self.buckets[1].name,
                    self.query_bucket, self.curl_path)
         output, error = shell.execute_command(cmd)
@@ -874,7 +879,7 @@ class RbacN1QL(QueryTests):
         self.grant_role()
         shell = RemoteMachineShellConnection(self.master)
         cmd = "{5} -u {0}:{1} http://{2}:8093/query/service -d " \
-              "'statement=DELETE FROM {3} a WHERE name IN (SELECT name FROM {4} WHERE age > 10)'". \
+              "'statement=DELETE FROM `{3}` a WHERE name IN (SELECT name FROM `{4}` WHERE age > 10)'". \
             format(self.users[0]['id'], self.users[0]['password'], self.master.ip, self.buckets[1].name,
                    self.query_bucket, self.curl_path)
         output, error = shell.execute_command(cmd)
