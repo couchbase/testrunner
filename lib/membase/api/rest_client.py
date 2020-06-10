@@ -4478,7 +4478,7 @@ class RestConnection(object):
     '''
 
     def import_function(self, body):
-        authorization = self.get_authorization(self.username, self.password)
+        authorization = base64.encodestring('%s:%s' % (self.username, self.password))
         url = "api/v1/import"
         api = self.eventing_baseUrl + url
         headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
