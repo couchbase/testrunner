@@ -141,7 +141,7 @@ class EventingRebalance(EventingBaseTest):
                       batch_size=self.batch_size)
         else:
             self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                      batch_size=self.batch_size,exp=30)
+                      batch_size=self.batch_size,exp=120)
         if self.pause_resume:
             self.pause_function(body)
         # rebalance in a eventing node when eventing is processing mutations
@@ -200,7 +200,7 @@ class EventingRebalance(EventingBaseTest):
                       batch_size=self.batch_size)
         else:
             self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                      batch_size=self.batch_size, exp=30)
+                      batch_size=self.batch_size, exp=120)
         if self.pause_resume:
             self.pause_function(body)
         # rebalance out a eventing node when eventing is processing mutations
@@ -259,7 +259,7 @@ class EventingRebalance(EventingBaseTest):
                       batch_size=self.batch_size)
         else:
             self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                      batch_size=self.batch_size, exp=30)
+                      batch_size=self.batch_size, exp=120)
         if self.pause_resume:
             self.pause_function(body)
         # swap rebalance an eventing node when eventing is processing mutations
@@ -320,7 +320,7 @@ class EventingRebalance(EventingBaseTest):
                       batch_size=self.batch_size)
         else:
             self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                      batch_size=self.batch_size, exp=60)
+                      batch_size=self.batch_size, exp=120)
         if self.pause_resume:
             self.pause_function(body)
         # rebalance in a kv node when eventing is processing mutations
@@ -372,7 +372,7 @@ class EventingRebalance(EventingBaseTest):
                       batch_size=self.batch_size)
         else:
             self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                      batch_size=self.batch_size, exp=60)
+                      batch_size=self.batch_size, exp=120)
         if self.pause_resume:
             self.pause_function(body)
         # rebalance out kv node when eventing is processing mutations
@@ -423,7 +423,7 @@ class EventingRebalance(EventingBaseTest):
                       batch_size=self.batch_size)
         else:
             self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                      batch_size=self.batch_size, exp=60)
+                      batch_size=self.batch_size, exp=120)
         if self.pause_resume:
             self.pause_function(body)
         # swap rebalance kv node when eventing is processing mutations
@@ -473,7 +473,7 @@ class EventingRebalance(EventingBaseTest):
                                                     self.buckets[0].kvs[1], 'create', compression=self.sdk_compression)
         else:
             task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
-                                                    self.buckets[0].kvs[1], 'create', compression=self.sdk_compression,exp=60)
+                                                    self.buckets[0].kvs[1], 'create', compression=self.sdk_compression,exp=120)
         if self.pause_resume:
             self.pause_function(body)
         # rebalance in a node
@@ -522,7 +522,7 @@ class EventingRebalance(EventingBaseTest):
                                                     self.buckets[0].kvs[1], 'create', compression=self.sdk_compression)
         else:
             task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
-                                                    self.buckets[0].kvs[1], 'create', compression=self.sdk_compression,exp=60)
+                                                    self.buckets[0].kvs[1], 'create', compression=self.sdk_compression,exp=120)
         if self.pause_resume:
             self.pause_function(body)
         nodes_out_list = self.servers[self.server_out]
@@ -572,7 +572,7 @@ class EventingRebalance(EventingBaseTest):
                                                     self.buckets[0].kvs[1], 'create', compression=self.sdk_compression)
         else:
             task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
-                                                    self.buckets[0].kvs[1], 'create', compression=self.sdk_compression,exp=60)
+                                                    self.buckets[0].kvs[1], 'create', compression=self.sdk_compression,exp=120)
         if self.pause_resume:
             self.pause_function(body)
         nodes_out_list = self.servers[self.server_out]
@@ -920,7 +920,7 @@ class EventingRebalance(EventingBaseTest):
                                                     self.buckets[0].kvs[1], 'create', compression=self.sdk_compression)
         else:
             task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
-                                                    self.buckets[0].kvs[1], 'create', compression=self.sdk_compression,exp=60)
+                                                    self.buckets[0].kvs[1], 'create', compression=self.sdk_compression,exp=120)
         if self.pause_resume:
             self.pause_function(body)
         # rebalance in a eventing nodes when eventing is processing mutations
@@ -981,7 +981,7 @@ class EventingRebalance(EventingBaseTest):
                                                     self.buckets[0].kvs[1], 'create', compression=self.sdk_compression)
         else:
             task2 = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gen_load_create,
-                                                    self.buckets[0].kvs[1], 'create', compression=self.sdk_compression,exp=60)
+                                                    self.buckets[0].kvs[1], 'create', compression=self.sdk_compression,exp=120)
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], all_eventing_nodes)
         reached = RestHelper(self.rest).rebalance_reached(retry_count=150)
         self.assertTrue(reached, "rebalance failed, stuck or did not complete")
@@ -1016,7 +1016,7 @@ class EventingRebalance(EventingBaseTest):
                                                     self.buckets[0].kvs[1], 'create', compression=self.sdk_compression)
         else:
             task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
-                                                    self.buckets[0].kvs[1], 'create', compression=self.sdk_compression,exp=60)
+                                                    self.buckets[0].kvs[1], 'create', compression=self.sdk_compression,exp=120)
         if self.pause_resume:
             self.pause_function(body)
         # rebalance in a multiple 2 kv nodes when eventing is processing mutations
@@ -1071,7 +1071,7 @@ class EventingRebalance(EventingBaseTest):
                                                     self.buckets[0].kvs[1], 'create', compression=self.sdk_compression)
         else:
             task2 = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gen_load_create,
-                                                    self.buckets[0].kvs[1], 'create', compression=self.sdk_compression,exp=60)
+                                                    self.buckets[0].kvs[1], 'create', compression=self.sdk_compression,exp=120)
         if self.pause_resume:
             self.pause_function(body)
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], all_kv_nodes[1:3])

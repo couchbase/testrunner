@@ -14,24 +14,11 @@ function OnDelete(meta) {
             try{
             dst_bucket[meta.id]=meta.id;
             }catch(e){
-                log(e);
+                log("error:",e);
             }
     }
     }catch(e){
-        log(e);
-    }
-}
-
-function NDtimerCallback(context) {
-    log("firing delete timer:",context.docID);
-    var docID = context.docID;
-    while (true) {
-    try {
-        delete dst_bucket[context.docID];
-        break;
-    } catch (e) {
-        log(e);
-        }
+        log("error:",e);
     }
 }
 
