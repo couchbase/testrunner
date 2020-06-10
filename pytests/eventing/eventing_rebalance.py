@@ -977,10 +977,10 @@ class EventingRebalance(EventingBaseTest):
                                services=["eventing"])
         # load data
         if not self.is_expired:
-            task2 = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
+            task2 = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gen_load_create,
                                                     self.buckets[0].kvs[1], 'create', compression=self.sdk_compression)
         else:
-            task2 = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
+            task2 = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gen_load_create,
                                                     self.buckets[0].kvs[1], 'create', compression=self.sdk_compression,exp=60)
         rebalance = self.cluster.async_rebalance(self.servers[:self.nodes_init], [], all_eventing_nodes)
         reached = RestHelper(self.rest).rebalance_reached(retry_count=150)
@@ -1067,10 +1067,10 @@ class EventingRebalance(EventingBaseTest):
                                services=["kv"])
         # load data
         if not self.is_expired:
-            task2 = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
+            task2 = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gen_load_create,
                                                     self.buckets[0].kvs[1], 'create', compression=self.sdk_compression)
         else:
-            task2 = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
+            task2 = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gen_load_create,
                                                     self.buckets[0].kvs[1], 'create', compression=self.sdk_compression,exp=60)
         if self.pause_resume:
             self.pause_function(body)
