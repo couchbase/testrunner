@@ -11,8 +11,8 @@ import os as OS
 import paramiko
 import ipaddress
 
-from couchbase import Couchbase
-from couchbase.bucket import Bucket
+from couchbase.cluster import Cluster
+from couchbase.cluster import PasswordAuthenticator
 from couchbase.exceptions import CouchbaseError
 from couchbase.n1ql import N1QLQuery
 import get_jenkins_params
@@ -27,6 +27,8 @@ POLL_INTERVAL = 60
 SERVER_MANAGER = '172.23.104.162:8081'
 ADDL_SERVER_MANAGER = '172.23.104.162:8081'
 TEST_SUITE_DB = '172.23.104.162'
+SERVER_MANAGER_USER_NAME = 'Administrator'
+SERVER_MANAGER_PASSWORD = "esabhcuoc"
 TIMEOUT = 60
 SSH_NUM_RETRIES = 3
 SSH_POLL_INTERVAL = 20
@@ -269,8 +271,11 @@ def main():
     #  testsToLaunch.append( {'descriptor':fields[0],'confFile':fields[1],'iniFile':fields[2],
     #                         'serverCount':int(fields[3]), 'timeLimit':int(fields[4]),
     #                          'parameters':fields[5]})
-
-    cb = Bucket('couchbase://' + TEST_SUITE_DB + '/QE-Test-Suites')
+    cluster = Cluster('couchbase://{}'.format(TEST_SUITE_DB))
+    authenticator = PasswordAuthenticator(SERVER_MANAGER_USER_NAME,
+                                          SERVER_MANAGER_PASSWORD)
+    cluster.authenticate(authenticator)
+    cb = cluster.open_bucket('QE-Test-Suites')
 
     if options.run == "12hr_weekly":
         suiteString = "('12hour' in partOf or 'weekly' in partOf)"
