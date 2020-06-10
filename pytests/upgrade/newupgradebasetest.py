@@ -57,7 +57,7 @@ class NewUpgradeBaseTest(BaseTestCase):
                                   "4.6.0", "4.6.0-3573", '4.6.2', "4.6.2-3905"]
         self.use_hostnames = self.input.param("use_hostnames", False)
         self.product = self.input.param('product', 'couchbase-server')
-        self.initial_version = self.input.param('initial_version', '2.5.1-1083')
+        self.initial_version = self.input.param('initial_version', None)
         self.initial_vbuckets = self.input.param('initial_vbuckets', 1024)
         self.upgrade_versions = self.input.param('upgrade_version', '2.0.1-170-rel')
         self.call_ftsCallable = True
