@@ -82,7 +82,25 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
         self.query_types = query_type
         self.dataset = dataset
         self.smart_queries = False
-        if fields:
+        if fields and query_type == ['N1QL_MATCH_PHRASE']:
+            self.fields = {}
+            add_only_match = False
+            self.make_fields_compatible(fields)
+            if 'text' in self.fields.keys():
+                temp_text = self.fields['text']
+                temp_str = self.fields['str']
+                del self.fields['text']
+                del self.fields['str']
+                add_only_match = True
+            self.query_types = self.get_custom_query_types()
+            if add_only_match:
+                self.fields['str'] = temp_str
+                self.fields['text'] = temp_text
+                self.query_types.append("match")
+                self.query_types.append("match_phrase")
+                print("query_types: %s" % self.query_types)
+            self.smart_queries = True
+        elif fields:
             # Smart query generation
             self.fields = {}
             self.make_fields_compatible(fields)
