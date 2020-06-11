@@ -272,7 +272,7 @@ class EventingRecovery(EventingBaseTest):
                       batch_size=self.batch_size)
         else:
             self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                      batch_size=self.batch_size,exp=120)
+                      batch_size=self.batch_size,exp=300)
         # kill erlang on eventing when eventing is processing mutations
         for node in [eventing_node]:
             self.print_eventing_stats_from_all_eventing_nodes()
@@ -331,7 +331,7 @@ class EventingRecovery(EventingBaseTest):
                       batch_size=self.batch_size)
         else:
             self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
-                      batch_size=self.batch_size,exp=120)
+                      batch_size=self.batch_size,exp=300)
         # kill erlang on kv when eventing is processing mutations
         for node in [kv_node]:
             self.print_eventing_stats_from_all_eventing_nodes()
@@ -389,7 +389,7 @@ class EventingRecovery(EventingBaseTest):
         else:
             task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
                                                     self.buckets[0].kvs[1], 'create', compression=self.sdk_compression,
-                                                    exp=120)
+                                                    exp=300)
         # pause handler
         if self.pause_resume:
             self.pause_function(body)
