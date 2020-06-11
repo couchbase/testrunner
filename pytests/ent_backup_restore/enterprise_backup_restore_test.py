@@ -3227,7 +3227,12 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
 
         try:
             if len(output) > 1:
-                self.assertTrue("Index:default/age" in output[1],
+                index_name_path =  "Index:{0}/{1}".format(self.buckets[0].name, "age")
+                version = RestConnection(
+                              self.backupset.restore_cluster_host).get_nodes_version()
+                if version[:1] >= "7":
+                    index_name_path =  "Index:{0}/_{0}/_{0}/{1}".format(self.buckets[0].name, "age")
+                self.assertTrue(self._check_output(index_name_path, output),
                                 "GSI index not created in restore cluster as expected")
                 self.log.info("GSI index created in restore cluster as expected")
             else:
