@@ -74,7 +74,7 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
     def tearDown(self):
         self.log.info("==============  QueriesUpgradeTests tearDown has started ==============")
         self.upgrade_servers = self.servers
-        if hasattr(self, 'upgrade_versions') and not self.initial_version:
+        if hasattr(self, 'upgrade_versions') and self.initial_version is '2.5.1-1083':
             self.log.info("checking upgrade version")
             upgrade_major = self.upgrade_versions[0][0]
             self.log.info("upgrade major version: " + str(upgrade_major))
