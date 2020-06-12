@@ -17,6 +17,8 @@ class InListOperatorTests(QueryTests):
         for bucket in self.buckets:
             self.cluster.bucket_flush(self.master, bucket=bucket,
                                       timeout=self.wait_timeout * 5)
+        # Adding sleep after flushing buckets (see CBQE-5838)
+        self.sleep(210)
         if self.test_buckets == 'default':
             self.test_buckets = 'temp_bucket'
         self.query_bucket = self.get_query_buckets()[0]
@@ -498,6 +500,8 @@ class InListOperatorTests(QueryTests):
 
         for bucket in self.buckets:
             self.cluster.bucket_flush(self.master, bucket=bucket, timeout=self.wait_timeout * 5)
+        # Adding sleep after flushing buckets (see CBQE-5838)
+        self.sleep(210)
 
         for i1 in range(len(test_data["int_field"])):
             for i2 in range(len(test_data["bool_field"])):

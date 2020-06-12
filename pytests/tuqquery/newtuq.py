@@ -59,6 +59,8 @@ class QueryTests(BaseTestCase):
             for bucket in self.buckets:
                 self.cluster.bucket_flush(self.master, bucket=bucket,
                                           timeout=self.wait_timeout * 5)
+            # Adding sleep after flushing buckets (see CBQE-5838)
+            self.sleep(210)
             self.gens_load = self.generate_docs(self.docs_per_day)
             self.load(self.gens_load, flag=self.item_flag)
             if self.analytics:

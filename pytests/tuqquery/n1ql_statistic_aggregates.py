@@ -421,6 +421,8 @@ class StatisticAggregatesTest(QueryTests):
 
         for bucket in self.buckets:
             self.cluster.bucket_flush(self.master, bucket=bucket, timeout=self.wait_timeout * 5)
+        # Adding sleep after flushing buckets (see CBQE-5838)
+        self.sleep(210)
 
         for i1 in range(len(self.numbers)):
             query = "insert into " + self.query_bucket + " values ('key_" + str(i1) + "', {"
@@ -470,6 +472,8 @@ class StatisticAggregatesTest(QueryTests):
 
         for bucket in self.buckets:
             self.cluster.bucket_flush(self.master, bucket=bucket, timeout=self.wait_timeout * 5)
+        # Adding sleep after flushing buckets (see CBQE-5838)
+        self.sleep(210)
 
         for i in [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]:
             int_val = "null"
@@ -508,6 +512,8 @@ class StatisticAggregatesTest(QueryTests):
 
         for bucket in self.buckets:
             self.cluster.bucket_flush(self.master, bucket=bucket, timeout=self.wait_timeout * 5)
+        # Adding sleep after flushing buckets (see CBQE-5838)
+        self.sleep(210)
 
         query = "insert into " + self.query_bucket + " values ('key_1', {'int_field': 1, 'float_field': 3.14})"
         self.run_cbq_query(query)

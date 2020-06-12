@@ -271,6 +271,8 @@ class QueryMiscTests(QueryTests):
         for bucket in self.buckets:
             if bucket.name == self.default_bucket_name:
                 self.cluster.bucket_flush(self.master, bucket=bucket, timeout=180000)
+                # Adding sleep after flushing buckets (see CBQE-5838)
+                self.sleep(210)
         bucket_doc_map = {self.default_bucket_name: 0}
         bucket_status_map = {self.default_bucket_name: "healthy"}
         self.wait_for_buckets_status(bucket_status_map, 5, 120)
@@ -429,6 +431,8 @@ class QueryMiscTests(QueryTests):
         created_index = False
         try:
             self.cluster.bucket_flush(self.master, bucket=self.default_bucket_name, timeout=180000)
+            # Adding sleep after flushing buckets (see CBQE-5838)
+            self.sleep(210)
             self.query = "create index idx1 on " + self.query_bucket + "(ln,lk)"
             self.run_cbq_query()
             self._wait_for_index_online(self.default_bucket_name, "idx1")
@@ -490,6 +494,8 @@ class QueryMiscTests(QueryTests):
             if created_index:
                 self.drop_index(self.default_bucket_name, "idx1")
             self.cluster.bucket_flush(self.master, bucket=self.default_bucket_name, timeout=180000)
+            # Adding sleep after flushing buckets (see CBQE-5838)
+            self.sleep(210)
 
     def run_insert_query(self):
         values = 'VALUES(UUID(),{"ln":"null","lk":"null"}),'*999

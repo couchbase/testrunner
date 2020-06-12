@@ -139,6 +139,8 @@ class QueryTests(BaseTestCase):
                 self.cluster.rebalance([self.master, self.cbas_node], [], [self.cbas_node], services=['cbas'])
             for bucket in self.buckets:
                 self.cluster.bucket_flush(self.master, bucket=bucket, timeout=180000)
+            # Adding sleep after flushing buckets (see CBQE-5838)
+            self.sleep(210)
             self.gens_load = self.gen_docs(self.docs_per_day)
             self.load(self.gens_load, batch_size=1000, flag=self.item_flag)
             if self.analytics:
@@ -305,6 +307,8 @@ class QueryTests(BaseTestCase):
                           end=1000):
         # Load Emp Dataset
         self.cluster.bucket_flush(self.master)
+        # Adding sleep after flushing buckets (see CBQE-5838)
+        self.sleep(210)
 
         if end > 0:
             self._kv_gen = JsonDocGenerator("emp_",
@@ -320,6 +324,8 @@ class QueryTests(BaseTestCase):
                           end=1000):
         # Load Emp Dataset
         self.cluster.bucket_flush(self.master)
+        # Adding sleep after flushing buckets (see CBQE-5838)
+        self.sleep(210)
 
         if end > 0:
             self._kv_gen = NapaDataLoader("napa_",
@@ -335,6 +341,8 @@ class QueryTests(BaseTestCase):
                            end=1000):
         # Load Emp Dataset
         # self.cluster.bucket_flush(self.master)
+        # Adding sleep after flushing buckets (see CBQE-5838)
+        self.sleep(210)
 
         if end > 0:
             self._kv_gen = WikiJSONGenerator("wiki_",

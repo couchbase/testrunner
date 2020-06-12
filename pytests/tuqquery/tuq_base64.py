@@ -12,6 +12,8 @@ class Base64Tests(QueryTests):
         self.gens_load = self.gen_docs(type='base64')
         for bucket in self.buckets:
             self.cluster.bucket_flush(self.master, bucket=bucket, timeout=self.wait_timeout * 5)
+        # Adding sleep after flushing buckets (see CBQE-5838)
+        self.sleep(210)
         self.load(self.gens_load)
         self.query_buckets = self.get_query_buckets(check_all_buckets=True)
 

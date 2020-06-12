@@ -10,6 +10,8 @@ class QueryANSIMERGETests(QueryTests):
         for bucket in self.buckets:
             self.cluster.bucket_flush(self.master, bucket=bucket,
                                       timeout=self.wait_timeout * 5)
+        # Adding sleep after flushing buckets (see CBQE-5838)
+        self.sleep(210)
         self.query_buckets = self.get_query_buckets(check_all_buckets=True)
         self.query_bucket0 = self.query_buckets[0]
         self.query_bucket1 = self.query_buckets[1]

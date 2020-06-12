@@ -276,7 +276,9 @@ class QueriesOpsTests(QuerySanityTests):
         fn()
         for bucket in self.buckets:
             self.cluster.bucket_flush(self.master, bucket=bucket)
-        self.sleep(5, 'wait some time before restore')
+        # Adding sleep after flushing buckets (see CBQE-5838)
+        self.sleep(210)
+
         shell.restore_backupFile(self.couchbase_login_info, self.backup_location,
                                  [bucket.name for bucket in self.buckets])
         fn = getattr(self, method_name)
@@ -303,7 +305,8 @@ class QueriesOpsTests(QuerySanityTests):
             fn()
             for bucket in self.buckets:
                 self.cluster.bucket_flush(self.master, bucket=bucket)
-            self.sleep(5, 'wait some time before restore')
+            # Adding sleep after flushing buckets (see CBQE-5838)
+            self.sleep(210)
             shell.restore_backupFile(self.couchbase_login_info, self.backup_location,
                                      [bucket.name for bucket in self.buckets])
             fn = getattr(self, method_name)
@@ -335,7 +338,8 @@ class QueriesOpsTests(QuerySanityTests):
             fn()
             for bucket in self.buckets:
                 self.cluster.bucket_flush(self.master, bucket=bucket)
-            self.sleep(5, 'wait some time before restore')
+            # Adding sleep after flushing buckets (see CBQE-5838)
+            self.sleep(210)
             shell.restore_backupFile(self.couchbase_login_info, self.backup_location,
                                      [bucket.name for bucket in self.buckets])
             fn = getattr(self, method_name)
