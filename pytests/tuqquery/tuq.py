@@ -339,17 +339,30 @@ class QueryTests(BaseTestCase):
         @param source_uuid: UUID of the source, may not be used
         """
         self.cbcluster = CouchbaseCluster(name='cluster', nodes=self.servers, log=self.log)
+        self.keyword_analyzer_at_type_mapping = self.input.param("keyword_analyzer_at_type_mapping", False)
         if not self.custom_map:
-            index_params = {
-                "default_analyzer": "keyword",
-                "default_datetime_parser": "dateTimeOptional",
-                "default_field": "_all",
-                "default_mapping": {
-                    "enabled": True,
-                    "dynamic": True,
-                    "default_analyzer": "keyword"
+            if self.keyword_analyzer_at_type_mapping:
+                index_params = {
+                    "default_analyzer": "standard",
+                    "default_datetime_parser": "dateTimeOptional",
+                    "default_field": "_all",
+                    "default_mapping": {
+                        "enabled": True,
+                        "dynamic": True,
+                        "default_analyzer": "keyword"
+                    }
                 }
-            }
+            else:
+                index_params = {
+                    "default_analyzer": "keyword",
+                    "default_datetime_parser": "dateTimeOptional",
+                    "default_field": "_all",
+                    "default_mapping": {
+                        "enabled": True,
+                        "dynamic": True,
+                        "default_analyzer": "keyword"
+                    }
+                }
 
         if not plan_params:
             plan_params = {'numReplicas': 0}
@@ -369,6 +382,11 @@ class QueryTests(BaseTestCase):
         )
         fts_index.create()
 
+        self.wait_for_fts_indexing_complete(fts_index, doc_count)
+
+        return fts_index
+
+    def wait_for_fts_indexing_complete(self, fts_index, doc_count):
         indexed_doc_count = 0
         retry_count = 10
         while indexed_doc_count < doc_count and retry_count > 0:
@@ -381,8 +399,6 @@ class QueryTests(BaseTestCase):
 
         if indexed_doc_count != doc_count:
             self.fail("FTS indexing did not complete. FTS index count : {0}, Bucket count : {1}".format(indexed_doc_count, doc_count))
-
-        return fts_index
 
     def _load_test_buckets(self):
         if self.get_bucket_from_name("beer-sample") is None:
