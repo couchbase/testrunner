@@ -980,7 +980,7 @@ class EventingRebalance(EventingBaseTest):
         # Wait for eventing to catch up with all the update mutations and verify results after rebalance
         if not self.cancel_timer:
             if self.is_sbm:
-                self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 5, skip_stats_validation=True)
+                self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 3, skip_stats_validation=True)
             else:
                 self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         else:
@@ -1073,7 +1073,7 @@ class EventingRebalance(EventingBaseTest):
         # Wait for eventing to catch up with all the update mutations and verify results after rebalance
         if not self.cancel_timer:
             if self.is_sbm:
-                self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 5, skip_stats_validation=True)
+                self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 3, skip_stats_validation=True)
             else:
                 self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True)
         else:
