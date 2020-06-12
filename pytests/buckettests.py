@@ -9,7 +9,7 @@ from testconstants import STANDARD_BUCKET_PORT
 from testconstants import LINUX_COUCHBASE_BIN_PATH
 from testconstants import LINUX_COUCHBASE_SAMPLE_PATH
 from testconstants import WIN_COUCHBASE_BIN_PATH
-from testconstants import WIN_COUCHBASE_SAMPLE_PATH
+from testconstants import WIN_COUCHBASE_SAMPLE_PATH_C
 from testconstants import COUCHBASE_FROM_WATSON, COUCHBASE_FROM_4DOT6,\
                           COUCHBASE_FROM_SPOCK, COUCHBASE_FROM_VULCAN
 from scripts.install import InstallerJob
@@ -41,7 +41,7 @@ class CreateBucketTests(BaseTestCase):
             self.bin_path = "/home/%s%s" % (self.master.ssh_username,
                                             LINUX_COUCHBASE_BIN_PATH)
         if type.lower() == 'windows':
-            self.sample_path = WIN_COUCHBASE_SAMPLE_PATH
+            self.sample_path = WIN_COUCHBASE_SAMPLE_PATH_C
             self.bin_path = WIN_COUCHBASE_BIN_PATH
         elif type.lower() == "mac":
             self.sample_path = MAC_COUCHBASE_SAMPLE_PATH

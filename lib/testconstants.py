@@ -123,7 +123,8 @@ WIN_NUM_ERLANG_PROCESS = 4
 WIN_MEMBASE_DATA_PATH = '/cygdrive/c/Program\ Files/Membase/Server/var/lib/membase/data/'
 WIN_COUCHBASE_DATA_PATH = '/cygdrive/c/Program\ Files/Couchbase/Server/var/lib/couchbase/data/'
 WIN_COUCHBASE_DATA_PATH_RAW = 'c:/Program\ Files/Couchbase/Server/var/lib/couchbase/data/'
-WIN_CB_PATH = "/cygdrive/c/Program Files/Couchbase/Server/"
+WIN_CB_PATH = "/cygdrive/c/Program\ Files/Couchbase/Server/"
+WIN_CB_PATH_PARA = "/cygdrive/c/Program Files/Couchbase/Server/"
 WIN_MB_PATH = "/cygdrive/c/Program Files/Membase/Server/"
 WIN_PROCESSES_KILLED = ["msiexec32.exe", "msiexec.exe", "setup.exe", "ISBEW64.*",
                         "iexplore.*", "WerFault.*", "Firefox.*", "bash.exe",

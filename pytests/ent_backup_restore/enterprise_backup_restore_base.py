@@ -1301,7 +1301,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         remote_client.log_command_output(output, error)
         if error:
             return False, error, "Merging backup failed"
-        elif output and not self._check_output("Merge completed successfully", output):
+        elif output and not self._check_output("succeeded", output):
             return False, output, "Merging backup failed"
         elif not output:
             self.log.info("process cbbackupmge may be killed")

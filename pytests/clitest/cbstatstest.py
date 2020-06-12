@@ -155,6 +155,8 @@ class cbstatsTests(CliBaseTest):
                                                       bucket.name, self.timeout)
         for line in output:
             stats = line.rsplit(":", 1)
+            if "c:/" in line:
+                stats = line.split(":", 1)
             collect_stats = ""
             commands = ["hash", "tapagg"]
             if command in commands:

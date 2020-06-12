@@ -500,7 +500,7 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
                                             cluster_host="localhost", cluster_port=8091,
                                               user="Administrator", password="password")
             if len(output) == 4:
-                self.assertEqual(output, ["INFO: rebalancing ", "", "SUCCESS: rebalanced cluster", ""])
+                self.assertTrue(self._check_output("SUCCESS: Rebalance complete", output))
             else:
                 self.assertTrue(self.cli_rebalance_msg in output)
 
@@ -555,7 +555,9 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
         output, error = remote_client.execute_couchbase_cli(cli_command=cli_command,
                                                             cluster_host="localhost", cluster_port=8091,
                                                             user="Administrator", password="password")
-        self.assertTrue(self.cli_rebalance_msg in output)
+        self.assertTrue(self._check_output(self.cli_rebalance_msg, output))
+        if self.os == 'windows':
+            self.sleep(10, "windows need more time to complete rebalance")
         remote_client.disconnect()
 
     def testAddRemoveNodesWithRecovery(self):

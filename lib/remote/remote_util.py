@@ -37,7 +37,7 @@ from testconstants import RPM_DIS_NAME
 from testconstants import LINUX_DISTRIBUTION_NAME, LINUX_CB_PATH, \
                           LINUX_COUCHBASE_BIN_PATH
 from testconstants import WIN_COUCHBASE_BIN_PATH,\
-                          WIN_CB_PATH
+                          WIN_CB_PATH, WIN_CB_PATH_PARA
 from testconstants import WIN_COUCHBASE_BIN_PATH_RAW
 from testconstants import WIN_TMP_PATH, WIN_TMP_PATH_RAW
 from testconstants import WIN_UNZIP, WIN_PSSUSPEND
@@ -4457,10 +4457,11 @@ class RemoteMachineShellConnection(KeepRefs):
             cb_client = "/home/%s%scouchbase-cli" % (self.username,
                                                      LINUX_COUCHBASE_BIN_PATH)
         self.extract_remote_info()
-        f, s, b = self.get_cbversion("unix")
+        os_name = "unix"
         if self.info.type.lower() == 'windows':
-            f, s, b = self.get_cbversion("windows")
+            os_name = "windows"
             cb_client = "%scouchbase-cli.exe" % (WIN_COUCHBASE_BIN_PATH)
+        f, s, b = self.get_cbversion(os_name)
         if self.info.distribution_type.lower() == 'mac':
             cb_client = "%scouchbase-cli" % (MAC_COUCHBASE_BIN_PATH)
 
@@ -4838,8 +4839,8 @@ class RemoteMachineShellConnection(KeepRefs):
                     log.info("couchbase server at {0} may not installed yet"
                                                            .format(self.ip))
         elif os_name == "windows":
-            if self.file_exists(WIN_CB_PATH, VERSION_FILE):
-                output = self.read_remote_file(WIN_CB_PATH, VERSION_FILE)
+            if self.file_exists(WIN_CB_PATH_PARA, VERSION_FILE):
+                output = self.read_remote_file(WIN_CB_PATH_PARA, VERSION_FILE)
             else:
                 log.info("couchbase server at {0} may not installed yet"
                                                         .format(self.ip))
