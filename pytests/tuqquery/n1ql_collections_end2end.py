@@ -257,6 +257,8 @@ class QueryCollectionsEnd2EndTests(QueryTests):
         self.assertTrue(result)
 
     def _perform_end_to_end_test(self, test_data=None):
+        sanity_test = self.input.param("sanity_test", False)
+
         if not test_data:
             test_data = {}
         namespace = "default"
@@ -273,104 +275,111 @@ class QueryCollectionsEnd2EndTests(QueryTests):
                 result = self.run_cbq_query(query)['status']
                 if result != 'success':
                     errors.append({"reason": "insert_no_index",
-                                   "message": "Initial insert is failed, cannot continue tests, aborting test suite."})
+                                   "message": "Initial insert is failed, cannot continue tests, aborting test suite1."})
                     return False, errors
                 query = "select * from "+keyspace+" use keys ['"+keyspace+"_id']"
                 result = self.run_cbq_query(query)
                 self.assertEquals(result['results'][0][collection_name]['name'], keyspace+'_name', "Wrong insert results!")
+
+                query = "insert into "+keyspace+" (KEY, VALUE) VALUES ('"+keyspace+"_id100', {'val':2, 'name' : '"+keyspace+"_name' })"
+                self.run_cbq_query(query)
+                query = "insert into "+keyspace+" (KEY, VALUE) VALUES ('"+keyspace+"_id200', {'val':3, 'name' : '"+keyspace+"_name' })"
+                self.run_cbq_query(query)
+
             except CBQError as e:
                 errors.append({"reason": "insert_no_index",
-                               "message": "Initial insert is failed, cannot continue tests, aborting test suite."})
+                               "message": "Initial insert is failed, cannot continue tests, aborting test suite2."})
                 return False, errors
 
-        for keyspace in tests:
-            keyspace = namespace+':'+keyspace
-            _, _, collection_name = self._extract_object_names(full_keyspace_name=keyspace)
+        if not sanity_test:
+            for keyspace in tests:
+                keyspace = namespace+':'+keyspace
+                _, _, collection_name = self._extract_object_names(full_keyspace_name=keyspace)
 
-            # select upon not indexed collection. Expected result - fail
-            try:
-                query = "select name from "+keyspace+" where val=1"
-                result = self.run_cbq_query(query)
-                if result['status'] == 'success':
-                    errors.append({"reason": "select_no_index", "message": "Select upon unindexed collection was unexpectedly successful."})
-            except CBQError as e:
-                pass
+                # select upon not indexed collection. Expected result - fail
+                try:
+                    query = "select name from "+keyspace+" where val=1"
+                    result = self.run_cbq_query(query)
+                    if result['status'] == 'success':
+                        errors.append({"reason": "select_no_index", "message": "Select upon unindexed collection was unexpectedly successful."})
+                except CBQError as e:
+                    pass
 
-            # update upon not indexed collection. Expected result - fail
-            try:
-                query = "update "+keyspace+" set name=name||'_updated' where val=1"
-                result = self.run_cbq_query(query)['status']
-                if result == 'success':
-                    errors.append({"reason": "update_no_index", "message": "Update upon unindexed collection was unexpectedly successful."})
-            except CBQError as e:
-                pass
+                # update upon not indexed collection. Expected result - fail
+                try:
+                    query = "update "+keyspace+" set name=name||'_updated' where val=1"
+                    result = self.run_cbq_query(query)['status']
+                    if result == 'success':
+                        errors.append({"reason": "update_no_index", "message": "Update upon unindexed collection was unexpectedly successful."})
+                except CBQError as e:
+                    pass
 
-            # upsert as update upon not indexed collection. Expected result - success
-            try:
-                query = "upsert into "+keyspace+" (KEY, VALUE) VALUES ('"+keyspace+"_id', {'val':1, 'name' : '"+keyspace+"_name_updated' })"
-                result = self.run_cbq_query(query)['status']
-                if result != 'success':
-                    errors.append({"reason": "upsert(update)_no_index", "message": "Upsert(update) upon unindexed collection was unsuccessful."})
-                query = "select * from "+keyspace+" use keys ['"+keyspace+"_id']"
-                result = self.run_cbq_query(query)
-                if result['results'][0][collection_name]['name'] != keyspace+'_name_updated':
-                    errors.append({"reason": "upsert(update)_no_index",
-                                   "message": "Upsert(update) upon unindexed collection produced incorrect result."})
-            except CBQError as e:
-                pass
+                # upsert as update upon not indexed collection. Expected result - success
+                try:
+                    query = "upsert into "+keyspace+" (KEY, VALUE) VALUES ('"+keyspace+"_id', {'val':1, 'name' : '"+keyspace+"_name_updated' })"
+                    result = self.run_cbq_query(query)['status']
+                    if result != 'success':
+                        errors.append({"reason": "upsert(update)_no_index", "message": "Upsert(update) upon unindexed collection was unsuccessful."})
+                    query = "select * from "+keyspace+" use keys ['"+keyspace+"_id']"
+                    result = self.run_cbq_query(query)
+                    if result['results'][0][collection_name]['name'] != keyspace+'_name_updated':
+                        errors.append({"reason": "upsert(update)_no_index",
+                                       "message": "Upsert(update) upon unindexed collection produced incorrect result."})
+                except CBQError as e:
+                    pass
 
-            # upsert as insert upon not indexed collection. Expected result - success
-            try:
-                query = "upsert into "+keyspace+" (KEY, VALUE) VALUES ('"+keyspace+"_id1', {'val':2, 'name' : '"+keyspace+"_name2' })"
-                result = self.run_cbq_query(query)['status']
-                if result != 'success':
-                    errors.append({"reason": "upsert(insert)_no_index", "message": "Upsert(insert) upon unindexed collection was unexpectedly successful."})
-                query = "select * from "+keyspace+" use keys ['"+keyspace+"_id1']"
-                result = self.run_cbq_query(query)
-                if result['results'][0][collection_name]['name'] != keyspace+'_name2':
-                    errors.append({"reason": "upsert(update)_no_index",
-                                   "message": "Upsert(update) upon unindexed collection produced incorrect result."})
-            except CBQError as e:
-                pass
+                # upsert as insert upon not indexed collection. Expected result - success - remove
+                try:
+                    query = "upsert into "+keyspace+" (KEY, VALUE) VALUES ('"+keyspace+"_id1', {'val':10, 'name' : '"+keyspace+"_name2' })"
+                    result = self.run_cbq_query(query)['status']
+                    if result != 'success':
+                        errors.append({"reason": "upsert(insert)_no_index", "message": "Upsert(insert) upon unindexed collection was unexpectedly successful."})
+                    query = "select * from "+keyspace+" use keys ['"+keyspace+"_id1']"
+                    result = self.run_cbq_query(query)
+                    if result['results'][0][collection_name]['name'] != keyspace+'_name2':
+                        errors.append({"reason": "upsert(update)_no_index",
+                                       "message": "Upsert(update) upon unindexed collection produced incorrect result."})
+                except CBQError as e:
+                    pass
 
-            # merge as insert upon not indexed collection. Expected result - fail
-            try:
-                query = "MERGE INTO "+keyspace+" AS target " \
-                                       "USING [ {'name':'"+keyspace+"_name2', 'val': 2} ] AS source " \
-                                       "ON target.val = source.val " \
-                                       "WHEN MATCHED THEN " \
-                                       "UPDATE SET target.name = source.name " \
-                                       "WHEN NOT MATCHED THEN " \
-                                       "INSERT (KEY UUID(), VALUE {'name': source.name, 'val': source.val})"
-                result = self.run_cbq_query(query)['status']
-                if result == 'success':
-                    errors.append({"reason": "merge(insert)_no_index", "message": "Merge(insert) upon unindexed collection was unexpectedly successful."})
-            except CBQError as e:
-                pass
+                # merge as insert upon not indexed collection. Expected result - fail 0 remove
+                try:
+                    query = "MERGE INTO "+keyspace+" AS target " \
+                                           "USING [ {'name':'"+keyspace+"_name2', 'val': 10} ] AS source " \
+                                           "ON target.val = source.val " \
+                                           "WHEN MATCHED THEN " \
+                                           "UPDATE SET target.name = source.name " \
+                                           "WHEN NOT MATCHED THEN " \
+                                           "INSERT (KEY UUID(), VALUE {'name': source.name, 'val': source.val})"
+                    result = self.run_cbq_query(query)['status']
+                    if result == 'success':
+                        errors.append({"reason": "merge(insert)_no_index", "message": "Merge(insert) upon unindexed collection was unexpectedly successful."})
+                except CBQError as e:
+                    pass
 
-            # merge as update upon not indexed collection. Expected result - fail
-            try:
-                query = "MERGE INTO "+keyspace+" AS target " \
-                                       "USING [ {'name':'"+keyspace+"_name2', 'val': 1} ] AS source " \
-                                       "ON target.val = source.val " \
-                                       "WHEN MATCHED THEN " \
-                                       "UPDATE SET target.name = source.name " \
-                                       "WHEN NOT MATCHED THEN " \
-                                       "INSERT (KEY UUID(), VALUE {'name': source.name, 'val': source.val})"
-                result = self.run_cbq_query(query)['status']
-                if result == 'success':
-                    errors.append({"reason": "merge(update)_no_index", "message": "Merge(update) upon unindexed collection was unexpectedly successful."})
-            except CBQError as e:
-                pass
+                # merge as update upon not indexed collection. Expected result - fail - remobe
+                try:
+                    query = "MERGE INTO "+keyspace+" AS target " \
+                                           "USING [ {'name':'"+keyspace+"_name2', 'val': 1} ] AS source " \
+                                           "ON target.val = source.val " \
+                                           "WHEN MATCHED THEN " \
+                                           "UPDATE SET target.name = source.name " \
+                                           "WHEN NOT MATCHED THEN " \
+                                           "INSERT (KEY UUID(), VALUE {'name': source.name, 'val': source.val})"
+                    result = self.run_cbq_query(query)['status']
+                    if result == 'success':
+                        errors.append({"reason": "merge(update)_no_index", "message": "Merge(update) upon unindexed collection was unexpectedly successful."})
+                except CBQError as e:
+                    pass
 
-            # delete upon not indexed collection. Expected result - fail
-            try:
-                query = "delete from "+keyspace+" where val='1'"
-                result = self.run_cbq_query(query)['status']
-                if result == 'success':
-                    errors.append({"reason": "delete_no_index", "message": "Delete upon unindexed collection was unexpectedly successful."})
-            except CBQError as e:
-                pass
+                # delete upon not indexed collection. Expected result - fail
+                try:
+                    query = "delete from "+keyspace+" where val='1'"
+                    result = self.run_cbq_query(query)['status']
+                    if result == 'success':
+                        errors.append({"reason": "delete_no_index", "message": "Delete upon unindexed collection was unexpectedly successful."})
+                except CBQError as e:
+                    pass
 
         for keyspace in tests:
             keyspace = namespace+':'+keyspace
@@ -396,13 +405,13 @@ class QueryCollectionsEnd2EndTests(QueryTests):
 
             # select upon collection with primary index. Expected result - success.
             try:
-                query = "select name from "+keyspace+" where val=1"
+                query = "select name from "+keyspace+" where val=2"
                 result = self.run_cbq_query(query)
                 if result['status'] != 'success':
                     errors.append({"reason": "select_primary_index", "message": "Select upon primary indexed collection is failed."})
-                if result['results'][0]['name'] != keyspace+'_name_updated':
+                if result['results'][0]['name'] != keyspace+'_name':
                     errors.append({"reason": "select_primary_index",
-                                   "message": "Select upon primary indexed collection returned wrong result."})
+                                    "message": "Select upon primary indexed collection returned wrong result."})
             except CBQError as e:
                 errors.append(
                     {"reason": "select_primary_index", "message": "Select upon primary indexed collection is failed."})
@@ -410,23 +419,23 @@ class QueryCollectionsEnd2EndTests(QueryTests):
 
             # update upon collection with primary index. Expected result - success.
             try:
-                query = "update "+keyspace+" set name=name||'_updated' where val=1"
+                query = "update "+keyspace+" set name=name||'_updated' where val=2"
                 result = self.run_cbq_query(query)['status']
                 if result != 'success':
                     errors.append({"reason": "update_primary_index", "message": "Update upon primary indexed collection is failed."})
-                query = "select name from "+keyspace+" where val=1"
+                query = "select name from "+keyspace+" where val=2"
                 result = self.run_cbq_query(query)
-                if result['results'][0]['name'] != keyspace+'_name_updated_updated':
+                if result['results'][0]['name'] != keyspace+'_name_updated':
                     errors.append({"reason": "select_primary_index",
-                                   "message": "Update upon primary indexed collection produced wrong result."})
+                                    "message": "Update upon primary indexed collection produced wrong result."})
             except CBQError as e:
                 errors.append(
                     {"reason": "update_primary_index", "message": "Update upon primary indexed collection is failed."})
-                pass
+            pass
 
-            # upsert as update upon collection with primary index. Expected result - success.
+        # upsert as update upon collection with primary index. Expected result - success.
             try:
-                query = "upsert into "+keyspace+" (KEY, VALUE) VALUES ('"+keyspace+"_id', {'val':1, 'name' : '"+keyspace+"_name' })"
+                query = "upsert into "+keyspace+" (KEY, VALUE) VALUES ('"+keyspace+"_id', {'val':2, 'name' : '"+keyspace+"_name' })"
                 result = self.run_cbq_query(query)
                 if result['status'] != 'success':
                     errors.append({"reason": "upsert(update)_primary_index", "message": "Upsert(update) upon primary indexed collection is failed."})
@@ -500,7 +509,7 @@ class QueryCollectionsEnd2EndTests(QueryTests):
 
             # select upon collection with secondary index. Expected result - success.
             try:
-                query = "select name from "+keyspace+" where val=1"
+                query = "select name from "+keyspace+" where val=3"
                 result = self.run_cbq_query(query)
                 if result['status'] != 'success':
                     errors.append({"reason": "select_secondary_index", "message": "Select upon secondary indexed collection is failed."})
@@ -514,11 +523,11 @@ class QueryCollectionsEnd2EndTests(QueryTests):
 
             # update upon collection with secondary index. Expected result - success.
             try:
-                query = "update "+keyspace+" set name=name||'_updated' where val=1"
+                query = "update "+keyspace+" set name=name||'_updated' where val=3"
                 result = self.run_cbq_query(query)['status']
                 if result != 'success':
                     errors.append({"reason": "update_secondary_index", "message": "Update upon secondary indexed collection is failed."})
-                query = "select name from "+keyspace+" where val=1"
+                query = "select name from "+keyspace+" where val=3"
                 result = self.run_cbq_query(query)
                 if result['results'][0]['name'] != keyspace+'_name_updated':
                     errors.append({"reason": "update_secondary_index",
@@ -530,11 +539,11 @@ class QueryCollectionsEnd2EndTests(QueryTests):
 
             # upsert as update upon collection with secondary index. Expected result - success.
             try:
-                query = "upsert into "+keyspace+" (KEY, VALUE) VALUES ('"+keyspace+"_id', {'val':1, 'name' : '"+keyspace+"_name_updated_x3' })"
+                query = "upsert into "+keyspace+" (KEY, VALUE) VALUES ('"+keyspace+"_id', {'val':3, 'name' : '"+keyspace+"_name_updated_x3' })"
                 result = self.run_cbq_query(query)['status']
                 if result != 'success':
                     errors.append({"reason": "upsert(update)_secondary_index", "message": "Upsert(update) upon secondary indexed collection is failed."})
-                query = "select name from " + keyspace + " where val=1"
+                query = "select name from " + keyspace + " where val=3"
                 result = self.run_cbq_query(query)
                 if result['results'][0]['name'] != keyspace + '_name_updated_x3':
                     errors.append({"reason": "upsert(update)_secondary_index",
@@ -546,11 +555,11 @@ class QueryCollectionsEnd2EndTests(QueryTests):
 
             # upsert as insert upon collection with secondary index. Expected result - success.
             try:
-                query = "upsert into "+keyspace+" (KEY, VALUE) VALUES ('"+keyspace+"_id3', {'val':3, 'name' : '"+keyspace+"_name3' })"
+                query = "upsert into "+keyspace+" (KEY, VALUE) VALUES ('"+keyspace+"_id3', {'val':33, 'name' : '"+keyspace+"_name3' })"
                 result = self.run_cbq_query(query)['status']
                 if result != 'success':
                     errors.append({"reason": "upsert(insert)_secondary_index", "message": "Upsert(insert) upon secondary indexed collection is failed."})
-                query = "select name from " + keyspace + " where val=3"
+                query = "select name from " + keyspace + " where val=33"
                 result = self.run_cbq_query(query)
                 if result['results'][0]['name'] != keyspace + '_name3':
                     errors.append({"reason": "upsert(insert)_secondary_index",
@@ -585,7 +594,7 @@ class QueryCollectionsEnd2EndTests(QueryTests):
             # merge as update upon collection with secondary index. Expected result - success.
             try:
                 query = "MERGE INTO "+keyspace+" AS target " \
-                                       "USING [ {'name':'"+keyspace+"_merged_name', 'val': 1} ] AS source " \
+                                       "USING [ {'name':'"+keyspace+"_merged_name', 'val': 3} ] AS source " \
                                        "ON target.val = source.val " \
                                        "WHEN MATCHED THEN " \
                                        "UPDATE SET target.name = source.name " \
@@ -594,7 +603,7 @@ class QueryCollectionsEnd2EndTests(QueryTests):
                 result = self.run_cbq_query(query)['status']
                 if result != 'success':
                     errors.append({"reason": "merge(update)_secondary_index", "message": "Merge(update) upon secondary indexed collection is failed."})
-                query = "select name from " + keyspace + " where val=1"
+                query = "select name from " + keyspace + " where val=3"
                 result = self.run_cbq_query(query)
                 if result['results'][0]['name'] != keyspace + '_merged_name':
                     errors.append({"reason": "merge(update)_secondary_index",
@@ -606,11 +615,11 @@ class QueryCollectionsEnd2EndTests(QueryTests):
 
             # delete upon collection with secondary index. Expected result - success.
             try:
-                query = "delete from "+keyspace+" where val=1"
+                query = "delete from "+keyspace+" where val=3"
                 result = self.run_cbq_query(query)['status']
                 if result != 'success':
                     errors.append({"reason": "delete_secondary_index", "message": "Delete upon secondary indexed collection is failed."})
-                query = "select count(*) from " + keyspace + " where val=1"
+                query = "select count(*) from " + keyspace + " where val=3"
                 result = self.run_cbq_query(query)
                 if result['results'][0]['$1'] != 0:
                     errors.append({"reason": "delete_secondary_index",
@@ -648,24 +657,25 @@ class QueryCollectionsEnd2EndTests(QueryTests):
                 pass
 
             # infer collection. Expected result - success.
-            try:
-                query = "infer "+keyspace
-                result = self.run_cbq_query(query)['status']
-                if result != 'success':
+            if not sanity_test:
+                try:
+                    query = "infer "+keyspace
+                    result = self.run_cbq_query(query)['status']
+                    if result != 'success':
+                        errors.append({"reason": "infer", "message": "Infer of collection is failed."})
+                except CBQError as e:
                     errors.append({"reason": "infer", "message": "Infer of collection is failed."})
-            except CBQError as e:
-                errors.append({"reason": "infer", "message": "Infer of collection is failed."})
-                pass
+                    pass
 
-            # update statistics for collection. Expected result - success.
-            try:
-                query = "UPDATE STATISTICS for "+keyspace+"(val)"
-                result = self.run_cbq_query(query)['status']
-                if result != 'success':
+                # update statistics for collection. Expected result - success.
+                try:
+                    query = "UPDATE STATISTICS for "+keyspace+"(val)"
+                    result = self.run_cbq_query(query)['status']
+                    if result != 'success':
+                        errors.append({"reason": "update_statistics", "message": "Update statistics for collection is failed."})
+                except CBQError as e:
                     errors.append({"reason": "update_statistics", "message": "Update statistics for collection is failed."})
-            except CBQError as e:
-                errors.append({"reason": "update_statistics", "message": "Update statistics for collection is failed."})
-                pass
+                    pass
 
             # drop secondary index for collection. Expected result - success.
             try:
