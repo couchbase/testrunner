@@ -3015,7 +3015,7 @@ class RestConnection(object):
 
     def get_recent_xdcr_vb_ckpt(self, repl_id):
         command = 'ns_server_testrunner_api:grab_all_goxdcr_checkpoints().'
-        status, content = self.diag_eval(command)
+        status, content = self.diag_eval(command, print_log=False)
         if not status:
             raise Exception("Unable to get recent XDCR checkpoint information")
         repl_ckpt_list = json.loads(content)

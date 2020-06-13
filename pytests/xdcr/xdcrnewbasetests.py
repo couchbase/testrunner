@@ -429,8 +429,7 @@ class NodeHelper:
         NodeHelper._log.info(count)
         if print_matches:
             NodeHelper._log.info(matches)
-            return matches, count
-        return count
+        return matches, count
 
     @staticmethod
     def rename_nodes(servers):
@@ -2917,7 +2916,7 @@ class XDCRNewBaseTest(unittest.TestCase):
             if self.__is_cluster_run():
                 goxdcr_log = NodeHelper.get_goxdcr_log_dir(node)\
                      + '/goxdcr.log*'
-            self._repl_restart_count_dict[node.ip] = \
+            _, self._repl_restart_count_dict[node.ip] = \
                 NodeHelper.check_goxdcr_log(node,
                                             "Try to fix Pipeline",
                                             goxdcr_log)

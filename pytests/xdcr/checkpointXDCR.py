@@ -174,10 +174,10 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
             total_successful_chkpts = 0
         self.log.info(total_successful_chkpts)
         chkpts, count = NodeHelper.check_goxdcr_log(node,
-                                                  "num_failedckpts",
-                                                  log_name="stats.log",
-                                                  print_matches=True,
-                                                  timeout=10)
+                                                    "num_failedckpts",
+                                                    log_name="stats.log",
+                                                    print_matches=False,
+                                                    timeout=10)
         if count > 0:
             total_failed_chkpts = int((chkpts[-1].split('num_failedckpts,')[1]).rstrip('},'))
         else:
@@ -190,7 +190,7 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
                                                         "POST /_goxdcr/_pre_replicate",
                                                         log_name="http_access.log",
                                                         timeout=10,
-                                                        print_matches=True)
+                                                        print_matches=False)
         if count > 0:
             total_successful_prereps = 0
             for call in prerep_calls:
@@ -315,7 +315,7 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
         num_404_errors_before_load = NodeHelper.check_goxdcr_log(
                                             active_src_node,
                                             "ERRO GOXDCR.CheckpointMgr: GetRemoteMemcachedConnection Operation failed after max retries",
-                                            timeout=30)
+                                            timeout=30, print_matches=False)
         self.sleep(60)
         self.log.info("################ New mutation:{0} ##################".format(self.key_counter+1))
         self.load_one_mutation_into_source_vb0(active_src_node)
@@ -323,7 +323,7 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
         num_404_errors_after_load = NodeHelper.check_goxdcr_log(
                                             active_src_node,
                                             "ERRO GOXDCR.CheckpointMgr: GetRemoteMemcachedConnection Operation failed after max retries",
-                                            timeout=30)
+                                            timeout=30, print_matches=False)
         if num_404_errors_after_load > num_404_errors_before_load:
             self.log.info("Topology change verified after dest failover/rebalance out")
             return True
@@ -621,14 +621,14 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
             nodes[0],
             "Received rollback from DCP stream",
             goxdcr_log,
-            timeout=30)
+            timeout=30, print_matches=False)
         self.assertGreater(count1, 0, "full rollback not received from DCP as expected")
         self.log.info("full rollback received from DCP as expected")
         count2 = NodeHelper.check_goxdcr_log(
             nodes[0],
             "Rolled back startSeqno to 0",
             goxdcr_log,
-            timeout=30)
+            timeout=30, print_matches=False)
         self.assertGreater(count2, 0, "startSeqno not rolled back to 0 as expected")
         self.log.info("startSeqno rolled back to 0 as expected")
 
