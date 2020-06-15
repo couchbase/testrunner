@@ -3383,6 +3383,8 @@ class XDCRNewBaseTest(unittest.TestCase):
     def setup_xdcr(self):
         self.set_xdcr_topology()
         self.setup_all_replications()
+        #Needed until collections with backfill is merged
+        time.sleep(60)
         if self._checkpoint_interval != 1800:
             for cluster in self.__cb_clusters:
                 cluster.set_global_checkpt_interval(self._checkpoint_interval)
@@ -3688,28 +3690,40 @@ class XDCRNewBaseTest(unittest.TestCase):
             self.fail(
                 "Errors encountered while executing query {0} on {1} : {2}".format(query, server, str(e)))
 
-    def _create_index(self, server, bucket):
-        query_check_index_exists = "SELECT COUNT(*) FROM system:indexes " \
+    def _create_index(self, server, bucket, scope=None, collection=None):
+        if scope != None and collection != None:
+            collection_index = bucket + "_" + scope + "_" + collection + "_index"
+            query_check_index_exists = "SELECT COUNT(*) FROM system:indexes " \
+                                       "WHERE name='" + collection_index + "'"
+            if not self.__execute_query(server, query_check_index_exists):
+                self.__execute_query(server, "CREATE PRIMARY INDEX " + collection_index
+                                     + " ON " + bucket + '.' + scope + '.' + collection)
+        else:
+            query_check_index_exists = "SELECT COUNT(*) FROM system:indexes " \
                                    "WHERE name='" + bucket + "_index'"
-        if not self.__execute_query(server, query_check_index_exists):
-            self.__execute_query(server, "CREATE PRIMARY INDEX " + bucket + "_index "
+            if not self.__execute_query(server, query_check_index_exists):
+                self.__execute_query(server, "CREATE PRIMARY INDEX " + bucket + "_index "
                                  + "ON " + bucket)
 
-    def _get_doc_count(self, server):
-        doc_count = 0
-        for bucket in self.filter_exp.keys():
-            exp = self.filter_exp[bucket]
-            if len(exp) > 1:
-                exp = " AND ".join(exp)
-            else:
-                exp = next(iter(exp))
-            if "DATE" in exp:
-                exp = exp.replace("DATE", '')
+    def _get_doc_count(self, server, bucket, scope=None, collection=None):
+        exp = self.filter_exp[bucket]
+        if len(exp) > 1:
+            exp = " AND ".join(exp)
+        else:
+            exp = next(iter(exp))
+        if "DATE" in exp:
+            exp = exp.replace("DATE", '')
+        if scope != None and collection != None:
+            doc_count = self.__execute_query(server, "SELECT COUNT(*) FROM "
+                                             + "default:" + bucket + "."
+                                             + scope + "." + collection +
+                                             " WHERE " + exp)
+        else:
             doc_count = self.__execute_query(server, "SELECT COUNT(*) FROM "
                                              + bucket +
                                              " WHERE " + exp)
-            if not doc_count:
-                return 0
+        if not doc_count:
+            return 0
         return doc_count
 
     def verify_filtered_items(self, src_master, dest_master, replications, skip_index=False):
@@ -3717,9 +3731,6 @@ class XDCRNewBaseTest(unittest.TestCase):
         for repl in replications:
             # Assuming src and dest bucket of the replication have the same name
             bucket = repl['source']
-            if not skip_index:
-                self._create_index(src_master, bucket)
-                self._create_index(dest_master, bucket)
             # filter_exp = {default:([filter_exp1, filter_exp2])}
             # and query will be "select count from default where filter_exp1 AND filter_exp2"
             if repl['filterExpression']:
@@ -3728,21 +3739,42 @@ class XDCRNewBaseTest(unittest.TestCase):
                     self.filter_exp[bucket].add(exp_in_brackets)
                 else:
                     self.filter_exp[bucket] = {exp_in_brackets}
-        src_count = self._get_doc_count(src_master)
-        dest_count = self._get_doc_count(dest_master)
-        if src_count != dest_count:
-            self.fail("Doc count {0} on {1} does not match "
-                      "doc count {2} on {3} "
-                      "after applying filter {4}"
-                      .format(src_count, src_master.ip,
-                              dest_count, dest_master.ip,
-                              self.filter_exp))
-        self.log.info("Doc count {0} on {1} matches "
-                      "doc count {2} on {3} "
-                      "after applying filter {4}"
-                      .format(src_count, src_master.ip,
-                              dest_count, dest_master.ip,
-                              self.filter_exp))
+            if self._use_java_sdk:
+                for scope in CollectionsRest(src_master).get_bucket_scopes(bucket):
+                    for collection in CollectionsRest(src_master).get_scope_collections(bucket, scope):
+                        if not skip_index:
+                            self._create_index(src_master, bucket, scope, collection)
+                            self._create_index(dest_master, bucket, scope, collection)
+                        src_count = self._get_doc_count(src_master, bucket, scope, collection)
+                        dest_count = self._get_doc_count(dest_master, bucket, scope, collection)
+                        if src_count != dest_count:
+                            self.fail("Doc count {0} on {1}:{2}->{3}->{4} does not match "
+                                      "doc count {5} on {6}:{2}->{3}->{4} after applying filter {7}"
+                                      .format(src_count, src_master.ip, bucket, scope, collection,
+                                              dest_count, dest_master.ip, self.filter_exp))
+                        self.log.info("Doc count {0} on {1}:{2}->{3}->{4} matches "
+                                      "doc count {5} on {6}:{2}->{3}->{4} after applying filter {7}"
+                                      .format(src_count, src_master.ip, bucket, scope, collection,
+                                              dest_count, dest_master.ip, self.filter_exp))
+            else:
+                if not skip_index:
+                    self._create_index(src_master, bucket)
+                    self._create_index(dest_master, bucket)
+                src_count = self._get_doc_count(src_master, bucket=bucket)
+                dest_count = self._get_doc_count(dest_master, bucket=bucket)
+                if src_count != dest_count:
+                    self.fail("Doc count {0} on {1} does not match "
+                              "doc count {2} on {3} "
+                              "after applying filter {4}"
+                              .format(src_count, src_master.ip,
+                                      dest_count, dest_master.ip,
+                                      self.filter_exp))
+                self.log.info("Doc count {0} on {1} matches "
+                              "doc count {2} on {3} "
+                              "after applying filter {4}"
+                              .format(src_count, src_master.ip,
+                                      dest_count, dest_master.ip,
+                                      self.filter_exp))
 
     def _check_lists_match(self, list1, list2):
         list_diff = [i for i in list1 + list2 if i not in list1 or i not in list2]
