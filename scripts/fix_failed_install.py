@@ -1,17 +1,25 @@
 from couchbase.bucket import Bucket
 from couchbase.n1ql import N1QLQuery
+from couchbase.cluster import Cluster
+from couchbase.cluster import PasswordAuthenticator
 import paramiko
 import sys
 
-if len(sys.argv) < 4:
-    print("Usage: fix_failed_install.py <poolid> <osusername> <osuserpwd>")
+if len(sys.argv) < 6:
+    print("Usage: fix_failed_install.py <poolid> <osusername> <osuserpwd> <cbuser> "
+          "<cbuserpassword>")
     sys.exit(1)
 
 poolId = sys.argv[1]
 username = sys.argv[2]
 password = sys.argv[3]
-cb = Bucket('couchbase://172.23.104.162/QE-server-pool')
+cb_username = sys.argv[4]
+cb_userpassword = sys.argv[5]
 
+cluster = Cluster('couchbase://172.23.104.162')
+authenticator = PasswordAuthenticator(cb_username,cb_userpassword)
+cluster.authenticate(authenticator)
+cb = cluster.open_bucket('QE-server-pool')
 
 def ssh_exec_cmd(ssh, server, cmds):
     print('cmds: %s' % cmds)
@@ -111,6 +119,9 @@ def clean_failedinstsall_vms(poolId):
                 setpoolstate(poolId, server, "failedInstall",
                              "available")  # ssh_stdin, ssh_stdout,   # ssh_stderr =
 				# ssh.exec_command('reboot')
+            else:
+                print("-->Not changed the server state as couchbase-server package removal not "
+                      "returned empty! {}".format(out_2))
 
         except Exception as e:
             print('Connection Failed: %s' % server)
