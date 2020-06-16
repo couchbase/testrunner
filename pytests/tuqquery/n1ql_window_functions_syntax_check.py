@@ -57,7 +57,8 @@ class WindowFunctionsSyntaxTest(QueryTests):
         self.log.info("==============  WindowFunctionsSyntaxTest suite_tearDown has completed ==============")
 
     def run_all(self):
-        self.test_from_select_batches()
+        # commenting from ... select queries to reduce overall test suite execution time.
+        #self.test_from_select_batches()
         self.test_select_from_batches()
 
     def generate_from_select_queries(self):
@@ -211,7 +212,7 @@ class WindowFunctionsSyntaxTest(QueryTests):
 
     def _run_test(self, query):
         try:
-            self.run_cbq_query(query)
+            self.run_cbq_query(query=query, debug_query=False)
         except CBQError as e:
             self.assertEqual('True', 'False', 'Wrong query - ' + str(query))
 
