@@ -19,9 +19,12 @@ import argparse
 import find_rerun_job
 import get_jenkins_params
 import merge_reports
+import shutil
+import zipfile
 
 host = '172.23.121.84'
 bucket_name = 'rerun_jobs'
+AWS_LINK = 'http://cb-logs-qe.s3-website-us-west-2.amazonaws.com'
 TIMEOUT = 60
 
 
@@ -99,28 +102,36 @@ def merge_xmls(rerun_document):
     job_url = job['job_url']
     artifacts = get_jenkins_params.get_js(job_url, "tree=artifacts[*]")
     if not artifacts or len(artifacts['artifacts']) == 0:
-        print("could not find the job. Job might be deleted")
-        testsuites = merge_reports.merge_reports("logs/**/*.xml")
-        return testsuites
-    relative_paths = []
-    for artifact in artifacts["artifacts"]:
-        if artifact["relativePath"].startswith("logs/") and \
-                artifact["relativePath"].endswith(".xml"):
-            relative_paths.append(artifact["relativePath"])
-    logs = []
-    for rel_path in relative_paths:
-        xml_data = get_jenkins_params.download_url_data("{0}artifact/"
-                                                        "{1}".format(
-            job_url, rel_path))
-        try:
-            file_name = rel_path.split('/')[-1]
-            file_name = "Old_Report_{0}".format(file_name)
-            f = open(file_name, "w")
-            f.writelines(xml_data.decode('utf-8'))
-            f.close()
-            logs.append(file_name)
-        except Exception as e:
-            print(e)
+        print("Could not find the job. Job might be deleted")
+        print("Trying to get the job logs from AWS")
+        logs = get_from_aws(rerun_document, job_url)
+    else:
+        relative_paths = []
+        for artifact in artifacts["artifacts"]:
+            if artifact["relativePath"].startswith("logs/") and \
+                    artifact["relativePath"].endswith(".xml"):
+                relative_paths.append(artifact["relativePath"])
+        logs = []
+        for rel_path in relative_paths:
+            xml_data = get_jenkins_params.download_url_data("{0}artifact/"
+                                                            "{1}".format(
+                job_url, rel_path))
+            try:
+                file_name = rel_path.split('/')[-1]
+                file_name = "Old_Report_{0}".format(file_name)
+                f = open(file_name, "w")
+                f.writelines(xml_data.decode('utf-8'))
+                f.close()
+                logs.append(file_name)
+            except Exception as e:
+                print(e)
+        if not logs:
+            print("Could not download the artifacts")
+            print("Trying to download from AWS")
+            logs = get_from_aws(rerun_document, job_url)
+    if logs is None or not logs:
+        print("Could not download any previous logs")
+        logs = []
     logs.append("logs/**/*.xml")
     testsuites = merge_reports.merge_reports(logs)
     try:
@@ -135,6 +146,51 @@ def merge_xmls(rerun_document):
         pass
     print("merged xmls")
     return testsuites
+
+
+def get_from_aws(rerun_document, job_url):
+    """
+    Get the previous job's logs from aws.
+    :param rerun_document: The rerun document containing reerun details
+    :type rerun_document: dict
+    :param job_url: Job url of the job whose logs have to be downloaded
+    :type job_url: str
+    :return: List of downloaded files if successful, else None
+    :rtype: list
+    """
+    build = rerun_document['build']
+    job_name = job_url.rstrip('/').split('/')[-2]
+    job_build_number = job_url.rstrip('/').split('/')[-1]
+    aws_link = '{0}/{1}/jenkins_logs/{2}/{3}' \
+               '/archive.zip'.format(AWS_LINK, build, job_name,
+                                     job_build_number)
+    archive_zip = get_jenkins_params.download_url_data(aws_link)
+    if not archive_zip:
+        print('Could not get the archive files from aws. ')
+        return None
+    try:
+        file_name = 'old_archive.zip'
+        f = open(file_name, "wb")
+        f.write(archive_zip)
+        f.close()
+        archive = zipfile.ZipFile('old_archive.zip')
+        extracted_files = []
+        for file in archive.namelist():
+            if file.startswith("archive/logs/") and file.endswith(
+                    ".xml"):
+                temp_folder = "temp"
+                test_log_file = 'Old_Report_{0}'.format(file.split(
+                    '/')[-1])
+                archive.extract(file, temp_folder)
+                shutil.copyfile("{0}/{1}".format(temp_folder, file),
+                                test_log_file)
+                shutil.rmtree(temp_folder)
+                extracted_files.append(test_log_file)
+        OS.remove('old_archive.zip')
+        return extracted_files
+    except Exception as e:
+        print(e)
+        return None
 
 
 def should_rerun_tests(testsuites=None, install_failure=False,
