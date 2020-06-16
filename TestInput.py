@@ -29,6 +29,7 @@ class TestInput(object):
         self.elastic = []
         self.advisor = []
         self.cbas = []
+        self.cbbackupmgr = {}
         #servers , each server can have u,p,port,directory
 
     def param(self, name, *args):
@@ -45,6 +46,26 @@ class TestInput(object):
         else:
             raise Exception("Parameter `{}` must be set "
                             "in the test configuration".format(name))
+
+    def cbbackupmgr_param(self, name, *args):
+        """Returns the config value from the ini whose key matches 'name' and is stored under the 'cbbackupmgr'
+        section heading.
+
+        Args:
+            name (str): The key under which an expected value is stored.
+            args (str): Expects a single parameter which will be used as the default if the requested key is not found.
+
+        Returns:
+            string: The value parsed from the ini file/default value if the given key is not found.
+
+        Raises:
+            Exception: If the given key does not exist in the ini and no default value is provided.
+        """
+        if name in self.cbbackupmgr:
+            return TestInput._parse_param(self.cbbackupmgr[name])
+        if len(args) == 1:
+            return args[0]
+        raise Exception(f"Parameter '{name}' must be set in the test configuration")
 
     @staticmethod
     def _parse_param(value):
@@ -89,6 +110,7 @@ class TestInputServer(object):
         self.es_password = ''
         self.upgraded = False
         self.collections_map = {}
+        self.cbbackupmgr = {}
 
     def __str__(self):
         #ip_str = "ip:{0}".format(self.ip)
@@ -197,6 +219,7 @@ class TestInputParser():
         input.dashboard = []
         input.ui_conf = {}
         cbas = []
+        input.cbbackupmgr = {}
         for section in sections:
             result = re.search('^cluster', section)
             if section == 'servers':
@@ -223,6 +246,8 @@ class TestInputParser():
                 input.advisor = TestInputParser.get_advisor_config(config, section, global_properties)
             elif section == 'cbas':
                 input.cbas = TestInputParser.get_cbas_config(config, section)
+            elif section == 'cbbackupmgr':
+                input.cbbackupmgr = TestInputParser.get_cbbackupmgr_config(config, section)
             elif result is not None:
                 cluster_list = TestInputParser.get_server_ips(config, section)
                 cluster_ips.extend(cluster_list)
@@ -359,6 +384,13 @@ class TestInputParser():
         if server.ssh_password == '' and 'password' in global_properties:
             server.ssh_password = global_properties['password']
         return server
+
+    @staticmethod
+    def get_cbbackupmgr_config(config, section):
+        options = {}
+        for option in config.options(section):
+            options[option] = config.get(section, option)
+        return options
 
     @staticmethod
     def get_advisor_config(config, section, global_properties):
