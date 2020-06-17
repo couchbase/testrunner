@@ -52,6 +52,7 @@ class QueryTests(BaseTestCase):
                 and str(self.__class__).find('N1qlFTSIntegrationTest') == -1 \
                 and str(self.__class__).find('N1qlFTSIntegrationPhase2Test') == -1 \
                 and str(self.__class__).find('N1qlFTSIntegrationPhase2ClusteropsTest') == -1 \
+                and str(self.__class__).find('QueryCollectionsEnd2EndTests') == -1 \
                 and str(self.__class__).find('FlexIndexTests') == -1 \
                 and str(self.__class__).find('AggregatePushdownRecoveryClass') == -1:
             self.skip_buckets_handle = True
