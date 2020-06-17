@@ -2628,7 +2628,7 @@ class RestConnection(object):
             if status:
                 break
             elif (int(header['status']) == 503 and
-                    '{"_":"Bucket with given name still exists"}' in content):
+                    '{"_":"Bucket with given name still exists"}'.encode('utf-8') in content):
                 log.info("The bucket still exists, sleep 1 sec and retry")
                 time.sleep(1)
             else:
