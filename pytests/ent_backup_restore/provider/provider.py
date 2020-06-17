@@ -36,6 +36,18 @@ class Provider(metaclass=abc.ABCMeta):
         """
         raise NotImplementedError
 
+    @abc.abstractmethod
+    def get_json_object(self, key):
+        """Returns the object from the object store with the given key. The object must contain valid JSON."""
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def list_objects(self, prefix=None):
+        """Returns a list of all the objects in the object store. If a prefix is provided, only objects with the given
+        prefix will be returned.
+        """
+        raise NotImplementedError
+
     def _remove_staging_directory(self, info, remote_client):
         if info in ('linux', 'mac'):
             command = f"rm -rf {self.staging_directory}"

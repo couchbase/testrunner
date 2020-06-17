@@ -13,7 +13,7 @@ from remote.remote_util import RemoteMachineShellConnection
 class BackupRestoreValidations(BackupRestoreValidationBase):
     def __init__(self, backupset, cluster, restore_cluster, bucket,
                  backup_validation_path, backups, num_items,
-                 vbuckets):
+                 vbuckets, objstore_provider):
         BackupRestoreValidationBase.__init__(self)
         self.backupset = backupset
         self.cluster = cluster
@@ -23,6 +23,7 @@ class BackupRestoreValidations(BackupRestoreValidationBase):
         self.backups = backups
         self.num_items = num_items
         self.vbuckets = vbuckets
+        self.objstore_provider = objstore_provider
         self.log = logger.Logger.get_logger()
 
     def validate_backup_create(self):
@@ -31,17 +32,31 @@ class BackupRestoreValidations(BackupRestoreValidationBase):
         Validates the backup metadata using backup-meta.json
         :return: status and message
         """
-        remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
-        info = remote_client.extract_remote_info().type.lower()
-        if info == 'linux' or info == 'mac':
-            command = "ls -R {0}/{1}".format(self.backupset.directory, self.backupset.name)
-            o, e = remote_client.execute_command(command)
-        elif info == 'windows':
-            o = remote_client.list_files("{0}/{1}".format(self.backupset.directory, self.backupset.name))
-        if not o and len(o) != 2 and o[1] != "backup-meta.json":
-            return False, "Backup create did not create backup-meta file."
-        remote_client.disconnect()
-        files_validations = BackupRestoreFilesValidations(self.backupset)
+        if self.objstore_provider:
+            keys = self.objstore_provider.list_objects()
+
+            # We expect to have seen three files created
+            # .backup
+            # logs/backup-0.log
+            # repo/backup-meta.json
+            if len(keys) != 3:
+                return False, "config did not create the expected number of files"
+
+            if f"{self.backupset.directory}/{self.backupset.name}/backup-meta.json" not in keys:
+                return False, "config did not create the backup-meta.json file"
+        else:
+            remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
+            info = remote_client.extract_remote_info().type.lower()
+            if info == 'linux' or info == 'mac':
+                command = "ls -R {0}/{1}".format(self.backupset.directory, self.backupset.name)
+                o, e = remote_client.execute_command(command)
+            elif info == 'windows':
+                o = remote_client.list_files("{0}/{1}".format(self.backupset.directory, self.backupset.name))
+            if not o and len(o) != 2 and o[1] != "backup-meta.json":
+                return False, "Backup create did not create backup-meta file."
+            remote_client.disconnect()
+
+        files_validations = BackupRestoreFilesValidations(self.backupset, self.objstore_provider)
         status, msg = files_validations.validate_backup_meta_json()
         if status:
             msg += "\nBackup create validation success."

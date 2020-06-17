@@ -6,9 +6,10 @@ from remote.remote_util import RemoteMachineShellConnection
 
 
 class BackupRestoreFilesValidations(BackupRestoreValidationBase):
-    def __init__(self, backupset):
+    def __init__(self, backupset, objstore_provider):
         BackupRestoreValidationBase.__init__(self)
         self.backupset = backupset
+        self.objstore_provider = objstore_provider
 
 
     def get_backup_meta_json(self):
@@ -16,11 +17,15 @@ class BackupRestoreFilesValidations(BackupRestoreValidationBase):
         Gets the actual backup metadata json after backup create
         :return: backup meta map
         """
-        remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
-        backup_meta_file_path = "{0}/{1}/backup-meta.json".format(self.backupset.directory, self.backupset.name)
-        remote_client.copy_file_remote_to_local(backup_meta_file_path, "/tmp/backup-meta.json")
-        remote_client.disconnect()
-        backup_meta = json.load(open("/tmp/backup-meta.json"))
+        if self.objstore_provider:
+            backup_meta = self.objstore_provider.get_json_object(f"{self.backupset.directory}/{self.backupset.name}/backup-meta.json")
+        else:
+            remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
+            backup_meta_file_path = "{0}/{1}/backup-meta.json".format(self.backupset.directory, self.backupset.name)
+            remote_client.copy_file_remote_to_local(backup_meta_file_path, "/tmp/backup-meta.json")
+            remote_client.disconnect()
+            backup_meta = json.load(open("/tmp/backup-meta.json"))
+
         return backup_meta
 
 

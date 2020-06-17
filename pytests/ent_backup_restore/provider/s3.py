@@ -1,5 +1,7 @@
 #!/usr/bin/python3
 
+import json
+
 import boto3
 import botocore
 
@@ -46,5 +48,22 @@ class S3(provider.Provider):
             obj.delete()
 
         self._remove_staging_directory(info, remote_client)
+
+    def get_json_object(self, key):
+        """See super class"""
+        return json.loads(self.resource.Object(self.bucket, key).get()['Body'].read())
+
+    def list_objects(self, prefix=None):
+        """See super class"""
+        keys = []
+
+        kwargs = {}
+        if prefix:
+            kwargs['Prefix'] = prefix
+
+        for obj in self.resource.Bucket(self.bucket).objects.filter(**kwargs):
+            keys.append(obj.key)
+
+        return keys
 
 provider.Provider.register(S3)

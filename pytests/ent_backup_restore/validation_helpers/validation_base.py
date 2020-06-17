@@ -186,7 +186,7 @@ class BackupRestoreValidationBase:
             with open(file_path, 'w') as f:
                 json.dump({"keys": keys}, f)
 
-    def store_range_json(self, buckets, backup_num, backup_validation_path, merge=False):
+    def store_range_json(self, buckets, backup_num, backup_validation_path, objstore_provider, merge=False):
         rest_conn = RestConnection(self.backupset.cluster_host)
         shell = RemoteMachineShellConnection(self.backupset.backup_host)
         for bucket in buckets:
@@ -194,15 +194,23 @@ class BackupRestoreValidationBase:
             bucket_uuid = bucket_stats["uuid"]
             from_file_name = self.backupset.directory + "/" + self.backupset.name + "/" + \
                              self.backups[backup_num - 1] + "/" + bucket.name + "-" + bucket_uuid + "/" + "range.json"
+
+            if self.objstore_provider:
+                output = self.objstore_provider.get_json_object(from_file_name)
+            else:
+                output, error = shell.execute_command("cat " + from_file_name)
+                output = [x.strip(' ') for x in output]
+                if output:
+                    output = " ".join(output)
+
             if merge:
                 to_file_name = "{0}-{1}-{2}.json".format(bucket, "range", "merge")
             else:
                 to_file_name = "{0}-{1}-{2}.json".format(bucket, "range", backup_num)
+
             to_file_path = os.path.join(backup_validation_path, to_file_name)
-            output, error = shell.execute_command("cat " + from_file_name)
-            output = [x.strip(' ') for x in output]
-            if output:
-                output = " ".join(output)
+
             with open(to_file_path, 'w') as f:
                 json.dump(output, f)
+
         shell.disconnect()

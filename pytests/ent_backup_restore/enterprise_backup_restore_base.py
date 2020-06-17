@@ -257,14 +257,6 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.backupset.backup_compressed = \
             self.input.param("backup-conpressed", False)
         self.backups = []
-        self.validation_helper = BackupRestoreValidations(self.backupset,
-                                                          self.cluster_to_backup,
-                                                          self.cluster_to_restore,
-                                                          self.buckets,
-                                                          self.backup_validation_files_location,
-                                                          self.backups,
-                                                          self.num_items,
-                                                          self.vbuckets)
         self.number_of_backups_taken = 0
         self.vbucket_seqno = []
         self.expires = self.input.param("expires", 0)
@@ -314,6 +306,16 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             # Override and use the same archive directory across platforms
             self.backupset.directory = f"archive-{self.master.ip}"
             self.objstore_provider.setup()
+
+        self.validation_helper = BackupRestoreValidations(self.backupset,
+                                                          self.cluster_to_backup,
+                                                          self.cluster_to_restore,
+                                                          self.buckets,
+                                                          self.backup_validation_files_location,
+                                                          self.backups,
+                                                          self.num_items,
+                                                          self.vbuckets,
+                                                          self.objstore_provider)
 
     def tearDown(self):
         super(EnterpriseBackupRestoreBase, self).tearDown()
@@ -595,7 +597,11 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                 self.log.error("Failed to backup bucket {0}".format(bucket.name))
                 return output, error
 
-        command = "ls -tr {0}/{1} | tail -1".format(self.backupset.directory, self.backupset.name)
+        command = (
+            f"ls -tr {self.backupset.objstore_staging_directory + '/' if self.objstore_provider else ''}"
+            f"{self.backupset.directory}/{self.backupset.name} | tail -1"
+        )
+
         o, e = remote_client.execute_command(command)
         if o:
             self.backups.append(o[0])
@@ -635,7 +641,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             self.validation_helper.store_latest(self.cluster_to_backup, self.buckets, self.number_of_backups_taken,
                                                 self.backup_validation_files_location)
             self.validation_helper.store_range_json(self.buckets, self.number_of_backups_taken,
-                                                    self.backup_validation_files_location)
+                                                    self.backup_validation_files_location,
+                                                    self.objstore_provider)
 
     def backup_restore(self):
         if self.restore_only:
@@ -990,7 +997,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             bk_raw_ipv6_dir = self.backupset.directory
             for x in ipv6_raw_format:
                 bk_raw_ipv6_dir = bk_raw_ipv6_dir.replace(x, "\\" + x)
-        bk_dir = self.backupset.directory
+        bk_dir = f"{self.backupset.objstore_staging_directory + '/' if self.objstore_provider else ''}{self.backupset.directory}"
         if ipv6_raw_ip:
             bk_dir = bk_raw_ipv6_dir
         command = "grep 'Restore completed successfully' " + bk_dir + \
@@ -1197,8 +1204,12 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.log.info("Backup succeeded with memcached crash and restart within 180 seconds")
         self.sleep(20)
         conn = RemoteMachineShellConnection(self.backupset.backup_host)
-        command = "ls -tr {0}/{1} | tail -1".format(self.backupset.directory,
-                                                    self.backupset.name)
+
+        command = (
+            f"ls -tr {self.backupset.objstore_staging_directory + '/' if self.objstore_provider else ''}"
+            f"{self.backupset.directory}/{self.backupset.name} | tail -1"
+        )
+
         o, e = conn.execute_command(command)
         if o:
             self.backups.append(o[0])
@@ -1212,7 +1223,9 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                                             self.number_of_backups_taken,
                                             self.backup_validation_files_location)
         self.validation_helper.store_range_json(self.buckets, self.number_of_backups_taken,
-                                                self.backup_validation_files_location, merge=True)
+                                                self.backup_validation_files_location,
+                                                self.objstore_provider,
+                                                merge=True)
         conn.disconnect()
 
     def bk_with_erlang_crash_and_restart(self):
@@ -1238,8 +1251,11 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.sleep(30)
         conn.disconnect()
         conn = RemoteMachineShellConnection(self.backupset.backup_host)
-        command = "ls -tr {0}/{1} | tail -1".format(self.backupset.directory,
-                                                    self.backupset.name)
+        command = (
+            f"ls -tr {self.backupset.objstore_staging_directory + '/' if self.objstore_provider else ''}"
+            f"{self.backupset.directory}/{self.backupset.name} | tail -1"
+        )
+
         o, e = conn.execute_command(command)
         if o:
             self.backups.append(o[0])
@@ -1253,7 +1269,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                                             self.number_of_backups_taken,
                                             self.backup_validation_files_location)
         self.validation_helper.store_range_json(self.buckets, self.number_of_backups_taken,
-                                                self.backup_validation_files_location)
+                                                self.backup_validation_files_location,
+                                                self.objstore_provider)
         conn.disconnect()
 
     def bk_with_cb_server_stop_and_restart(self):
@@ -1279,8 +1296,11 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.sleep(30)
         conn.disconnect()
         conn = RemoteMachineShellConnection(self.backupset.backup_host)
-        command = "ls -tr {0}/{1} | tail -1".format(self.backupset.directory,
-                                                    self.backupset.name)
+        command = (
+            f"ls -tr {self.backupset.objstore_staging_directory + '/' if self.objstore_provider else ''}"
+            f"{self.backupset.directory}/{self.backupset.name} | tail -1"
+        )
+
         o, e = conn.execute_command(command)
         if o:
             self.backups.append(o[0])
@@ -1294,7 +1314,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                                             self.number_of_backups_taken,
                                             self.backup_validation_files_location)
         self.validation_helper.store_range_json(self.buckets, self.number_of_backups_taken,
-                                                self.backup_validation_files_location)
+                                                self.backup_validation_files_location,
+                                                self.objstore_provider)
         conn.disconnect()
 
     def bk_with_stop_and_resume(self):
@@ -1396,8 +1417,11 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             self.log.info("process cbbackupmge may be killed")
             return False, [], "cbbackupmgr may be killed"
         del self.backups[self.backupset.start - 1:self.backupset.end]
-        command = "ls -tr {0}/{1} | tail -1".format(self.backupset.directory,
-                                                    self.backupset.name)
+        command = (
+            f"ls -tr {self.backupset.objstore_staging_directory + '/' if self.objstore_provider else ''}"
+            f"{self.backupset.directory}/{self.backupset.name} | tail -1"
+        )
+
         o, e = remote_client.execute_command(command)
         if o:
             self.backups.insert(self.backupset.start - 1, o[0])
@@ -1430,7 +1454,9 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             self.validation_helper.store_latest(self.cluster_to_backup, self.buckets, self.number_of_backups_taken,
                                                 self.backup_validation_files_location)
             self.validation_helper.store_range_json(self.buckets, self.number_of_backups_taken,
-                                                    self.backup_validation_files_location, merge=True)
+                                                    self.backup_validation_files_location,
+                                                    self.objstore_provider,
+                                                    merge=True)
 
             self.validation_helper.validate_merge(self.backup_validation_files_location)
 
@@ -2932,7 +2958,11 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
             self.fail("Memcached failed to restart")
 
         del self.backups[self.backupset.start - 1:self.backupset.end]
-        command = "ls -tr {0}/{1} | tail -1".format(self.backupset.directory, self.backupset.name)
+        command = (
+            f"ls -tr {self.backupset.objstore_staging_directory + '/' if self.objstore_provider else ''}"
+            f"{self.backupset.directory}/{self.backupset.name} | tail -1"
+        )
+
         o, e = conn.execute_command(command)
         if o:
             self.backups.insert(self.backupset.start - 1, o[0])
@@ -2946,7 +2976,8 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
             self.validation_helper.store_latest(self.cluster_to_backup, self.buckets, self.number_of_backups_taken,
                                                 self.backup_validation_files_location)
             self.validation_helper.store_range_json(self.buckets, self.number_of_backups_taken,
-                                                    self.backup_validation_files_location)
+                                                    self.backup_validation_files_location,
+                                                    self.objstore_provider)
             self.validation_helper.validate_merge(self.backup_validation_files_location)
         conn.disconnect()
 
@@ -2986,7 +3017,8 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
             self.validation_helper.store_latest(self.cluster_to_backup, self.buckets, self.number_of_backups_taken,
                                                 self.backup_validation_files_location)
             self.validation_helper.store_range_json(self.buckets, self.number_of_backups_taken,
-                                                    self.backup_validation_files_location)
+                                                    self.backup_validation_files_location,
+                                                    self.objstore_provider)
             self.validation_helper.validate_merge(self.backup_validation_files_location)
         conn.disconnect()
 
@@ -3012,7 +3044,11 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
             self.fail("cb server failed to restart")
 
         del self.backups[self.backupset.start - 1:self.backupset.end]
-        command = "ls -tr {0}/{1} | tail -1".format(self.backupset.directory, self.backupset.name)
+        command = (
+            f"ls -tr {self.backupset.objstore_staging_directory + '/' if self.objstore_provider else ''}"
+            f"{self.backupset.directory}/{self.backupset.name} | tail -1"
+        )
+
         o, e = conn.execute_command(command)
         if o:
             self.backups.insert(self.backupset.start - 1, o[0])
@@ -3026,7 +3062,8 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
             self.validation_helper.store_latest(self.cluster_to_backup, self.buckets, self.number_of_backups_taken,
                                                 self.backup_validation_files_location)
             self.validation_helper.store_range_json(self.buckets, self.number_of_backups_taken,
-                                                    self.backup_validation_files_location)
+                                                    self.backup_validation_files_location,
+                                                    self.objstore_provider)
             self.validation_helper.validate_merge(self.backup_validation_files_location)
         conn.disconnect()
 
