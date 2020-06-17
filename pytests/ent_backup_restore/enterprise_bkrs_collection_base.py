@@ -260,9 +260,21 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
         self.backupset.bucket_backup = self.input.param("bucket-backup", None)
         self.backupset.backup_to_compact = self.input.param("backup-to-compact", 0)
         self.backupset.map_buckets = self.input.param("map-buckets", None)
+        self.ops_type = self.input.param("ops-type", "update")
+        """
+        ****** Collection params *******
+        """
         self.backupset.map_data_collection = self.input.param("map_data_collection", False)
         self.backupset.col_per_scope = self.input.param("col_per_scope", 1)
         self.backupset.delete_old_bucket = self.input.param("delete-old-bucket", False)
+        self.backupset.info_all = self.input.param("info_all", True)
+        self.backupset.info_to_json = self.input.param("info_to_json", True)
+        self.backupset.load_to_collection = self.input.param("load_to_collection", False)
+        self.backupset.collection_string = self.input.param("collection_string", None)
+        self.backupset.scopes = None
+        self.backupset.collections = None
+        self.backupset.load_scope_id = None
+
         self.add_node_services = self.input.param("add-node-services", "kv")
         self.backupset.backup_compressed = \
             self.input.param("backup-conpressed", False)
@@ -307,8 +319,6 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
         self.cli_rs = CollectionsCLI(self.backupset.restore_cluster_host)
         self.conn_rs = RestConnection(self.backupset.restore_cluster_host)
         self.stat_rs = CollectionsStats(self.backupset.restore_cluster_host)
-        self.backupset.scopes = None
-        self.backupset.collections = None
 
         if not os.path.exists(self.backup_validation_files_location):
             os.mkdir(self.backup_validation_files_location)
@@ -401,7 +411,7 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
                 self.rest_bk.create_scope(bucket=bucket_name, scope="scope{0}".format(x),
                                               params=None)
             else:
-                self.cli_bk.create_collection(bucket=bucket_name, scope="scope{0}".format(x))
+                self.cli_bk.create_scope(bucket=bucket_name, scope="scope{0}".format(x))
 
     def delete_scope_cluster_host(self, num_scope=2):
         bucket_name = self.buckets[0].name
@@ -451,7 +461,7 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
         if self.use_rest:
             scopes = self.rest_bk.get_bucket_scopes(bucket_name)
         else:
-            scopes = self.cli_bk.get_bucket_scopes(bucket_name)
+            scopes = self.cli_bk.get_bucket_scopes(bucket_name)[0]
         return scopes
 
     def create_scope_restore_cluster_host(self, num_scope=2):
@@ -615,17 +625,27 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
         remote_client.disconnect()
         return output, error
 
-    def backup_info(self, json_out=True):
-        args = "info --archive {0} --repo {1}".format(self.backupset.directory, self.backupset.name)
-        if json_out:
+    def backup_info(self):
+        args = "info -a {0} -r {1}".format(self.backupset.directory, self.backupset.name)
+        if self.backupset.info_to_json:
             args += " --json"
+        if self.backupset.info_all:
+            args += " --all"
+        if self.backupset.backup_incr_backup:
+            args += " --backup {0}".format(self.backupset.backup_incr_backup)
+        if self.backupset.collection_string:  # format 'bucket.scope.collection'
+            args += " --collection-string {0}".format(self.backupset.collection_string)
 
         remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, args)
         output, error = remote_client.execute_command(command)
-        remote_client.log_command_output(output, error)
+        if self.debug_logs:
+            remote_client.log_command_output(output, error)
         remote_client.disconnect()
-        return output, error
+        if error:
+            return False, error, "Getting backup info failed."
+        else:
+            return True, output, "Backup info obtained"
 
     def _verify_backup_directory_count(self, expected):
         shell = RemoteMachineShellConnection(self.backupset.backup_host)
@@ -1226,13 +1246,19 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
             return True, output, "Removing of backup success"
 
     def backup_list_validate(self):
-        status, output, message = self.backup_list()
+        return self.backup_info_validate()
+
+    def backup_info_validate(self, scopes=None, collections=None):
+        status, output, message = self.backup_info()
         if not status:
             self.fail(message)
-        status, message = self.validation_helper.validate_backup_list(output)
+        status, message = self.validation_helper.validate_backup_info(output,
+                                                                      scopes,
+                                                                      collections)
         if not status:
             self.fail(message)
         self.log.info(message)
+
 
     def backup_compact_validate(self):
         self.log.info("Listing backup details before compact")
@@ -2449,5 +2475,8 @@ class Backupset:
         self.collections = None
         self.map_data_collection = False
         self.col_per_scope = 1
-
-
+        self.info_all = True
+        self.info_to_json = True
+        self.collection_string = None
+        self.load_to_collection = False
+        self.load_scope_id = None

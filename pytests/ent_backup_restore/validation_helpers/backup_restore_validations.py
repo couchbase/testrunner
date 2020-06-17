@@ -170,6 +170,84 @@ class BackupRestoreValidations(BackupRestoreValidationBase):
             return False, "Backup type is not in info command output"
         return True, "Info command validation success"
 
+    def validate_backup_info(self, output, scopes=None, collections=None,
+                                         num_backup=1, bucket_items=None):
+        """
+        Validates info command output with --all and without --all
+        :param output: info command output
+        :return: status and message
+        """
+        backup_name = False
+        bucket_name = False
+        backup_folder_timestamp = False
+        items_count = False
+        first_backup_full = False
+        after_first_backup_incr = False
+        bk_type = ["FULL"]
+        items = 0
+        if output and output[0]:
+            if self.backupset.info_to_json:
+                bk_info = json.loads(output[0])
+            else:
+                """ remove empty element """
+                output = list(filter(None, output))
+                """ remove space in element """
+                output = [x.replace(' ', '') for x in output]
+            bk_name = bk_info["name"]
+            bk_scopes = bk_info["backups"][0]["buckets"][0]["scopes"]
+        else:
+            return False, "No output content"
+
+        if self.backupset.name in bk_name:
+            backup_name = True
+        for idx, val in enumerate(bk_info["backups"]):
+            if self.backups[idx] in bk_info["backups"][idx]["date"]:
+                backup_folder_timestamp = True
+            if self.num_items == bk_info["backups"][idx]["buckets"][0]["items"]:
+                items_count = True
+            if idx == 0:
+                if bk_info["backups"][idx]["type"] == "FULL":
+                    first_backup_full = True
+            if idx > 0:
+                if bk_info["backups"][idx]["type"] == "INCR":
+                    after_first_backup_incr = True
+            if idx > len(self.buckets) - 1:
+                continue
+            elif str(self.buckets[idx].name) in bk_info["backups"][idx]["buckets"][0]["name"]:
+                bucket_name = True
+
+        if scopes:
+            for scope_id in bk_scopes:
+                if bk_scopes[scope_id]["name"] not in scopes:
+                    return False, "scope {0} not in backup repo"\
+                                   .format(bk_scopes[scope_id]["name"])
+                if collections:
+                    for collection in list(bk_scopes[scope_id]["collections"].values()):
+                        if collection["name"] not in collections:
+                            raise("collection not in backup")
+                    if self.backupset.load_to_collection:
+                        if str(self.backupset.load_scope_id[2:]) in list(bk_scopes[scope_id]["collections"].keys()):
+                            self.log.info("check items in collection")
+                            if bk_scopes[scope_id]["collections"][str(self.backupset.load_scope_id[2:])]["mutations"] != self.num_items:
+                                raise("collection items not in backup")
+
+        if not backup_name:
+            return False, "Expected Backup name not found in info command output"
+        if not bucket_name:
+            return False, "Expected Bucket name not found in info command output"
+        if not backup_folder_timestamp:
+            return False, "Expected folder timestamp not found in info command output"
+        if not items_count:
+            return False, "Items count mismatch in info command output"
+        if not first_backup_full:
+            return False, "First backup is not a full backup"
+        if len(bk_info["backups"]) >= 2 and not after_first_backup_incr:
+            return False, "second backup is not a incr backup"
+        if not bk_info["backups"][0]["complete"]:
+            return False, "Backup type is not in info command output"
+        return True, "Info command validation success"
+
+
     def validate_compact_lists(self, output_before_compact, output_after_compact, is_approx=False):
         size_match = True
         if output_before_compact and output_before_compact[0]:

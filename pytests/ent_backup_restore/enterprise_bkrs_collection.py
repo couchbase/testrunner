@@ -1,5 +1,5 @@
 import re, copy, json, subprocess
-from random import randrange, randint
+from random import randrange, randint, choice
 from threading import Thread
 
 from collection.collections_cli_client import CollectionsCLI
@@ -93,6 +93,13 @@ class EnterpriseBackupRestoreCollectionTest(EnterpriseBackupRestoreCollectionBas
         self.create_scope_cluster_host()
         self.create_collection_cluster_host(self.backupset.col_per_scope)
         backup_scopes = self.get_bucket_scope_cluster_host()
+        scopes_id = []
+        for scope in backup_scopes:
+            if scope == "_default":
+                continue
+            scopes_id.append(self.get_scopes_id_cluster_host(scope))
+        """ remove null and empty element """
+        scopes_id = [i for i in scopes_id if i]
         backup_collections = self.get_bucket_collection_cluster_host()
         col_stats = self.get_collection_stats_cluster_host()
         for backup_scope in backup_scopes:
@@ -105,7 +112,12 @@ class EnterpriseBackupRestoreCollectionTest(EnterpriseBackupRestoreCollectionBas
         for i in range(1, self.backupset.number_of_backups + 1):
             if self.ops_type == "update":
                 self.log.info("*** start to update items in all buckets")
-                self.load_all_buckets(self.backupset.cluster_host, ratio=0.1)
+                col_cmd = ""
+                if self.backupset.load_to_collection:
+                    self.backupset.load_scope_id = choice(scopes_id)
+                    col_cmd = " -c {0} ".format(self.backupset.load_scope_id)
+                self.load_all_buckets(self.backupset.cluster_host, ratio=0.1,
+                                                     command_options=col_cmd)
                 self.log.info("*** done update items in all buckets")
             self.sleep(10)
             self.log.info("*** start to validate backup cluster")
@@ -162,6 +174,129 @@ class EnterpriseBackupRestoreCollectionTest(EnterpriseBackupRestoreCollectionBas
         restore_scopes = self.get_bucket_scope_restore_cluster_host()
         restore_collections = self.get_bucket_collection_restore_cluster_host()
         self.verify_collections_in_restore_cluster_host()
+
+    def test_backup_merge_collection_sanity(self):
+        """
+        1. Creates specified bucket on the cluster and loads it with given number of items
+        2. Takes specified number of backups (param number_of_backups - should be atleast 2 for this test case)
+        3. Executes list command and validates if all backups are present
+        4. Randomly selects a start and end and merges the backups
+        5. Executes info command again and validates if the new merges set of backups are listed
+        """
+        if self.backupset.number_of_backups < 2:
+            self.fail("Need number_of_backups >= 2")
+        self.create_scope_cluster_host()
+        self.create_collection_cluster_host(self.backupset.col_per_scope)
+        scopes = self.get_bucket_scope_cluster_host()
+        scopes_id = []
+        for scope in scopes:
+            if scope == "_default":
+                continue
+            scopes_id.append(self.get_scopes_id_cluster_host(scope))
+        """ remove null and empty element """
+        scopes_id = [i for i in scopes_id if i]
+        col_cmd = ""
+        if self.backupset.load_to_collection:
+            self.backupset.load_scope_id = choice(scopes_id)
+            col_cmd = " -c {0} ".format(self.backupset.load_scope_id)
+        self.load_all_buckets(self.backupset.cluster_host, ratio=0.9,
+                                             command_options=col_cmd)
+        self.backup_create()
+        self._take_n_backups(n=self.backupset.number_of_backups)
+        status, output, message = self.backup_info()
+        if not status:
+            self.fail(message)
+        backup_count = 0
+        """ remove last 6 chars of offset time in backup name"""
+        if self.backups and self.backups[0][-3:] == "_00":
+            strip_backupset = [s[:-6] for s in self.backups]
+        if output and output[0]:
+            bk_info = json.loads(output[0])
+        else:
+            return False, "No output content"
+
+        if bk_info["backups"]:
+            for i in range(0, len(bk_info["backups"])):
+                backup_name = bk_info["backups"][i]["date"]
+                if self.debug_logs:
+                    print("backup name ", backup_name)
+                    print("backup set  ", strip_backupset)
+                if backup_name in self.backups:
+                    backup_count += 1
+                    self.log.info("{0} matched in info command output".format(backup_name))
+        self.assertEqual(backup_count, len(self.backups), "Initial number of backups did not match")
+        self.log.info("Initial number of backups matched")
+        self.backupset.start = randrange(1, self.backupset.number_of_backups)
+        self.backupset.end = randrange(self.backupset.start + 1, self.backupset.number_of_backups + 1)
+        status, output, message = self.backup_merge()
+        if not status:
+            self.fail(message)
+        status, output, message = self.backup_info()
+        if not status:
+            self.fail(message)
+        backup_count = 0
+        if output and output[0]:
+            bk_info = json.loads(output[0])
+        else:
+            return False, "No output content"
+        """ remove last 6 chars of offset time in backup name"""
+        if self.backups and self.backups[0][-3:] == "_00":
+            strip_backupset = [s[:-6] for s in self.backups]
+
+        if bk_info["backups"]:
+            for i in range(0, len(bk_info["backups"])):
+                backup_name = bk_info["backups"][i]["date"]
+                if self.debug_logs:
+                    print("backup name ", backup_name)
+                    print("backup set  ", strip_backupset)
+                if backup_name in self.backups:
+                    backup_count += 1
+                    self.log.info("{0} matched in info command output".format(backup_name))
+        self.assertEqual(backup_count, len(strip_backupset), "Merged number of backups did not match")
+        self.log.info("Merged number of backups matched")
+
+    def _take_n_backups(self, n=1, validate=False):
+        for i in range(1, n + 1):
+            if validate:
+                self.backup_cluster_validate()
+            else:
+                self.backup_cluster()
+
+    def test_bkrs_collection_info(self):
+        """
+        1. Creates specified bucket on the cluster and loads it with given number of items
+        2. Creates a backup and validates it
+        3. Executes list command on the backupset and validates the output
+        """
+        self.create_scope_cluster_host()
+        self.create_collection_cluster_host(self.backupset.col_per_scope)
+        scopes = self.get_bucket_scope_cluster_host()
+        scopes_id = []
+        for scope in scopes:
+            if scope == "_default":
+                continue
+            scopes_id.append(self.get_scopes_id_cluster_host(scope))
+        """ remove null and empty element """
+        scopes_id = [i for i in scopes_id if i]
+        self.backup_create()
+        col_cmd = ""
+        if self.backupset.load_to_collection:
+            self.backupset.load_scope_id = choice(scopes_id)
+            col_cmd = " -c {0} ".format(self.backupset.load_scope_id)
+        self.load_all_buckets(self.backupset.cluster_host, ratio=0.1,
+                                             command_options=col_cmd)
+        for i in range(1, self.backupset.number_of_backups + 1):
+            if self.ops_type == "update":
+                self.log.info("*** start to update items in all buckets")
+                self.load_all_buckets(self.backupset.cluster_host, ratio=0.1,
+                                      command_options=col_cmd)
+                self.log.info("*** done update items in all buckets")
+            self.sleep(10)
+            self.log.info("*** start to validate backup cluster")
+            self.backup_cluster_validate()
+            scopes = self.get_bucket_scope_cluster_host()
+            collections = self.get_bucket_collection_cluster_host()
+            self.backup_info_validate(scopes, collections)
 
     def _kill_cbbackupmgr(self):
         """
