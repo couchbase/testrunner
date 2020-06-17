@@ -34,6 +34,7 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
         self.n1ql_op_dst=self.input.param('n1ql_op_dst', 'n1ql_op_dst')
         self.gens_load = self.generate_docs(self.docs_per_day)
         self.upgrade_version = self.input.param("upgrade_version")
+        ClusterOperationHelper.flushctl_set(self.master, "exp_pager_stime", 60, bucket=self.src_bucket_name)
 
     def tearDown(self):
         super(EventingUpgrade, self).tearDown()
@@ -156,7 +157,7 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
         self.operations(self.servers[:self.nodes_init], services="kv,eventing,index,n1ql")
         self.create_buckets()
         # Load the data in older version
-        self.load(self.gens_load, buckets=self.src_bucket, verify_data=False)
+        self.load(self.gens_load, buckets=self.src_bucket, verify_data=False,exp=600)
         self.restServer = self.get_nodes_from_services_map(service_type="eventing")
         self.rest = RestConnection(self.restServer)
         # Deploy the bucket op function
@@ -165,7 +166,7 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
         # Validate the data
         self.validate_eventing(self.dst_bucket_name, self.docs_per_day * 2016)
         # Deploy the bucket op with timer function
-        self.import_function(EXPORTED_FUNCTION.BUCKET_OP_WITH_TIMER)
+        self.import_function(EXPORTED_FUNCTION.CANCEL_TIMERS)
         # Validate the data
         self.validate_eventing(self.dst_bucket_name1, self.docs_per_day * 2016)
         # offline upgrade all the nodes
@@ -197,7 +198,7 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
         # Validate the data
         self.validate_eventing(self.n1ql_op_dst, self.docs_per_day * 2016)
         # Delete the data on source bucket
-        self.load(self.gens_load, buckets=self.src_bucket, verify_data=False, op_type='delete')
+        #self.load(self.gens_load, buckets=self.src_bucket, verify_data=False, op_type='delete')
         # Delete the data on SBM bucket
         self.load(self.gens_load, buckets=self.sbm, verify_data=False, op_type='delete')
         # Validate the data for both the functions
@@ -208,7 +209,7 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
         self.validate_eventing(self.n1ql_op_dst,0)
         ## pause resume handler
         self.pause_function(EXPORTED_FUNCTION.BUCKET_OP)
-        self.pause_function(EXPORTED_FUNCTION.BUCKET_OP_WITH_TIMER)
+        self.pause_function(EXPORTED_FUNCTION.CANCEL_TIMERS)
         self.pause_function(EXPORTED_FUNCTION.SBM_BUCKET_OP)
         self.pause_function(EXPORTED_FUNCTION.CURL_BUCKET_OP)
         self.pause_function(EXPORTED_FUNCTION.N1QL_OP)
@@ -216,7 +217,7 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
         self.load(self.gens_load, buckets=self.src_bucket, verify_data=False)
         self.load(self.gens_load, buckets=self.sbm, verify_data=False)
         self.resume_function(EXPORTED_FUNCTION.BUCKET_OP)
-        self.resume_function(EXPORTED_FUNCTION.BUCKET_OP_WITH_TIMER)
+        self.resume_function(EXPORTED_FUNCTION.CANCEL_TIMERS)
         self.resume_function(EXPORTED_FUNCTION.SBM_BUCKET_OP)
         self.resume_function(EXPORTED_FUNCTION.CURL_BUCKET_OP)
         self.resume_function(EXPORTED_FUNCTION.N1QL_OP)
@@ -241,7 +242,7 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
         self.create_buckets()
         # Load the data in older version
         log.info("Load the data in older version in the initial version")
-        self.load(self.gens_load, buckets=self.src_bucket, verify_data=False)
+        self.load(self.gens_load, buckets=self.src_bucket, verify_data=False,exp=600)
         self.restServer = self.get_nodes_from_services_map(service_type="eventing")
         self.rest = RestConnection(self.restServer)
         # Deploy the bucket op function
@@ -255,7 +256,7 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
         self.rest = RestConnection(self.restServer)
         self.add_built_in_server_user()
         # Deploy the bucket op with timer function
-        self.import_function(EXPORTED_FUNCTION.BUCKET_OP_WITH_TIMER)
+        self.import_function(EXPORTED_FUNCTION.CANCEL_TIMERS)
         # Do validations
         self.validate_eventing(self.dst_bucket_name1, self.docs_per_day * 2016)
         # Load the data source bucket
@@ -274,7 +275,7 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
         # Validate the data
         self.validate_eventing(self.n1ql_op_dst, self.docs_per_day * 2016)
         # Delete the data on source bucket
-        self.load(self.gens_load, buckets=self.src_bucket, verify_data=False, op_type='delete')
+        #self.load(self.gens_load, buckets=self.src_bucket, verify_data=False, op_type='delete')
         # Delete the data on SBM bucket
         self.load(self.gens_load, buckets=self.sbm, verify_data=False, op_type='delete')
         # Validate the data for both the functions
@@ -285,7 +286,7 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
         self.validate_eventing(self.n1ql_op_dst, 0)
         ## pause resume handler
         self.pause_function(EXPORTED_FUNCTION.BUCKET_OP)
-        self.pause_function(EXPORTED_FUNCTION.BUCKET_OP_WITH_TIMER)
+        self.pause_function(EXPORTED_FUNCTION.CANCEL_TIMERS)
         self.pause_function(EXPORTED_FUNCTION.SBM_BUCKET_OP)
         self.pause_function(EXPORTED_FUNCTION.CURL_BUCKET_OP)
         self.pause_function(EXPORTED_FUNCTION.N1QL_OP)
@@ -293,7 +294,7 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
         self.load(self.gens_load, buckets=self.src_bucket, verify_data=False)
         self.load(self.gens_load, buckets=self.sbm, verify_data=False)
         self.resume_function(EXPORTED_FUNCTION.BUCKET_OP)
-        self.resume_function(EXPORTED_FUNCTION.BUCKET_OP_WITH_TIMER)
+        self.resume_function(EXPORTED_FUNCTION.CANCEL_TIMERS)
         self.resume_function(EXPORTED_FUNCTION.SBM_BUCKET_OP)
         self.resume_function(EXPORTED_FUNCTION.CURL_BUCKET_OP)
         self.resume_function(EXPORTED_FUNCTION.N1QL_OP)
@@ -318,7 +319,7 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
         self.create_buckets()
         # Load the data in older version
         log.info("Load the data in older version in the initial version")
-        self.load(self.gens_load, buckets=self.src_bucket, verify_data=False)
+        self.load(self.gens_load, buckets=self.src_bucket, verify_data=False,exp=600)
         self.restServer = self.get_nodes_from_services_map(service_type="eventing")
         self.rest = RestConnection(self.restServer)
         # Deploy the bucket op function
@@ -332,7 +333,7 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
         self.rest = RestConnection(self.restServer)
         self.add_built_in_server_user()
         # Deploy the bucket op with timer function
-        self.import_function(EXPORTED_FUNCTION.BUCKET_OP_WITH_TIMER)
+        self.import_function(EXPORTED_FUNCTION.CANCEL_TIMERS)
         # Do validations
         self.validate_eventing(self.dst_bucket_name1, self.docs_per_day * 2016)
         # Load the data source bucket
@@ -351,7 +352,7 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
         # Validate the data
         self.validate_eventing(self.n1ql_op_dst, self.docs_per_day * 2016)
         # Delete the data on source bucket
-        self.load(self.gens_load, buckets=self.src_bucket, verify_data=False, op_type='delete')
+        #self.load(self.gens_load, buckets=self.src_bucket, verify_data=False, op_type='delete')
         # Delete the data on SBM bucket
         self.load(self.gens_load, buckets=self.sbm, verify_data=False, op_type='delete')
         # Validate the data for both the functions
@@ -362,7 +363,7 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
         self.validate_eventing(self.n1ql_op_dst, 0)
         ## pause resume handler
         self.pause_function(EXPORTED_FUNCTION.BUCKET_OP)
-        self.pause_function(EXPORTED_FUNCTION.BUCKET_OP_WITH_TIMER)
+        self.pause_function(EXPORTED_FUNCTION.CANCEL_TIMERS)
         self.pause_function(EXPORTED_FUNCTION.SBM_BUCKET_OP)
         self.pause_function(EXPORTED_FUNCTION.CURL_BUCKET_OP)
         self.pause_function(EXPORTED_FUNCTION.N1QL_OP)
@@ -370,7 +371,7 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
         self.load(self.gens_load, buckets=self.src_bucket, verify_data=False)
         self.load(self.gens_load, buckets=self.sbm, verify_data=False)
         self.resume_function(EXPORTED_FUNCTION.BUCKET_OP)
-        self.resume_function(EXPORTED_FUNCTION.BUCKET_OP_WITH_TIMER)
+        self.resume_function(EXPORTED_FUNCTION.CANCEL_TIMERS)
         self.resume_function(EXPORTED_FUNCTION.SBM_BUCKET_OP)
         self.resume_function(EXPORTED_FUNCTION.CURL_BUCKET_OP)
         self.resume_function(EXPORTED_FUNCTION.N1QL_OP)
@@ -395,7 +396,7 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
         self.create_buckets()
         # Load the data in older version
         log.info("Load the data in older version in the initial version")
-        self.load(self.gens_load, buckets=self.src_bucket, verify_data=False)
+        self.load(self.gens_load, buckets=self.src_bucket, verify_data=False,exp=600)
         self.restServer = self.get_nodes_from_services_map(service_type="eventing")
         self.rest = RestConnection(self.restServer)
         # Deploy the bucket op function
@@ -409,7 +410,7 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
         self.rest = RestConnection(self.restServer)
         self.add_built_in_server_user()
         # Deploy the bucket op with timer function
-        self.import_function(EXPORTED_FUNCTION.BUCKET_OP_WITH_TIMER)
+        self.import_function(EXPORTED_FUNCTION.CANCEL_TIMERS)
         # Do validations
         self.validate_eventing(self.dst_bucket_name1, self.docs_per_day * 2016)
         # Load the data source bucket
@@ -428,7 +429,7 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
         # Validate the data
         self.validate_eventing(self.n1ql_op_dst, self.docs_per_day * 2016)
         # Delete the data on source bucket
-        self.load(self.gens_load, buckets=self.src_bucket, verify_data=False, op_type='delete')
+        #self.load(self.gens_load, buckets=self.src_bucket, verify_data=False, op_type='delete')
         # Delete the data on SBM bucket
         self.load(self.gens_load, buckets=self.sbm, verify_data=False, op_type='delete')
         # Validate the data for both the functions
@@ -439,7 +440,7 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
         self.validate_eventing(self.n1ql_op_dst, 0)
         ## pause resume handler
         self.pause_function(EXPORTED_FUNCTION.BUCKET_OP)
-        self.pause_function(EXPORTED_FUNCTION.BUCKET_OP_WITH_TIMER)
+        self.pause_function(EXPORTED_FUNCTION.CANCEL_TIMERS)
         self.pause_function(EXPORTED_FUNCTION.SBM_BUCKET_OP)
         self.pause_function(EXPORTED_FUNCTION.CURL_BUCKET_OP)
         self.pause_function(EXPORTED_FUNCTION.N1QL_OP)
@@ -447,7 +448,7 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
         self.load(self.gens_load, buckets=self.src_bucket, verify_data=False)
         self.load(self.gens_load, buckets=self.sbm, verify_data=False)
         self.resume_function(EXPORTED_FUNCTION.BUCKET_OP)
-        self.resume_function(EXPORTED_FUNCTION.BUCKET_OP_WITH_TIMER)
+        self.resume_function(EXPORTED_FUNCTION.CANCEL_TIMERS)
         self.resume_function(EXPORTED_FUNCTION.SBM_BUCKET_OP)
         self.resume_function(EXPORTED_FUNCTION.CURL_BUCKET_OP)
         self.resume_function(EXPORTED_FUNCTION.N1QL_OP)

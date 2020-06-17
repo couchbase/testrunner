@@ -101,3 +101,5 @@ class EXPORTED_FUNCTION:
     SBM_BUCKET_OP ='exported_functions/bucket_op_sbm.json'
     CURL_BUCKET_OP='exported_functions/bucket_op_curl.json'
     N1QL_OP='exported_functions/n1ql_op.json'
+    EXPIRY='exported_functions/expiry.json'
+    CANCEL_TIMERS='exported_functions/cancel_timers.json'
