@@ -20,6 +20,10 @@ class S3(provider.Provider):
 
         self.resource = boto3.resource('s3', **kwargs)
 
+    def schema_prefix(self):
+        """See super class"""
+        return "s3://"
+
     def setup(self):
         """See super class"""
         configuration = {}

@@ -15,6 +15,11 @@ class Provider(metaclass=abc.ABCMeta):
         self.staging_directory = staging_directory
 
     @abc.abstractmethod
+    def schema_prefix(self):
+        """Returns the schema prefix expected by cbbackupmgr for the given cloud provider."""
+        raise NotImplementedError
+
+    @abc.abstractmethod
     def setup(self):
         """Run any pre-testing setup. For most cloud providers this will mean ensuring the bucket exists and is ready
         for cbbackupmgr to use.
