@@ -391,16 +391,18 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         status, output, message = self.backup_list()
         if not status:
             self.fail(message)
-        backup_count = 0
-        for line in output:
-            if "entbackup" in line:
-                continue
-            if re.search("\d{4}-\d{2}-\d{2}T\d{2}_\d{2}_\d{2}.\d+-\d{2}_\d{2}", line):
-                backup_name = re.search("\d{4}-\d{2}-\d{2}T\d{2}_\d{2}_\d{2}.\d+-\d{2}_\d{2}", line).group()
-                if backup_name in self.backups:
-                    backup_count += 1
-                    self.log.info("{0} matched in list command output".format(backup_name))
-        self.assertEqual(backup_count, len(self.backups), "Number of backups did not match")
+        if output and output[0]:
+            bk_info = json.loads(output[0])
+            bk_info = bk_info["repos"][0]["backups"]
+        else:
+            return False, "No output content"
+
+        self.assertEqual(len(bk_info), len(self.backups),
+                         "Number of backups did not match.  In repo: {0} != in bk: {1}"\
+                         .format(len(bk_info), len(self.backups)))
+        for backup in bk_info:
+            if backup["date"] not in self.backups:
+                raise("backup date does not match")
         self.log.info("Number of backups matched")
 
     def _take_n_backups(self, n=1, validate=False):
