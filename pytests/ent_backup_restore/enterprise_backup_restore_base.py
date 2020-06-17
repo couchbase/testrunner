@@ -4,6 +4,8 @@ import json
 import random
 import urllib.request, urllib.parse, urllib.error, datetime
 
+from boto3 import s3, resource
+from botocore.exceptions import ClientError
 from basetestcase import BaseTestCase
 from TestInput import TestInputSingleton, TestInputServer
 from couchbase_helper.data_analysis_helper import DataCollector
@@ -29,6 +31,8 @@ from couchbase.bucket import Bucket
 
 from lib.couchbase_helper.tuq_generators import JsonGenerator
 from lib.memcached.helper.data_helper import VBucketAwareMemcached, MemcachedClientHelper
+
+from ent_backup_restore.provider.s3 import S3
 
 SOURCE_CB_PARAMS = {
     "authUser": "default",
@@ -286,6 +290,29 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             os.mkdir(self.backup_validation_files_location)
         shell.disconnect()
 
+        # Common configuration which are shared accross cloud providers
+        self.backupset.objstore_access_key_id = self.input.cbbackupmgr_param('access_key_id', '')
+        self.backupset.objstore_bucket = self.input.cbbackupmgr_param('bucket', 'cbbackupmgr-testing')
+        self.backupset.objstore_endpoint = self.input.cbbackupmgr_param('endpoint', '')
+        self.backupset.objstore_region = self.input.cbbackupmgr_param('region', '')
+        self.backupset.objstore_secret_access_key = self.input.cbbackupmgr_param('secret_access_key', '') # Required
+        self.backupset.objstore_staging_directory = self.input.cbbackupmgr_param('staging_directory')
+
+        # S3 specific configuration
+        self.backupset.s3_force_path_style = self.input.cbbackupmgr_param('s3_force_path_style', False)
+
+        # The setup/teardown is provider specific, this is hidden behind the 'Provider' abstract class
+        provider = self.input.param("objstore_provider", "")
+        if provider == "s3":
+            self.objstore_provider = S3(self.backupset.objstore_access_key_id, self.backupset.objstore_bucket,
+                                        self.backupset.objstore_endpoint, self.backupset.objstore_region,
+                                        self.backupset.objstore_secret_access_key,
+                                        self.backupset.objstore_staging_directory)
+
+        # We run in a separate branch so when we add more providers the setup will be run by default
+        if provider:
+            self.objstore_provider.setup()
+
     def tearDown(self):
         super(EnterpriseBackupRestoreBase, self).tearDown()
         if not self.input.param("skip_cleanup", False):
@@ -322,6 +349,15 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             if os.path.exists(validation_files_location):
                 self.log.info("delete dir %s" % validation_files_location)
                 shutil.rmtree(validation_files_location)
+
+            # testrunner runs the teardown before running setup which means the 'objstore_provider' will be undefined
+            # we can continue in this case knowing that we haven't yet loaded any data into the cloud.
+            try:
+                if self.objstore_provider:
+                    self.objstore_provider.teardown(info, remote_client)
+            except AttributeError:
+                pass
+
             remote_client.disconnect()
 
     @property
@@ -2605,6 +2641,17 @@ class Backupset:
         self.log_to_stdout = False
         self.auto_select_threads = False
         self.date_range = ''
+
+        # Common configuration which is to be shared accross cloud providers
+        self.objstore_access_key_id = ""
+        self.objstore_bucket = ""
+        self.objstore_endpoint = ""
+        self.objstore_region = ""
+        self.objstore_secret_access_key = ""
+        self.objstore_staging_directory = ""
+
+        # S3 specific configuration
+        self.s3_force_path_style = False
 
 
 class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
