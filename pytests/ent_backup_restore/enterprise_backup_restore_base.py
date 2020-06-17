@@ -258,14 +258,6 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.backupset.backup_compressed = \
                                       self.input.param("backup-conpressed", False)
         self.backups = []
-        self.validation_helper = BackupRestoreValidations(self.backupset,
-                                                          self.cluster_to_backup,
-                                                          self.cluster_to_restore,
-                                            self.buckets,
-                                            self.backup_validation_files_location,
-                                            self.backups,
-                                            self.num_items,
-                                            self.vbuckets)
         self.number_of_backups_taken = 0
         self.vbucket_seqno = []
         self.expires = self.input.param("expires", 0)
@@ -313,6 +305,16 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         # We run in a separate branch so when we add more providers the setup will be run by default
         if provider:
             self.objstore_provider.setup()
+
+        self.validation_helper = BackupRestoreValidations(self.backupset,
+                                                          self.cluster_to_backup,
+                                                          self.cluster_to_restore,
+                                                          self.buckets,
+                                                          self.backup_validation_files_location,
+                                                          self.backups,
+                                                          self.num_items,
+                                                          self.vbuckets,
+                                                          self.objstore_provider)
 
     def tearDown(self):
         super(EnterpriseBackupRestoreBase, self).tearDown()
@@ -411,16 +413,14 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                     self.fail(e)
 
     def backup_create(self, del_old_backup=True):
-        args = (
-            f"config --archive {self.objstore_provider.schema_prefix() + self.backupset.objstore_bucket + '/' if self.objstore_provider else ''}{self.backupset.directory} "
-            f"--repo {self.backupset.name} "
-            f"{'--obj-staging-dir ' + self.backupset.objstore_staging_directory if self.objstore_provider else ''} "
-            f"{'--obj-endpoint ' + self.backupset.objstore_endpoint if self.objstore_provider and self.backupset.objstore_endpoint else ''} "
-            f"{'--obj-region ' + self.backupset.objstore_region if self.objstore_provider and self.backupset.objstore_region else ''} "
-            f"{'--obj-access-key-id ' + self.backupset.objstore_access_key_id if self.objstore_provider and self.backupset.objstore_access_key_id else ''} "
-            f"{'--obj-secret-access-key ' + self.backupset.objstore_secret_access_key if self.objstore_provider and self.backupset.objstore_secret_access_key else ''}"
-            f"{' --s3-force-path-style' if self.objstore_provider and self.objstore_provider.schema_prefix() == 's3://' else ''}"
-        )
+        args= "--repo {} ".format(self.backupset.name)
+        args += "{} ".format('--obj-staging-dir ' + self.backupset.objstore_staging_directory if self.objstore_provider else '')
+        args += "{} ".format('--obj-endpoint ' + self.backupset.objstore_endpoint if self.objstore_provider and self.backupset.objstore_endpoint else '')
+        args += "{} ".format('--obj-region ' + self.backupset.objstore_region if self.objstore_provider and self.backupset.objstore_region else '')
+        args += "{} ".format('--obj-access-key-id ' + self.backupset.objstore_access_key_id if self.objstore_provider and self.backupset.objstore_access_key_id else '')
+        args += "{} ".format('--obj-secret-access-key ' + self.backupset.objstore_secret_access_key if self.objstore_provider and self.backupset.objstore_secret_access_key else '')
+        args += "{} ".format('--s3-force-path-style' if self.objstore_provider and self.objstore_provider.schema_prefix() == 's3://' else '')
+
         if self.backupset.exclude_buckets:
             args += " --exclude-buckets \"{0}\"".format(",".join(self.backupset.exclude_buckets))
         if self.backupset.include_buckets:
@@ -459,17 +459,15 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         return output, error
 
     def backup_info(self, json_out=True):
-        args = (
-            f"info --archive {self.objstore_provider.schema_prefix() + self.backupset.objstore_bucket + '/' if self.objstore_provider else ''}{self.backupset.directory} "
-            f"--repo {self.backupset.name} "
-            f"{'--obj-staging-dir ' + self.backupset.objstore_staging_directory if self.objstore_provider else ''} "
-            f"{'--obj-endpoint ' + self.backupset.objstore_endpoint if self.objstore_provider and self.backupset.objstore_endpoint else ''} "
-            f"{'--obj-region ' + self.backupset.objstore_region if self.objstore_provider and self.backupset.objstore_region else ''} "
-            f"{'--obj-access-key-id ' + self.backupset.objstore_access_key_id if self.objstore_provider and self.backupset.objstore_access_key_id else ''} "
-            f"{'--obj-secret-access-key ' + self.backupset.objstore_secret_access_key if self.objstore_provider and self.backupset.objstore_secret_access_key else ''}"
-            f"{' --s3-force-path-style' if self.objstore_provider and self.objstore_provider.schema_prefix() == 's3://' else ''}"
-            f"{' --json' if json_out else ''}"
-        )
+        args = "info --archive {}{} ".format(self.objstore_provider.schema_prefix() + self.backupset.objstore_bucket + '/' if self.objstore_provider else '', self.backupset.directory)
+        args += "--repo {} ".format(self.backupset.name)
+        args += "{} ".format('--obj-staging-dir ' + self.backupset.objstore_staging_directory if self.objstore_provider else '')
+        args += "{} ".format('--obj-endpoint ' + self.backupset.objstore_endpoint if self.objstore_provider and self.backupset.objstore_endpoint else '')
+        args += "{} ".format('--obj-region ' + self.backupset.objstore_region if self.objstore_provider and self.backupset.objstore_region else '')
+        args += "{} ".format('--obj-access-key-id ' + self.backupset.objstore_access_key_id if self.objstore_provider and self.backupset.objstore_access_key_id else '')
+        args += "{}".format('--obj-secret-access-key ' + self.backupset.objstore_secret_access_key if self.objstore_provider and self.backupset.objstore_secret_access_key else '')
+        args += "{}".format(' --s3-force-path-style' if self.objstore_provider and self.objstore_provider.schema_prefix() == 's3://' else '')
+        args += "{}".format(' --json' if json_out else '')
 
         remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, args)
@@ -532,19 +530,17 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         if "4.6" <= self.cbbkmgr_version[:3]:
             self.cluster_flag = "--cluster"
 
-        args = (
-            f"backup --archive {self.objstore_provider.schema_prefix() + self.backupset.objstore_bucket + '/' if self.objstore_provider else ''}{self.backupset.directory} "
-            f"--repo {self.backupset.name} "
-            f"{self.cluster_flag} http{url_format}://{self.backupset.cluster_host.ip}:{secure_port}{self.backupset.cluster_host.port} "
-            f"{user_input} "
-            f"{password_input} "
-            f"{'--obj-staging-dir ' + self.backupset.objstore_staging_directory if self.objstore_provider else ''} "
-            f"{'--obj-endpoint ' + self.backupset.objstore_endpoint if self.objstore_provider and self.backupset.objstore_endpoint else ''} "
-            f"{'--obj-region ' + self.backupset.objstore_region if self.objstore_provider and self.backupset.objstore_region else ''} "
-            f"{'--obj-access-key-id ' + self.backupset.objstore_access_key_id if self.objstore_provider and self.backupset.objstore_access_key_id else ''} "
-            f"{'--obj-secret-access-key ' + self.backupset.objstore_secret_access_key if self.objstore_provider and self.backupset.objstore_secret_access_key else ''}"
-            f"{' --s3-force-path-style' if self.objstore_provider and self.objstore_provider.schema_prefix() == 's3://' else ''}"
-        )
+        args = "backup --archive {}{} ".format(self.objstore_provider.schema_prefix() + self.backupset.objstore_bucket + '/' if self.objstore_provider else '', self.backupset.directory)
+        args += "--repo {} ".format(self.backupset.name)
+        args += "{} http{}://{}:{}{} ".format(self.cluster_flag, url_format, self.backupset.cluster_host.ip, secure_port, self.backupset.cluster_host.port)
+        args += "{} ".format(user_input)
+        args += "{} ".format(password_input)
+        args += "{} ".format('--obj-staging-dir ' + self.backupset.objstore_staging_directory if self.objstore_provider else '')
+        args += "{} ".format('--obj-endpoint ' + self.backupset.objstore_endpoint if self.objstore_provider and self.backupset.objstore_endpoint else '')
+        args += "{} ".format('--obj-region ' + self.backupset.objstore_region if self.objstore_provider and self.backupset.objstore_region else '')
+        args += "{} ".format('--obj-access-key-id ' + self.backupset.objstore_access_key_id if self.objstore_provider and self.backupset.objstore_access_key_id else '')
+        args += "{}".format('--obj-secret-access-key ' + self.backupset.objstore_secret_access_key if self.objstore_provider and self.backupset.objstore_secret_access_key else '')
+        args += "{}".format(' --s3-force-path-style' if self.objstore_provider and self.objstore_provider.schema_prefix() == 's3://' else '')
 
         if self.backupset.no_ssl_verify:
             args += " --no-ssl-verify"
@@ -594,7 +590,9 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                 self.log.error("Failed to backup bucket {0}".format(bucket.name))
                 return output, error
 
-        command = "ls -tr {0}/{1} | tail -1".format(self.backupset.directory, self.backupset.name)
+        command = "ls -tr {}".format(self.backupset.objstore_staging_directory + '/' if self.objstore_provider else '')
+        command += "{}/{} | tail -1".format(self.backupset.directory, self.backupset.name)
+
         o, e = remote_client.execute_command(command)
         if o:
             self.backups.append(o[0])
@@ -634,7 +632,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             self.validation_helper.store_latest(self.cluster_to_backup, self.buckets, self.number_of_backups_taken,
                                                 self.backup_validation_files_location)
             self.validation_helper.store_range_json(self.buckets, self.number_of_backups_taken,
-                                                    self.backup_validation_files_location)
+                                                    self.backup_validation_files_location,
+                                                    self.objstore_provider)
 
     def backup_restore(self):
         if self.restore_only:
@@ -673,21 +672,19 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         if "4.6" <= self.backupset.current_bkrs_client_version[:3]:
             self.cluster_flag = "--cluster"
 
-        args = (
-            f"restore --archive {self.objstore_provider.schema_prefix() + self.backupset.objstore_bucket + '/' if self.objstore_provider else ''}{self.backupset.directory} "
-            f"--repo {self.backupset.name} "
-            f"{self.cluster_flag} http{url_format}://{self.backupset.restore_cluster_host.ip}:{secure_port}{self.backupset.restore_cluster_host.port} "
-            f"{user_input} "
-            f"{password_input} "
-            f"--start {backup_start} "
-            f"--end {backup_end} "
-            f"{'--obj-staging-dir ' + self.backupset.objstore_staging_directory if self.objstore_provider else ''} "
-            f"{'--obj-endpoint ' + self.backupset.objstore_endpoint if self.objstore_provider and self.backupset.objstore_endpoint else ''} "
-            f"{'--obj-region ' + self.backupset.objstore_region if self.objstore_provider and self.backupset.objstore_region else ''} "
-            f"{'--obj-access-key-id ' + self.backupset.objstore_access_key_id if self.objstore_provider and self.backupset.objstore_access_key_id else ''} "
-            f"{'--obj-secret-access-key ' + self.backupset.objstore_secret_access_key if self.objstore_provider and self.backupset.objstore_secret_access_key else ''}"
-            f"{' --s3-force-path-style' if self.objstore_provider and self.objstore_provider.schema_prefix() == 's3://' else ''}"
-        )
+        args = "restore --archive {}{} ".format(self.objstore_provider.schema_prefix() + self.backupset.objstore_bucket + '/' if self.objstore_provider else '', self.backupset.directory)
+        args += "--repo {} ".format(self.backupset.name)
+        args += "{} http{}://{}:{}{} ".format(self.cluster_flag, url_format, self.backupset.restore_cluster_host.ip, secure_port, self.backupset.restore_cluster_host.port)
+        args += "{} ".format(user_input)
+        args += "{} ".format(password_input)
+        args += "--start {} ".format(backup_start)
+        args += "--end {} ".format(backup_end)
+        args += "{} ".format('--obj-staging-dir ' + self.backupset.objstore_staging_directory if self.objstore_provider else '')
+        args += "{} ".format('--obj-endpoint ' + self.backupset.objstore_endpoint if self.objstore_provider and self.backupset.objstore_endpoint else '')
+        args += "{} ".format('--obj-region ' + self.backupset.objstore_region if self.objstore_provider and self.backupset.objstore_region else '')
+        args += "{} ".format('--obj-access-key-id ' + self.backupset.objstore_access_key_id if self.objstore_provider and self.backupset.objstore_access_key_id else '')
+        args += "{}".format('--obj-secret-access-key ' + self.backupset.objstore_secret_access_key if self.objstore_provider and self.backupset.objstore_secret_access_key else '')
+        args += "{}".format(' --s3-force-path-style' if self.objstore_provider and self.objstore_provider.schema_prefix() == 's3://' else '')
 
         if version >= "6.5" and self.backupset.auto_select_threads:
             args += " --auto-select-threads"
@@ -978,7 +975,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             bk_raw_ipv6_dir = self.backupset.directory
             for x in ipv6_raw_format:
                 bk_raw_ipv6_dir = bk_raw_ipv6_dir.replace(x, "\\" + x)
-        bk_dir = self.backupset.directory
+        bk_dir = "{}{}".format(self.backupset.objstore_staging_directory + '/' if self.objstore_provider else '', self.backupset.directory)
         if ipv6_raw_ip:
             bk_dir = bk_raw_ipv6_dir
         command = "grep 'Transfer plan finished successfully' " + bk_dir + \
@@ -1030,17 +1027,15 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         remote_client.disconnect()
 
     def backup_list(self):
-        args = (
-            f"info --archive {self.objstore_provider.schema_prefix() + self.backupset.objstore_bucket + '/' if self.objstore_provider else ''}{self.backupset.directory} "
-            f"{'--obj-staging-dir ' + self.backupset.objstore_staging_directory if self.objstore_provider else ''} "
-            f"{'--obj-endpoint ' + self.backupset.objstore_endpoint if self.objstore_provider and self.backupset.objstore_endpoint else ''} "
-            f"{'--obj-region ' + self.backupset.objstore_region if self.objstore_provider and self.backupset.objstore_region else ''} "
-            f"{'--obj-access-key-id ' + self.backupset.objstore_access_key_id if self.objstore_provider and self.backupset.objstore_access_key_id else ''} "
-            f"{'--obj-secret-access-key ' + self.backupset.objstore_secret_access_key if self.objstore_provider and self.backupset.objstore_secret_access_key else ''} "
-            f"{'--s3-force-path-style' if self.objstore_provider and self.objstore_provider.schema_prefix() == 's3://' else ''} "
-            f"--all "
-            f"--json"
-        )
+        args = "info --archive {}{} ".format(self.objstore_provider.schema_prefix() + self.backupset.objstore_bucket + '/' if self.objstore_provider else '', self.backupset.directory)
+        args += "{} ".format('--obj-staging-dir ' + self.backupset.objstore_staging_directory if self.objstore_provider else '')
+        args += "{} ".format('--obj-endpoint ' + self.backupset.objstore_endpoint if self.objstore_provider and self.backupset.objstore_endpoint else '')
+        args += "{} ".format('--obj-region ' + self.backupset.objstore_region if self.objstore_provider and self.backupset.objstore_region else '')
+        args += "{} ".format('--obj-access-key-id ' + self.backupset.objstore_access_key_id if self.objstore_provider and self.backupset.objstore_access_key_id else '')
+        args += "{} ".format('--obj-secret-access-key ' + self.backupset.objstore_secret_access_key if self.objstore_provider and self.backupset.objstore_secret_access_key else '')
+        args += "{} ".format('--s3-force-path-style' if self.objstore_provider and self.objstore_provider.schema_prefix() == 's3://' else '')
+        args += "--all "
+        args += "--json"
 
         if self.backupset.backup_list_name:
             args += " --repo {0}".format(self.backupset.backup_list_name)
@@ -1120,16 +1115,14 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         remote_client.disconnect()
 
     def backup_remove(self, backup_range=None, verify_cluster_stats=True):
-        args = (
-            f"remove --archive {self.objstore_provider.schema_prefix() + self.backupset.objstore_bucket + '/' if self.objstore_provider else ''}{self.backupset.directory} "
-            f"--repo {self.backupset.name} "
-            f"{'--obj-staging-dir ' + self.backupset.objstore_staging_directory if self.objstore_provider else ''} "
-            f"{'--obj-endpoint ' + self.backupset.objstore_endpoint if self.objstore_provider and self.backupset.objstore_endpoint else ''} "
-            f"{'--obj-region ' + self.backupset.objstore_region if self.objstore_provider and self.backupset.objstore_region else ''} "
-            f"{'--obj-access-key-id ' + self.backupset.objstore_access_key_id if self.objstore_provider and self.backupset.objstore_access_key_id else ''} "
-            f"{'--obj-secret-access-key ' + self.backupset.objstore_secret_access_key if self.objstore_provider and self.backupset.objstore_secret_access_key else ''}"
-            f"{' --s3-force-path-style' if self.objstore_provider and self.objstore_provider.schema_prefix() == 's3://' else ''}"
-        )
+        args = "remove --archive {}{} ".format(self.objstore_provider.schema_prefix() + self.backupset.objstore_bucket + '/' if self.objstore_provider else '', self.backupset.directory)
+        args += "--repo {} ".format(self.backupset.name)
+        args += "{} ".format('--obj-staging-dir ' + self.backupset.objstore_staging_directory if self.objstore_provider else '')
+        args += "{} ".format('--obj-endpoint ' + self.backupset.objstore_endpoint if self.objstore_provider and self.backupset.objstore_endpoint else '')
+        args += "{} ".format('--obj-region ' + self.backupset.objstore_region if self.objstore_provider and self.backupset.objstore_region else '')
+        args += "{} ".format('--obj-access-key-id ' + self.backupset.objstore_access_key_id if self.objstore_provider and self.backupset.objstore_access_key_id else '')
+        args += "{}".format('--obj-secret-access-key ' + self.backupset.objstore_secret_access_key if self.objstore_provider and self.backupset.objstore_secret_access_key else '')
+        args += "{}".format(' --s3-force-path-style' if self.objstore_provider and self.objstore_provider.schema_prefix() == 's3://' else '')
 
         if backup_range is not None:
             args += " --backups {0}".format(backup_range)
@@ -1234,8 +1227,10 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.log.info("Backup succeeded with memcached crash and restart within 180 seconds")
         self.sleep(20)
         conn = RemoteMachineShellConnection(self.backupset.backup_host)
-        command = "ls -tr {0}/{1} | tail -1".format(self.backupset.directory,
-                                                    self.backupset.name)
+
+        command = "ls -tr {}".format(self.backupset.objstore_staging_directory + '/' if self.objstore_provider else '')
+        command += "{}/{} | tail -1".format(self.backupset.directory, self.backupset.name)
+
         o, e = conn.execute_command(command)
         if o:
             self.backups.append(o[0])
@@ -1249,7 +1244,9 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                                             self.number_of_backups_taken,
                                             self.backup_validation_files_location)
         self.validation_helper.store_range_json(self.buckets, self.number_of_backups_taken,
-                                         self.backup_validation_files_location, merge=True)
+                                                self.backup_validation_files_location,
+                                                self.objstore_provider,
+                                                merge=True)
         conn.disconnect()
 
     def bk_with_erlang_crash_and_restart(self):
@@ -1276,8 +1273,9 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.sleep(30)
         conn.disconnect()
         conn = RemoteMachineShellConnection(self.backupset.backup_host)
-        command = "ls -tr {0}/{1} | tail -1".format(self.backupset.directory,
-                                                    self.backupset.name)
+        command = "ls -tr {}".format(self.backupset.objstore_staging_directory + '/' if self.objstore_provider else '')
+        command += "{}/{} | tail -1".format(self.backupset.directory, self.backupset.name)
+
         o, e = conn.execute_command(command)
         if o:
             self.backups.append(o[0])
@@ -1291,7 +1289,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                                             self.number_of_backups_taken,
                                             self.backup_validation_files_location)
         self.validation_helper.store_range_json(self.buckets, self.number_of_backups_taken,
-                                                self.backup_validation_files_location)
+                                                self.backup_validation_files_location,
+                                                self.objstore_provider)
         conn.disconnect()
 
     def bk_with_cb_server_stop_and_restart(self):
@@ -1318,8 +1317,9 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.sleep(30)
         conn.disconnect()
         conn = RemoteMachineShellConnection(self.backupset.backup_host)
-        command = "ls -tr {0}/{1} | tail -1".format(self.backupset.directory,
-                                                    self.backupset.name)
+        command = "ls -tr {}".format(self.backupset.objstore_staging_directory + '/' if self.objstore_provider else '')
+        command += "{}/{} | tail -1".format(self.backupset.directory, self.backupset.name)
+
         o, e = conn.execute_command(command)
         if o:
             self.backups.append(o[0])
@@ -1333,7 +1333,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                                             self.number_of_backups_taken,
                                             self.backup_validation_files_location)
         self.validation_helper.store_range_json(self.buckets, self.number_of_backups_taken,
-                                                self.backup_validation_files_location)
+                                                self.backup_validation_files_location,
+                                                self.objstore_provider)
         conn.disconnect()
 
     def bk_with_stop_and_resume(self):
@@ -1436,8 +1437,9 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             self.log.info("process cbbackupmge may be killed")
             return False, [] , "cbbackupmgr may be killed"
         del self.backups[self.backupset.start - 1:self.backupset.end]
-        command = "ls -tr {0}/{1} | tail -1".format(self.backupset.directory,
-                                                    self.backupset.name)
+        command = "ls -tr {}".format(self.backupset.objstore_staging_directory + '/' if self.objstore_provider else '')
+        command += "{}/{} | tail -1".format(self.backupset.directory, self.backupset.name)
+
         o, e = remote_client.execute_command(command)
         if o:
             self.backups.insert(self.backupset.start - 1, o[0])
@@ -1470,7 +1472,9 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             self.validation_helper.store_latest(self.cluster_to_backup, self.buckets, self.number_of_backups_taken,
                                                 self.backup_validation_files_location)
             self.validation_helper.store_range_json(self.buckets, self.number_of_backups_taken,
-                                                    self.backup_validation_files_location, merge=True)
+                                                    self.backup_validation_files_location,
+                                                    self.objstore_provider,
+                                                    merge=True)
 
             self.validation_helper.validate_merge(self.backup_validation_files_location)
 
@@ -1910,15 +1914,13 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         shell = RemoteMachineShellConnection(self.backupset.backup_host)
         info = shell.extract_remote_info().type.lower()
 
-        args = (
-            f"collect-logs --archive {self.objstore_provider.schema_prefix() + self.backupset.objstore_bucket + '/' if self.objstore_provider else ''}{self.backupset.directory} "
-            f"{'--obj-staging-dir ' + self.backupset.objstore_staging_directory if self.objstore_provider else ''} "
-            f"{'--obj-endpoint ' + self.backupset.objstore_endpoint if self.objstore_provider and self.backupset.objstore_endpoint else ''} "
-            f"{'--obj-region ' + self.backupset.objstore_region if self.objstore_provider and self.backupset.objstore_region else ''} "
-            f"{'--obj-access-key-id ' + self.backupset.objstore_access_key_id if self.objstore_provider and self.backupset.objstore_access_key_id else ''} "
-            f"{'--obj-secret-access-key ' + self.backupset.objstore_secret_access_key if self.objstore_provider and self.backupset.secret_access_key else ''}"
-            f"{' --s3-force-path-style' if self.objstore_provider and self.objstore_provider.schema_prefix() == 's3://' else ''}"
-        )
+        args = "collect-logs --archive {}{} ".format(self.objstore_provider.schema_prefix() + self.backupset.objstore_bucket + '/' if self.objstore_provider else '', self.backupset.directory)
+        args += "{} ".format('--obj-staging-dir ' + self.backupset.objstore_staging_directory if self.objstore_provider else '')
+        args += "{} ".format('--obj-endpoint ' + self.backupset.objstore_endpoint if self.objstore_provider and self.backupset.objstore_endpoint else '')
+        args += "{} ".format('--obj-region ' + self.backupset.objstore_region if self.objstore_provider and self.backupset.objstore_region else '')
+        args += "{} ".format('--obj-access-key-id ' + self.backupset.objstore_access_key_id if self.objstore_provider and self.backupset.objstore_access_key_id else '')
+        args += "{}".format('--obj-secret-access-key ' + self.backupset.objstore_secret_access_key if self.objstore_provider and self.backupset.secret_access_key else '')
+        args += "{}".format(' --s3-force-path-style' if self.objstore_provider and self.objstore_provider.schema_prefix() == 's3://' else '')
 
         if self.backupset.ex_logs_path:
             if info == 'windows':
@@ -2920,7 +2922,9 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         self.log.info("Merge succeeded with memcached crash and restart within 180 seconds")
         self.sleep(30)
         del self.backups[self.backupset.start - 1:self.backupset.end]
-        command = "ls -tr {0}/{1} | tail -1".format(self.backupset.directory, self.backupset.name)
+        command = "ls -tr {}".format(self.backupset.objstore_staging_directory + '/' if self.objstore_provider else '')
+        command += "{}/{} | tail -1".format(self.backupset.directory, self.backupset.name)
+
         o, e = conn.execute_command(command)
         if o:
             self.backups.insert(self.backupset.start - 1, o[0])
@@ -2934,7 +2938,8 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
             self.validation_helper.store_latest(self.cluster_to_backup, self.buckets, self.number_of_backups_taken,
                                                 self.backup_validation_files_location)
             self.validation_helper.store_range_json(self.buckets, self.number_of_backups_taken,
-                                                    self.backup_validation_files_location)
+                                                    self.backup_validation_files_location,
+                                                    self.objstore_provider)
             self.validation_helper.validate_merge(self.backup_validation_files_location)
         conn.disconnect()
 
@@ -2971,7 +2976,8 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
             self.validation_helper.store_latest(self.cluster_to_backup, self.buckets, self.number_of_backups_taken,
                                                 self.backup_validation_files_location)
             self.validation_helper.store_range_json(self.buckets, self.number_of_backups_taken,
-                                                    self.backup_validation_files_location)
+                                                    self.backup_validation_files_location,
+                                                    self.objstore_provider)
             self.validation_helper.validate_merge(self.backup_validation_files_location)
         conn.disconnect()
 
@@ -2994,7 +3000,9 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         self.log.info("Merge succeeded with couchbase stop and start within 180 seconds")
         self.sleep(30)
         del self.backups[self.backupset.start - 1:self.backupset.end]
-        command = "ls -tr {0}/{1} | tail -1".format(self.backupset.directory, self.backupset.name)
+        command = "ls -tr {}".format(self.backupset.objstore_staging_directory + '/' if self.objstore_provider else '')
+        command += "{}/{} | tail -1".format(self.backupset.directory, self.backupset.name)
+
         o, e = conn.execute_command(command)
         if o:
             self.backups.insert(self.backupset.start - 1, o[0])
@@ -3008,7 +3016,8 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
             self.validation_helper.store_latest(self.cluster_to_backup, self.buckets, self.number_of_backups_taken,
                                                 self.backup_validation_files_location)
             self.validation_helper.store_range_json(self.buckets, self.number_of_backups_taken,
-                                                    self.backup_validation_files_location)
+                                                    self.backup_validation_files_location,
+                                                    self.objstore_provider)
             self.validation_helper.validate_merge(self.backup_validation_files_location)
         conn.disconnect()
 
