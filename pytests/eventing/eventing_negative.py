@@ -83,7 +83,7 @@ class EventingNegative(EventingBaseTest):
         try:
             self.rest.create_function(self.function_name,body)
         except Exception as ex:
-            if "Source bucket same as metadata bucket" not in str(ex):
+            if "ERR_INTER_BUCKET_RECURSION" not in str(ex):
                 self.fail("Eventing function allowed both source and metadata bucket to be same")
 
     def test_eventing_with_memcached_buckets(self):
@@ -423,7 +423,7 @@ class EventingNegative(EventingBaseTest):
             self.fail("application is deployed for insert on source bucket")
         except Exception as e:
             log.info(str(e))
-            if "ERR_HANDLER_COMPILATION" not in str(e):
+            if "ERR_INTER_BUCKET_RECURSION" not in str(e):
                 self.fail("Not correct exception thrown")
 
     def test_n1ql_with_wrong_query(self):
