@@ -2532,7 +2532,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                 self.log.info("**** add built-in '%s' user to node %s ****" % (testuser[0]["name"],
                                                                                servers[2].ip))
                 RbacBase().create_user_source(testuser, 'builtin', servers[2])
-                
+
                 self.log.info("**** add '%s' role to '%s' user ****" % (rolelist[0]["roles"],
                                                                         testuser[0]["name"]))
                 status = RbacBase().add_user_role(rolelist, RestConnection(servers[2]), 'builtin')
@@ -2731,6 +2731,86 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         remote_client.disconnect()
         self.assertEqual(output[0], "Backup repository creation failed: Backup Repository `backup` exists",
                          "Expected error message not thrown")
+
+    def test_objstore_negative_args(self):
+        remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
+        command = f"{self.cli_command_location}/cbbackupmgr"
+
+        # Run all the sub_commands with the (non-objstore) required arguments (so that we are actually checking the
+        # correct error)
+        for sub_command in ['backup -a archive -r repo -c localhost -u admin -p password',
+                            # TODO(James Lee) - Uncomment when MB-40011 has been closed and the fix has been picked up
+                            # by the latest build.
+                            # 'collect-logs -a archive',
+                            'config -a archive -r repo',
+                            'examine -a archive -r repo -k asdf --bucket asdf',
+                            'info -a archive',
+                            'remove -a archive -r repo',
+                            'restore -a archive -r repo -c localhost -u admin -p password']:
+
+            # Check all the object store arguments (ones that require an argument have one provided so that we are
+            # validating cbbackupmgr and not cbflag).
+            for argument in ['--obj-access-key-id asdf',
+                             '--obj-cacert asdf',
+                             '--obj-endpoint asdf',
+                             '--obj-no-ssl-verify',
+                             '--obj-region asdf',
+                             '--obj-secret-access-key asdf']:
+
+                # Check all the common object store commands
+                output, error = remote_client.execute_command(f"{command} {sub_command} {argument}")
+                remote_client.log_command_output(output, error)
+                self.assertNotEqual(len(output), 0)
+                self.assertIn("cloud arguments provided without the cloud scheme prefix", output[0],
+                                "Expected an error about providing cloud arguments without the cloud schema prefix")
+
+                # Check all the S3 specific arguments
+                if self.objstore_provider.schema_prefix() == 's3://':
+                    for argument in ['--s3-force-path-style', '--s3-log-level asdf']:
+                        output, error = remote_client.execute_command(f"{command} {sub_command} {argument}")
+                        remote_client.log_command_output(output, error)
+                        self.assertNotEqual(len(output), 0)
+                        self.assertIn("s3 arguments provided without the archive 's3://' schema prefix", output[0],
+                                        "Expected an error about providing S3 specific arguments without the s3:// schema prefix")
+
+            # Check all the common objstore flags that require arguments without providing arguments. This is testing
+            # cbflag.
+            for argument in ['--obj-access-key-id',
+                             '--obj-cacert',
+                             '--obj-endpoint',
+                             '--obj-region',
+                             '--obj-secret-access-key']:
+
+                # Check that common object store arguments that require a value throw the correct error when a value
+                # is omitted.
+                output, error = remote_client.execute_command(
+                    f"{command} {sub_command.replace('archive', self.objstore_provider.schema_prefix() + 'archive')} --obj-staging-dir staging {argument}"
+                )
+                remote_client.log_command_output(output, error)
+                self.assertNotEqual(len(output), 0)
+                self.assertIn(f"Expected argument for option: {argument}", output[0],
+                                "Expected an error about providing cloud arguments without a value")
+
+            # Check all the S3 specific flags that require arguments without providing arguments. This is testing
+            # cbflag.
+            for argument in ['--s3-log-level']:
+                output, error = remote_client.execute_command(
+                    f"{command} {sub_command.replace('archive', 's3://archive')} --obj-staging-dir staging {argument}"
+                )
+                remote_client.log_command_output(output, error)
+                self.assertNotEqual(len(output), 0)
+                self.assertIn(f"Expected argument for option: {argument}", output[0],
+                                "Expected an error about providing cloud arguments without a value")
+
+
+            # Test omitting the staging directory argument
+            output, error = remote_client.execute_command(
+                f"{command} {sub_command.replace('archive', self.objstore_provider.schema_prefix() + 'archive')}"
+            )
+            remote_client.log_command_output(output, error)
+            self.assertNotEqual(len(output), 0)
+            self.assertIn("you must provide the '--obj-staging-dir' argument", output[0],
+                            "Expected an error about not supplying the '--obj-staging-dir' argument")
 
     def test_backup_cluster_restore_negative_args(self):
         """
