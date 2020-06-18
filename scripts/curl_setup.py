@@ -6,6 +6,7 @@ import requests
 def start_image(client,name):
    run= False
    try:
+    client.images.pull(name)
     image=client.images.get(name)
     print('image found:',image.id)
    except Exception:

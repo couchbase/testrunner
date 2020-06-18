@@ -53,7 +53,7 @@ class EventingN1QL(EventingBaseTest):
         try:
             self.deploy_function(body)
         except Exception as ex:
-            if "ERR_HANDLER_COMPILATION" not in str(ex):
+            if "ERR_INTER_BUCKET_RECURSION" not in str(ex):
                 self.fail("recursive mutations are allowed through n1ql")
 
     def test_n1ql_prepare_statement(self):
