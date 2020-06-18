@@ -537,7 +537,7 @@ class FlexIndexTests(QueryTests):
         self.generate_random_queries()
         fts_index.smart_query_fields = self.query_gen.fields
         self.update_expected_fts_index_map(fts_index)
-        fts_index.update_num_replicas(2)
+        fts_index.update_num_replicas(1)
         self.wait_for_fts_indexing_complete(fts_index, self.num_items)
         failed_to_run_query, not_found_index_in_response, result_mismatch = self.run_queries_and_validate()
 
