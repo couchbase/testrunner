@@ -825,8 +825,8 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
                             "Expected command to succeed")
             self.assertTrue(self.isClusterInitialized(server), "Cluster was not initialized")
             self.assertTrue(self.verifyServices(server, services), "Services do not match")
-            self.assertFalse(self.verifyNotificationsEnabled(server),
-                             "Notification is enabled (default is disable)")
+            self.assertTrue(self.verifyNotificationsEnabled(server),
+                             "Notification is disabled (default is enable)")
             self.assertTrue(self.verifyClusterName(server, name), "Cluster name does not match")
 
             if "index" in services:
