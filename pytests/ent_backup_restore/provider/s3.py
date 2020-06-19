@@ -1,6 +1,7 @@
 #!/usr/bin/python3
 
 import json
+import re
 
 import boto3
 import botocore
@@ -77,6 +78,29 @@ class S3(provider.Provider):
             keys.append(obj.key)
 
         return keys
+
+    def delete_objects(self, prefix):
+        """See super class"""
+        kwargs = {}
+        if prefix:
+            kwargs['Prefix'] = prefix
+
+        for obj in self.resource.Bucket(self.bucket).objects.filter(**kwargs):
+            obj.delete()
+
+    def list_backups(self, archive, repo):
+        """See super class"""
+        pattern = re.compile("([0-9]+)-(0[1-9]|1[012])-(0[1-9]|[12][0-9]|3[01])[Tt]([01][0-9]|2[0-3])_([0-5][0-9])_([0-5][0-9]|60)(\.[0-9]+)?(([Zz])|([\+|\-]([01][0-9]|2[0-3])_[0-5][0-9]))")
+
+        backups = []
+        for obj in self.resource.Bucket(self.bucket).objects.filter(Prefix="{}/{}".format(archive, repo)):
+            res = pattern.search(obj.key)
+
+            if res and res.group() not in backups:
+                backups.append(res.group())
+
+        return backups
+
 
     def num_multipart_uploads(self):
         return len(list(self.resource.Bucket(self.bucket).multipart_uploads.all()))
