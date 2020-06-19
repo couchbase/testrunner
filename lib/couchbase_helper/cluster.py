@@ -1254,46 +1254,36 @@ class Cluster(object):
         status = _task.result()
         return status
 
-    def async_backup_cluster(self, cluster_host, backup_host, directory='', name='',
-                             resume=False, purge=False, no_progress_bar=False,
+    def async_backup_cluster(self, backupset, objstore_provider, resume=False, purge=False, no_progress_bar=False,
                              cli_command_location='', cb_version=None, num_shards=''):
         """
         Asynchronously starts backup cluster
 
-        :param cluster_host: host to be backed up
-        :param backup_host: host where backup happens
-        :param directory: backup directory
-        :param name: backup name
+        :param backupset: backupset containing common parameter passed into backup tests
+        :param cloud_provider: an object which implements 'Provider'
         :param resume: bool to decide if it is a resume
         :param purge: bool to decide if it is a purge
         :param no_progress_bar: bool to decide progress bar
         :param cli_command_location: command location with respect to os
         :return: task with the output or error message
         """
-        _task = EnterpriseBackupTask(cluster_host, backup_host, directory, name, resume,
-                                     purge, no_progress_bar, cli_command_location, cb_version,
-                                     num_shards)
+        _task = EnterpriseBackupTask(backupset, objstore_provider, resume, purge, no_progress_bar, cli_command_location,
+                                     cb_version, num_shards)
         self.task_manager.schedule(_task)
         return _task
 
-    def async_restore_cluster(self, restore_host, backup_host, backups=[], start=0, end=0, directory='', name='',
-                 force_updates=False, no_progress_bar=False, cli_command_location='', cb_version=None):
+    def async_restore_cluster(self, backupset, objstore_provider, no_progress_bar=False, cli_command_location='',
+                              cb_version=None):
         """
         Asynchronously start backup restore
-        :param restore_host: cluster to be restored to
-        :param backup_host: cluster where backup happens
-        :param backups: list of backups available
-        :param start: backup start index
-        :param end: backup end index
-        :param directory: backup directory
-        :param name: backup name
+        :param backupset: backupset containing common parameter passed into backup tests
+        :param cloud_provider: an object which implements 'Provider'
         :param force_updates: bool to decide if force_updates
         :param no_progress_bar: bool to decide progress bar
         :param cli_command_location: cli_command_location: command location with respect to os
         :return: task with the output or error message
         """
-        _task = EnterpriseRestoreTask(restore_host, backup_host, backups, start, end, directory, name,
-                                      force_updates, no_progress_bar, cli_command_location, cb_version)
+        _task = EnterpriseRestoreTask(backupset, objstore_provider, no_progress_bar, cli_command_location, cb_version)
         self.task_manager.schedule(_task)
         return _task
 

@@ -1208,17 +1208,14 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
     def bk_with_memcached_crash_and_restart(self):
         num_shards = ""
         backup_result = self.cluster.async_backup_cluster(
-                                           cluster_host=self.backupset.cluster_host,
-                                           backup_host=self.backupset.backup_host,
-                                           directory=self.backupset.directory,
-                                           name=self.backupset.name,
-                                           resume=self.backupset.resume,
-                                           purge=self.backupset.purge,
-                                           no_progress_bar=self.no_progress_bar,
-                                           cli_command_location=self.cli_command_location,
-                                           cb_version=self.cb_version,
-                                           num_shards=num_shards)
-        self.sleep(5)
+            backupset=self.backupset,
+            objstore_provider=self.objstore_provider,
+            resume=self.backupset.resume,
+            purge=self.backupset.purge,
+            no_progress_bar=self.no_progress_bar,
+            cli_command_location=self.cli_command_location,
+            cb_version=self.cb_version,
+            num_shards=num_shards)
         conn_bk = RemoteMachineShellConnection(self.backupset.cluster_host)
         conn_bk.pause_memcached(timesleep=8)
         conn_bk.unpause_memcached()
@@ -1259,17 +1256,14 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
     def bk_with_erlang_crash_and_restart(self):
         num_shards = ""
         backup_result = self.cluster.async_backup_cluster(
-                                           cluster_host=self.backupset.cluster_host,
-                                           backup_host=self.backupset.backup_host,
-                                           directory=self.backupset.directory,
-                                           name=self.backupset.name,
-                                           resume=self.backupset.resume,
-                                           purge=self.backupset.purge,
-                                           no_progress_bar=self.no_progress_bar,
-                                           cli_command_location=self.cli_command_location,
-                                           cb_version=self.cb_version,
-                                           num_shards=num_shards)
-        self.sleep(10)
+            backupset=self.backupset,
+            objstore_provider=self.objstore_provider,
+            resume=self.backupset.resume,
+            purge=self.backupset.purge,
+            no_progress_bar=self.no_progress_bar,
+            cli_command_location=self.cli_command_location,
+            cb_version=self.cb_version,
+            num_shards=num_shards)
         conn = RemoteMachineShellConnection(self.backupset.cluster_host)
         conn.kill_erlang()
         conn.start_couchbase()
@@ -1303,17 +1297,14 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
     def bk_with_cb_server_stop_and_restart(self):
         num_shards = ""
         backup_result = self.cluster.async_backup_cluster(
-                                           cluster_host=self.backupset.cluster_host,
-                                           backup_host=self.backupset.backup_host,
-                                           directory=self.backupset.directory,
-                                           name=self.backupset.name,
-                                           resume=self.backupset.resume,
-                                           purge=self.backupset.purge,
-                                           no_progress_bar=self.no_progress_bar,
-                                           cli_command_location=self.cli_command_location,
-                                           cb_version=self.cb_version,
-                                           num_shards=num_shards)
-        self.sleep(10)
+            backupset=self.backupset,
+            objstore_provider=self.objstore_provider,
+            resume=self.backupset.resume,
+            purge=self.backupset.purge,
+            no_progress_bar=self.no_progress_bar,
+            cli_command_location=self.cli_command_location,
+            cb_version=self.cb_version,
+            num_shards=num_shards)
         conn = RemoteMachineShellConnection(self.backupset.cluster_host)
         conn.stop_couchbase()
         conn.start_couchbase()
@@ -1352,17 +1343,14 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         started_couchbase = False
         try:
             backup_result = self.cluster.async_backup_cluster(
-                                           cluster_host=self.backupset.cluster_host,
-                                           backup_host=self.backupset.backup_host,
-                                           directory=self.backupset.directory,
-                                           name=self.backupset.name,
-                                           resume=False,
-                                           purge=self.backupset.purge,
-                                           no_progress_bar=self.no_progress_bar,
-                                           cli_command_location=self.cli_command_location,
-                                           cb_version=self.cb_version,
-                                           num_shards=num_shards)
-            self.sleep(3)
+                backupset=self.backupset,
+                objstore_provider=self.objstore_provider,
+                resume=False,
+                purge=self.backupset.purge,
+                no_progress_bar=self.no_progress_bar,
+                cli_command_location=self.cli_command_location,
+                cb_version=self.cb_version,
+                num_shards=num_shards)
             conn.kill_erlang(self.os_name)
             output = backup_result.result(timeout=600)
             self.log.info(str(output))
