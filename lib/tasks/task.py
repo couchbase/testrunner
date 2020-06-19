@@ -4764,17 +4764,17 @@ class EnterpriseBackupTask(Task):
     def execute(self, task_manager):
         try:
             args = (
-                f"backup --archive {self.objstore_provider.schema_prefix() + self.backupset.objstore_bucket + '/' if self.objstore_provider else ''}{self.backupset.directory} "
-                f"--repo {self.backupset.name} "
-                f"{self.cluster_flag} http://{self.backupset.cluster_host.ip}:{self.backupset.cluster_host.port} "
-                f"--username {self.backupset.cluster_host.rest_username} "
-                f"--password {self.backupset.cluster_host.rest_password} "
-                f"{self.num_shards} "
-                f"{'--obj-staging-dir ' + self.backupset.objstore_staging_directory if self.objstore_provider else ''} "
-                f"{'--obj-endpoint ' + self.backupset.objstore_endpoint if self.objstore_provider and self.backupset.objstore_endpoint else ''} "
-                f"{'--obj-region ' + self.backupset.objstore_region if self.objstore_provider and self.backupset.objstore_region else ''} "
-                f"{'--obj-access-key-id ' + self.backupset.objstore_access_key_id if self.objstore_provider and self.backupset.objstore_access_key_id else ''} "
-                f"{'--obj-secret-access-key ' + self.backupset.objstore_secret_access_key if self.objstore_provider and self.backupset.objstore_secret_access_key else ''}"
+                f"backup --archive {self.objstore_provider.schema_prefix() + self.backupset.objstore_bucket + '/' if self.objstore_provider else ''}{self.backupset.directory}"
+                f" --repo {self.backupset.name}"
+                f" {self.cluster_flag} http://{self.backupset.cluster_host.ip}:{self.backupset.cluster_host.port}"
+                f" --username {self.backupset.cluster_host.rest_username}"
+                f" --password {self.backupset.cluster_host.rest_password}"
+                f" {self.num_shards}"
+                f"{' --obj-staging-dir ' + self.backupset.objstore_staging_directory if self.objstore_provider else ''}"
+                f"{' --obj-endpoint ' + self.backupset.objstore_endpoint if self.objstore_provider and self.backupset.objstore_endpoint else ''}"
+                f"{' --obj-region ' + self.backupset.objstore_region if self.objstore_provider and self.backupset.objstore_region else ''}"
+                f"{' --obj-access-key-id ' + self.backupset.objstore_access_key_id if self.objstore_provider and self.backupset.objstore_access_key_id else ''}"
+                f"{' --obj-secret-access-key ' + self.backupset.objstore_secret_access_key if self.objstore_provider and self.backupset.objstore_secret_access_key else ''}"
                 f"{' --s3-force-path-style' if self.objstore_provider and self.objstore_provider.schema_prefix() == 's3://' else ''}"
             )
 
@@ -4845,18 +4845,18 @@ class EnterpriseRestoreTask(Task):
                 backup_end = "{0}{1}".format(self.backups[-1], self.end)
 
             args = (
-                f"restore --archive {self.objstore_provider.schema_prefix() + self.backupset.objstore_bucket + '/' if self.objstore_provider else ''}{self.backupset.directory} "
-                f"--repo {self.backupset.name} "
-                f"{self.cluster_flag} http://{self.backupset.restore_cluster_host.ip}:{self.backupset.restore_cluster_host.port} "
-                f"--username {self.backupset.restore_cluster_host.rest_username} "
-                f"--password {self.backupset.restore_cluster_host.rest_password} "
-                f"--start {backup_start} "
-                f"--end {backup_end} "
-                f"{'--obj-staging-dir ' + self.backupset.objstore_staging_directory if self.objstore_provider else ''} "
-                f"{'--obj-endpoint ' + self.backupset.objstore_endpoint if self.objstore_provider and self.backupset.objstore_endpoint else ''} "
-                f"{'--obj-region ' + self.backupset.objstore_region if self.objstore_provider and self.backupset.objstore_region else ''} "
-                f"{'--obj-access-key-id ' + self.backupset.objstore_access_key_id if self.objstore_provider and self.backupset.objstore_access_key_id else ''} "
-                f"{'--obj-secret-access-key ' + self.backupset.objstore_secret_access_key if self.objstore_provider and self.backupset.objstore_secret_access_key else ''}"
+                f"restore --archive {self.objstore_provider.schema_prefix() + self.backupset.objstore_bucket + '/' if self.objstore_provider else ''}{self.backupset.directory}"
+                f" --repo {self.backupset.name}"
+                f" {self.cluster_flag} http://{self.backupset.restore_cluster_host.ip}:{self.backupset.restore_cluster_host.port}"
+                f" --username {self.backupset.restore_cluster_host.rest_username}"
+                f" --password {self.backupset.restore_cluster_host.rest_password}"
+                f" --start {backup_start}"
+                f" --end {backup_end}"
+                f"{' --obj-staging-dir ' + self.backupset.objstore_staging_directory if self.objstore_provider else ''}"
+                f"{' --obj-endpoint ' + self.backupset.objstore_endpoint if self.objstore_provider and self.backupset.objstore_endpoint else ''}"
+                f"{' --obj-region ' + self.backupset.objstore_region if self.objstore_provider and self.backupset.objstore_region else ''}"
+                f"{' --obj-access-key-id ' + self.backupset.objstore_access_key_id if self.objstore_provider and self.backupset.objstore_access_key_id else ''}"
+                f"{' --obj-secret-access-key ' + self.backupset.objstore_secret_access_key if self.objstore_provider and self.backupset.objstore_secret_access_key else ''}"
                 f"{' --s3-force-path-style' if self.objstore_provider and self.objstore_provider.schema_prefix() == 's3://' else ''}"
             )
 
