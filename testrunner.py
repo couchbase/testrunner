@@ -164,7 +164,10 @@ def process_include_or_filter_exclude_tests(filtertype, option, tests, options):
                 tests_list=tp+tf
             else:
                 tp, tf = parse_junit_result_xml()
-
+                if not tp and not tf:
+                    tp, tf = parse_testreport_result_xml()
+            if tp is None and tf is None:
+                return tests
             if option.startswith('failed') and tf:
                 tests_list = tf
             elif option.startswith('passed') and tp:
@@ -357,9 +360,10 @@ def parse_testreport_result_xml(filepath=""):
             with open(filepath, 'wb') as f:
                 f.write(datatowrite)
         except Exception as ex:
-            log.error("Error:: "+str(ex)+"! Please check if " + url_path + " URL is accessible!! "
-                                                                        "Exiting...")
-            sys.exit(1)
+            log.error("Error:: "+str(ex)+"! Please check if " +
+                      url_path + " URL is accessible!!")
+            log.info("Running all the tests instead for now.")
+            return None, None
     if filepath == "":
         filepath = "logs/**/*.xml"
     log.info("Loading result data from "+filepath)
@@ -393,8 +397,7 @@ def parse_testreport_result_xml(filepath=""):
 
 def parse_junit_result_xml(filepath=""):
     if filepath.startswith("http://") or filepath.startswith("https://"):
-        parse_testreport_result_xml(filepath)
-        return
+        return parse_testreport_result_xml(filepath)
     if filepath == "":
         filepath = "logs/**/*.xml"
     log.info("Loading result data from "+filepath)
