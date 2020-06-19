@@ -1179,10 +1179,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
     def bk_with_memcached_crash_and_restart(self):
         num_shards = ""
         backup_result = self.cluster.async_backup_cluster(
-            cluster_host=self.backupset.cluster_host,
-            backup_host=self.backupset.backup_host,
-            directory=self.backupset.directory,
-            name=self.backupset.name,
+            backupset=self.backupset,
+            objstore_provider=self.objstore_provider,
             resume=self.backupset.resume,
             purge=self.backupset.purge,
             no_progress_bar=self.no_progress_bar,
@@ -1231,10 +1229,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
     def bk_with_erlang_crash_and_restart(self):
         num_shards = ""
         backup_result = self.cluster.async_backup_cluster(
-            cluster_host=self.backupset.cluster_host,
-            backup_host=self.backupset.backup_host,
-            directory=self.backupset.directory,
-            name=self.backupset.name,
+            backupset=self.backupset,
+            objstore_provider=self.objstore_provider,
             resume=self.backupset.resume,
             purge=self.backupset.purge,
             no_progress_bar=self.no_progress_bar,
@@ -1276,10 +1272,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
     def bk_with_cb_server_stop_and_restart(self):
         num_shards = ""
         backup_result = self.cluster.async_backup_cluster(
-            cluster_host=self.backupset.cluster_host,
-            backup_host=self.backupset.backup_host,
-            directory=self.backupset.directory,
-            name=self.backupset.name,
+            backupset=self.backupset,
+            objstore_provider=self.objstore_provider,
             resume=self.backupset.resume,
             purge=self.backupset.purge,
             no_progress_bar=self.no_progress_bar,
@@ -1326,10 +1320,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         started_couchbase = False
         try:
             backup_result = self.cluster.async_backup_cluster(
-                cluster_host=self.backupset.cluster_host,
-                backup_host=self.backupset.backup_host,
-                directory=self.backupset.directory,
-                name=self.backupset.name,
+                backupset=self.backupset,
+                objstore_provider=self.objstore_provider,
                 resume=False,
                 purge=self.backupset.purge,
                 no_progress_bar=self.no_progress_bar,

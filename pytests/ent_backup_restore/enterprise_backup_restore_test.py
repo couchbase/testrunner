@@ -1646,9 +1646,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
         self._load_all_buckets(self.master, gen, "create", 0)
         self.backup_create()
-        backup_result = self.cluster.async_backup_cluster(cluster_host=self.backupset.cluster_host,
-                                                          backup_host=self.backupset.backup_host,
-                                                          directory=self.backupset.directory, name=self.backupset.name,
+        backup_result = self.cluster.async_backup_cluster(backupset=self.backupset,
+                                                          objstore_provider=self.objstore_provider,
                                                           resume=self.backupset.resume, purge=self.backupset.purge,
                                                           no_progress_bar=self.no_progress_bar,
                                                           cli_command_location=self.cli_command_location,
@@ -1673,9 +1672,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
         self._load_all_buckets(self.master, gen, "create", 0)
         self.backup_create()
-        backup_result = self.cluster.async_backup_cluster(cluster_host=self.backupset.cluster_host,
-                                                          backup_host=self.backupset.backup_host,
-                                                          directory=self.backupset.directory, name=self.backupset.name,
+        backup_result = self.cluster.async_backup_cluster(backupset=self.backupset,
+                                                          objstore_provider=self.objstore_provider,
                                                           resume=self.backupset.resume, purge=self.backupset.purge,
                                                           no_progress_bar=self.no_progress_bar,
                                                           cli_command_location=self.cli_command_location,
@@ -1700,16 +1698,12 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
         self._load_all_buckets(self.master, gen, "create", 0)
         self.backup_create()
-        backup_result = self.cluster.async_backup_cluster(
-                                            cluster_host=self.backupset.cluster_host,
-                                            backup_host=self.backupset.backup_host,
-                                            directory=self.backupset.directory,
-                                            name=self.backupset.name,
-                                            resume=self.backupset.resume,
-                                            purge=self.backupset.purge,
-                                            no_progress_bar=self.no_progress_bar,
-                                            cli_command_location=self.cli_command_location,
-                                            cb_version=self.cb_version)
+        backup_result = self.cluster.async_backup_cluster(backupset=self.backupset,
+                                                          objstore_provider=self.objstore_provider,
+                                                          resume=self.backupset.resume, purge=self.backupset.purge,
+                                                          no_progress_bar=self.no_progress_bar,
+                                                          cli_command_location=self.cli_command_location,
+                                                          cb_version=self.cb_version)
         self.sleep(10)
         conn = RemoteMachineShellConnection(self.backupset.cluster_host)
         conn.pause_memcached()
@@ -1731,16 +1725,12 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self._load_all_buckets(self.master, gen, "create", 0)
         self.backup_create()
         try:
-            backup_result = self.cluster.async_backup_cluster(
-                                                cluster_host=self.backupset.cluster_host,
-                                                backup_host=self.backupset.backup_host,
-                                                directory=self.backupset.directory,
-                                                name=self.backupset.name,
-                                                resume=self.backupset.resume,
-                                                purge=self.backupset.purge,
-                                                no_progress_bar=self.no_progress_bar,
-                                                cli_command_location=self.cli_command_location,
-                                                cb_version=self.cb_version)
+            backup_result = self.cluster.async_backup_cluster(backupset=self.backupset,
+                                                              objstore_provider=self.objstore_provider,
+                                                              resume=self.backupset.resume, purge=self.backupset.purge,
+                                                              no_progress_bar=self.no_progress_bar,
+                                                              cli_command_location=self.cli_command_location,
+                                                              cb_version=self.cb_version)
             if self.os_name != "windows":
                 self.sleep(10)
             conn = RemoteMachineShellConnection(self.backupset.cluster_host)
@@ -1774,10 +1764,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self._load_all_buckets(self.master, gen, "create", 0)
         self.backup_create()
         try:
-            backup_result = self.cluster.async_backup_cluster(cluster_host=self.backupset.cluster_host,
-                                                              backup_host=self.backupset.backup_host,
-                                                              directory=self.backupset.directory,
-                                                              name=self.backupset.name,
+            backup_result = self.cluster.async_backup_cluster(backupset=self.backupset,
+                                                              objstore_provider=self.objstore_provider,
                                                               resume=self.backupset.resume, purge=self.backupset.purge,
                                                               no_progress_bar=self.no_progress_bar,
                                                               cli_command_location=self.cli_command_location,
@@ -1811,16 +1799,12 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             conn = RemoteMachineShellConnection(self.backupset.cluster_host)
             conn.pause_memcached(self.os_name)
             self.sleep(17, "time needs for memcached process completely stopped")
-            backup_result = self.cluster.async_backup_cluster(
-                                                cluster_host=self.backupset.cluster_host,
-                                                backup_host=self.backupset.backup_host,
-                                                directory=self.backupset.directory,
-                                                name=self.backupset.name,
-                                                resume=self.backupset.resume,
-                                                purge=self.backupset.purge,
-                                                no_progress_bar=self.no_progress_bar,
-                                                cli_command_location=self.cli_command_location,
-                                                cb_version=self.cb_version)
+            backup_result = self.cluster.async_backup_cluster(backupset=self.backupset,
+                                                              objstore_provider=self.objstore_provider,
+                                                              resume=self.backupset.resume, purge=self.backupset.purge,
+                                                              no_progress_bar=self.no_progress_bar,
+                                                              cli_command_location=self.cli_command_location,
+                                                              cb_version=self.cb_version)
 
             self.sleep(10)
             output = backup_result.result(timeout=200)
@@ -1848,17 +1832,11 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.backup_cluster()
         rest_conn = RestConnection(self.backupset.restore_cluster_host)
         rest_conn.create_bucket(bucket="default", ramQuotaMB=512)
-        restore_result = self.cluster.async_restore_cluster(
-                                                restore_host=self.backupset.restore_cluster_host,
-                                                backup_host=self.backupset.backup_host,
-                                                backups=self.backups, start=self.backupset.start,
-                                                end=self.backupset.end,
-                                                directory=self.backupset.directory,
-                                                name=self.backupset.name,
-                                                force_updates=self.backupset.force_updates,
-                                                no_progress_bar=self.no_progress_bar,
-                                                cli_command_location=self.cli_command_location,
-                                                cb_version=self.cb_version)
+        restore_result = self.cluster.async_restore_cluster(backupset=self.backupset,
+                                                            objstore_provider=self.objstore_provider,
+                                                            no_progress_bar=self.no_progress_bar,
+                                                            cli_command_location=self.cli_command_location,
+                                                            cb_version=self.cb_version)
         self.sleep(10)
         conn = RemoteMachineShellConnection(self.backupset.restore_cluster_host)
         conn.kill_erlang(self.os_name)
@@ -1883,17 +1861,11 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.backup_cluster()
         rest_conn = RestConnection(self.backupset.restore_cluster_host)
         rest_conn.create_bucket(bucket="default", ramQuotaMB=512)
-        restore_result = self.cluster.async_restore_cluster(
-                                                restore_host=self.backupset.restore_cluster_host,
-                                                backup_host=self.backupset.backup_host,
-                                                backups=self.backups, start=self.backupset.start,
-                                                end=self.backupset.end,
-                                                directory=self.backupset.directory,
-                                                name=self.backupset.name,
-                                                force_updates=self.backupset.force_updates,
-                                                no_progress_bar=self.no_progress_bar,
-                                                cli_command_location=self.cli_command_location,
-                                                cb_version=self.cb_version)
+        restore_result = self.cluster.async_restore_cluster(backupset=self.backupset,
+                                                            objstore_provider=self.objstore_provider,
+                                                            no_progress_bar=self.no_progress_bar,
+                                                            cli_command_location=self.cli_command_location,
+                                                            cb_version=self.cb_version)
         self.sleep(10)
         conn = RemoteMachineShellConnection(self.backupset.restore_cluster_host)
         conn.stop_couchbase()
@@ -1918,12 +1890,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.backup_cluster()
         rest_conn = RestConnection(self.backupset.restore_cluster_host)
         rest_conn.create_bucket(bucket="default", ramQuotaMB=512)
-        restore_result = self.cluster.async_restore_cluster(restore_host=self.backupset.restore_cluster_host,
-                                                            backup_host=self.backupset.backup_host,
-                                                            backups=self.backups, start=self.backupset.start,
-                                                            end=self.backupset.end, directory=self.backupset.directory,
-                                                            name=self.backupset.name,
-                                                            force_updates=self.backupset.force_updates,
+        restore_result = self.cluster.async_restore_cluster(backupset=self.backupset,
+                                                            objstore_provider=self.objstore_provider,
                                                             no_progress_bar=self.no_progress_bar,
                                                             cli_command_location=self.cli_command_location,
                                                             cb_version=self.cb_version)
@@ -1951,17 +1919,11 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         rest_conn = RestConnection(self.backupset.restore_cluster_host)
         rest_conn.create_bucket(bucket="default", ramQuotaMB=512)
         try:
-            restore_result = self.cluster.async_restore_cluster(
-                                            restore_host=self.backupset.restore_cluster_host,
-                                            backup_host=self.backupset.backup_host,
-                                            backups=self.backups, start=self.backupset.start,
-                                            end=self.backupset.end,
-                                            directory=self.backupset.directory,
-                                            name=self.backupset.name,
-                                            force_updates=self.backupset.force_updates,
-                                            no_progress_bar=self.no_progress_bar,
-                                            cli_command_location=self.cli_command_location,
-                                            cb_version=self.cb_version)
+            restore_result = self.cluster.async_restore_cluster(backupset=self.backupset,
+                                                                objstore_provider=self.objstore_provider,
+                                                                no_progress_bar=self.no_progress_bar,
+                                                                cli_command_location=self.cli_command_location,
+                                                                cb_version=self.cb_version)
             conn = RemoteMachineShellConnection(self.backupset.restore_cluster_host)
             conn.kill_erlang(self.os_name)
             output = restore_result.result(timeout=300)
@@ -1990,13 +1952,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         rest_conn = RestConnection(self.backupset.restore_cluster_host)
         rest_conn.create_bucket(bucket="default", ramQuotaMB=512)
         try:
-            restore_result = self.cluster.async_restore_cluster(restore_host=self.backupset.restore_cluster_host,
-                                                                backup_host=self.backupset.backup_host,
-                                                                backups=self.backups, start=self.backupset.start,
-                                                                end=self.backupset.end,
-                                                                directory=self.backupset.directory,
-                                                                name=self.backupset.name,
-                                                                force_updates=self.backupset.force_updates,
+            restore_result = self.cluster.async_restore_cluster(backupset=self.backupset,
+                                                                objstore_provider=self.objstore_provider,
                                                                 no_progress_bar=self.no_progress_bar,
                                                                 cli_command_location=self.cli_command_location,
                                                                 cb_version=self.cb_version)
@@ -2212,9 +2169,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.backup_create()
         old_backup_name = ""
         new_backup_name = ""
-        backup_result = self.cluster.async_backup_cluster(cluster_host=self.backupset.cluster_host,
-                                                          backup_host=self.backupset.backup_host,
-                                                          directory=self.backupset.directory, name=self.backupset.name,
+        backup_result = self.cluster.async_backup_cluster(backupset=self.backupset,
+                                                          objstore_provider=self.objstore_provider,
                                                           resume=self.backupset.resume, purge=self.backupset.purge,
                                                           no_progress_bar=self.no_progress_bar,
                                                           cli_command_location=self.cli_command_location,
@@ -3832,16 +3788,12 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                             end=self.num_items)
         self._load_all_buckets(self.master, gen, "create", 0)
         self.backup_create()
-        backup_result = self.cluster.async_backup_cluster(
-            cluster_host=self.backupset.cluster_host,
-            backup_host=self.backupset.backup_host,
-            directory=self.backupset.directory,
-            name=self.backupset.name,
-            resume=self.backupset.resume,
-            purge=self.backupset.purge,
-            no_progress_bar=self.no_progress_bar,
-            cli_command_location=self.cli_command_location,
-            cb_version=self.cb_version)
+        backup_result = self.cluster.async_backup_cluster(backupset=self.backupset,
+                                                          objstore_provider=self.objstore_provider,
+                                                          resume=self.backupset.resume, purge=self.backupset.purge,
+                                                          no_progress_bar=self.no_progress_bar,
+                                                          cli_command_location=self.cli_command_location,
+                                                          cb_version=self.cb_version)
 
         # We need to wait until the data transfer starts before we pause memcached.
         # Read the backup file output until we find evidence of a DCP connection,
@@ -4197,9 +4149,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.backup_create()
 
         # Test with backup
-        backup_result = self.cluster.async_backup_cluster(cluster_host=self.backupset.cluster_host,
-                                                          backup_host=self.backupset.backup_host,
-                                                          directory=self.backupset.directory, name=self.backupset.name,
+        backup_result = self.cluster.async_backup_cluster(backupset=self.backupset,
+                                                          objstore_provider=self.objstore_provider,
                                                           resume=self.backupset.resume, purge=self.backupset.purge,
                                                           no_progress_bar=self.no_progress_bar,
                                                           cli_command_location=self.cli_command_location,

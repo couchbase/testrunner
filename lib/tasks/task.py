@@ -4735,13 +4735,11 @@ class CancelBucketCompactionTask(Task):
 
 class EnterpriseBackupTask(Task):
 
-    def __init__(self, cluster_host, backup_host, directory='', name='', resume=False, purge=False,
-                 no_progress_bar=False, cli_command_location='', cb_version=None, num_shards=''):
+    def __init__(self, backupset, objstore_provider, resume=False, purge=False, no_progress_bar=False,
+                 cli_command_location='', cb_version=None, num_shards=''):
         Task.__init__(self, "enterprise_backup_task")
-        self.cluster_host = cluster_host
-        self.backup_host = backup_host
-        self.directory = directory
-        self.name = name
+        self.backupset = backupset
+        self.objstore_provider = objstore_provider
         self.resume = resume
         self.purge = purge
         self.no_progress_bar = no_progress_bar
@@ -4757,7 +4755,7 @@ class EnterpriseBackupTask(Task):
         self.output = []
         self.error = []
         try:
-            self.remote_client = RemoteMachineShellConnection(self.backup_host)
+            self.remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
         except Exception as e:
             self.log.error(e)
             self.state = FINISHED
@@ -4765,12 +4763,21 @@ class EnterpriseBackupTask(Task):
 
     def execute(self, task_manager):
         try:
-            args = "backup --archive {0} --repo {1} {6} http://{2}:{3}\
-                           --username {4} --password {5} {7} "\
-                   .format(self.directory, self.name, self.cluster_host.ip,
-                   self.cluster_host.port, self.cluster_host.rest_username,
-                   self.cluster_host.rest_password, self.cluster_flag,
-                   self.num_shards)
+            args = (
+                f"backup --archive {self.objstore_provider.schema_prefix() + self.backupset.objstore_bucket + '/' if self.objstore_provider else ''}{self.backupset.directory} "
+                f"--repo {self.backupset.name} "
+                f"{self.cluster_flag} http://{self.backupset.cluster_host.ip}:{self.backupset.cluster_host.port} "
+                f"--username {self.backupset.cluster_host.rest_username} "
+                f"--password {self.backupset.cluster_host.rest_password} "
+                f"{self.num_shards} "
+                f"{'--obj-staging-dir ' + self.backupset.objstore_staging_directory if self.objstore_provider else ''} "
+                f"{'--obj-endpoint ' + self.backupset.objstore_endpoint if self.objstore_provider and self.backupset.objstore_endpoint else ''} "
+                f"{'--obj-region ' + self.backupset.objstore_region if self.objstore_provider and self.backupset.objstore_region else ''} "
+                f"{'--obj-access-key-id ' + self.backupset.objstore_access_key_id if self.objstore_provider and self.backupset.objstore_access_key_id else ''} "
+                f"{'--obj-secret-access-key ' + self.backupset.objstore_secret_access_key if self.objstore_provider and self.backupset.objstore_secret_access_key else ''}"
+                f"{' --s3-force-path-style' if self.objstore_provider and self.objstore_provider.schema_prefix() == 's3://' else ''}"
+            )
+
             if self.resume:
                 args += " --resume"
             if self.purge:
@@ -4801,14 +4808,10 @@ class EnterpriseBackupTask(Task):
 
 class EnterpriseRestoreTask(Task):
 
-    def __init__(self, restore_host, backup_host, backups=[], start=0, end=0, directory='', name='',
-                 force_updates=False, no_progress_bar=False, cli_command_location='', cb_version=None):
+    def __init__(self, backupset, objstore_provider, no_progress_bar=False, cli_command_location='', cb_version=None):
         Task.__init__(self, "enterprise_backup_task")
-        self.restore_host = restore_host
-        self.backup_host = backup_host
-        self.directory = directory
-        self.name = name
-        self.force_updates = force_updates
+        self.backupset = backupset
+        self.objstore_provider = objstore_provider
         self.no_progress_bar = no_progress_bar
         self.cli_command_location = cli_command_location
         self.cb_version = cb_version
@@ -4824,7 +4827,7 @@ class EnterpriseRestoreTask(Task):
         self.start = start
         self.end = end
         try:
-            self.remote_client = RemoteMachineShellConnection(self.backup_host)
+            self.remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
         except Exception as e:
             self.log.error(e)
             self.state = FINISHED
@@ -4840,13 +4843,23 @@ class EnterpriseRestoreTask(Task):
                 backup_end = self.backups[int(self.end) - 1]
             except IndexError:
                 backup_end = "{0}{1}".format(self.backups[-1], self.end)
-            args = "restore --archive {0} --repo {1} {8} http://{2}:{3} --username {4} "\
-                                                " --password {5}  --start {6} --end {7}"\
-                                                        .format(self.directory, self.name,
-                                             self.restore_host.ip, self.restore_host.port,
-                                                          self.restore_host.rest_username,
-                                            self.restore_host.rest_password, backup_start,
-                                                            backup_end, self.cluster_flag)
+
+            args = (
+                f"restore --archive {self.objstore_provider.schema_prefix() + self.backupset.objstore_bucket + '/' if self.objstore_provider else ''}{self.backupset.directory} "
+                f"--repo {self.backupset.name} "
+                f"{self.cluster_flag} http://{self.backupset.restore_cluster_host.ip}:{self.backupset.restore_cluster_host.port} "
+                f"--username {self.backupset.restore_cluster_host.rest_username} "
+                f"--password {self.backupset.restore_cluster_host.rest_password} "
+                f"--start {backup_start} "
+                f"--end {backup_end} "
+                f"{'--obj-staging-dir ' + self.backupset.objstore_staging_directory if self.objstore_provider else ''} "
+                f"{'--obj-endpoint ' + self.backupset.objstore_endpoint if self.objstore_provider and self.backupset.objstore_endpoint else ''} "
+                f"{'--obj-region ' + self.backupset.objstore_region if self.objstore_provider and self.backupset.objstore_region else ''} "
+                f"{'--obj-access-key-id ' + self.backupset.objstore_access_key_id if self.objstore_provider and self.backupset.objstore_access_key_id else ''} "
+                f"{'--obj-secret-access-key ' + self.backupset.objstore_secret_access_key if self.objstore_provider and self.backupset.objstore_secret_access_key else ''}"
+                f"{' --s3-force-path-style' if self.objstore_provider and self.objstore_provider.schema_prefix() == 's3://' else ''}"
+            )
+
             if self.no_progress_bar:
                 args += " --no-progress-bar"
             if self.force_updates:
