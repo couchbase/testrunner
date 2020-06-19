@@ -44,9 +44,15 @@ class S3(provider.Provider):
         """See super class"""
         bucket = self.resource.Bucket(self.bucket)
 
+        # Delete all the remaining objects
         for obj in bucket.objects.all():
             obj.delete()
 
+        # Abort all the remaining multipart uploads
+        for upload in bucket.multipart_uploads.all():
+            upload.abort()
+
+        # Remove the staging directory because cbbackupmgr has validation to ensure that are unique to each archive
         self._remove_staging_directory(info, remote_client)
 
     def get_json_object(self, key):
@@ -65,5 +71,8 @@ class S3(provider.Provider):
             keys.append(obj.key)
 
         return keys
+
+    def num_multipart_uploads(self):
+        return len(self.resource.Bucket(self.bucket).multipart_uploads.all())
 
 provider.Provider.register(S3)

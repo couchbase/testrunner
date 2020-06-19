@@ -454,8 +454,12 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, args)
         if del_old_backup:
-            self.log.info("Remove any old dir before create new one")
+            # Since we are just wiping out the archive here, we can just run the object store teardown
+            if self.objstore_provider:
+                self.objstore_provider.teardown(remote_client.extract_remote_info().type.lower(), remote_client)
+
             remote_client.execute_command("rm -rf {0}".format(self.backupset.directory))
+
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
         remote_client.disconnect()
@@ -1328,6 +1332,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                 cli_command_location=self.cli_command_location,
                 cb_version=self.cb_version,
                 num_shards=num_shards)
+            self.sleep(5)
             conn.kill_erlang(self.os_name)
             output = backup_result.result(timeout=600)
             self.log.info(str(output))
@@ -1360,6 +1365,14 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                     new_backup_name = re.search(r"\d{4}-\d{2}-\d{2}T\d{2}_\d{2}"
                                                 r"_\d{2}.\d+-\d{2}_\d{2}", line).group()
                     self.log.info("Backup name after resume: " + new_backup_name)
+
+            # Once the backup has been resumed to completion we shouldn't see any orphaned multipart uploads
+            if self.objstore_provider:
+                self.assertEqual(
+                    self.objstore_provider.num_multipart_uploads(), 0,
+                    "Expected all multipart uploads to have been purged (all newly created ones should have also been completed)"
+                )
+
             self.assertEqual(old_backup_name, new_backup_name,
                              "Old backup name and new backup name are not same when resume is used")
             self.log.info("Old backup name and new backup name are same when resume is used")
