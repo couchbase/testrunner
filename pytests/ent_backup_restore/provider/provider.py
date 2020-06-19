@@ -50,6 +50,14 @@ class Provider():
         """
         raise NotImplementedError
 
+    @abc.abstractmethod
+    def num_multipart_uploads(self):
+        """Returns the number of in-progress multipart uploads (the setup/teardown) logic should abort any multipart
+        uploads in the event that cbbackupmgr crashes and doesn't do it itself. This will allow testing to continue
+        without leaking logic into the following tests.
+        """
+        raise NotImplementedError
+
     def _remove_staging_directory(self, info, remote_client):
         if info in ('linux', 'mac'):
             command = "rm -rf {}".format(self.staging_directory)

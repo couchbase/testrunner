@@ -2212,6 +2212,13 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                 new_backup_name = bk_info["backups"][i]["date"]
                 self.log.info("Backup name after purge: " + new_backup_name)
 
+        # Once the purge (and backup) have completed we shouldn't see any orphaned multipart uploads
+        if self.objstore_provider:
+            self.assertEqual(
+                self.objstore_provider.num_multipart_uploads(), 0,
+                "Expected all multipart uploads to have been purged (all newly created ones should have also been completed)"
+            )
+
         self.assertNotEqual(old_backup_name, new_backup_name,
                             "Old backup name and new backup name are same when purge is used")
         self.log.info("Old backup name and new backup name are not same when purge is used")
