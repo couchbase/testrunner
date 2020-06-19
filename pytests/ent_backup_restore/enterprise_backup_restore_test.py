@@ -3981,7 +3981,11 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self._take_n_backups(n=3)
 
         shell = RemoteMachineShellConnection(self.backupset.backup_host)
-        list_dir, _ = shell.execute_command("ls -l {}/{}".format(self.backupset.directory, self.backupset.name))
+        command = (
+            f"ls -l {self.backupset.objstore_staging_directory + '/' if self.objstore_provider else ''}"
+            f"{self.backupset.directory}/{self.backupset.name}"
+        )
+        list_dir, _ = shell.execute_command(command)
         list_dir = " ".join(list_dir)
         shell.disconnect()
 
@@ -4099,7 +4103,11 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
 
         #  Test based on dynamic file names
         shell = RemoteMachineShellConnection(self.backupset.backup_host)
-        list_dir, _ = shell.execute_command("ls -l {}/{}".format(self.backupset.directory, self.backupset.name))
+        command = (
+            f"ls -l {self.backupset.objstore_staging_directory + '/' if self.objstore_provider else ''}"
+            f"{self.backupset.directory}/{self.backupset.name}"
+        )
+        list_dir, _ = shell.execute_command(command)
         list_dir = " ".join(list_dir)
         shell.disconnect()
 

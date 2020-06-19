@@ -487,18 +487,29 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
 
     def _verify_backup_directory_count(self, expected):
         shell = RemoteMachineShellConnection(self.backupset.backup_host)
-        output, _ = shell.execute_command("ls -l {}/{} | wc -l".format(self.backupset.directory,
-                                                                       self.backupset.name))
+        command = (
+            f"ls -l {self.backupset.objstore_staging_directory + '/' if self.objstore_provider else ''}"
+            f"{self.backupset.directory}/{self.backupset.name} | wc -l"
+        )
+
+        output, _ = shell.execute_command(command)
         output = " ".join(output)
+
         try:
             count = int(output)
-            if count != expected + 2:
-                self.fail(
-                    "Number of backup directories {0} does not match expected {1}".format(count - 2, expected + 2))
+            self.assertEqual(count - 2, expected,
+                             "Number of backup directories {0} does not match expected {1}".format(count - 2, expected))
         except ValueError as e:
             self.fail("Could not get the number of backups in the archive due to: {0}".format(e))
 
         shell.disconnect()
+
+        # It's important that we check to ensure the backups were removed in object store as well as in the staging
+        # directory.
+        if self.objstore_provider:
+            count = len(self.objstore_provider.list_backups(self.backupset.directory, self.backupset.name))
+            self.assertEqual(count, expected,
+                             f"Number of remote backup directories {count} does not match expected {expected}")
 
     def backup_create_validate(self):
         output, error = self.backup_create()
@@ -1820,8 +1831,17 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         shell.disconnect()
 
     def _delete_repo(self):
+        # We should remove all the remote objects as well as the files in the staging directory
+        if self.objstore_provider:
+            self.objstore_provider.delete_objects(f"{self.backupset.directory}/{self.backupset.name}")
+
         shell = RemoteMachineShellConnection(self.backupset.backup_host)
-        shell.execute_command("rm -rf {}/{}".format(self.backupset.directory, self.backupset.name))
+        command = (
+            f"rm -rf {self.backupset.objstore_staging_directory + '/' if self.objstore_provider else ''}"
+            f"{self.backupset.directory}/{self.backupset.name}"
+        )
+
+        shell.execute_command(command)
         shell.disconnect()
 
     def _check_output(self, word_check, output):

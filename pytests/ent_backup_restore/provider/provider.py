@@ -49,6 +49,16 @@ class Provider(metaclass=abc.ABCMeta):
         raise NotImplementedError
 
     @abc.abstractmethod
+    def delete_objects(self, prefix):
+        """Remove all the objects from the object store with the given prefix."""
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def list_backups(self, archive, repo):
+        """List all the backups that currently exist in the remote given archive/repo."""
+        raise NotImplementedError
+
+    @abc.abstractmethod
     def num_multipart_uploads(self):
         """Returns the number of in-progress multipart uploads (the setup/teardown) logic should abort any multipart
         uploads in the event that cbbackupmgr crashes and doesn't do it itself. This will allow testing to continue
