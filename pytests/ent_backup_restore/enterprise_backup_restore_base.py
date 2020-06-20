@@ -368,16 +368,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                     self.fail(e)
 
     def backup_create(self, del_old_backup=True):
-        args = (
-            f"config --archive {self.objstore_provider.schema_prefix() + self.backupset.objstore_bucket + '/' if self.objstore_provider else ''}{self.backupset.directory} "
-            f"--repo {self.backupset.name} "
-            f"{'--obj-staging-dir ' + self.backupset.objstore_staging_directory if self.objstore_provider else ''} "
-            f"{'--obj-endpoint ' + self.backupset.objstore_endpoint if self.objstore_provider and self.backupset.objstore_endpoint else ''} "
-            f"{'--obj-region ' + self.backupset.objstore_region if self.objstore_provider and self.backupset.objstore_region else ''} "
-            f"{'--obj-access-key-id ' + self.backupset.objstore_access_key_id if self.objstore_provider and self.backupset.objstore_access_key_id else ''} "
-            f"{'--obj-secret-access-key ' + self.backupset.objstore_secret_access_key if self.objstore_provider and self.backupset.objstore_secret_access_key else ''}"
-            f"{' --s3-force-path-style' if self.objstore_provider and self.objstore_provider.schema_prefix() == 's3://' else ''}"
-        )
+        args = "config --archive {0} --repo {1}".format(self.backupset.directory, self.backupset.name)
 
         cbbkmgr_version = RestConnection(self.backupset.backup_host).get_nodes_version()
         exclude_bucket = " --exclude-data "
@@ -423,17 +414,9 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         return output, error
 
     def backup_info(self, json_out=True):
-        args = (
-            f"info --archive {self.objstore_provider.schema_prefix() + self.backupset.objstore_bucket + '/' if self.objstore_provider else ''}{self.backupset.directory} "
-            f"--repo {self.backupset.name} "
-            f"{'--obj-staging-dir ' + self.backupset.objstore_staging_directory if self.objstore_provider else ''} "
-            f"{'--obj-endpoint ' + self.backupset.objstore_endpoint if self.objstore_provider and self.backupset.objstore_endpoint else ''} "
-            f"{'--obj-region ' + self.backupset.objstore_region if self.objstore_provider and self.backupset.objstore_region else ''} "
-            f"{'--obj-access-key-id ' + self.backupset.objstore_access_key_id if self.objstore_provider and self.backupset.objstore_access_key_id else ''} "
-            f"{'--obj-secret-access-key ' + self.backupset.objstore_secret_access_key if self.objstore_provider and self.backupset.objstore_secret_access_key else ''}"
-            f"{' --s3-force-path-style' if self.objstore_provider and self.objstore_provider.schema_prefix() == 's3://' else ''}"
-            f"{' --json' if json_out else ''}"
-        )
+        args = "info --archive {0} --repo {1}".format(self.backupset.directory, self.backupset.name)
+        if json_out:
+            args += " --json"
 
         remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, args)
@@ -496,19 +479,14 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         if "4.6" <= self.cbbkmgr_version[:3]:
             self.cluster_flag = "--cluster"
 
-        args = (
-            f"backup --archive {self.objstore_provider.schema_prefix() + self.backupset.objstore_bucket + '/' if self.objstore_provider else ''}{self.backupset.directory} "
-            f"--repo {self.backupset.name} "
-            f"{self.cluster_flag} http{url_format}://{self.backupset.cluster_host.ip}:{secure_port}{self.backupset.cluster_host.port} "
-            f"{user_input} "
-            f"{password_input} "
-            f"{'--obj-staging-dir ' + self.backupset.objstore_staging_directory if self.objstore_provider else ''} "
-            f"{'--obj-endpoint ' + self.backupset.objstore_endpoint if self.objstore_provider and self.backupset.objstore_endpoint else ''} "
-            f"{'--obj-region ' + self.backupset.objstore_region if self.objstore_provider and self.backupset.objstore_region else ''} "
-            f"{'--obj-access-key-id ' + self.backupset.objstore_access_key_id if self.objstore_provider and self.backupset.objstore_access_key_id else ''} "
-            f"{'--obj-secret-access-key ' + self.backupset.objstore_secret_access_key if self.objstore_provider and self.backupset.objstore_secret_access_key else ''}"
-            f"{' --s3-force-path-style' if self.objstore_provider and self.objstore_provider.schema_prefix() == 's3://' else ''}"
-        )
+        args = "backup --archive {0} --repo {1} {6} http{7}://{2}:{8}{3} " \
+               "{4} {5}".format(self.backupset.directory, self.backupset.name,
+                                self.backupset.cluster_host.ip,
+                                self.backupset.cluster_host.port,
+                                user_input,
+                                password_input,
+                                self.cluster_flag, url_format,
+                                secure_port)
 
         if self.backupset.no_ssl_verify:
             args += " --no-ssl-verify"
@@ -637,21 +615,16 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         if "4.6" <= version:
             self.cluster_flag = "--cluster"
 
-        args = (
-            f"restore --archive {self.objstore_provider.schema_prefix() + self.backupset.objstore_bucket + '/' if self.objstore_provider else ''}{self.backupset.directory} "
-            f"--repo {self.backupset.name} "
-            f"{self.cluster_flag}http{url_format}://{self.backupset.restore_cluster_host.ip}:{secure_port}{self.backupset.restore_cluster_host.port} "
-            f"{user_input} "
-            f"{password_input} "
-            f"--start {backup_start} "
-            f"--end {backup_end} "
-            f"{'--obj-staging-dir ' + self.backupset.objstore_staging_directory if self.objstore_provider else ''} "
-            f"{'--obj-endpoint ' + self.backupset.objstore_endpoint if self.objstore_provider and self.backupset.objstore_endpoint else ''} "
-            f"{'--obj-region ' + self.backupset.objstore_region if self.objstore_provider and self.backupset.objstore_region else ''} "
-            f"{'--obj-access-key-id ' + self.backupset.objstore_access_key_id if self.objstore_provider and self.backupset.objstore_access_key_id else ''} "
-            f"{'--obj-secret-access-key ' + self.backupset.objstore_secret_access_key if self.objstore_provider and self.backupset.objstore_secret_access_key else ''}"
-            f"{' --s3-force-path-style' if self.objstore_provider and self.objstore_provider.schema_prefix() == 's3://' else ''}"
-        )
+        args = "restore --archive {0} --repo {1} {2} http{9}://{3}:{10}{4} " \
+               "{5} {6} --start {7} --end {8}" \
+            .format(self.backupset.directory,
+                    self.backupset.name,
+                    self.cluster_flag,
+                    self.backupset.restore_cluster_host.ip,
+                    self.backupset.restore_cluster_host.port,
+                    user_input,
+                    password_input,
+                    backup_start, backup_end, url_format, secure_port)
 
         if version >= "6.5" and self.backupset.auto_select_threads:
             args += " --auto-select-threads"
@@ -1005,18 +978,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         remote_client.disconnect()
 
     def backup_list(self):
-        args = (
-            f"info --archive {self.objstore_provider.schema_prefix() + self.backupset.objstore_bucket + '/' if self.objstore_provider else ''}{self.backupset.directory} "
-            f"{'--obj-staging-dir ' + self.backupset.objstore_staging_directory if self.objstore_provider else ''} "
-            f"{'--obj-endpoint ' + self.backupset.objstore_endpoint if self.objstore_provider and self.backupset.objstore_endpoint else ''} "
-            f"{'--obj-region ' + self.backupset.objstore_region if self.objstore_provider and self.backupset.objstore_region else ''} "
-            f"{'--obj-access-key-id ' + self.backupset.objstore_access_key_id if self.objstore_provider and self.backupset.objstore_access_key_id else ''} "
-            f"{'--obj-secret-access-key ' + self.backupset.objstore_secret_access_key if self.objstore_provider and self.backupset.objstore_secret_access_key else ''} "
-            f"{'--s3-force-path-style' if self.objstore_provider and self.objstore_provider.schema_prefix() == 's3://' else ''} "
-            f"--all "
-            f"--json"
-        )
-
+        args = "info --all -j --archive {0}".format(self.backupset.directory)
         if self.backupset.backup_list_name:
             args += " --repo {0}".format(self.backupset.backup_list_name)
         if self.backupset.backup_incr_backup:
@@ -1048,17 +1010,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         remote_client.disconnect()
 
     def backup_remove(self, backup_range=None):
-        args = (
-            f"remove --archive {self.objstore_provider.schema_prefix() + self.backupset.objstore_bucket + '/' if self.objstore_provider else ''}{self.backupset.directory} "
-            f"--repo {self.backupset.name} "
-            f"{'--obj-staging-dir ' + self.backupset.objstore_staging_directory if self.objstore_provider else ''} "
-            f"{'--obj-endpoint ' + self.backupset.objstore_endpoint if self.objstore_provider and self.backupset.objstore_endpoint else ''} "
-            f"{'--obj-region ' + self.backupset.objstore_region if self.objstore_provider and self.backupset.objstore_region else ''} "
-            f"{'--obj-access-key-id ' + self.backupset.objstore_access_key_id if self.objstore_provider and self.backupset.objstore_access_key_id else ''} "
-            f"{'--obj-secret-access-key ' + self.backupset.objstore_secret_access_key if self.objstore_provider and self.backupset.objstore_secret_access_key else ''}"
-            f"{' --s3-force-path-style' if self.objstore_provider and self.objstore_provider.schema_prefix() == 's3://' else ''}"
-        )
-
+        args = "remove --archive {0} --repo {1}".format(self.backupset.directory, self.backupset.name)
         if backup_range is not None:
             args += " --backups {0}".format(backup_range)
 
@@ -1860,16 +1812,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         shell = RemoteMachineShellConnection(self.backupset.backup_host)
         info = shell.extract_remote_info().type.lower()
 
-        args = (
-            f"collect-logs --archive {self.objstore_provider.schema_prefix() + self.backupset.objstore_bucket + '/' if self.objstore_provider else ''}{self.backupset.directory} "
-            f"{'--obj-staging-dir ' + self.backupset.objstore_staging_directory if self.objstore_provider else ''} "
-            f"{'--obj-endpoint ' + self.backupset.objstore_endpoint if self.objstore_provider and self.backupset.objstore_endpoint else ''} "
-            f"{'--obj-region ' + self.backupset.objstore_region if self.objstore_provider and self.backupset.objstore_region else ''} "
-            f"{'--obj-access-key-id ' + self.backupset.objstore_access_key_id if self.objstore_provider and self.backupset.objstore_access_key_id else ''} "
-            f"{'--obj-secret-access-key ' + self.backupset.objstore_secret_access_key if self.objstore_provider and self.backupset.secret_access_key else ''}"
-            f"{' --s3-force-path-style' if self.objstore_provider and self.objstore_provider.schema_prefix() == 's3://' else ''}"
-        )
-
+        args = " collect-logs -a {0}".format(self.backupset.directory)
         if self.backupset.ex_logs_path:
             if info == 'windows':
                 if "tmp" in self.backupset.ex_logs_path:
