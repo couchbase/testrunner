@@ -14,17 +14,20 @@ logging.getLogger().setLevel(logging.INFO)
 import argparse
 
 
-def filter_fields(testname):
+def filter_fields(testname, run_params=""):
     testwords = testname.split(",")
     line = ""
+    filter_test_params = ['logs_folder', 'conf_file',
+                          'cluster_name:', 'ini:', 'case_number:',
+                          'num_nodes:', 'spec:', 'is_container:']
+    filter_test_params.extend([param.split("=")[0] for param in
+                          run_params.split(',')])
     for fw in testwords:
-        if not fw.startswith("logs_folder") and not fw.startswith("conf_file") \
-                and not fw.startswith("cluster_name:") \
-                and not fw.startswith("ini:") \
-                and not fw.startswith("case_number:") \
-                and not fw.startswith("num_nodes:") \
-                and not fw.startswith("spec:") \
-                and not fw.startswith("is_container:"):
+        filter_word = False
+        for filter_words in filter_test_params:
+            if fw.startswith(filter_words):
+                filter_word = True
+        if not filter_word:
             line = line + fw.replace(":", "=", 1)
             if fw != testwords[-1]:
                 line = line + ","
@@ -43,7 +46,7 @@ def compare_with_sort(dict, key):
     return False, None
 
 
-def merge_reports(filespath):
+def merge_reports(filespath, run_params=""):
     log.info("Merging of report files from "+str(filespath))
 
     testsuites = {}
@@ -89,7 +92,7 @@ def merge_reports(filespath):
                     tctime = tc.getAttribute("time")
                     tcerror = tc.getElementsByTagName("error")
 
-                    tcname_filtered = filter_fields(tcname)
+                    tcname_filtered = filter_fields(tcname, run_params)
                     test_case_present, key = compare_with_sort(tests,
                                                                tcname_filtered)
                     if test_case_present:
@@ -169,9 +172,10 @@ def merge_reports(filespath):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Process some integers.')
+    parser.add_argument('run_params', type=str, default="")
     parser.add_argument('files', metavar='<xml file1> <xml file2> ...', type=str, nargs='+',
                         help='Accept all input xml files')
     args = parser.parse_args()
 
     print(args.files)
-    merge_reports(args.files)
+    merge_reports(args.files, args.run_params)
