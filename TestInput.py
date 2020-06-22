@@ -65,7 +65,8 @@ class TestInput(object):
             return TestInput._parse_param(self.cbbackupmgr[name])
         if len(args) == 1:
             return args[0]
-        raise Exception(f"Parameter '{name}' must be set in the test configuration")
+        if self.cbbackupmgr["name"] != "local_bkrs":
+            raise Exception(f"Parameter '{name}' must be set in the test configuration")
 
     @staticmethod
     def _parse_param(value):
@@ -279,6 +280,9 @@ class TestInputParser():
         for moxi_ip in moxi_ips:
             moxis.append(TestInputParser.get_server(moxi_ip, config))
         input.moxis = TestInputParser.get_server_options(moxis, input.membase_settings, global_properties)
+
+        if 'cbbackupmgr' not in sections:
+            input.cbbackupmgr["name"] = "local_bkrs"
 
         # Setting up 'clients' tag
         input.clients = client_ips
