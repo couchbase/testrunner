@@ -1,6 +1,4 @@
-import queue
-import copy
-
+from Queue import Queue
 from TestInput import TestInputSingleton
 from couchbase_helper.tuq_helper import N1QLHelper
 from newupgradebasetest import NewUpgradeBaseTest
@@ -23,7 +21,7 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
         super(EventingUpgrade, self).setUp()
         self.rest = RestConnection(self.master)
         self.server = self.master
-        self.queue = queue.Queue()
+        self.queue = Queue()
         self.src_bucket_name = self.input.param('src_bucket_name', 'src_bucket')
         self.eventing_log_level = self.input.param('eventing_log_level', 'INFO')
         self.dst_bucket_name = self.input.param('dst_bucket_name', 'dst_bucket')
