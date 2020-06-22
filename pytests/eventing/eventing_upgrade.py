@@ -32,7 +32,6 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
         self.n1ql_op_dst=self.input.param('n1ql_op_dst', 'n1ql_op_dst')
         self.gens_load = self.generate_docs(self.docs_per_day)
         self.upgrade_version = self.input.param("upgrade_version")
-        ClusterOperationHelper.flushctl_set(self.master, "exp_pager_stime", 60, bucket=self.src_bucket_name)
 
     def tearDown(self):
         super(EventingUpgrade, self).tearDown()
@@ -41,6 +40,7 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
         self._install(self.servers[:self.nodes_init])
         self.operations(self.servers[:self.nodes_init], services="kv,kv,index,n1ql")
         self.create_buckets()
+        ClusterOperationHelper.flushctl_set(self.master, "exp_pager_stime", 60, bucket=self.src_bucket_name)
         # Load the data in older version
         self.load(self.gens_load, buckets=self.src_bucket, verify_data=False)
         # upgrade all the nodes
@@ -68,6 +68,7 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
         self._install(self.servers[:self.nodes_init])
         self.operations(self.servers[:self.nodes_init], services="kv,eventing,index,n1ql")
         self.create_buckets()
+        ClusterOperationHelper.flushctl_set(self.master, "exp_pager_stime", 60, bucket=self.src_bucket_name)
         # Load the data in older version
         self.load(self.gens_load, buckets=self.src_bucket, verify_data=False)
         self.restServer = self.get_nodes_from_services_map(service_type="eventing")
@@ -155,6 +156,7 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
         self.operations(self.servers[:self.nodes_init], services="kv,eventing,index,n1ql")
         self.create_buckets()
         # Load the data in older version
+        ClusterOperationHelper.flushctl_set(self.master, "exp_pager_stime", 60, bucket=self.src_bucket_name)
         self.load(self.gens_load, buckets=self.src_bucket, verify_data=False,exp=600)
         self.restServer = self.get_nodes_from_services_map(service_type="eventing")
         self.rest = RestConnection(self.restServer)
@@ -238,6 +240,7 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
         self._install(self.servers[self.nodes_init:self.num_servers])
         self.operations(self.servers[:self.nodes_init], services="kv,eventing,index,n1ql")
         self.create_buckets()
+        ClusterOperationHelper.flushctl_set(self.master, "exp_pager_stime", 60, bucket=self.src_bucket_name)
         # Load the data in older version
         log.info("Load the data in older version in the initial version")
         self.load(self.gens_load, buckets=self.src_bucket, verify_data=False,exp=600)
@@ -315,6 +318,7 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
         self._install(self.servers[self.nodes_init:self.num_servers])
         self.operations(self.servers[:self.nodes_init], services="kv,kv,eventing,index,n1ql")
         self.create_buckets()
+        ClusterOperationHelper.flushctl_set(self.master, "exp_pager_stime", 60, bucket=self.src_bucket_name)
         # Load the data in older version
         log.info("Load the data in older version in the initial version")
         self.load(self.gens_load, buckets=self.src_bucket, verify_data=False,exp=600)
@@ -392,6 +396,7 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
         self._install(self.servers[self.nodes_init:self.num_servers])
         self.operations(self.servers[:self.nodes_init], services="kv,eventing,index,n1ql")
         self.create_buckets()
+        ClusterOperationHelper.flushctl_set(self.master, "exp_pager_stime", 60, bucket=self.src_bucket_name)
         # Load the data in older version
         log.info("Load the data in older version in the initial version")
         self.load(self.gens_load, buckets=self.src_bucket, verify_data=False,exp=600)
