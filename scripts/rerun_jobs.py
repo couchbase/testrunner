@@ -50,6 +50,9 @@ def parse_args():
     argument_parser.add_argument("--manual_run", action="store_true",
                                  help="Is this a manual rerun of the "
                                       "job")
+    argument_parser.add_argument("--run_params", type=str, default="",
+                                 help="Testrunner extra params for "
+                                      "the job")
     args = vars(argument_parser.parse_args())
     return args
 
@@ -72,7 +75,7 @@ def build_args(build_version, executor_jenkins_job=False,
     return locals()
 
 
-def merge_xmls(rerun_document):
+def merge_xmls(rerun_document, run_params=""):
     """
     Merge the xml of the runs into a single xml for the jenkins job
     to consume to show the test results
@@ -83,7 +86,8 @@ def merge_xmls(rerun_document):
     :rtype: dict
     """
     if not rerun_document:
-        testsuites = merge_reports.merge_reports("logs/**/*.xml")
+        testsuites = merge_reports.merge_reports("logs/**/*.xml",
+                                                 run_params)
         return testsuites
     print("Merging xmls")
     num_runs = rerun_document['num_runs'] - 1
@@ -97,7 +101,8 @@ def merge_xmls(rerun_document):
             valid_run = True
     if not job:
         print("no valid jobs found with run results")
-        testsuites = merge_reports.merge_reports("logs/**/*.xml")
+        testsuites = merge_reports.merge_reports("logs/**/*.xml",
+                                                 run_params)
         return testsuites
     job_url = job['job_url']
     artifacts = get_jenkins_params.get_js(job_url, "tree=artifacts[*]")
@@ -133,7 +138,7 @@ def merge_xmls(rerun_document):
         print("Could not download any previous logs")
         logs = []
     logs.append("logs/**/*.xml")
-    testsuites = merge_reports.merge_reports(logs)
+    testsuites = merge_reports.merge_reports(logs, run_params)
     try:
         # Remove old logs from the machine
         try:
@@ -288,6 +293,7 @@ def rerun_job(args):
     jenkins_job = args['jenkins_job']
     install_failure = args['install_failure']
     fresh_run = OS.getenv('fresh_run', False)
+    run_params = args['run_params']
     is_rerun_args = find_rerun_job.build_args(build_version,
                                               executor_jenkins_job=executor_jenkins_job,
                                               jenkins_job=jenkins_job,
@@ -297,9 +303,9 @@ def rerun_job(args):
     test_suites = {}
     if is_rerun and not install_failure and (fresh_run != 'true' or
                                              fresh_run is False):
-        test_suites = merge_xmls(rerun_document)
+        test_suites = merge_xmls(rerun_document, run_params)
     else:
-        test_suites = merge_xmls({})
+        test_suites = merge_xmls({}, run_params)
     retry_count = OS.getenv("retries")
     if not retry_count:
         if "retries" in args:
