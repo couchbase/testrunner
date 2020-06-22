@@ -304,6 +304,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                                         self.backupset.objstore_endpoint, self.backupset.objstore_region,
                                         self.backupset.objstore_secret_access_key,
                                         self.backupset.objstore_staging_directory)
+        elif not provider:
+            self.objstore_provider = None
 
         # We run in a separate branch so when we add more providers the setup will be run by default
         if provider:
@@ -658,7 +660,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
 
     def backup_restore(self):
         if self.restore_only:
-            self.backups.append("2019-11-21T14_54_50.808254198-08_00")
+            self.backups.append("2020-06-22T11_00_58.431467623+01_00")
         if self.vbuckets_filter_no_data:
             self.log.info("No data in backup repo as expected.")
             return
@@ -952,9 +954,10 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             bk_log_file_name = "backup.log"
             if "6.5" <= RestConnection(self.backupset.backup_host).get_nodes_version():
                 bk_log_file_name = "backup-*.log"
-            command = "cat " + self.backupset.directory + \
-                      "/logs/{0} | grep '".format(bk_log_file_name) + \
-                      error_str + "' -A 10 -B 100"
+
+                command = "cat {}".format(self.backupset.objstore_staging_directory + '/' if self.objstore_provider else '')
+                command += "{}/logs/{} | grep {} -A 10 -B 100".format(self.backupset.directory, bk_log_file_name, error_str)
+
             output, error = shell.execute_command(command)
             shell.log_command_output(output, error)
         if 'Required Flags:' in res:

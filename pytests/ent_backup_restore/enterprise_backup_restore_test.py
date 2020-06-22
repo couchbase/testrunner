@@ -1,4 +1,4 @@
-import re, copy, json, subprocess
+import os, re, copy, json, subprocess
 from random import randrange, randint
 from threading import Thread
 
@@ -1261,8 +1261,14 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         all_buckets = self.input.param("all_buckets", False)
         self.log.info("Copy backup dataset to tmp dir")
         shell = RemoteMachineShellConnection(self.backupset.backup_host)
-        shell.execute_command("rm -rf {0} ".format(self.backupset.directory))
-        shell.execute_command("rm -rf {0} ".format(self.backupset.directory.split("_")[0]))
+
+        # Since we are just wiping out the archive here, we can just run the object store teardown
+        if self.objstore_provider:
+            self.objstore_provider.teardown(shell.extract_remote_info().type.lower(), shell)
+        else:
+            shell.execute_command("rm -rf {0} ".format(self.backupset.directory))
+            shell.execute_command("rm -rf {0} ".format(self.backupset.directory.split("_")[0]))
+
         backup_file = ENT_BKRS
         backup_dir_found = False
         backup_dir = "entbackup_{0}".format(self.master.ip)
@@ -1281,12 +1287,30 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             shell.execute_command("mv {0} {1}".format(backup_dir.split("_")[0], backup_dir))
         if "-" in self.cluster_new_role:
             self.cluster_new_role = self.cluster_new_role.replace("-", ",")
-        shell.execute_command("cp -r entbackup_{0} {1}/entbackup_{0}"\
-                                       .format(self.master.ip, self.tmp_path))
+        if self.objstore_provider and self.objstore_provider.schema_prefix() == "s3://":
+            command = ""
+            if self.backupset.objstore_region or self.backupset.objstore_access_key_id or self.backupset.objstore_secret_access_key:
+                command += "env"
+            if self.backupset.objstore_region:
+                command += " AWS_REGION={}".format(self.backupset.objstore_region)
+            if self.backupset.objstore_access_key_id:
+                command += " AWS_ACCESS_KEY_ID={}".format(self.backupset.objstore_access_key_id)
+            if self.backupset.objstore_secret_access_key:
+                command += " AWS_SECRET_ACCESS_KEY={}".format(self.backupset.objstore_secret_access_key)
 
-        shell.execute_command("echo '' > {0}/logs/backup-0.log" \
-                              .format(self.backupset.directory))
-        shell.disconnect()
+            command += " aws"
+
+            if self.backupset.objstore_endpoint:
+                command += " --endpoint={}".format(self.backupset.objstore_endpoint)
+
+            command += " s3 sync entbackup_{} s3://{}/{}".format(self.master.ip, self.backupset.objstore_bucket, self.backupset.directory)
+
+            _, error = shell.execute_command(command, debug=False) # Contains senstive info so don't log
+            if error:
+                self.fail("Failed to sync backup to S3: {}".format(error))
+        else:
+            shell.execute_command("cp -r entbackup_{0}/ {1}/entbackup_{0}"\
+                                           .format(self.master.ip, self.tmp_path))
         status, _, message = self.backup_list()
         if not status:
             self.fail(message)
