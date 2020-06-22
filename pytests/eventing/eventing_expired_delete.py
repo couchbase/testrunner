@@ -70,3 +70,14 @@ class EventingExpired(EventingBaseTest):
         # Wait for eventing to catch up with all the delete mutations and verify results
         self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
+
+    def test_expired_with_cancel_timer(self):
+        self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
+                  batch_size=self.batch_size, exp=60)
+        # set expiry pager interval
+        ClusterOperationHelper.flushctl_set(self.master, "exp_pager_stime", 10, bucket=self.src_bucket_name)
+        body = self.create_save_function_body(self.function_name, "handler_code/cancel_timer_with_expiry.js")
+        self.deploy_function(body)
+        # Wait for eventing to catch up with all the delete mutations and verify results
+        self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
+        self.undeploy_and_delete_function(body)
