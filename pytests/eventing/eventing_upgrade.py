@@ -479,7 +479,10 @@ class EventingUpgrade(NewUpgradeBaseTest, BaseTestCase):
 
     def online_upgrade(self, services=None):
         servers_in = self.servers[self.nodes_init:self.num_servers]
-        self.cluster.rebalance(self.servers[:self.nodes_init], servers_in, [], services=services)
+        rebalance=self.cluster.async_rebalance(self.servers[:self.nodes_init], servers_in, [], services=services)
+        reached = RestHelper(self.rest).rebalance_reached(retry_count=150)
+        self.assertTrue(reached, "rebalance failed, stuck or did not complete")
+        rebalance.result()
         log.info("Rebalance in all {0} nodes" \
                  .format(self.input.param("upgrade_version", "")))
         self.sleep(self.sleep_time)
