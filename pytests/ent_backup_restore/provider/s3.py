@@ -118,6 +118,6 @@ class S3(provider.Provider):
 
 
     def num_multipart_uploads(self):
-        return len(list(self.resource.Bucket(self.bucket).multipart_uploads.all()))
+        return sum(1 for _ in self.resource.Bucket(self.bucket).multipart_uploads.all())
 
 provider.Provider.register(S3)
