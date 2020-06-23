@@ -25,7 +25,7 @@ class S3(provider.Provider):
 
     def schema_prefix(self):
         """See super class"""
-        return "s3://"
+        return 's3://'
 
     def setup(self):
         """See super class"""
@@ -38,7 +38,7 @@ class S3(provider.Provider):
             self.resource.create_bucket(Bucket=self.bucket, CreateBucketConfiguration=configuration)
         except botocore.exceptions.ClientError as error:
             error_code = error.response['Error']['Code']
-            if error_code != "BucketAlreadyExists":
+            if error_code != 'BucketAlreadyExists':
                 raise error
 
     def teardown(self, info, remote_client):
@@ -46,8 +46,19 @@ class S3(provider.Provider):
         bucket = self.resource.Bucket(self.bucket)
 
         # Delete all the remaining objects
-        for obj in bucket.objects.all():
-            obj.delete()
+        try:
+            for obj in bucket.objects.all():
+                obj.delete()
+        except botocore.exceptions.ClientError as error:
+            error_code = error.response['Error']['Code']
+            if error_code == 'NoSuchBucket':
+                # Some tests remove the bucket after it's created/cleaned, if the bucket doesn't exist then all we need
+                # to do is clean the staging directory.
+                self._remove_staging_directory(info, remote_client)
+                return
+
+            raise error_code
+
 
         # Abort all the remaining multipart uploads
         for upload in bucket.multipart_uploads.all():
@@ -55,6 +66,10 @@ class S3(provider.Provider):
 
         # Remove the staging directory because cbbackupmgr has validation to ensure that are unique to each archive
         self._remove_staging_directory(info, remote_client)
+
+    def remove_bucket(self):
+        """See super class"""
+        self.resource.Bucket(self.bucket).delete()
 
     def get_json_object(self, key):
         """See super class"""

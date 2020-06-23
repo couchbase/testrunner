@@ -37,6 +37,11 @@ class Provider(metaclass=abc.ABCMeta):
         raise NotImplementedError
 
     @abc.abstractmethod
+    def remove_bucket(self):
+        """Remove the storage bucket being used for testing."""
+        raise NotImplementedError
+
+    @abc.abstractmethod
     def get_json_object(self, key):
         """Returns the object from the object store with the given key. The object must contain valid JSON."""
         raise NotImplementedError

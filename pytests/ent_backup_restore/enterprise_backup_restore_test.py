@@ -4223,3 +4223,33 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.assertTrue(self._check_output("Merge completed successfully", output),
                         "Merge failed while running info at the same time")
 
+    def test_config_without_objstore_bucket(self):
+        self.assertIsNotNone(self.objstore_provider, "Test requires an object store provider")
+        self.objstore_provider.remove_bucket()
+        output, _ = self.backup_create(del_old_backup=False)
+        self.assertIn('the specified bucket does not exist', output[0].lower())
+
+    def test_backup_without_objstore_bucket(self):
+        self.assertIsNotNone(self.objstore_provider, "Test requires an object store provider")
+        self.objstore_provider.remove_bucket()
+        output, _ = self.backup_cluster()
+        self.assertIn('the specified bucket does not exist', output[0].lower())
+
+    def test_info_without_objstore_bucket(self):
+        self.assertIsNotNone(self.objstore_provider, "Test requires an object store provider")
+        self.objstore_provider.remove_bucket()
+        output, _ = self.backup_info()
+        self.assertIn('the specified bucket does not exist', output[0].lower())
+
+    def test_restore_without_objstore_bucket(self):
+        self.assertIsNotNone(self.objstore_provider, "Test requires an object store provider")
+        self.objstore_provider.remove_bucket()
+        self.restore_only = True
+        output, _ = self.backup_restore()
+        self.assertIn('the specified bucket does not exist', output[0].lower())
+
+    def test_remove_without_objstore_bucket(self):
+        self.assertIsNotNone(self.objstore_provider, "Test requires an object store provider")
+        self.objstore_provider.remove_bucket()
+        _, output, _ = self.backup_remove()
+        self.assertIn('the specified bucket does not exist', output[0].lower())
