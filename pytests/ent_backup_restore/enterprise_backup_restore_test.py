@@ -2261,7 +2261,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                             end=self.num_items)
         self._load_all_buckets(self.master, gen, "create", 0)
         self.backup_create()
-        self.bk_with_stop_and_resume()
+        self.bk_with_stop_and_resume(remove_staging_directory=self.input.param("remove_staging_directory", False))
 
     def test_backup_restore_with_deletes(self):
         """

@@ -1352,7 +1352,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                                                 self.objstore_provider)
         conn.disconnect()
 
-    def bk_with_stop_and_resume(self):
+    def bk_with_stop_and_resume(self, remove_staging_directory=False):
         old_backup_name = ""
         new_backup_name = ""
         num_shards = ""
@@ -1388,9 +1388,20 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                 self.fail("Server failed to start")
             else:
                 started_couchbase = True
-            output, error = self.backup_cluster()
-            if error or not self._check_output("Backup successfully completed", output):
-                self.fail("Taking cluster backup failed.")
+            if self.objstore_provider and remove_staging_directory:
+                remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
+                self.objstore_provider._remove_staging_directory(remote_client.extract_remote_info().type.lower(), remote_client)
+                output, _ = self.backup_cluster()
+                self.assertNotEqual(len(output), 0, "Expected some useful information to have been printed to stdout")
+                self.assertIn("it looks like the staging directory was removed you must re-run with '--purge' to ensure previous in-progress uploads are purged",
+                              output[0],
+                              "Expected an informative error about why backup could not be resumed")
+                # We don't need to continue any further, we've validated all the output that we need to
+                return
+            else:
+                output, error = self.backup_cluster()
+                if error or not self._check_output("Backup successfully completed", output):
+                    self.fail("Taking cluster backup failed.")
             status, output, message = self.backup_list()
             if not status:
                 self.fail(message)
