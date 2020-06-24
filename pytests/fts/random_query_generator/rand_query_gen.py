@@ -281,7 +281,7 @@ class FTSESQueryGenerator(EmployeeQuerables, WikiQuerables):
         fts_match_phrase_query = {}
         es_match_phrase_query = {'match_phrase': {}}
         fieldname = self.get_random_value(self.fields['text'])
-        if fieldname == "name":
+        if fieldname == "name" or fieldname == "manages_reports":
             match_str = eval("self.get_queryable_%s" % fieldname + "(full=True)").encode('utf-8')
         else:
             match_str = eval("self.get_queryable_%s()" % fieldname).encode('utf-8')
