@@ -1025,6 +1025,29 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                                  "Missing flag {0} in help content".format(self.bkrs_flag))
         shell.disconnect()
 
+    def test_cbbackupmgr_help_contains_objstore_info(self):
+        remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
+
+        supports_read_only = ['restore']
+        for sub_command in ['backup', 'collect-logs', 'config', 'examine', 'info', 'remove', 'restore']:
+            output, error = remote_client.execute_command("{}/cbbackupmgr {} -h".format(self.cli_command_location, sub_command))
+            if error:
+                self.fail("Expected to be able to get help for {}".format(sub_command))
+
+            arguments = ['--obj-access-key-id', '--obj-cacert', '--obj-endpoint', '--obj-no-ssl-verify',
+                             '--obj-region', '--obj-secret-access-key', '--obj-staging-dir', '--s3-force-path-style',
+                             '--s3-log-level']
+
+            if sub_command in supports_read_only:
+                arguments.append('--obj-read-only')
+
+            for argument in arguments:
+                found = False
+                for line in output:
+                    found = found or argument in line
+
+                self.assertTrue(found, "Expected to find help about {}".format(argument))
+
     def test_backup_restore_with_optional_flags(self):
         """
             1. Create a bucket
