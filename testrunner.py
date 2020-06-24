@@ -652,10 +652,11 @@ def runtests(names, options, arg_i, arg_p, runtime_test_params):
             before_suite_name = "%s.%s" % (name[:name.rfind('.')], BEFORE_SUITE)
             try:
                 print(("Run before suite setup for %s" % name))
-                suite = unittest.TestLoader().loadTestsFromName(before_suite_name)
-                print(("-->before_suite_name:{},suite: {}".format(before_suite_name,suite)))
-                result = unittest.TextTestRunner(verbosity=2).run(suite)
-                print(("-->result: {}".format(result)))
+                if hasattr(unittest.TestLoader(), before_suite_name):
+                    suite = unittest.TestLoader().loadTestsFromName(before_suite_name)
+                    print(("-->before_suite_name:{},suite: {}".format(before_suite_name,suite)))
+                    result = unittest.TextTestRunner(verbosity=2).run(suite)
+                    print(("-->result: {}".format(result)))
                 if "get-coredumps" in TestInputSingleton.input.test_params:
                     if TestInputSingleton.input.param("get-coredumps", True):
                         if get_core_dumps(TestInputSingleton.input, logs_folder):
@@ -664,9 +665,8 @@ def runtests(names, options, arg_i, arg_p, runtime_test_params):
                                              "were found and collected."
                                              " Check testrunner logs folder.")]
                             log.info("FAIL: New core dump(s) was found and collected")
-            except AttributeError as ex:
-                traceback.print_exc()
-                pass
+            except Exception as ex:
+                log.error("Error:: " + str(ex))
         try:
             suite = unittest.TestLoader().loadTestsFromName(name)
         except AttributeError as e:
@@ -759,11 +759,12 @@ def runtests(names, options, arg_i, arg_p, runtime_test_params):
     if test_exec_count>0:
         after_suite_name = "%s.%s" % (name[:name.rfind('.')], AFTER_SUITE)
         try:
-            print(("Run after suite setup for %s" % name))
-            suite = unittest.TestLoader().loadTestsFromName(after_suite_name)
-            result = unittest.TextTestRunner(verbosity=2).run(suite)
-        except AttributeError as ex:
-            pass
+            if hasattr(unittest.TestLoader(), after_suite_name):
+                print(("Run after suite setup for %s" % name))
+                suite = unittest.TestLoader().loadTestsFromName(after_suite_name)
+                result = unittest.TextTestRunner(verbosity=2).run(suite)
+        except Exception as ex:
+            log.error("Error:: " + str(ex))
     if "makefile" in TestInputSingleton.input.test_params:
         # print out fail for those tests which failed and do sys.exit() error code
         fail_count = 0
