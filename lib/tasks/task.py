@@ -4888,11 +4888,10 @@ class EnterpriseBackupTask(Task):
             args = (
                 f"backup --archive {self.objstore_provider.schema_prefix() + self.backupset.objstore_bucket + '/' if self.objstore_provider else ''}{self.backupset.directory}"
                 f" --repo {self.backupset.name}"
-                f" {self.cluster_flag} http://{self.backupset.cluster_host.ip}:{
-                        self.backupset.cluster_host.port}"
+                f" {self.cluster_flag} http://{self.backupset.cluster_host.ip}:{self.backupset.cluster_host.port}"
                 f" --username {self.backupset.cluster_host.rest_username}"
-                        f" --password {self.backupset.cluster_host.rest_password}"
-                        f" {self.num_shards}"
+                f" --password {self.backupset.cluster_host.rest_password}"
+                f" {self.num_shards}"
                 f"{' --obj-staging-dir ' + self.backupset.objstore_staging_directory if self.objstore_provider else ''}"
                 f"{' --obj-endpoint ' + self.backupset.objstore_endpoint if self.objstore_provider and self.backupset.objstore_endpoint else ''}"
                 f"{' --obj-region ' + self.backupset.objstore_region if self.objstore_provider and self.backupset.objstore_region else ''}"
