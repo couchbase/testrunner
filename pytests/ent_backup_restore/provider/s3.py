@@ -79,7 +79,14 @@ class S3(provider.Provider):
 
     def get_json_object(self, key):
         """See super class"""
-        return json.loads(self.resource.Object(self.bucket, key).get()['Body'].read())
+        obj = None
+        try:
+            obj = json.loads(self.resource.Object(self.bucket, key).get()['Body'].read())
+        except botocore.exceptions.ClientError as error:
+            error_code = error.response['Error']['Code']
+            if error_code not in ('NoSuchKey', 'KeyNotFound'):
+                raise error_code
+        return obj
 
     def list_objects(self, prefix=None):
         """See super class"""

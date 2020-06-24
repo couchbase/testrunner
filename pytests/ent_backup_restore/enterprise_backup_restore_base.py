@@ -719,9 +719,9 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             if not self.backupset.rt_no_cert:
                 args += " --cacert %s" % cacert
         if self.backupset.exclude_buckets:
-            args += " --exclude-buckets {0}".format(self.backupset.exclude_buckets)
+            args += " {} {}".format('--exclude-data' if int(version[0]) >= 7 else '--exclude-buckets', ''.join(self.backupset.exclude_buckets))
         if self.backupset.include_buckets:
-            args += " --include-buckets {0}".format(self.backupset.include_buckets)
+            args += " {} {}".format('--include-data' if int(version[0]) >= 7 else '--include-buckets', ''.join(self.backupset.include_buckets))
         if self.backupset.disable_bucket_config:
             args += " --disable-bucket-config {0}".format(self.backupset.disable_bucket_config)
         if self.backupset.disable_views:
