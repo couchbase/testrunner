@@ -19,6 +19,10 @@ from os.path import isfile, join
 import traceback
 from .rqg_postgres_client import RQGPostgresClient
 from membase.api.exception import CBQError
+from fts.random_query_generator.rand_query_gen import FTSFlexQueryGenerator
+from pytests.fts.fts_base import FTSIndex
+from pytests.fts.random_query_generator.rand_query_gen import DATASET
+from pytests.fts.fts_base import CouchbaseCluster
 
 class BaseRQGTests(BaseTestCase):
     def setUp(self):
@@ -104,7 +108,7 @@ class BaseRQGTests(BaseTestCase):
             self.float_round_level = self.input.param("float_round_level", 0)
             self.delta = self.input.param("delta", 0)
             self.window_function_test = self.input.param("window_function_test", False)
-
+            self.use_fts = self.input.param("use_fts", False)
             self.advise_server = self.input.advisor
             self.advise_buckets = ["bucket_01", "bucket_02", "bucket_03", "bucket_04", "bucket_05", "bucket_06", "bucket_07", "bucket_08", "bucket_09", "bucket_10"]
             self.advise_dict={}
@@ -154,11 +158,76 @@ class BaseRQGTests(BaseTestCase):
                 client._db_execute_query(query=query)
         client.drop_database(self.database)
 
+    def create_fts_index(self, name, source_type='couchbase',
+                         source_name=None, index_type='fulltext-index',
+                         index_params=None, plan_params=None,
+                         source_params=None, source_uuid=None, doc_count=1000):
+        """Create fts index/alias
+        @param node: Node on which index is created
+        @param name: name of the index/alias
+        @param source_type : 'couchbase' or 'files'
+        @param source_name : name of couchbase bucket or "" for alias
+        @param index_type : 'fulltext-index' or 'fulltext-alias'
+        @param index_params :  to specify advanced index mapping;
+                                dictionary overriding params in
+                                INDEX_DEFAULTS.BLEVE_MAPPING or
+                                INDEX_DEFAULTS.ALIAS_DEFINITION depending on
+                                index_type
+        @param plan_params : dictionary overriding params defined in
+                                INDEX_DEFAULTS.PLAN_PARAMS
+        @param source_params: dictionary overriding params defined in
+                                INDEX_DEFAULTS.SOURCE_CB_PARAMS or
+                                INDEX_DEFAULTS.SOURCE_FILE_PARAMS
+        @param source_uuid: UUID of the source, may not be used
+        """
+        self.cbcluster = CouchbaseCluster(name='cluster', nodes=self.servers, log=self.log)
+        index_params = {
+            "default_mapping": {
+                "enabled": True,
+                "dynamic": True,
+                "default_analyzer": "keyword"
+            }
+        }
+
+        plan_params = {'numReplicas': 0}
+
+        fts_index = FTSIndex(
+            self.cbcluster,
+            name,
+            source_type,
+            source_name,
+            index_type,
+            index_params,
+            plan_params,
+            source_params,
+            source_uuid)
+        fts_index.create()
+
+        indexed_doc_count = 0
+        retry_count = 10
+        while indexed_doc_count < doc_count and retry_count > 0:
+            try:
+                self.sleep(10)
+                indexed_doc_count = fts_index.get_indexed_doc_count()
+            except KeyError as k:
+                continue
+            retry_count -= 1
+
+        if indexed_doc_count != doc_count:
+            self.fail(
+                "FTS indexing did not complete. FTS index count : {0}, Bucket count : {1}".format(indexed_doc_count,
+                                                                                                  doc_count))
+
     def test_rqg(self):
         try:
             # Get Data Map
             table_list = self.client._get_table_list()
             table_map = self.client._get_values_with_type_for_fields_in_table()
+            i = 1
+            for table_name in table_list:
+                if self.use_fts:
+                    fts_index = self.create_fts_index(name="default_index" + str(i), source_name=self.database+"_"+table_name)
+                    i = i + 1
             if self.remove_alias:
                 table_map = self.remove_aliases_from_table_map(table_map)
 
@@ -319,6 +388,7 @@ class BaseRQGTests(BaseTestCase):
                         except CBQError as ex:
                             if "already exists" in str(ex):
                                 continue
+
 
 
     def count_secondary_indexes(self):
@@ -740,7 +810,45 @@ class BaseRQGTests(BaseTestCase):
             n1ql_query = n1ql_query.replace("USE INDEX(`#primary` USING GSI)", " ")
         if self.prepared:
             n1ql_query = "PREPARE " + n1ql_query
-        self.log.info(" SQL QUERY :: {0}".format(sql_query))
+        fts_query = n1ql_query
+        if self.use_fts:
+            if not "JOIN" in n1ql_query:
+                add_hint = n1ql_query.split("WHERE")
+                fts_query = add_hint[0] + " USE INDEX (USING FTS, USING GSI) WHERE " + add_hint[1]
+                if "BETWEEN" in n1ql_query:
+                    fts_query = add_hint[0] + " USE INDEX (USING FTS) WHERE " + add_hint[1]
+            else:
+                split_list = n1ql_query.split("JOIN")
+                i = 0
+                new_n1ql = ""
+                for items in split_list:
+                    if "BETWEEN" in n1ql_query:
+                        if "ON" in items:
+                            items = items.replace("ON", "USE INDEX (USING FTS) ON")
+                        else:
+                            items = items.replace("INNER", "USE INDEX (USING FTS) INNER")
+                            items = items.replace("LEFT", "USE INDEX (USING FTS) LEFT")
+                        if i == 0:
+                            new_n1ql = new_n1ql + items
+                        else:
+                            new_n1ql = new_n1ql + " JOIN " + items
+                    else:
+                        if "ON" in items:
+                            items = items.replace("ON", "USE INDEX (USING FTS, USING GSI) ON")
+                        else:
+                            items = items.replace("INNER",  "USE INDEX (USING FTS, USING GSI) INNER")
+                            items = items.replace("LEFT",  "USE INDEX (USING FTS, USING GSI) LEFT")
+                        if i == 0:
+                            new_n1ql = new_n1ql + items
+                        else:
+                            new_n1ql = new_n1ql + " JOIN " + items
+                    i = i + 1
+                fts_query = new_n1ql
+            if self.prepared:
+                fts_query = "PREPARE " + fts_query
+            self.log.info(" FTS QUERY :: {0}".format(fts_query))
+        else:
+            self.log.info(" SQL QUERY :: {0}".format(sql_query))
         self.log.info(" N1QL QUERY :: {0}".format(n1ql_query))
         # Run n1ql query
         hints = self.query_helper._find_hints(sql_query)
@@ -752,6 +860,14 @@ class BaseRQGTests(BaseTestCase):
                 query_params = {'timeout': '1200s'}
             else:
                 query_params={}
+            if self.use_fts:
+                fts_result = self.n1ql_query_runner_wrapper(n1ql_query=fts_query, server=self.n1ql_server,
+                                                               query_params=query_params)
+                fts_explain = self.n1ql_helper.run_cbq_query(query="EXPLAIN " + fts_query, server=self.n1ql_server,
+                                                                query_params=query_params)
+                if not fts_explain['results'][0]['plan']['~children'][0]['#operator'] == 'IndexFtsSearch':
+                    return {"success": False, "result": str("Query does not use fts index {0}".format(fts_explain))}
+
             actual_result = self.n1ql_query_runner_wrapper(n1ql_query=n1ql_query, server=self.n1ql_server, query_params=query_params, scan_consistency="request_plus")
             if self.prepared:
                 name = actual_result["results"][0]['name']
@@ -759,41 +875,57 @@ class BaseRQGTests(BaseTestCase):
                 self.log.info(" N1QL QUERY :: {0}".format(prepared_query))
                 actual_result = self.n1ql_query_runner_wrapper(n1ql_query=prepared_query, server=self.n1ql_server, query_params=query_params, scan_consistency="request_plus")
             n1ql_result = actual_result["results"]
+            fts_result = fts_result["results"]
 
             # Run SQL Query
-            sql_result = expected_result
-            client = None
-            if self.use_mysql:
-                client = RQGMySQLClient(database=self.database, host=self.mysql_url, user_id=self.user_id, password=self.password)
-            elif self.use_postgres:
-                client = RQGPostgresClient()
+            if not self.use_fts:
+                sql_result = expected_result
+                client = None
+                if self.use_mysql:
+                    client = RQGMySQLClient(database=self.database, host=self.mysql_url, user_id=self.user_id, password=self.password)
+                elif self.use_postgres:
+                    client = RQGPostgresClient()
 
-            if expected_result is None:
-                columns, rows = client._execute_query(query=sql_query)
-                if self.aggregate_pushdown:
-                    sql_result = client._gen_json_from_results_repeated_columns(columns, rows)
-                else:
-                    sql_result = client._gen_json_from_results(columns, rows)
-            client._close_connection()
+                if expected_result is None:
+                    columns, rows = client._execute_query(query=sql_query)
+                    if self.aggregate_pushdown:
+                        sql_result = client._gen_json_from_results_repeated_columns(columns, rows)
+                    else:
+                        sql_result = client._gen_json_from_results(columns, rows)
+                client._close_connection()
+                self.log.info(" result from sql query returns {0} items".format(len(sql_result)))
+            else:
+                self.log.info(" result from fts query returns {0} items".format(len(fts_result)))
             self.log.info(" result from n1ql query returns {0} items".format(len(n1ql_result)))
-            self.log.info(" result from sql query returns {0} items".format(len(sql_result)))
 
-            if len(n1ql_result) != len(sql_result):
-                self.log.info("number of results returned from sql and n1ql are different")
-                self.log.info("sql query is {0}".format(sql_query))
-                self.log.info("n1ql query is {0}".format(n1ql_query))
+            if self.use_fts:
+                if len(n1ql_result) != len(fts_result):
+                    self.log.info("number of results returned from sql and n1ql are different")
+                    self.log.info("fts query is {0}".format(fts_query))
+                    self.log.info("n1ql query is {0}".format(n1ql_query))
 
-                if (len(sql_result) == 0 and len(n1ql_result) == 1) or (len(n1ql_result) == 0 and len(sql_result) == 1) or (len(sql_result) == 0):
+                    if (len(fts_result) == 0 and len(n1ql_result) == 1) or (
+                            len(n1ql_result) == 0 and len(fts_result) == 1) or (len(fts_result) == 0):
                         return {"success": True, "result": "Pass"}
-                return {"success": False, "result": str("different results")}
+                    return {"success": False, "result": str("different results")}
+            else:
+                if len(n1ql_result) != len(sql_result):
+                    self.log.info("number of results returned from sql and n1ql are different")
+                    self.log.info("sql query is {0}".format(sql_query))
+                    self.log.info("n1ql query is {0}".format(n1ql_query))
+
+                    if (len(sql_result) == 0 and len(n1ql_result) == 1) or (len(n1ql_result) == 0 and len(sql_result) == 1) or (len(sql_result) == 0):
+                            return {"success": True, "result": "Pass"}
+                    return {"success": False, "result": str("different results")}
             try:
-                self.n1ql_helper._verify_results_rqg(subquery, aggregate, sql_result=sql_result, n1ql_result=n1ql_result,
-                                                     hints=hints, aggregate_pushdown=self.aggregate_pushdown,
-                                                     window_function_test=self.window_function_test, delta=self.delta)
+                if self.use_fts:
+                    self.n1ql_helper._verify_results_rqg(subquery, aggregate, sql_result=fts_result, n1ql_result=n1ql_result, hints=hints, aggregate_pushdown=self.aggregate_pushdown,use_fts=self.use_fts)
+                else:
+                    self.n1ql_helper._verify_results_rqg(subquery, aggregate, sql_result=sql_result, n1ql_result=n1ql_result, hints=hints, aggregate_pushdown=self.aggregate_pushdown)
             except Exception as ex:
                 self.log.info(ex)
                 traceback.print_exc()
-                return {"success": False, "result": str(ex)}
+                return {"success": False, "result": str(ex) }
             return {"success": True, "result": "Pass"}
         except Exception as ex:
             self.log.info(ex)

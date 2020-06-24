@@ -155,13 +155,15 @@ class N1QLHelper():
         if leave_primary:
             current_indexes = [index for index in current_indexes if index['is_primary'] is False]
         for index in current_indexes:
-            bucket = index['bucket']
+            bucket = index['bucket'].replace("()","")
             index_name = index['name']
-            self.run_cbq_query("drop index %s.%s" % (bucket, index_name))
+            if index['using'] != 'fts':
+                self.run_cbq_query("drop index {0}.{1}".format(bucket, index_name))
         for index in current_indexes:
             bucket = index['bucket']
             index_name = index['name']
-            self.wait_for_index_drop(bucket, index_name)
+            if index['using'] != 'fts':
+                self.wait_for_index_drop(bucket, index_name)
 
     def wait_for_index_drop(self, bucket_name, index_name, fields_set=None, using=None):
         self.with_retry(lambda: self.is_index_present(bucket_name, index_name, fields_set=fields_set, using=using, status="any"), eval=False, delay=1, tries=30)
@@ -283,7 +285,7 @@ class N1QLHelper():
             self._wait_for_index_online(index['bucket'], index['name'])
 
     def get_parsed_indexes(self):
-        query_response = self.run_cbq_query("SELECT * FROM system:indexes")
+        query_response = self.run_cbq_query("SELECT * FROM system:indexes where bucket_id is missing and name not like 'default%'")
         current_indexes = [{'name': i['indexes']['name'],
                             'bucket': i['indexes']['keyspace_id'],
                             'fields': frozenset([(key.replace('`', '').replace('(', '').replace(')', '').replace('meta.id', 'meta().id'), j)
@@ -330,7 +332,7 @@ class N1QLHelper():
             raise Exception(msg)
 
     def _verify_results_rqg(self, subquery, aggregate=False, n1ql_result=[], sql_result=[], hints=["a1"],
-                            aggregate_pushdown=False, window_function_test=False, delta=0):
+                            aggregate_pushdown=False, window_function_test=False, delta=0, use_fts=False):
         new_n1ql_result = []
         for result in n1ql_result:
             if result != {}:
@@ -346,7 +348,7 @@ class N1QLHelper():
 
         if actual_result == [{}]:
             actual_result = []
-        if check:
+        if check and not use_fts:
             actual_result = self._gen_dict(n1ql_result)
 
         expected_result = sql_result
@@ -392,7 +394,7 @@ class N1QLHelper():
             diffs = DeepDiff(actual_result, expected_result, ignore_order=True, ignore_type_in_groups=[(int, float)])
             if diffs:
                 self.log.info("-->actual vs expected diffs found:{}".format(diffs))
-                raise Exception(msg)
+                raise Exception("-->actual vs expected diffs found:{}".format(diffs))
 
     def _sort_data(self, result):
         new_data = []

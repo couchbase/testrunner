@@ -1826,10 +1826,12 @@ class BaseRQGQueryHelper(object):
         tokens = sql.split(" ")
         string_check = False
         numeric_check = False
+        closed_range = False
         bool_check = False
         datetime_check = False
         add_token = True
         new_sql = ""
+        same_field = ""
         space = " "
         values = ["DEFAULT"]
         for token in tokens:
@@ -1844,6 +1846,17 @@ class BaseRQGQueryHelper(object):
                     add_token = False
                     field_name, values = self._search_field(["varchar", "text", "tinytext", "char"], table_map)
                     new_sql += token.replace("STRING_FIELD", field_name)+space
+                elif "SAME_CLOSED_RANGE_NUMERIC_FIELD" in token:
+                    add_token = False
+                    new_sql += token.replace("SAME_CLOSED_RANGE_NUMERIC_FIELD", same_field)+space
+                    numeric_check = True
+                elif "CLOSED_RANGE_NUMERIC_FIELD" in token:
+                    add_token = False
+                    field_name, values = self._search_field(["int", "mediumint", "double", "float", "decimal"], table_map)
+                    same_field = field_name
+                    new_sql += token.replace("CLOSED_RANGE_NUMERIC_FIELD", field_name)+space
+                    numeric_check = True
+                    closed_range = True
                 elif "NUMERIC_FIELD" in token:
                     add_token = False
                     field_name, values = self._search_field(["int", "mediumint", "double", "float", "decimal"], table_map)
@@ -1909,9 +1922,12 @@ class BaseRQGQueryHelper(object):
                         new_sql += token.replace("NUMERIC_VALUE", str(values[mid_value_index]))+space
                     elif "UPPER_BOUND_VALUE" in token:
                         numeric_check = False
+                        closed_range = False
                         add_token = False
                         new_sql += token.replace("UPPER_BOUND_VALUE", str(values[len(values) - 1])) + space
                     elif "LOWER_BOUND_VALUE" in token:
+                        if closed_range:
+                            numeric_check = False
                         add_token = False
                         new_sql += token.replace("LOWER_BOUND_VALUE", str(values[0])) + space
                     else:
