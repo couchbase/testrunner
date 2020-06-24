@@ -2256,8 +2256,17 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         5. Executes backup command again with resume option
         6. Validates the old backup is resumes and backup is completed successfully
         """
-        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size,
-                            end=self.num_items)
+        num_vbuckets = self.input.param("num_vbuckets", None)
+        if num_vbuckets:
+            remote_client = RemoteMachineShellConnection(self.backupset.cluster_host)
+            command = (
+                f"curl -X POST -u {self.master.rest_username}:{self.master.rest_password}"
+                f" {self.master.ip}:8091/diag/eval -d 'ns_config:set(couchbase_num_vbuckets_default, {num_vbuckets}).'"
+            )
+            output, _ = remote_client.execute_command(command)
+            if 'ok' not in output[0]:
+                self.fail(f"failed to reduce the number of vBuckets {num_vbuckets}")
+        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
         self._load_all_buckets(self.master, gen, "create", 0)
         self.backup_create()
         self.bk_with_stop_and_resume(remove_staging_directory=self.input.param("remove_staging_directory", False))
