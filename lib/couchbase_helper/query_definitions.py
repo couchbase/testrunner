@@ -127,7 +127,7 @@ class QueryDefinition(object):
         return ind_content
 
     def generate_index_drop_query(self, bucket="default", use_gsi_for_secondary=True, use_gsi_for_primary=True):
-        if "primary" in self.index_name:
+        if "#primary" in self.index_name:
             query = f"DROP PRIMARY INDEX ON {bucket}"
         else:
             query = f"DROP INDEX {self.index_name} ON {bucket}"

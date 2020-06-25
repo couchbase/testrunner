@@ -124,8 +124,8 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
         except Exception as err:
             self.fail(str(err))
         finally:
-            query_1 = query_gen_1.generate_index_drop_query(bucket=collection_namespace, use_gsi_for_primary=True)
-            query_2 = query_gen_2.generate_index_drop_query(bucket=collection_namespace, use_gsi_for_primary=True)
+            query_1 = query_gen_1.generate_index_drop_query(bucket=collection_namespace)
+            query_2 = query_gen_2.generate_index_drop_query(bucket=collection_namespace)
             self.run_cbq_query(query=query_1)
             self.run_cbq_query(query=query_2)
 
@@ -340,11 +340,16 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
         self._prepare_collection_for_indexing()
         collection_namespace = self.namespace[0]
 
-        # index creation
+        # index creation with num replica
         index_gen = QueryDefinition(index_name='idx', index_fields=['age'])
         try:
-            query = index_gen.generate_index_create_query(bucket=collection_namespace, num_replica=1, desc=False)
+            query = index_gen.generate_index_create_query(bucket=collection_namespace, num_replica=1,
+                                                          defer_build=self.defer_build)
             self.run_cbq_query(query=query)
+            if self.defer_build:
+                query = index_gen.generate_build_query(collection_namespace)
+                self.run_cbq_query(query=query)
+                self.wait_until_indexes_online(defer_build=True)
 
             # querying docs for the idx index
             query = f'SELECT COUNT(*) FROM {collection_namespace} WHERE age > 65'
@@ -356,13 +361,18 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
             query = index_gen.generate_index_drop_query(bucket=collection_namespace)
             self.run_cbq_query(query=query)
 
+        # index creation with node info
         try:
             replica_nodes = []
             for node in index_nodes:
                 replica_nodes.append(f'{node.ip}:8091')
             query = index_gen.generate_index_create_query(bucket=collection_namespace, deploy_node_info=replica_nodes,
-                                                          desc=True)
+                                                          defer_build=self.defer_build)
             self.run_cbq_query(query=query)
+            if self.defer_build:
+                query = index_gen.generate_build_query(collection_namespace)
+                self.run_cbq_query(query=query)
+                self.wait_until_indexes_online(defer_build=True)
 
             # querying docs for the idx index
             query = f'SELECT COUNT(*) FROM {collection_namespace} WHERE age > 65'
