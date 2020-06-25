@@ -1443,7 +1443,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         remote_client.log_command_output(output, error)
         if error:
             return False, error, "Merging backup failed"
-        elif output and not self._check_output("succeeded", output):
+        elif output and not self._check_output(["succeeded", "successfully"], output):
             return False, output, "Merging backup failed"
         elif not output:
             self.log.info("process cbbackupmge may be killed")
@@ -3615,16 +3615,16 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         command = "{0}/{1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        if "Index created" not in output[-1]:
+        if not self._check_output("Index created", output):
             err_msg = "cannot proceed due to rebalance in progress"
             if self._check_output(err_msg, output) or \
                     self._check_output(err_msg, error):
                 self.sleep(15, "wait for rebalance complete")
                 output, error = remote_client.execute_command(command)
-                if "Index created" not in output[-1]:
-                    self.fail("GSI index cannot be created")
-        else:
-            self.fail("GSI index cannot be created")
+                if not self._check_output("Index created", output):
+                    self.fail("GSI index cannot be created after rebalance")
+            else:
+                self.fail("GSI index cannot be created")
         cmd = "cbindex -type create -bucket default -using plasma -index " \
               "name_idx -fields=name -auth {0}:{1}".format(self.servers[0].rest_username,
                                                            self.servers[0].rest_password, )
@@ -3634,7 +3634,7 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         command = "{0}/{1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
-        if "Index created" not in output[-1]:
+        if not self._check_output("Index created", output):
             self.fail("GSI index cannot be created")
 
         index_definition = INDEX_DEFINITION
@@ -3690,7 +3690,7 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
                 command = "{0}/{1}".format(self.cli_command_location, cmd)
                 output, error = remote_client.execute_command(command)
                 remote_client.log_command_output(output, error)
-                if error or "Index created" not in output[-1]:
+                if error or not self._check_output("Index created", output):
                     self.fail("GSI index cannot be created")
 
                 index_definition = INDEX_DEFINITION
