@@ -553,16 +553,17 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         if "4.6" <= self.cbbkmgr_version[:3]:
             self.cluster_flag = "--cluster"
 
-        args = "backup --archive {}{} ".format(self.objstore_provider.schema_prefix() + self.backupset.objstore_bucket + '/' if self.objstore_provider else '', self.backupset.directory)
-        args += "--repo {} ".format(self.backupset.name)
-        args += "{} http{}://{}:{}{} ".format(self.cluster_flag, url_format, self.backupset.cluster_host.ip, secure_port, self.backupset.cluster_host.port)
-        args += "{} ".format(user_input)
-        args += "{} ".format(password_input)
-        args += "{} ".format('--obj-staging-dir ' + self.backupset.objstore_staging_directory if self.objstore_provider else '')
-        args += "{} ".format('--obj-endpoint ' + self.backupset.objstore_endpoint if self.objstore_provider and self.backupset.objstore_endpoint else '')
-        args += "{} ".format('--obj-region ' + self.backupset.objstore_region if self.objstore_provider and self.backupset.objstore_region else '')
-        args += "{} ".format('--obj-access-key-id ' + self.backupset.objstore_access_key_id if self.objstore_provider and self.backupset.objstore_access_key_id else '')
-        args += "{}".format('--obj-secret-access-key ' + self.backupset.objstore_secret_access_key if self.objstore_provider and self.backupset.objstore_secret_access_key else '')
+        args = "backup --archive {}{}".format(self.objstore_provider.schema_prefix() + self.backupset.objstore_bucket + '/' if self.objstore_provider else '', self.backupset.directory)
+        args += " --repo {}".format(self.backupset.name)
+        args += " {} http{}://{}:{}{}".format(self.cluster_flag, url_format, self.backupset.cluster_host.ip, secure_port, self.backupset.cluster_host.port)
+        args += " {}".format(user_input)
+        args += " {}".format(password_input)
+        args += "{}".format(' --full-backup' if self.backupset.full_backup else '')
+        args += "{}".format(' --obj-staging-dir ' + self.backupset.objstore_staging_directory if self.objstore_provider else '')
+        args += "{}".format(' --obj-endpoint ' + self.backupset.objstore_endpoint if self.objstore_provider and self.backupset.objstore_endpoint else '')
+        args += "{}".format(' --obj-region ' + self.backupset.objstore_region if self.objstore_provider and self.backupset.objstore_region else '')
+        args += "{}".format(' --obj-access-key-id ' + self.backupset.objstore_access_key_id if self.objstore_provider and self.backupset.objstore_access_key_id else '')
+        args += "{}".format(' --obj-secret-access-key ' + self.backupset.objstore_secret_access_key if self.objstore_provider and self.backupset.objstore_secret_access_key else '')
         args += "{}".format(' --s3-force-path-style' if self.objstore_provider and self.objstore_provider.schema_prefix() == 's3://' else '')
 
         if self.backupset.no_ssl_verify:
@@ -2736,6 +2737,7 @@ class Backupset:
         self.current_bkrs_client_version = None
         self.bkrs_client_upgrade = False
         self.bwc_version = None
+        self.full_backup = False
 
         # Common configuration which is to be shared accross cloud providers
         self.objstore_access_key_id = ""

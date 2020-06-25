@@ -4637,3 +4637,51 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.assertEqual(len(output), 1)
         self.assertIn("start point", output[0])
         self.assertIn("is after end point", output[0])
+
+    def test_restore_single_full_backup(self):
+        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
+        self._load_all_buckets(self.master, gen, "create", 0)
+        self.backup_create_validate()
+        self.backup_cluster_validate()
+        self.backupset.start = 1
+        self.backupset.end = 1
+        self._all_buckets_flush()
+        self.backup_restore_validate()
+
+    def test_restore_single_incr_backup(self):
+        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
+        self._load_all_buckets(self.master, gen, "create", 0)
+        self.backup_create_validate()
+        for _ in range(2):
+            self._load_all_buckets(self.master, gen, "create", 0)
+            self.backup_cluster_validate()
+        self.backupset.start = 2
+        self.backupset.end = 2
+        self._all_buckets_flush()
+        self.backup_restore_validate()
+
+    def test_start_full_end_incr(self):
+        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
+        self._load_all_buckets(self.master, gen, "create", 0)
+        self.backup_create_validate()
+        for _ in range(2):
+            self._load_all_buckets(self.master, gen, "create", 0)
+            self.backup_cluster_validate()
+        self.backupset.start = 1
+        self.backupset.end = 2
+        self._all_buckets_flush()
+        self.backup_restore_validate()
+
+    def test_start_incr_end_full(self):
+        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
+        self._load_all_buckets(self.master, gen, "create", 0)
+        self.backup_create_validate()
+        for _ in range(2):
+            self.backup_cluster_validate()
+        self._load_all_buckets(self.master, gen, "create", 0)
+        self.backupset.full_backup = True
+        self.backup_cluster_validate()
+        self.backupset.start = 2
+        self.backupset.end = 3
+        self._all_buckets_flush()
+        self.backup_restore_validate()
