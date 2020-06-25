@@ -4624,3 +4624,16 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.objstore_provider._remove_staging_directory(remote_client.extract_remote_info().type.lower(), remote_client)
         success, _, _ = self.backup_remove()
         self.assertTrue(success, "Expected to have removed backups even though the staging directory was removed")
+
+    def test_restore_start_after_end(self):
+        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
+        self._load_all_buckets(self.master, gen, "create", 0)
+        self.backup_create_validate()
+        for _ in range(2):
+            self.backup_cluster_validate()
+        self.backupset.start = 2
+        self.backupset.end = 1
+        output, _ = self.backup_restore()
+        self.assertEqual(len(output), 1)
+        self.assertIn("start point", output[0])
+        self.assertIn("is after end point", output[0])
