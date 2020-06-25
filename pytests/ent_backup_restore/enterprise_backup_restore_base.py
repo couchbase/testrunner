@@ -558,6 +558,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             f" {self.cluster_flag} http{url_format}://{self.backupset.cluster_host.ip}:{secure_port}{self.backupset.cluster_host.port}"
             f" {user_input}"
             f" {password_input}"
+            f"{' --full-backup' if self.backupset.full_backup else ''}"
             f"{' --obj-staging-dir ' + self.backupset.objstore_staging_directory if self.objstore_provider else ''}"
             f"{' --obj-endpoint ' + self.backupset.objstore_endpoint if self.objstore_provider and self.backupset.objstore_endpoint else ''}"
             f"{' --obj-region ' + self.backupset.objstore_region if self.objstore_provider and self.backupset.objstore_region else ''}"
@@ -2770,6 +2771,7 @@ class Backupset:
         self.log_to_stdout = False
         self.auto_select_threads = False
         self.date_range = ''
+        self.full_backup = False
 
         # Common configuration which is to be shared accross cloud providers
         self.objstore_access_key_id = ""
