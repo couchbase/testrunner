@@ -2292,7 +2292,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
         self._load_all_buckets(self.master, gen, "create", 0)
         self.backup_create()
-        self.bk_with_stop_and_resume(remove_staging_directory=self.input.param("remove_staging_directory", False))
+        self.bk_with_stop_and_resume(iterations=self.input.param("iterations", 1),
+                                     remove_staging_directory=self.input.param("remove_staging_directory", False))
 
     def test_backup_restore_with_deletes(self):
         """
