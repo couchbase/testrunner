@@ -442,6 +442,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             args += " --disable-gsi-indexes"
         if self.backupset.disable_ft_indexes:
             args += " --disable-ft-indexes"
+        if self.backupset.disable_ft_alias:
+            args += " --disable-ft-alias"
         if self.backupset.disable_data:
             args += " --disable-data"
         if self.backupset.current_bkrs_client_version[:3] >= "6.5":
@@ -2738,6 +2740,7 @@ class Backupset:
         self.bkrs_client_upgrade = False
         self.bwc_version = None
         self.full_backup = False
+        self.disable_ft_alias = False
 
         # Common configuration which is to be shared accross cloud providers
         self.objstore_access_key_id = ""
