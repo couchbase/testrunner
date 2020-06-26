@@ -230,6 +230,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.backupset.disable_gsi_indexes = self.input.param("disable-gsi-indexes", False)
         self.backupset.disable_ft_indexes = self.input.param("disable-ft-indexes", False)
         self.backupset.disable_ft_alias = self.input.param("disable-ft-alias", False)
+        self.backupset.disable_analytics = self.input.param("disable-analytics", False)
         self.backupset.disable_data = self.input.param("disable-data", False)
         self.backupset.disable_conf_res_restriction = self.input.param("disable-conf-res-restriction", None)
         self.backupset.force_updates = self.input.param("force-updates", False)
@@ -444,6 +445,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             args += " --disable-ft-indexes"
         if self.backupset.disable_ft_alias:
             args += " --disable-ft-alias"
+        if self.backupset.disable_analytics:
+            args += " --disable-analytics"
         if self.backupset.disable_data:
             args += " --disable-data"
         if self.backupset.log_to_stdout:
@@ -2776,6 +2779,7 @@ class Backupset:
         self.date_range = ''
         self.full_backup = False
         self.disable_ft_alias = False
+        self.disable_analytics = False
 
         # Common configuration which is to be shared accross cloud providers
         self.objstore_access_key_id = ""

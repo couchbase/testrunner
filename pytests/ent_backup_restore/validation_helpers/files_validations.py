@@ -51,6 +51,8 @@ class BackupRestoreFilesValidations(BackupRestoreValidationBase):
             expected_meta_json["exclude_data"].append(exclude_data)
         if self.backupset.disable_ft_alias:
             expected_meta_json['disable_ft_alias'] = True
+        if self.backupset.disable_analytics:
+            expected_meta_json['disable_analytics'] = True
         actual_meta_json = self.get_backup_meta_json()
         is_equal, not_equal, extra, not_present = self.compare_dictionary(expected_meta_json, actual_meta_json)
         return self.compare_dictionary_result_analyser(is_equal, not_equal, extra, not_present, "Backup Meta data json")
