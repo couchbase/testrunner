@@ -243,7 +243,7 @@ class QueryCollectionsEnd2EndTests(QueryTests):
         if not test_data or test_data == {}:
             raise ValueError(f"Test name {test_name} is incorrect, please check .conf file.")
         test_objects_created, error = \
-            self.collections_helper.create_bucket_scope_collection_multi_structure(cluster=self.cluster,
+            self.collections_helper.create_bucket_scope_collection_multi_structure_cli(cluster=self.cluster,
                                                                                    existing_buckets=self.buckets,
                                                                                    bucket_params=self.bucket_params,
                                                                                    data_structure=test_data)

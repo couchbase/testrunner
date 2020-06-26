@@ -1,5 +1,6 @@
 from couchbase_helper.tuq_helper import N1QLHelper
 from membase.api.exception import CBQError
+from lib.collection.collections_cli_client import CollectionsCLI
 import logger
 import time
 
@@ -10,6 +11,7 @@ class CollectionsN1QL(object):
         self.node = node
         self.use_rest = True
         self.n1ql_helper = N1QLHelper(use_rest=True, log=self.log)
+        self.cli_helper = CollectionsCLI(node)
 
     def create_collection(self, keyspace="default", bucket_name="", scope_name="", collection_name="", poll_interval=1,
                           timeout=30):
@@ -83,6 +85,35 @@ class CollectionsN1QL(object):
                     for collection in collections:
                         result = self.create_collection(bucket_name=bucket["name"], scope_name=scope["name"],
                                                         collection_name=collection["name"])
+                        if not result:
+                            return False, f"Collection {collection['name']} creation is failed."
+        except CBQError as err:
+            return False, str(err)
+        return True, ""
+
+    def create_bucket_scope_collection_multi_structure_cli(self, cluster=None, existing_buckets=None, bucket_params=None,
+                                                       data_structure=None):
+        if data_structure is None:
+            data_structure = {}
+        if bucket_params is None:
+            bucket_params = {}
+        if existing_buckets is None:
+            existing_buckets = []
+        try:
+            buckets = data_structure["buckets"]
+            for bucket in buckets:
+                if bucket not in existing_buckets:
+                    cluster.create_standard_bucket(bucket["name"], 11222, bucket_params)
+                scopes = bucket["scopes"]
+                for scope in scopes:
+                    if not scope["name"] == "_default":
+                        result = self.cli_helper.create_scope(bucket=bucket["name"], scope=scope["name"])
+                        if not result:
+                            return False, f"Scope {scope['name']} creation is failed."
+                    collections = scope["collections"]
+                    for collection in collections:
+                        result = self.cli_helper.create_collection(bucket=bucket["name"], scope=scope["name"],
+                                                                   collection=collection["name"])
                         if not result:
                             return False, f"Collection {collection['name']} creation is failed."
         except CBQError as err:

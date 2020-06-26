@@ -32,7 +32,7 @@ class CollectionsCLI(object):
         return success
 
     def delete_scope(self, scope, bucket="default"):
-        status, content, success = self.cli.delete_scope(bucket, scope)
+        status, content, success = self.cli.delete_scope(scope, bucket)
         if success:
             self.log.info("Scope dropped {}->{}".format(bucket, scope))
         else:
