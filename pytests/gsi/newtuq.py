@@ -64,7 +64,7 @@ class QueryTests(BaseTestCase):
         verify_data = False
         if self.scan_consistency != "request_plus":
             verify_data = True
-        if self.skip_load:
+        if not self.skip_load:
             self.gens_load = self.generate_docs(self.docs_per_day)
             self.full_docs_list = self.generate_full_docs_list(self.gens_load)
             self.gen_results = TuqGenerators(self.log, self.full_docs_list)
