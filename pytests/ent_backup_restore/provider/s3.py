@@ -17,8 +17,14 @@ class S3(provider.Provider):
         # boto3 will raise an exception if given an empty string as the endpoint_url so we must construct a kwargs
         # dictionary and conditionally populate it.
         kwargs = {}
+        if self.access_key_id:
+            kwargs['aws_access_key_id'] = self.access_key_id
         if self.endpoint != '':
             kwargs['endpoint_url'] = self.endpoint
+        if self.region:
+            kwargs['region_name'] = self.region
+        if self.secret_access_key:
+            kwargs['aws_secret_access_key'] = self.secret_access_key
 
         self.resource = boto3.resource('s3', **kwargs)
 
