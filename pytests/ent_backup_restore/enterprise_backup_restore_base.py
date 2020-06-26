@@ -1357,42 +1357,43 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                                                 self.objstore_provider)
         conn.disconnect()
 
-    def bk_with_stop_and_resume(self, remove_staging_directory=False):
+    def bk_with_stop_and_resume(self, iterations=1, remove_staging_directory=False):
         old_backup_name = ""
         new_backup_name = ""
         num_shards = ""
         conn = RemoteMachineShellConnection(self.backupset.cluster_host)
         started_couchbase = False
         try:
-            backup_result = self.cluster.async_backup_cluster(
-                backupset=self.backupset,
-                objstore_provider=self.objstore_provider,
-                resume=False,
-                purge=self.backupset.purge,
-                no_progress_bar=self.no_progress_bar,
-                cli_command_location=self.cli_command_location,
-                cb_version=self.cb_version,
-                num_shards=num_shards)
-            self.sleep(5)
-            conn.kill_erlang(self.os_name)
-            output = backup_result.result(timeout=600)
-            self.log.info(str(output))
-            status, output, message = self.backup_list()
-            if not status:
-                self.fail(message)
-            for line in output:
-                if "enterprise" in line:
-                    continue
-                if re.search("\d{4}-\d{2}-\d{2}T\d{2}_\d{2}_\d{2}.\d+-\d{2}_\d{2}", line):
-                    old_backup_name = re.search("\d{4}-\d{2}-\d{2}T\d{2}_\d{2}"
-                                            "_\d{2}.\d+-\d{2}_\d{2}", line).group()
-                    self.log.info("Backup name before resume: " + old_backup_name)
-            conn.start_couchbase()
-            ready = RestHelper(RestConnection(self.backupset.cluster_host)).is_ns_server_running()
-            if not ready:
-                self.fail("Server failed to start")
-            else:
-                started_couchbase = True
+            for _ in range(iterations):
+                backup_result = self.cluster.async_backup_cluster(
+                    backupset=self.backupset,
+                    objstore_provider=self.objstore_provider,
+                    resume=False,
+                    purge=self.backupset.purge,
+                    no_progress_bar=self.no_progress_bar,
+                    cli_command_location=self.cli_command_location,
+                    cb_version=self.cb_version,
+                    num_shards=num_shards)
+                self.sleep(5)
+                conn.kill_erlang(self.os_name)
+                output = backup_result.result(timeout=600)
+                self.log.info(str(output))
+                status, output, message = self.backup_list()
+                if not status:
+                    self.fail(message)
+                for line in output:
+                    if "enterprise" in line:
+                        continue
+                    if re.search(r"\d{4}-\d{2}-\d{2}T\d{2}_\d{2}_\d{2}.\d+-\d{2}_\d{2}", line):
+                        old_backup_name = re.search(r"\d{4}-\d{2}-\d{2}T\d{2}_\d{2}"
+                                                    r"_\d{2}.\d+-\d{2}_\d{2}", line).group()
+                        self.log.info("Backup name before resume: " + old_backup_name)
+                conn.start_couchbase()
+                ready = RestHelper(RestConnection(self.backupset.cluster_host)).is_ns_server_running()
+                if not ready:
+                    self.fail("Server failed to start")
+                else:
+                    started_couchbase = True
             if self.objstore_provider and remove_staging_directory:
                 remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
                 self.objstore_provider._remove_staging_directory(remote_client.extract_remote_info().type.lower(), remote_client)
