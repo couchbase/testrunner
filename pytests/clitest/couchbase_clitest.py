@@ -509,16 +509,17 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
             to detect no graceful failover if no bucket """
         self._create_bucket(remote_client, bucket_replica=self.num_replicas)
         cli_command = "failover"
-        for num in range(nodes_failover):
-            self.log.info("failover node {0}" \
+        for num in xrange(nodes_failover):
+            self.log.info("failover node {0}"\
+                          "MB-39220: Adding --hard flag for cli failover tests"\
                           .format(self.servers[nodes_add - nodes_rem - num].ip))
             options = "--server-failover={0}:8091" \
                       .format(self.servers[nodes_add - nodes_rem - num].ip)
             if self.force_failover:
-                options += " --force"
-                output, error = remote_client.execute_couchbase_cli(\
-                        cli_command=cli_command, options=options, \
-                        cluster_host="localhost", cluster_port=8091, \
+                options += " --force --hard"
+                output, error = remote_client.execute_couchbase_cli(
+                        cli_command=cli_command, options=options,
+                        cluster_host="localhost", cluster_port=8091,
                         user="Administrator", password="password")
                 if len(output) == 2:
                     self.assertEqual(output, ["SUCCESS: Server failed over",
@@ -526,9 +527,9 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
                 else:
                     self.assertTrue("SUCCESS: Server failed over" in output)
             else:
-                output, error = remote_client.execute_couchbase_cli(\
-                        cli_command=cli_command, options=options, \
-                        cluster_host="localhost", cluster_port=8091, \
+                output, error = remote_client.execute_couchbase_cli(
+                        cli_command=cli_command, options=options,
+                        cluster_host="localhost", cluster_port=8091,
                         user="Administrator", password="password")
                 RestConnection(self.master).monitorRebalance()
                 if not self._check_output("SUCCESS: Server failed over", output):
@@ -613,24 +614,26 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
             self.log.info("failover node {0}"\
                                 .format(self.servers[nodes_add - nodes_rem - num].ip))
             options = "--server-failover={0}:8091"\
-                                  .format(self.servers[nodes_add - nodes_rem - num].ip)
+                      .format(self.servers[nodes_add - nodes_rem - num].ip)
             if self.force_failover or num == nodes_failover - 1:
-                options += " --force"
+                options += " --force --hard"
                 force_failover = True
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command,
                                                                 options=options,
                                                                 cluster_host="localhost",
                                                                 user=cluster_user,
                                                                 password=cluster_pwd)
+            self.assertTrue("SUCCESS: Server failed over" in str(output),
+                            "Node failover failed")
             if not force_failover:
                 RestConnection(self.master).monitorRebalance()
 
         cli_command = "recovery"
         for num in range(nodes_failover):
             # try to set recovery when nodes failovered (MB-11230)
-            options = "--server-recovery={0} --recovery-type=delta"\
-                                  .format(self.servers[nodes_add - nodes_rem - num].ip)
-                                          #self.servers[nodes_add - nodes_rem - num].port)
+            options = "--server-recovery=%s:%s --recovery-type=delta" \
+                      % (self.servers[nodes_add - nodes_rem - num].ip,
+                         self.servers[nodes_add - nodes_rem - num].port)
             output, error = remote_client.execute_couchbase_cli(cli_command=cli_command,
                                                                 options=options,
                                                                 cluster_host="localhost",
