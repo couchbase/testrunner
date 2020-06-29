@@ -83,7 +83,7 @@ class EventingNegative(EventingBaseTest):
         try:
             self.rest.create_function(self.function_name,body)
         except Exception as ex:
-            if "ERR_INTER_BUCKET_RECURSION" not in str(ex):
+            if "ERR_SRC_MB_SAME" not in str(ex):
                 self.fail("Eventing function allowed both source and metadata bucket to be same")
 
     def test_eventing_with_memcached_buckets(self):
