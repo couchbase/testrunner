@@ -233,7 +233,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.backupset.disable_ft_alias = self.input.param("disable-ft-alias", False)
         self.backupset.disable_analytics = self.input.param("disable-analytics", False)
         self.backupset.disable_data = self.input.param("disable-data", False)
-        self.backupset.disable_conf_res_restriction = self.input.param("disable-conf-res-restriction", None)
+        self.backupset.disable_conf_res_restriction = self.input.param("disable-conf-res-restriction", False)
         self.backupset.force_updates = self.input.param("force-updates", False)
         self.backupset.resume = self.input.param("resume", False)
         self.backupset.purge = self.input.param("purge", False)
@@ -727,19 +727,16 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             args += " {} {}".format('--exclude-data' if int(version[0]) >= 7 else '--exclude-buckets', ''.join(self.backupset.exclude_buckets))
         if self.backupset.include_buckets:
             args += " {} {}".format('--include-data' if int(version[0]) >= 7 else '--include-buckets', ''.join(self.backupset.include_buckets))
-        if self.backupset.disable_bucket_config:
-            args += " --disable-bucket-config {0}".format(self.backupset.disable_bucket_config)
         if self.backupset.disable_views:
             args += " --disable-views "
         if self.backupset.disable_gsi_indexes:
-            args += " --disable-gsi-indexes {0}".format(self.backupset.disable_gsi_indexes)
+            args += " --disable-gsi-indexes"
         if self.backupset.disable_ft_indexes:
-            args += " --disable-ft-indexes {0}".format(self.backupset.disable_ft_indexes)
+            args += " --disable-ft-indexes"
         if self.backupset.disable_data:
-            args += " --disable-data {0}".format(self.backupset.disable_data)
+            args += " --disable-data"
         if self.backupset.disable_conf_res_restriction is not None:
-            args += " --disable-conf-res-restriction {0}".format(
-                self.backupset.disable_conf_res_restriction)
+            args += " --disable-conf-res-restriction"
         filter_chars = {"star": "*", "dot": "."}
         if self.backupset.filter_keys:
             for key in filter_chars:
