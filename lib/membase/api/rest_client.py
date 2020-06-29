@@ -2544,7 +2544,8 @@ class RestConnection(object):
                       evictionPolicy='valueOnly',
                       lww=False,
                       maxTTL=None,
-                      compressionMode='passive'):
+                      compressionMode='passive',
+                      storageBackend='couchstore'):
 
 
         api = '{0}{1}'.format(self.baseUrl, 'pools/default/buckets')
@@ -2612,6 +2613,10 @@ class RestConnection(object):
 
         if bucketType == 'ephemeral':
             del init_params['replicaIndex']     # does not apply to ephemeral buckets, and is even rejected
+
+        # bucket storage is applicable only for membase bucket
+        if bucketType == "membase":
+            init_params['storageBackend'] = storageBackend
 
         pre_spock = not self.check_cluster_compatibility("5.0")
         if pre_spock:
@@ -5185,7 +5190,7 @@ class NodeDiskStorage(object):
 
 class Bucket(object):
     def __init__(self, bucket_size='', name="", authType="sasl", saslPassword="", num_replicas=0, port=11211, master_id=None,
-                 type='', eviction_policy="valueOnly", bucket_priority=None, uuid="", lww=False, maxttl=None):
+                 type='', eviction_policy="valueOnly", bucket_priority=None, uuid="", lww=False, maxttl=None, bucket_storage=None):
         self.name = name
         self.port = port
         self.type = type
@@ -5206,6 +5211,7 @@ class Bucket(object):
         self.uuid = uuid
         self.lww = lww
         self.maxttl = maxttl
+        self.bucket_storage = bucket_storage
 
 
     def __str__(self):

@@ -44,7 +44,8 @@ class BucketOperationHelper:
     @staticmethod
     def create_multiple_buckets(server, replica, bucket_ram_ratio=(2.0 / 3.0),
                                 howmany=3, sasl=True, saslPassword='password',
-                                bucketType='membase', evictionPolicy='valueOnly'):
+                                bucketType='membase', evictionPolicy='valueOnly',
+                                bucket_storage='couchstore'):
         success = True
         log = logger.Logger.get_logger()
         rest = RestConnection(server)
@@ -70,12 +71,14 @@ class BucketOperationHelper:
                                        saslPassword=saslPassword,
                                        proxyPort=port,
                                        bucketType=bucketType,
-                                       evictionPolicy=evictionPolicy)
+                                       evictionPolicy=evictionPolicy,
+                                       storageBackend=bucket_storage)
                 else:
                     rest.create_bucket(bucket=name,
                                        ramQuotaMB=bucket_ram,
                                        replicaNumber=replica,
-                                       proxyPort=port)
+                                       proxyPort=port,
+                                       storageBackend=bucket_storage)
                 port += 1
                 msg = "create_bucket succeeded but bucket \"{0}\" does not exist"
                 bucket_created = BucketOperationHelper.wait_for_bucket_creation(name, rest)

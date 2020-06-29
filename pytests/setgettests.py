@@ -56,8 +56,10 @@ class SimpleSetGetTestBase(object):
         bucket_ram = int(rest.get_nodes_self().memoryQuota // 4)
 
         mcport = rest.get_nodes_self().memcached
+        self.bucket_storage = self.input.param('bucket_storage', 'couchstore')
         for name, replica in specs:
-            rest.create_bucket(name, bucket_ram, "sasl", "password", replica, mcport)
+            rest.create_bucket(name, bucket_ram, "sasl", "password", replica, mcport,
+                               storageBackend=self.bucket_storage)
 
         bucket_data = {}
         buckets = RestConnection(serverInfo).get_buckets()

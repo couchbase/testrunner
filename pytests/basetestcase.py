@@ -165,6 +165,7 @@ class BaseTestCase(unittest.TestCase):
             # bucket parameters go here,
             self.bucket_size = self.input.param("bucket_size", None)
             self.bucket_type = self.input.param("bucket_type", 'membase')
+            self.bucket_storage = self.input.param("bucket_storage", 'couchstore')
             self.num_replicas = self.input.param("replicas", 1)
             self.enable_replica_index = self.input.param("index_replicas", 1)
             self.skip_bucket_setup = self.input.param("skip_bucket_setup", False)
@@ -184,7 +185,6 @@ class BaseTestCase(unittest.TestCase):
             self.sasl_bucket_name = "bucket"
             self.sasl_bucket_priority = self.input.param("sasl_bucket_priority", None)
             self.standard_bucket_priority = self.input.param("standard_bucket_priority", None)
-            self.magma_storage = self.input.param("magma_storage", False)
             # end of bucket parameters spot (this is ongoing)
             self.disable_diag_eval_on_non_local_host = self.input.param("disable_diag_eval_non_local", False)
             self.ntonencrypt = self.input.param('ntonencrypt', 'disable')
@@ -660,6 +660,8 @@ class BaseTestCase(unittest.TestCase):
         bucket_params['lww'] = lww
         bucket_params['maxTTL'] = maxttl
         bucket_params['compressionMode'] = compression_mode
+        if bucket_type == "membase":
+            bucket_params['bucket_storage'] = self.bucket_storage
         return bucket_params
 
     def _bucket_creation(self):
@@ -678,7 +680,8 @@ class BaseTestCase(unittest.TestCase):
                                        bucket_size=self.bucket_size,
                                        eviction_policy=self.eviction_policy,
                                        lww=self.lww,
-                                       type=self.bucket_type))
+                                       type=self.bucket_type,
+                                       bucket_storage=self.bucket_storage))
             if self.enable_time_sync:
                 self._set_time_sync_on_buckets([self.default_bucket_name])
 
@@ -688,28 +691,6 @@ class BaseTestCase(unittest.TestCase):
 
         if len(self.master.collections_map):
             self._create_scope_collection()
-
-        if self.magma_storage:
-            command = "backend"
-            value = "magma"
-            self.log.info("Changing the bucket properties by changing {0} to {1}".
-                          format(command, value))
-            rest = RestConnection(self.master)
-
-            shell = RemoteMachineShellConnection(self.master)
-            shell.enable_diag_eval_on_non_local_hosts()
-            shell.disconnect()
-            for bucket in self.buckets:
-                cmd = 'ns_bucket:update_bucket_props("%s", [{extra_config_string, "%s=%s"}]).' % (
-                bucket.name, command, value)
-                rest.diag_eval(cmd)
-
-            # Restart Memcached in all cluster nodes to reflect the settings
-            for server in self.get_kv_nodes(master=self.master):
-                shell = RemoteMachineShellConnection(server)
-                shell.restart_couchbase()
-                shell.disconnect()
-                self.wait_node_restarted(server)
 
     def _create_scope_collection(self):
         collection_tasks = []
@@ -831,13 +812,16 @@ class BaseTestCase(unittest.TestCase):
                 bucket_priority = self.get_bucket_priority(self.standard_bucket_priority[i])
 
             bucket_params['bucket_priority'] = bucket_priority
+            bucket_params['bucket_storage'] = self.bucket_storage
             bucket_tasks.append(self.cluster.async_create_standard_bucket(name=name, port=port,
                                                                           bucket_params=bucket_params))
             self.buckets.append(Bucket(name=name, authType=None, saslPassword=None,
                                        num_replicas=self.num_replicas,
                                        bucket_size=self.bucket_size,
                                        port=port, master_id=server_id,
-                                       eviction_policy=self.eviction_policy, lww=self.lww))
+                                       eviction_policy=self.eviction_policy,
+                                       bucket_storage=self.bucket_storage,
+                                       lww=self.lww))
 
         for task in bucket_tasks:
             task.result(self.wait_timeout * 10)
@@ -876,7 +860,8 @@ class BaseTestCase(unittest.TestCase):
                                        num_replicas=self.num_replicas,
                                        bucket_size=bucket_size,
                                        port=STANDARD_BUCKET_PORT + i, master_id=server_id,
-                                       eviction_policy=self.eviction_policy, type=self.bucket_type));
+                                       eviction_policy=self.eviction_policy, type=self.bucket_type,
+                                       bucket_storage=self.bucket_storage));
         for task in bucket_tasks:
             task.result(self.wait_timeout * 10)
 

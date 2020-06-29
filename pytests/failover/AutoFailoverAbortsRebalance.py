@@ -32,7 +32,7 @@ class AutoFailoverAbortsRebalance(AutoFailoverBaseTest, BaseTestCase):
         self.num_buckets = self.num_buckets - 1  # this is done as default is created by base class
         if self.num_buckets:
             BucketOperationHelper.create_multiple_buckets(self.master, self.num_replicas, node_ram_ratio * (2.0 / 3.0),
-                                                          howmany=self.num_buckets)
+                                                          howmany=self.num_buckets, bucket_storage=self.bucket_storage)
         self.buckets = self.rest.get_buckets()
         for bucket in self.buckets:
             ready = BucketOperationHelper.wait_for_memcached(self.master, bucket.name)

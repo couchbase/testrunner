@@ -1201,7 +1201,8 @@ class CouchbaseCluster:
 
     def _create_bucket_params(self, server, replicas=1, size=0, port=11211, password=None,
                              bucket_type=None, enable_replica_index=1, eviction_policy='valueOnly',
-                             bucket_priority=None, flush_enabled=1, lww=False, maxttl=None):
+                             bucket_priority=None, flush_enabled=1, lww=False, maxttl=None,
+                             bucket_storage='couchstore'):
         """Create a set of bucket_parameters to be sent to all of the bucket_creation methods
         Parameters:
             server - The server to create the bucket on. (TestInputServer)
@@ -1251,6 +1252,7 @@ class CouchbaseCluster:
                 bucket_params['eviction_policy'] = eviction_policy
             else:
                 bucket_params['eviction_policy'] = EVICTION_POLICY.VALUE_ONLY
+            bucket_params['bucket_storage'] = bucket_storage
         bucket_params['bucket_priority'] = bucket_priority
         bucket_params['flush_enabled'] = flush_enabled
         bucket_params['lww'] = lww
@@ -1338,7 +1340,7 @@ class CouchbaseCluster:
             self, bucket_size, num_buckets=1, num_replicas=1,
             eviction_policy=EVICTION_POLICY.VALUE_ONLY,
             bucket_priority=BUCKET_PRIORITY.HIGH, lww=False,
-            maxttl=None):
+            maxttl=None, bucket_storage='couchstore'):
         """Create sasl buckets.
         @param bucket_size: size of the bucket.
         @param num_buckets: number of buckets to create.
@@ -1354,7 +1356,8 @@ class CouchbaseCluster:
                                                      size=bucket_size, replicas=num_replicas,
                                                      eviction_policy=eviction_policy,
                                                      bucket_priority=bucket_priority,
-                                                     lww=lww, maxttl=maxttl)
+                                                     lww=lww, maxttl=maxttl,
+                                                     bucket_storage=bucket_storage)
             bucket_tasks.append(self.__clusterop.async_create_sasl_bucket(name=name, password='password',
                                                                           bucket_params=sasl_params))
 
@@ -1365,7 +1368,8 @@ class CouchbaseCluster:
                     eviction_policy=eviction_policy,
                     bucket_priority=bucket_priority,
                     lww=lww,
-                    maxttl=maxttl
+                    maxttl=maxttl,
+                    bucket_storage=bucket_storage
                 ))
 
         for task in bucket_tasks:
@@ -1374,7 +1378,8 @@ class CouchbaseCluster:
     def create_standard_buckets(
             self, bucket_size, num_buckets=1, num_replicas=1,
             eviction_policy=EVICTION_POLICY.VALUE_ONLY,
-            bucket_priority=BUCKET_PRIORITY.HIGH, lww=False, maxttl=None):
+            bucket_priority=BUCKET_PRIORITY.HIGH, lww=False, maxttl=None,
+            bucket_storage='couchstore'):
         """Create standard buckets.
         @param bucket_size: size of the bucket.
         @param num_buckets: number of buckets to create.
@@ -1393,7 +1398,8 @@ class CouchbaseCluster:
                 eviction_policy=eviction_policy,
                 bucket_priority=bucket_priority,
                 lww=lww,
-                maxttl=maxttl)
+                maxttl=maxttl,
+                bucket_storage=bucket_storage)
 
             bucket_tasks.append(self.__clusterop.async_create_standard_bucket(name=name, port=STANDARD_BUCKET_PORT+i,
                                                                               bucket_params=standard_params))
@@ -1410,7 +1416,8 @@ class CouchbaseCluster:
                     eviction_policy=eviction_policy,
                     bucket_priority=bucket_priority,
                     lww=lww,
-                    maxttl=maxttl
+                    maxttl=maxttl,
+                    bucket_storage=bucket_storage
                 ))
 
         for task in bucket_tasks:
@@ -1420,7 +1427,7 @@ class CouchbaseCluster:
             self, bucket_size, num_replicas=1,
             eviction_policy=EVICTION_POLICY.VALUE_ONLY,
             bucket_priority=BUCKET_PRIORITY.HIGH, lww=False,
-            maxttl=None):
+            maxttl=None, bucket_storage='couchstore'):
         """Create default bucket.
         @param bucket_size: size of the bucket.
         @param num_replicas: number of replicas (1-3).
@@ -1435,7 +1442,8 @@ class CouchbaseCluster:
             eviction_policy=eviction_policy,
             bucket_priority=bucket_priority,
             lww=lww,
-            maxttl=maxttl)
+            maxttl=maxttl,
+            bucket_storage=bucket_storage)
 
         self.__clusterop.create_default_bucket(bucket_params)
         self.__buckets.append(
@@ -1448,7 +1456,8 @@ class CouchbaseCluster:
                 eviction_policy=eviction_policy,
                 bucket_priority=bucket_priority,
                 lww=lww,
-                maxttl=maxttl
+                maxttl=maxttl,
+                bucket_storage=bucket_storage
             ))
 
         if self.use_java_sdk:
@@ -2822,6 +2831,7 @@ class XDCRNewBaseTest(unittest.TestCase):
         self.__num_stand_buckets = self._input.param("standard_buckets", 0)
 
         self.__eviction_policy = self._input.param("eviction_policy", 'valueOnly')
+        self.__bucket_storage = self._input.param("bucket_storage", 'couchstore')
         self.__mixed_priority = self._input.param("mixed_priority", None)
 
         self.__lww = self._input.param("lww", 0)
@@ -3047,21 +3057,24 @@ class XDCRNewBaseTest(unittest.TestCase):
                     eviction_policy=self.__eviction_policy,
                     bucket_priority=bucket_priority,
                     lww=self.__lww,
-                    maxttl=maxttl)
+                    maxttl=maxttl,
+                    bucket_storage=self.__bucket_storage)
 
             cb_cluster.create_sasl_buckets(
                 bucket_size, num_buckets=self.__num_sasl_buckets,
                 num_replicas=self._num_replicas,
                 eviction_policy=self.__eviction_policy,
                 bucket_priority=bucket_priority, lww=self.__lww,
-                maxttl=maxttl)
+                maxttl=maxttl,
+                bucket_storage=self.__bucket_storage)
 
             cb_cluster.create_standard_buckets(
                 bucket_size, num_buckets=self.__num_stand_buckets,
                 num_replicas=self._num_replicas,
                 eviction_policy=self.__eviction_policy,
                 bucket_priority=bucket_priority, lww=self.__lww,
-                maxttl=maxttl)
+                maxttl=maxttl,
+                bucket_storage=self.__bucket_storage)
 
 
     def create_buckets_on_cluster(self, cluster_name):

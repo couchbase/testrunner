@@ -35,7 +35,7 @@ class ExpiryTests(unittest.TestCase):
         BucketOperationHelper.delete_all_buckets_or_assert([self.master], self)
 
         self._bucket_name = 'default'
-
+        self.bucket_storage = TestInputSingleton.input.param("bucket_storage", 'couchstore')
         serverInfo = self.master
 
         rest = RestConnection(serverInfo)
@@ -56,7 +56,8 @@ class ExpiryTests(unittest.TestCase):
 
         rest.create_bucket(bucket=self._bucket_name,
                            ramQuotaMB=bucket_ram,
-                           proxyPort=info.memcached)
+                           proxyPort=info.memcached,
+                           storageBackend=self.bucket_storage)
         bucket_ready = RestHelper(rest).vbucket_map_ready(self._bucket_name)
         if not bucket_ready:
             self.fail("bucket {0} not ready after 120 seconds".format(self._bucket_name))

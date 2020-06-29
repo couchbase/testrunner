@@ -36,6 +36,7 @@ class MemcapableTestBase(object):
         self.master = self.input.servers[0]
         self.bucket_port = port
         self.bucket_name = bucket_name
+        self.bucket_storage = self.input.param("bucket_storage", 'couchstore')
         ClusterOperationHelper.cleanup_cluster([self.master])
         BucketOperationHelper.delete_all_buckets_or_assert([self.master], self.test)
 
@@ -59,7 +60,8 @@ class MemcapableTestBase(object):
             node_ram_ratio = BucketOperationHelper.base_bucket_ratio(TestInputSingleton.input.servers)
             info = rest.get_nodes_self()
             available_ram = info.memoryQuota * node_ram_ratio
-            rest.create_bucket(bucket=name, ramQuotaMB=int(available_ram))
+            rest.create_bucket(bucket=name, ramQuotaMB=int(available_ram),
+                               storageBackend=self.bucket_storage)
             BucketOperationHelper.wait_for_vbuckets_ready_state(master, name)
         unittest.assertTrue(helper.bucket_exists(name),
                             msg="unable to create {0} bucket".format(name))

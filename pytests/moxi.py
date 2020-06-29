@@ -25,6 +25,7 @@ class MoxiTests(unittest.TestCase):
         self.keys = []
         self.keycount = 0
         self.failure_string = ""
+        self.bucket_storage = self.input.param("bucket_storage", 'couchstore')
 
         self.cleanup()
 
@@ -39,7 +40,8 @@ class MoxiTests(unittest.TestCase):
                                                                 replica=1,
                                                                 bucket_ram_ratio=(2.0 / 3.0),
                                                                 howmany=10,
-                                                                sasl=False)
+                                                                sasl=False,
+                                                                bucket_storage=self.bucket_storage)
         self.assertTrue(created, "bucket creation failed")
 
         ready = BucketOperationHelper.wait_for_memcached(self.master, "bucket-0")

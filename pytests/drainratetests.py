@@ -59,6 +59,7 @@ class DrainRateTests(unittest.TestCase):
 
     def _create_default_bucket(self, replica=1):
         name = "default"
+        self.bucket_storage = self.input.param("bucket_storage", 'couchstore')
         master = self.input.servers[0]
         rest = RestConnection(master)
         helper = RestHelper(RestConnection(master))
@@ -68,7 +69,9 @@ class DrainRateTests(unittest.TestCase):
             available_ram = info.memoryQuota * node_ram_ratio
             if(available_ram < 256):
                 available_ram = 256
-            rest.create_bucket(bucket=name, ramQuotaMB=int(available_ram), replicaNumber=replica)
+            rest.create_bucket(bucket=name, ramQuotaMB=int(available_ram),
+                               replicaNumber=replica,
+                               storageBackend=self.bucket_storage)
             ready = BucketOperationHelper.wait_for_memcached(master, name)
             self.assertTrue(ready, msg="wait_for_memcached failed")
         self.assertTrue(helper.bucket_exists(name),

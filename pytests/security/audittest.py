@@ -106,14 +106,16 @@ class auditTest(BaseTestCase):
                                "user":user, "ip":self.ipAddress, "port":57457, 'sessionid':'', 'conflict_resolution_type':'seqno', \
                                'storage_mode':'couchstore','max_ttl':400,'compression_mode':'passive'}
             rest.create_bucket(expectedResults['bucket_name'], expectedResults['ram_quota'] // 1048576, expectedResults['auth_type'], 'password', expectedResults['num_replicas'], \
-                               '11211', 'membase', 0, expectedResults['num_threads'], 0, 'valueOnly', maxTTL=expectedResults['max_ttl'])
+                               '11211', 'membase', 0, expectedResults['num_threads'], 0, 'valueOnly', maxTTL=expectedResults['max_ttl'],
+                               storageBackend=self.bucket_storage)
 
         elif (ops in ['update']):
             expectedResults = {'bucket_name':'TestBucket', 'ram_quota':209715200, 'num_replicas':1, 'replica_index':False, 'eviction_policy':'value_only', 'type':'membase', \
                                'auth_type':'sasl', "autocompaction":'false', "purge_interval":"undefined", "flush_enabled":'true', "num_threads":3, "source":source, \
                                "user":user, "ip":self.ipAddress, "port":57457 , 'sessionid':'','storage_mode':'couchstore', 'max_ttl':400}
             rest.create_bucket(expectedResults['bucket_name'], expectedResults['ram_quota'] // 1048576, expectedResults['auth_type'], 'password', expectedResults['num_replicas'], '11211', 'membase', \
-                               0, expectedResults['num_threads'], 0, 'valueOnly', maxTTL=expectedResults['max_ttl'])
+                               0, expectedResults['num_threads'], 0, 'valueOnly', maxTTL=expectedResults['max_ttl'],
+                               storageBackend=self.bucket_storage)
             expectedResults = {'bucket_name':'TestBucket', 'ram_quota':104857600, 'num_replicas':1, 'replica_index':True, 'eviction_policy':'value_only', 'type':'membase', \
                                'auth_type':'sasl', "autocompaction":'false', "purge_interval":"undefined", "flush_enabled":True, "num_threads":3, "source":source, \
                                "user":user, "ip":self.ipAddress, "port":57457,'storage_mode':'couchstore', 'max_ttl':200}
@@ -125,7 +127,8 @@ class auditTest(BaseTestCase):
                                'auth_type':'sasl', "autocompaction":'false', "purge_interval":"undefined", "flush_enabled":False, "num_threads":3, "source":source, \
                                "user":user, "ip":self.ipAddress, "port":57457}
             rest.create_bucket(expectedResults['bucket_name'], expectedResults['ram_quota'] // 1048576, expectedResults['auth_type'], 'password', expectedResults['num_replicas'], \
-                               '11211', 'membase', 1, expectedResults['num_threads'], 0, 'valueOnly')
+                               '11211', 'membase', 1, expectedResults['num_threads'], 0, 'valueOnly',
+                               storageBackend=self.bucket_storage)
             rest.delete_bucket(expectedResults['bucket_name'])
 
         elif (ops in ['flush']):
@@ -133,7 +136,8 @@ class auditTest(BaseTestCase):
            'auth_type':'sasl', "autocompaction":'false', "purge_interval":"undefined", "flush_enabled":True, "num_threads":3, "source":source, \
                                "user":user, "ip":self.ipAddress, "port":57457,'storage_mode':'couchstore'}
             rest.create_bucket(expectedResults['bucket_name'], expectedResults['ram_quota'], expectedResults['auth_type'], 'password', expectedResults['num_replicas'], \
-                               '11211', 'membase', 1, expectedResults['num_threads'], 1, 'valueOnly')
+                               '11211', 'membase', 1, expectedResults['num_threads'], 1, 'valueOnly',
+                               storageBackend=self.bucket_storage)
             self.sleep(10)
             rest.flush_bucket(expectedResults['bucket_name'])
 
@@ -142,7 +146,8 @@ class auditTest(BaseTestCase):
     def test_bucket_select_audit(self):
         # security.audittest.auditTest.test_bucket_select_audit,default_bucket=false,id=20492
         rest = RestConnection(self.master)
-        rest.create_bucket(bucket='TestBucket', ramQuotaMB=100)
+        rest.create_bucket(bucket='TestBucket', ramQuotaMB=100,
+                           storageBackend=self.bucket_storage)
         time.sleep(30)
         mc = MemcachedClient(self.master.ip, 11210)
         mc.sasl_auth_plain(self.master.rest_username, self.master.rest_password)
@@ -483,7 +488,8 @@ class auditTest(BaseTestCase):
                                     "flush_enabled":False, "num_threads":3, "source":source, \
                                    "user":user, "ip":self.ipAddress, "port":57457, 'sessionid':'', 'conflict_resolution_type':'seqno'}
                 rest.create_bucket(expectedResults['bucket_name'], expectedResults['ram_quota'] // 1048576, expectedResults['auth_type'], 'password', expectedResults['num_replicas'], \
-                                   '11211', 'membase', 0, expectedResults['num_threads'], 0, 'valueOnly')
+                                   '11211', 'membase', 0, expectedResults['num_threads'], 0, 'valueOnly',
+                                   storageBackend=self.bucket_storage)
                 self.log.info ("value of server is {0}".format(server))
                 self.checkConfig(self.eventID, server, expectedResults)
 
@@ -517,7 +523,8 @@ class auditTest(BaseTestCase):
                                 "flush_enabled":False, "num_threads":3, "source":source, \
                                 "user":user, "ip":self.ipAddress, "port":57457, 'sessionid':'', 'conflict_resolution_type':'seqno'}
             restFirstNode.create_bucket(expectedResults['bucket_name'], expectedResults['ram_quota'] // 1048576, expectedResults['auth_type'], 'password', expectedResults['num_replicas'], \
-                                '11211', 'membase', 0, expectedResults['num_threads'], 0, 'valueOnly')
+                                '11211', 'membase', 0, expectedResults['num_threads'], 0, 'valueOnly',
+                                storageBackend=self.bucket_storage)
 
             self.checkConfig(self.eventID, firstNode, expectedResults)
 
@@ -537,7 +544,8 @@ class auditTest(BaseTestCase):
                                     "flush_enabled":False, "num_threads":3, "source":source, \
                                    "user":user, "ip":self.ipAddress, "port":57457, 'sessionid':'', 'conflict_resolution_type':'seqno'}
                 rest.create_bucket(expectedResults['bucket_name'], expectedResults['ram_quota'] // 1048576, expectedResults['auth_type'], 'password', expectedResults['num_replicas'], \
-                                   '11211', 'membase', 0, expectedResults['num_threads'], 0, 'valueOnly')
+                                   '11211', 'membase', 0, expectedResults['num_threads'], 0, 'valueOnly',
+                                   storageBackend=self.bucket_storage)
 
                 self.checkConfig(self.eventID, server, expectedResults)
 

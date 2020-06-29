@@ -287,6 +287,7 @@ class XDCRBaseTest(unittest.TestCase):
         self._num_replicas = self._input.param("replicas", 1)
         self._mem_quota_int = 0  # will be set in subsequent methods
         self.eviction_policy = self._input.param("eviction_policy", 'valueOnly')  # or 'fullEviction'
+        self.bucket_storage = self._input.param('bucket_storage', 'couchstore')
         self.mixed_priority = self._input.param("mixed_priority", None)
         # if mixed priority is set by user, set high priority for sasl and standard buckets
         if self.mixed_priority:
@@ -613,6 +614,8 @@ class XDCRBaseTest(unittest.TestCase):
         bucket_params['bucket_priority'] = bucket_priority
         bucket_params['flush_enabled'] = flush_enabled
         bucket_params['lww'] = lww
+        if bucket_type == "membase":
+            bucket_params['bucket_storage'] = self.bucket_storage
         return bucket_params
 
     def _create_sasl_buckets(self, server, num_buckets, server_id, bucket_size):
@@ -627,7 +630,8 @@ class XDCRBaseTest(unittest.TestCase):
 
             self.buckets.append(Bucket(name=name, authType="sasl", saslPassword="password",
                                    num_replicas=self._num_replicas, bucket_size=bucket_size,
-                                   master_id=server_id, eviction_policy=self.eviction_policy))
+                                   master_id=server_id, eviction_policy=self.eviction_policy,
+                                   bucket_storage=self.bucket_storage))
 
         for task in bucket_tasks:
             task.result(self.wait_timeout * 10)
@@ -644,7 +648,8 @@ class XDCRBaseTest(unittest.TestCase):
 
             self.buckets.append(Bucket(name=name, authType=None, saslPassword=None,
                                     num_replicas=self._num_replicas, bucket_size=bucket_size,
-                                    port=STANDARD_BUCKET_PORT + i, master_id=server_id, eviction_policy=self.eviction_policy))
+                                    port=STANDARD_BUCKET_PORT + i, master_id=server_id, eviction_policy=self.eviction_policy,
+                                    bucket_storage=self.bucket_storage))
 
         for task in bucket_tasks:
             task.result(self.wait_timeout * 10)
@@ -667,12 +672,16 @@ class XDCRBaseTest(unittest.TestCase):
         self._create_standard_buckets(master_node, self._standard_buckets, master_id, bucket_size)
         if self._default_bucket:
             bucket_params = self._create_bucket_params(server=master_node, size=bucket_size,
-                                                              replicas=self._num_replicas,
-                                                              eviction_policy=self.eviction_policy)
+                                                       replicas=self._num_replicas,
+                                                       eviction_policy=self.eviction_policy)
             self.cluster.create_default_bucket(bucket_params)
-            self.buckets.append(Bucket(name="default", authType="sasl", saslPassword="",
-                                       num_replicas=self._num_replicas, bucket_size=bucket_size, master_id=master_id,
-                                       eviction_policy=self.eviction_policy))
+            self.buckets.append(Bucket(name="default",
+                                       authType="sasl", saslPassword="",
+                                       num_replicas=self._num_replicas,
+                                       bucket_size=bucket_size,
+                                       master_id=master_id,
+                                       eviction_policy=self.eviction_policy,
+                                       bucket_storage=self.bucket_storage))
 
     def _get_bucket_size(self, mem_quota, num_buckets):
         #min size is 100MB now

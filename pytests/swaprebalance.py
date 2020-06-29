@@ -39,6 +39,7 @@ class SwapRebalanceBase(unittest.TestCase):
         self.ratio_expiry = self.input.param("ratio-expiry", 0.03)
         self.ratio_deletes = self.input.param("ratio-deletes", 0.13)
         self.num_buckets = self.input.param("num-buckets", 1)
+        self.bucket_storage = self.input.param("bucket_storage", 'couchstore')
         self.failover_factor = self.num_swap = self.input.param("num-swap", 1)
         self.num_initial_servers = self.input.param("num-initial-servers", 3)
         self.fail_orchestrator = self.swap_orchestrator = self.input.param("swap-orchestrator", False)
@@ -172,7 +173,8 @@ class SwapRebalanceBase(unittest.TestCase):
             node_ram_ratio = BucketOperationHelper.base_bucket_ratio(self.servers)
             info = rest.get_nodes_self()
             available_ram = info.memoryQuota * node_ram_ratio
-            rest.create_bucket(bucket=name, ramQuotaMB=int(available_ram), replicaNumber=replica)
+            rest.create_bucket(bucket=name, ramQuotaMB=int(available_ram), replicaNumber=replica,
+                               storageBackend=self.bucket_storage)
             ready = BucketOperationHelper.wait_for_memcached(master, name)
             self.assertTrue(ready, msg="wait_for_memcached failed")
         self.assertTrue(helper.bucket_exists(name),
@@ -181,7 +183,8 @@ class SwapRebalanceBase(unittest.TestCase):
     @staticmethod
     def _create_multiple_buckets(self, replica=1):
         master = self.servers[0]
-        created = BucketOperationHelper.create_multiple_buckets(master, replica, howmany=self.num_buckets)
+        created = BucketOperationHelper.create_multiple_buckets(master, replica, howmany=self.num_buckets,
+                                                                bucket_storage=self.bucket_storage)
         self.assertTrue(created, "unable to create multiple buckets")
 
         rest = RestConnection(master)

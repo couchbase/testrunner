@@ -24,6 +24,7 @@ class CreateMembaseBucketsTests(unittest.TestCase):
         self.servers = self.input.servers
         BucketOperationHelper.delete_all_buckets_or_assert(servers=self.servers, test_case=self)
         self.master = self.servers[0]
+        self.bucket_storage = self.input.param("bucket_storage", 'couchstore')
         self._log_start()
 
     def tearDown(self):
@@ -282,7 +283,8 @@ class CreateMembaseBucketsTests(unittest.TestCase):
             proxyPort = rest.get_nodes_self().moxi
             try:
                 rest.create_bucket(bucket=name, ramQuotaMB=200, replicaNumber=2,
-                                   authType='sasl', proxyPort=proxyPort)
+                                   authType='sasl', proxyPort=proxyPort,
+                                   storageBackend=self.bucket_storage)
             except BucketCreationException as ex:
                 self.log.error(ex)
                 self.fail('failed to create bucket with 2 replicas')
@@ -298,7 +300,8 @@ class CreateMembaseBucketsTests(unittest.TestCase):
             proxyPort = rest.get_nodes_self().moxi
             try:
                 rest.create_bucket(bucket=name, ramQuotaMB=200, replicaNumber=3,
-                                   authType='sasl', proxyPort=proxyPort)
+                                   authType='sasl', proxyPort=proxyPort,
+                                   storageBackend=self.bucket_storage)
             except BucketCreationException as ex:
                 self.log.error(ex)
                 self.fail('failed to create bucket with 3 replicas')
@@ -417,7 +420,8 @@ class CreateMembaseBucketsTests(unittest.TestCase):
         proxyPort = rest.get_nodes_self().moxi
         try:
             rest.create_bucket(bucket=name, ramQuotaMB=200,
-                                authType='sasl', proxyPort=proxyPort)
+                               authType='sasl', proxyPort=proxyPort,
+                               storageBackend=self.bucket_storage)
             if name_len <= max_len:
                 msg = 'failed to start up bucket with valid length'
                 self.assertTrue(BucketOperationHelper.wait_for_bucket_creation(name, rest), msg=msg)

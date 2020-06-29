@@ -30,6 +30,7 @@ class RebalanceBaseTest(unittest.TestCase):
 
         # Initialize test params
         self.replica = self.input.param("replica", 1)
+        self.bucket_storage = self.input.param("bucket_storage", 'couchstore')
 
         # By default we use keys-count for LoadTask
         # Use keys-count=-1 to use load-ratio
@@ -61,7 +62,7 @@ class RebalanceBaseTest(unittest.TestCase):
             password=master.rest_password)
         rest.init_cluster_memoryQuota(memoryQuota=int(info.mcdMemoryReserved * node_ram_ratio))
         BucketOperationHelper.create_multiple_buckets(master, self.replica, node_ram_ratio * (2.0 / 3.0),
-                howmany=self.num_buckets, sasl=not self.do_ascii)
+                howmany=self.num_buckets, sasl=not self.do_ascii, storageBackend=self.bucket_storage)
         buckets = rest.get_buckets()
         for bucket in buckets:
             ready = BucketOperationHelper.wait_for_memcached(master, bucket.name)
