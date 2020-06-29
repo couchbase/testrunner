@@ -235,6 +235,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.backupset.disable_data = self.input.param("disable-data", False)
         self.backupset.disable_conf_res_restriction = self.input.param("disable-conf-res-restriction", False)
         self.backupset.force_updates = self.input.param("force-updates", False)
+        self.backupset.auto_create_buckets = self.input.param("auto-create-buckets", False)
         self.backupset.resume = self.input.param("resume", False)
         self.backupset.purge = self.input.param("purge", False)
         self.backupset.threads = self.input.param("threads", self.number_of_processors())
@@ -737,6 +738,9 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             args += " --disable-data"
         if self.backupset.disable_conf_res_restriction is not None:
             args += " --disable-conf-res-restriction"
+        if self.backupset.auto_create_buckets:
+            RestConnection(self.backupset.cluster_host).delete_all_buckets()
+            args += " --auto-create-buckets"
         filter_chars = {"star": "*", "dot": "."}
         if self.backupset.filter_keys:
             for key in filter_chars:
@@ -2742,6 +2746,7 @@ class Backupset:
         self.full_backup = False
         self.disable_ft_alias = False
         self.disable_analytics = False
+        self.auto_create_buckets = False
 
         # Common configuration which is to be shared accross cloud providers
         self.objstore_access_key_id = ""
