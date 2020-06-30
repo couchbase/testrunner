@@ -9,19 +9,24 @@ import botocore
 from . import provider
 
 class S3(provider.Provider):
-    def __init__(self, access_key_id, bucket, endpoint, region, secret_access_key, staging_directory):
+    def __init__(self, access_key_id, bucket, cacert, endpoint, no_ssl_verify, region, secret_access_key, staging_directory):
         """Create a new S3 provider which allows interaction with S3 masked behind the common 'Provider' interface. All
         required parameters should be those parsed from the ini.
         """
-        super(S3, self).__init__(access_key_id, bucket, endpoint, region, secret_access_key, staging_directory)
+        super(S3, self).__init__(access_key_id, bucket, cacert, endpoint, no_ssl_verify, region, secret_access_key, staging_directory)
 
         # boto3 will raise an exception if given an empty string as the endpoint_url so we must construct a kwargs
         # dictionary and conditionally populate it.
         kwargs = {}
         if self.access_key_id:
             kwargs['aws_access_key_id'] = self.access_key_id
+        if self.cacert:
+            kwargs['verify'] = self.cacert
         if self.endpoint != '':
             kwargs['endpoint_url'] = self.endpoint
+        if self.no_ssl_verify:
+            # Supplying no_ssl_verify will override the cacert value if supplied e.g. they are mutually exclusive
+            kwargs['verify'] = False
         if self.region:
             kwargs['region_name'] = self.region
         if self.secret_access_key:
