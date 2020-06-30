@@ -314,10 +314,10 @@ class QueriesUpgradeTests(QueryTests, NewUpgradeBaseTest):
         elif phase == "mixed-mode":
             self.log.info("running mixed-mode test for flex index")
             failed_to_run_query, not_found_index_in_response, result_mismatch = ft_object.run_query_and_validate(flex_query_list)
-            if failed_to_run_query or not_found_index_in_response or result_mismatch:
-                self.fail("Found queries not runnable: {0} or required index not found in the query resonse: {1} "
-                          "or flex query and gsi query results not matching: {2}"
-                          .format(failed_to_run_query, not_found_index_in_response, result_mismatch))
+            if failed_to_run_query or result_mismatch:
+                self.fail("Found queries not runnable: {0} "
+                          "or flex query and gsi query results not matching: {1}"
+                          .format(failed_to_run_query, result_mismatch))
             else:
                 self.log.info("All queries passed")
         elif phase == "post-upgrade":
