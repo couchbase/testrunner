@@ -257,6 +257,9 @@ class EventingBaseTest(QueryHelperTests):
             self.sleep(timeout//20, message=message)
             curr_items=stats_dst["curr_items"]
             stats_dst = self.rest.get_bucket_stats(bucket)
+            ### compact buckets when mutation count not progressing. Helpful for expiry events
+            if count==10:
+                self.bucket_compaction()
             if curr_items == stats_dst["curr_items"]:
                 count += 1
             else:
