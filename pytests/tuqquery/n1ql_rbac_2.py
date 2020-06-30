@@ -1,11 +1,12 @@
 
 from couchbase_helper.documentgenerator import BlobGenerator
-from .tuq import QueryTests
+from tuq import QueryTests
 from TestInput import TestInputSingleton
 from security.rbac_base import RbacBase
 from lib.membase.api.rest_client import RestConnection
 from remote.remote_util import RemoteMachineShellConnection
 import json
+
 class RbacN1QL(QueryTests):
     def setUp(self):
         super(RbacN1QL, self).setUp()
@@ -21,8 +22,8 @@ class RbacN1QL(QueryTests):
             self.query_bucket = self.bucket_name
             self.run_cbq_query(query="CREATE PRIMARY INDEX ON `{0}`".format(self.bucket_name))
         else:
-            self.query_buckets = self.get_query_buckets(check_all_buckets=True)
-            self.query_bucket = self.query_buckets[0]
+            self.query_bucket = self.bucket_name
+
     def tearDown(self):
         super(RbacN1QL, self).tearDown()
     def test_select(self):
