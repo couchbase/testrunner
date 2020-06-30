@@ -1,8 +1,6 @@
-
-from remote.remote_util import RemoteMachineShellConnection
 from tuq import QueryTests
 import time
-from deepdiff import DeepDiff
+
 class QueryAdviseTests(QueryTests):
     def setUp(self):
         super(QueryAdviseTests, self).setUp()
