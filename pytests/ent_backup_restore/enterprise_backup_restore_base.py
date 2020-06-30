@@ -288,7 +288,9 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         # Common configuration which are shared accross cloud providers
         self.backupset.objstore_access_key_id = self.input.cbbackupmgr_param('access_key_id', '')
         self.backupset.objstore_bucket = self.input.cbbackupmgr_param('bucket', 'cbbackupmgr-testing')
+        self.backupset.objstore_cacert = self.input.cbbackupmgr_param('cacert', '')
         self.backupset.objstore_endpoint = self.input.cbbackupmgr_param('endpoint', '')
+        self.backupset.objstore_no_ssl_verify = self.input.cbbackupmgr_param('no_ssl_verify', False)
         self.backupset.objstore_region = self.input.cbbackupmgr_param('region', '')
         self.backupset.objstore_secret_access_key = self.input.cbbackupmgr_param('secret_access_key', '') # Required
         self.backupset.objstore_staging_directory = self.input.cbbackupmgr_param('staging_directory')
@@ -297,14 +299,14 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.backupset.s3_force_path_style = self.input.cbbackupmgr_param('s3_force_path_style', False)
 
         # The setup/teardown is provider specific, this is hidden behind the 'Provider' abstract class
+        self.objstore_provider = None
         provider = self.input.param("objstore_provider", None)
         if provider == "s3":
             self.objstore_provider = S3(self.backupset.objstore_access_key_id, self.backupset.objstore_bucket,
-                                        self.backupset.objstore_endpoint, self.backupset.objstore_region,
+                                        self.backupset.objstore_cacert, self.backupset.objstore_endpoint,
+                                        self.backupset.objstore_no_ssl_verify, self.backupset.objstore_region,
                                         self.backupset.objstore_secret_access_key,
                                         self.backupset.objstore_staging_directory)
-        elif not provider:
-            self.objstore_provider = None
 
         # We run in a separate branch so when we add more providers the setup will be run by default
         if provider:
@@ -415,12 +417,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         args = (
             f"config --archive {self.objstore_provider.schema_prefix() + self.backupset.objstore_bucket + '/' if self.objstore_provider else ''}{self.backupset.directory}"
             f" --repo {self.backupset.name}"
-            f"{' --obj-staging-dir ' + self.backupset.objstore_staging_directory if self.objstore_provider else ''}"
-            f"{' --obj-endpoint ' + self.backupset.objstore_endpoint if self.objstore_provider and self.backupset.objstore_endpoint else ''}"
-            f"{' --obj-region ' + self.backupset.objstore_region if self.objstore_provider and self.backupset.objstore_region else ''}"
-            f"{' --obj-access-key-id ' + self.backupset.objstore_access_key_id if self.objstore_provider and self.backupset.objstore_access_key_id else ''}"
-            f"{' --obj-secret-access-key ' + self.backupset.objstore_secret_access_key if self.objstore_provider and self.backupset.objstore_secret_access_key else ''}"
-            f"{' --s3-force-path-style' if self.objstore_provider and self.objstore_provider.schema_prefix() == 's3://' else ''}"
+            f"{self._common_objstore_arguments()}"
         )
 
         cbbkmgr_version = RestConnection(self.backupset.backup_host).get_nodes_version()
@@ -478,12 +475,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         args = (
             f"info --archive {self.objstore_provider.schema_prefix() + self.backupset.objstore_bucket + '/' if self.objstore_provider else ''}{self.backupset.directory}"
             f" --repo {self.backupset.name} "
-            f"{' --obj-staging-dir ' + self.backupset.objstore_staging_directory if self.objstore_provider else ''}"
-            f"{' --obj-endpoint ' + self.backupset.objstore_endpoint if self.objstore_provider and self.backupset.objstore_endpoint else ''}"
-            f"{' --obj-region ' + self.backupset.objstore_region if self.objstore_provider and self.backupset.objstore_region else ''}"
-            f"{' --obj-access-key-id ' + self.backupset.objstore_access_key_id if self.objstore_provider and self.backupset.objstore_access_key_id else ''}"
-            f"{' --obj-secret-access-key ' + self.backupset.objstore_secret_access_key if self.objstore_provider and self.backupset.objstore_secret_access_key else ''}"
-            f"{' --s3-force-path-style' if self.objstore_provider and self.objstore_provider.schema_prefix() == 's3://' else ''}"
+            f"{self._common_objstore_arguments()}"
             f"{' --json' if json_out else ''}"
         )
 
@@ -566,12 +558,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             f" {user_input}"
             f" {password_input}"
             f"{' --full-backup' if self.backupset.full_backup else ''}"
-            f"{' --obj-staging-dir ' + self.backupset.objstore_staging_directory if self.objstore_provider else ''}"
-            f"{' --obj-endpoint ' + self.backupset.objstore_endpoint if self.objstore_provider and self.backupset.objstore_endpoint else ''}"
-            f"{' --obj-region ' + self.backupset.objstore_region if self.objstore_provider and self.backupset.objstore_region else ''}"
-            f"{' --obj-access-key-id ' + self.backupset.objstore_access_key_id if self.objstore_provider and self.backupset.objstore_access_key_id else ''}"
-            f"{' --obj-secret-access-key ' + self.backupset.objstore_secret_access_key if self.objstore_provider and self.backupset.objstore_secret_access_key else ''}"
-            f"{' --s3-force-path-style' if self.objstore_provider and self.objstore_provider.schema_prefix() == 's3://' else ''}"
+            f"{self._common_objstore_arguments()}"
         )
 
         if self.backupset.no_ssl_verify:
@@ -714,12 +701,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             f" {password_input}"
             f" --start {backup_start}"
             f" --end {backup_end}"
-            f"{' --obj-staging-dir ' + self.backupset.objstore_staging_directory if self.objstore_provider else ''}"
-            f"{' --obj-endpoint ' + self.backupset.objstore_endpoint if self.objstore_provider and self.backupset.objstore_endpoint else ''}"
-            f"{' --obj-region ' + self.backupset.objstore_region if self.objstore_provider and self.backupset.objstore_region else ''}"
-            f"{' --obj-access-key-id ' + self.backupset.objstore_access_key_id if self.objstore_provider and self.backupset.objstore_access_key_id else ''}"
-            f"{' --obj-secret-access-key ' + self.backupset.objstore_secret_access_key if self.objstore_provider and self.backupset.objstore_secret_access_key else ''}"
-            f"{' --s3-force-path-style' if self.objstore_provider and self.objstore_provider.schema_prefix() == 's3://' else ''}"
+            f"{self._common_objstore_arguments()}"
         )
 
         if version >= "6.5" and self.backupset.auto_select_threads:
@@ -1079,12 +1061,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
     def backup_list(self):
         args = (
             f"info --archive {self.objstore_provider.schema_prefix() + self.backupset.objstore_bucket + '/' if self.objstore_provider else ''}{self.backupset.directory}"
-            f"{' --obj-staging-dir ' + self.backupset.objstore_staging_directory if self.objstore_provider else ''}"
-            f"{' --obj-endpoint ' + self.backupset.objstore_endpoint if self.objstore_provider and self.backupset.objstore_endpoint else ''}"
-            f"{' --obj-region ' + self.backupset.objstore_region if self.objstore_provider and self.backupset.objstore_region else ''}"
-            f"{' --obj-access-key-id ' + self.backupset.objstore_access_key_id if self.objstore_provider and self.backupset.objstore_access_key_id else ''}"
-            f"{' --obj-secret-access-key ' + self.backupset.objstore_secret_access_key if self.objstore_provider and self.backupset.objstore_secret_access_key else ''}"
-            f"{' --s3-force-path-style' if self.objstore_provider and self.objstore_provider.schema_prefix() == 's3://' else ''}"
+            f"{self._common_objstore_arguments()}"
             f" --all"
             f" --json"
         )
@@ -1123,12 +1100,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         args = (
             f"remove --archive {self.objstore_provider.schema_prefix() + self.backupset.objstore_bucket + '/' if self.objstore_provider else ''}{self.backupset.directory}"
             f" --repo {self.backupset.name}"
-            f"{' --obj-staging-dir ' + self.backupset.objstore_staging_directory if self.objstore_provider else ''}"
-            f"{' --obj-endpoint ' + self.backupset.objstore_endpoint if self.objstore_provider and self.backupset.objstore_endpoint else ''}"
-            f"{' --obj-region ' + self.backupset.objstore_region if self.objstore_provider and self.backupset.objstore_region else ''}"
-            f"{' --obj-access-key-id ' + self.backupset.objstore_access_key_id if self.objstore_provider and self.backupset.objstore_access_key_id else ''}"
-            f"{' --obj-secret-access-key ' + self.backupset.objstore_secret_access_key if self.objstore_provider and self.backupset.objstore_secret_access_key else ''}"
-            f"{' --s3-force-path-style' if self.objstore_provider and self.objstore_provider.schema_prefix() == 's3://' else ''}"
+            f"{self._common_objstore_arguments()}"
         )
 
         if backup_range is not None:
@@ -1975,12 +1947,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
 
         args = (
             f"collect-logs --archive {self.objstore_provider.schema_prefix() + self.backupset.objstore_bucket + '/' if self.objstore_provider else ''}{self.backupset.directory}"
-            f"{' --obj-staging-dir ' + self.backupset.objstore_staging_directory if self.objstore_provider else ''}"
-            f"{' --obj-endpoint ' + self.backupset.objstore_endpoint if self.objstore_provider and self.backupset.objstore_endpoint else ''}"
-            f"{' --obj-region ' + self.backupset.objstore_region if self.objstore_provider and self.backupset.objstore_region else ''}"
-            f"{' --obj-access-key-id ' + self.backupset.objstore_access_key_id if self.objstore_provider and self.backupset.objstore_access_key_id else ''}"
-            f"{' --obj-secret-access-key ' + self.backupset.objstore_secret_access_key if self.objstore_provider and self.backupset.secret_access_key else ''}"
-            f"{' --s3-force-path-style' if self.objstore_provider and self.objstore_provider.schema_prefix() == 's3://' else ''}"
+            f"{self._common_objstore_arguments()}"
         )
 
         if self.backupset.ex_logs_path:
@@ -2715,6 +2682,18 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         else:
             self.log.info("No availabe node to create cluster.")
 
+    def _common_objstore_arguments(self):
+        return (
+            f"{' --obj-access-key-id ' + self.backupset.objstore_access_key_id if self.objstore_provider and self.backupset.objstore_access_key_id else ''}"
+            f"{' --obj-cacert ' + self.backupset.objstore_cacert if self.objstore_provider and self.backupset.objstore_cacert else ''}"
+            f"{' --obj-endpoint ' + self.backupset.objstore_endpoint if self.objstore_provider and self.backupset.objstore_endpoint else ''}"
+            f"{' --obj-no-ssl-verify' if self.objstore_provider and self.backupset.objstore_no_ssl_verify else ''}"
+            f"{' --obj-region ' + self.backupset.objstore_region if self.objstore_provider and self.backupset.objstore_region else ''}"
+            f"{' --obj-secret-access-key ' + self.backupset.objstore_secret_access_key if self.objstore_provider and self.backupset.objstore_secret_access_key else ''}"
+            f"{' --obj-staging-dir ' + self.backupset.objstore_staging_directory if self.objstore_provider else ''}"
+            f"{' --s3-force-path-style' if self.objstore_provider and self.objstore_provider.schema_prefix() == 's3://' else ''}"
+        )
+
 
 class Backupset:
     def __init__(self):
@@ -2787,7 +2766,9 @@ class Backupset:
         # Common configuration which is to be shared accross cloud providers
         self.objstore_access_key_id = ""
         self.objstore_bucket = ""
+        self.objstore_cacert = ""
         self.objstore_endpoint = ""
+        self.objstore_no_ssl_verify = False
         self.objstore_region = ""
         self.objstore_secret_access_key = ""
         self.objstore_staging_directory = ""
