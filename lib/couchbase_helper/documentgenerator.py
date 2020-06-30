@@ -654,9 +654,8 @@ class SDKDataLoader(object):
     # type: (int, int, int, int, str, int, str, str, list, list, str, bool)
     def __init__(self, num_ops, percent_create, percent_update=0, percent_delete=0,
                  load_pattern="uniform", start_seq_num=1, key_prefix="doc_", key_suffix="_",
-                 scope="_default", collection="default", json_template="Person", print_sdk_logs="info",
-                 username="Administrator", password="password"):
-        #TODO : doc_size, batch_size, pause_secs, timeout, expiry
+                 scope="_default", collection="default", json_template="Person", doc_expiry=0,
+                 doc_size=500, print_sdk_logs="info", username="Administrator", password="password", timeout=300):
         self.num_ops = num_ops
         self.percent_create = percent_create
         self.percent_update = percent_update
@@ -668,9 +667,12 @@ class SDKDataLoader(object):
         self.scope = scope
         self.collection = collection
         self.json_template = json_template
+        self.doc_expiry = doc_expiry
+        self.doc_size = doc_size
         self.print_sdk_logs = print_sdk_logs
         self.username = username
         self.password = password
+        self.timeout = timeout
 
     def isGenerator(self):
         return False

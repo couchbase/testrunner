@@ -1452,8 +1452,10 @@ class CouchbaseCluster:
             ))
 
         if self.use_java_sdk:
-            CollectionsRest(self.__master_node).async_create_scope_collection(
-                self.scope_num, self.collection_num, BUCKET_NAME.DEFAULT)
+            node = self.__master_node
+            for bucket in RestConnection(node).get_buckets():
+                CollectionsRest(node).async_create_scope_collection(
+                    self.scope_num, self.collection_num, bucket)
 
     def get_buckets(self):
         return self.__buckets

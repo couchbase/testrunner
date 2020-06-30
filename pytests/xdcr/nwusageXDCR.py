@@ -3,7 +3,7 @@ import random
 import re
 
 from couchbase_helper.cluster import Cluster
-from couchbase_helper.documentgenerator import BlobGenerator
+from couchbase_helper.documentgenerator import BlobGenerator, SDKDataLoader
 from membase.api.rest_client import RestConnection
 from remote.remote_util import RemoteMachineShellConnection
 
@@ -144,6 +144,14 @@ class nwusage(XDCRNewBaseTest):
         curr_time = output[0].strip()
         return curr_time
 
+    def _get_generator(self, prefix, docsize, numitems):
+        if self._use_java_sdk:
+            gen_create = SDKDataLoader(num_ops=numitems, percent_create=100, key_prefix=prefix, doc_size=docsize,
+                                       timeout=1000)
+        else:
+            gen_create = BlobGenerator(prefix, prefix, docsize, end=numitems)
+        return gen_create
+
     def test_nwusage_with_unidirection(self):
         self.setup_xdcr()
         self.sleep(60)
@@ -152,7 +160,7 @@ class nwusage(XDCRNewBaseTest):
         nw_limit = self._input.param("nw_limit", self._get_nwusage_limit())
         self._set_nwusage_limit(self.src_cluster, nw_limit * self.num_src_nodes)
 
-        gen_create = BlobGenerator('nwOne', 'nwOne', self._value_size, end=self._num_items)
+        gen_create = self._get_generator('nwOne', self._value_size, self._num_items)
         self.src_cluster.load_all_buckets_from_generator(kv_gen=gen_create)
 
         self.perform_update_delete()
@@ -173,9 +181,9 @@ class nwusage(XDCRNewBaseTest):
         dest_nw_limit = self._input.param("nw_limit", self._get_nwusage_limit())
         self._set_nwusage_limit(self.dest_cluster, dest_nw_limit * self.num_dest_nodes)
 
-        gen_create1 = BlobGenerator('nwOne', 'nwOne', self._value_size, end=self._num_items)
+        gen_create1 = self._get_generator('nwOne', self._value_size, self._num_items)
         self.src_cluster.load_all_buckets_from_generator(kv_gen=gen_create1)
-        gen_create2 = BlobGenerator('nwTwo', 'nwTwo', self._value_size, end=self._num_items)
+        gen_create2 = self._get_generator('nwTwo', self._value_size, self._num_items)
         self.dest_cluster.load_all_buckets_from_generator(kv_gen=gen_create2)
 
         self.perform_update_delete()
@@ -189,7 +197,7 @@ class nwusage(XDCRNewBaseTest):
     def test_nwusage_with_unidirection_pause_resume(self):
         self.setup_xdcr()
 
-        gen_create = BlobGenerator('nwOne', 'nwOne', self._value_size, end=self._num_items)
+        gen_create = self._get_generator('nwOne', self._value_size, self._num_items)
         tasks = self.src_cluster.async_load_all_buckets_from_generator(kv_gen=gen_create)
 
         self.src_cluster.pause_all_replications()
@@ -212,9 +220,9 @@ class nwusage(XDCRNewBaseTest):
     def test_nwusage_with_bidirection_pause_resume(self):
         self.setup_xdcr()
 
-        gen_create1 = BlobGenerator('nwOne', 'nwOne', self._value_size, end=self._num_items)
+        gen_create1 = self._get_generator('nwOne', self._value_size, self._num_items)
         tasks = self.src_cluster.async_load_all_buckets_from_generator(kv_gen=gen_create1)
-        gen_create2 = BlobGenerator('nwTwo', 'nwTwo', self._value_size, end=self._num_items)
+        gen_create2 = self._get_generator('nwTwo', self._value_size, self._num_items)
         tasks.extend(self.dest_cluster.async_load_all_buckets_from_generator(kv_gen=gen_create2))
 
         self.src_cluster.pause_all_replications()
@@ -242,7 +250,7 @@ class nwusage(XDCRNewBaseTest):
     def test_nwusage_with_unidirection_in_parallel(self):
         self.setup_xdcr()
 
-        gen_create = BlobGenerator('nwOne', 'nwOne', self._value_size, end=self._num_items)
+        gen_create = self._get_generator('nwOne', self._value_size, self._num_items)
         tasks = self.src_cluster.async_load_all_buckets_from_generator(kv_gen=gen_create)
 
         self._set_doc_size_num()
@@ -261,9 +269,9 @@ class nwusage(XDCRNewBaseTest):
     def test_nwusage_with_bidirection_in_parallel(self):
         self.setup_xdcr()
 
-        gen_create1 = BlobGenerator('nwOne', 'nwOne', self._value_size, end=self._num_items)
+        gen_create1 = self._get_generator('nwOne', self._value_size, self._num_items)
         tasks = self.src_cluster.async_load_all_buckets_from_generator(kv_gen=gen_create1)
-        gen_create2 = BlobGenerator('nwTwo', 'nwTwo', self._value_size, end=self._num_items)
+        gen_create2 = self._get_generator('nwTwo', self._value_size, self._num_items)
         tasks.extend(self.dest_cluster.async_load_all_buckets_from_generator(kv_gen=gen_create2))
 
         self._set_doc_size_num()
@@ -290,7 +298,7 @@ class nwusage(XDCRNewBaseTest):
         nw_limit = self._input.param("nw_limit", self._get_nwusage_limit())
         self._set_nwusage_limit(self.src_cluster, nw_limit * no_of_nodes)
 
-        gen_create = BlobGenerator('nwOne', 'nwOne', self._value_size, end=self._num_items)
+        gen_create = self._get_generator('nwOne', self._value_size, self._num_items)
         self.src_cluster.load_all_buckets_from_generator(kv_gen=gen_create)
 
         self.src_cluster.rebalance_in()
@@ -309,7 +317,7 @@ class nwusage(XDCRNewBaseTest):
         nw_limit = self._input.param("nw_limit", self._get_nwusage_limit())
         self._set_nwusage_limit(self.src_cluster, nw_limit * no_of_nodes)
 
-        gen_create = BlobGenerator('nwOne', 'nwOne', self._value_size, end=self._num_items)
+        gen_create = self._get_generator('nwOne', self._value_size, self._num_items)
         self.src_cluster.load_all_buckets_from_generator(kv_gen=gen_create)
 
         self.src_cluster.rebalance_out()
@@ -328,7 +336,7 @@ class nwusage(XDCRNewBaseTest):
         nw_limit = self._input.param("nw_limit", self._get_nwusage_limit())
         self._set_nwusage_limit(self.src_cluster, nw_limit * self.num_src_nodes)
 
-        gen_create = BlobGenerator('nwOne', 'nwOne', self._value_size, end=self._num_items)
+        gen_create = self._get_generator('nwOne', self._value_size, self._num_items)
         tasks = self.src_cluster.async_load_all_buckets_from_generator(kv_gen=gen_create)
 
         self.sleep(30)
@@ -355,7 +363,7 @@ class nwusage(XDCRNewBaseTest):
 
         self.src_cluster.pause_all_replications()
 
-        gen_create = BlobGenerator('nwOne', 'nwOne', self._value_size, end=self._num_items)
+        gen_create = self._get_generator('nwOne', self._value_size, self._num_items)
         self.src_cluster.load_all_buckets_from_generator(kv_gen=gen_create)
 
         self.src_cluster.resume_all_replications()
@@ -388,7 +396,7 @@ class nwusage(XDCRNewBaseTest):
 
         self.src_cluster.pause_all_replications()
 
-        gen_create = BlobGenerator('nwOne', 'nwOne', self._value_size, end=self._num_items)
+        gen_create = self._get_generator('nwOne', self._value_size, self._num_items)
         self.src_cluster.load_all_buckets_from_generator(kv_gen=gen_create)
 
         self.src_cluster.resume_all_replications()
@@ -432,7 +440,7 @@ class nwusage(XDCRNewBaseTest):
 
         self.src_cluster.pause_all_replications()
 
-        gen_create = BlobGenerator('nwOne', 'nwOne', self._value_size, end=self._num_items)
+        gen_create = self._get_generator('nwOne', self._value_size, self._num_items)
         self.src_cluster.load_all_buckets_from_generator(kv_gen=gen_create)
 
         self.src_cluster.resume_all_replications()
@@ -474,7 +482,7 @@ class nwusage(XDCRNewBaseTest):
 
         self.src_cluster.pause_all_replications()
 
-        gen_create = BlobGenerator('nwOne', 'nwOne', self._value_size, end=self._num_items)
+        gen_create = self._get_generator('nwOne', self._value_size, self._num_items)
         self.src_cluster.load_all_buckets_from_generator(kv_gen=gen_create)
 
         self.src_cluster.resume_all_replications()

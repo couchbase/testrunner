@@ -173,7 +173,7 @@ class Cluster(object):
                                                 scope=scope, collection=collection)
         # Load using java sdk client
         elif not generator.isGenerator():
-            _task = SDKLoadDocumentsTask(server, bucket, generator, pause_secs, timeout_secs)
+            _task = SDKLoadDocumentsTask(server, bucket, generator)
         else:
             _task = LoadDocumentsGeneratorsTask(server, bucket, [generator], kv_store, op_type, exp, flag,
                                                 only_store_hash, batch_size, compression=compression,

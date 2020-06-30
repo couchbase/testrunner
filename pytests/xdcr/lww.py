@@ -1,6 +1,6 @@
 import zlib
 
-from couchbase_helper.documentgenerator import BlobGenerator, DocumentGenerator
+from couchbase_helper.documentgenerator import BlobGenerator, DocumentGenerator, SDKDataLoader
 from .xdcrnewbasetests import XDCRNewBaseTest, FloatingServers
 from .xdcrnewbasetests import NodeHelper
 from membase.api.rest_client import RestConnection
@@ -13,6 +13,7 @@ from membase.helper.cluster_helper import ClusterOperationHelper
 from membase.api.exception import XDCRCheckpointException
 from memcached.helper.data_helper import VBucketAwareMemcached
 from security.rbac_base import RbacBase
+from collection.collections_rest_client import CollectionsRest
 
 
 class Lww(XDCRNewBaseTest):
@@ -40,12 +41,6 @@ class Lww(XDCRNewBaseTest):
             remote_client.log_command_output(output, error)
         if not self.skip_ntp:
             self._disable_ntp()
-
-    def suite_setUp(self):
-        self.log.info("*** Lww: suite_setUp() ***")
-
-    def suite_tearDown(self):
-        self.log.info("*** Lww: suite_tearDown() ***")
 
     def _enable_ntp_and_sync(self, nodes=[], ntp_server="0.north-america.pool.ntp.org"):
         if not nodes:
@@ -122,20 +117,25 @@ class Lww(XDCRNewBaseTest):
                        dst_lww=True,
                        skip_src=False,
                        skip_dst=False):
+        src_rest = RestConnection(self.c1_cluster.get_master_node())
         if not skip_src:
-            src_rest = RestConnection(self.c1_cluster.get_master_node())
             if src_lww:
                 src_rest.create_bucket(bucket=bucket, ramQuotaMB=ramQuotaMB, authType=authType, saslPassword=saslPassword,
                                        replicaNumber=replicaNumber, proxyPort=proxyPort, bucketType=self.bucketType,
                                        replica_index=replica_index, flushEnabled=flushEnabled, evictionPolicy=self.evictionPolicy,
                                        lww=True)
+                self.assertTrue(src_rest.is_lww_enabled(bucket), "LWW not enabled on source bucket")
+                self.log.info("LWW enabled on source bucket as expected")
             else:
                 src_rest.create_bucket(bucket=bucket, ramQuotaMB=ramQuotaMB, authType=authType, saslPassword=saslPassword,
                                        replicaNumber=replicaNumber, proxyPort=proxyPort, bucketType=self.bucketType,
                                        replica_index=replica_index, flushEnabled=flushEnabled, evictionPolicy=self.evictionPolicy)
+                self.assertFalse(src_rest.is_lww_enabled(bucket), "LWW enabled on source bucket")
+                self.log.info("LWW not enabled on source bucket as expected")
             self.c1_cluster.add_bucket(ramQuotaMB=ramQuotaMB, bucket=bucket, authType=authType,
                                        saslPassword=saslPassword, replicaNumber=replicaNumber,
                                        proxyPort=proxyPort, bucketType=self.bucketType, evictionPolicy=self.evictionPolicy)
+
         if not skip_dst:
             dst_rest = RestConnection(self.c2_cluster.get_master_node())
             if dst_lww:
@@ -143,13 +143,42 @@ class Lww(XDCRNewBaseTest):
                                        replicaNumber=replicaNumber, proxyPort=proxyPort, bucketType=self.bucketType,
                                        replica_index=replica_index, flushEnabled=flushEnabled, evictionPolicy=self.evictionPolicy,
                                        lww=True)
+                self.assertTrue(dst_rest.is_lww_enabled(bucket), "LWW not enabled on dest bucket")
+                self.log.info("LWW enabled on dest bucket as expected")
             else:
                 dst_rest.create_bucket(bucket=bucket, ramQuotaMB=ramQuotaMB, authType=authType, saslPassword=saslPassword,
                                        replicaNumber=replicaNumber, proxyPort=proxyPort, bucketType=self.bucketType,
                                        replica_index=replica_index, flushEnabled=flushEnabled, evictionPolicy=self.evictionPolicy)
+                self.assertFalse(src_rest.is_lww_enabled(bucket), "LWW enabled on dest bucket")
+                self.log.info("LWW not enabled on dest bucket as expected")
             self.c2_cluster.add_bucket(ramQuotaMB=ramQuotaMB, bucket=bucket, authType=authType,
                                        saslPassword=saslPassword, replicaNumber=replicaNumber,
                                        proxyPort=proxyPort, bucketType=self.bucketType, evictionPolicy=self.evictionPolicy)
+
+        if self._use_java_sdk:
+            # Only create collections on src cluster
+            self._create_collections(src_rest)
+
+    def _create_collections(self, src_rest):
+        for bucket in src_rest.get_buckets():
+            try:
+                CollectionsRest(self.c1_cluster.get_master_node()).async_create_scope_collection(
+                    self._scope_num, self._collection_num, bucket)
+            except Exception:
+                pass
+
+
+    def load_cluster_buckets(self, cluster=None):
+        if self._use_java_sdk:
+            gen = SDKDataLoader(self._num_items, percent_create=100, key_prefix="lww-")
+        else:
+            gen = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
+        if cluster:
+            cluster.load_all_buckets_from_generator(gen)
+        else:
+            #Load buckets on both src and target clusters
+            self.c1_cluster.load_all_buckets_from_generator(gen)
+            self.c2_cluster.load_all_buckets_from_generator(gen)
 
     def _get_python_sdk_client(self, ip, bucket, cluster):
         try:
@@ -215,128 +244,49 @@ class Lww(XDCRNewBaseTest):
     def test_lww_enable(self):
         src_conn = RestConnection(self.c1_cluster.get_master_node())
         dest_conn = RestConnection(self.c2_cluster.get_master_node())
-
         self._create_buckets(bucket='default', ramQuotaMB=100, src_lww=False, dst_lww=False)
-        self.assertFalse(src_conn.is_lww_enabled(), "LWW enabled on source bucket")
-        self.log.info("LWW not enabled on source bucket as expected")
-        self.assertFalse(dest_conn.is_lww_enabled(), "LWW enabled on dest bucket")
-        self.log.info("LWW not enabled on dest bucket as expected")
-
         src_conn.delete_bucket()
         dest_conn.delete_bucket()
-
         self._create_buckets(bucket='default', ramQuotaMB=100)
-        self.assertTrue(src_conn.is_lww_enabled(), "LWW not enabled on source bucket")
-        self.log.info("LWW enabled on source bucket as expected")
-        self.assertTrue(dest_conn.is_lww_enabled(), "LWW not enabled on dest bucket")
-        self.log.info("LWW enabled on dest bucket as expected")
 
     def test_replication_with_lww_default(self):
         src_conn = RestConnection(self.c1_cluster.get_master_node())
         dest_conn = RestConnection(self.c2_cluster.get_master_node())
-
         self._create_buckets(bucket='default', ramQuotaMB=100)
-        self.assertTrue(src_conn.is_lww_enabled(), "LWW not enabled on source bucket")
-        self.log.info("LWW enabled on source bucket as expected")
-        self.assertTrue(dest_conn.is_lww_enabled(), "LWW not enabled on dest bucket")
-        self.log.info("LWW enabled on dest bucket as expected")
-
-        self.sleep(10)
-
         self.setup_xdcr()
         self.merge_all_buckets()
         self.c1_cluster.pause_all_replications_by_id()
-
-        gen1 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
-        self.c2_cluster.load_all_buckets_from_generator(gen1)
-        gen2 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
-        self.c1_cluster.load_all_buckets_from_generator(gen2)
-
+        self.load_cluster_buckets()
         self.c1_cluster.resume_all_replications_by_id()
-
         self.verify_results()
 
     def test_replication_with_lww_sasl(self):
-        src_conn = RestConnection(self.c1_cluster.get_master_node())
-        dest_conn = RestConnection(self.c2_cluster.get_master_node())
-
         self._create_buckets(bucket='sasl_bucket', ramQuotaMB=100, authType='sasl', saslPassword='password')
-        self.assertTrue(src_conn.is_lww_enabled('sasl_bucket'), "LWW not enabled on source bucket")
-        self.log.info("LWW enabled on source bucket as expected")
-        self.assertTrue(dest_conn.is_lww_enabled('sasl_bucket'), "LWW not enabled on dest bucket")
-        self.log.info("LWW enabled on dest bucket as expected")
-
-        self.sleep(10)
-
         self.setup_xdcr()
         self.merge_all_buckets()
         self.c1_cluster.pause_all_replications_by_id()
-
-        gen1 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
-        self.c2_cluster.load_all_buckets_from_generator(gen1)
-        gen2 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
-        self.c1_cluster.load_all_buckets_from_generator(gen2)
-
+        self.load_cluster_buckets()
         self.c1_cluster.resume_all_replications_by_id()
-
         self.verify_results()
 
     def test_replication_with_lww_standard(self):
-        src_conn = RestConnection(self.c1_cluster.get_master_node())
-        dest_conn = RestConnection(self.c2_cluster.get_master_node())
-
         self._create_buckets(bucket='standard_bucket', ramQuotaMB=100, proxyPort=STANDARD_BUCKET_PORT)
-        self.assertTrue(src_conn.is_lww_enabled('standard_bucket'), "LWW not enabled on source bucket")
-        self.log.info("LWW enabled on source bucket as expected")
-        self.assertTrue(dest_conn.is_lww_enabled('standard_bucket'), "LWW not enabled on dest bucket")
-        self.log.info("LWW enabled on dest bucket as expected")
-
-        self.sleep(10)
-
         self.setup_xdcr()
         self.merge_all_buckets()
         self.c1_cluster.pause_all_replications_by_id()
-
-        gen1 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
-        self.c2_cluster.load_all_buckets_from_generator(gen1)
-        gen2 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
-        self.c1_cluster.load_all_buckets_from_generator(gen2)
-
+        self.load_cluster_buckets()
         self.c1_cluster.resume_all_replications_by_id()
-
         self.verify_results()
 
     def test_replication_with_lww_and_no_lww(self):
-        src_conn = RestConnection(self.c1_cluster.get_master_node())
-        dest_conn = RestConnection(self.c2_cluster.get_master_node())
-
         self._create_buckets(bucket='lww', ramQuotaMB=100, proxyPort=STANDARD_BUCKET_PORT)
-        self.assertTrue(src_conn.is_lww_enabled(bucket='lww'), "LWW not enabled on source bucket")
-        self.log.info("LWW enabled on source bucket as expected")
-        self.assertTrue(dest_conn.is_lww_enabled(bucket='lww'), "LWW not enabled on dest bucket")
-        self.log.info("LWW enabled on dest bucket as expected")
-
-
         self._create_buckets(bucket='nolww', ramQuotaMB=100, proxyPort=STANDARD_BUCKET_PORT + 1, src_lww=False,
                             dst_lww=False)
-        self.assertFalse(src_conn.is_lww_enabled(bucket='nolww'), "LWW enabled on source bucket")
-        self.log.info("LWW not enabled on source bucket as expected")
-        self.assertFalse(dest_conn.is_lww_enabled(bucket='nolww'), "LWW enabled on dest bucket")
-        self.log.info("LWW not enabled on dest bucket as expected")
-
-        self.sleep(10)
-
         self.setup_xdcr()
         self.merge_all_buckets()
         self.c1_cluster.pause_all_replications_by_id()
-
-        gen1 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
-        self.c2_cluster.load_all_buckets_from_generator(gen1)
-        gen2 = BlobGenerator("lww-", "lww-", self._value_size, end=self._num_items)
-        self.c1_cluster.load_all_buckets_from_generator(gen2)
-
+        self.load_cluster_buckets()
         self.c1_cluster.resume_all_replications_by_id()
-
         self.verify_results()
 
     def test_seq_upd_on_uni_with_src_wins(self):
@@ -344,20 +294,8 @@ class Lww(XDCRNewBaseTest):
         dest_conn = RestConnection(self.c2_cluster.get_master_node())
 
         self._create_buckets(bucket='lww', ramQuotaMB=100, proxyPort=STANDARD_BUCKET_PORT)
-        self.assertTrue(src_conn.is_lww_enabled(bucket='lww'), "LWW not enabled on source bucket")
-        self.log.info("LWW enabled on source bucket as expected")
-        self.assertTrue(dest_conn.is_lww_enabled(bucket='lww'), "LWW not enabled on dest bucket")
-        self.log.info("LWW enabled on dest bucket as expected")
-
         self._create_buckets(bucket='nolww', ramQuotaMB=100, proxyPort=STANDARD_BUCKET_PORT + 1, src_lww=False,
                             dst_lww=False)
-        self.assertFalse(src_conn.is_lww_enabled(bucket='nolww'), "LWW enabled on source bucket")
-        self.log.info("LWW not enabled on source bucket as expected")
-        self.assertFalse(dest_conn.is_lww_enabled(bucket='nolww'), "LWW enabled on dest bucket")
-        self.log.info("LWW not enabled on dest bucket as expected")
-
-        self.sleep(30)
-
         src_lww = self._get_python_sdk_client(self.c1_cluster.get_master_node().ip, 'lww', self.c1_cluster)
         self.sleep(10)
         src_nolww = self._get_python_sdk_client(self.c1_cluster.get_master_node().ip, 'nolww', self.c1_cluster)
@@ -366,12 +304,10 @@ class Lww(XDCRNewBaseTest):
         self.sleep(10)
         dest_nolww = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'nolww', self.c2_cluster)
         self.sleep(10)
-
         self.setup_xdcr()
         self.merge_all_buckets()
         self.c1_cluster.pause_all_replications_by_id()
         self.sleep(10)
-
         gen = DocumentGenerator('lww', '{{"key":"value"}}', list(range(100)), start=0, end=1)
         self.c2_cluster.load_all_buckets_from_generator(gen)
         self.sleep(10)
@@ -406,26 +342,12 @@ class Lww(XDCRNewBaseTest):
         dest_conn = RestConnection(self.c2_cluster.get_master_node())
 
         self._create_buckets(bucket='lww', ramQuotaMB=100, proxyPort=STANDARD_BUCKET_PORT)
-        self.assertTrue(src_conn.is_lww_enabled(bucket='lww'), "LWW not enabled on source bucket")
-        self.log.info("LWW enabled on source bucket as expected")
-        self.assertTrue(dest_conn.is_lww_enabled(bucket='lww'), "LWW not enabled on dest bucket")
-        self.log.info("LWW enabled on dest bucket as expected")
-
         self._create_buckets(bucket='nolww', ramQuotaMB=100, proxyPort=STANDARD_BUCKET_PORT + 1, src_lww=False,
                             dst_lww=False)
-        self.assertFalse(src_conn.is_lww_enabled(bucket='nolww'), "LWW enabled on source bucket")
-        self.log.info("LWW not enabled on source bucket as expected")
-        self.assertFalse(dest_conn.is_lww_enabled(bucket='nolww'), "LWW enabled on dest bucket")
-        self.log.info("LWW not enabled on dest bucket as expected")
-
-        self.sleep(10)
-
         self.setup_xdcr()
         self.merge_all_buckets()
         self.c1_cluster.pause_all_replications_by_id()
-
         self.sleep(30)
-
         src_lww = self._get_python_sdk_client(self.c1_cluster.get_master_node().ip, 'lww', self.c1_cluster)
         self.sleep(10)
         src_nolww = self._get_python_sdk_client(self.c1_cluster.get_master_node().ip, 'nolww', self.c1_cluster)
