@@ -24,12 +24,6 @@ class unidirectional(XDCRNewBaseTest):
     def tearDown(self):
         super(unidirectional, self).tearDown()
 
-    # def suite_setUp(self):
-    #     self.log.info("*** unidirectional: suite_setUp() ***")
-    #
-    # def suite_tearDown(self):
-    #     self.log.info("*** unidirectional: suite_tearDown() ***")
-
     """Testing Unidirectional load( Loading only at source) Verifying whether XDCR replication is successful on
     subsequent destination clusters.Create/Update/Delete operations are performed based on doc-ops specified by the user. """
 
@@ -686,11 +680,11 @@ class unidirectional(XDCRNewBaseTest):
 
         # check logs for traces of retry attempts
         for node in self.src_cluster.get_nodes():
-            count1 = NodeHelper.check_goxdcr_log(
+            _, count1 = NodeHelper.check_goxdcr_log(
                             node,
                             "Failed to repair connections to target cluster",
                             goxdcr_log)
-            count2 = NodeHelper.check_goxdcr_log(
+            _, count2 = NodeHelper.check_goxdcr_log(
                             node,
                             "Failed to set up connections to target cluster",
                             goxdcr_log)
@@ -720,7 +714,7 @@ class unidirectional(XDCRNewBaseTest):
         self.sleep(300)
 
         for node in self.src_cluster.get_nodes():
-            count = NodeHelper.check_goxdcr_log(
+            _, count = NodeHelper.check_goxdcr_log(
                             node,
                             "batchGetMeta received fatal error and had to abort",
                             goxdcr_log)
@@ -740,7 +734,7 @@ class unidirectional(XDCRNewBaseTest):
             task.result()
 
         for node in self.src_cluster.get_nodes():
-            count = NodeHelper.check_goxdcr_log(
+            _, count = NodeHelper.check_goxdcr_log(
                             node,
                             "batchGetMeta received fatal error and had to abort",
                             goxdcr_log)
@@ -786,7 +780,7 @@ class unidirectional(XDCRNewBaseTest):
         self._wait_for_replication_to_catchup()
 
         for node in self.src_cluster.get_nodes():
-            count = NodeHelper.check_goxdcr_log(
+            _, count = NodeHelper.check_goxdcr_log(
                             node,
                             "counter .+ goes backward, maybe due to the pipeline is restarted",
                             goxdcr_log)
@@ -902,7 +896,7 @@ class unidirectional(XDCRNewBaseTest):
                         "Mutations in source cluster not replicated to target after rollback")
         self.log.info("Mutations in source cluster replicated to target after rollback")
 
-        count = NodeHelper.check_goxdcr_log(
+        _, count = NodeHelper.check_goxdcr_log(
                         nodes[0],
                         "Received rollback from DCP stream",
                         goxdcr_log, timeout=60)
@@ -920,7 +914,7 @@ class unidirectional(XDCRNewBaseTest):
             task.result()
 
         for node in self.src_cluster.get_nodes():
-            count = NodeHelper.check_goxdcr_log(
+            _, count = NodeHelper.check_goxdcr_log(
                 node,
                 "Can't move update state from",
                 goxdcr_log)

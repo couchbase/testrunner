@@ -2902,7 +2902,7 @@ class XDCRNewBaseTest(unittest.TestCase):
                      + '/goxdcr.log*'
             self.__error_count_dict[node.ip] = {}
             for error in self.__report_error_list:
-                self.__error_count_dict[node.ip][error] = \
+                _, self.__error_count_dict[node.ip][error] = \
                     NodeHelper.check_goxdcr_log(node, error, goxdcr_log)
         self.log.info(self.__error_count_dict)
 
@@ -3551,7 +3551,7 @@ class XDCRNewBaseTest(unittest.TestCase):
                 goxdcr_log = NodeHelper.get_goxdcr_log_dir(node)\
                      + '/goxdcr.log*'
             for error in self.__report_error_list:
-                new_error_count = NodeHelper.check_goxdcr_log(node,
+                _, new_error_count = NodeHelper.check_goxdcr_log(node,
                                                               error,
                                                               goxdcr_log)
                 self.log.info("Initial {0} count on {1} :{2}, now :{3}".

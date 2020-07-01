@@ -312,23 +312,23 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRNewBaseTest):
             goxdcr_log = NodeHelper.get_goxdcr_log_dir(self._input.servers[0])\
                      + '/goxdcr.log*'
             for node in self.src_cluster.get_nodes():
-                count1 =  NodeHelper.check_goxdcr_log(
+                _, count1 =  NodeHelper.check_goxdcr_log(
                             node,
                             "Received error response from memcached in target cluster",
                             goxdcr_log)
-                count2 = NodeHelper.check_goxdcr_log(
+                _, count2 = NodeHelper.check_goxdcr_log(
                             node,
                             "EINVAL",
                             goxdcr_log)
-                count3 = NodeHelper.check_goxdcr_log(
+                _, count3 = NodeHelper.check_goxdcr_log(
                             node,
                             "Failed to repair connections to target cluster",
                             goxdcr_log)
-                count4 = NodeHelper.check_goxdcr_log(
+                _, count4 = NodeHelper.check_goxdcr_log(
                     node,
                     "received error response from setMeta client. Repairing connection. response status=EINVAL",
                     goxdcr_log)
-                count5 = NodeHelper.check_goxdcr_log(
+                _, count5 = NodeHelper.check_goxdcr_log(
                     node,
                     "GOGC in new global setting is 0, which is not a valid value and can only have come from "
                     "upgrade. Changed it to 100 instead.",
@@ -342,10 +342,10 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRNewBaseTest):
                 self.assertEqual(count5, 0, "GOGC reset to 0 during upgrade in " + str(node.ip))
 
     def is_goxdcr_migration_successful(self, server):
-        count = NodeHelper.check_goxdcr_log(server,
+        _, count = NodeHelper.check_goxdcr_log(server,
                                 "Starting to migrate xdcr metadata")
         if count > 0:
-            count = NodeHelper.check_goxdcr_log(server,
+            _, count = NodeHelper.check_goxdcr_log(server,
                                 "Metadata migration completed without errors")
             self.log.info(count)
             if count == 1:
@@ -358,7 +358,7 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRNewBaseTest):
     def is_ssl_over_memcached(self, master):
         self.sleep(60)
         goxdcr_log = NodeHelper.get_goxdcr_log_dir(master) + '/goxdcr.log*'
-        count = NodeHelper.check_goxdcr_log(master, "Trying to create a ssl over memcached connection", goxdcr_log, timeout=60)
+        _, count = NodeHelper.check_goxdcr_log(master, "Trying to create a ssl over memcached connection", goxdcr_log, timeout=60)
         if count == 0:
             if NodeHelper.check_goxdcr_log(master,
                     "Get or create ssl over proxy connection", goxdcr_log, timeout=60):
@@ -521,23 +521,23 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRNewBaseTest):
             goxdcr_log = NodeHelper.get_goxdcr_log_dir(self._input.servers[0])\
                      + '/goxdcr.log*'
             for node in self.src_cluster.get_nodes():
-                count1 =  NodeHelper.check_goxdcr_log(
+                _, count1 =  NodeHelper.check_goxdcr_log(
                             node,
                             "Received error response from memcached in target cluster",
                             goxdcr_log)
-                count2 = NodeHelper.check_goxdcr_log(
+                _, count2 = NodeHelper.check_goxdcr_log(
                             node,
                             "EINVAL",
                             goxdcr_log)
-                count3 = NodeHelper.check_goxdcr_log(
+                _, count3 = NodeHelper.check_goxdcr_log(
                             node,
                             "Failed to repair connections to target cluster",
                             goxdcr_log)
-                count4 = NodeHelper.check_goxdcr_log(
+                _, count4 = NodeHelper.check_goxdcr_log(
                     node,
                     "received error response from setMeta client. Repairing connection. response status=EINVAL",
                     goxdcr_log)
-                count5 = NodeHelper.check_goxdcr_log(
+                _, count5 = NodeHelper.check_goxdcr_log(
                     node,
                     "GOGC in new global setting is 0, which is not a valid value and can only have come from "
                     "upgrade. Changed it to 100 instead.",
@@ -632,23 +632,23 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRNewBaseTest):
             goxdcr_log = NodeHelper.get_goxdcr_log_dir(self._input.servers[0])\
                      + '/goxdcr.log*'
             for node in self.src_cluster.get_nodes():
-                count1 =  NodeHelper.check_goxdcr_log(
+                _, count1 =  NodeHelper.check_goxdcr_log(
                             node,
                             "Received error response from memcached in target cluster",
                             goxdcr_log)
-                count2 = NodeHelper.check_goxdcr_log(
+                _, count2 = NodeHelper.check_goxdcr_log(
                             node,
                             "EINVAL",
                             goxdcr_log)
-                count3 = NodeHelper.check_goxdcr_log(
+                _, count3 = NodeHelper.check_goxdcr_log(
                             node,
                             "Failed to repair connections to target cluster",
                             goxdcr_log)
-                count4 = NodeHelper.check_goxdcr_log(
+                _, count4 = NodeHelper.check_goxdcr_log(
                     node,
                     "received error response from setMeta client. Repairing connection. response status=EINVAL",
                     goxdcr_log)
-                count5 = NodeHelper.check_goxdcr_log(
+                _, count5 = NodeHelper.check_goxdcr_log(
                     node,
                     "GOGC in new global setting is 0, which is not a valid value and can only have come from "
                     "upgrade. Changed it to 100 instead.",
@@ -859,23 +859,23 @@ class UpgradeTests(NewUpgradeBaseTest, XDCRNewBaseTest):
             goxdcr_log = NodeHelper.get_goxdcr_log_dir(self._input.servers[0])\
                      + '/goxdcr.log*'
             for node in self.src_cluster.get_nodes():
-                count1 =  NodeHelper.check_goxdcr_log(
-                            node,
+                _, count1 =  NodeHelper.check_goxdcr_log(
+                             node,
                             "Received error response from memcached in target cluster",
                             goxdcr_log)
-                count2 = NodeHelper.check_goxdcr_log(
+                _, count2 = NodeHelper.check_goxdcr_log(
                             node,
                             "EINVAL",
                             goxdcr_log)
-                count3 = NodeHelper.check_goxdcr_log(
+                _, count3 = NodeHelper.check_goxdcr_log(
                             node,
                             "Failed to repair connections to target cluster",
                             goxdcr_log)
-                count4 = NodeHelper.check_goxdcr_log(
+                _, count4 = NodeHelper.check_goxdcr_log(
                             node,
                             "received error response from setMeta client. Repairing connection. response status=EINVAL",
                             goxdcr_log)
-                count5 = NodeHelper.check_goxdcr_log(
+                _, count5 = NodeHelper.check_goxdcr_log(
                             node,
                             "GOGC in new global setting is 0, which is not a valid value and can only have come from "
                             "upgrade. Changed it to 100 instead.",

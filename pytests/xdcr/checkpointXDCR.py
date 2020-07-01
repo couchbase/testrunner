@@ -312,7 +312,7 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
     def mutate_and_check_error404(self, n=1):
         # get vb0 active source node
         active_src_node = self.get_active_vb0_node(self.src_master)
-        num_404_errors_before_load = NodeHelper.check_goxdcr_log(
+        _, num_404_errors_before_load = NodeHelper.check_goxdcr_log(
                                             active_src_node,
                                             "ERRO GOXDCR.CheckpointMgr: GetRemoteMemcachedConnection Operation failed after max retries",
                                             timeout=30, print_matches=False)
@@ -320,7 +320,7 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
         self.log.info("################ New mutation:{0} ##################".format(self.key_counter+1))
         self.load_one_mutation_into_source_vb0(active_src_node)
         self.sleep(5)
-        num_404_errors_after_load = NodeHelper.check_goxdcr_log(
+        _, num_404_errors_after_load = NodeHelper.check_goxdcr_log(
                                             active_src_node,
                                             "ERRO GOXDCR.CheckpointMgr: GetRemoteMemcachedConnection Operation failed after max retries",
                                             timeout=30, print_matches=False)
@@ -617,14 +617,14 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
 
         goxdcr_log = NodeHelper.get_goxdcr_log_dir(self._input.servers[0]) \
                      + '/goxdcr.log*'
-        count1 = NodeHelper.check_goxdcr_log(
+        _, count1 = NodeHelper.check_goxdcr_log(
             nodes[0],
             "Received rollback from DCP stream",
             goxdcr_log,
             timeout=30, print_matches=False)
         self.assertGreater(count1, 0, "full rollback not received from DCP as expected")
         self.log.info("full rollback received from DCP as expected")
-        count2 = NodeHelper.check_goxdcr_log(
+        _, count2 = NodeHelper.check_goxdcr_log(
             nodes[0],
             "Rolled back startSeqno to 0",
             goxdcr_log,

@@ -293,7 +293,7 @@ class Capi(XDCRNewBaseTest, NewUpgradeBaseTest):
         goxdcr_log = NodeHelper.get_goxdcr_log_dir(self.src_master) \
                      + '/goxdcr.log*'
         for node in self.src_cluster.get_nodes():
-            count = NodeHelper.check_goxdcr_log(
+            _, count = NodeHelper.check_goxdcr_log(
                 node,
                 "malformed HTTP response",
                 goxdcr_log)

@@ -19,12 +19,6 @@ class Rebalance(XDCRNewBaseTest):
     def tearDown(self):
         super(Rebalance, self).tearDown()
 
-    def suite_setUp(self):
-        self.log.info("*** Rebalance: suite_setUp() ***")
-
-    def suite_tearDown(self):
-        self.log.info("*** Rebalance: suite_tearDown() ***")
-
     """Load data only at source for unidirectional, and at both source/destination for bidirection replication.
     Async Rebalance-In node at Source/Destination while
     Create/Update/Delete are performed in parallel based on doc-ops specified by the user.
