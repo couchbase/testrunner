@@ -25,10 +25,9 @@ class SecondaryIndexDGMTests(BaseSecondaryIndexingTests):
         self.initial_index_number = self.input.param("initial_index_number", 5)
         for x in range(self.initial_index_number):
             index_name = "index_name_" + str(x)
-            query_definition = QueryDefinition(
-                index_name=index_name, index_fields=["VMs"],
-                query_template="SELECT * FROM %s ", groups=["simple"],
-                index_where_clause = " VMs IS NOT NULL ")
+            query_definition = QueryDefinition(index_name=index_name, index_fields=["VMs"],
+                                               query_template="SELECT * FROM %s ", groups=["simple"],
+                                               index_where_clause=" VMs IS NOT NULL ")
             self.load_query_definitions.append(query_definition)
         if self.load_query_definitions:
             self.multi_create_index(buckets=self.buckets,
@@ -307,18 +306,14 @@ class SecondaryIndexDGMTests(BaseSecondaryIndexingTests):
             self.multi_query_using_index()
         query_definitions = []
 
-        query_definitions.append(QueryDefinition(
-            index_name="lru_job_title", index_fields=["job_title"],
-            query_template="SELECT * FROM %s WHERE {0}".format(
-                " %s " % "job_title = \"Engineer\" ORDER BY _id"),
-            groups = ["employee"],
-            index_where_clause=" job_title IS NOT NULL "))
-        query_definitions.append(QueryDefinition(
-            index_name="lru_join_yr", index_fields=["join_yr"],
-            query_template="SELECT * FROM %s WHERE {0}".format(
-                " %s " % "join_yr = 2008  ORDER BY _id"),
-            groups = ["employee"],
-            index_where_clause=" join_yr IS NOT NULL "))
+        query_definitions.append(QueryDefinition(index_name="lru_job_title", index_fields=["job_title"],
+                                                 query_template="SELECT * FROM %s WHERE {0}".format(
+                                                     " %s " % "job_title = \"Engineer\" ORDER BY _id"),
+                                                 groups=["employee"], index_where_clause=" job_title IS NOT NULL "))
+        query_definitions.append(QueryDefinition(index_name="lru_join_yr", index_fields=["join_yr"],
+                                                 query_template="SELECT * FROM %s WHERE {0}".format(
+                                                     " %s " % "join_yr = 2008  ORDER BY _id"), groups=["employee"],
+                                                 index_where_clause=" join_yr IS NOT NULL "))
         cache_misses = {}
         for bucket in self.buckets:
             if bucket.name not in list(cache_misses.keys()):

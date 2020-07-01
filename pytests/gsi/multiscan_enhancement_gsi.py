@@ -26,12 +26,11 @@ class SecondaryIndexingMultiscanTests(BaseSecondaryIndexingTests):
 
     def test_simple_index_seek(self):
         failed_scans = []
-        query_definition = QueryDefinition(
-            index_name="name_index", index_fields=["name"],
-            query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s " %
-                                                      "name > \"Adara\" AND "
-                                                      "name < \"Winta\" ORDER BY _id"),
-            groups=["simple"], index_where_clause=" name IS NOT NULL ")
+        query_definition = QueryDefinition(index_name="name_index", index_fields=["name"],
+                                           query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s " %
+                                                                                     "name > \"Adara\" AND "
+                                                                                     "name < \"Winta\" ORDER BY _id"),
+                                           groups=["simple"], index_where_clause=" name IS NOT NULL ")
         scan_contents = []
         scan_contents.append([{"Seek": None}])
         scan_contents.append([{"Seek": ["Kala"]}])
@@ -60,12 +59,11 @@ class SecondaryIndexingMultiscanTests(BaseSecondaryIndexingTests):
     # This test is failing because of MB-30274
     def test_simple_index_multiple_seek(self):
         failed_scans = []
-        query_definition = QueryDefinition(
-            index_name="name_index", index_fields=["name"],
-            query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s " %
-                                                      "name > \"Adara\" AND "
-                                                      "name < \"Winta\" ORDER BY _id"),
-            groups=["simple"], index_where_clause=" name IS NOT NULL ")
+        query_definition = QueryDefinition(index_name="name_index", index_fields=["name"],
+                                           query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s " %
+                                                                                     "name > \"Adara\" AND "
+                                                                                     "name < \"Winta\" ORDER BY _id"),
+                                           groups=["simple"], index_where_clause=" name IS NOT NULL ")
         scan_contents = []
         scan_contents.append([{"Seek": None}, {"Seek": None}])
         scan_contents.append([{"Seek": None}, {"Seek": ["Kala"]}])
@@ -117,12 +115,11 @@ class SecondaryIndexingMultiscanTests(BaseSecondaryIndexingTests):
 
     def test_simple_index_filter(self):
         failed_scans = []
-        query_definition = QueryDefinition(
-            index_name="name_index", index_fields=["name"],
-            query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s " %
-                                                      "name > \"Adara\" AND "
-                                                      "name < \"Winta\" ORDER BY _id"),
-            groups=["simple"], index_where_clause=" name IS NOT NULL ")
+        query_definition = QueryDefinition(index_name="name_index", index_fields=["name"],
+                                           query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s " %
+                                                                                     "name > \"Adara\" AND "
+                                                                                     "name < \"Winta\" ORDER BY _id"),
+                                           groups=["simple"], index_where_clause=" name IS NOT NULL ")
         scan_contents = []
         scan_contents.append([{"Filter":[{"Low":"Adara", "High":"Winta"}]}])
         scan_contents.append([{"Filter":[{"Low":"Adara", "High":"Winta"}]}])
@@ -164,12 +161,11 @@ class SecondaryIndexingMultiscanTests(BaseSecondaryIndexingTests):
 
     def test_simple_index_multiple_filter_spans(self):
         failed_scans = []
-        query_definition = QueryDefinition(
-            index_name="name_index", index_fields=["name"],
-            query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s " %
-                                                      "name > \"Adara\" AND "
-                                                      "name < \"Winta\" ORDER BY _id"),
-            groups=["simple"], index_where_clause=" name IS NOT NULL ")
+        query_definition = QueryDefinition(index_name="name_index", index_fields=["name"],
+                                           query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s " %
+                                                                                     "name > \"Adara\" AND "
+                                                                                     "name < \"Winta\" ORDER BY _id"),
+                                           groups=["simple"], index_where_clause=" name IS NOT NULL ")
         scan_contents = []
         scan_contents.append([{"Filter":[{"Low":"Adara", "High":"Callia"}]},
                               {"Filter":[{"Low": "Kala", "High": "Winta"}]}])
@@ -213,13 +209,12 @@ class SecondaryIndexingMultiscanTests(BaseSecondaryIndexingTests):
 
     def test_two_field_composite_index_seek(self):
         failed_scans = []
-        query_definition = QueryDefinition(
-            index_name="name_index", index_fields=["name", "age"],
-            query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s " %
-                                                      "name < \"Winta\""
-                                                      "AND age > 0 AND age "
-                                                      "< 100 ORDER BY _id"),
-            groups=["two_field_index"], index_where_clause=" name IS NOT NULL ")
+        query_definition = QueryDefinition(index_name="name_index", index_fields=["name", "age"],
+                                           query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s " %
+                                                                                     "name < \"Winta\""
+                                                                                     "AND age > 0 AND age "
+                                                                                     "< 100 ORDER BY _id"),
+                                           groups=["two_field_index"], index_where_clause=" name IS NOT NULL ")
         scan_contents = []
         scan_contents.append([{"Seek": ["Kacila", 58]}])
         scan_contents.append([{"Seek": None}])
@@ -256,14 +251,13 @@ class SecondaryIndexingMultiscanTests(BaseSecondaryIndexingTests):
 
     def test_two_field_composite_index_basic_filter(self):
         failed_scans = []
-        query_definition = QueryDefinition(
-            index_name="two_field_composite_name_age", index_fields=["name", "age"],
-            query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s " %
-                                                      "name > \"Callia\" AND "
-                                                      "name < \"Kala\""
-                                                      "AND age > 0 AND age "
-                                                      "< 100 ORDER BY _id"),
-            groups=["two_field_index"], index_where_clause=" name IS NOT NULL ")
+        query_definition = QueryDefinition(index_name="two_field_composite_name_age", index_fields=["name", "age"],
+                                           query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s " %
+                                                                                     "name > \"Callia\" AND "
+                                                                                     "name < \"Kala\""
+                                                                                     "AND age > 0 AND age "
+                                                                                     "< 100 ORDER BY _id"),
+                                           groups=["two_field_index"], index_where_clause=" name IS NOT NULL ")
         scan_contents = []
         scan_contents.append([{"Seek": None, "Filter":[{"Low":"Callia", "High":"Kala"},
                                                  {"Low":40, "High":70}]}])
@@ -311,16 +305,13 @@ class SecondaryIndexingMultiscanTests(BaseSecondaryIndexingTests):
 
     def test_two_field_composite_index_unbounded_filter(self):
         failed_scans = []
-        query_definition = QueryDefinition(
-             index_name="two_field_composite_name_age",
-             index_fields=["name", "age"],
-             query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s " %
-                                                      "name > \"Adara\" AND "
-                                                      "name < \"Winta\""
-                                                      "AND age > 0 AND age "
-                                                      "< 100 ORDER BY _id"),
-             groups=["two_field_index"],
-             index_where_clause=" name IS NOT NULL ")
+        query_definition = QueryDefinition(index_name="two_field_composite_name_age", index_fields=["name", "age"],
+                                           query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s " %
+                                                                                     "name > \"Adara\" AND "
+                                                                                     "name < \"Winta\""
+                                                                                     "AND age > 0 AND age "
+                                                                                     "< 100 ORDER BY _id"),
+                                           groups=["two_field_index"], index_where_clause=" name IS NOT NULL ")
         scan_contents = []
         scan_contents.append([{"Filter":[{"Low": NULL_STRING, "High":"Winta"},
                                         {"Low":30, "High":50}]}])
@@ -378,16 +369,13 @@ class SecondaryIndexingMultiscanTests(BaseSecondaryIndexingTests):
 
     def test_two_field_composite_index_null_filter(self):
         failed_scans = []
-        query_definition = QueryDefinition(
-             index_name="two_field_composite_name_age",
-             index_fields=["name", "age"],
-             query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s " %
-                                                      "name > \"Adara\" AND "
-                                                      "name < \"Winta\""
-                                                      "AND age > 0 AND age "
-                                                      "< 100 ORDER BY _id"),
-             groups=["two_field_index"],
-             index_where_clause=" name IS NOT NULL ")
+        query_definition = QueryDefinition(index_name="two_field_composite_name_age", index_fields=["name", "age"],
+                                           query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s " %
+                                                                                     "name > \"Adara\" AND "
+                                                                                     "name < \"Winta\""
+                                                                                     "AND age > 0 AND age "
+                                                                                     "< 100 ORDER BY _id"),
+                                           groups=["two_field_index"], index_where_clause=" name IS NOT NULL ")
         scan_contents = []
         scan_contents.append([{"Filter":[{"Low": None, "High":"Winta"},
                                         {"Low":30, "High":50}]}])
@@ -445,14 +433,13 @@ class SecondaryIndexingMultiscanTests(BaseSecondaryIndexingTests):
 
     def test_two_field_composite_index_filter_empty_results(self):
         failed_scans = []
-        query_definition = QueryDefinition(
-            index_name="two_field_composite_name_age", index_fields=["name", "age"],
-            query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s " %
-                                                      "name > \"Callia\" AND "
-                                                      "name < \"Kala\""
-                                                      "AND age > 0 AND age "
-                                                      "< 100 ORDER BY _id"),
-            groups=["two_field_index"], index_where_clause=" name IS NOT NULL ")
+        query_definition = QueryDefinition(index_name="two_field_composite_name_age", index_fields=["name", "age"],
+                                           query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s " %
+                                                                                     "name > \"Callia\" AND "
+                                                                                     "name < \"Kala\""
+                                                                                     "AND age > 0 AND age "
+                                                                                     "< 100 ORDER BY _id"),
+                                           groups=["two_field_index"], index_where_clause=" name IS NOT NULL ")
         scan_contents = []
         scan_contents.append([{"Seek": None, "Filter":[{"Low":"Callia", "High":"Kala"},
                                                  {"Low":40, "High":70}]}])
@@ -500,14 +487,13 @@ class SecondaryIndexingMultiscanTests(BaseSecondaryIndexingTests):
 
     def test_name_age_composite_index_seek_filter(self):
         failed_scans = []
-        query_definition = QueryDefinition(
-            index_name="two_field_composite_name_age", index_fields=["name", "age"],
-            query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s " %
-                                                      "name > \"Adara\" AND "
-                                                      "name < \"Winta\""
-                                                      "AND age > 0 AND age "
-                                                      "< 100 ORDER BY _id"),
-            groups=["two_field_index"], index_where_clause=" name IS NOT NULL ")
+        query_definition = QueryDefinition(index_name="two_field_composite_name_age", index_fields=["name", "age"],
+                                           query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s " %
+                                                                                     "name > \"Adara\" AND "
+                                                                                     "name < \"Winta\""
+                                                                                     "AND age > 0 AND age "
+                                                                                     "< 100 ORDER BY _id"),
+                                           groups=["two_field_index"], index_where_clause=" name IS NOT NULL ")
         scan_content = [{"Seek": ["Kimberly", 58],
                               "Filter":[{"Low":"A", "High":"Z"},
                                         {"Low":50, "High":50}]}]
@@ -543,17 +529,13 @@ class SecondaryIndexingMultiscanTests(BaseSecondaryIndexingTests):
 
     def test_name_age_composite_index_empty_second_filter(self):
         failed_scans = []
-        query_definition = QueryDefinition(
-             index_name="two_field_composite_name_age",
-             index_fields=["name", "age"],
-             query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s " %
-                                                      "name > \"Adara\" AND "
-                                                      "name < \"Winta\""
-                                                      "AND age > 0 AND age "
-                                                      "< 100 ORDER BY _id"),
-
-             groups=["two_field_index"],
-             index_where_clause=" name IS NOT NULL ")
+        query_definition = QueryDefinition(index_name="two_field_composite_name_age", index_fields=["name", "age"],
+                                           query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s " %
+                                                                                     "name > \"Adara\" AND "
+                                                                                     "name < \"Winta\""
+                                                                                     "AND age > 0 AND age "
+                                                                                     "< 100 ORDER BY _id"),
+                                           groups=["two_field_index"], index_where_clause=" name IS NOT NULL ")
         scan_content = [{"Filter":[{"Low": "M", "High": "Z"}, {}]}]
         for bucket in self.buckets:
             id_map = self.create_index_using_rest(bucket, query_definition)
@@ -577,10 +559,10 @@ class SecondaryIndexingMultiscanTests(BaseSecondaryIndexingTests):
 
     def test_name_age_distinct_array_composite_index(self):
         failed_scans = []
-        query_definition = QueryDefinition(
-            index_name="two_field_composite_travel_history_age",
-            index_fields=["DISTINCT ARRAY t FOR t in TO_ARRAY(`travel_history`) END", "age"],
-            groups=["two_field_index"], index_where_clause=" name IS NOT NULL ")
+        query_definition = QueryDefinition(index_name="two_field_composite_travel_history_age",
+                                           index_fields=["DISTINCT ARRAY t FOR t in TO_ARRAY(`travel_history`) END",
+                                                         "age"], groups=["two_field_index"],
+                                           index_where_clause=" name IS NOT NULL ")
         scan_contents = []
         #Basic Scan
         scan_contents.append([{"Seek": None,
@@ -612,10 +594,9 @@ class SecondaryIndexingMultiscanTests(BaseSecondaryIndexingTests):
 
     def test_name_age_all_array_composite_index(self):
         failed_scans = []
-        query_definition = QueryDefinition(
-            index_name="two_field_composite_travel_history_age",
-            index_fields=["ALL ARRAY t FOR t in TO_ARRAY(`travel_history`) END", "age"],
-            groups=["two_field_index"], index_where_clause=" name IS NOT NULL ")
+        query_definition = QueryDefinition(index_name="two_field_composite_travel_history_age",
+                                           index_fields=["ALL ARRAY t FOR t in TO_ARRAY(`travel_history`) END", "age"],
+                                           groups=["two_field_index"], index_where_clause=" name IS NOT NULL ")
         #Basic Scan
         scan_content = [{"Seek": None,
                          "Filter":[{"Low":"India", "High":"US"},
@@ -645,10 +626,9 @@ class SecondaryIndexingMultiscanTests(BaseSecondaryIndexingTests):
 
     def test_name_age_premium_customer_composite_index(self):
         failed_scans = []
-        query_definition = QueryDefinition(
-            index_name="three_field_composite_name_age",
-            index_fields=["name", "age", "premium_customer"],
-            groups=["two_field_index"], index_where_clause=" name IS NOT NULL ")
+        query_definition = QueryDefinition(index_name="three_field_composite_name_age",
+                                           index_fields=["name", "age", "premium_customer"], groups=["two_field_index"],
+                                           index_where_clause=" name IS NOT NULL ")
         #Basic Scan
         scan_content = [{"Seek": None,
                              "Filter":[{"Low":"India", "High":"US"},
@@ -682,14 +662,13 @@ class SecondaryIndexingMultiscanTests(BaseSecondaryIndexingTests):
 
     def test_two_field_composite_index_multiple_nonoverlapping_scans(self):
         failed_scans = []
-        query_definition = QueryDefinition(
-            index_name="two_field_composite_name_age", index_fields=["name", "age"],
-            query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s " %
-                                                      "name > \"Adara\" AND "
-                                                      "name < \"Winta\""
-                                                      "AND age > 0 AND age "
-                                                      "< 100 ORDER BY _id"),
-            groups=["two_field_index"], index_where_clause=" name IS NOT NULL ")
+        query_definition = QueryDefinition(index_name="two_field_composite_name_age", index_fields=["name", "age"],
+                                           query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s " %
+                                                                                     "name > \"Adara\" AND "
+                                                                                     "name < \"Winta\""
+                                                                                     "AND age > 0 AND age "
+                                                                                     "< 100 ORDER BY _id"),
+                                           groups=["two_field_index"], index_where_clause=" name IS NOT NULL ")
         scan_contents = []
         scan_contents.append([{"Seek": None,
                          "Filter":[{"Low": "Adara", "High":"Jerica"},
@@ -785,14 +764,13 @@ class SecondaryIndexingMultiscanTests(BaseSecondaryIndexingTests):
 
     def test_two_field_composite_index_multiple_overlapping_scans(self):
         failed_scans = []
-        query_definition = QueryDefinition(
-            index_name="two_field_composite_name_age", index_fields=["name", "age"],
-            query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s " %
-                                                      "name > \"Adara\" AND "
-                                                      "name < \"Winta\""
-                                                      "AND age > 0 AND age "
-                                                      "< 100 ORDER BY _id"),
-            groups=["two_field_index"], index_where_clause=" name IS NOT NULL ")
+        query_definition = QueryDefinition(index_name="two_field_composite_name_age", index_fields=["name", "age"],
+                                           query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s " %
+                                                                                     "name > \"Adara\" AND "
+                                                                                     "name < \"Winta\""
+                                                                                     "AND age > 0 AND age "
+                                                                                     "< 100 ORDER BY _id"),
+                                           groups=["two_field_index"], index_where_clause=" name IS NOT NULL ")
         scan_contents = []
         #Overlapping first Scans
         scan_contents.append([{"Seek": None,
@@ -885,14 +863,13 @@ class SecondaryIndexingMultiscanTests(BaseSecondaryIndexingTests):
 
     def test_two_field_composite_index_three_scans(self):
         failed_scans = []
-        query_definition = QueryDefinition(
-            index_name="two_field_composite_name_age", index_fields=["name", "age"],
-            query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s " %
-                                                      "name > \"Adara\" AND "
-                                                      "name < \"Winta\""
-                                                      "AND age > 0 AND age "
-                                                      "< 100 ORDER BY _id"),
-            groups=["two_field_index"], index_where_clause=" name IS NOT NULL ")
+        query_definition = QueryDefinition(index_name="two_field_composite_name_age", index_fields=["name", "age"],
+                                           query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s " %
+                                                                                     "name > \"Adara\" AND "
+                                                                                     "name < \"Winta\""
+                                                                                     "AND age > 0 AND age "
+                                                                                     "< 100 ORDER BY _id"),
+                                           groups=["two_field_index"], index_where_clause=" name IS NOT NULL ")
         scan_contents = []
         # Three Non-Overlapping first Filters
         scan_contents.append([{"Filter": [{"Low": "Adara", "High":"Callia"},

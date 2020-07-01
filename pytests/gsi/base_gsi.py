@@ -85,7 +85,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         index_where_clause = None
         if self.use_where_clause_in_index:
             index_where_clause = query_definition.index_where_clause
-        self.query = query_definition.generate_index_create_query(bucket=bucket,
+        self.query = query_definition.generate_index_create_query(namespace=bucket,
                                                                   use_gsi_for_secondary=self.use_gsi_for_secondary,
                                                                   deploy_node_info=deploy_node_info,
                                                                   defer_build=self.defer_build,
@@ -208,7 +208,7 @@ class BaseSecondaryIndexingTests(QueryTests):
             query_definitions = self.query_definitions
         for bucket in buckets:
             for query_definition in query_definitions:
-                index_info = query_definition.generate_index_drop_query(bucket=bucket.name)
+                index_info = query_definition.generate_index_drop_query(namespace=bucket.name)
                 index_create_info = "{0}:{1}".format(bucket.name, query_definition.index_name)
                 if index_info not in self.memory_drop_list:
                     self.memory_drop_list.append(index_info)
@@ -224,7 +224,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         drop_index_tasks = []
         for bucket in buckets:
             for query_definition in query_definitions:
-                index_info = query_definition.generate_index_drop_query(bucket=bucket.name)
+                index_info = query_definition.generate_index_drop_query(namespace=bucket.name)
                 if index_info not in self.memory_drop_list:
                     self.memory_drop_list.append(index_info)
                     drop_index_tasks.append(self.async_drop_index(bucket.name, query_definition))
@@ -232,7 +232,7 @@ class BaseSecondaryIndexingTests(QueryTests):
 
     def drop_index(self, bucket, query_definition, verify_drop=True):
         try:
-            self.query = query_definition.generate_index_drop_query(bucket=bucket,
+            self.query = query_definition.generate_index_drop_query(namespace=bucket,
                                                                     use_gsi_for_secondary=self.use_gsi_for_secondary,
                                                                     use_gsi_for_primary=self.use_gsi_for_primary)
             actual_result = self.n1ql_helper.run_cbq_query(query=self.query, server=self.n1ql_node)
@@ -254,7 +254,7 @@ class BaseSecondaryIndexingTests(QueryTests):
             del (self.index_id_map[bucket][query_definition])
 
     def async_drop_index(self, bucket, query_definition):
-        self.query = query_definition.generate_index_drop_query(bucket=bucket,
+        self.query = query_definition.generate_index_drop_query(namespace=bucket,
                                                                 use_gsi_for_secondary=self.use_gsi_for_secondary,
                                                                 use_gsi_for_primary=self.use_gsi_for_primary)
         drop_index_task = self.gsi_thread.async_drop_index(server=self.n1ql_node, bucket=bucket, query=self.query,
@@ -904,7 +904,7 @@ class BaseSecondaryIndexingTests(QueryTests):
             for index_info in index_status.values():
                 for index_state in index_info.values():
                     if defer_build:
-                        if index_state["status"] == "Created" or index_state["status"] == "Ready":
+                        if index_state["status"] == "Ready":
                             check = True
                         else:
                             check = False

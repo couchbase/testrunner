@@ -22,10 +22,9 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         self.initial_index_number = self.input.param("initial_index_number", 10)
         for x in range(self.initial_index_number):
             index_name = "index_name_" + str(x)
-            query_definition = QueryDefinition(
-                index_name=index_name, index_fields=["VMs"],
-                query_template="SELECT * FROM %s ", groups=["simple"],
-                index_where_clause=" VMs IS NOT NULL ")
+            query_definition = QueryDefinition(index_name=index_name, index_fields=["VMs"],
+                                               query_template="SELECT * FROM %s ", groups=["simple"],
+                                               index_where_clause=" VMs IS NOT NULL ")
             self.load_query_definitions.append(query_definition)
         if self.load_query_definitions:
             self.multi_create_index(buckets=self.buckets,
@@ -714,10 +713,9 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         self.load(gens_load, flag=self.item_flag, batch_size=self.batch_size, op_type="create", verify_data=False)
 
         # creating Index
-        query_definition = QueryDefinition(
-            index_name=index_name, index_fields=["VMs"],
-            query_template="SELECT * FROM %s ", groups=["simple"],
-            index_where_clause=" VMs IS NOT NULL ")
+        query_definition = QueryDefinition(index_name=index_name, index_fields=["VMs"],
+                                           query_template="SELECT * FROM %s ", groups=["simple"],
+                                           index_where_clause=" VMs IS NOT NULL ")
         self.load_query_definitions.append(query_definition)
         self.create_index(bucket="default", query_definition=query_definition)
 
@@ -803,10 +801,9 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         self.load(gens_load, flag=self.item_flag, batch_size=self.batch_size, op_type="create", verify_data=False)
 
         # creating Index
-        query_definition = QueryDefinition(
-            index_name=index_name, index_fields=["VMs"],
-            query_template="SELECT * FROM %s ", groups=["simple"],
-            index_where_clause=" VMs IS NOT NULL ")
+        query_definition = QueryDefinition(index_name=index_name, index_fields=["VMs"],
+                                           query_template="SELECT * FROM %s ", groups=["simple"],
+                                           index_where_clause=" VMs IS NOT NULL ")
         self.load_query_definitions.append(query_definition)
         self.create_index(bucket="default", query_definition=query_definition)
 
@@ -985,10 +982,8 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         self.cluster.create_default_bucket(default_params)
 
         # creating Index idx_0
-        query_definition = QueryDefinition(
-            index_name="idx_0", index_fields=["VMs"],
-            query_template="SELECT * FROM %s ", groups=["simple"],
-            index_where_clause=" VMs IS NOT NULL ")
+        query_definition = QueryDefinition(index_name="idx_0", index_fields=["VMs"], query_template="SELECT * FROM %s ",
+                                           groups=["simple"], index_where_clause=" VMs IS NOT NULL ")
         self.load_query_definitions.append(query_definition)
         self.create_index(bucket="default", query_definition=query_definition)
 
@@ -998,10 +993,9 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
 
         # creating few more indexes
         for item in range(1, 4):
-            query_definition = QueryDefinition(
-                index_name="idx_{0}".format(item), index_fields=["VMs"],
-                query_template="SELECT * FROM %s ", groups=["simple"],
-                index_where_clause=" VMs IS NOT NULL ")
+            query_definition = QueryDefinition(index_name="idx_{0}".format(item), index_fields=["VMs"],
+                                               query_template="SELECT * FROM %s ", groups=["simple"],
+                                               index_where_clause=" VMs IS NOT NULL ")
             self.load_query_definitions.append(query_definition)
             self.create_index(bucket="default", query_definition=query_definition)
 

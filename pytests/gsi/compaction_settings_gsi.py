@@ -22,8 +22,8 @@ class SecondaryIndexingCompactionTests(BaseSecondaryIndexingTests):
         self.load_query_definitions = []
         for x in range(self.initial_index_number):
             index_name = "index_name_"+str(x)
-            query_definition = QueryDefinition(index_name=index_name, index_fields = ["job_title"],
-                        query_template = self.query_template, groups = ["simple"])
+            query_definition = QueryDefinition(index_name=index_name, index_fields=["job_title"],
+                                               query_template=self.query_template, groups=["simple"])
             self.load_query_definitions.append(query_definition)
         self.multi_create_index(self.buckets, self.load_query_definitions)
 

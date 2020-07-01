@@ -80,20 +80,17 @@ class SecondaryIndexArrayIndexTests(BaseSecondaryIndexingTests):
 
     def generate_query_definition_for_aggr_data(self):
         query_definitions = []
-        query_definition = QueryDefinition(
-            index_name="agg_func_int_arr",
-            index_fields=["int_num", "ALL ARRAY t FOR t in int_arr END"],
-            query_template="SELECT {0} int_num){1} FROM %s where any t in int_arr satisfies t > 50 end")
+        query_definition = QueryDefinition(index_name="agg_func_int_arr",
+                                           index_fields=["int_num", "ALL ARRAY t FOR t in int_arr END"],
+                                           query_template="SELECT {0} int_num){1} FROM %s where any t in int_arr satisfies t > 50 end")
         query_definitions.append(query_definition)
-        query_definition = QueryDefinition(
-            index_name="agg_func_float_arr",
-            index_fields=["float_num", "ALL ARRAY t FOR t in float_arr END"],
-            query_template="SELECT {0} float_num){1} FROM %s where any t in float_arr satisfies t > 50.0 end")
+        query_definition = QueryDefinition(index_name="agg_func_float_arr",
+                                           index_fields=["float_num", "ALL ARRAY t FOR t in float_arr END"],
+                                           query_template="SELECT {0} float_num){1} FROM %s where any t in float_arr satisfies t > 50.0 end")
         query_definitions.append(query_definition)
-        query_definition = QueryDefinition(
-            index_name="agg_func_str_arr",
-            index_fields=["name", "ALL ARRAY t FOR t in str_arr END"],
-            query_template="SELECT {0} name){1} FROM %s where any t in str_arr satisfies t = \"India\" end")
+        query_definition = QueryDefinition(index_name="agg_func_str_arr",
+                                           index_fields=["name", "ALL ARRAY t FOR t in str_arr END"],
+                                           query_template="SELECT {0} name){1} FROM %s where any t in str_arr satisfies t = \"India\" end")
         query_definitions.append(query_definition)
         return query_definitions
 
@@ -134,11 +131,10 @@ class SecondaryIndexArrayIndexTests(BaseSecondaryIndexingTests):
 
     def test_simple_indexes_mutation(self):
         query_definitions = []
-        query_definition = QueryDefinition(
-            index_name="index_name_travel_history",
-            index_fields=["ALL `travel_history`"],
-            query_template="SELECT {0} FROM %s WHERE `travel_history` IS NOT NULL",
-            groups=["array"], index_where_clause=" `travel_history` IS NOT NULL ")
+        query_definition = QueryDefinition(index_name="index_name_travel_history",
+                                           index_fields=["ALL `travel_history`"],
+                                           query_template="SELECT {0} FROM %s WHERE `travel_history` IS NOT NULL",
+                                           groups=["array"], index_where_clause=" `travel_history` IS NOT NULL ")
         query_definitions.append(query_definition)
         self.multi_create_index_using_rest(buckets=self.buckets,
                                            query_definitions=query_definitions)
@@ -172,19 +168,19 @@ class SecondaryIndexArrayIndexTests(BaseSecondaryIndexingTests):
             pass
         else:
             query_definition = QueryDefinition(index_name="index_name_travel_history_leading",
-                                                index_fields=["ALL `travel_history` END", "name", "age"],
-                                                query_template="SELECT {0} FROM %s WHERE `travel_history` IS NOT NULL",
-                                                groups=["array"], index_where_clause=" `travel_history` IS NOT NULL ")
+                                               index_fields=["ALL `travel_history` END", "name", "age"],
+                                               query_template="SELECT {0} FROM %s WHERE `travel_history` IS NOT NULL",
+                                               groups=["array"], index_where_clause=" `travel_history` IS NOT NULL ")
             definitions_list.append(query_definition)
             query_definition = QueryDefinition(index_name="index_name_travel_history_non_leading_end",
-                                                index_fields=["name", "age", "ALL `travel_history` END"],
-                                                query_template="SELECT {0} FROM %s WHERE `travel_history` IS NOT NULL",
-                                                groups=["array"], index_where_clause=" `travel_history` IS NOT NULL ")
+                                               index_fields=["name", "age", "ALL `travel_history` END"],
+                                               query_template="SELECT {0} FROM %s WHERE `travel_history` IS NOT NULL",
+                                               groups=["array"], index_where_clause=" `travel_history` IS NOT NULL ")
             definitions_list.append(query_definition)
             query_definition = QueryDefinition(index_name="index_name_travel_history_non_leading_middle",
-                                                index_fields=["name", "ALL `travel_history` END", "age"],
-                                                query_template="SELECT {0} FROM %s WHERE `travel_history` IS NOT NULL",
-                                                groups=["array"], index_where_clause=" `travel_history` IS NOT NULL ")
+                                               index_fields=["name", "ALL `travel_history` END", "age"],
+                                               query_template="SELECT {0} FROM %s WHERE `travel_history` IS NOT NULL",
+                                               groups=["array"], index_where_clause=" `travel_history` IS NOT NULL ")
             definitions_list.append(query_definition)
             self.multi_create_index_using_rest(buckets=self.buckets, query_definitions=definitions_list)
             self.sleep(20)
@@ -217,10 +213,9 @@ class SecondaryIndexArrayIndexTests(BaseSecondaryIndexingTests):
         for data_type in data_types:
             definitions_list = []
             query_definition = QueryDefinition(index_name="index_name_{0}_duplicate".format(data_type),
-                                                index_fields=["ALL `{0}`".format(index_field)],
+                                               index_fields=["ALL `{0}`".format(index_field)],
                                                query_template="SELECT {0} FROM %s WHERE `{0}` IS NOT NULL".format(
-                                                   index_field),
-                                               groups=["array"],
+                                                   index_field), groups=["array"],
                                                index_where_clause=" `{0}` IS NOT NULL ".format(index_field))
             definitions_list.append(query_definition)
             for bucket in self.buckets:
@@ -247,11 +242,10 @@ class SecondaryIndexArrayIndexTests(BaseSecondaryIndexingTests):
             self.full_docs_list = self.generate_full_docs_list(self.gens_load)
 
     def test_create_query_drop_index_on_mixed_datatypes(self):
-        query_definition = QueryDefinition(
-            index_name="index_name_travel_history",
-            index_fields=["ALL `travel_history`"],
-            query_template="SELECT {0} FROM %s WHERE `travel_history` IS NOT NULL",
-            groups=["array"], index_where_clause=" `travel_history` IS NOT NULL ")
+        query_definition = QueryDefinition(index_name="index_name_travel_history",
+                                           index_fields=["ALL `travel_history`"],
+                                           query_template="SELECT {0} FROM %s WHERE `travel_history` IS NOT NULL",
+                                           groups=["array"], index_where_clause=" `travel_history` IS NOT NULL ")
         end = 0
         for bucket in self.buckets:
             for data in DATATYPES:
@@ -315,9 +309,9 @@ class SecondaryIndexArrayIndexTests(BaseSecondaryIndexingTests):
 
     def test_array_item_limit(self):
         query_definition = QueryDefinition(index_name="index_name_big_values",
-                                                index_fields=["DISTINCT ARRAY t FOR t in bigValues END"],
-                                                query_template="SELECT {0} FROM %s WHERE bigValues IS NOT NULL",
-                                                groups=["array"], index_where_clause=" bigValues IS NOT NULL ")
+                                           index_fields=["DISTINCT ARRAY t FOR t in bigValues END"],
+                                           query_template="SELECT {0} FROM %s WHERE bigValues IS NOT NULL",
+                                           groups=["array"], index_where_clause=" bigValues IS NOT NULL ")
         self.rest.flush_bucket(self.buckets[0])
         generators = []
         template = '{{"name":"{0}", "age":{1}, "bigValues":{2} }}'

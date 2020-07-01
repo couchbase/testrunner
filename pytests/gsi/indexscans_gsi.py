@@ -37,11 +37,8 @@ class SecondaryIndexingScanTests(BaseSecondaryIndexingTests):
         if self.whereCondition:
             query_template += " WHERE {0}".format(self.whereCondition)
         query_template = self._translate_where_clause(query_template)
-        query_definition = QueryDefinition(
-            index_name=self.index_name,
-            index_fields = self.indexes,
-            query_template = query_template,
-            groups = [])
+        query_definition = QueryDefinition(index_name=self.index_name, index_fields=self.indexes,
+                                           query_template=query_template, groups=[])
         self.run_multi_operations(
             buckets = self.buckets,
             query_definitions = [query_definition],
@@ -339,11 +336,8 @@ class SecondaryIndexingScanTests(BaseSecondaryIndexingTests):
         if self.whereCondition:
             query_template += " WHERE {0}".format(self.whereCondition)
         query_template = self._translate_where_clause(query_template)
-        query_definition = QueryDefinition(
-            index_name=self.index_name,
-            index_fields = self.indexes,
-            query_template = query_template,
-            groups = [])
+        query_definition = QueryDefinition(index_name=self.index_name, index_fields=self.indexes,
+                                           query_template=query_template, groups=[])
         try:
             self.run_multi_operations(
             buckets = self.buckets,

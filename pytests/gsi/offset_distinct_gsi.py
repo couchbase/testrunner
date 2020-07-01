@@ -16,37 +16,28 @@ DATATYPES = [str, "scalar", int, dict, "missing", "empty", "null"]
 RANGE_SCAN_TEMPLATE = "SELECT {0} FROM %s WHERE {1}"
 log = logging.getLogger()
 emit_fields = "*"
-query_definition = QueryDefinition(
-    index_name="two_field_composite_name_age",
-    index_fields=["name", "age"],
-    query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s " %
-                                              "name > \"Adara\" AND "
-                                              "name < \"Winta\" "
-                                              "AND age > 0 AND age "
-                                              "< 100 ORDER BY _id"),
-    groups=["two_field_index"],
-    index_where_clause=" name IS NOT NULL ")
+query_definition = QueryDefinition(index_name="two_field_composite_name_age", index_fields=["name", "age"],
+                                   query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s " %
+                                                                             "name > \"Adara\" AND "
+                                                                             "name < \"Winta\" "
+                                                                             "AND age > 0 AND age "
+                                                                             "< 100 ORDER BY _id"),
+                                   groups=["two_field_index"], index_where_clause=" name IS NOT NULL ")
 
-query_definition1 = QueryDefinition(
-    index_name="two_field_composite_name_age1",
-    index_fields=["name", "age"],
-    query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s " %
-                                              "name > \"Adara\" AND "
-                                              "name < \"Winta\" "
-                                              "AND age > 20 AND age "
-                                              "< 50 ORDER BY _id"),
-    groups=["two_field_index1"],
-    index_where_clause=" name IS NOT NULL ")
+query_definition1 = QueryDefinition(index_name="two_field_composite_name_age1", index_fields=["name", "age"],
+                                    query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s " %
+                                                                              "name > \"Adara\" AND "
+                                                                              "name < \"Winta\" "
+                                                                              "AND age > 20 AND age "
+                                                                              "< 50 ORDER BY _id"),
+                                    groups=["two_field_index1"], index_where_clause=" name IS NOT NULL ")
 
-query_definition2 = QueryDefinition(
-    index_name="single_field_index",
-    index_fields=["name"],
-    query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s " %
-                                              "name > \"Adara\" AND "
-                                              "name < \"Winta\" "
-                                              "ORDER BY _id"),
-    groups=["single_field_index"],
-    index_where_clause=" name IS NOT NULL ")
+query_definition2 = QueryDefinition(index_name="single_field_index", index_fields=["name"],
+                                    query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s " %
+                                                                              "name > \"Adara\" AND "
+                                                                              "name < \"Winta\" "
+                                                                              "ORDER BY _id"),
+                                    groups=["single_field_index"], index_where_clause=" name IS NOT NULL ")
 
 global_projection_value = None
 
@@ -198,16 +189,14 @@ class SecondaryIndexingOffsetTests(BaseSecondaryIndexingTests):
         """
             Test multiscan with offset and limit with more than 2 index fields
         """
-        query_definition1 = QueryDefinition(
-            index_name="three_field_composite_name_age_question_values",
-            index_fields=["name", "age", "question_values"],
-            query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s " %
-                                                      "name > \"Adara\" AND "
-                                                      "name < \"Winta\" "
-                                                      "AND age > 0 AND age "
-                                                      "< 100 ORDER BY _id"),
-            groups=["three_field_index"],
-            index_where_clause=" name IS NOT NULL ")
+        query_definition1 = QueryDefinition(index_name="three_field_composite_name_age_question_values",
+                                            index_fields=["name", "age", "question_values"],
+                                            query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s " %
+                                                                                      "name > \"Adara\" AND "
+                                                                                      "name < \"Winta\" "
+                                                                                      "AND age > 0 AND age "
+                                                                                      "< 100 ORDER BY _id"),
+                                            groups=["three_field_index"], index_where_clause=" name IS NOT NULL ")
         id_map = 0
         scan_contents = []
         scan_contents.append([{"Seek": None,
@@ -431,15 +420,12 @@ class SecondaryIndexingOffsetTests(BaseSecondaryIndexingTests):
         """
             Test multiscan with offset and limit with distinct=true
         """
-        query_definition1 = QueryDefinition(
-            index_name="single_field_name",
-            index_fields=["name"],
-            query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s " %
-                                                      "name > \"Adara\" AND "
-                                                      "name < \"Winta\" "
-                                                      "ORDER BY _id"),
-            groups=["single_field_index"],
-            index_where_clause=" name IS NOT NULL ")
+        query_definition1 = QueryDefinition(index_name="single_field_name", index_fields=["name"],
+                                            query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s " %
+                                                                                      "name > \"Adara\" AND "
+                                                                                      "name < \"Winta\" "
+                                                                                      "ORDER BY _id"),
+                                            groups=["single_field_index"], index_where_clause=" name IS NOT NULL ")
         id_map = 0
         scan_contents = []
         scan_contents.append([{"Seek": None,
@@ -458,11 +444,9 @@ class SecondaryIndexingOffsetTests(BaseSecondaryIndexingTests):
         """
             Test multiscan with offset and limit with distinct=true on primary index
         """
-        query_definition_pi = QueryDefinition(
-            index_name="primary_index",
-            index_fields=["name"],
-            query_template="SELECT * FROM %s",
-            groups=["full_data_set", "primary"], index_where_clause="")
+        query_definition_pi = QueryDefinition(index_name="primary_index", index_fields=["name"],
+                                              query_template="SELECT * FROM %s", groups=["full_data_set", "primary"],
+                                              index_where_clause="")
 
         id_map = 0
         scan_contents = []
@@ -644,16 +628,14 @@ class SecondaryIndexingOffsetTests(BaseSecondaryIndexingTests):
         """
             Test multiscan with offset and limit with distinct=true on composite index
         """
-        query_definition2 = QueryDefinition(
-            index_name="multiple_field_index",
-            index_fields=["name", "age", "email", "premium_customer"],
-            query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s " %
-                                                      "name > \"Adara\" AND "
-                                                      "name < \"Winta\" "
-                                                      "AND age > 0 AND age "
-                                                      "< 100 ORDER BY _id"),
-            groups=["multiple_field_index"],
-            index_where_clause=" name IS NOT NULL ")
+        query_definition2 = QueryDefinition(index_name="multiple_field_index",
+                                            index_fields=["name", "age", "email", "premium_customer"],
+                                            query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s " %
+                                                                                      "name > \"Adara\" AND "
+                                                                                      "name < \"Winta\" "
+                                                                                      "AND age > 0 AND age "
+                                                                                      "< 100 ORDER BY _id"),
+                                            groups=["multiple_field_index"], index_where_clause=" name IS NOT NULL ")
 
         id_map = 0
         scan_contents = []
@@ -671,16 +653,14 @@ class SecondaryIndexingOffsetTests(BaseSecondaryIndexingTests):
         """
         if self.docs_per_day < 1000000:
             log.error("Atleast 1M docs is required for this test to make sense!!")
-        query_definition2 = QueryDefinition(
-            index_name="multiple_field_index",
-            index_fields=["name", "age", "email", "premium_customer"],
-            query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s " %
-                                                      "name > \"Adara\" AND "
-                                                      "name < \"Winta\" "
-                                                      "AND age > 0 AND age "
-                                                      "< 100 ORDER BY _id"),
-            groups=["multiple_field_index"],
-            index_where_clause=" name IS NOT NULL ")
+        query_definition2 = QueryDefinition(index_name="multiple_field_index",
+                                            index_fields=["name", "age", "email", "premium_customer"],
+                                            query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s " %
+                                                                                      "name > \"Adara\" AND "
+                                                                                      "name < \"Winta\" "
+                                                                                      "AND age > 0 AND age "
+                                                                                      "< 100 ORDER BY _id"),
+                                            groups=["multiple_field_index"], index_where_clause=" name IS NOT NULL ")
 
         id_map = 0
         scan_contents = []
@@ -697,16 +677,14 @@ class SecondaryIndexingOffsetTests(BaseSecondaryIndexingTests):
         """
             Test parallel multiscan with offset and limit on non overlapping data
         """
-        query_definition2 = QueryDefinition(
-            index_name="multiple_field_index",
-            index_fields=["name", "age", "email", "premium_customer"],
-            query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s " %
-                                                      "name > \"Adara\" AND "
-                                                      "name < \"Winta\" "
-                                                      "AND age > 0 AND age "
-                                                      "< 100 ORDER BY _id"),
-            groups=["multiple_field_index"],
-            index_where_clause=" name IS NOT NULL ")
+        query_definition2 = QueryDefinition(index_name="multiple_field_index",
+                                            index_fields=["name", "age", "email", "premium_customer"],
+                                            query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s " %
+                                                                                      "name > \"Adara\" AND "
+                                                                                      "name < \"Winta\" "
+                                                                                      "AND age > 0 AND age "
+                                                                                      "< 100 ORDER BY _id"),
+                                            groups=["multiple_field_index"], index_where_clause=" name IS NOT NULL ")
 
         id_map = 0
         scan_contents = []
@@ -730,16 +708,14 @@ class SecondaryIndexingOffsetTests(BaseSecondaryIndexingTests):
         """
             Test parallel multiscan with offset and limit on overlapping data
         """
-        query_definition2 = QueryDefinition(
-            index_name="multiple_field_index",
-            index_fields=["name", "age", "email", "premium_customer"],
-            query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s " %
-                                                      "name > \"Adara\" AND "
-                                                      "name < \"Winta\" "
-                                                      "AND age > 0 AND age "
-                                                      "< 100 ORDER BY _id"),
-            groups=["multiple_field_index"],
-            index_where_clause=" name IS NOT NULL ")
+        query_definition2 = QueryDefinition(index_name="multiple_field_index",
+                                            index_fields=["name", "age", "email", "premium_customer"],
+                                            query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s " %
+                                                                                      "name > \"Adara\" AND "
+                                                                                      "name < \"Winta\" "
+                                                                                      "AND age > 0 AND age "
+                                                                                      "< 100 ORDER BY _id"),
+                                            groups=["multiple_field_index"], index_where_clause=" name IS NOT NULL ")
 
         id_map = 0
         scan_contents = []
@@ -763,16 +739,14 @@ class SecondaryIndexingOffsetTests(BaseSecondaryIndexingTests):
         """
             Test offset,limit and distinct with binary data
         """
-        query_definition2 = QueryDefinition(
-            index_name="multiple_field_index",
-            index_fields=["name", "age", "email", "premium_customer"],
-            query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s " %
-                                                      "name > \"Adara\" AND "
-                                                      "name < \"Winta\" "
-                                                      "AND age > 0 AND age "
-                                                      "< 100 ORDER BY _id"),
-            groups=["multiple_field_index"],
-            index_where_clause=" name IS NOT NULL ")
+        query_definition2 = QueryDefinition(index_name="multiple_field_index",
+                                            index_fields=["name", "age", "email", "premium_customer"],
+                                            query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s " %
+                                                                                      "name > \"Adara\" AND "
+                                                                                      "name < \"Winta\" "
+                                                                                      "AND age > 0 AND age "
+                                                                                      "< 100 ORDER BY _id"),
+                                            groups=["multiple_field_index"], index_where_clause=" name IS NOT NULL ")
 
         id_map = 0
         scan_contents = []
@@ -807,16 +781,14 @@ class SecondaryIndexingOffsetTests(BaseSecondaryIndexingTests):
         """
             Test offset,limit , distinct and primary key with different values
         """
-        query_definition2 = QueryDefinition(
-            index_name="multiple_field_index",
-            index_fields=["name", "age", "email", "premium_customer"],
-            query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s " %
-                                                      "name > \"Adara\" AND "
-                                                      "name < \"Winta\" "
-                                                      "AND age > 0 AND age "
-                                                      "< 100 ORDER BY _id"),
-            groups=["multiple_field_index"],
-            index_where_clause=" name IS NOT NULL ")
+        query_definition2 = QueryDefinition(index_name="multiple_field_index",
+                                            index_fields=["name", "age", "email", "premium_customer"],
+                                            query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s " %
+                                                                                      "name > \"Adara\" AND "
+                                                                                      "name < \"Winta\" "
+                                                                                      "AND age > 0 AND age "
+                                                                                      "< 100 ORDER BY _id"),
+                                            groups=["multiple_field_index"], index_where_clause=" name IS NOT NULL ")
 
         id_map = 0
         scan_contents = []
@@ -841,16 +813,14 @@ class SecondaryIndexingOffsetTests(BaseSecondaryIndexingTests):
         """
             Test offset,limit and distinct with binary data
         """
-        query_definition2 = QueryDefinition(
-            index_name="multiple_field_index",
-            index_fields=["name", "age", "email", "premium_customer"],
-            query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s " %
-                                                      "name > \"Adara\" AND "
-                                                      "name < \"Winta\" "
-                                                      "AND age > 0 AND age "
-                                                      "< 100 ORDER BY _id"),
-            groups=["multiple_field_index"],
-            index_where_clause=" name IS NOT NULL ")
+        query_definition2 = QueryDefinition(index_name="multiple_field_index",
+                                            index_fields=["name", "age", "email", "premium_customer"],
+                                            query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s " %
+                                                                                      "name > \"Adara\" AND "
+                                                                                      "name < \"Winta\" "
+                                                                                      "AND age > 0 AND age "
+                                                                                      "< 100 ORDER BY _id"),
+                                            groups=["multiple_field_index"], index_where_clause=" name IS NOT NULL ")
 
         id_map = 0
         scan_contents = []
@@ -871,16 +841,14 @@ class SecondaryIndexingOffsetTests(BaseSecondaryIndexingTests):
         """
             Test offset,limit and distinct with negative scenarios
         """
-        query_definition2 = QueryDefinition(
-            index_name="multiple_field_index",
-            index_fields=["name", "age", "email", "premium_customer"],
-            query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s " %
-                                                      "name > \"Adara\" AND "
-                                                      "name < \"Winta\" "
-                                                      "AND age > 0 AND age "
-                                                      "< 100 ORDER BY _id"),
-            groups=["multiple_field_index"],
-            index_where_clause=" name IS NOT NULL ")
+        query_definition2 = QueryDefinition(index_name="multiple_field_index",
+                                            index_fields=["name", "age", "email", "premium_customer"],
+                                            query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s " %
+                                                                                      "name > \"Adara\" AND "
+                                                                                      "name < \"Winta\" "
+                                                                                      "AND age > 0 AND age "
+                                                                                      "< 100 ORDER BY _id"),
+                                            groups=["multiple_field_index"], index_where_clause=" name IS NOT NULL ")
 
         id_map = 0
         scan_contents = []
@@ -904,16 +872,14 @@ class SecondaryIndexingOffsetTests(BaseSecondaryIndexingTests):
         """
             Test offset,limit and distinct with negative scenarios
         """
-        query_definition2 = QueryDefinition(
-            index_name="multiple_field_index",
-            index_fields=["name", "age", "email", "premium_customer"],
-            query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s " %
-                                                      "name > \"Adara\" AND "
-                                                      "name < \"Winta\" "
-                                                      "AND age > 0 AND age "
-                                                      "< 100 ORDER BY _id"),
-            groups=["multiple_field_index"],
-            index_where_clause=" name IS NOT NULL ")
+        query_definition2 = QueryDefinition(index_name="multiple_field_index",
+                                            index_fields=["name", "age", "email", "premium_customer"],
+                                            query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s " %
+                                                                                      "name > \"Adara\" AND "
+                                                                                      "name < \"Winta\" "
+                                                                                      "AND age > 0 AND age "
+                                                                                      "< 100 ORDER BY _id"),
+                                            groups=["multiple_field_index"], index_where_clause=" name IS NOT NULL ")
 
         id_map = 0
         scan_contents = []
@@ -940,16 +906,14 @@ class SecondaryIndexingOffsetTests(BaseSecondaryIndexingTests):
         """
             Test offset,limit and distinct with duplicate entry keys
         """
-        query_definition2 = QueryDefinition(
-            index_name="multiple_field_index",
-            index_fields=["name", "age", "email", "premium_customer"],
-            query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s " %
-                                                      "name > \"Adara\" AND "
-                                                      "name < \"Winta\" "
-                                                      "AND age > 0 AND age "
-                                                      "< 100 ORDER BY _id"),
-            groups=["multiple_field_index"],
-            index_where_clause=" name IS NOT NULL ")
+        query_definition2 = QueryDefinition(index_name="multiple_field_index",
+                                            index_fields=["name", "age", "email", "premium_customer"],
+                                            query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s " %
+                                                                                      "name > \"Adara\" AND "
+                                                                                      "name < \"Winta\" "
+                                                                                      "AND age > 0 AND age "
+                                                                                      "< 100 ORDER BY _id"),
+                                            groups=["multiple_field_index"], index_where_clause=" name IS NOT NULL ")
 
         id_map = 0
         scan_contents = []
@@ -976,18 +940,18 @@ class SecondaryIndexingOffsetTests(BaseSecondaryIndexingTests):
         """
             Test offset,limit and distinct with large indexed values
         """
-        query_definition2 = QueryDefinition(
-            index_name="multiple_field_index",
-            index_fields=["name", "age", "email", "premium_customer", "travel_history_code", "countries_visited",
-                          "mutated", "credit_cards", "secret_combination", "address", "question_values",
-                          "travel_details", "booking", "travel_history"],
-            query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s " %
-                                                      "name > \"Adara\" AND "
-                                                      "name < \"Winta\" "
-                                                      "AND age > 0 AND age "
-                                                      "< 100 ORDER BY _id"),
-            groups=["multiple_field_index"],
-            index_where_clause=" name IS NOT NULL ")
+        query_definition2 = QueryDefinition(index_name="multiple_field_index",
+                                            index_fields=["name", "age", "email", "premium_customer",
+                                                          "travel_history_code", "countries_visited",
+                                                          "mutated", "credit_cards", "secret_combination", "address",
+                                                          "question_values",
+                                                          "travel_details", "booking", "travel_history"],
+                                            query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s " %
+                                                                                      "name > \"Adara\" AND "
+                                                                                      "name < \"Winta\" "
+                                                                                      "AND age > 0 AND age "
+                                                                                      "< 100 ORDER BY _id"),
+                                            groups=["multiple_field_index"], index_where_clause=" name IS NOT NULL ")
 
         id_map = 0
         scan_contents = []
@@ -1062,11 +1026,9 @@ class SecondaryIndexingOffsetTests(BaseSecondaryIndexingTests):
         """
             Test multiscan with offset and limit with primary index
         """
-        query_definition2 = QueryDefinition(
-            index_name="primary_index",
-            index_fields=["name"],
-            query_template="SELECT * FROM %s",
-            groups=["full_data_set", "primary"], index_where_clause="")
+        query_definition2 = QueryDefinition(index_name="primary_index", index_fields=["name"],
+                                            query_template="SELECT * FROM %s", groups=["full_data_set", "primary"],
+                                            index_where_clause="")
 
         id_map = 0
         scan_contents = []
@@ -1090,11 +1052,9 @@ class SecondaryIndexingOffsetTests(BaseSecondaryIndexingTests):
         """
             Test multiscan with offset and limit with primary index and distinct=True
         """
-        query_definition2 = QueryDefinition(
-            index_name="primary_index",
-            index_fields=["name"],
-            query_template="SELECT * FROM %s",
-            groups=["full_data_set", "primary"], index_where_clause="")
+        query_definition2 = QueryDefinition(index_name="primary_index", index_fields=["name"],
+                                            query_template="SELECT * FROM %s", groups=["full_data_set", "primary"],
+                                            index_where_clause="")
 
         id_map = 0
         scan_contents = []
@@ -1118,13 +1078,11 @@ class SecondaryIndexingOffsetTests(BaseSecondaryIndexingTests):
         self.assertEqual(self.dataset, "array", "Use Array as dataset")
         index_name_prefix = "airlines_" + str(random.randint(100000, 999999))
         definitions_list.append(
-            QueryDefinition(index_name=index_name_prefix + "_name_age",
-                            index_fields=["name", "age"],
+            QueryDefinition(index_name=index_name_prefix + "_name_age", index_fields=["name", "age"],
                             query_template=RANGE_SCAN_TEMPLATE.format(
                                 emit_fields, " %s " %
                                              "name > \"Adara\" AND name < \"Winta\" "
-                                             "AND age > 40 AND age < 50 ORDER BY _id"),
-                            groups=["two_field_index"],
+                                             "AND age > 40 AND age < 50 ORDER BY _id"), groups=["two_field_index"],
                             index_where_clause=" travel_history IS NOT NULL "))
         return definitions_list
 

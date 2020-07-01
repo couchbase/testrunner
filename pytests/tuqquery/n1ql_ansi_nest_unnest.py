@@ -151,7 +151,7 @@ class QueryANSINestUnnestTests(QueryTests):
         for bucket in self.buckets:
             query_bucket = self.get_collection_name(bucket.name)
             for query_defn in self.query_definitions:
-                create_query = query_defn.generate_index_create_query(bucket=query_bucket)
+                create_query = query_defn.generate_index_create_query(namespace=query_bucket)
                 self.run_cbq_query(create_query)
 
 
@@ -161,51 +161,39 @@ class QueryDefs(SQLDefinitionGenerator):
         index_name_prefix = "back_detail_" + str(random.randint(100000, 999999))
         # Primary Index
         definitions_list.append(
-            QueryDefinition(index_name=index_name_prefix + "_primary_index",
-                            index_fields=[], query_template="SELECT * FROM %s",
-                            groups=["full_data_set", "primary"],
+            QueryDefinition(index_name=index_name_prefix + "_primary_index", index_fields=[],
+                            query_template="SELECT * FROM %s", groups=["full_data_set", "primary"],
                             index_where_clause=""))
         # simple index on string
         definitions_list.append(
-            QueryDefinition(index_name=index_name_prefix + "_name",
-                            index_fields=["name"],
-                            query_template="SELECT name FROM %s where name = 'Ciara'",
-                            groups=["all", "simple_index"],
+            QueryDefinition(index_name=index_name_prefix + "_name", index_fields=["name"],
+                            query_template="SELECT name FROM %s where name = 'Ciara'", groups=["all", "simple_index"],
                             index_where_clause=" name = 'Ciara' "))
         # simple index on int
         definitions_list.append(
-            QueryDefinition(index_name=index_name_prefix + "_business_name",
-                            index_fields=["business_name"],
+            QueryDefinition(index_name=index_name_prefix + "_business_name", index_fields=["business_name"],
                             query_template="SELECT business_name FROM %s where business_name < 'V' and business_name > 'C'",
                             groups=["all", "simple_index"],
                             index_where_clause=" business_name < 'V' and business_name > 'C' "))
         # simple index on int
         definitions_list.append(
-            QueryDefinition(index_name=index_name_prefix + "_home",
-                            index_fields=["home"],
-                            query_template="SELECT home FROM %s where home = 'India'",
-                            groups=["all", "simple_index"],
+            QueryDefinition(index_name=index_name_prefix + "_home", index_fields=["home"],
+                            query_template="SELECT home FROM %s where home = 'India'", groups=["all", "simple_index"],
                             index_where_clause=" home = 'India' "))
         definitions_list.append(
-            QueryDefinition(index_name=index_name_prefix + "_age",
-                            index_fields=["age"],
+            QueryDefinition(index_name=index_name_prefix + "_age", index_fields=["age"],
                             query_template="SELECT age FROM %s where age > 50 and age < 70",
-                            groups=["all", "simple_index"],
-                            index_where_clause=" age > 50 and age < 70 "))
+                            groups=["all", "simple_index"], index_where_clause=" age > 50 and age < 70 "))
         # simple index on float
         definitions_list.append(
-            QueryDefinition(index_name=index_name_prefix + "_weight",
-                            index_fields=["weight"],
-                            query_template="SELECT weight FROM %s where weight > 65.5",
-                            groups=["all", "simple_index"],
+            QueryDefinition(index_name=index_name_prefix + "_weight", index_fields=["weight"],
+                            query_template="SELECT weight FROM %s where weight > 65.5", groups=["all", "simple_index"],
                             index_where_clause=" weight > 65.5 "))
         index_name_prefix = "back_detail_" + str(random.randint(100000, 999999))
         # simple index on negative int
         definitions_list.append(
-            QueryDefinition(index_name=index_name_prefix + "_debt",
-                            index_fields=["debt"],
-                            query_template="SELECT debt FROM %s where debt < -300000",
-                            groups=["all", "simple_index"],
+            QueryDefinition(index_name=index_name_prefix + "_debt", index_fields=["debt"],
+                            query_template="SELECT debt FROM %s where debt < -300000", groups=["all", "simple_index"],
                             index_where_clause=" debt < -300000 "))
         # simple array index on int+str
         definitions_list.append(
@@ -223,11 +211,9 @@ class QueryDefs(SQLDefinitionGenerator):
                             index_where_clause=" ANY t IN `transactions` SATISFIES t > 3000 END "))
         # simple index on object
         definitions_list.append(
-            QueryDefinition(index_name=index_name_prefix + "_address",
-                            index_fields=["address"],
+            QueryDefinition(index_name=index_name_prefix + "_address", index_fields=["address"],
                             query_template="SELECT address FROM %s where address.country = 'India'",
-                            groups=["all", "simple_index"],
-                            index_where_clause=" address.country = 'India' "))
+                            groups=["all", "simple_index"], index_where_clause=" address.country = 'India' "))
         # simple array index on str
         definitions_list.append(
             QueryDefinition(index_name=index_name_prefix + "_travel_history",

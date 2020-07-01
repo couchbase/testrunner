@@ -503,43 +503,39 @@ class QueryDefs(SQLDefinitionGenerator):
         index_name_prefix = "int_64_" + str(random.randint(100000, 999999))
         # simple index on string
         definitions_list.append(
-            QueryDefinition(index_name=index_name_prefix + "_name",
-                            index_fields=["name"],
+            QueryDefinition(index_name=index_name_prefix + "_name", index_fields=["name"],
                             query_template=["SELECT name FROM default use index ({0}) where name = 'Ciara'",
                                             "SELECT name FROM default use index ({0}) where name > 'Ciara'",
                                             "SELECT name FROM default where name is not null"],
                             groups=["all", "simple_index"]))
         definitions_list.append(
-            QueryDefinition(index_name=index_name_prefix + "_long_num",
-                            index_fields=["long_num"],
+            QueryDefinition(index_name=index_name_prefix + "_long_num", index_fields=["long_num"],
                             query_template=["SELECT long_num FROM default use index ({0}) where long_num = 2147483600",
                                             "SELECT long_num FROM default use index ({0}) where long_num > 2147483600",
                                             "SELECT long_num FROM default use index ({0}) where long_num > 2147483599 and long_num < 2147483601",
                                             "SELECT long_num FROM default where long_num is not null"],
                             groups=["all", "simple_index"]))
         definitions_list.append(
-            QueryDefinition(index_name=index_name_prefix + "_long_num_partial",
-                            index_fields=["long_num_partial"],
-                            query_template=["SELECT long_num_partial FROM default use index ({0}) where long_num = 2147483600",
-                                            "SELECT long_num_partial FROM default use index ({0}) where long_num > 2147483600",
-                                            "SELECT long_num_partial FROM default use index ({0}) where (long_num % 10 != 0)",
-                                            "SELECT long_num_partial FROM default where long_num is not null"],
-                            groups=["all", "simple_index"],
-                            index_where_clause=" long_num > 20 "))
+            QueryDefinition(index_name=index_name_prefix + "_long_num_partial", index_fields=["long_num_partial"],
+                            query_template=[
+                                "SELECT long_num_partial FROM default use index ({0}) where long_num = 2147483600",
+                                "SELECT long_num_partial FROM default use index ({0}) where long_num > 2147483600",
+                                "SELECT long_num_partial FROM default use index ({0}) where (long_num % 10 != 0)",
+                                "SELECT long_num_partial FROM default where long_num is not null"],
+                            groups=["all", "simple_index"], index_where_clause=" long_num > 20 "))
         definitions_list.append(
             QueryDefinition(index_name=index_name_prefix + "_long_arr",
-                            index_fields=["ALL ARRAY t FOR t in `long_arr` END"],
-                            query_template=["SELECT t FROM default use index ({0}) where any t in `long_arr` satisfies t = 2147483600 END",
-                                            "SELECT t FROM default use index ({0}) where any t in `long_arr` satisfies t > 2147483600 END",
-                                            "SELECT t FROM default use index ({0}) where any t in `long_arr` satisfies t is not null END"],
+                            index_fields=["ALL ARRAY t FOR t in `long_arr` END"], query_template=[
+                    "SELECT t FROM default use index ({0}) where any t in `long_arr` satisfies t = 2147483600 END",
+                    "SELECT t FROM default use index ({0}) where any t in `long_arr` satisfies t > 2147483600 END",
+                    "SELECT t FROM default use index ({0}) where any t in `long_arr` satisfies t is not null END"],
                             groups=["all", "simple_index"]))
         definitions_list.append(
-            QueryDefinition(index_name=index_name_prefix + "_long_num_name",
-                            index_fields=["long_num", "name"],
+            QueryDefinition(index_name=index_name_prefix + "_long_num_name", index_fields=["long_num", "name"],
                             query_template=[
-                                            # Commented out because of MB-30207
-                                            #"SELECT sum(long_num) as long_num, name FROM default use index ({0}) where long_num > 2147483600 group by name",
-                                            "SELECT min(long_num) as long_num, name FROM default use index ({0}) where long_num > 2147483600 group by name",
-                                            "SELECT long_num, name FROM default use index ({0}) where long_num > 2147483600"],
+                                # Commented out because of MB-30207
+                                # "SELECT sum(long_num) as long_num, name FROM default use index ({0}) where long_num > 2147483600 group by name",
+                                "SELECT min(long_num) as long_num, name FROM default use index ({0}) where long_num > 2147483600 group by name",
+                                "SELECT long_num, name FROM default use index ({0}) where long_num > 2147483600"],
                             groups=["all", "simple_index"]))
         return definitions_list

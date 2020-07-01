@@ -146,9 +146,10 @@ class QueryHelperTests(BaseTestCase):
 
     def create_index(self, bucket, query_definition, deploy_node_info=None):
         defer_build = True
-        query = query_definition.generate_index_create_query(
-            bucket=bucket, use_gsi_for_secondary=self.use_gsi_for_secondary,
-            deploy_node_info=deploy_node_info, defer_build=defer_build, num_replica=self.num_index_replicas)
+        query = query_definition.generate_index_create_query(namespace=bucket,
+                                                             use_gsi_for_secondary=self.use_gsi_for_secondary,
+                                                             deploy_node_info=deploy_node_info, defer_build=defer_build,
+                                                             num_replica=self.num_index_replicas)
         log.info(query)
         # Define Helper Method which will be used for running n1ql queries, create index, drop index
         self.n1ql_helper = N1QLHelper(shell=self.shell,
@@ -222,10 +223,9 @@ class QueryHelperTests(BaseTestCase):
 
     def drop_index(self, bucket, query_definition, verify_drop=True):
         try:
-            query = query_definition.generate_index_drop_query(
-                bucket=bucket,
-                use_gsi_for_secondary=self.use_gsi_for_secondary,
-                use_gsi_for_primary=self.use_gsi_for_primary)
+            query = query_definition.generate_index_drop_query(namespace=bucket,
+                                                               use_gsi_for_secondary=self.use_gsi_for_secondary,
+                                                               use_gsi_for_primary=self.use_gsi_for_primary)
             log.info(query)
             actual_result = self.n1ql_helper.run_cbq_query(query=query,
                                                            server=self.n1ql_server)

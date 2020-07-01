@@ -25,22 +25,16 @@ class SecondaryIndexingAscendingDescendingCollations(BaseSecondaryIndexingTests)
 
     def test_three_indexes_on_different_fields_with_asc_desc_combinations(self):
         failed_scans = []
-        query_definition1 = QueryDefinition(
-            index_name="index_field1",
-            index_fields=["name"],
-            groups=["simple"], index_where_clause=" name IS NOT NULL ")
+        query_definition1 = QueryDefinition(index_name="index_field1", index_fields=["name"], groups=["simple"],
+                                            index_where_clause=" name IS NOT NULL ")
         scan_content1 = [{"Seek": None,
                           "Filter": [{"Low": "Adara", "High": "Winta"}]}]
-        query_definition2 = QueryDefinition(
-            index_name="index_field2",
-            index_fields=["age"],
-            groups=["simple"], index_where_clause=" age IS NOT NULL ")
+        query_definition2 = QueryDefinition(index_name="index_field2", index_fields=["age"], groups=["simple"],
+                                            index_where_clause=" age IS NOT NULL ")
         scan_content2 = [{"Seek": None,
                           "Filter": [{"Low": 20, "High": 60}]}]
-        query_definition3 = QueryDefinition(
-            index_name="index_field3",
-            index_fields=["premium_customer"],
-            groups=["simple"], index_where_clause=" premium_customer IS NOT NULL ")
+        query_definition3 = QueryDefinition(index_name="index_field3", index_fields=["premium_customer"],
+                                            groups=["simple"], index_where_clause=" premium_customer IS NOT NULL ")
         scan_content3 = [{"Seek": None,
                           "Filter": [{"Low": False, "High": True}]}]
         dict = {query_definition1: scan_content1, query_definition2: scan_content2, query_definition3: scan_content3}
@@ -71,16 +65,13 @@ class SecondaryIndexingAscendingDescendingCollations(BaseSecondaryIndexingTests)
 
     def test_three_array_indexes_on_different_fields_with_asc_desc_combinations(self):
         failed_scans = []
-        query_definition1 = QueryDefinition(
-            index_name="index_array_field1",
-            index_fields=["ALL ARRAY t FOR t in TO_ARRAY(`travel_history`) END"],
-            groups=["array"], index_where_clause=" name IS NOT NULL ")
+        query_definition1 = QueryDefinition(index_name="index_array_field1",
+                                            index_fields=["ALL ARRAY t FOR t in TO_ARRAY(`travel_history`) END"],
+                                            groups=["array"], index_where_clause=" name IS NOT NULL ")
         scan_content1 = [{"Seek": None,
                           "Filter": [{"Low": "India", "High": "US"}]}]
-        query_definition2 = QueryDefinition(
-            index_name="index_field2",
-            index_fields=["age"],
-            groups=["simple"], index_where_clause=" age IS NOT NULL ")
+        query_definition2 = QueryDefinition(index_name="index_field2", index_fields=["age"], groups=["simple"],
+                                            index_where_clause=" age IS NOT NULL ")
         scan_content2 = [{"Seek": None,
                           "Filter": [{"Low": 20, "High": 60}]}]
         dict = {query_definition1: scan_content1, query_definition2: scan_content2}
@@ -111,10 +102,9 @@ class SecondaryIndexingAscendingDescendingCollations(BaseSecondaryIndexingTests)
 
     def test_composite_with_asc_desc_combinations(self):
         failed_scans = []
-        query_definition = QueryDefinition(
-            index_name="three_field_composite_name_age",
-            index_fields=["name", "age", "premium_customer"],
-            groups=["three_field_index"], index_where_clause=" name IS NOT NULL ")
+        query_definition = QueryDefinition(index_name="three_field_composite_name_age",
+                                           index_fields=["name", "age", "premium_customer"],
+                                           groups=["three_field_index"], index_where_clause=" name IS NOT NULL ")
         # Basic Scan
         scan_content = [{"Seek": None,
                          "Filter": [{"Low": "Adara", "High": "Winta"},

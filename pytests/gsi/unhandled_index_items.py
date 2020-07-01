@@ -591,23 +591,19 @@ class GSIUnhandledIndexItems(BaseSecondaryIndexingTests):
 
     def _create_indexes(self):
         query_definitions = []
-        query_definitions.append(QueryDefinition(index_name="index_long_name",
-                            index_fields=["name"]))
+        query_definitions.append(QueryDefinition(index_name="index_long_name", index_fields=["name"]))
         query_definitions.append(QueryDefinition(index_name="index_array_encoded",
-                            index_fields=["ALL ARRAY t FOR t in `encoded_array` END"]))
+                                                 index_fields=["ALL ARRAY t FOR t in `encoded_array` END"]))
         query_definitions.append(QueryDefinition(index_name="index_array_encoded_bigValue",
-                            index_fields=["ALL ARRAY t FOR t in `encoded_big_value_array` END"]))
-        query_definitions.append(QueryDefinition(index_name="index_long_name_age",
-                            index_fields=["name", "age"]))
-        query_definitions.append(QueryDefinition(
-            index_name="index_long_endoded_age",
-            index_fields=["ALL ARRAY t FOR t in `encoded_array` END", "age"]))
-        query_definitions.append(QueryDefinition(
-            index_name="index_long_endoded_name",
-            index_fields=["ALL ARRAY t FOR t in `encoded_array` END", "name"]))
-        query_definitions.append(QueryDefinition(
-            index_name="index_long_name_encoded_age",
-            index_fields=["name", "ALL ARRAY t FOR t in `encoded_array` END", "age"]))
+                                                 index_fields=["ALL ARRAY t FOR t in `encoded_big_value_array` END"]))
+        query_definitions.append(QueryDefinition(index_name="index_long_name_age", index_fields=["name", "age"]))
+        query_definitions.append(QueryDefinition(index_name="index_long_endoded_age",
+                                                 index_fields=["ALL ARRAY t FOR t in `encoded_array` END", "age"]))
+        query_definitions.append(QueryDefinition(index_name="index_long_endoded_name",
+                                                 index_fields=["ALL ARRAY t FOR t in `encoded_array` END", "name"]))
+        query_definitions.append(QueryDefinition(index_name="index_long_name_encoded_age",
+                                                 index_fields=["name", "ALL ARRAY t FOR t in `encoded_array` END",
+                                                               "age"]))
         self.multi_create_index(query_definitions=query_definitions)
         return query_definitions
 

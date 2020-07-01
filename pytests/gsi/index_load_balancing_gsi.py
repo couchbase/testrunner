@@ -257,9 +257,7 @@ class SecondaryIndexingLoadBalancingTests(BaseSecondaryIndexingTests):
         query_definitions = []
         for ctr in range(start, start+index_count):
             index_name = "index_name_{0}".format(ctr)
-            query_definition = QueryDefinition(index_name=index_name,
-                                               index_fields=["join_yr"],
-                                               query_template="SELECT * from %s WHERE join_yr == 2010 ",
-                                               groups=[])
+            query_definition = QueryDefinition(index_name=index_name, index_fields=["join_yr"],
+                                               query_template="SELECT * from %s WHERE join_yr == 2010 ", groups=[])
             query_definitions.append(query_definition)
         return query_definitions

@@ -33,9 +33,8 @@ class SecondaryIndexMemdbOomTests(BaseSecondaryIndexingTests):
         self.load_query_definitions = []
         for x in range(self.initial_index_number):
             index_name = "index_name_"+str(x)
-            query_definition = QueryDefinition(
-                index_name=index_name, index_fields=["VMs"],
-                query_template=self.query_template, groups=["simple"])
+            query_definition = QueryDefinition(index_name=index_name, index_fields=["VMs"],
+                                               query_template=self.query_template, groups=["simple"])
             self.load_query_definitions.append(query_definition)
         self.multi_create_index(buckets=self.buckets,
                                 query_definitions=self.load_query_definitions,
@@ -314,7 +313,7 @@ class SecondaryIndexMemdbOomTests(BaseSecondaryIndexingTests):
         for x in range(3):
             index_name = "index_"+str(x)
             query_definition = QueryDefinition(index_name=index_name, index_fields=["job_title"],
-                        query_template=self.query_template, groups=["simple"])
+                                               query_template=self.query_template, groups=["simple"])
             query_definitions.append(query_definition)
         create_tasks = []
         build_tasks = []
@@ -352,7 +351,7 @@ class SecondaryIndexMemdbOomTests(BaseSecondaryIndexingTests):
         deploy_node_info = ["{0}:{1}".format(index_node.ip, index_node.port)]
         index_name = "replica_index"
         replica_definition = QueryDefinition(index_name=index_name, index_fields=["job_title"],
-                        query_template=self.query_template, groups=["simple"])
+                                             query_template=self.query_template, groups=["simple"])
         self.create_index(self.buckets[0].name, replica_definition, deploy_node_info)
         self.assertTrue(self._push_indexer_off_the_cliff(), "OOM Can't be achieved")
         self.multi_query_using_index(buckets=self.buckets,
@@ -365,8 +364,8 @@ class SecondaryIndexMemdbOomTests(BaseSecondaryIndexingTests):
         """
         self.assertTrue(self._push_indexer_off_the_cliff(), "OOM Can't be achieved")
         index_name = "oom_index"
-        query_definition = QueryDefinition(index_name=index_name, index_fields=["join_mo"],
-                                           query_template="", groups=["simple"])
+        query_definition = QueryDefinition(index_name=index_name, index_fields=["join_mo"], query_template="",
+                                           groups=["simple"])
         try:
             self.create_index(self.buckets[0].name, query_definition, self.deploy_node_info)
         except Exception as ex:
@@ -380,8 +379,8 @@ class SecondaryIndexMemdbOomTests(BaseSecondaryIndexingTests):
         self.defer_build = False
         self.assertTrue(self._push_indexer_off_the_cliff(), "OOM Can't be achieved")
         index_name = "oom_index"
-        query_definition = QueryDefinition(index_name=index_name, index_fields=["join_mo"],
-                                           query_template="", groups=["simple"])
+        query_definition = QueryDefinition(index_name=index_name, index_fields=["join_mo"], query_template="",
+                                           groups=["simple"])
         try:
             task = self.async_create_index(self.buckets[0].name, query_definition)
             task.result()

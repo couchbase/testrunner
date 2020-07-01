@@ -19,10 +19,9 @@ class SecondaryIndexingPlasmaDGMRecoveryTests(BaseSecondaryIndexingTests):
         self.load_query_definitions = []
         for x in range(self.initial_index_number):
             index_name = "index_name_" + str(x)
-            query_definition = QueryDefinition(
-                index_name=index_name, index_fields=["VMs"],
-                query_template="SELECT * FROM %s ", groups=["simple"],
-                index_where_clause = " VMs IS NOT NULL ")
+            query_definition = QueryDefinition(index_name=index_name, index_fields=["VMs"],
+                                               query_template="SELECT * FROM %s ", groups=["simple"],
+                                               index_where_clause=" VMs IS NOT NULL ")
             self.load_query_definitions.append(query_definition)
         if self.load_query_definitions:
             self.multi_create_index(buckets=self.buckets,

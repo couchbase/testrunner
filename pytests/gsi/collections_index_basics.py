@@ -14,6 +14,7 @@ from couchbase_helper.query_definitions import QueryDefinition
 from .base_gsi import BaseSecondaryIndexingTests
 from collection.collections_rest_client import CollectionsRest
 from collection.collections_stats import CollectionsStats
+from tasks import task
 
 
 class CollectionsIndexBasics(BaseSecondaryIndexingTests):
@@ -51,7 +52,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
         pass
 
     def _prepare_collection_for_indexing(self, num_scopes=1, num_collections=1, num_of_docs_per_collection=1000,
-                                         skip_defaults=True, indexes_before_load=False):
+                                         skip_defaults=True, indexes_before_load=False, json_template="Person"):
         self.namespace = []
         pre_load_idx_pri = None
         pre_load_idx_gsi = None
@@ -61,7 +62,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
                                                     bucket=self.test_bucket)
         self.scopes = self.cli_rest.get_bucket_scopes(bucket=self.test_bucket)
         self.collections = self.cli_rest.get_bucket_collections(bucket=self.test_bucket)
-        self.sleep(5)
+
         if skip_defaults:
             self.scopes.remove('_default')
             self.collections.remove('_default')
@@ -74,11 +75,11 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
                         pre_load_idx_gsi = QueryDefinition(index_name='pre_load_idx_gsi', index_fields=['firstname'])
                         query = pre_load_idx_pri.generate_primary_index_create_query(namespace=self.namespace[0])
                         self.run_cbq_query(query=query)
-                        query = pre_load_idx_gsi.generate_index_create_query(bucket=self.namespace[0])
+                        query = pre_load_idx_gsi.generate_index_create_query(namespace=self.namespace[0])
                         self.run_cbq_query(query=query)
                     self.gen_create = SDKDataLoader(num_ops=num_of_docs_per_collection, percent_create=100,
                                                     percent_update=0, percent_delete=0, scope=s_item,
-                                                    collection=c_item)
+                                                    collection=c_item, json_template=json_template)
                     self._load_all_buckets(self.master, self.gen_create)
                     # gens_load = self.generate_docs(self.docs_per_day)
                     # self.load(gens_load, flag=self.item_flag, verify_data=False, batch_size=self.batch_size,
@@ -102,9 +103,10 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
             if self.defer_build:
                 query = query_gen_1.generate_build_query(collection_namespace)
                 self.run_cbq_query(query=query)
-                self.wait_until_indexes_online(defer_build=True)
+            self.wait_until_indexes_online(defer_build=self.defer_build)
             query = f'SELECT COUNT(*) from {collection_namespace}'
-            count = self.run_cbq_query(query=query)['results'][0]['$1']
+            count = self.run_query_with_retry(query=query, expected_result=self.num_of_docs_per_collection,
+                                              is_count_query=True)
             self.assertEqual(count, self.num_of_docs_per_collection, "Docs count not matching")
             # stat = self.stat.get_collection_stats(bucket=self.buckets[0])
 
@@ -117,15 +119,16 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
             if self.defer_build:
                 query = query_gen_2.generate_build_query(collection_namespace)
                 self.run_cbq_query(query=query)
-                self.wait_until_indexes_online(defer_build=True)
+            self.wait_until_indexes_online(defer_build=self.defer_build)
             query = f'SELECT COUNT(*) from {collection_namespace}'
-            count = self.run_cbq_query(query=query)['results'][0]['$1']
+            count = self.run_query_with_retry(query=query, expected_result=self.num_of_docs_per_collection,
+                                              is_count_query=True)
             self.assertEqual(count, self.num_of_docs_per_collection, "Docs count not matching")
         except Exception as err:
             self.fail(str(err))
         finally:
-            query_1 = query_gen_1.generate_index_drop_query(bucket=collection_namespace)
-            query_2 = query_gen_2.generate_index_drop_query(bucket=collection_namespace)
+            query_1 = query_gen_1.generate_index_drop_query(namespace=collection_namespace)
+            query_2 = query_gen_2.generate_index_drop_query(namespace=collection_namespace)
             self.run_cbq_query(query=query_1)
             self.run_cbq_query(query=query_2)
 
@@ -138,23 +141,23 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
         primary_gen = QueryDefinition(index_name='`#primary`')
         try:
             # Checking for secondary index creation on named collection
-            query = query_gen.generate_index_create_query(bucket=collection_namespace, defer_build=self.defer_build)
+            query = query_gen.generate_index_create_query(namespace=collection_namespace, defer_build=self.defer_build)
             self.run_cbq_query(query=query)
             if self.defer_build:
                 query = query_gen.generate_build_query(collection_namespace)
                 self.run_cbq_query(query=query)
-                self.wait_until_indexes_online(defer_build=True)
-                # todo (why it's failing even though build is complete)
-                self.sleep(5)
+            self.wait_until_indexes_online(defer_build=self.defer_build)
+            # todo (why it's failing even though build is complete)
+            self.sleep(5)
 
-            query = indx_gen.generate_index_create_query(bucket=collection_namespace, defer_build=self.defer_build)
+            query = indx_gen.generate_index_create_query(namespace=collection_namespace, defer_build=self.defer_build)
             self.run_cbq_query(query=query)
             if self.defer_build:
                 query = indx_gen.generate_build_query(collection_namespace)
                 self.run_cbq_query(query=query)
-                self.wait_until_indexes_online(defer_build=True)
-                # todo (why it's failing even though build is complete)
-                self.sleep(5)
+            self.wait_until_indexes_online(defer_build=self.defer_build)
+            # todo (why it's failing even though build is complete)
+            self.sleep(5)
 
             query = primary_gen.generate_primary_index_create_query(namespace=collection_namespace,
                                                                     deploy_node_info=self.deploy_node_info,
@@ -164,9 +167,9 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
             if self.defer_build:
                 query = primary_gen.generate_build_query(collection_namespace)
                 self.run_cbq_query(query=query)
-                self.wait_until_indexes_online(defer_build=True)
-                # todo (why it's failing even though build is complete)
-                self.sleep(5)
+            self.wait_until_indexes_online(defer_build=self.defer_build)
+            # todo (why it's failing even though build is complete)
+            self.sleep(5)
 
             query = f'SELECT age from {collection_namespace} where age > 65'
             result = self.run_cbq_query(query=query)['results']
@@ -213,9 +216,8 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
             docs_to_delete = [doc_id['id'] for doc_id in random.choices(doc_ids, k=10)]
             doc_ids = ", ".join([f'"{item}"' for item in docs_to_delete])
             delete_query = f'DELETE FROM {collection_namespace} d WHERE meta(d).id in [{doc_ids}] RETURNING d'
-            result = self.run_cbq_query(query=delete_query)['results']
+            self.run_cbq_query(query=delete_query)
             count -= len(docs_to_delete)
-            # self.assertEqual(result, docs_to_delete, f"Actual: {result}, Expected: {docs_to_delete}")
             doc_count = self.run_query_with_retry(query=doc_count_query, expected_result=count, is_count_query=True)
             self.assertEqual(doc_count, count, f"Actual: {doc_count}, Expected: {count}")
 
@@ -239,7 +241,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
                     f'("upsert-1", {{ "firstName": "Michael", "age": 72}}),' \
                     f'("upsert-2", {{"firstName": "George", "age": 75}})' \
                     f' RETURNING VALUE name'
-            result = self.run_cbq_query(query=query)['results']
+            self.run_cbq_query(query=query)
             self.sleep(5, 'Giving some time to indexer to index newly inserted docs')
             query = f'SELECT meta().id FROM {collection_namespace} WHERE age > 70'
             upsert_doc_ids = self.run_cbq_query(query=query)['results']
@@ -253,25 +255,25 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
             # checking if pre-load indexes indexed docs
             query = f'SELECT COUNT(*) FROM {collection_namespace} WHERE firstName is not null'
             result = self.run_query_with_retry(query=query, expected_result=count, is_count_query=True)
-            self.assertEqual(result, count,  f"Actual: {doc_count}, Expected: {count}")
+            self.assertEqual(result, count, f"Actual: {doc_count}, Expected: {count}")
 
             query = f'SELECT COUNT(*) FROM {collection_namespace}'
             result = self.run_query_with_retry(query=query, expected_result=count, is_count_query=True)
-            self.assertEqual(result, count,  f"Actual: {doc_count}, Expected: {count}")
+            self.assertEqual(result, count, f"Actual: {doc_count}, Expected: {count}")
         except Exception as err:
             self.fail(str(err))
         finally:
-            query = query_gen.generate_index_drop_query(bucket=collection_namespace)
+            query = query_gen.generate_index_drop_query(namespace=collection_namespace)
             self.run_cbq_query(query=query)
-            query = indx_gen.generate_index_drop_query(bucket=collection_namespace)
+            query = indx_gen.generate_index_drop_query(namespace=collection_namespace)
             self.run_cbq_query(query=query)
-            query = primary_gen.generate_index_drop_query(bucket=collection_namespace)
+            query = primary_gen.generate_index_drop_query(namespace=collection_namespace)
             self.run_cbq_query(query=query)
 
             # Deleting pre-load-indexes
-            query = pre_load_idx_pri.generate_index_drop_query(bucket=collection_namespace)
+            query = pre_load_idx_pri.generate_index_drop_query(namespace=collection_namespace)
             self.run_cbq_query(query=query)
-            query = pre_load_idx_gsi.generate_index_drop_query(bucket=collection_namespace)
+            query = pre_load_idx_gsi.generate_index_drop_query(namespace=collection_namespace)
             self.run_cbq_query(query=query)
 
     def test_multiple_indexes_on_same_field(self):
@@ -291,43 +293,38 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
             if self.defer_build:
                 query = primary_gen.generate_build_query(collection_namespace)
                 self.run_cbq_query(query=query)
-                self.wait_until_indexes_online(defer_build=True)
+            self.wait_until_indexes_online(defer_build=self.defer_build)
             query = f'SELECT COUNT(*) from {collection_namespace}'
-            count = self.run_query_with_retry(query=query,expected_result=self.num_of_docs_per_collection,
-                                              is_count_query=True)
-            count = self.run_cbq_query(query=query)['results'][0]['$1']
+            count = self.run_query_with_retry(query=query, expected_result=self.num_of_docs_per_collection,
+                                              is_count_query=True)['results'][0]['$1']
             self.assertEqual(count, self.num_of_docs_per_collection, "Docs count not matching")
 
-            query = query_gen.generate_index_create_query(bucket=collection_namespace, defer_build=self.defer_build)
+            query = query_gen.generate_index_create_query(namespace=collection_namespace, defer_build=self.defer_build)
             self.run_cbq_query(query=query)
             if self.defer_build:
                 query = query_gen.generate_build_query(collection_namespace)
                 self.run_cbq_query(query=query)
-                self.wait_until_indexes_online(defer_build=True)
+            self.wait_until_indexes_online(defer_build=self.defer_build)
 
-            query = query_gen_copy.generate_index_create_query(bucket=collection_namespace,
+            query = query_gen_copy.generate_index_create_query(namespace=collection_namespace,
                                                                defer_build=self.defer_build)
             self.run_cbq_query(query=query)
             if self.defer_build:
                 query = query_gen_copy.generate_build_query(collection_namespace)
                 self.run_cbq_query(query=query)
-                self.wait_until_indexes_online(defer_build=True)
+                self.wait_until_indexes_online(defer_build=self.defer_build)
 
             # Running query against GSI index idx and idx_copy
             query = f'select count(*) from {collection_namespace} where age is not null;'
             result = self.run_query_with_retry(query=query, expected_result=count, is_count_query=True)
             self.assertEqual(result, count, f"Actual: {result}, Expected: {count}")
 
-            query = f'EXPLAIN {query}'
-            result = self.run_cbq_query(query=query)
-            # self.assertEqual(result)
-
         except Exception as err:
             self.fail(str(err))
         finally:
-            query_1 = primary_gen.generate_index_drop_query(bucket=collection_namespace)
-            query_2 = query_gen.generate_index_drop_query(bucket=collection_namespace)
-            query_3 = query_gen_copy.generate_index_drop_query(bucket=collection_namespace)
+            query_1 = primary_gen.generate_index_drop_query(namespace=collection_namespace)
+            query_2 = query_gen.generate_index_drop_query(namespace=collection_namespace)
+            query_3 = query_gen_copy.generate_index_drop_query(namespace=collection_namespace)
             self.run_cbq_query(query=query_1)
             self.run_cbq_query(query=query_2)
             self.run_cbq_query(query=query_3)
@@ -343,13 +340,13 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
         # index creation with num replica
         index_gen = QueryDefinition(index_name='idx', index_fields=['age'])
         try:
-            query = index_gen.generate_index_create_query(bucket=collection_namespace, num_replica=1,
-                                                          defer_build=self.defer_build)
+            query = index_gen.generate_index_create_query(namespace=collection_namespace, defer_build=self.defer_build,
+                                                          num_replica=1)
             self.run_cbq_query(query=query)
             if self.defer_build:
                 query = index_gen.generate_build_query(collection_namespace)
                 self.run_cbq_query(query=query)
-                self.wait_until_indexes_online(defer_build=True)
+            self.wait_until_indexes_online(defer_build=self.defer_build)
 
             # querying docs for the idx index
             query = f'SELECT COUNT(*) FROM {collection_namespace} WHERE age > 65'
@@ -358,7 +355,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
         except Exception as err:
             self.fail(str(err))
         finally:
-            query = index_gen.generate_index_drop_query(bucket=collection_namespace)
+            query = index_gen.generate_index_drop_query(namespace=collection_namespace)
             self.run_cbq_query(query=query)
 
         # index creation with node info
@@ -366,13 +363,13 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
             replica_nodes = []
             for node in index_nodes:
                 replica_nodes.append(f'{node.ip}:8091')
-            query = index_gen.generate_index_create_query(bucket=collection_namespace, deploy_node_info=replica_nodes,
-                                                          defer_build=self.defer_build)
+            query = index_gen.generate_index_create_query(namespace=collection_namespace,
+                                                          deploy_node_info=replica_nodes, defer_build=self.defer_build)
             self.run_cbq_query(query=query)
             if self.defer_build:
                 query = index_gen.generate_build_query(collection_namespace)
                 self.run_cbq_query(query=query)
-                self.wait_until_indexes_online(defer_build=True)
+            self.wait_until_indexes_online(defer_build=self.defer_build)
 
             # querying docs for the idx index
             query = f'SELECT COUNT(*) FROM {collection_namespace} WHERE age > 65'
@@ -381,8 +378,427 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
         except Exception as err:
             self.fail(str(err))
         finally:
-            query = index_gen.generate_index_drop_query(bucket=collection_namespace)
+            query = index_gen.generate_index_drop_query(namespace=collection_namespace)
             self.run_cbq_query(query=query)
 
     def test_gsi_array_indexes(self):
-        pass
+        self._prepare_collection_for_indexing(json_template="Employee")
+        collection_namespace = self.namespace[0]
+        primary_gen = QueryDefinition(index_name='`#primary`')
+        doc_count = self.run_cbq_query(query=f'select count(*) from {collection_namespace}')['results'][0]['$1']
+        arr_index = "arr_index"
+        # preparing index
+        try:
+            query = primary_gen.generate_primary_index_create_query(namespace=collection_namespace,
+                                                                    deploy_node_info=self.deploy_node_info,
+                                                                    defer_build=self.defer_build,
+                                                                    num_replica=self.num_index_replicas)
+
+            self.run_cbq_query(query=query)
+            if self.defer_build:
+                query = primary_gen.generate_build_query(collection_namespace)
+                self.run_cbq_query(query=query)
+            self.wait_until_indexes_online(defer_build=self.defer_build)
+
+            # Creating Array index
+            query = f"create index {arr_index} on {collection_namespace}(ALL ARRAY v.name for v in VMs END) "
+            self.run_cbq_query(query=query)
+            self.wait_until_indexes_online()
+            # Run a query that uses array indexes
+            query = f'select count(*) from {collection_namespace}  where any v in VMs satisfies v.name like "vm_%" END'
+            result = self.run_cbq_query(query=query)['results'][0]['$1']
+            self.assertEqual(result, doc_count, f"Expected: {doc_count}, Actual: {result}")
+            # Dropping the indexer
+            query = f"DROP INDEX {arr_index} ON {collection_namespace}"
+            self.run_cbq_query(query=query)
+
+            # Partial Indexes
+            query = f"create index {arr_index} on {collection_namespace}(ALL ARRAY v.name for v in VMs END) " \
+                    f"where join_mo > 8"
+            self.run_cbq_query(query=query)
+            self.wait_until_indexes_online()
+            # Run a query that uses array indexes
+            query = f'explain select count(*) from {collection_namespace}  where join_mo > 8 AND ' \
+                    f'any v in VMs satisfies v.name like "vm_%" END'
+            result = self.run_cbq_query(query=query)['results']
+            self.assertEqual(result[0]['plan']['~children'][0]['scan']['index'], 'arr_index',
+                             "Array index arr_index is not used.")
+            query = f'explain select count(*) from {collection_namespace}  where join_mo > 7 AND ' \
+                    f'any v in VMs satisfies v.name like "vm_%" END'
+            result = self.run_cbq_query(query=query)['results']
+            self.assertEqual(result[0]['plan']['~children'][0]['index'], '#primary',
+                             "Array index arr_index is used.")
+            # Dropping the indexer
+            query = f"DROP INDEX {arr_index} ON {collection_namespace}"
+            self.run_cbq_query(query=query)
+
+            # Checking for Simplified index
+            query = f"create index {arr_index} on {collection_namespace}(ALL  VMs)"
+            self.run_cbq_query(query=query)
+            self.wait_until_indexes_online()
+            # Run a query that uses array indexes
+            query = f' select count(*) from {collection_namespace} where ' \
+                    f'any v in VMs satisfies v.name like "vm_%" and v.memory like "%1%" END'
+            result = self.run_cbq_query(query=query)['results'][0]['$1']
+            self.assertNotEqual(result, 1000)
+            query = f'explain {query}'
+            result = self.run_cbq_query(query=query)['results']
+            self.assertEqual(result[0]['plan']['~children'][0]['scan']['index'], 'arr_index',
+                             "Array index arr_index is not used.")
+            # Dropping the indexer
+            query = f"DROP INDEX {arr_index} ON {collection_namespace}"
+            self.run_cbq_query(query=query)
+        except Exception as err:
+            # Dropping the indexer
+            query = f"DROP INDEX {arr_index} ON {collection_namespace}"
+            self.run_cbq_query(query=query)
+            self.fail(str(err))
+        finally:
+            query = primary_gen.generate_index_drop_query(namespace=collection_namespace)
+            self.run_cbq_query(query=query)
+
+    def test_index_partitioning(self):
+        self._prepare_collection_for_indexing(json_template="Employee")
+        collection_namespace = self.namespace[0]
+        arr_index = "arr_index"
+        primary_gen = QueryDefinition(index_name='`#primary`')
+        index_gen = QueryDefinition(index_name=arr_index, index_fields=['join_mo', 'join_day'],
+                                    partition_by_fields=['meta().id'])
+        try:
+            query = primary_gen.generate_primary_index_create_query(namespace=collection_namespace,
+                                                                    deploy_node_info=self.deploy_node_info,
+                                                                    defer_build=self.defer_build,
+                                                                    num_replica=self.num_index_replicas)
+
+            self.run_cbq_query(query=query)
+            if self.defer_build:
+                query = primary_gen.generate_build_query(collection_namespace)
+                self.run_cbq_query(query=query)
+            self.wait_until_indexes_online(defer_build=self.defer_build)
+
+            # Creating Paritioned index
+            query = index_gen.generate_index_create_query(namespace=collection_namespace, defer_build=self.defer_build)
+            self.run_cbq_query(query=query)
+            if self.defer_build:
+                query = index_gen.generate_build_query(collection_namespace)
+                self.run_cbq_query(query=query)
+            self.wait_until_indexes_online(defer_build=self.defer_build)
+
+            # Validating index partition
+            index_metadata = self.rest.get_indexer_metadata()['status']
+            for index in index_metadata:
+                if index['name'] != arr_index:
+                    continue
+                self.assertTrue(index['partitioned'], f"{arr_index} is not a partitioned index")
+                self.assertEqual(index['numPartition'], 8, "No. of partitions are not matching")
+
+            # Run a query that uses partitioned indexes
+            query = f'select count(*) from {collection_namespace}  where join_mo > 3 and join_day > 15'
+            result = self.run_cbq_query(query=query)['results'][0]['$1']
+            self.assertNotEqual(result, 0)
+
+            query = f'explain {query}'
+            result = self.run_cbq_query(query=query)['results']
+            self.assertEqual(result[0]['plan']['~children'][0]['index'], 'arr_index',
+                             f"index arr_index is not used. Index used is {result[0]['plan']['~children'][0]['index']}")
+            # Dropping the indexer
+            query = index_gen.generate_index_drop_query(namespace=collection_namespace)
+            self.run_cbq_query(query=query)
+
+            # Creating partial partitioned index
+            query = index_gen.generate_index_create_query(namespace=collection_namespace, defer_build=self.defer_build,
+                                                          index_where_clause="test_rate > 5")
+            self.run_cbq_query(query=query)
+            if self.defer_build:
+                query = index_gen.generate_build_query(collection_namespace)
+                self.run_cbq_query(query=query)
+            self.wait_until_indexes_online(defer_build=self.defer_build)
+
+            # Validating index partition
+            index_metadata = self.rest.get_indexer_metadata()['status']
+            for index in index_metadata:
+                if index['name'] != arr_index:
+                    continue
+                self.assertTrue(index['partitioned'], f"{arr_index} is not a partitioned index")
+                self.assertEqual(index['numPartition'], 8, "No. of partitions are not matching")
+
+            # Run a query that uses partitioned indexes
+            query = f'select count(*) from {collection_namespace}  where join_mo > 3 and join_day > 15' \
+                    f' and test_rate > 5'
+            result = self.run_cbq_query(query=query)['results'][0]['$1']
+            self.assertNotEqual(result, 0)
+
+            query = f'explain {query}'
+            result = self.run_cbq_query(query=query)['results']
+            self.assertEqual(result[0]['plan']['~children'][0]['index'], 'arr_index',
+                             f"index arr_index is not used. Index used is {result[0]['plan']['~children'][0]['index']}")
+            # Dropping the indexer
+            query = index_gen.generate_index_drop_query(namespace=collection_namespace)
+            self.run_cbq_query(query=query)
+        except Exception as err:
+            query = index_gen.generate_index_drop_query(namespace=collection_namespace)
+            self.run_cbq_query(query=query)
+            self.fail(str(err))
+        finally:
+            query = primary_gen.generate_index_drop_query(namespace=collection_namespace)
+            self.run_cbq_query(query=query)
+
+    def test_partial_indexes(self):
+        self._prepare_collection_for_indexing(json_template="Employee")
+        collection_namespace = self.namespace[0]
+        arr_index = "arr_index"
+        primary_gen = QueryDefinition(index_name='`#primary`')
+        index_gen = QueryDefinition(index_name=arr_index, index_fields=['join_mo', 'join_day'])
+        try:
+            query = primary_gen.generate_primary_index_create_query(namespace=collection_namespace,
+                                                                    deploy_node_info=self.deploy_node_info,
+                                                                    defer_build=self.defer_build,
+                                                                    num_replica=self.num_index_replicas)
+
+            self.run_cbq_query(query=query)
+            if self.defer_build:
+                query = primary_gen.generate_build_query(collection_namespace)
+                self.run_cbq_query(query=query)
+            self.wait_until_indexes_online(defer_build=self.defer_build)
+
+            # Creating Partial index
+            query = index_gen.generate_index_create_query(namespace=collection_namespace, defer_build=self.defer_build,
+                                                          index_where_clause="join_yr > 2010")
+            self.run_cbq_query(query=query)
+            if self.defer_build:
+                query = index_gen.generate_build_query(collection_namespace)
+                self.run_cbq_query(query=query)
+            self.wait_until_indexes_online(defer_build=self.defer_build)
+
+            query = f"select count(*) from {collection_namespace} where join_mo > 8 and join_day > 15 and" \
+                    f" join_yr > 2010"
+            result = self.run_cbq_query(query=query)['results'][0]['$1']
+            self.assertNotEqual(result, 0)
+
+            query = f'Explain {query}'
+            result = self.run_cbq_query(query=query)['results']
+            self.assertEqual(result[0]['plan']['~children'][0]['index'], arr_index,
+                             f'index {arr_index} is not used.')
+            # Dropping the indexer
+            query = index_gen.generate_index_drop_query(namespace=collection_namespace)
+            self.run_cbq_query(query=query)
+
+        except Exception as err:
+            query = index_gen.generate_index_drop_query(namespace=collection_namespace)
+            self.run_cbq_query(query=query)
+            self.fail(str(err))
+        finally:
+            query = primary_gen.generate_index_drop_query(namespace=collection_namespace)
+            self.run_cbq_query(query=query)
+
+    def test_same_name_indexes(self):
+        # todo: Untestested test - MB-40263
+        # different scopes, different named collections
+        num_combo = 2
+        collection_prefix = 'test_collection'
+        scope_prefix = 'test_scope'
+        collection_namespaces = []
+        arr_index = 'arr_index'
+        index_gen = QueryDefinition(index_name=arr_index, index_fields=['age'])
+        for item in range(num_combo):
+            scope = f"{scope_prefix}_{item}"
+            collection = f"{collection_prefix}_{item}"
+            self.cli_rest.create_scope_collection(bucket=self.test_bucket, scope=scope, collection=collection)
+            col_namespace = f"default:{self.test_bucket}.{scope}.{collection}"
+            collection_namespaces.append(col_namespace)
+            self.gen_create = SDKDataLoader(num_ops=1000, percent_create=100,
+                                            percent_update=0, percent_delete=0, scope=scope, collection=collection)
+            self._load_all_buckets(self.master, self.gen_create)
+            query = index_gen.generate_index_create_query(namespace=col_namespace)
+            self.run_cbq_query(query=query)
+            self.wait_until_indexes_online()
+
+        for col_namespace in collection_namespaces:
+            _, keyspace = col_namespace.split(':')
+            bucket, scope, collection = keyspace.split('.')
+            try:
+                # running a query that would use above index
+                query = f"Select count(*) from {col_namespace} where age > 40"
+                result = self.run_cbq_query(query=query)['results'][0]['$1']
+                self.assertNotEqual(result, 0)
+
+                query = f"Explain {query}"
+                result = self.run_cbq_query(query=query)['results']
+                self.assertEqual(result[0]['plan']['~children'][0]['index'], arr_index,
+                                 f'index {arr_index} is not used.')
+                query = index_gen.generate_index_drop_query(namespace=col_namespace)
+                self.run_cbq_query(query=query)
+                self.cli_rest.delete_scope_collection(bucket=bucket, scope=scope, collection=collection)
+            except Exception as err:
+                query = index_gen.generate_index_drop_query(namespace=col_namespace)
+                self.run_cbq_query(query=query)
+                self.fail(str(err))
+
+        # different scopes, same named collection
+        num_scope = 2
+        collection = 'test_collection'
+        collection_namespaces = []
+        for item in range(num_scope):
+            scope = f"scope_{item}"
+            self.cli_rest.create_scope_collection(bucket=self.test_bucket, scope=scope, collection=collection)
+            collection_namespaces.append(f"default:{self.test_bucket}.{scope}.{collection}")
+            self.gen_create = SDKDataLoader(num_ops=1000, percent_create=100,
+                                            percent_update=0, percent_delete=0, scope=scope, collection=collection)
+            self._load_all_buckets(self.master, self.gen_create)
+        for col_namespace in collection_namespaces:
+            _, keyspace = col_namespace.split(':')
+            bucket, scope, collection = keyspace.split('.')
+            try:
+                query = index_gen.generate_index_create_query(namespace=col_namespace)
+                self.run_cbq_query(query=query)
+                self.wait_until_indexes_online()
+
+                # running a query that would use above index
+                query = f"Select count(*) from {col_namespace} where age > 40"
+                result = self.run_cbq_query(query=query)['results'][0]['$1']
+                self.assertNotEqual(result, 0)
+
+                query = f"Explain {query}"
+                result = self.run_cbq_query(query=query)['results']
+                self.assertEqual(result[0]['plan']['~children'][0]['index'], arr_index,
+                                 f'index {arr_index} is not used.')
+                query = index_gen.generate_index_drop_query(namespace=col_namespace)
+                self.run_cbq_query(query=query)
+                self.cli_rest.delete_scope_collection(bucket=bucket, scope=scope, collection=collection)
+            except Exception as err:
+                query = index_gen.generate_index_drop_query(namespace=col_namespace)
+                self.run_cbq_query(query=query)
+                self.fail(str(err))
+
+        # Same scope, different named collections
+        num_collection = 2
+        scope = 'test_scope'
+        collection_namespaces = []
+        for item in range(num_collection):
+            collection = f"collection_{item}"
+            self.cli_rest.create_scope_collection(bucket=self.test_bucket, scope=scope, collection=collection)
+            collection_namespaces.append(f"default:{self.test_bucket}.{scope}.{collection}")
+            self.gen_create = SDKDataLoader(num_ops=1000, percent_create=100,
+                                            percent_update=0, percent_delete=0, scope=scope, collection=collection)
+            self._load_all_buckets(self.master, self.gen_create)
+        for col_namespace in collection_namespaces:
+            _, keyspace = col_namespace.split(':')
+            bucket, scope, collection = keyspace.split('.')
+            try:
+                query = index_gen.generate_index_create_query(namespace=col_namespace)
+                self.run_cbq_query(query=query)
+                self.wait_until_indexes_online()
+
+                # running a query that would use above index
+                query = f"Select count(*) from {col_namespace} where age > 40"
+                result = self.run_cbq_query(query=query)['results'][0]['$1']
+                self.assertNotEqual(result, 0)
+
+                query = f"Explain {query}"
+                result = self.run_cbq_query(query=query)['results']
+                self.assertEqual(result[0]['plan']['~children'][0]['index'], arr_index,
+                                 f'index {arr_index} is not used.')
+                query = index_gen.generate_index_drop_query(namespace=col_namespace)
+                self.run_cbq_query(query=query)
+                self.cli_rest.delete_scope_collection(bucket=bucket, scope=scope, collection=collection)
+            except Exception as err:
+                query = index_gen.generate_index_drop_query(namespace=col_namespace)
+                self.run_cbq_query(query=query)
+                self.fail(str(err))
+
+    def test_build_indexes_at_different_stages(self):
+        # todo: Incomplete test
+        scope = 'test_scope'
+        collection = 'test_collection'
+        arr_index = 'arr_index'
+        index_gen = QueryDefinition(index_name=arr_index, index_fields=['age'])
+        primary_gen = QueryDefinition(index_name='`#primary`')
+        self.cli_rest.create_scope_collection(bucket=self.test_bucket, scope=scope, collection=collection)
+        collection_namespace = f"default:{self.test_bucket}.{scope}.{collection}"
+        self.gen_create = SDKDataLoader(num_ops=10000, percent_create=100,
+                                        percent_update=0, percent_delete=0, scope=scope, collection=collection)
+        self._load_all_buckets(self.master, self.gen_create)
+        query = primary_gen.generate_primary_index_create_query(namespace=collection_namespace)
+        self.run_cbq_query(query=query)
+        self.wait_until_indexes_online()
+
+        query = f"select meta().id from {collection_namespace}"
+        results = self.run_cbq_query(query=query)['results']
+        doc_ids = [doc['id'] for doc in results]
+        # building indexes during create operation
+
+        # building indexes during upsert operation
+
+        # building indexes during update operation
+
+        # building indexes during delete operation
+
+    def test_index_creation_with_increased_seq_num(self):
+        """Create/Drop collection increment the seqno of a vbucket. It is important to test if indexer can handle those
+         e.g. load docs in colA, create index idx1 on colA, create colB, build index idx1 on colA, drop colB,
+         build index idx2 on colA etc. Try it with both empty collection and collection with mutations."""
+        # todo: Incomplete test - MB-40288
+        scope_prefix = 'test_scope'
+        collection_prefix = 'test_collection'
+        arr_index_1 = 'arr_index_1'
+        arr_index_2 = 'arr_index_2'
+        index_gen_1 = QueryDefinition(index_name=arr_index_1, index_fields=['age'])
+        index_gen_2 = QueryDefinition(index_name=arr_index_2, index_fields=['city'])
+        primary_gen = QueryDefinition(index_name='`#primary`')
+
+        # creating colA and then creating index arr_index_1 on empty collection.
+        # creating colB and then building index arr_index_1.
+        # dropping colB and then creating index arr_index_2
+        namespace = f"default:{self.test_bucket}.test_scope_1.test_col_1"
+        try:
+            self.cli_rest.create_scope_collection(bucket=self.test_bucket, scope='test_scope_1',
+                                                  collection="test_col_1")
+            self.sleep(5)
+            query = primary_gen.generate_primary_index_create_query(namespace=namespace)
+            self.run_cbq_query(query=query)
+            query = index_gen_1.generate_index_create_query(namespace=namespace, defer_build=True)
+            self.run_cbq_query(query=query)
+            self.cli_rest.create_collection(bucket=self.test_bucket, scope='test_scope_1', collection="test_col_2")
+            query = index_gen_1.generate_build_query(namespace=namespace)
+            self.run_cbq_query(query=query)
+            self.cli_rest.delete_collection(bucket=self.test_bucket,scope='test_scope_1', collection='test_col_2')
+            self.wait_until_indexes_online()
+            self.sleep(5)
+            query = index_gen_2.generate_index_create_query(namespace=namespace)
+            self.run_cbq_query(query=query)
+            query = f'select count(*) from {namespace}'
+            result = self.run_cbq_query(query=query)['results'][0]['$1']
+            self.assertEqual(result, 0)
+            query = index_gen_1.generate_index_drop_query(namespace=namespace)
+            self.run_cbq_query(query=query)
+            query = index_gen_2.generate_index_drop_query(namespace=namespace)
+            self.run_cbq_query(query=query)
+
+            # Trying with loaded collection
+            self.cli_rest.create_collection(bucket=self.test_bucket, scope='test_scope_1', collection="test_col_2")
+            self.gen_create = SDKDataLoader(num_ops=1000, percent_create=100, percent_update=0, percent_delete=0,
+                                            scope='test_scope_1', collection='test_col_1')
+            self._load_all_buckets(self.master, self.gen_create)
+            query = index_gen_1.generate_index_create_query(namespace=namespace, defer_build=True)
+            self.run_cbq_query(query=query)
+            self.cli_rest.create_collection(bucket=self.test_bucket, scope='test_scope_1', collection="test_col_2")
+            query = index_gen_1.generate_build_query(namespace=namespace)
+            self.run_cbq_query(query=query)
+            self.cli_rest.delete_collection(bucket=self.test_bucket,scope='test_scope_1', collection='test_col_2')
+            self.wait_until_indexes_online()
+            query = index_gen_2.generate_index_create_query(namespace=namespace)
+            self.run_cbq_query(query=query)
+            query = f'select count(*) from {namespace} where age > 0'
+            result = self.run_query_with_retry(query=query, expected_result=1000, is_count_query=True)
+            self.assertEqual(result, 1000)
+            query = index_gen_1.generate_index_drop_query(namespace=namespace)
+            self.run_cbq_query(query=query)
+            query = index_gen_2.generate_index_drop_query(namespace=namespace)
+            self.run_cbq_query(query=query)
+        except Exception as err:
+            self.log.error(str(err))
+            query = index_gen_1.generate_index_drop_query(namespace=namespace)
+            self.run_cbq_query(query=query)
+            query = index_gen_2.generate_index_drop_query(namespace=namespace)
+            self.run_cbq_query(query=query)
+            self.fail()

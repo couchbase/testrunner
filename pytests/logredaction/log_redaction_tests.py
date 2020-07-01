@@ -203,7 +203,7 @@ class LogRedactionTests(LogRedactionBase):
 
         for query_definition in query_definitions:
             for bucket in self.buckets:
-                drop_query = query_definition.generate_index_drop_query(bucket=bucket.name)
+                drop_query = query_definition.generate_index_drop_query(namespace=bucket.name)
                 n1ql_helper.run_cbq_query(query=drop_query, server=n1ql_node)
         result = self.monitor_logs_collection()
         log.info(result)
@@ -265,7 +265,7 @@ class LogRedactionTests(LogRedactionBase):
 
         for query_definition in query_definitions:
             for bucket in self.buckets:
-                drop_query = query_definition.generate_index_drop_query(bucket=bucket.name)
+                drop_query = query_definition.generate_index_drop_query(namespace=bucket.name)
                 n1ql_helper.run_cbq_query(query=drop_query, server=n1ql_node)
         result = self.monitor_logs_collection()
         log.info(result)
@@ -327,7 +327,7 @@ class LogRedactionTests(LogRedactionBase):
 
         for query_definition in query_definitions:
             for bucket in self.buckets:
-                drop_query = query_definition.generate_index_drop_query(bucket=bucket.name)
+                drop_query = query_definition.generate_index_drop_query(namespace=bucket.name)
                 n1ql_helper.run_cbq_query(query=drop_query, server=n1ql_node)
         result = self.monitor_logs_collection()
         log.info(result)
@@ -389,7 +389,7 @@ class LogRedactionTests(LogRedactionBase):
 
         for query_definition in query_definitions:
             for bucket in self.buckets:
-                drop_query = query_definition.generate_index_drop_query(bucket=bucket.name)
+                drop_query = query_definition.generate_index_drop_query(namespace=bucket.name)
                 n1ql_helper.run_cbq_query(query=drop_query, server=n1ql_node)
         result = self.monitor_logs_collection()
         log.info(result)

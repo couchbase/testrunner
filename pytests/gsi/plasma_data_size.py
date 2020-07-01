@@ -51,11 +51,9 @@ class SecondaryIndexDatasizeTests(BaseSecondaryIndexingTests):
         generators = self._upload_documents_in_sorted()
         self.full_docs_list = self.generate_full_docs_list(generators)
         self.gen_results = TuqGenerators(self.log, self.full_docs_list)
-        query_definition =  QueryDefinition(
-            index_name="index_range_shrink_name",
-            index_fields=["name"],
-            query_template="SELECT * FROM %s WHERE name IS NOT NULL",
-            groups=["simple"], index_where_clause=" name IS NOT NULL ")
+        query_definition = QueryDefinition(index_name="index_range_shrink_name", index_fields=["name"],
+                                           query_template="SELECT * FROM %s WHERE name IS NOT NULL", groups=["simple"],
+                                           index_where_clause=" name IS NOT NULL ")
         buckets = []
         for bucket in self.buckets:
             if bucket.name.startswith("plasma_dgm"):
@@ -75,11 +73,9 @@ class SecondaryIndexDatasizeTests(BaseSecondaryIndexingTests):
         generators = self._upload_documents_in_sorted()
         self.full_docs_list = self.generate_full_docs_list(generators)
         self.gen_results = TuqGenerators(self.log, self.full_docs_list)
-        query_definition =  QueryDefinition(
-            index_name="index_range_shrink_name",
-            index_fields=["name"],
-            query_template="SELECT * FROM %s WHERE name IS NOT NULL",
-            groups=["simple"], index_where_clause=" name IS NOT NULL ")
+        query_definition = QueryDefinition(index_name="index_range_shrink_name", index_fields=["name"],
+                                           query_template="SELECT * FROM %s WHERE name IS NOT NULL", groups=["simple"],
+                                           index_where_clause=" name IS NOT NULL ")
         buckets = []
         for bucket in self.buckets:
             if bucket.name.startswith("plasma_dgm"):
@@ -115,11 +111,9 @@ class SecondaryIndexDatasizeTests(BaseSecondaryIndexingTests):
         generators = self._upload_documents_in_sorted()
         self.full_docs_list = self.generate_full_docs_list(generators)
         self.gen_results = TuqGenerators(self.log, self.full_docs_list)
-        query_definition =  QueryDefinition(
-            index_name="index_range_shrink_name",
-            index_fields=["name"],
-            query_template="SELECT * FROM %s WHERE name IS NOT NULL",
-            groups=["simple"], index_where_clause=" name IS NOT NULL ")
+        query_definition = QueryDefinition(index_name="index_range_shrink_name", index_fields=["name"],
+                                           query_template="SELECT * FROM %s WHERE name IS NOT NULL", groups=["simple"],
+                                           index_where_clause=" name IS NOT NULL ")
         buckets = []
         for bucket in self.buckets:
             if bucket.name.startswith("plasma_dgm"):
@@ -207,11 +201,9 @@ class SecondaryIndexDatasizeTests(BaseSecondaryIndexingTests):
         buckets = self._create_plasma_buckets()
         if self.plasma_dgm:
             self.get_dgm_for_plasma(indexer_nodes=[self.dgmServer])
-        query_definition =  QueryDefinition(
-            index_name="index_name_big_values",
-            index_fields=["bigValues"],
-            query_template="SELECT * FROM %s WHERE bigValues IS NOT NULL",
-            groups=["simple"], index_where_clause=" bigValues IS NOT NULL ")
+        query_definition = QueryDefinition(index_name="index_name_big_values", index_fields=["bigValues"],
+                                           query_template="SELECT * FROM %s WHERE bigValues IS NOT NULL",
+                                           groups=["simple"], index_where_clause=" bigValues IS NOT NULL ")
         self.multi_create_index(buckets=buckets,
                                 query_definitions=[query_definition])
         template = '{{"name":"{0}", "age":{1}, "bigValues": "{2}" }}'
@@ -256,11 +248,9 @@ class SecondaryIndexDatasizeTests(BaseSecondaryIndexingTests):
         buckets = self._create_plasma_buckets()
         if self.plasma_dgm:
             self.get_dgm_for_plasma(indexer_nodes=[self.dgmServer])
-        query_definition =  QueryDefinition(
-            index_name="index_name_big_values",
-            index_fields=["bigValues"],
-            query_template="SELECT * FROM %s WHERE bigValues IS NOT NULL",
-            groups=["simple"], index_where_clause=" bigValues IS NOT NULL ")
+        query_definition = QueryDefinition(index_name="index_name_big_values", index_fields=["bigValues"],
+                                           query_template="SELECT * FROM %s WHERE bigValues IS NOT NULL",
+                                           groups=["simple"], index_where_clause=" bigValues IS NOT NULL ")
         self.multi_create_index(buckets=buckets,
                                 query_definitions=[query_definition])
         template = '{{"name":"{0}", "age":{1}, "bigValues": "{2}" }}'
@@ -382,23 +372,19 @@ class SecondaryIndexDatasizeTests(BaseSecondaryIndexingTests):
 
     def _create_indexes(self, buckets):
         query_definitions = []
-        query_definitions.append(QueryDefinition(index_name="index_long_name",
-                            index_fields=["name"]))
+        query_definitions.append(QueryDefinition(index_name="index_long_name", index_fields=["name"]))
         query_definitions.append(QueryDefinition(index_name="index_array_encoded",
-                            index_fields=["ALL ARRAY t FOR t in `encoded_array` END"]))
+                                                 index_fields=["ALL ARRAY t FOR t in `encoded_array` END"]))
         query_definitions.append(QueryDefinition(index_name="index_array_encoded_bigValue",
-                            index_fields=["ALL ARRAY t FOR t in `encoded_big_value_array` END"]))
-        query_definitions.append(QueryDefinition(index_name="index_long_name_age",
-                            index_fields=["name", "age"]))
-        query_definitions.append(QueryDefinition(
-            index_name="index_long_endoded_age",
-            index_fields=["ALL ARRAY t FOR t in `encoded_array` END", "age"]))
-        query_definitions.append(QueryDefinition(
-            index_name="index_long_endoded_name",
-            index_fields=["ALL ARRAY t FOR t in `encoded_array` END", "name"]))
-        query_definitions.append(QueryDefinition(
-            index_name="index_long_name_encoded_age",
-            index_fields=["name", "ALL ARRAY t FOR t in `encoded_array` END", "age"]))
+                                                 index_fields=["ALL ARRAY t FOR t in `encoded_big_value_array` END"]))
+        query_definitions.append(QueryDefinition(index_name="index_long_name_age", index_fields=["name", "age"]))
+        query_definitions.append(QueryDefinition(index_name="index_long_endoded_age",
+                                                 index_fields=["ALL ARRAY t FOR t in `encoded_array` END", "age"]))
+        query_definitions.append(QueryDefinition(index_name="index_long_endoded_name",
+                                                 index_fields=["ALL ARRAY t FOR t in `encoded_array` END", "name"]))
+        query_definitions.append(QueryDefinition(index_name="index_long_name_encoded_age",
+                                                 index_fields=["name", "ALL ARRAY t FOR t in `encoded_array` END",
+                                                               "age"]))
         self.multi_create_index(buckets=buckets, query_definitions=query_definitions)
         return query_definitions
 

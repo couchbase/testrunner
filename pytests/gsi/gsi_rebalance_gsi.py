@@ -1672,16 +1672,14 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
         to_remove_nodes = [nodes_out_list]
         emit_fields = "*"
         body = {"stale": "False"}
-        query_definition = QueryDefinition(
-            index_name="multiple_field_index",
-            index_fields=["name", "age", "email", "premium_customer"],
-            query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s " %
-                                                      "name > \"Adara\" AND "
-                                                      "name < \"Winta\" "
-                                                      "AND age > 0 AND age "
-                                                      "< 100 ORDER BY _id"),
-            groups=["multiple_field_index"],
-            index_where_clause=" name IS NOT NULL ")
+        query_definition = QueryDefinition(index_name="multiple_field_index",
+                                           index_fields=["name", "age", "email", "premium_customer"],
+                                           query_template=RANGE_SCAN_TEMPLATE.format(emit_fields, " %s " %
+                                                                                     "name > \"Adara\" AND "
+                                                                                     "name < \"Winta\" "
+                                                                                     "AND age > 0 AND age "
+                                                                                     "< 100 ORDER BY _id"),
+                                           groups=["multiple_field_index"], index_where_clause=" name IS NOT NULL ")
         self.rest = RestConnection(nodes_out_list)
         id_map = self.create_index_using_rest(self.buckets[0], query_definition)
         self.run_operation(phase="before")
@@ -2895,10 +2893,9 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
             self.run_async_index_operations(operation_type="drop_index")
 
     def _drop_index(self, query_definition, bucket):
-        query = query_definition.generate_index_drop_query(
-            bucket=bucket,
-            use_gsi_for_secondary=self.use_gsi_for_secondary,
-            use_gsi_for_primary=self.use_gsi_for_primary)
+        query = query_definition.generate_index_drop_query(namespace=bucket,
+                                                           use_gsi_for_secondary=self.use_gsi_for_secondary,
+                                                           use_gsi_for_primary=self.use_gsi_for_primary)
         log.info(query)
         actual_result = self.n1ql_helper.run_cbq_query(query=query,
                                                        server=self.n1ql_server)
@@ -2906,9 +2903,9 @@ class SecondaryIndexingRebalanceTests(BaseSecondaryIndexingTests, QueryHelperTes
     def _create_index_with_defer_build(self, defer_build=True):
         for bucket in self.buckets:
             for query_definition in self.query_definitions:
-                query = query_definition.generate_index_create_query(
-                    bucket=bucket, use_gsi_for_secondary=self.use_gsi_for_secondary,
-                    deploy_node_info=None, defer_build=defer_build)
+                query = query_definition.generate_index_create_query(namespace=bucket,
+                                                                     use_gsi_for_secondary=self.use_gsi_for_secondary,
+                                                                     deploy_node_info=None, defer_build=defer_build)
                 log.info(query)
                 create_index_task = self.cluster.async_create_index(
                     server=self.n1ql_server, bucket=bucket, query=query,
