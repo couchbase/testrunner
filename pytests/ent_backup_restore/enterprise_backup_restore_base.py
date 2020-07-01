@@ -1482,10 +1482,10 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         """
         data_matched = True
         data_collector = DataCollector()
-        bk_file_data, _ = data_collector.get_kv_dump_from_backup_file(server_host,
-                                                                      self.cli_command_location, self.cmd_ext,
-                                                                      self.backupset.directory, master_key,
-                                                                      self.buckets)
+        bk_file_data, _ = data_collector.get_kv_dump_from_backup_file(server_host, self.cli_command_location,
+                                                                      self.cmd_ext, master_key, self.buckets,
+                                                                      objstore_provider=self.objstore_provider,
+                                                                      backupset=self.backupset)
         restore_file_data = bk_file_data
         regex_backup_data = {}
         if regex_pattern is not None:
@@ -2279,8 +2279,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         data_collector = DataCollector()
         bk_file_data, _ = data_collector.get_kv_dump_from_backup_file(self.backupset.backup_host,
                                                                       self.cli_command_location, self.cmd_ext,
-                                                                      self.backupset.directory, "ent-backup",
-                                                                      self.buckets)
+                                                                      "ent-backup", self.buckets,
+                                                                      backupset=self.backupset)
         shell = RemoteMachineShellConnection(self.backupset.backup_host)
         rest = RestConnection(self.backupset.restore_cluster_host)
         restore_buckets_items = rest.get_buckets_itemCount()

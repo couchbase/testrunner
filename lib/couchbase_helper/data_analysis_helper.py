@@ -777,9 +777,8 @@ class DataCollector(object):
                 os.remove(dest_path)
         return headerInfo, bucketMap
 
-    def get_kv_dump_from_backup_file(self, server, cli_command, cmd_ext,
-                                     backup_dir, master_key, buckets,
-                                     debug_logs=False):
+    def get_kv_dump_from_backup_file(self, server, cli_command, cmd_ext, master_key, buckets, debug_logs=False,
+                                     objstore_provider=None, backupset=None):
         """
             Extract key value from database file shard_0.sqlite.0
             Return: key, kv store name, status and value
@@ -796,13 +795,45 @@ class DataCollector(object):
             if master_key == "random_keys":
                 master_key = ".\{12\}$"
             dump_output = []
+
+            command = (
+                f"ls -tr {backupset.objstore_staging_directory + '/' if objstore_provider else ''}"
+                f"{backupset.directory}/{backupset.name} | tail -1"
+            )
+
+            backup_name, e = conn.execute_command(command)
+            if not backup_name or e:
+                return None, status
+
+            command = (
+                f"ls -tr --group-directories-first {backupset.objstore_staging_directory + '/' if objstore_provider else ''}"
+                f"{backupset.directory}/{backupset.name}/{backup_name[0]} | head -1"
+            )
+
+            bucket_name, e = conn.execute_command(command)
+            if not bucket_name or e:
+                return None, status
+
             for i in range(0, 1024):
-                cmd2 = "{0}cbriftdump{1} "\
-                       " -f {2}/backup/{3}*/{4}*/data/index_{5}.sqlite.0 | grep -A 8 'Key: {6}' "\
-                                                  .format(cli_command, cmd_ext,\
-                                                   backup_dir, now.year, bucket.name,\
-                                                   i, master_key)
-                output, error = conn.execute_command(cmd2, debug=False)
+                command = (
+                    f"{cli_command}cbriftdump{cmd_ext}"
+                    f" -f {objstore_provider.schema_prefix() + backupset.objstore_bucket + '/' if objstore_provider else ''}"
+                    f"{backupset.directory}/backup/{backup_name[0]}/{bucket_name[0]}/data/index_{i}.sqlite.0"
+                )
+
+                if objstore_provider:
+                    f"{' --obj-staging-dir ' + backupset.objstore_staging_directory}"
+                    f"{' --obj-access-key-id ' + backupset.objstore_access_key_id if backupset.objstore_access_key_id else ''}"
+                    f"{' --obj-cacert ' + backupset.objstore_cacert if backupset.objstore_cacert else ''}"
+                    f"{' --obj-endpoint ' + backupset.objstore_endpoint if backupset.objstore_endpoint else ''}"
+                    f"{' --obj-no-ssl-verify' if backupset.objstore_no_ssl_verify else ''}"
+                    f"{' --obj-region ' + backupset.objstore_region if backupset.objstore_region else ''}"
+                    f"{' --obj-secret-access-key ' + backupset.objstore_secret_access_key if backupset.objstore_secret_access_key else ''}"
+                    f"{' --s3-force-path-style' if objstore_provider.schema_prefix() == 's3://' else ''}"
+
+                command += f" | grep -A 8 'Key: {master_key}' "
+
+                output, error = conn.execute_command(command, debug=False)
                 if output:
                     shards_with_data[bucket.name].append(i)
                     """ remove empty element """

@@ -1093,6 +1093,11 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             4. Delete bucket
             5. Restore docs with regex
             6. Verify only key or value in regex restored to bucket
+
+            NOTE: This test requires a specific config/ini to run correctly; if provided with an incorrect config
+            testrunner will restore data into the bucket that was backed up on the same cluster without performing a
+            flush. This will mean cbbackupmgr will restore with conflict resolution enabled and the validation will find
+            an unexpected amount of keys (all of them) in the target bucket.
         """
         key_name = "ent-backup"
         if self.backupset.random_keys:
