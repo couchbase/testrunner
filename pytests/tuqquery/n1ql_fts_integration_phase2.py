@@ -7,6 +7,7 @@ from membase.api.exception import CBQError
 from pytests.fts.fts_base import CouchbaseCluster
 from pytests.security.rbac_base import RbacBase
 from .tuq import QueryTests
+import time
 
 
 class N1qlFTSIntegrationPhase2Test(QueryTests):
@@ -1379,7 +1380,7 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
             self.wait_for_all_indexes_online()
             self.sleep(10, "wait after indexes are online")
 
-    def _create_fts_index(self, index_name='', doc_count=0, source_name=''):
+    def _create_fts_index(self, index_name='', doc_count=0, source_name='', poll_interval=10, num_retries=30):
         fts_index_type = self.input.param("fts_index_type", "scorch")
 
         fts_index = self.cbcluster.create_fts_index(name=index_name, source_name=source_name)
@@ -1388,12 +1389,14 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
         else:
             fts_index.update_index_to_scorch()
         indexed_doc_count = 0
-        while indexed_doc_count < doc_count:
+        while (indexed_doc_count < doc_count) and num_retries > 0:
             try:
-                self.sleep(10)
+                self.sleep(poll_interval)
                 indexed_doc_count = fts_index.get_indexed_doc_count()
             except KeyError:
                 continue
+            finally:
+                num_retries -= 1
 
         return fts_index
 
