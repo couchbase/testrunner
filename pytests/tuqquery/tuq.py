@@ -1211,7 +1211,7 @@ class QueryTests(BaseTestCase):
             json_output_str += s
         return json.loads(json_output_str)
 
-    def run_cbq_query(self, query=None, min_output_size=10, server=None, query_params={}, is_prepared=False, encoded_plan=None, username=None, password=None, use_fts_query_param=None):
+    def run_cbq_query(self, query=None, min_output_size=10, server=None, query_params={}, is_prepared=False, encoded_plan=None, username=None, password=None, use_fts_query_param=None, debug_query=True):
         if query is None:
             query = self.query
         if server is None:
@@ -1279,7 +1279,7 @@ class QueryTests(BaseTestCase):
                 hint = ' USE INDEX (%s using %s) ' % (self.hint_index, self.index_type)
                 query = query.replace(from_clause, from_clause + hint)
 
-            if not is_prepared:
+            if not is_prepared and debug_query:
                 self.log.info('RUN QUERY %s' % query)
 
             if self.analytics:
@@ -1325,7 +1325,7 @@ class QueryTests(BaseTestCase):
                         self.log.error("INCORRECT DOCUMENT IS: "+str(output1))
         if isinstance(result, str) or 'errors' in result:
             raise CBQError(result, server.ip)
-        if 'metrics' in result:
+        if 'metrics' in result and debug_query:
             self.log.info("TOTAL ELAPSED TIME: %s" % result["metrics"]["elapsedTime"])
         return result
 
