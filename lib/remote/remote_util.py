@@ -4210,7 +4210,8 @@ class RemoteMachineShellConnection(KeepRefs):
         if self.info.distribution_type.lower() == 'mac':
             transfer_command = "%scbtransfer" % (MAC_COUCHBASE_BIN_PATH)
 
-        command = "%s %s %s %s" % (transfer_command, source, destination, command_options)
+        command = "%s %s %s %s -x uncompress=1" % (transfer_command, source, destination,
+                                                   command_options)
         if self.info.type.lower() == 'windows':
             command = "cmd /c \"%s\" \"%s\" \"%s\" %s" % (transfer_command,
                                                           source,
