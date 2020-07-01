@@ -3,6 +3,7 @@ from threading import Thread
 import time
 
 from base_2i import BaseSecondaryIndexingTests
+from couchbase.n1ql import CONSISTENCY_REQUEST
 from couchbase_helper.query_definitions import QueryDefinition
 from lib.memcached.helper.data_helper import MemcachedClientHelper
 from membase.api.rest_client import RestConnection
@@ -671,6 +672,431 @@ class SecondaryIndexingRecoveryTests(BaseSecondaryIndexingTests):
         post_recovery_tasks = self.async_run_operations(phase="after")
         self.sleep(180)
         self._run_tasks([post_recovery_tasks])
+
+    def test_robust_rollback_handling_in_failure_scenario(self):
+        """
+        MB-36582
+        TODO:
+        "https://issues.couchbase.com/browse/MB-37586
+        https://issues.couchbase.com/browse/MB-37588
+        Will wait on the stats to be available
+        https://issues.couchbase.com/browse/MB-37594
+        """
+        data_nodes = self.get_kv_nodes()
+        self.assertTrue(len(data_nodes) >= 3, "Can't run this with less than 3 KV nodes")
+        bucket_name = self.buckets[0].name
+        index_name = self.get_index_map()[bucket_name].keys()[0]
+        index_node = self.get_nodes_from_services_map(service_type="index",
+                                                      get_all_nodes=False)
+        rest = RestConnection(index_node)
+        # Change indexer snapshot for a recovery point
+        doc = {"indexer.settings.persisted_snapshot.moi.interval": 60000}
+        rest.set_index_settings(doc)
+
+        # Deleting bucket as there is no easy way in testrunner to crate index before loading data
+        for bucket in self.buckets:
+            self.cluster.bucket_delete(self.master, bucket=bucket)
+
+        # Create default bucket
+        default_params = self._create_bucket_params(
+            server=self.master, size=self.bucket_size,
+            replicas=self.num_replicas, bucket_type=self.bucket_type,
+            enable_replica_index=self.enable_replica_index,
+            eviction_policy=self.eviction_policy, lww=self.lww,
+            maxttl=self.maxttl, compression_mode=self.compression_mode)
+        self.cluster.create_default_bucket(default_params)
+
+        # loading data to bucket
+        gens_load = self.generate_docs(num_items=self.docs_per_day)
+        self.load(gens_load, flag=self.item_flag, batch_size=self.batch_size, op_type="create", verify_data=False)
+
+        # creating Index
+        query_definition = QueryDefinition(
+            index_name=index_name, index_fields=["VMs"],
+            query_template="SELECT * FROM %s ", groups=["simple"],
+            index_where_clause=" VMs IS NOT NULL ")
+        self.load_query_definitions.append(query_definition)
+        self.create_index(bucket="default", query_definition=query_definition)
+
+        node_b, node_c = (None, None)
+        for node in data_nodes:
+            if node.ip == self.master.ip:
+                continue
+            if not node_b:
+                node_b = node
+            else:
+                node_c = node
+                break
+        # Blocking Node C from Node B
+        try:
+            self.block_incoming_network_from_node(node_b, node_c)
+
+            # Killing Memcached on Node C so that disk snapshots have vbuuid not available with Node B
+            for _ in range(2):
+                # Killing memcached on node C
+                num_snapshot = rest.get_index_stats()[bucket_name][index_name]["num_commits"]
+                remote_client = RemoteMachineShellConnection(node_c)
+                remote_client.kill_memcached()
+                remote_client.disconnect()
+
+                sleep_count = 0
+                while sleep_count < 10:
+                    self.sleep(10, "Waiting for Disk Snapshot/s to be available")
+                    new_num_snapshot = rest.get_index_stats()[bucket_name][index_name]["num_commits"]
+                    if new_num_snapshot > num_snapshot:
+                        self.log.info("New Disk Snapshot is available")
+                        break
+                    sleep_count += 1
+
+            # Restarting Indexer to clear in-memory snapshots
+            remote_client = RemoteMachineShellConnection(index_node)
+            remote_client.execute_command("kill -9 $(ps aux | pgrep 'indexer')")
+            self.sleep(timeout=10, message="Allowing time for indexer to restart")
+
+            # Fail over Node C so that replica takes over on Node B
+            self.cluster.failover(servers=self.servers, failover_nodes=[node_c])
+            self.sleep(timeout=30, message="Waiting for rollback to kick in")
+
+            # Get rollback count
+            num_rollback = rest.get_num_rollback_stat(bucket="default")
+            self.assertEqual(num_rollback, 1, "Failed to rollback in failure scenario")
+            # Todo: add validation that the rollback has happened from snapshot not from Zero
+        finally:
+            self.resume_blocked_incoming_network_from_node(node_b, node_c)
+
+    def test_discard_disk_snapshot_after_kv_persisted(self):
+        """
+        MB-35664
+        Todo: https://issues.couchbase.com/browse/MB-37586
+        Will wait on the stats to be available
+        https://issues.couchbase.com/browse/MB-37587
+        """
+        data_nodes = self.get_kv_nodes()
+        self.assertTrue(len(data_nodes) == 2, "This test require a cluster of 2 nodes")
+        bucket_name = self.buckets[0].name
+        index_name = list(self.get_index_map()[bucket_name])[0]
+        index_node = self.get_nodes_from_services_map(service_type="index",
+                                                      get_all_nodes=False)
+        rest = RestConnection(index_node)
+        # Change indexer snapshot for a recovery point
+        doc = {"indexer.settings.persisted_snapshot.moi.interval": 60000}
+        rest.set_index_settings(doc)
+
+        # Deleting bucket as there is no easy way in testrunner to crate index before loading data
+        for bucket in self.buckets:
+            self.cluster.bucket_delete(self.master, bucket=bucket)
+
+        # Create default bucket
+        default_params = self._create_bucket_params(
+            server=self.master, size=self.bucket_size,
+            replicas=self.num_replicas, bucket_type=self.bucket_type,
+            enable_replica_index=self.enable_replica_index,
+            eviction_policy=self.eviction_policy, lww=self.lww,
+            maxttl=self.maxttl, compression_mode=self.compression_mode)
+        self.cluster.create_default_bucket(default_params)
+
+        # loading data to bucket
+        gens_load = self.generate_docs(num_items=self.docs_per_day)
+        self.load(gens_load, flag=self.item_flag, batch_size=self.batch_size, op_type="create", verify_data=False)
+
+        # creating Index
+        query_definition = QueryDefinition(
+            index_name=index_name, index_fields=["VMs"],
+            query_template="SELECT * FROM %s ", groups=["simple"],
+            index_where_clause=" VMs IS NOT NULL ")
+        self.load_query_definitions.append(query_definition)
+        self.create_index(bucket="default", query_definition=query_definition)
+
+        # Blocking node B firewall
+        node_b, node_c = data_nodes
+        try:
+            self.block_incoming_network_from_node(node_b, node_c)
+
+            # Performing doc mutation
+            num_snapshot = rest.get_index_stats()[bucket_name][index_name]["num_commits"]
+            gens_load = self.generate_docs(self.docs_per_day * 2)
+            self.load(gens_load, flag=self.item_flag, verify_data=False, batch_size=self.batch_size)
+
+            sleep_count = 0
+            while sleep_count < 10:
+                self.sleep(10, "Waiting for Disk Snapshot/s to be available")
+                new_num_snapshot = rest.get_index_stats()[bucket_name][index_name]["num_commits"]
+                if new_num_snapshot > num_snapshot:
+                    self.log.info("New Disk Snapshot is available")
+                    break
+                sleep_count += 1
+
+            # Performing doc mutation
+            num_snapshot = rest.get_index_stats()[bucket_name][index_name]["num_commits"]
+            gens_load = self.generate_docs(self.docs_per_day * 3)
+            self.load(gens_load, flag=self.item_flag, verify_data=False, batch_size=self.batch_size)
+
+            sleep_count = 0
+            while sleep_count < 10:
+                self.sleep(10, "Waiting for Disk Snapshot/s to be available")
+                new_num_snapshot = rest.get_index_stats()[bucket_name][index_name]["num_commits"]
+                if new_num_snapshot > num_snapshot:
+                    self.log.info("New Disk Snapshot is available")
+                    break
+                sleep_count += 1
+            # resume the communication between node B and node C
+        finally:
+            self.resume_blocked_incoming_network_from_node(node_b, node_c)
+
+        # TODO: Need to add validation based on stat that the Disk Snapshot has catch up and extra snapshots are deleted
+        # Meanwhile we will validate based on the item_count
+        self.sleep(timeout=2 * 60, message="Giving some time to indexer to recover after resuming communication "
+                                           "between node A and node B")
+        item_count_after_checking_kv_persisted_seq_num = rest.get_index_stats()[bucket_name][index_name]["items_count"]
+        self.assertEqual(item_count_after_checking_kv_persisted_seq_num, self.docs_per_day * 3 * 2016,
+                         "Indexer failed to index all the items in bucket.\nExpected indexed item {}"
+                         "\n Actual indexed item {}".format(item_count_after_checking_kv_persisted_seq_num,
+                                                            self.docs_per_day * 3 * 2016))
+
+    def test_rollback_to_zero_preceded_by_rollback_from_disk_snapshot(self):
+        """
+        MB36444
+        """
+        bucket_name = self.buckets[0].name
+        index_name = list(self.get_index_map()[bucket_name])[0]
+        data_nodes = self.get_kv_nodes()
+        self.assertTrue(len(data_nodes) >= 3, "Can't run this with less than 3 KV nodes")
+        # Blocking node B firewall
+        node_b, node_c = (None, None)
+        for node in data_nodes:
+            if node.ip == self.master.ip:
+                continue
+            if not node_b:
+                node_b = node
+            else:
+                node_c = node
+                break
+        try:
+            # Blocking communication between Node B and Node C
+            conn = RestConnection(self.master)
+            self.block_incoming_network_from_node(node_b, node_c)
+
+            # Doing some mutation which replica on Node C won't see
+            gens_load = self.generate_docs(num_items=self.docs_per_day * 2)
+            self.load(gens_load, flag=self.item_flag, batch_size=self.batch_size, op_type="create", verify_data=False)
+
+            # Failing over Node C
+            self.cluster.failover(servers=self.servers, failover_nodes=[node_c])
+
+            sleep_count = 0
+            while sleep_count < 15:
+                num_rollback = conn.get_num_rollback_stat(bucket=bucket_name)
+                if num_rollback == 1:
+                    self.log.info("Indexer has rolled back from disk snapshot")
+                    break
+                self.sleep(10, "Waiting for rollback to disk snapshot")
+                sleep_count += 1
+            self.assertNotEqual(sleep_count, 15, "Rollback to disk snapshot didn't happen")
+
+            # Change indexer snapshot for a recovery point
+            doc = {"indexer.settings.persisted_snapshot.moi.interval": 60000}
+            conn.set_index_settings(doc)
+
+            # Doing some mutation so that two new disk snapshots are generated
+            num_snapshot = conn.get_index_stats()[bucket_name][index_name]["num_commits"]
+            gens_load = self.generate_docs(num_items=self.docs_per_day * 3)
+            self.load(gens_load, flag=self.item_flag, batch_size=self.batch_size, op_type="create", verify_data=False)
+
+            sleep_count = 0
+            while sleep_count < 10:
+                self.sleep(10, "Waiting for Disk Snapshot/s to be available")
+                new_num_snapshot = conn.get_index_stats()[bucket_name][index_name]["num_commits"]
+                if new_num_snapshot > num_snapshot:
+                    self.log.info("New Disk Snapshot is available")
+                    break
+                sleep_count += 1
+            self.assertNotEqual(sleep_count, 10, "No new Disk Snapshot is available")
+
+            num_snapshot = conn.get_index_stats()[bucket_name][index_name]["num_commits"]
+            gens_load = self.generate_docs(num_items=self.docs_per_day * 4)
+            self.load(gens_load, flag=self.item_flag, batch_size=self.batch_size, op_type="create", verify_data=False)
+
+            sleep_count = 0
+            while sleep_count < 10:
+                self.sleep(10, "Waiting for Disk Snapshot/s to be available")
+                new_num_snapshot = conn.get_index_stats()[bucket_name][index_name]["num_commits"]
+                if new_num_snapshot > num_snapshot:
+                    self.log.info("New Disk Snapshot is available")
+                    break
+                sleep_count += 1
+            self.assertNotEqual(sleep_count, 10, "No new Disk Snapshot is available")
+
+            # Performing full recovery for fail over Node C
+            self.resume_blocked_incoming_network_from_node(node_b, node_c)
+            conn.set_recovery_type(otpNode='ns_1@' + node_c.ip, recoveryType="full")
+            self.cluster.rebalance(self.servers, [], [])
+
+            # Blocking communication between Node B and Node C
+            conn = RestConnection(self.master)
+            self.block_incoming_network_from_node(node_b, node_c)
+
+            # Doing some mutation which replica on Node C won't see
+            gens_load = self.generate_docs(num_items=self.docs_per_day * 5)
+            self.load(gens_load, flag=self.item_flag, batch_size=self.batch_size, op_type="create", verify_data=False)
+
+            # Killing memcached on node C
+            remote_client = RemoteMachineShellConnection(node_c)
+            remote_client.kill_memcached()
+            remote_client.disconnect()
+
+            # Failing over Node C
+            num_rollback = conn.get_num_rollback_stat(bucket=bucket_name)
+            self.cluster.failover(servers=self.servers, failover_nodes=[node_c])
+            sleep_count = 0
+            while sleep_count < 10:
+                self.sleep(10, "Waiting for Disk Snapshot/s to be available")
+                new_num_rollback = conn.get_num_rollback_stat(bucket=bucket_name)
+                if new_num_rollback == num_rollback + 1:
+                    self.log.info("Rollbacked to Disk Snapshot")
+                    break
+                sleep_count += 1
+            self.assertNotEqual(sleep_count, 10, "Indexer failed to rollback")
+            # Todo: add the assert to check the rollback happened from disk snapshot not from zero
+        finally:
+            self.resume_blocked_incoming_network_from_node(node_b, node_c)
+
+    def test_restart_timestamp_calculation_for_rollback(self):
+        """
+        MB-35880
+        Case B:
+        Can't reproduce it consistently
+        """
+        data_nodes = self.get_kv_nodes()
+        self.assertTrue(len(data_nodes) >= 3, "Can't run this with less than 3 KV nodes")
+        # Deleting bucket as there is no easy way in testrunner to crate index before loading data
+        for bucket in self.buckets:
+            self.cluster.bucket_delete(self.master, bucket=bucket)
+
+        # Create default bucket
+        default_params = self._create_bucket_params(
+            server=self.master, size=self.bucket_size,
+            replicas=self.num_replicas, bucket_type=self.bucket_type,
+            enable_replica_index=self.enable_replica_index,
+            eviction_policy=self.eviction_policy, lww=self.lww,
+            maxttl=self.maxttl, compression_mode=self.compression_mode)
+        self.cluster.create_default_bucket(default_params)
+
+        # creating Index idx_0
+        query_definition = QueryDefinition(
+            index_name="idx_0", index_fields=["VMs"],
+            query_template="SELECT * FROM %s ", groups=["simple"],
+            index_where_clause=" VMs IS NOT NULL ")
+        self.load_query_definitions.append(query_definition)
+        self.create_index(bucket="default", query_definition=query_definition)
+
+        # loading data to bucket
+        gens_load = self.generate_docs(num_items=self.docs_per_day)
+        self.load(gens_load, flag=self.item_flag, batch_size=self.batch_size, op_type="create", verify_data=False)
+
+        # creating few more indexes
+        for item in range(1, 4):
+            query_definition = QueryDefinition(
+                index_name="idx_{0}".format(item), index_fields=["VMs"],
+                query_template="SELECT * FROM %s ", groups=["simple"],
+                index_where_clause=" VMs IS NOT NULL ")
+            self.load_query_definitions.append(query_definition)
+            self.create_index(bucket="default", query_definition=query_definition)
+
+        # Checking item_count in all indexes
+        self.sleep(timeout=10, message="Allowing indexes to index all item in bucket")
+        rest = RestConnection(self.master)
+        for item in range(4):
+            indexed_item = rest.get_index_stats()["default"]["idx_{0}".format(item)]["items_count"]
+            self.assertEqual(indexed_item, self.docs_per_day * 2016, "Failed to index all the item in bucket")
+
+        data_nodes = self.get_kv_nodes()
+        node_b, node_c = (None, None)
+        for node in data_nodes:
+            if node.ip == self.master.ip:
+                continue
+            if not node_b:
+                node_b = node
+            else:
+                node_c = node
+                break
+
+        try:
+            # Blocking communication between Node B and Node C
+            self.block_incoming_network_from_node(node_b, node_c)
+
+            # Mutating docs so that replica on Node C don't see changes on Node B
+            gens_load = self.generate_docs(num_items=self.docs_per_day)
+            self.load(gens_load, flag=self.item_flag, batch_size=self.batch_size, op_type="create", verify_data=False)
+
+            # killing Memcached on Node B
+            remote_client = RemoteMachineShellConnection(node_b)
+            remote_client.kill_memcached()
+            remote_client.disconnect()
+
+            # Failing over Node B
+            self.cluster.failover(servers=self.servers, failover_nodes=[node_b])
+            self.sleep(timeout=10, message="Allowing indexer to rollback")
+
+            # Validating that indexer has indexed item after rollback and catch up with items in bucket
+            for item in range(4):
+                indexed_item = rest.get_index_stats()["default"]["idx_{0}".format(item)]["items_count"]
+                self.assertEqual(indexed_item, self.docs_per_day * 2016, "Index {} has failed to index items after"
+                                                                         " rollback")
+        finally:
+            self.resume_blocked_incoming_network_from_node(node_b, node_c)
+
+    def test_recover_index_from_in_memory_snapshot(self):
+        """
+        MB-32102
+        MB-35663
+        """
+        bucket_name = self.buckets[0].name
+        index_name = list(self.get_index_map()[bucket_name])[0]
+        # Blocking node B firewall
+        data_nodes = self.get_kv_nodes()
+        self.assertTrue(len(data_nodes) >= 3, "Can't run this with less than 3 KV nodes")
+        node_b, node_c = (None, None)
+        for node in data_nodes:
+            if node.ip == self.master.ip:
+                continue
+            if not node_b:
+                node_b = node
+            else:
+                node_c = node
+                break
+        # get num_rollback stats before triggering in-memory recovery
+        conn = RestConnection(self.master)
+        num_rollback_before_recovery = conn.get_num_rollback_stat(bucket=bucket_name)
+        try:
+            self.block_incoming_network_from_node(node_b, node_c)
+
+            # killing Memcached on Node B
+            remote_client = RemoteMachineShellConnection(node_b)
+            remote_client.kill_memcached()
+            remote_client.disconnect()
+
+            # Failing over Node B
+            self.cluster.failover(servers=self.servers, failover_nodes=[node_b])
+        finally:
+            # resume the communication between node B and node C
+            self.resume_blocked_incoming_network_from_node(node_b, node_c)
+        # get num_rollback stats after in-memory recovery of indexes
+        num_rollback_after_recovery = conn.get_num_rollback_stat(bucket=bucket_name)
+        self.assertEqual(num_rollback_before_recovery, num_rollback_after_recovery,
+                         "Recovery didn't happen from in-memory snapshot")
+        self.log.info("Node has recovered from in-memory snapshots")
+        # Loading few more docs so that indexer will index updated as well as new docs
+        gens_load = self.generate_docs(num_items=self.docs_per_day * 2)
+        self.load(gens_load, flag=self.item_flag, batch_size=self.batch_size, op_type="create", verify_data=False)
+
+        use_index_query = "select Count(*) from {0} USE INDEX ({1})".format(bucket_name, index_name)
+        result = self.n1ql_helper.run_cbq_query(query=use_index_query, server=self.n1ql_node,
+                                                scan_consistency=CONSISTENCY_REQUEST)["results"][0]["$1"]
+        expected_result = self.docs_per_day * 2 * 2016
+        self.assertEqual(result, expected_result, "Indexer hasn't recovered properly from in-memory as"
+                                                  " indexes haven't catch up with "
+                                                  "request_plus/consistency_request")
+        self.log.info("Indexer continues to index as expected")
 
     def test_partial_rollback(self):
         self.multi_create_index()

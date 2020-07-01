@@ -756,6 +756,21 @@ class BaseSecondaryIndexingTests(QueryTests):
             buckets = True
         if not buckets:
             self.fail('FAIL: This test requires buckets')
+
+    def block_incoming_network_from_node(self, node1, node2):
+        shell = RemoteMachineShellConnection(node1)
+        self.log.info("Adding {0} into iptables rules on {1}".format(
+            node1.ip, node2.ip))
+        command = "iptables -A INPUT -s {0} -j REJECT".format(node2.ip)
+        shell.execute_command(command)
+
+    def resume_blocked_incoming_network_from_node(self, node1, node2):
+        shell = RemoteMachineShellConnection(node1)
+        self.log.info("Adding {0} into iptables rules on {1}".format(
+            node1.ip, node2.ip))
+        command = "iptables -D INPUT -s {0} -j REJECT".format(node2.ip)
+        shell.execute_command(command)
+
     def set_indexer_logLevel(self, loglevel="info"):
         """
         :param loglevel:
