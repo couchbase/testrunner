@@ -4209,15 +4209,17 @@ class RemoteMachineShellConnection(KeepRefs):
             transfer_command = "\"%scbtransfer.exe\"" % (WIN_COUCHBASE_BIN_PATH_RAW)
         if self.info.distribution_type.lower() == 'mac':
             transfer_command = "%scbtransfer" % (MAC_COUCHBASE_BIN_PATH)
+        uncompress_flag = " -x uncompress=1 "
 
-        command = "%s %s %s %s -x uncompress=1" % (transfer_command, source, destination,
+        command = "%s %s %s %s" % (transfer_command, source, destination,
                                                    command_options)
         if self.info.type.lower() == 'windows':
             command = "cmd /c \"%s\" \"%s\" \"%s\" %s" % (transfer_command,
                                                           source,
                                                           destination,
                                                           command_options)
-        output, error = self.execute_command(command, debug=debug, use_channel=True)
+        output, error = self.execute_command(command + uncompress_flag,
+                                             debug=debug, use_channel=True)
         if debug:
             self.log_command_output(output, error)
         log.info("done execute cbtransfer")
