@@ -15,6 +15,9 @@ import get_jenkins_params as jenkins_api
 
 
 host = '172.23.121.84'
+SERVER_MANAGER = "172.23.104.162"
+SERVER_MANAGER_USERNAME = "Administrator"
+SERVER_MANAGER_PASSWORD = "esabhcuoc"
 bucket_name = 'rerun_jobs'
 
 
@@ -160,31 +163,43 @@ def should_dispatch_job(os, component, sub_component, version):
     """
     doc_id = "{0}_{1}_{2}_{3}".format(os, component, sub_component,
                                     version)
-    cluster = Cluster('couchbase://{}'.format(host))
-    authenticator = PasswordAuthenticator('Administrator', 'password')
-    cluster.authenticate(authenticator)
-    rerun_jobs = cluster.open_bucket(bucket_name)
-    user_name = "{0}-{1}%{2}".format(component, sub_component, version)
-    query = "select * from `QE-server-pool` where username like " \
-            "'{0}' and state = 'booked'".format(user_name)
-    qe_server_pool = cluster.open_bucket("QE-server-pool")
-    n1ql_result = qe_server_pool.n1ql_query(N1QLQuery(query))
-    if n1ql_result.buffered_remainder.__len__():
-        print("Tests are already running. Not dispatching another job")
-        return False
-    run_document = rerun_jobs.get(doc_id, quiet=True)
-    if not run_document.success:
+    try:
+        cluster = Cluster('couchbase://{}'.format(host))
+        authenticator = PasswordAuthenticator('Administrator', 'password')
+        cluster.authenticate(authenticator)
+        rerun_jobs = cluster.open_bucket(bucket_name)
+        user_name = "{0}-{1}%{2}".format(component, sub_component, version)
+        query = "select count(*) as count from `QE-server-pool` where " \
+                "username like '{0}' and state = 'booked'".format(user_name)
+        server_pool_cluster = Cluster('couchbase://{}'.format(SERVER_MANAGER))
+        server_pool_authenticator = PasswordAuthenticator(
+            SERVER_MANAGER_USERNAME, SERVER_MANAGER_PASSWORD)
+        server_pool_cluster.authenticate(server_pool_authenticator)
+        qe_server_pool = server_pool_cluster.open_bucket("QE-server-pool")
+        n1ql_result = qe_server_pool.n1ql_query(N1QLQuery(query))
+        result = n1ql_result.get_single_result()
+        if result['count'] > 0:
+            print("Tests are already running. Not dispatching another "
+                "job")
+            return False
+        run_document = rerun_jobs.get(doc_id, quiet=True)
+        if not run_document.success:
+            return True
+        run_document = run_document.value
+        last_job = run_document['jobs'][-1]
+        last_job_url = last_job['job_url'].rstrip('/')
+        result = jenkins_api.get_js(last_job_url, "tree=result")
+        if not result or 'result' not in result:
+            return True
+        if result['result'] == "SUCCESS":
+            print("Job had run successfully previously.")
+            print("{} is the successful job.".format(last_job_url))
+            return False
+    except Exception as e:
+        print("Some exception has occured while trying to determine "
+              "if job has to be dispatched. Dispatching the job")
+        print(e)
         return True
-    run_document = run_document.value
-    last_job = run_document['jobs'][-1]
-    last_job_url = last_job['job_url'].rstrip('/')
-    result = jenkins_api.get_js(last_job_url, "tree=result")
-    if not result or 'result' not in result:
-        return True
-    if result['result'] == "SUCCESS":
-        print("Job had run successfully previously.")
-        print("{} is the successful job.".format(last_job_url))
-        return False
     return True
 
 
