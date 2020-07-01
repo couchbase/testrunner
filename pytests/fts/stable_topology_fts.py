@@ -1006,7 +1006,7 @@ class StableTopFTS(FTSBaseTest):
             "default_index")
         self.wait_for_indexing_complete()
         index.add_type_mapping_to_index_definition(type="emp",
-                                                   analyzer="keyword")
+                                                   analyzer="standard")
         index.index_definition['uuid'] = index.get_uuid()
         index.update()
         self.sleep(15)
@@ -1081,7 +1081,7 @@ class StableTopFTS(FTSBaseTest):
             "default_index")
         self.wait_for_indexing_complete()
         index.add_type_mapping_to_index_definition(type="emp",
-                                                   analyzer="keyword")
+                                                   analyzer="standard")
 
         index.index_definition['uuid'] = index.get_uuid()
         index.update()
