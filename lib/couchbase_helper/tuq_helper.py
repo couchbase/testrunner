@@ -51,13 +51,15 @@ class N1QLHelper():
         if leave_primary:
             current_indexes = [index for index in current_indexes if index['is_primary'] is False]
         for index in current_indexes:
-            bucket = index['bucket']
+            bucket = index['bucket'].replace("()","")
             index_name = index['name']
-            self.run_cbq_query("drop index %s.%s" % (bucket, index_name))
+            if index['using'] != 'fts':
+                self.run_cbq_query("drop index {0}.{1}".format(bucket, index_name))
         for index in current_indexes:
             bucket = index['bucket']
             index_name = index['name']
-            self.wait_for_index_drop(bucket, index_name)
+            if index['using'] != 'fts':
+                self.wait_for_index_drop(bucket, index_name)
 
     def wait_for_index_drop(self, bucket_name, index_name, fields_set=None, using=None):
         self.with_retry(lambda: self.is_index_present(bucket_name, index_name, fields_set=fields_set, using=using, status="any"), eval=False, delay=1, tries=30)
@@ -221,7 +223,7 @@ class N1QLHelper():
         if actual_result != expected_result:
             raise Exception(msg)
 
-    def _verify_results_rqg(self, subquery, aggregate=False, n1ql_result=[], sql_result=[], hints=["a1"], aggregate_pushdown=False):
+    def _verify_results_rqg(self, subquery, aggregate=False, n1ql_result=[], sql_result=[], hints=["a1"], aggregate_pushdown=False, use_fts=False):
         new_n1ql_result = []
         for result in n1ql_result:
             if result != {}:
@@ -237,7 +239,7 @@ class N1QLHelper():
 
         if actual_result == [{}]:
             actual_result = []
-        if check:
+        if check and not use_fts:
             actual_result = self._gen_dict(n1ql_result)
 
         actual_result = sorted(actual_result)
