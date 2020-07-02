@@ -4302,10 +4302,10 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
 
     def test_backup_with_remove_staging_directory(self):
         self.assertIsNotNone(self.objstore_provider, "Test requires an object store provider")
+        remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
         self.objstore_provider._remove_staging_directory(remote_client.extract_remote_info().type.lower(), remote_client)
         gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
         self.backup_create_validate()
-        remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
         self._load_all_buckets(self.master, gen, "create")
         self.backup_cluster_validate()
 
