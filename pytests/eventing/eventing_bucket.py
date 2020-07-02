@@ -180,6 +180,7 @@ class EventingBucket(EventingBaseTest):
                         msg="eventing-consumer processes are not cleaned up even after undeploying the function")
 
     def test_eventing_where_source_bucket_is_in_dgm(self):
+        self.skip_metabucket_check=True
         # push the source bucket to dgm
         self.push_to_dgm(self.src_bucket_name, 50)
         body = self.create_save_function_body(self.function_name, self.handler_code,
@@ -238,6 +239,7 @@ class EventingBucket(EventingBaseTest):
         self.sleep(30)
         self.assertTrue(self.check_if_eventing_consumers_are_cleaned_up(),
                         msg="eventing-consumer processes are not cleaned up even after undeploying the function")
+        self.skip_metabucket_check=True
 
     def test_eventing_where_destination_bucket_is_in_warmup_state(self):
         kv_node = self.get_nodes_from_services_map(service_type="kv", get_all_nodes=False)
@@ -307,6 +309,7 @@ class EventingBucket(EventingBaseTest):
         else:
             self.verify_eventing_results(self.function_name, 0, skip_stats_validation=True)
         self.undeploy_and_delete_function(body)
+        self.skip_metabucket_check=True
 
     def test_source_and_destination_bucket_interchanged(self):
         self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
