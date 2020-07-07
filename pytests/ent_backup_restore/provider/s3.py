@@ -71,9 +71,15 @@ class S3(provider.Provider):
             raise error_code
 
 
-        # Abort all the remaining multipart uploads
+        # Abort all the remaining multipart uploads. We ignore any 'NoSuchUpload' errors because we don't care if the
+        # upload doesn't exist; we are trying to remove it.
         for upload in bucket.multipart_uploads.all():
-            upload.abort()
+            try:
+                upload.abort()
+            except botocore.exceptions.ClientError as error:
+                error_code = error.response['Error']['Code']
+                if error_code != "NoSuchUpload":
+                    raise error
 
         # Remove the staging directory because cbbackupmgr has validation to ensure that are unique to each archive
         self._remove_staging_directory(info, remote_client)
