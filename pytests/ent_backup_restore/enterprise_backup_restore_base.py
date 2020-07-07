@@ -1862,6 +1862,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         return found
 
     def _reset_storage_mode(self, rest, storageMode, reset_node=True):
+        if not storageMode:
+            storageMode = "memory_optimized"
         nodes_in_cluster = rest.get_nodes()
         for node in nodes_in_cluster:
             matched_server = None
@@ -2658,7 +2660,6 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             "," in self.backupset.restore_cluster_host.services[0]:
             sv_in_rs = self.backupset.restore_cluster_host.services[0].split(",")
         kv_quota = rest_rs.init_node(sv_in_rs)
-        self._reset_storage_mode(rest_rs, bk_storage_mode, False)
         if len(bk_cluster_services) > 1:
             bk_cluster_services.remove(bk_services)
         if len(self.input.clusters[0]) > 1:
@@ -2681,6 +2682,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                     self.fail("Status still shows running after rebalance complete 8 seconds")
         else:
             self.log.info("No availabe node to create cluster.")
+        self._reset_storage_mode(rest_rs, bk_storage_mode, False)
 
     def _common_objstore_arguments(self):
         return (
