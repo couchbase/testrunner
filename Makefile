@@ -51,10 +51,10 @@ test-viewmerge-viewci:
 	scripts/start_cluster_and_run_tests.sh b/resources/dev-single-node.ini conf/view-conf/py-viewmerge-sansdevview.conf
 	scripts/start_cluster_and_run_tests.sh b/resources/dev-4-nodes.ini conf/view-conf/py-viewmerge-sansdevview.conf
 
-# required before merging 2i code
-test-2i-integrations-tests:
-	echo "Running 2i integration tests with 4 node cluster"
-	scripts/start_cluster_and_run_tests.sh b/resources/dev-4-nodes-xdcr_n1ql_2i.ini conf/simple_2i_n1ql.conf 1 1 $(PARAMS)
+# required before merging gsi code
+test-gsi-integrations-tests:
+	echo "Running gsi integration tests with 4 node cluster"
+	scripts/start_cluster_and_run_tests.sh b/resources/dev-4-nodes-xdcr_n1ql_gsi.ini conf/simple_gsi_n1ql.conf 1 1 $(PARAMS)
 
 e2e-kv-single-node:
 	scripts/start_cluster_and_run_tests.sh b/resources/dev.ini conf/py-all-dev.conf

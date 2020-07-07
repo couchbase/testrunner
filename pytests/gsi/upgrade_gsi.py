@@ -3,7 +3,7 @@ import logging
 from datetime import datetime
 from threading import Thread
 
-from base_2i import BaseSecondaryIndexingTests
+from base_gsi import BaseSecondaryIndexingTests
 from couchbase_helper.query_definitions import QueryDefinition
 from membase.helper.bucket_helper import BucketOperationHelper
 from newupgradebasetest import NewUpgradeBaseTest

@@ -9,7 +9,7 @@ from couchbase_helper.data import FIRST_NAMES, COUNTRIES
 from couchbase_helper.query_definitions import QueryDefinition
 from membase.api.rest_client import RestConnection
 from membase.helper.bucket_helper import BucketOperationHelper
-from base_2i import BaseSecondaryIndexingTests
+from base_gsi import BaseSecondaryIndexingTests
 from couchbase_helper.cluster import Cluster
 from couchbase_helper.documentgenerator import BlobGenerator
 

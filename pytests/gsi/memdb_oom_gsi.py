@@ -7,7 +7,7 @@ from membase.api.rest_client import RestConnection
 from membase.helper.cluster_helper import ClusterOperationHelper
 from membase.helper.bucket_helper import BucketOperationHelper
 from remote.remote_util import RemoteMachineShellConnection
-from base_2i import BaseSecondaryIndexingTests
+from base_gsi import BaseSecondaryIndexingTests
 
 log = logging.getLogger(__name__)
 QUERY_TEMPLATE = "SELECT {0} FROM %s "

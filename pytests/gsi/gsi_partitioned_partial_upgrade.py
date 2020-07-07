@@ -1,5 +1,5 @@
 from remote.remote_util import RemoteMachineShellConnection
-from upgrade_2i import UpgradeSecondaryIndex
+from upgrade_gsi import UpgradeSecondaryIndex
 from membase.api.rest_client import RestConnection, RestHelper
 import time
 

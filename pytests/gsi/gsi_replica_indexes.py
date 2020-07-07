@@ -1,6 +1,6 @@
 import json
 
-from base_2i import BaseSecondaryIndexingTests
+from base_gsi import BaseSecondaryIndexingTests
 from membase.api.rest_client import RestConnection, RestHelper
 import random
 from lib import testconstants

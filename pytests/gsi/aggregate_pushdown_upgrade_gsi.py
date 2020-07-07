@@ -2,7 +2,7 @@ import logging
 import random
 
 from membase.api.rest_client import RestConnection, RestHelper
-from int64_upgrade_2i import UpgradeSecondaryIndexInt64
+from int64_upgrade_gsi import UpgradeSecondaryIndexInt64
 
 log = logging.getLogger(__name__)
 INT64_VALUES = [-9223372036854775808, 9223372036854775807, 9223372036854770000, 9000000000000000000,

@@ -2,7 +2,7 @@ import logging
 from threading import Thread
 import time
 
-from base_2i import BaseSecondaryIndexingTests
+from base_gsi import BaseSecondaryIndexingTests
 from couchbase.n1ql import CONSISTENCY_REQUEST
 from couchbase_helper.query_definitions import QueryDefinition
 from lib.memcached.helper.data_helper import MemcachedClientHelper

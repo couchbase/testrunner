@@ -4,7 +4,7 @@ import random
 import pdb
 
 from string import lowercase
-from base_2i import BaseSecondaryIndexingTests
+from base_gsi import BaseSecondaryIndexingTests
 from couchbase.bucket import Bucket
 from couchbase_helper.documentgenerator import  DocumentGenerator
 from couchbase_helper.query_definitions import QueryDefinition

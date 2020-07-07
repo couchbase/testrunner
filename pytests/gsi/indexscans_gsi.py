@@ -1,4 +1,4 @@
-from base_2i import BaseSecondaryIndexingTests
+from base_gsi import BaseSecondaryIndexingTests
 import copy
 from couchbase_helper.query_definitions import QueryDefinition
 from couchbase_helper.query_definitions import SQLDefinitionGenerator

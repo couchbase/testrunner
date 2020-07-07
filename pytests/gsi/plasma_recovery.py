@@ -1,6 +1,6 @@
 import logging
 
-from base_2i import BaseSecondaryIndexingTests
+from base_gsi import BaseSecondaryIndexingTests
 from couchbase_helper.query_definitions import QueryDefinition
 from couchbase_helper.tuq_generators import TuqGenerators
 from membase.api.rest_client import RestConnection

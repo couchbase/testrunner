@@ -9,8 +9,8 @@ from couchbase_helper.tuq_generators import TuqGenerators
 from couchbase_helper.query_definitions import QueryDefinition, SQLDefinitionGenerator
 from remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection, RestHelper
-from upgrade_2i import UpgradeSecondaryIndex
-from base_2i import BaseSecondaryIndexingTests
+from upgrade_gsi import UpgradeSecondaryIndex
+from base_gsi import BaseSecondaryIndexingTests
 
 log = logging.getLogger(__name__)
 INT64_VALUES = [-9223372036854775808, 9223372036854775807, 9223372036854770000, 9000000000000000000,
