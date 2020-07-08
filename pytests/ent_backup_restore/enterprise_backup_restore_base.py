@@ -717,7 +717,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             args += " --disable-ft-indexes"
         if self.backupset.disable_data:
             args += " --disable-data"
-        if self.backupset.disable_conf_res_restriction is not None:
+        if self.backupset.disable_conf_res_restriction:
             args += " --disable-conf-res-restriction"
         if self.backupset.auto_create_buckets:
             RestConnection(self.backupset.cluster_host).delete_all_buckets()
