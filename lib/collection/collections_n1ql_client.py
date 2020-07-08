@@ -120,19 +120,22 @@ class CollectionsN1QL(object):
             return False, str(err)
         return True, ""
 
-    def find_object_in_all_keyspaces(self, type=None, name=None, bucket=None, scope=None):
+    def find_object_in_all_keyspaces(self, type=None, name=None, bucket=None, scope=None, namespace="default"):
         path = ""
         if type == 'scope':
-            path = f"default:{bucket}.{name}"
+            result = self.check_if_scope_exists_in_scopes(keyspace=namespace, bucket=bucket, scope=scope)
+            return result, ""
         else:
             path = f"default:{bucket}.{scope}.{name}"
+            query = f"select count(*) from system:all_keyspaces where `path`='{path}'"
+            result = self.n1ql_helper.run_cbq_query(query=query, server=self.node)
 
-        query = f"select count(*) from system:all_keyspaces where path='{path}'"
-        result = self.n1ql_helper.run_cbq_query(query)
+            if result['results'][0]['$1'] == 0:
+                return False, f"Object {path} is not found in system:all_keyspaces."
+            elif result['results'][0]['$1'] > 1:
+                return False, f" More than one object {path} is found in system:all_keyspaces."
+            else:
+                return True, ""
 
-        if result['results'][0]['$1'] == 0:
-            return False, f"Object {path} is not found in system:all_keyspaces."
-        elif result['results'][0]['$1'] > 1:
-            return False, f" More than one object {path} is found in system:all_keyspaces."
-        else:
-            return True, ""
+    def check_if_scope_exists_in_scopes(self, keyspace=None, bucket=None, scope=None):
+        return self.n1ql_helper.check_if_scope_exists(server=self.node, namespace=keyspace, bucket=bucket, scope=scope)

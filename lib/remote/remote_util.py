@@ -3305,7 +3305,11 @@ class RemoteMachineShellConnection(KeepRefs):
 
         return self.execute_command_raw(command, debug=debug, use_channel=use_channel)
 
-    def terminate_process(self, info=None, process_name='',force=False):
+    def terminate_process(self, info=None, process_name=None, force=False):
+        if not process_name:
+            log.info("Please specify process name to be terminated.")
+            return
+
         self.extract_remote_info()
         if self.info.type.lower() == 'windows':
             o, r = self.execute_command("taskkill /F /T /IM {0}*"\

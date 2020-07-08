@@ -73,15 +73,19 @@ class N1QLHelper():
         self.run_cbq_query(server=server, query=query)
         self.wait_till_collection_dropped(server, bucket_name, scope_name, collection_name, poll_interval, timeout)
 
-    def delete_scope(self, server=None, keyspace="", bucket_name="", scope_name="", poll_interval=1, timeout=30):
-        objects = RestConnection(server).get_scope_collections(bucket_name, scope_name)
-        if scope_name not in objects:
-            self.log.info(f"Cannot find specified scope {keyspace}:{bucket_name}.{scope_name}. Nothing to delete, returning.")
-            return
+    def check_if_scope_exists(self, server=None, namespace=None, bucket=None, scope=None):
+        scope_query = f"select count(*) as cnt from system:scopes where `namespace`='{namespace}' and `bucket`='{bucket}' and name='{scope}'"
+        res = self.run_cbq_query(query=scope_query, server=server)
+        return res['results'][0]['cnt'] == 1
 
-        query = f"drop scope {keyspace}:{bucket_name}.{scope_name}"
-        self.run_cbq_query(query=query)
-        self.wait_till_scope_dropped(server, bucket_name, scope_name, poll_interval, timeout)
+    def delete_scope(self, server=None, keyspace="", bucket_name="", scope_name="", poll_interval=1, timeout=30):
+        scope_exists = self.check_if_scope_exists(server=server, namespace=keyspace, bucket=bucket_name, scope=scope_name)
+        if scope_exists:
+            query = f"drop scope {keyspace}:{bucket_name}.{scope_name}"
+            self.run_cbq_query(query=query, server=server)
+            self.wait_till_scope_dropped(server, bucket_name, scope_name, poll_interval, timeout)
+        else:
+            self.log.info(f"Cannot find specified scope {keyspace}:{bucket_name}.{scope_name}. Nothing to delete, returning.")
 
     def wait_till_scope_dropped(self, server=None, bucket_name="", scope_name="", poll_interval=1, timeout=30):
         start_time = time.time()
