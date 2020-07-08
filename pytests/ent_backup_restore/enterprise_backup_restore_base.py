@@ -1223,7 +1223,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             cb_version=self.cb_version,
             num_shards=num_shards)
         conn_bk = RemoteMachineShellConnection(self.backupset.cluster_host)
-        conn_bk.pause_memcached(timesleep=8)
+        conn_bk.pause_memcached(timesleep=8, delay=10)
         conn_bk.unpause_memcached()
         conn_bk.disconnect()
         output = backup_result.result(timeout=600)
@@ -1271,7 +1271,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             cb_version=self.cb_version,
             num_shards=num_shards)
         conn = RemoteMachineShellConnection(self.backupset.cluster_host)
-        conn.kill_erlang()
+        conn.kill_erlang(delay=10)
         conn.start_couchbase()
         output = backup_result.result(timeout=700)
         self.assertTrue(self._check_output("Backup successfully completed", output),
