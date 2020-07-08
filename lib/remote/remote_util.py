@@ -569,7 +569,9 @@ class RemoteMachineShellConnection(KeepRefs):
         output, error = self.execute_command("cmd /c schtasks /end /tn upgrademe")
         self.log_command_output(output, error)
 
-    def kill_erlang(self, os="unix"):
+    def kill_erlang(self, os="unix", delay=0):
+        if delay:
+            time.sleep(delay)
         if os == "windows":
             o, r = self.execute_command("taskkill /F /T /IM epmd.exe*")
             self.log_command_output(o, r)
@@ -3816,8 +3818,10 @@ class RemoteMachineShellConnection(KeepRefs):
 
 
 
-    def pause_memcached(self, os="linux", timesleep=30):
+    def pause_memcached(self, os="linux", timesleep=30, delay=0):
         log.info("*** pause memcached process ***")
+        if delay:
+            time.sleep(delay)
         if os == "windows":
             self.check_cmd("pssuspend")
             cmd = "pssuspend $(tasklist | grep  memcached | gawk '{printf $2}')"
