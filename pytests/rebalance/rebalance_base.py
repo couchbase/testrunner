@@ -3,6 +3,7 @@ from couchbase_helper.document import View
 from couchbase_helper.documentgenerator import BlobGenerator
 from membase.api.rest_client import RestConnection
 import json
+import time
 
 
 class RebalanceBaseTest(BaseTestCase):
