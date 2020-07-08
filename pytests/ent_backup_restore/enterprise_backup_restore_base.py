@@ -1045,6 +1045,9 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         elif self.replace_ttl == "all" or self.replace_ttl == "expired":
             self._validate_restore_replace_ttl_with(self.ttl_value)
         else:
+            if self.expires:
+                self.log.info("Remove expired items by checking them")
+                self._verify_all_buckets(self.backupset.restore_cluster_host)
             status, msg = self.validation_helper.validate_restore(self.backupset.end,
                                                                   self.vbucket_seqno, current_vseqno,
                                                                   compare_uuid=compare_uuid,

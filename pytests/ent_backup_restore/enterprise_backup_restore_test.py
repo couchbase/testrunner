@@ -364,15 +364,11 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         status, output, message = self.backup_list()
         if not status:
             self.fail(message)
-        for line in output:
-            if warnning_mesg in line:
-                continue
-            if self.buckets[0].name in line:
-                name = True
-            if "shard" in line.lower():
-                split = line.split(" ")
-                split = [s for s in split if s]
-                items += int(split[1])
+        if output and output[0]:
+            output = json.loads(output[0])
+        if self.buckets[0].name == output["name"]:
+            name = True
+            items = output["items"]
         self.assertTrue(name, "Expected bucket not listed for --bucket-backup option")
         self.log.info("Expected bucket listed for --bucket-backup option")
         self.assertEqual(items, self.num_items, "Mismatch in items for --bucket-backup option")
