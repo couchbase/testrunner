@@ -1181,6 +1181,7 @@ class MovingTopFTS(FTSBaseTest):
         new_plan_param = {"maxPartitionsPerPIndex": 64}
         index.index_definition['planParams'] = \
             index.build_custom_plan_params(new_plan_param)
+        index.index_definition['planParams']['numReplicas'] = 0
         index.index_definition['uuid'] = index.get_uuid()
         update_index_thread = Thread(target=index.update(),
                                    name="update_index",
