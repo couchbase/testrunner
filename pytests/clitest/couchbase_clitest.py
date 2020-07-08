@@ -2327,8 +2327,8 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
 
             if servers_to_recover and not skip_failover:
                 for restore_server in servers_to_recover.split(","):
-                    _, _, errored = cli.failover(restore_server, True)
-                    self.assertTrue(errored, "Unable to failover servers")
+                    _, errored, status = cli.failover(restore_server, True)
+                    self.assertTrue(status, "Unable to failover servers")
 
         time.sleep(5)
         cli = CouchbaseCLI(server, username, password)
