@@ -509,7 +509,7 @@ class CouchbaseCliTest(CliBaseTest, NewUpgradeBaseTest):
             to detect no graceful failover if no bucket """
         self._create_bucket(remote_client, bucket_replica=self.num_replicas)
         cli_command = "failover"
-        for num in xrange(nodes_failover):
+        for num in range(nodes_failover):
             self.log.info("failover node {0}"\
                           "MB-39220: Adding --hard flag for cli failover tests"\
                           .format(self.servers[nodes_add - nodes_rem - num].ip))
