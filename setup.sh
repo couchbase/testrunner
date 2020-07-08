@@ -16,15 +16,21 @@ if [[ $# -lt 1 ]]; then
     echo "Unexpected arguments passed. Check --help."
 fi
 
-PYTHON=python3
-PIP=pip3
+
 if [[ $1 == couchbase3 ]]; then
-    echo "Using Couchbase 3 SDK "
-    sed -i 's/couchbase~=2.5.12/couchbase~=3.0.0/g' requirements.txt
+    PYTHON=/usr/local/bin/python3
+    PIP=pip3
+    echo "Using $PYTHON with $PIP and Couchbase 3 SDK "
 
 elif [[ $1 == couchbase2 ]]; then
-    echo "Using Couchbase 2 SDK"
-
+    PYTHON=/usr/bin/python
+    PIP=pip
+    echo "Using $PYTHON with $PIP and Couchbase 2 SDK"
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        sed -i "" 's/~=.*//' requirements.txt
+    else
+        sed -i 's/~=.*//' requirements.txt
+    fi
 else
     echo "Exiting. Make sure Couchbase version is either 3 or 2"
     exit 1

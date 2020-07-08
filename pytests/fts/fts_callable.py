@@ -46,7 +46,7 @@ class FTSCallable:
                       "wildcard", "regexp", "query_string",
                       "numeric_range", "date_range"]
         if self.compare_es and not self.elastic_node:
-            raise "For ES result validation, pls add in the"
+            raise Exception("For ES result validation, pls add in the")
         elif self.compare_es:
             self.es = ElasticSearchBase(self.elastic_node, self.log)
             if es_reset:

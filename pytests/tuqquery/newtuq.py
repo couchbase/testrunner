@@ -13,6 +13,7 @@ from basetestcase import BaseTestCase
 from membase.api.exception import CBQError, ReadDocumentException
 from membase.api.rest_client import RestConnection
 
+
 class QueryTests(BaseTestCase):
     def setUp(self):
         if not self._testMethodName == 'suite_setUp':
@@ -69,9 +70,9 @@ class QueryTests(BaseTestCase):
         if self.input.param("gomaxprocs", None):
             self.configure_gomaxprocs()
         self.gen_results = TuqGenerators(self.log, self.generate_full_docs_list(self.gens_load))
-        if (self.analytics == False):
-                self.create_primary_index_for_3_0_and_greater()
-        if (self.analytics):
+        if not self.analytics:
+            self.create_primary_index_for_3_0_and_greater()
+        if self.analytics:
             self.setup_analytics()
             self.sleep(30, 'wait for analytics setup')
 
@@ -81,7 +82,7 @@ class QueryTests(BaseTestCase):
             if not self.input.param("skip_build_tuq", True):
                 self._build_tuq(self.master)
             self.skip_buckets_handle = True
-            if (self.analytics):
+            if self.analytics:
                 self.cluster.rebalance([self.master, self.cbas_node], [self.cbas_node], [], services=['cbas'])
                 self.setup_analytics()
                 self.sleep(30, 'wait for analytics setup')
@@ -98,7 +99,7 @@ class QueryTests(BaseTestCase):
             data = 'use Default ;'
             for bucket in self.buckets:
                 data += 'disconnect bucket {0} if connected;'.format(bucket.name)
-                data += 'drop dataset {0} if exists;'.format(bucket.name+ "_shadow")
+                data += 'drop dataset {0} if exists;'.format(bucket.name + "_shadow")
                 data += 'drop bucket {0} if exists;'.format(bucket.name)
             filename = "file.txt"
             f = open(filename, 'w')
@@ -117,10 +118,10 @@ class QueryTests(BaseTestCase):
                 self.shell.execute_command("killall tuqtng")
                 self.shell.disconnect()
 
-##############################################################################################
-#
-#  Setup Helpers
-##############################################################################################
+    ##############################################################################################
+    #
+    #  Setup Helpers
+    ##############################################################################################
 
     def setup_analytics(self):
         data = 'use Default;'
@@ -166,10 +167,10 @@ class QueryTests(BaseTestCase):
                     'select * from system:completed_requests where requestId  =  "%s"' % requestId)
                 self.assertTrue(result['metrics']['resultCount'] == 0)
 
-##############################################################################################
-#
-#   COMMON FUNCTIONS
-##############################################################################################
+    ##############################################################################################
+    #
+    #   COMMON FUNCTIONS
+    ##############################################################################################
 
     def run_query_from_template(self, query_template):
         self.query = self.gen_results.generate_query(query_template)
@@ -225,8 +226,8 @@ class QueryTests(BaseTestCase):
                 except CBQError as ex:
                     self.log.error(ex)
                     self.assertTrue(str(ex).find(error) != -1,
-                                    "Error is incorrect.Actual %s.\n Expected: %s.\n" %(
-                                                                str(ex).split(':')[-1], error))
+                                    "Error is incorrect.Actual %s.\n Expected: %s.\n" % (
+                                        str(ex).split(':')[-1], error))
                 else:
                     self.fail("There were no errors. Error expected: %s" % error)
 
@@ -234,9 +235,9 @@ class QueryTests(BaseTestCase):
         if query is None:
             query = self.query
         if server is None:
-           server = self.master
-           if server.ip == "127.0.0.1":
-            self.n1ql_port = server.n1ql_port
+            server = self.master
+            if server.ip == "127.0.0.1":
+                self.n1ql_port = server.n1ql_port
         else:
             if server.ip == "127.0.0.1":
                 self.n1ql_port = server.n1ql_port
@@ -259,29 +260,29 @@ class QueryTests(BaseTestCase):
             if self.analytics:
                 query = query + ";"
                 for bucket in self.buckets:
-                    query = query.replace(bucket.name, bucket.name+"_shadow")
+                    query = query.replace(bucket.name, bucket.name + "_shadow")
                 result = RestConnection(self.cbas_node).execute_statement_on_cbas(query, "immediate")
                 result = json.loads(result)
 
-            else :
+            else:
                 result = rest.query_tool(query, self.n1ql_port, query_params=query_params)
-
 
         else:
             if self.version == "git_repo":
-                output = self.shell.execute_commands_inside("$GOPATH/src/github.com/couchbase/query/" +\
+                output = self.shell.execute_commands_inside("$GOPATH/src/github.com/couchbase/query/" + \
                                                             "shell/cbq/cbq ", "", "", "", "", "", "")
             else:
                 os = self.shell.extract_remote_info().type.lower()
-                if not(self.isprepared):
+                if not self.isprepared:
                     query = query.replace('"', '\\"')
                     query = query.replace('`', '\\`')
 
-                cmd =  "%s/cbq  -engine=http://%s:%s/ -q -u %s -p %s" % (self.path, server.ip, server.port, username, password)
+                cmd = "%s/cbq  -engine=http://%s:%s/ -q -u %s -p %s" % (
+                    self.path, server.ip, server.port, username, password)
 
                 output = self.shell.execute_commands_inside(cmd, query, "", "", "", "", "")
-                if not(output[0] == '{'):
-                    output1 = '{'+str(output)
+                if not (output[0] == '{'):
+                    output1 = '{' + str(output)
                 else:
                     output1 = output
                 result = json.loads(output1)
@@ -295,9 +296,9 @@ class QueryTests(BaseTestCase):
         type = info.distribution_type.lower()
         if type in ["ubuntu", "centos", "red hat"]:
             url = "https://s3.amazonaws.com/packages.couchbase.com/releases/couchbase-query/dp1/"
-            url += "couchbase-query_%s_%s_linux.tar.gz" %(
-                                version, info.architecture_type)
-        #TODO for windows
+            url += "couchbase-query_%s_%s_linux.tar.gz" % (
+                version, info.architecture_type)
+        # TODO for windows
         return url
 
     def _build_tuq(self, server):
@@ -315,23 +316,23 @@ class QueryTests(BaseTestCase):
                 goroot = self.input.tuq_client["goroot"]
             cmd = "rm -rf {0}/src/github.com".format(gopath)
             self.shell.execute_command(cmd)
-            cmd= 'export GOROOT={0} && export GOPATH={1} &&'.format(goroot, gopath) +\
-                ' export PATH=$PATH:$GOROOT/bin && ' +\
-                'go get github.com/couchbaselabs/tuqtng;' +\
-                'cd $GOPATH/src/github.com/couchbaselabs/tuqtng; ' +\
-                'go get -d -v ./...; cd .'
+            cmd = 'export GOROOT={0} && export GOPATH={1} &&'.format(goroot, gopath) + \
+                  ' export PATH=$PATH:$GOROOT/bin && ' + \
+                  'go get github.com/couchbaselabs/tuqtng;' + \
+                  'cd $GOPATH/src/github.com/couchbaselabs/tuqtng; ' + \
+                  'go get -d -v ./...; cd .'
             self.shell.execute_command(cmd)
-            cmd = 'export GOROOT={0} && export GOPATH={1} &&'.format(goroot, gopath) +\
-                ' export PATH=$PATH:$GOROOT/bin && ' +\
-                'cd $GOPATH/src/github.com/couchbaselabs/tuqtng; go build; cd .'
+            cmd = 'export GOROOT={0} && export GOPATH={1} &&'.format(goroot, gopath) + \
+                  ' export PATH=$PATH:$GOROOT/bin && ' + \
+                  'cd $GOPATH/src/github.com/couchbaselabs/tuqtng; go build; cd .'
             self.shell.execute_command(cmd)
-            cmd = 'export GOROOT={0} && export GOPATH={1} &&'.format(goroot, gopath) +\
-                ' export PATH=$PATH:$GOROOT/bin && ' +\
-                'cd $GOPATH/src/github.com/couchbaselabs/tuqtng/tuq_client; go build; cd .'
+            cmd = 'export GOROOT={0} && export GOPATH={1} &&'.format(goroot, gopath) + \
+                  ' export PATH=$PATH:$GOROOT/bin && ' + \
+                  'cd $GOPATH/src/github.com/couchbaselabs/tuqtng/tuq_client; go build; cd .'
             self.shell.execute_command(cmd)
         else:
             cbq_url = self.build_url(self.version)
-            #TODO for windows
+            # TODO for windows
             cmd = "cd /tmp; mkdir tuq;cd tuq; wget {0} -O tuq.tar.gz;".format(cbq_url)
             cmd += "tar -xvf tuq.tar.gz;rm -rf tuq.tar.gz"
             self.shell.execute_command(cmd)
@@ -346,13 +347,13 @@ class QueryTests(BaseTestCase):
             if self.input.tuq_client and "gopath" in self.input.tuq_client:
                 gopath = self.input.tuq_client["gopath"]
             if os == 'windows':
-                cmd = "cd %s/src/github.com/couchbase/query/server/main; " % (gopath) +\
-                "./cbq-engine.exe -datastore http://%s:%s/ >/dev/null 2>&1 &" %(
-                                                                server.ip, server.port)
+                cmd = "cd %s/src/github.com/couchbase/query/server/main; " % (gopath) + \
+                      "./cbq-engine.exe -datastore http://%s:%s/ >/dev/null 2>&1 &" % (
+                          server.ip, server.port)
             else:
-                cmd = "cd %s/src/github.com/couchbase/query//server/main; " % (gopath) +\
-                "./cbq-engine -datastore http://%s:%s/ >n1ql.log 2>&1 &" %(
-                                                                server.ip, server.port)
+                cmd = "cd %s/src/github.com/couchbase/query//server/main; " % (gopath) + \
+                      "./cbq-engine -datastore http://%s:%s/ >n1ql.log 2>&1 &" % (
+                          server.ip, server.port)
             self.shell.execute_command(cmd)
         elif self.version == "sherlock":
             if self.services_init.find('n1ql') != -1:
@@ -365,29 +366,29 @@ class QueryTests(BaseTestCase):
             if self.input.tuq_client and "sherlock_path" in self.input.tuq_client:
                 couchbase_path = "%s/bin" % self.input.tuq_client["sherlock_path"]
             if os == 'windows':
-                cmd = "cd %s; " % (couchbase_path) +\
-                "./cbq-engine.exe -datastore http://%s:%s/ >/dev/null 2>&1 &" %(
-                                                                server.ip, server.port)
+                cmd = "cd %s; " % (couchbase_path) + \
+                      "./cbq-engine.exe -datastore http://%s:%s/ >/dev/null 2>&1 &" % (
+                          server.ip, server.port)
             else:
-                cmd = "cd %s; " % (couchbase_path) +\
-                "./cbq-engine -datastore http://%s:%s/ >n1ql.log 2>&1 &" %(
-                                                                server.ip, server.port)
+                cmd = "cd %s; " % (couchbase_path) + \
+                      "./cbq-engine -datastore http://%s:%s/ >n1ql.log 2>&1 &" % (
+                          server.ip, server.port)
                 n1ql_port = self.input.param("n1ql_port", None)
                 if server.ip == "127.0.0.1" and server.n1ql_port:
                     n1ql_port = server.n1ql_port
                 if n1ql_port:
-                    cmd = "cd %s; " % (couchbase_path) +\
-                './cbq-engine -datastore http://%s:%s/ -http=":%s">n1ql.log 2>&1 &' %(
-                                                                server.ip, server.port, n1ql_port)
+                    cmd = "cd %s; " % (couchbase_path) + \
+                          './cbq-engine -datastore http://%s:%s/ -http=":%s">n1ql.log 2>&1 &' % (
+                              server.ip, server.port, n1ql_port)
             self.shell.execute_command(cmd)
         else:
             os = self.shell.extract_remote_info().type.lower()
             if os != 'windows':
-                cmd = "cd /tmp/tuq;./cbq-engine -couchbase http://%s:%s/ >/dev/null 2>&1 &" %(
-                                                                server.ip, server.port)
+                cmd = "cd /tmp/tuq;./cbq-engine -couchbase http://%s:%s/ >/dev/null 2>&1 &" % (
+                    server.ip, server.port)
             else:
-                cmd = "cd /cygdrive/c/tuq;./cbq-engine.exe -couchbase http://%s:%s/ >/dev/null 2>&1 &" %(
-                                                                server.ip, server.port)
+                cmd = "cd /cygdrive/c/tuq;./cbq-engine.exe -couchbase http://%s:%s/ >/dev/null 2>&1 &" % (
+                    server.ip, server.port)
             self.shell.execute_command(cmd)
 
     def _parse_query_output(self, output):
@@ -417,43 +418,42 @@ class QueryTests(BaseTestCase):
 
     def generate_docs_employee(self, docs_per_day, start=0):
         json_generator = JsonGenerator()
-        return json_generator.generate_docs_employee_data(docs_per_day = docs_per_day, start = start)
+        return json_generator.generate_docs_employee_data(docs_per_day=docs_per_day, start=start)
 
     def generate_docs_simple(self, docs_per_day, start=0):
         json_generator = JsonGenerator()
-        return json_generator.generate_docs_employee_simple_data(docs_per_day = docs_per_day, start = start)
+        return json_generator.generate_docs_employee_simple_data(docs_per_day=docs_per_day, start=start)
 
     def generate_docs_sales(self, docs_per_day, start=0):
         json_generator = JsonGenerator()
-        return json_generator.generate_docs_employee_sales_data(docs_per_day = docs_per_day, start = start)
+        return json_generator.generate_docs_employee_sales_data(docs_per_day=docs_per_day, start=start)
 
     def generate_docs_bigdata(self, docs_per_day, start=0):
         json_generator = JsonGenerator()
-        return json_generator.generate_docs_bigdata(end=(1000*docs_per_day), start=start, value_size=self.value_size)
+        return json_generator.generate_docs_bigdata(end=(1000 * docs_per_day), start=start, value_size=self.value_size)
 
-
-    def _verify_results(self, actual_result, expected_result, missing_count = 1, extra_count = 1):
+    def _verify_results(self, actual_result, expected_result, missing_count=1, extra_count=1):
         if len(actual_result) != len(expected_result):
             missing, extra = self.check_missing_and_extra(actual_result, expected_result)
             self.log.error("Missing items: %s.\n Extra items: %s" % (missing[:missing_count], extra[:extra_count]))
             self.fail("Results are incorrect.Actual num %s. Expected num: %s.\n" % (
-                                            len(actual_result), len(expected_result)))
+                len(actual_result), len(expected_result)))
         if self.max_verify is not None:
             actual_result = actual_result[:self.max_verify]
             expected_result = expected_result[:self.max_verify]
 
-        msg = "Results are incorrect.\n Actual first and last 100:  %s.\n ... \n %s" +\
-        "Expected first and last 100: %s.\n  ... \n %s"
+        msg = "Results are incorrect.\n Actual first and last 100:  %s.\n ... \n %s" + \
+              "Expected first and last 100: %s.\n  ... \n %s"
         self.assertTrue(actual_result == expected_result,
-                          msg % (actual_result[:100], actual_result[-100:],
-                                 expected_result[:100], expected_result[-100:]))
+                        msg % (actual_result[:100], actual_result[-100:],
+                               expected_result[:100], expected_result[-100:]))
 
     def check_missing_and_extra(self, actual, expected):
         missing = []
         extra = []
         for item in actual:
             if not (item in expected):
-                 extra.append(item)
+                extra.append(item)
         for item in expected:
             if not (item in actual):
                 missing.append(item)
@@ -487,7 +487,7 @@ class QueryTests(BaseTestCase):
                 if self.primary_indx_drop:
                     self.log.info("Dropping primary index for %s using %s ..." % (bucket.name, self.primary_indx_type))
                     self.query = "DROP PRIMARY INDEX ON %s USING %s" % (bucket.name, self.primary_indx_type)
-                    #self.run_cbq_query()
+                    # self.run_cbq_query()
                     self.sleep(3, 'Sleep for some time after index drop')
                 self.query = 'select * from system:indexes where name="#primary" and keyspace_id = "%s"' % bucket.name
                 res = self.run_cbq_query()
@@ -519,9 +519,9 @@ class QueryTests(BaseTestCase):
                 if item['indexes']['keyspace_id'] == bucket.name:
                     if item['indexes']['state'] == "online":
                         return
-            self.sleep(5, 'index is pending or not in the list. sleeping... (%s)' % [item['indexes'] for item in res['results']])
+            self.sleep(5, 'index is pending or not in the list. sleeping... (%s)' % [item['indexes'] for item in
+                                                                                     res['results']])
         raise Exception('index %s is not online. last response is %s' % (index_name, res))
-
 
     def _get_keys(self, key_num):
         keys = []

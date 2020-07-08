@@ -1,42 +1,42 @@
-import os
-import json
-import socket
-import uuid
+import ast
+import collections
 import copy
+import json
+import logging
+import os
 import pprint
 import re
-import logging
+import socket
+import time
+import traceback
+import uuid
+from subprocess import Popen, PIPE
 
 import httplib2
 import testconstants
-import time
-import traceback
-import collections
-from couchbase_helper.documentgenerator import JsonDocGenerator
-from couchbase_helper.documentgenerator import WikiJSONGenerator
-from couchbase_helper.documentgenerator import NapaDataLoader
-from subprocess import Popen, PIPE
-from remote.remote_util import RemoteMachineShellConnection
-from couchbase_helper.tuq_generators import JsonGenerator
 from basetestcase import BaseTestCase
-from membase.api.exception import CBQError, ReadDocumentException
+from couchbase.cluster import Cluster, ClusterOptions
+from couchbase.cluster import PasswordAuthenticator, QueryOptions
+# from couchbase.n1ql import N1QLQuery, STATEMENT_PLUS, CONSISTENCY_REQUEST
+from couchbase_core.n1ql import CONSISTENCY_REQUEST, STATEMENT_PLUS
 from couchbase_helper.documentgenerator import DocumentGenerator
-from membase.api.rest_client import RestConnection
-from security.rbac_base import RbacBase
-# from sdk_client import SDKClient
-from couchbase_helper.tuq_generators import TuqGenerators
 # from xdcr.upgradeXDCR import UpgradeTests
 from couchbase_helper.documentgenerator import JSONNonDocGenerator
-from couchbase.cluster import Cluster
-from couchbase.cluster import PasswordAuthenticator
-import couchbase.subdocument as SD
-from couchbase.n1ql import N1QLQuery, STATEMENT_PLUS, CONSISTENCY_REQUEST, MutationState
-import ast
+from couchbase_helper.documentgenerator import JsonDocGenerator
+from couchbase_helper.documentgenerator import NapaDataLoader
+from couchbase_helper.documentgenerator import WikiJSONGenerator
+from couchbase_helper.tuq_generators import JsonGenerator
+# from sdk_client import SDKClient
+from couchbase_helper.tuq_generators import TuqGenerators
 from deepdiff import DeepDiff
 from fts.random_query_generator.rand_query_gen import FTSFlexQueryGenerator
+from membase.api.exception import CBQError
+from membase.api.rest_client import RestConnection
+from pytests.fts.fts_base import CouchbaseCluster
 from pytests.fts.fts_base import FTSIndex
 from pytests.fts.random_query_generator.rand_query_gen import DATASET
-from pytests.fts.fts_base import CouchbaseCluster
+from remote.remote_util import RemoteMachineShellConnection
+from security.rbac_base import RbacBase
 
 JOIN_INNER = "INNER"
 JOIN_LEFT = "LEFT"
@@ -75,7 +75,7 @@ class QueryTests(BaseTestCase):
                                            password=self.master.rest_password)
         self.query_buckets = None
         self.test_buckets = self.input.param('test_buckets', 'default')
-        if (self.test_buckets == "default") & (self.default_bucket == False) :
+        if (self.test_buckets == "default") & (self.default_bucket is False):
             self.test_buckets = None
         self.sample_bucket = self.input.param('sample_bucket', None)
         self.sample_bucket_index = self.input.param('sample_bucket_index', None)
@@ -322,7 +322,7 @@ class QueryTests(BaseTestCase):
                               expiration)
 
     def _load_napa_dataset(self, op_type="create", expiration=0, start=0,
-                          end=1000):
+                           end=1000):
         # Load Emp Dataset
         self.cluster.bucket_flush(self.master)
         # Adding sleep after flushing buckets (see CBQE-5838)
@@ -330,9 +330,9 @@ class QueryTests(BaseTestCase):
 
         if end > 0:
             self._kv_gen = NapaDataLoader("napa_",
-                                            encoding="utf-8",
-                                            start=start,
-                                            end=end)
+                                          encoding="utf-8",
+                                          start=start,
+                                          end=end)
             gen = copy.deepcopy(self._kv_gen)
 
             self._load_bucket(self.buckets[0], self.servers[0], gen, op_type,
@@ -457,52 +457,88 @@ class QueryTests(BaseTestCase):
         user_to_create = None
         rolelist = None
         user_role_map = [{
-                'admin_user': [{'id': 'admin_user', 'name': 'admin_user', 'password': 'password'}],
-                'rolelist': [{'id': 'admin_user', 'name': 'admin_user', 'roles': 'admin'}]
+            'admin_user': [{'id': 'admin_user', 'name': 'admin_user', 'password': 'password'}],
+            'rolelist': [{'id': 'admin_user', 'name': 'admin_user', 'roles': 'admin'}]
+        },
+            {
+                'all_buckets_data_reader_search_admin': [
+                    {'id': 'all_buckets_data_reader_search_admin', 'name': 'all_buckets_data_reader_search_admin',
+                     'password': 'password'}],
+                'rolelist': [
+                    {'id': 'all_buckets_data_reader_search_admin', 'name': 'all_buckets_data_reader_search_admin',
+                     'roles': 'query_select[*],fts_admin[*],query_external_access'}]
             },
             {
-                'all_buckets_data_reader_search_admin': [{'id': 'all_buckets_data_reader_search_admin', 'name': 'all_buckets_data_reader_search_admin', 'password': 'password'}],
-                'rolelist': [{'id': 'all_buckets_data_reader_search_admin', 'name': 'all_buckets_data_reader_search_admin', 'roles': 'query_select[*],fts_admin[*],query_external_access'}]
+                'all_buckets_data_reader_search_reader': [
+                    {'id': 'all_buckets_data_reader_search_reader', 'name': 'all_buckets_data_reader_search_reader',
+                     'password': 'password'}],
+                'rolelist': [
+                    {'id': 'all_buckets_data_reader_search_reader', 'name': 'all_buckets_data_reader_search_reader',
+                     'roles': 'query_select[*],fts_searcher[*],query_external_access'}]
             },
             {
-                'all_buckets_data_reader_search_reader':  [{'id': 'all_buckets_data_reader_search_reader', 'name': 'all_buckets_data_reader_search_reader', 'password': 'password'}],
-                'rolelist': [{'id': 'all_buckets_data_reader_search_reader', 'name': 'all_buckets_data_reader_search_reader', 'roles': 'query_select[*],fts_searcher[*],query_external_access'}]
+                'test_bucket_data_reader_search_admin': [
+                    {'id': 'test_bucket_data_reader_search_admin', 'name': 'test_bucket_data_reader_search_admin',
+                     'password': 'password'}],
+                'rolelist': [
+                    {'id': 'test_bucket_data_reader_search_admin', 'name': 'test_bucket_data_reader_search_admin',
+                     'roles': 'query_select[' + bucket_name + '],fts_admin[' + bucket_name + '],query_external_access'}]
             },
             {
-                'test_bucket_data_reader_search_admin': [{'id': 'test_bucket_data_reader_search_admin', 'name': 'test_bucket_data_reader_search_admin', 'password': 'password'}],
-                'rolelist': [{'id': 'test_bucket_data_reader_search_admin', 'name': 'test_bucket_data_reader_search_admin', 'roles': 'query_select['+bucket_name+'],fts_admin['+bucket_name+'],query_external_access'}]
+                'test_bucket_data_reader_null': [
+                    {'id': 'test_bucket_data_reader_null', 'name': 'test_bucket_data_reader_null',
+                     'password': 'password'}],
+                'rolelist': [{'id': 'test_bucket_data_reader_null', 'name': 'test_bucket_data_reader_null',
+                              'roles': 'query_select[' + bucket_name + '],query_external_access'}]
             },
             {
-                'test_bucket_data_reader_null': [{'id': 'test_bucket_data_reader_null', 'name': 'test_bucket_data_reader_null', 'password': 'password'}],
-                'rolelist': [{'id': 'test_bucket_data_reader_null', 'name': 'test_bucket_data_reader_null', 'roles': 'query_select['+bucket_name+'],query_external_access'}]
+                'test_bucket_data_reader_search_reader': [
+                    {'id': 'test_bucket_data_reader_search_reader', 'name': 'test_bucket_data_reader_search_reader',
+                     'password': 'password'}],
+                'rolelist': [
+                    {'id': 'test_bucket_data_reader_search_reader', 'name': 'test_bucket_data_reader_search_reader',
+                     'roles': 'query_select[' + bucket_name + '],fts_searcher[' + bucket_name + '],query_external_access'}]
             },
             {
-                'test_bucket_data_reader_search_reader': [{'id': 'test_bucket_data_reader_search_reader', 'name': 'test_bucket_data_reader_search_reader', 'password': 'password'}],
-                'rolelist': [{'id': 'test_bucket_data_reader_search_reader', 'name': 'test_bucket_data_reader_search_reader', 'roles': 'query_select['+bucket_name+'],fts_searcher['+bucket_name+'],query_external_access'}]
+                'all_buckets_data_reader_null': [
+                    {'id': 'all_buckets_data_reader_null', 'name': 'all_buckets_data_reader_null',
+                     'password': 'password'}],
+                'rolelist': [{'id': 'all_buckets_data_reader_null', 'name': 'all_buckets_data_reader_null',
+                              'roles': 'query_select[*],query_external_access'}]
             },
             {
-                'all_buckets_data_reader_null': [{'id': 'all_buckets_data_reader_null', 'name': 'all_buckets_data_reader_null', 'password': 'password'}],
-                'rolelist': [{'id': 'all_buckets_data_reader_null', 'name': 'all_buckets_data_reader_null', 'roles': 'query_select[*],query_external_access'}]
+                'all_buckets_null_search_admin': [
+                    {'id': 'all_buckets_null_search_admin', 'name': 'all_buckets_null_search_admin',
+                     'password': 'password'}],
+                'rolelist': [{'id': 'all_buckets_null_search_admin', 'name': 'all_buckets_null_search_admin',
+                              'roles': 'fts_admin[*],query_external_access'}]
             },
             {
-                'all_buckets_null_search_admin': [{'id': 'all_buckets_null_search_admin', 'name': 'all_buckets_null_search_admin', 'password': 'password'}],
-                'rolelist': [{'id': 'all_buckets_null_search_admin', 'name': 'all_buckets_null_search_admin', 'roles': 'fts_admin[*],query_external_access'}]
+                'all_buckets_null_null': [
+                    {'id': 'all_buckets_null_null', 'name': 'all_buckets_null_null', 'password': 'password'}],
+                'rolelist': [
+                    {'id': 'all_buckets_null_null', 'name': 'all_buckets_null_null', 'roles': 'query_external_access'}]
             },
             {
-                'all_buckets_null_null': [{'id': 'all_buckets_null_null', 'name': 'all_buckets_null_null', 'password': 'password'}],
-                'rolelist': [{'id': 'all_buckets_null_null', 'name': 'all_buckets_null_null', 'roles': 'query_external_access'}]
+                'all_buckets_null_search_reader': [
+                    {'id': 'all_buckets_null_search_reader', 'name': 'all_buckets_null_search_reader',
+                     'password': 'password'}],
+                'rolelist': [{'id': 'all_buckets_null_search_reader', 'name': 'all_buckets_null_search_reader',
+                              'roles': 'fts_searcher[*],query_external_access'}]
             },
             {
-                'all_buckets_null_search_reader': [{'id': 'all_buckets_null_search_reader', 'name': 'all_buckets_null_search_reader', 'password': 'password'}],
-                'rolelist': [{'id': 'all_buckets_null_search_reader', 'name': 'all_buckets_null_search_reader', 'roles': 'fts_searcher[*],query_external_access'}]
+                'test_bucket_null_search_admin': [
+                    {'id': 'test_bucket_null_search_admin', 'name': 'test_bucket_null_search_admin',
+                     'password': 'password'}],
+                'rolelist': [{'id': 'test_bucket_null_search_admin', 'name': 'test_bucket_null_search_admin',
+                              'roles': 'fts_admin[' + bucket_name + '],query_external_access'}]
             },
             {
-                'test_bucket_null_search_admin': [{'id': 'test_bucket_null_search_admin', 'name': 'test_bucket_null_search_admin', 'password': 'password'}],
-                'rolelist': [{'id': 'test_bucket_null_search_admin', 'name': 'test_bucket_null_search_admin', 'roles': 'fts_admin['+bucket_name+'],query_external_access'}]
-            },
-            {
-                'test_bucket_null_search_reader': [{'id': 'test_bucket_null_search_reader', 'name': 'test_bucket_null_search_reader', 'password': 'password'}],
-                'rolelist': [{'id': 'test_bucket_null_search_reader', 'name': 'test_bucket_null_search_reader', 'roles': 'fts_searcher['+bucket_name+'],query_external_access'}]
+                'test_bucket_null_search_reader': [
+                    {'id': 'test_bucket_null_search_reader', 'name': 'test_bucket_null_search_reader',
+                     'password': 'password'}],
+                'rolelist': [{'id': 'test_bucket_null_search_reader', 'name': 'test_bucket_null_search_reader',
+                              'roles': 'fts_searcher[' + bucket_name + '],query_external_access'}]
             }
         ]
 
@@ -518,7 +554,7 @@ class QueryTests(BaseTestCase):
         else:
             self.fail("{0} looks like an invalid user".format(user))
 
-    def generate_random_queries(self, fields=None, num_queries=1, query_type=["match"],
+    def generate_random_queries(self, fields=None, num_queries=1, query_type=None,
                                 seed=0):
         """
          Calls FTS-FLex Query Generator for employee dataset
@@ -527,6 +563,8 @@ class QueryTests(BaseTestCase):
                       like: query_type=["match", "match_phrase","bool",
                                         "conjunction", "disjunction"]
         """
+        if query_type is None:
+            query_type = ["match"]
         self.query_gen = FTSFlexQueryGenerator(num_queries, query_type=query_type,
                                                seed=seed, dataset=self.dataset,
                                                fields=fields)
@@ -1205,7 +1243,9 @@ class QueryTests(BaseTestCase):
                 self.sleep(delay, 'exception returned: %s \n sleeping for %s' % (ex, delay))
         raise Exception('timeout, invalid results: %s' % res)
 
-    def negative_common_body(self, queries_errors={}):
+    def negative_common_body(self, queries_errors=None):
+        if queries_errors is None:
+            queries_errors = {}
         if not queries_errors:
             self.fail("No queries to run!")
         check_code = False
@@ -1291,7 +1331,7 @@ class QueryTests(BaseTestCase):
 
         shell = RemoteMachineShellConnection(server)
         cmd = (
-                self.curl_path + " -u " + self.master.rest_username + ":" + self.master.rest_password + " http://" + server.ip + ":" + server.n1ql_port + "/query/service -d " \
+                self.curl_path + " -u " + self.master.rest_username + ":" + self.master.rest_password + " http://" + server.ip + ":" + server.n1ql_port + "/query/service -d "
                                                                                                                                                           "statement=" + query)
 
         output, error = shell.execute_command(cmd)
@@ -1300,7 +1340,10 @@ class QueryTests(BaseTestCase):
             json_output_str += s
         return json.loads(json_output_str)
 
-    def run_cbq_query(self, query=None, min_output_size=10, server=None, query_params={}, is_prepared=False, encoded_plan=None, username=None, password=None, use_fts_query_param=None, debug_query=True):
+    def run_cbq_query(self, query=None, min_output_size=10, server=None, query_params=None, is_prepared=False,
+                      encoded_plan=None, username=None, password=None, use_fts_query_param=None, debug_query=True):
+        if query_params is None:
+            query_params = {}
         if query is None:
             query = self.query
         if server is None:
@@ -1320,32 +1363,29 @@ class QueryTests(BaseTestCase):
         if use_fts_query_param:
             query_params['use_fts'] = True
         if self.testrunner_client == 'python_sdk' and not is_prepared:
-            sdk_cluster = Cluster('couchbase://' + str(server.ip))
-            authenticator = PasswordAuthenticator(username, password)
-            sdk_cluster.authenticate(authenticator)
-            for bucket in self.buckets:
-                cb = sdk_cluster.open_bucket(bucket.name)
-
-            sdk_query = N1QLQuery(query)
+            cluster = Cluster(f'couchbase://{server.ip}', ClusterOptions(PasswordAuthenticator(username, password)))
+            sdk_query = QueryOptions()
 
             # if is_prepared:
             #     sdk_query.adhoc = False
 
             if 'scan_consistency' in query_params:
                 if query_params['scan_consistency'] == 'REQUEST_PLUS':
-                    sdk_query.consistency = CONSISTENCY_REQUEST  # request_plus is currently mapped to the CONSISTENT_REQUEST constant in the Python SDK
+                    # request_plus is currently mapped to the CONSISTENT_REQUEST constant in the Python SDK
+                    sdk_query.scan_consistency = CONSISTENCY_REQUEST
                 elif query_params['scan_consistency'] == 'STATEMENT_PLUS':
-                    sdk_query.consistency = STATEMENT_PLUS
+                    sdk_query.scan_consistency = STATEMENT_PLUS
                 else:
                     raise ValueError('Unknown consistency')
             # Python SDK returns results row by row, so we need to iterate through all the results
-            row_iterator = cb.n1ql_query(sdk_query)
+            query_results = cluster.query(query, sdk_query)
+            rows = query_results.rows()
+            metadata = query_results.metadata()
             content = []
             try:
-                for row in row_iterator:
+                for row in query_results.rows():
                     content.append(row)
-                row_iterator.meta['results'] = content
-                result = row_iterator.meta
+                result = content
             except Exception as e:
                 # This will parse the resulting HTTP error and return only the dictionary containing the query results
                 result = ast.literal_eval(str(e).split("value=")[1].split(", http_status")[0])
@@ -1808,7 +1848,7 @@ class QueryTests(BaseTestCase):
                         self.sleep(5)
                         retries -= 1
                     else:
-                        break;
+                        break
 
                 self.assertTrue(result['metrics']['resultCount'] == 0)
                 result = self.run_cbq_query("select * from system:completed_requests")
@@ -1824,7 +1864,7 @@ class QueryTests(BaseTestCase):
                         self.sleep(5)
                         retries -= 1
                     else:
-                        break;
+                        break
 
                 self.assertTrue(result['metrics']['resultCount'] == 0)
 
@@ -2247,7 +2287,7 @@ class QueryTests(BaseTestCase):
 
     def create_users(self, users=None):
         """
-        :param user: takes a list of {'id': 'xxx', 'name': 'some_name ,
+        :param users: takes a list of {'id': 'xxx', 'name': 'some_name ,
                                         'password': 'passw0rd'}
         :return: Nothing
         """
@@ -2387,16 +2427,6 @@ class QueryTests(BaseTestCase):
     # Again very specific, some things are generalizable, perhaps rbac should have its own query base test
     #
     ##############################################################################################
-    def create_users(self, users=None):
-        """
-        :param user: takes a list of {'id': 'xxx', 'name': 'some_name ,
-                                        'password': 'passw0rd'}
-        :return: Nothing
-        """
-        if not users:
-            users = self.users
-        RbacBase().create_user_source(users, 'builtin', self.master)
-        self.log.info("SUCCESS: User(s) %s created" % ','.join([user['name'] for user in users]))
 
     def assign_role(self, rest=None, roles=None):
         if not rest:
@@ -2579,7 +2609,9 @@ class QueryTests(BaseTestCase):
         self.assertTrue(res['metrics']['resultCount'] == 1)
         res = self.curl_with_roles('select * from system:keyspaces')
 
-        if role in ["query_update(default)", "query_delete(default)", "query_insert(default)","query_insert({0})".format(self.bucket_name),"query_update({0})".format(self.bucket_name),"query_delete({0})".format(self.bucket_name)]:
+        if role in ["query_update(default)", "query_delete(default)", "query_insert(default)",
+                    "query_insert({0})".format(self.bucket_name), "query_update({0})".format(self.bucket_name),
+                    "query_delete({0})".format(self.bucket_name)]:
             self.assertTrue(res['status'] == 'success')
         elif role.startswith("query_") or role.startswith("select") or role in ["bucket_full_access(default)",
                                                                                 "query_delete(default)"]:
@@ -2593,14 +2625,18 @@ class QueryTests(BaseTestCase):
         except Exception as ex:
             self.log.error(ex)
 
-        if role not in ["query_insert(default)", "query_update(default)", "query_delete(default)","query_insert({0})".format(self.bucket_name),"query_update({0})".format(self.bucket_name),"query_delete({0})".format(self.bucket_name)]:
+        if role not in ["query_insert(default)", "query_update(default)", "query_delete(default)",
+                        "query_insert({0})".format(self.bucket_name), "query_update({0})".format(self.bucket_name),
+                        "query_delete({0})".format(self.bucket_name)]:
             self.query = 'create primary index on `{0}`'.format(self.buckets[1].name)
             try:
                 self.curl_with_roles(self.query)
             except Exception as ex:
                 self.log.error(ex)
 
-        if role not in ["views_admin(standard_bucket0)", "views_admin(default)", "query_insert(default)","query_insert({0})".format(self.bucket_name),"query_update({0})".format(self.bucket_name),"query_delete({0})".format(self.bucket_name),
+        if role not in ["views_admin(standard_bucket0)", "views_admin(default)", "query_insert(default)",
+                        "query_insert({0})".format(self.bucket_name), "query_update({0})".format(self.bucket_name),
+                        "query_delete({0})".format(self.bucket_name),
                         "query_update(default)", "query_delete(default)"]:
             self.query = 'create index idx1 on `{0}`(name)'.format(self.buckets[0].name)
             res = self.curl_with_roles(self.query)
@@ -2634,9 +2670,12 @@ class QueryTests(BaseTestCase):
         if role == "bucket_full_access(default)":
             self.assertTrue(res['status'] == 'stopped')
         elif role in ["select(default)", "query_select(default)", "select(standard_bucket0)",
-                      "query_select(standard_bucket0)","select({0})".format(self.bucket_name), "query_select({0})".format(self.bucket_name)]:
+                      "query_select(standard_bucket0)", "select({0})".format(self.bucket_name),
+                      "query_select({0})".format(self.bucket_name)]:
             self.assertTrue(str(res).find("'code': 13014") != -1)
-        elif role in ["insert(default)", "query_insert(default)", "query_update(default)", "query_delete(default)","insert(({0})".format(self.bucket_name), "query_insert({0})".format(self.bucket_name), "query_update({0})".format(self.bucket_name), "query_delete({0})".format(self.bucket_name)]:
+        elif role in ["insert(default)", "query_insert(default)", "query_update(default)", "query_delete(default)",
+                      "insert(({0})".format(self.bucket_name), "query_insert({0})".format(self.bucket_name),
+                      "query_update({0})".format(self.bucket_name), "query_delete({0})".format(self.bucket_name)]:
             self.assertTrue(res['status'] == 'fatal')
         else:
             self.assertTrue(res['status'] == 'success')
@@ -2661,10 +2700,13 @@ class QueryTests(BaseTestCase):
         #     self.assertTrue(str(res).find("'code': 13014")!=-1)
         # else:
         #     self.assertTrue(res['metrics']['resultCount']> 0)
-        if role not in ["ro_admin", "replication_admin", "query_insert(default)", "query_delete(default)","query_insert({0})".format(self.bucket_name),"query_update({0})".format(self.bucket_name),"query_delete({0})".format(self.bucket_name),
+        if role not in ["ro_admin", "replication_admin", "query_insert(default)", "query_delete(default)",
+                        "query_insert({0})".format(self.bucket_name), "query_update({0})".format(self.bucket_name),
+                        "query_delete({0})".format(self.bucket_name),
                         "query_update(default)", "bucket_full_access(default)", "query_system_catalog",
                         "views_admin(default)"]:
-            self.query = "prepare `st1{0}` from select * from `{0}` union select * from `{0}` union select * from `{0}`".format(self.bucket_name)
+            self.query = "prepare `st1{0}` from select * from `{0}` union select * from `{0}` union select * from `{0}`".format(
+                self.bucket_name)
             res = self.curl_with_roles(self.query)
             self.query = 'execute `st1{0}`'.format(self.bucket_name)
             res = self.curl_with_roles(self.query)
@@ -2675,14 +2717,17 @@ class QueryTests(BaseTestCase):
             else:
                 self.assertTrue(res['status'] == 'success')
 
-            if role not in ["query_insert(default)", "query_delete(default)", "query_update(default)","query_insert({0})".format(self.bucket_name),"query_update({0})".format(self.bucket_name),"query_delete({0})".format(self.bucket_name)]:
+            if role not in ["query_insert(default)", "query_delete(default)", "query_update(default)",
+                            "query_insert({0})".format(self.bucket_name), "query_update({0})".format(self.bucket_name),
+                            "query_delete({0})".format(self.bucket_name)]:
                 self.query = "prepare `st2{0}` from select * from `{0}` union select * from " \
                              "standard_bucket0 union select * from `{0}`".format(self.bucket_name)
                 res = self.curl_with_roles(self.query)
 
                 if role in ["bucket_admin(standard_bucket0)", "views_admin(standard_bucket0)",
                             "views_admin(default)", "views_admin", "bucket_admin(default)", "replication_admin",
-                            "query_system_catalog", "select(default)", "query_select(default)","select({0})".format(self.bucket_name), "query_select({0})".format(self.bucket_name)]:
+                            "query_system_catalog", "select(default)", "query_select(default)",
+                            "select({0})".format(self.bucket_name), "query_select({0})".format(self.bucket_name)]:
                     self.assertTrue(str(res).find("'code': 13014") != -1)
                 else:
                     self.assertTrue(res['metrics']['resultCount'] > 0)
@@ -2691,7 +2736,8 @@ class QueryTests(BaseTestCase):
                 res = self.curl_with_roles(self.query)
                 if role in ["bucket_admin(standard_bucket0)", "views_admin(standard_bucket0)", "views_admin(default)",
                             "views_admin", "bucket_admin(default)", "replication_admin", "query_system_catalog",
-                            "select(default)", "query_select(default)","select({0})".format(self.bucket_name), "query_select({0})".format(self.bucket_name)]:
+                            "select(default)", "query_select(default)", "select({0})".format(self.bucket_name),
+                            "query_select({0})".format(self.bucket_name)]:
                     self.assertTrue(str(res).find("'code': 4040") != -1)
                 else:
                     self.assertTrue(res['status'] == 'success')
@@ -2699,19 +2745,23 @@ class QueryTests(BaseTestCase):
                 self.query = 'select * from system:completed_requests'
                 res = self.curl_with_roles(self.query)
 
-                if role == "select(default)" or role == "query_select(default)" or role == "select({0})".format(self.bucket_name) or role == "query_select({0})".format(self.bucket_name):
+                if role == "select(default)" or role == "query_select(default)" or role == "select({0})".format(
+                        self.bucket_name) or role == "query_select({0})".format(self.bucket_name):
                     self.assertTrue(str(res).find("'code': 13014") != -1)
                 elif role == "bucket_admin(standard_bucket0)":
                     self.assertTrue(res['metrics']['resultCount'] > 0)
                 else:
                     self.assertTrue(res['status'] == 'success')
 
-        if role not in ["query_insert(default)", "query_delete(default)", "query_update(default)","query_insert({0})".format(self.bucket_name),"query_update({0})".format(self.bucket_name),"query_delete({0})".format(self.bucket_name),
+        if role not in ["query_insert(default)", "query_delete(default)", "query_update(default)",
+                        "query_insert({0})".format(self.bucket_name), "query_update({0})".format(self.bucket_name),
+                        "query_delete({0})".format(self.bucket_name),
                         "bucket_full_access(default)", "ro_admin"]:
             self.query = 'select * from system:prepareds'
             res = self.curl_with_roles(self.query)
 
-            if role == "select(default)" or role == "query_select(default)" or role == "select({0})".format(self.bucket_name) or role == "query_select({0})".format(self.bucket_name):
+            if role == "select(default)" or role == "query_select(default)" or role == "select({0})".format(
+                    self.bucket_name) or role == "query_select({0})".format(self.bucket_name):
                 self.assertTrue(str(res).find("'code': 13014") != -1)
             else:
                 self.assertTrue(res['status'] == 'success')
@@ -2719,7 +2769,8 @@ class QueryTests(BaseTestCase):
             self.query = 'select * from system:active_requests'
             res = self.curl_with_roles(self.query)
 
-            if role == "select(default)" or role == "query_select(default)" or role == "select({0})".format(self.bucket_name) or role == "query_select({0})".format(self.bucket_name):
+            if role == "select(default)" or role == "query_select(default)" or role == "select({0})".format(
+                    self.bucket_name) or role == "query_select({0})".format(self.bucket_name):
                 self.assertTrue(str(res).find("'code': 13014") != -1)
             else:
                 self.assertTrue(res['metrics']['resultCount'] > 0)
@@ -2734,9 +2785,12 @@ class QueryTests(BaseTestCase):
         if role == "views_admin(default)":
             self.assertTrue(res['status'] == 'success')
         elif role in ["bucket_admin(standard_bucket0)", "bucket_admin(default)", "select(default)",
-                      "query_select(default)", "query_select({0})".format(self.bucket_name), "select({0})".format(self.bucket_name)]:
+                      "query_select(default)", "query_select({0})".format(self.bucket_name),
+                      "select({0})".format(self.bucket_name)]:
             self.assertTrue(res['metrics']['resultCount'] == 1)
-        elif role in ["query_insert(default)", "query_delete(default)", "query_update(default)","query_insert({0})".format(self.bucket_name),"query_update({0})".format(self.bucket_name),"query_delete({0})".format(self.bucket_name)]:
+        elif role in ["query_insert(default)", "query_delete(default)", "query_update(default)",
+                      "query_insert({0})".format(self.bucket_name), "query_update({0})".format(self.bucket_name),
+                      "query_delete({0})".format(self.bucket_name)]:
             self.assertTrue(res['metrics']['resultCount'] == 0)
             # elif (role == "ro_admin"):
             #     self.assertTrue(res['metrics']['resultCount']==2)
@@ -2922,8 +2976,10 @@ class QueryTests(BaseTestCase):
     #
     ##############################################################################################
     def execute_commands_inside(self, main_command, query, queries, bucket1, password, bucket2, source,
-                                subcommands=[], min_output_size=0,
+                                subcommands=None, min_output_size=0,
                                 end_msg='', timeout=250):
+        if subcommands is None:
+            subcommands = []
         shell = RemoteMachineShellConnection(self.master)
         shell.extract_remote_info()
         filename = "/tmp/test2"
@@ -3192,14 +3248,10 @@ class QueryTests(BaseTestCase):
         for item in result:
             if 'emp' in item:
                 del item['emp']['_id']
-            else:
-                None
             if 'tasks' in item:
                 for task in item['tasks']:
                     if task and '_id' in task:
                         del task['_id']
-                    else:
-                        None
 
     def _generate_full_joined_docs_list(self, join_type=JOIN_INNER, particular_key=None):
         joined_list = []
@@ -3504,8 +3556,6 @@ class QueryTests(BaseTestCase):
         for item in result:
             if '_id' in item:
                 del item['_id']
-            else:
-                None
             for bucket in self.buckets:
                 if bucket.name in item and 'id' in item[bucket.name]:
                     del item[bucket.name]['_id']
@@ -3625,7 +3675,7 @@ class QueryTests(BaseTestCase):
                                if [doc['tasks_points']["task1"]
                                    for doc in self.full_list].count(group) > 0 and \
                                (min([doc["join_day"] for doc in self.full_list
-                                     if doc['tasks_points']["task1"] == group]) == 1 or \
+                                     if doc['tasks_points']["task1"] == group]) == 1 or
                                 max([doc["join_yr"] for doc in self.full_list
                                      if doc['tasks_points']["task1"] == group]) == 2011)]
             expected_result = sorted(expected_result, key=lambda doc: (doc['task']))
