@@ -2385,7 +2385,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         json_generator = JsonGenerator()
         return json_generator.generate_docs_simple(start=start, docs_per_day=self.docs_per_day)
 
-    def create_save_function_body_test(self, appname, appcode, description="Sample Description",
+    def create_save_function_body(self, appname, appcode, description="Sample Description",
                                        checkpoint_interval=10000, cleanup_timers=False,
                                        dcp_stream_boundary="everything", deployment_status=True,
                                        skip_timer_threshold=86400,
@@ -2396,7 +2396,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                                        ):
         body = {}
         body['appname'] = appname
-        script_dir = os.path.dirname(__file__)
+        script_dir = "pytests/eventing"
         abs_file_path = os.path.join(script_dir, appcode)
         fh = open(abs_file_path, "r")
         body['appcode'] = fh.read()
@@ -2431,6 +2431,46 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             deadline_timeout = execution_timeout + 1
         body['settings']['deadline_timeout'] = deadline_timeout
         return body
+
+    def deploy_function(self, body, deployment_fail=False, wait_for_bootstrap=True,pause_resume=False,pause_resume_number=1,
+                        deployment_status=True,processing_status=True):
+        body['settings']['deployment_status'] = deployment_status
+        body['settings']['processing_status'] = processing_status
+        if self.print_eventing_handler_code_in_logs:
+            self.log.info("Deploying the following handler code : {0} with \nbindings: {1} and \nsettings: {2}".format(body['appname'], body['depcfg'] , body['settings']))
+            self.log.info("\n{0}".format(body['appcode']))
+        rest = RestConnection(self.backupset.cluster_host)
+        content1 = rest.create_function(body['appname'], body)
+        self.log.info("deploy Application : {0}".format(content1))
+        if deployment_fail:
+            res = json.loads(content1)
+            if not res["compile_success"]:
+                return
+            else:
+                raise Exception("Deployment is expected to be failed but no message of failure")
+        if wait_for_bootstrap:
+            # wait for the function to come out of bootstrap state
+            self.bkrs_wait_for_handler_state(body['appname'], "deployed", rest)
+        if pause_resume and pause_resume_number > 0:
+            self.pause_resume_n(body, pause_resume_number, rest)
+
+    def pause_resume_n(self, body, num , rest):
+        for i in range(num):
+            self.bkrs_pause_function(body, rest)
+            self.sleep(30)
+            self.bkrs_resume_function(body, rest)
+
+    def bkrs_pause_function(self, body, rest, wait_for_pause=True):
+        body['settings']['deployment_status'] = True
+        body['settings']['processing_status'] = False
+        self.refresh_rest_server()
+        # save the function so that it is visible in UI
+        #content = self.rest.save_function(body['appname'], body)
+        # undeploy the function
+        content1 = rest.set_settings_for_function(body['appname'], body['settings'])
+        self.log.info("Pause Application : {0}".format(body['appname']))
+        if wait_for_pause:
+            self.bkrs_wait_for_handler_state(body['appname'], "paused", rest)
 
     def bkrs_resume_function(self, body, rest, wait_for_resume=True):
         body['settings']['deployment_status'] = True

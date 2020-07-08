@@ -189,18 +189,26 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self._load_all_buckets(self.master, gen, "create", 0)
         self.backup_create_validate()
         self.backupset.number_of_backups = 1
-        self.cluster.async_rebalance(self.cluster_to_backup, serv_in, serv_out)
+        rebalance = self.cluster.async_rebalance(self.cluster_to_backup, serv_in, serv_out)
         self.sleep(10)
-        self.backup_cluster_validate()
+        count = 0
+        while rebalance.state != "FINISHED":
+            if count == 0:
+                self.backup_cluster_validate()
+            count += 1
         if not self.same_cluster:
             self._initialize_nodes(Cluster(), self.input.clusters[0][:self.nodes_init])
             serv_in = self.input.clusters[0][self.nodes_init: self.nodes_init + self.nodes_in]
             serv_out = self.input.clusters[0][self.nodes_init - self.nodes_out: self.nodes_init]
-            self.cluster.async_rebalance(self.cluster_to_restore, serv_in, serv_out)
+            rebalance = self.cluster.async_rebalance(self.cluster_to_restore, serv_in, serv_out)
         else:
-            self.cluster.async_rebalance(self.cluster_to_restore, serv_out, serv_in)
+            rebalance = self.cluster.async_rebalance(self.cluster_to_restore, serv_out, serv_in)
         self.sleep(10)
-        self.backup_restore_validate(compare_uuid=False, seqno_compare_function="<=")
+        count = 0
+        while rebalance.state != "FINISHED":
+            if count == 0:
+                self.backup_restore_validate(compare_uuid=False, seqno_compare_function="<=")
+            count += 1
 
     def test_backup_restore_with_ops(self):
         """

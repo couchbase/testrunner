@@ -927,6 +927,10 @@ class NewUpgradeBaseTest(BaseTestCase):
         json_generator = JsonGenerator()
         return json_generator.generate_docs_simple(start=start, docs_per_day=self.docs_per_day)
 
+    def generate_docs_default(self, docs_per_day, start=0):
+        json_generator = JsonGenerator()
+        return json_generator.generate_docs_employee(docs_per_day, start)
+
     def generate_docs(self, num_items, start=0):
         try:
             if self.dataset == "simple":
