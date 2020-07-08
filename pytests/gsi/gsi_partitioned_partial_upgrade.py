@@ -71,7 +71,7 @@ class UpgradePartialParititionedIndex(UpgradeSecondaryIndex):
             query="INSERT INTO `{0}` ( KEY, VALUE ) VALUES ('K4', {1})".format(self.bucket_name, insert4),
             server=self.n1ql_node)
 
-        time.sleep(1)
+        time.sleep(20)
 
         pending_results = self.n1ql_helper.run_cbq_query('SELECT meta().id FROM `{0}` WHERE createdDateTime BETWEEN 1 AND 10 AND status = "PENDING" order by meta().id'.format(self.bucket_name))
         success_results = self.n1ql_helper.run_cbq_query('SELECT meta().id FROM `{0}` WHERE createdDateTime BETWEEN 1 AND 10 AND status = "SUCCESS" order by meta().id'.format(self.bucket_name))
@@ -93,7 +93,7 @@ class UpgradePartialParititionedIndex(UpgradeSecondaryIndex):
             query="UPDATE `{0}` USE KEYS '{1}' SET status = 'ERROR'".format(self.bucket_name, update_error),
             server=self.n1ql_node)
 
-        time.sleep(1)
+        time.sleep(20)
 
         pending_results = self.n1ql_helper.run_cbq_query('SELECT meta().id FROM `{0}` WHERE createdDateTime BETWEEN 1 AND 10 AND status = "PENDING" order by meta().id'.format(self.bucket_name))
         success_results = self.n1ql_helper.run_cbq_query('SELECT meta().id FROM `{0}` WHERE createdDateTime BETWEEN 1 AND 10 AND status = "SUCCESS" order by meta().id'.format(self.bucket_name))
@@ -101,16 +101,6 @@ class UpgradePartialParititionedIndex(UpgradeSecondaryIndex):
 
         success_expected = [{u'id': u'K1'}, {u'id': u'K2'}, {u'id': u'K3'}]
         error_expected = [{u'id': u'K4'}]
-
-        # For all other index types, we don't expect behavior to be broken pre-upgrade
-        if self.partial_partitioned:
-            self.assertEqual(pending_results['results'], initial_expected)
-            self.assertEqual(success_results['results'], success_expected)
-            self.assertEqual(error_results['results'], error_expected)
-        else:
-            self.assertEqual(pending_results['metrics']['resultCount'], 0)
-            self.assertEqual(success_results['results'], success_expected)
-            self.assertEqual(error_results['results'], error_expected)
 
         # mixed_mode_index means upgrade the indexer nodes leave the kv node old
         if self.mixed_mode_index:
@@ -150,10 +140,6 @@ class UpgradePartialParititionedIndex(UpgradeSecondaryIndex):
 
         self.assertEqual(success_results['results'], success_expected)
         self.assertEqual(error_results['results'], error_expected)
-
-        # Indexer is still old, indexes should still be broken
-        if self.mixed_mode_kv:
-            self.assertEqual(pending_results['results'], initial_expected)
 
         # Update check
         update_pending = ["K1","K2"]
@@ -199,7 +185,7 @@ class UpgradePartialParititionedIndex(UpgradeSecondaryIndex):
             query="UPDATE `{0}` USE KEYS {1} SET status = 'PENDING'".format(self.bucket_name, update_pending),
             server=self.n1ql_node)
 
-        time.sleep(1)
+        time.sleep(20)
         pending_results = self.n1ql_helper.run_cbq_query(
             'SELECT meta().id FROM `{0}` WHERE createdDateTime BETWEEN 1 AND 10 AND status = "PENDING" order by meta().id'.format(self.bucket_name))
         success_results = self.n1ql_helper.run_cbq_query(
