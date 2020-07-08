@@ -618,6 +618,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.backup_create()
         self._take_n_backups(n=self.backupset.number_of_backups)
         status, output, message = self.backup_list()
+        error_msg = "Error merging data: Unable to read bucket settings because bucket-config.json is corrupt"
         if not status:
             self.fail(message)
         backup_count = 0
@@ -642,7 +643,8 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         result, output, _ = self.backup_merge()
         if result:
             self.log.info("Here is the output from command %s " % output[0])
-            self.fail("merge should failed since bucket-config.json is invalid")
+            if not self._check_output(error_msg, output):
+                self.fail("read bucket config should fail since bucket-config.json is invalid")
         remote_client.disconnect()
 
     def test_restore_with_non_exist_bucket(self):
