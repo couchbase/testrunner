@@ -181,11 +181,10 @@ class BaseRQGTests(BaseTestCase):
         @param source_uuid: UUID of the source, may not be used
         """
         self.cbcluster = CouchbaseCluster(name='cluster', nodes=self.servers, log=self.log)
-        index_params = {
+        index_params = {"default_analyzer": "keyword",
             "default_mapping": {
                 "enabled": True,
                 "dynamic": True,
-                "default_analyzer": "keyword"
             }
         }
 
@@ -822,26 +821,15 @@ class BaseRQGTests(BaseTestCase):
                 i = 0
                 new_n1ql = ""
                 for items in split_list:
-                    if "BETWEEN" in n1ql_query:
-                        if "ON" in items:
-                            items = items.replace("ON", "USE INDEX (USING FTS) ON")
-                        else:
-                            items = items.replace("INNER", "USE INDEX (USING FTS) INNER")
-                            items = items.replace("LEFT", "USE INDEX (USING FTS) LEFT")
-                        if i == 0:
-                            new_n1ql = new_n1ql + items
-                        else:
-                            new_n1ql = new_n1ql + " JOIN " + items
+                    if "ON" in items:
+                        items = items.replace("ON", "USE INDEX (USING FTS) ON")
                     else:
-                        if "ON" in items:
-                            items = items.replace("ON", "USE INDEX (USING FTS, USING GSI) ON")
-                        else:
-                            items = items.replace("INNER",  "USE INDEX (USING FTS, USING GSI) INNER")
-                            items = items.replace("LEFT",  "USE INDEX (USING FTS, USING GSI) LEFT")
-                        if i == 0:
-                            new_n1ql = new_n1ql + items
-                        else:
-                            new_n1ql = new_n1ql + " JOIN " + items
+                        items = items.replace("INNER",  "USE INDEX (USING FTS) INNER")
+                        items = items.replace("LEFT",  "USE INDEX (USING FTS) LEFT")
+                    if i == 0:
+                        new_n1ql = new_n1ql + items
+                    else:
+                        new_n1ql = new_n1ql + " JOIN " + items
                     i = i + 1
                 fts_query = new_n1ql
             if self.prepared:
@@ -865,7 +853,7 @@ class BaseRQGTests(BaseTestCase):
                                                                query_params=query_params)
                 fts_explain = self.n1ql_helper.run_cbq_query(query="EXPLAIN " + fts_query, server=self.n1ql_server,
                                                                 query_params=query_params)
-                if not fts_explain['results'][0]['plan']['~children'][0]['#operator'] == 'IndexFtsSearch':
+                if not (fts_explain['results'][0]['plan']['~children'][0]['#operator'] == 'IndexFtsSearch' or fts_explain['results'][0]['plan']['~children'][0]['~children'][0]['#operator'] == 'IndexFtsSearch'):
                     return {"success": False, "result": str("Query does not use fts index {0}".format(fts_explain))}
 
             actual_result = self.n1ql_query_runner_wrapper(n1ql_query=n1ql_query, server=self.n1ql_server, query_params=query_params, scan_consistency="request_plus")
@@ -875,7 +863,8 @@ class BaseRQGTests(BaseTestCase):
                 self.log.info(" N1QL QUERY :: {0}".format(prepared_query))
                 actual_result = self.n1ql_query_runner_wrapper(n1ql_query=prepared_query, server=self.n1ql_server, query_params=query_params, scan_consistency="request_plus")
             n1ql_result = actual_result["results"]
-            fts_result = fts_result["results"]
+            if self.use_fts:
+                fts_result = fts_result["results"]
 
             # Run SQL Query
             if not self.use_fts:
