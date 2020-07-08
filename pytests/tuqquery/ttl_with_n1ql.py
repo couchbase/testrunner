@@ -1,6 +1,11 @@
 import sys
 import time
+<<<<<<< HEAD   (30f15b adding fts to rqg config file)
 from couchbase.cluster import Cluster
+=======
+
+from couchbase.cluster import Cluster, ClusterOptions
+>>>>>>> CHANGE (d182f6 Making changes for switch between couchbase3 and couchbase2 )
 from couchbase.cluster import PasswordAuthenticator
 from membase.api.rest_client import RestConnection
 from remote.remote_util import RemoteMachineShellConnection
@@ -23,9 +28,8 @@ class QueryExpirationTests(QueryTests):
         self.default_bucket_name = self.input.param('bucket_name', 'default')
 
         self.cb_rest = RestConnection(self.master)
-        self.cb_cluster = Cluster('couchbase://{0}'.format(self.master.ip))
-        authenticator = PasswordAuthenticator(self.master.rest_username, self.master.rest_password)
-        self.cb_cluster.authenticate(authenticator)
+        self.auth_ops = ClusterOptions(PasswordAuthenticator(self.master.rest_username, self.master.rest_password))
+        self.cb_cluster = Cluster('couchbase://{0}'.format(self.master.ip), self.auth_ops)
 
     def tearDown(self):
         self.log.info("==============  QueryExpirationTests tearDown has started ==============")

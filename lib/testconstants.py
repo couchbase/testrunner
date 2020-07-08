@@ -230,10 +230,18 @@ CB_FQDN_REPO = "http://{0}/builds/latestbuilds/couchbase-server/".format(CB_DOWN
 CB_RELEASE_REPO = "http://{0}/builds/releases/".format(CB_DOWNLOAD_SERVER)
 #MV_RELEASE_REPO = "http://latestbuilds.hq.couchbase.com/release"
 MC_BIN_CLIENT = "mc_bin_client"
+<<<<<<< HEAD   (30f15b adding fts to rqg config file)
 TESTRUNNER_CLIENT = "testrunner_client"
 PYTHON_SDK = "python_sdk"
 CB_RELEASE_APT_GET_REPO = "http://172.23.126.166/couchbase-release/10/couchbase-release-1.0-0.deb"
 CB_RELEASE_YUM_REPO = "http://172.23.126.166/couchbase-release/10/couchbase-release-1.0-0.noarch.rpm"
+=======
+PYTHON_SDK = "python_sdk"
+# TESTRUNNER_CLIENT = "testrunner_client"
+TESTRUNNER_CLIENT = PYTHON_SDK
+CB_RELEASE_APT_GET_REPO = "http://latestbuilds.service.couchbase.com/couchbase-release/10/couchbase-release-1.0-0.deb"
+CB_RELEASE_YUM_REPO = "http://latestbuilds.service.couchbase.com/couchbase-release/10/couchbase-release-1.0-0.noarch.rpm"
+>>>>>>> CHANGE (d182f6 Making changes for switch between couchbase3 and couchbase2 )
 DEWIKI = "https://s3-us-west-1.amazonaws.com/qebucket/testrunner/data/dewiki.txt.gz"
 ENWIKI = "https://s3-us-west-1.amazonaws.com/qebucket/testrunner/data/enwiki.txt.gz"
 ESWIKI = "https://s3-us-west-1.amazonaws.com/qebucket/testrunner/data/eswiki.txt.gz"
