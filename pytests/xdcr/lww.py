@@ -58,7 +58,7 @@ class Lww(XDCRNewBaseTest):
                 conn.log_command_output(output, error)
                 output, error = conn.execute_command("/etc/init.d/ntpd start")
                 conn.log_command_output(output, error)
-                output, error = conn.execute_command("systemctl start ntpd")
+                output, error = conn.execute_command("sudo systemctl start ntpd")
                 conn.log_command_output(output, error)
                 output, error = conn.execute_command("ntpdate -q " + ntp_server)
                 conn.log_command_output(output, error)
@@ -77,7 +77,7 @@ class Lww(XDCRNewBaseTest):
                 conn.log_command_output(output, error)
                 output, error = conn.execute_command("/etc/init.d/ntpd stop")
                 conn.log_command_output(output, error)
-                output, error = conn.execute_command("systemctl stop ntpd")
+                output, error = conn.execute_command("sudo systemctl stop ntpd")
                 conn.log_command_output(output, error)
 
     def _offset_wall_clock(self, cluster=None, offset_secs=0, inc=True, offset_drift=-1):
@@ -177,8 +177,8 @@ class Lww(XDCRNewBaseTest):
             cluster.load_all_buckets_from_generator(gen)
         else:
             #Load buckets on both src and target clusters
-            self.c1_cluster.load_all_buckets_from_generator(gen)
             self.c2_cluster.load_all_buckets_from_generator(gen)
+            self.c1_cluster.load_all_buckets_from_generator(gen)
 
     def _get_python_sdk_client(self, ip, bucket, cluster):
         try:
