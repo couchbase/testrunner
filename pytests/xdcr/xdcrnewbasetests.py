@@ -3398,8 +3398,7 @@ class XDCRNewBaseTest(unittest.TestCase):
     def setup_xdcr(self):
         self.set_xdcr_topology()
         self.setup_all_replications()
-        #Needed until collections with backfill is merged
-        time.sleep(60)
+        
         if self._checkpoint_interval != 1800:
             for cluster in self.__cb_clusters:
                 cluster.set_global_checkpt_interval(self._checkpoint_interval)
