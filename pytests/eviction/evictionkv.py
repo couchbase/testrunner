@@ -352,7 +352,7 @@ class EphemeralBackupRestoreTest(EvictionBase):
                                                    "--username Administrator --password password --start %s" % output[
                                                        0])
         self.log.info(output)
-        self.assertEqual('Restore completed successfully', output[1])
+        self.assertEqual("Restore bucket 'default' succeeded", output[1])
         self._verify_all_buckets(self.master)
 
 
