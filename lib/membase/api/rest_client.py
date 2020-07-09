@@ -4647,7 +4647,7 @@ class RestConnection(object):
     Delete user from couchbase role assignment
     user_id=userid of user to act on'''
     def delete_user_roles(self, user_id):
-        url = "/settings/rbac/users/" + user_id
+        url = "settings/rbac/users/local/" + user_id
         api = self.baseUrl + url
         status, content, header = self._http_request(api, 'DELETE')
         if not status:

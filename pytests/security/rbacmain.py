@@ -49,7 +49,7 @@ class rbacmain:
         url = "/settings/rbac/roles"
         api = rest.baseUrl + url
         status, content, header = rest._http_request(api, 'GET')
-        log.info(" Retrieve all User roles - Status - {0} -- Content - {1} -- Header - {2}".format(status, content, header))
+        #log.info(" Retrieve all User roles - Status - {0} -- Content - {1} -- Header - {2}".format(status, content, header))
         return status, content, header
 
     def _retrieve_user_roles(self):
@@ -57,7 +57,7 @@ class rbacmain:
         url = "/settings/rbac/users"
         api = rest.baseUrl + url
         status, content, header = rest._http_request(api, 'GET')
-        log.info(" Retrieve User Roles - Status - {0} -- Content - {1} -- Header - {2}".format(status, content, header))
+        #log.info(" Retrieve User Roles - Status - {0} -- Content - {1} -- Header - {2}".format(status, content, header))
         return status, content, header
 
     def _retrieve_user_details(self, user):

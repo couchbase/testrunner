@@ -24,14 +24,21 @@ class SDKClient(object):
     """Python SDK Client Implementation for testrunner - master branch Implementation"""
 
     def __init__(self, bucket, hosts=["localhost"], scheme="couchbase",
-                 ssl_path=None, uhm_options=None, password=None,
+                 ssl_path=None, uhm_options=None, username= None, password=None,
                  quiet=True, certpath=None, transcoder=None, ipv6=False, compression=True):
         self.connection_string = \
             self._createString(scheme=scheme, bucket=bucket, hosts=hosts,
                                certpath=certpath, uhm_options=uhm_options, ipv6=ipv6, compression=compression)
         self.bucket = bucket
         sys.setrecursionlimit(100)
-        self.password = password
+        if username == None:
+            self.username = 'Administrator'
+        else:
+            self.username = username
+        if password == None:
+            self.password ='password'
+        else:
+            self.password = password
         self.quiet = quiet
         self.transcoder = transcoder
         self.default_timeout = 1
@@ -69,13 +76,12 @@ class SDKClient(object):
                 connection_string = "{0}?certpath={1}".format(connection_string, certpath)
         return connection_string
 
-    def _createConn(self, username='Administrator', password='password'):
+    def _createConn(self):
         try:
             self.cluster = Cluster(self.connection_string,
-                                   ClusterOptions(PasswordAuthenticator(username, password)))
-            # cluster.authenticate(PasswordAuthenticator(self.bucket, 'password'))
+                                       ClusterOptions(PasswordAuthenticator(self.username, self.password)))
             self.cb = self.cluster.bucket(self.bucket)
-            self.default_collection = self.cb.default_collection()
+            #self.default_collection = self.cb.default_collection()
         except BucketNotFoundException:
             raise
         except AuthenticationException:
@@ -90,6 +96,8 @@ class SDKClient(object):
                 self.default_collection = self.cb.default_collection()
             except AuthenticationException:
                 raise
+        except Exception as e:
+            raise e
 
     def reconnect(self):
         self.cb.close()
@@ -441,8 +449,11 @@ class SDKClient(object):
                            replicate_to=replicate_to, scope=scope, collection=collection)
 
     def collection_connect(self, scope, collection):
-        scope = self.cb.scope(scope)
-        self.collection = scope.collection(collection)
+        try:
+            scope = self.cb.scope(scope)
+            self.collection = scope.collection(collection)
+        except Exception as e:
+            raise e   
 
     def upsert(self, key, value, cas=0, ttl=0, format=None, persist_to=0, replicate_to=0, scope=None, collection=None):
         try:
@@ -455,8 +466,8 @@ class SDKClient(object):
             else:
                 return self.default_collection.upsert(key, value, cas, ttl, format, persist_to, replicate_to)
         except CouchbaseException as e:
-            time.sleep(20)
-            self.upsert(key, value, cas, ttl, format, persist_to, replicate_to)
+            return (e)
+            #self.upsert(key, value, cas, ttl, format, persist_to, replicate_to)
             # try:
             #     time.sleep(10)
             #     if collection:
@@ -506,11 +517,12 @@ class SDKClient(object):
         try:
             if collection:
                 self.collection_connect(scope, collection)
-                self.collection.insert(key, value, ttl=ttl, format=format, persist_to=persist_to,
+                result = self.collection.insert(key, value, ttl=ttl, format=format, persist_to=persist_to,
                                        replicate_to=replicate_to)
             else:
-                self.default_collection.insert(key, value, ttl=ttl, format=format, persist_to=persist_to,
+                result = self.default_collection.insert(key, value, ttl=ttl, format=format, persist_to=persist_to,
                                                replicate_to=replicate_to)
+            return result
         except CouchbaseException as e:
             try:
                 time.sleep(10)
@@ -524,7 +536,6 @@ class SDKClient(object):
                 raise
 
     def insert_multi(self, keys, ttl=0, format=None, persist_to=0, replicate_to=0, scope=None, collection=None):
-        print("inside insert multi")
         try:
             if collection:
                 self.collection_connect(scope, collection)
