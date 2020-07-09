@@ -1423,6 +1423,9 @@ class BaseTestCase(unittest.TestCase):
                 if server.ip == _node.ip:
                     _servers.append(server)
 
+        _nodes = sorted(_nodes, key=lambda x: x.ip)
+        _servers = sorted(_servers, key=lambda x: x.ip)
+
         self._kill_nodes(_nodes, _servers, bucket_name)
 
         start = time.time()
@@ -1436,8 +1439,10 @@ class BaseTestCase(unittest.TestCase):
                     stats = mc.stats()
                     new_uptime = int(stats["uptime"])
                     self.log.info("New warmup uptime %s:%s" % (
-                        new_uptime, self.pre_warmup_stats[bucket_name]["%s:%s" % (server.ip, server.port)]["uptime"]))
-                    if new_uptime < self.pre_warmup_stats[bucket_name]["%s:%s" % (server.ip, server.port)]["uptime"]:
+                        new_uptime,
+                        int(self.pre_warmup_stats[bucket_name]["%s:%s" % (server.ip, server.port)]["uptime"])))
+                    if new_uptime < int(
+                            self.pre_warmup_stats[bucket_name]["%s:%s" % (server.ip, server.port)]["uptime"]):
                         self.log.info("memcached restarted...")
                         memcached_restarted = True
                         break;
