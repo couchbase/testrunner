@@ -46,13 +46,9 @@ class FTSCallable:
                       "wildcard", "regexp", "query_string",
                       "numeric_range", "date_range"]
         if self.compare_es and not self.elastic_node:
-<<<<<<< HEAD   (30f15b adding fts to rqg config file)
             raise ("For ES result validation, pls add in the"
                       " [elastic] section in your ini file,"
                       " else set \"compare_es\" as False")
-=======
-            raise Exception("For ES result validation, pls add in the")
->>>>>>> CHANGE (d182f6 Making changes for switch between couchbase3 and couchbase2 )
         elif self.compare_es:
             self.es = ElasticSearchBase(self.elastic_node, self.log)
             if es_reset:
