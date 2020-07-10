@@ -1,7 +1,7 @@
 import sys
 import time
 
-from couchbase.cluster import Cluster, ClusterOptions
+from couchbase.cluster import Cluster
 from couchbase.cluster import PasswordAuthenticator
 from membase.api.rest_client import RestConnection
 from remote.remote_util import RemoteMachineShellConnection
@@ -21,8 +21,9 @@ class QueryExpirationTests(QueryTests):
         self.exp_index = 'idx_expire'
         self.default_bucket_name = self.input.param('bucket_name', 'default')
         self.cb_rest = RestConnection(self.master)
-        self.auth_ops = ClusterOptions(PasswordAuthenticator(self.master.rest_username, self.master.rest_password))
-        self.cb_cluster = Cluster('couchbase://{0}'.format(self.master.ip), self.auth_ops)
+        self.cb_cluster = Cluster('couchbase://{0}'.format(self.master.ip))
+        authenticator = PasswordAuthenticator(self.master.rest_username, self.master.rest_password)
+        self.cb_cluster.authenticate(authenticator)
 
     def tearDown(self):
         self.log.info("==============  QueryExpirationTests tearDown has started ==============")
