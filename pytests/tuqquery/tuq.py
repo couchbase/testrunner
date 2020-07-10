@@ -126,6 +126,7 @@ class QueryTests(BaseTestCase):
         self.bucket_name = self.input.param("bucket_name", "default")
         self.curl_path = "curl"
         self.n1ql_certs_path = "/opt/couchbase/var/lib/couchbase/n1qlcerts"
+        self.query_context = self.input.param("query_context", '')
         if type.lower() == 'windows':
             self.path = testconstants.WIN_COUCHBASE_BIN_PATH
             self.curl_path = "%scurl" % self.path
@@ -1300,7 +1301,7 @@ class QueryTests(BaseTestCase):
             json_output_str += s
         return json.loads(json_output_str)
 
-    def run_cbq_query(self, query=None, min_output_size=10, server=None, query_params={}, is_prepared=False, encoded_plan=None, username=None, password=None, use_fts_query_param=None, debug_query=True):
+    def run_cbq_query(self, query=None, min_output_size=10, server=None, query_params={}, is_prepared=False, encoded_plan=None, username=None, password=None, use_fts_query_param=None, debug_query=True, query_context=''):
         if query is None:
             query = self.query
         if server is None:
@@ -1319,6 +1320,8 @@ class QueryTests(BaseTestCase):
         query_params.update(cred_params)
         if use_fts_query_param:
             query_params['use_fts'] = True
+        if query_context != '':
+            query_params['query_context'] = query_context
         if self.testrunner_client == 'python_sdk' and not is_prepared:
             sdk_cluster = Cluster('couchbase://' + str(server.ip))
             authenticator = PasswordAuthenticator(username, password)
