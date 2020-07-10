@@ -2285,6 +2285,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         bk_file_data, _ = data_collector.get_kv_dump_from_backup_file(self.backupset.backup_host,
                                                                       self.cli_command_location, self.cmd_ext,
                                                                       "ent-backup", self.buckets,
+                                                                      objstore_provider= self.objstore_provider,
                                                                       backupset=self.backupset)
         shell = RemoteMachineShellConnection(self.backupset.backup_host)
         rest = RestConnection(self.backupset.restore_cluster_host)

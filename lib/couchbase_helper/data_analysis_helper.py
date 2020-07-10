@@ -822,6 +822,7 @@ class DataCollector(object):
                 )
 
                 if objstore_provider:
+                    command += (
                     f"{' --obj-staging-dir ' + backupset.objstore_staging_directory}"
                     f"{' --obj-access-key-id ' + backupset.objstore_access_key_id if backupset.objstore_access_key_id else ''}"
                     f"{' --obj-cacert ' + backupset.objstore_cacert if backupset.objstore_cacert else ''}"
@@ -830,6 +831,7 @@ class DataCollector(object):
                     f"{' --obj-region ' + backupset.objstore_region if backupset.objstore_region else ''}"
                     f"{' --obj-secret-access-key ' + backupset.objstore_secret_access_key if backupset.objstore_secret_access_key else ''}"
                     f"{' --s3-force-path-style' if objstore_provider.schema_prefix() == 's3://' else ''}"
+                    )
 
                 command += f" | grep -A 8 'Key: {master_key}' "
 
