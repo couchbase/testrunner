@@ -816,14 +816,16 @@ class DataCollector(object):
                 command += " | grep -A 8 'Key: {}' ".format(master_key)
 
                 if objstore_provider:
-                    "{}".format(' --obj-staging-dir ' + backupset.objstore_staging_directory)
-                    "{}".format(' --obj-access-key-id ' + backupset.objstore_access_key_id if backupset.objstore_access_key_id else '')
-                    "{}".format(' --obj-cacert ' + backupset.objstore_cacert if backupset.objstore_cacert else '')
-                    "{}".format(' --obj-endpoint ' + backupset.objstore_endpoint if backupset.objstore_endpoint else '')
-                    "{}".format(' --obj-no-ssl-verify' if backupset.objstore_no_ssl_verify else '')
-                    "{}".format(' --obj-region ' + backupset.objstore_region if backupset.objstore_region else '')
-                    "{}".format(' --obj-secret-access-key ' + backupset.objstore_secret_access_key if backupset.objstore_secret_access_key else '')
-                    "{}".format(' --s3-force-path-style' if objstore_provider.schema_prefix() == 's3://' else '')
+                    command += "{}".format(' --obj-staging-dir ' + backupset.objstore_staging_directory)
+                    command += "{}".format(' --obj-access-key-id ' + backupset.objstore_access_key_id if backupset.objstore_access_key_id else '')
+                    command += "{}".format(' --obj-cacert ' + backupset.objstore_cacert if backupset.objstore_cacert else '')
+                    command += "{}".format(' --obj-endpoint ' + backupset.objstore_endpoint if backupset.objstore_endpoint else '')
+                    command += "{}".format(' --obj-no-ssl-verify' if backupset.objstore_no_ssl_verify else '')
+                    command += "{}".format(' --obj-region ' + backupset.objstore_region if backupset.objstore_region else '')
+                    command += "{}".format(' --obj-secret-access-key ' + backupset.objstore_secret_access_key if backupset.objstore_secret_access_key else '')
+                    command += "{}".format(' --s3-force-path-style' if objstore_provider.schema_prefix() == 's3://' else '')
+
+                command += " | grep -A 8 'Key: {}' ".format(master_key)
 
                 output, error = conn.execute_command(command, debug=False)
                 if output:
