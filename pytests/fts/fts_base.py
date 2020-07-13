@@ -752,7 +752,6 @@ class FTSIndex:
         child_field['fields'] = [
             {
                 "analyzer": analyzer,
-                "display_order": "0",
                 "include_in_all": True,
                 "include_term_vectors": True,
                 "index": True,
@@ -799,7 +798,6 @@ class FTSIndex:
 
         child_field = {
             "analyzer": analyzer,
-            "display_order": "0",
             "include_in_all": True,
             "include_term_vectors": True,
             "index": True,
@@ -839,7 +837,6 @@ class FTSIndex:
         type_map = {}
         type_map[type] = {}
         type_map[type]['default_analyzer'] = analyzer
-        type_map[type]['display_order'] = 0
         type_map[type]['dynamic'] = True
         type_map[type]['enabled'] = True
 
