@@ -4406,3 +4406,46 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.backupset.end = 3
         self._all_buckets_flush()
         self.backup_restore_validate()
+
+    def test_cbbackup_with_big_rev(self):
+        # automation ticket MB-38683
+        # verified test failed in build 6.6.0-7680 and passed in 6.6.0-7685
+        from ep_mc_bin_client import MemcachedClient, MemcachedError
+
+        bucket = 'default'
+        value = "value"
+        expiry = 0
+        rev_seq = 2**64-1
+        key = 'test_with_meta'
+
+        mc = MemcachedClient(self.master.ip, 11210)
+        mc.sasl_auth_plain('Administrator', 'password')
+        mc.bucket_select(bucket)
+        self.log.info("pushing a key with large rev_seq {0} to bucket".format(rev_seq))
+
+        try:
+            mc.setWithMeta(key, 'value', 0, 0, rev_seq, 0x1512a3186faa0000)
+            meta_key = mc.getMeta(key)
+            self.log.info("key meta: {0}".format(meta_key))
+        except MemcachedError as error:
+            msg = "unable to push key : {0} error : {1}"
+            self.log.error(msg.format(key, error.status))
+            self.fail(msg.format(key, error.status))
+
+        client = RemoteMachineShellConnection(self.backupset.backup_host)
+        client.execute_command("rm -rf {0}/backup".format(self.tmp_path))
+        client.execute_command("mkdir {0}backup".format(self.tmp_path))
+        cmd = "{0}cbbackup{1} -u Administrator -p password http://{2}:8091 {3}backup"\
+                .format(self.cli_command_location, self.cmd_ext, self.master.ip, self.tmp_path)
+        try:
+            cbbackup_run = False
+            output, error = client.execute_command(cmd, timeout=20)
+            cbbackup_run = True
+            if not self._check_output("done", error):
+                self.fail("Failed to run cbbackup with large rev_seq")
+        except Exception as e:
+            if e and not cbbackup_run:
+                self.fail("Failed to run cbbackup with large rev_seq")
+        finally:
+            client.execute_command("rm -rf {0}/backup".format(self.tmp_path))
+            client.disconnect()
