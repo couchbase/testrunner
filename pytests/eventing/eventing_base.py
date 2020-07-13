@@ -117,11 +117,11 @@ class EventingBaseTest(QueryHelperTests):
 
     def create_save_function_body(self, appname, appcode, description="Sample Description",
                                   checkpoint_interval=20000, cleanup_timers=False,
-                                  dcp_stream_boundary="everything", deployment_status=True,
+                                  dcp_stream_boundary="everything", deployment_status=False,
                                   # rbacpass="password", rbacrole="admin", rbacuser="cbadminbucket",
                                   skip_timer_threshold=86400,
                                   sock_batch_size=1, tick_duration=5000, timer_processing_tick_interval=500,
-                                  timer_worker_pool_size=3, worker_count=3, processing_status=True,
+                                  timer_worker_pool_size=3, worker_count=3, processing_status=False ,
                                   cpp_worker_thread_count=1, multi_dst_bucket=False, execution_timeout=20,
                                   data_chan_size=10000, worker_queue_cap=100000, deadline_timeout=62,
                                   language_compatibility='6.5.0',hostpath=None,validate_ssl=False):
@@ -185,6 +185,8 @@ class EventingBaseTest(QueryHelperTests):
             if self.auth_type=="bearer":
                 body['depcfg']['curl'][0]['bearer_key']=self.bearer_key
         body['settings']['language_compatibility']=language_compatibility
+        content1 = self.rest.create_function(body['appname'], body)
+        self.log.info("saving function {}".format(content1))
         return body
 
     def wait_for_bootstrap_to_complete(self, name, iterations=120):
@@ -346,12 +348,10 @@ class EventingBaseTest(QueryHelperTests):
 
     def deploy_function(self, body, deployment_fail=False, wait_for_bootstrap=True,pause_resume=False,pause_resume_number=1,
                         deployment_status=True,processing_status=True):
-        body['settings']['deployment_status'] = deployment_status
-        body['settings']['processing_status'] = processing_status
         if self.print_eventing_handler_code_in_logs:
             log.info("Deploying the following handler code : {0} with \nbindings: {1} and \nsettings: {2}".format(body['appname'], body['depcfg'] , body['settings']))
             log.info("\n{0}".format(body['appcode']))
-        content1 = self.rest.create_function(body['appname'], body)
+        content1 = self.rest.lifecycle_operation(body['appname'], "deploy")
         log.info("deploy Application : {0}".format(content1))
         if deployment_fail:
             res = json.loads(content1)
@@ -370,12 +370,11 @@ class EventingBaseTest(QueryHelperTests):
         if self.print_app_log:
             self.print_app_logs(body['appname'])
         self.undeploy_function(body)
-        self.sleep(5)
         self.delete_function(body)
 
     def undeploy_function(self, body):
         self.refresh_rest_server()
-        content = self.rest.undeploy_function(body['appname'])
+        content = self.rest.lifecycle_operation(body['appname'],"undeploy")
         log.info("Undeploy Application : {0}".format(body['appname']))
         self.wait_for_handler_state(body['appname'], "undeployed")
         return content
@@ -386,29 +385,14 @@ class EventingBaseTest(QueryHelperTests):
         return content1
 
     def pause_function(self, body,wait_for_pause=True):
-        body['settings']['deployment_status'] = True
-        body['settings']['processing_status'] = False
         self.refresh_rest_server()
-        # save the function so that it is visible in UI
-        #content = self.rest.save_function(body['appname'], body)
-        # undeploy the function
-        content1 = self.rest.set_settings_for_function(body['appname'], body['settings'])
+        self.rest.lifecycle_operation(body['appname'], "pause")
         log.info("Pause Application : {0}".format(body['appname']))
         if wait_for_pause:
             self.wait_for_handler_state(body['appname'], "paused")
 
     def resume_function(self, body,wait_for_resume=True):
-        body['settings']['deployment_status'] = True
-        body['settings']['processing_status'] = True
-        if "dcp_stream_boundary" in body['settings']:
-            body['settings'].pop('dcp_stream_boundary')
-        log.info("Settings after deleting dcp_stream_boundary : {0}".format(body['settings']))
-        self.refresh_rest_server()
-        #body['settings']['dcp_stream_boundary'] = "from_prior"
-        # save the function so that it is visible in UI
-        #content = self.rest.save_function(body['appname'], body)
-        # undeploy the function
-        content1 = self.rest.set_settings_for_function(body['appname'], body['settings'])
+        content1 = self.rest.lifecycle_operation(body['appname'], "resume")
         log.info("Resume Application : {0}".format(body['appname']))
         if wait_for_resume:
             self.wait_for_handler_state(body['appname'], "deployed")

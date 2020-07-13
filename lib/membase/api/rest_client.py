@@ -4529,6 +4529,26 @@ class RestConnection(object):
 
     # Applicable to eventing service
     '''
+           Eventing lifecycle operation 
+    '''
+
+    def lifecycle_operation(self, name, operation,body=None):
+        authorization = self.get_authorization(self.username, self.password)
+        url = "api/v1/functions/" + name +"/"+ operation
+        api = self.eventing_baseUrl + url
+        headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
+        if body != None:
+            status, content, header = self._http_request(api, 'POST', headers=headers,
+                                                     params=json.dumps(body).encode("ascii", "ignore"))
+        else:
+            status, content, header = self._http_request(api, 'POST', headers=headers)
+        if not status:
+            raise Exception(content)
+        return content
+
+
+
+    '''
         Save the Function so that it is visible in UI
     '''
     def save_function(self, name, body):
