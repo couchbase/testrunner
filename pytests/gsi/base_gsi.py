@@ -939,7 +939,6 @@ class BaseSecondaryIndexingTests(QueryTests):
         while not check:
             index_status = rest.get_index_status()
             next_time = init_time
-            log.info(index_status)
             for index_info in list(index_status.values()):
                 for idx_name in list(index_info.keys()):
                     if idx_name == index_name:

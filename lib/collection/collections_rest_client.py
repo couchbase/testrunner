@@ -18,7 +18,7 @@ class CollectionsRest(object):
     def delete_collection(self, bucket="default", scope='_default', collection='_default'):
         return self.rest.delete_collection(bucket, scope, collection)
 
-    def delete_scope(self, scope, bucket="default"):
+    def delete_scope(self, bucket="default", scope='_default'):
         return self.rest.delete_scope(bucket, scope)
 
     # Create collection in scope
