@@ -208,7 +208,11 @@ class FailoverTests(FailoverBaseTest):
             self.compare_vbucketseq_failoverlogs(new_vbucket_stats, new_failover_stats)
         # Verify Active and Replica Bucket Count
         if self.num_replicas > 0:
-            nodes = self.get_nodes_in_cluster(self.master)
+            if '.com' in self.master.ip or ':' in self.master.ip:
+                # for ipv6 hostnames, self.get_nodes_in_cluster is not working properly
+                nodes = self.filter_servers(self.servers, chosen)
+            else:
+                nodes = self.get_nodes_in_cluster(self.master)
             self.vb_distribution_analysis(servers=nodes, buckets=self.buckets, std=20.0 , total_vbuckets=self.total_vbuckets)
         self.log.info("End VERIFICATION for Rebalance after Failover Only")
 
@@ -298,7 +302,12 @@ class FailoverTests(FailoverBaseTest):
 
         # Verify Active and Replica Bucket Count
         if self.num_replicas > 0:
-            nodes = self.get_nodes_in_cluster(self.master)
+            if '.com' in self.master.ip or ':' in self.master.ip:
+                # for ipv6 hostnames, self.get_nodes_in_cluster is not working properly. Since its addback,all nodes
+                # must be in cluster
+                nodes = self.servers
+            else:
+                nodes = self.get_nodes_in_cluster(self.master)
             self.vb_distribution_analysis(servers=nodes, buckets=self.buckets, std=20.0 , total_vbuckets=self.total_vbuckets)
 
         self.log.info("End VERIFICATION for Add-back and rebalance")

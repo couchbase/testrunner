@@ -2469,7 +2469,9 @@ class BaseTestCase(unittest.TestCase):
                                 node.ssh_username = server.ssh_username
                                 node.ssh_password = server.ssh_password
                                 break
-
+                        if node.ssh_username == "" or node.ssh_username == '\n':
+                            node.ssh_username = servers[0].ssh_username
+                            node.ssh_password = servers[0].ssh_password
                         shell = RemoteMachineShellConnection(node)
                         hostname = shell.get_full_hostname()
                         self.log.info("convert IP: {0} to hostname: {1}" \
