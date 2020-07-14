@@ -3,7 +3,8 @@ from lib.remote.remote_util import RemoteMachineShellConnection
 
 class CollectionsStats(object):
     def __init__(self, node):
-        self.shell = RemoteMachineShellConnection(node)
+        self.node = node
+        self.shell = RemoteMachineShellConnection(self.node)
 
     def get_collection_stats(self, bucket):
         output, error = self.shell.execute_cbstats(bucket, "collections", cbadmin_user="Administrator")
@@ -47,34 +48,49 @@ class CollectionsStats(object):
                     return stat.split(":name:")[0]
         return None
 
-    def get_scope_item_count(self, bucket, scope):
+    def get_scope_item_count(self, bucket, scope, node=None):
         count = 0
-        cbstats, _ = self.get_collection_stats(bucket)
-        scope_id = self.get_scope_id(bucket, scope, cbstats)
-        id_counts = {}
-        for stat in cbstats:
-            if ":items:" in stat:
-                stat = stat.replace(' ', '')
-                id_counts[stat.split(":items:")[0]] = int(stat.split(":items:")[1])
-        for id in id_counts.keys():
-            if id.split(':')[0] == scope_id:
-                count += id_counts[id]
+        if not node:
+            nodes = [self.node]
+        elif isinstance(node, list):
+            nodes = node
+        else:
+            nodes = [node]
+        for node in nodes:
+            cbstats, _ = RemoteMachineShellConnection(node).get_collection_stats(bucket)
+            scope_id = self.get_scope_id(bucket, scope, cbstats)
+            id_counts = {}
+            for stat in cbstats:
+                if ":items:" in stat:
+                    stat = stat.replace(' ', '')
+                    id_counts[stat.split(":items:")[0]] = int(stat.split(":items:")[1])
+            for id in id_counts.keys():
+                if id.split(':')[0] == scope_id:
+                    count += id_counts[id]
         return count
 
-    def get_collection_item_count(self, bucket, scope, collection):
+    def get_collection_item_count(self, bucket, scope, collection, node=None):
         count = 0
-        cbstats, _ = self.get_collection_stats(bucket)
-        collection_id = self.get_collection_id(bucket, scope, collection, cbstats)
-        id_counts = {}
-        for stat in cbstats:
-            if ":items:" in stat:
-                stat = stat.replace(' ', '')
-                id_count = stat.split(":items:")
-                id_counts[id_count[0].strip()] = int(id_count[1])
+        if not node:
+            nodes = [self.node]
+        elif isinstance(node, list):
+            nodes = node
+        else:
+            nodes = [node]
+        for node in nodes:
+            cbstats, _ = RemoteMachineShellConnection(node).execute_cbstats(bucket, "collections",
+                                                                            cbadmin_user="Administrator")
+            collection_id = self.get_collection_id(bucket, scope, collection, cbstats)
+            id_counts = {}
+            for stat in cbstats:
+                if ":items:" in stat:
+                    stat = stat.replace(' ', '')
+                    id_count = stat.split(":items:")
+                    id_counts[id_count[0].strip()] = int(id_count[1])
 
-        for id in id_counts.keys():
-            if id == collection_id:
-                count = id_counts[id]
+            for id in id_counts.keys():
+                if id == collection_id:
+                    count += id_counts[id]
         return count
 
 

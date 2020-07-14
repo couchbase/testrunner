@@ -3398,7 +3398,7 @@ class XDCRNewBaseTest(unittest.TestCase):
     def setup_xdcr(self):
         self.set_xdcr_topology()
         self.setup_all_replications()
-        
+
         if self._checkpoint_interval != 1800:
             for cluster in self.__cb_clusters:
                 cluster.set_global_checkpt_interval(self._checkpoint_interval)
@@ -3823,20 +3823,19 @@ class XDCRNewBaseTest(unittest.TestCase):
 
 
     def verify_collection_doc_count(self, src, dest):
-        src_rest = CollectionsRest(src)
-        dest_rest = CollectionsRest(dest)
-        src_stat = CollectionsStats(src)
-        dest_stat = CollectionsStats(dest)
+        src_rest = CollectionsRest(src.get_master_node())
+        src_stat = CollectionsStats(src.get_master_node())
+        dest_stat = CollectionsStats(dest.get_master_node())
         # Assuming implicit mapping
-        for bucket in RestConnection(src).get_buckets():
+        for bucket in RestConnection(src.get_master_node()).get_buckets():
             src_scopes = src_rest.get_bucket_scopes(bucket)
-            dest_scopes = dest_rest.get_bucket_scopes(bucket)
             for scope in src_scopes:
                 src_collections = src_rest.get_scope_collections(bucket, scope)
-                dest_collections = dest_rest.get_scope_collections(bucket, scope)
                 for collection in src_collections:
-                    src_count = src_stat.get_collection_item_count(bucket, scope, collection)
-                    dest_count = dest_stat.get_collection_item_count(bucket, scope, collection)
+                    src_count = src_stat.get_collection_item_count(bucket, scope, collection,
+                                                                   src.get_nodes())
+                    dest_count = dest_stat.get_collection_item_count(bucket, scope, collection,
+                                                                     dest.get_nodes())
                     if src_count == dest_count:
                         self.log.info("Collection item count on src {} = dest {} for "
                                       "bucket {}->scope {}-> collection {}"
@@ -3905,7 +3904,7 @@ class XDCRNewBaseTest(unittest.TestCase):
                 if not skip_mirroring_validation :
                     self.verify_mapping(src_cluster.get_master_node(), dest_cluster.get_master_node())
                 if not skip_collection_key_validation:
-                    self.verify_collection_doc_count(src_cluster.get_master_node(), dest_cluster.get_master_node())
+                    self.verify_collection_doc_count(src_cluster, dest_cluster)
                 if not skip_key_validation:
                     try:
                         if len(src_cluster.get_nodes()) > 1:
