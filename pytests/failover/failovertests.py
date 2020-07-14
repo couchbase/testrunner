@@ -458,7 +458,7 @@ class FailoverTests(FailoverBaseTest):
         failed_over.result()
         for task in compact_tasks:
             task.result()
-        msg = "rebalance failed while removing failover nodes {0}".format(node.id)
+        msg = "rebalance failed while removing failover nodes {0}".format([node.id for node in chosen])
         self.assertTrue(self.rest.monitorRebalance(stop_if_loop=True), msg=msg)
 
 
