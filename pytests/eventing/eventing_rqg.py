@@ -184,7 +184,7 @@ class EventingRQG(EventingBaseTest):
         script_dir = os.path.dirname(__file__)
         abs_file_path = os.path.join(script_dir, handler_code)
         fh = open(abs_file_path, "r")
-        code = Template(fh.read()).substitute(n1ql=query)
+        code = Template(fh.read()).substitute(n1ql=query.strip())
         fh.close()
         ts = datetime.datetime.now().strftime('%m%d%y%H%M%S%f')
         temp_file_path = HANDLER_CODE.N1QL_TEMP_PATH + "f_" + ts + ".js"
