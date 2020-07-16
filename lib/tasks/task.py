@@ -8,6 +8,7 @@ import socket
 import string
 import time
 import traceback
+import sys
 from functools import cmp_to_key
 from http.client import IncompleteRead
 from multiprocessing import Process, Manager, Semaphore
@@ -42,13 +43,20 @@ from TestInput import TestInputServer, TestInputSingleton
 
 try:
     CHECK_FLAG = False
-    if testconstants.TESTRUNNER_CLIENT == testconstants.PYTHON_SDK:
+    if (TestInputSingleton.input.param("testrunner_client", None) == testconstants.PYTHON_SDK) or \
+        ((testconstants.TESTRUNNER_CLIENT in list(os.environ.keys())) and os.environ[testconstants.TESTRUNNER_CLIENT] == testconstants.PYTHON_SDK):
         try:
             from sdk_client import SDKSmartClient as VBucketAwareMemcached
             from sdk_client import SDKBasedKVStoreAwareSmartClient as KVStoreAwareSmartClient
         except:
             from sdk_client3 import SDKSmartClient as VBucketAwareMemcached
             from sdk_client3 import SDKBasedKVStoreAwareSmartClient as KVStoreAwareSmartClient
+        if (TestInputSingleton.input.param("enable_sdk_logging", False)):
+            import logging
+            import couchbase
+
+            logging.basicConfig(stream=sys.stderr, level=logging.INFO)
+            couchbase.enable_logging()
     else:
         CHECK_FLAG = True
         from memcached.helper.data_helper import VBucketAwareMemcached, KVStoreAwareSmartClient
