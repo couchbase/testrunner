@@ -155,6 +155,7 @@ class Lww(XDCRNewBaseTest):
                                        saslPassword=saslPassword, replicaNumber=replicaNumber,
                                        proxyPort=proxyPort, bucketType=self.bucketType, evictionPolicy=self.evictionPolicy)
 
+        self.sleep(10)
         if self._use_java_sdk:
             # Only create collections on src cluster
             self._create_collections(src_rest)
