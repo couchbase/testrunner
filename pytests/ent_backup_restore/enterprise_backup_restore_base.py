@@ -2677,7 +2677,12 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                                                master=self.backupset.restore_cluster_host)
 
         rest_bk = RestConnection(self.backupset.cluster_host)
-        bk_storage_mode = rest_bk.get_index_settings()["indexer.settings.storage_mode"]
+        try:
+            bk_storage_mode = rest_bk.get_index_settings()["indexer.settings.storage_mode"]
+        except Exception as e:
+            if e:
+                print("Exception error: ", str(e))
+                raise("Need index service in node {0}".format(self.backupset.cluster_host.ip))
         eventing_service_in = False
         bk_cluster_services = list(rest_bk.get_nodes_services().values())
         for srv in bk_cluster_services:
@@ -3646,10 +3651,16 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
                           self.servers[1].ip, services=['index', 'fts'])
         rebalance = self.cluster.async_rebalance(self.cluster_to_backup, [], [])
         rebalance.result()
+        storage_mode = "plasma"
+        cluster_storage_mode = rest_src.get_index_storage_mode()
+        self.log.info("Cluster storage mode: {0}".format(cluster_storage_mode))
+        if storage_mode != cluster_storage_mode:
+            storage_mode = cluster_storage_mode
 
-        cmd = "cbindex -type create -bucket default -using plasma -index " \
+        cmd = "cbindex -type create -bucket default -using {2} -index " \
               "age_idx -fields=age -auth {0}:{1}".format(self.servers[0].rest_username,
-                                                         self.servers[0].rest_password, )
+                                                         self.servers[0].rest_password,
+                                                         storage_mode)
         remote_client = RemoteMachineShellConnection(
             self.backupset.cluster_host)
         command = "{0}/{1}".format(self.cli_command_location, cmd)
