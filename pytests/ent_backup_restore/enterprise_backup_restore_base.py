@@ -3676,9 +3676,10 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
                     self.fail("GSI index cannot be created after rebalance")
             else:
                 self.fail("GSI index cannot be created")
-        cmd = "cbindex -type create -bucket default -using plasma -index " \
+        cmd = "cbindex -type create -bucket default -using {2} -index " \
               "name_idx -fields=name -auth {0}:{1}".format(self.servers[0].rest_username,
-                                                           self.servers[0].rest_password, )
+                                                           self.servers[0].rest_password,
+                                                           storage_mode)
         remote_client.disconnect()
         remote_client = RemoteMachineShellConnection(
             self.backupset.cluster_host)
@@ -3733,9 +3734,10 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
 
             if self.overwrite_indexes:
                 err_msg = "cannot create index because an index with the same name already exist"
-                cmd = "cbindex -type create -bucket default -using plasma -index " \
+                cmd = "cbindex -type create -bucket default -using {2} -index " \
                       "age_idx1 -fields=age -auth {0}:{1}".format(self.servers[0].rest_username,
-                                                                  self.servers[0].rest_password, )
+                                                                  self.servers[0].rest_password,
+                                                                  storage_mode)
                 remote_client = RemoteMachineShellConnection(
                     self.backupset.restore_cluster_host)
                 command = "{0}/{1}".format(self.cli_command_location, cmd)
