@@ -3733,7 +3733,7 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
                                   % bucket_name)
 
             if self.overwrite_indexes:
-                err_msg = "cannot create index because an index with the same name already exist"
+                err_msg = "cannot create index because an index with the same name already exists"
                 cmd = "cbindex -type create -bucket default -using {2} -index " \
                       "age_idx1 -fields=age -auth {0}:{1}".format(self.servers[0].rest_username,
                                                                   self.servers[0].rest_password,
@@ -3753,9 +3753,9 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
                     self.log.info("Create fts index")
                     rest_fts.create_fts_index(index_name, index_definition)
                 except Exception as ex:
-                    if err_msg not in str(ex):
+                    if not self._check_output(err_msg, str(ex)):
                         self.log.error("It should not create same name index")
-                    self.fail(ex)
+                        self.fail(ex)
         remote_client.disconnect()
 
     def update_indexes(self):
