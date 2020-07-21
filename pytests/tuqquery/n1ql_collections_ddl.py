@@ -780,7 +780,8 @@ class QueryCollectionsDDLTests(QueryTests):
                     "expected_result": "positive",
                     "object_type": "scope",
                     "object_name": "scope1",
-                    "object_container": "bucket1"
+                    "object_container": "bucket1",
+                    "object_scope": "scope1"
                 }
             ]
         },
@@ -799,13 +800,15 @@ class QueryCollectionsDDLTests(QueryTests):
                     "expected_result": "positive",
                     "object_type": "scope",
                     "object_name": "scope1",
-                    "object_container": "bucket1"
+                    "object_container": "bucket1",
+                    "object_scope": "scope1",
                 },
                 {
                     "expected_result": "positive",
                     "object_type": "scope",
                     "object_name": "scope2",
-                    "object_container": "bucket1"
+                    "object_container": "bucket1",
+                    "object_scope": "scope2",
                 }
             ]
         },
@@ -829,13 +832,15 @@ class QueryCollectionsDDLTests(QueryTests):
                     "expected_result": "positive",
                     "object_type": "scope",
                     "object_name": "scope1",
-                    "object_container": "bucket1"
+                    "object_container": "bucket1",
+                    "object_scope": "scope1",
                 },
                 {
                     "expected_result": "positive",
                     "object_type": "scope",
                     "object_name": "scope1",
-                    "object_container": "bucket2"
+                    "object_container": "bucket2",
+                    "object_scope": "scope1",
                 }
             ]
         },

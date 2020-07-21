@@ -121,6 +121,8 @@ class CollectionsN1QL(object):
         return True, ""
 
     def find_object_in_all_keyspaces(self, type=None, name=None, bucket=None, scope=None, namespace="default"):
+        #stabilizing test suite by reducing the probability of timing issues
+        time.sleep(5)
         path = ""
         if type == 'scope':
             result = self.check_if_scope_exists_in_scopes(keyspace=namespace, bucket=bucket, scope=scope)
