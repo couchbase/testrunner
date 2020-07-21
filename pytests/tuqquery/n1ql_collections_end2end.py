@@ -265,6 +265,9 @@ class QueryCollectionsEnd2EndTests(QueryTests):
         errors = []
         tests = test_data["tests"]
 
+        # Allow time for scope/collection metadata changes for scopes/collections to propagate before using the new scope/collections
+        self.sleep(5)
+
         for keyspace in tests:
             keyspace = namespace+':'+keyspace
             _, _, collection_name = self._extract_object_names(full_keyspace_name=keyspace)
