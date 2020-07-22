@@ -9,7 +9,7 @@ import traceback
 from couchbase.cluster import Cluster
 
 import couchbase.subdocument as SD
-from couchbase.exceptions import CouchbaseTransientException
+from couchbase.exceptions import CouchbaseTransientError
 
 from .constants import Constants as constants
 from .ValueGenerator import ValueGenerator
@@ -42,21 +42,27 @@ class JSONDoc(object):
                 logging.info("No valid server provided. Generating docs locally in ./output dir")
                 self.printDoc()
             else:
-                self.uploadDoc(self.username, self.password)
+                self.uploadDoc()
 
-    def uploadDoc(self, username="Administrator", password="password"):
+    def uploadDoc(self):
         # connect to cb cluster
-        cb = None
         try:
-            from couchbase.cluster import ClusterOptions
-            from couchbase_core.cluster import PasswordAuthenticator
+            from couchbase.cluster import PasswordAuthenticator
             connection = "couchbase://" + self.server
             if "ip6" in self.server or self.server.startswith("["):
-                connection = connection + "?ipv6=allow"
-            cluster = Cluster(connection, ClusterOptions(
-                PasswordAuthenticator(username, password)))
+                connection = connection+"?ipv6=allow"
+            cluster = Cluster(connection)
+            authenticator = PasswordAuthenticator(self.username, self.password)
+            cluster.authenticate(authenticator)
+            cb = cluster.open_bucket(self.bucket)
+            cb.timeout = 100
+        except ImportError:
+            from couchbase.cluster import ClusterOptions
+            from couchbase_core.cluster import PasswordAuthenticator
+            cluster = Cluster(self.connection_string, ClusterOptions(
+                PasswordAuthenticator(self.bucket, 'password')))
             cb = cluster.bucket(self.bucket).default_collection()
-        except Exception:
+        except Exception as e:
             logging.error("Connection error\n" + traceback.format_exc())
         json_docs = {}
         for i in range(self.startseqnum, self.startseqnum + self.num_docs):
@@ -85,7 +91,7 @@ class JSONDoc(object):
                 cb.upsert_multi(batch)
                 num_completed += len(batch)
                 batches.pop()
-            except CouchbaseTransientException as e:
+            except CouchbaseTransientError as e:
                 logging.error(e)
                 ok, fail = e.split_results()
                 new_batch = {}
