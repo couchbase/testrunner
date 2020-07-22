@@ -6,7 +6,7 @@ from .xdcrnewbasetests import NodeHelper
 from membase.api.rest_client import RestConnection
 from testconstants import STANDARD_BUCKET_PORT
 from remote.remote_util import RemoteMachineShellConnection
-from couchbase.exceptions import NotFoundError
+from couchbase.exceptions import DocumentNotFoundException
 from couchbase.bucket import Bucket
 from couchbase_helper.cluster import Cluster
 from membase.helper.cluster_helper import ClusterOperationHelper
@@ -117,8 +117,9 @@ class Lww(XDCRNewBaseTest):
                        dst_lww=True,
                        skip_src=False,
                        skip_dst=False):
-        src_rest = RestConnection(self.c1_cluster.get_master_node())
+
         if not skip_src:
+            src_rest = RestConnection(self.c1_cluster.get_master_node())
             if src_lww:
                 src_rest.create_bucket(bucket=bucket, ramQuotaMB=ramQuotaMB, authType=authType, saslPassword=saslPassword,
                                        replicaNumber=replicaNumber, proxyPort=proxyPort, bucketType=self.bucketType,
@@ -157,16 +158,13 @@ class Lww(XDCRNewBaseTest):
 
         self.sleep(10)
         if self._use_java_sdk:
-            # Only create collections on src cluster
-            self._create_collections(src_rest)
+            self._create_collections(self.c1_cluster.get_master_node())
+            self._create_collections(self.c2_cluster.get_master_node())
 
-    def _create_collections(self, src_rest):
-        for bucket in src_rest.get_buckets():
-            try:
-                CollectionsRest(self.c1_cluster.get_master_node()).async_create_scope_collection(
-                    self._scope_num, self._collection_num, bucket)
-            except Exception:
-                pass
+    def _create_collections(self, node):
+        for bucket in RestConnection(node).get_buckets():
+            CollectionsRest(node).async_create_scope_collection(
+                self._scope_num, self._collection_num, bucket)
 
 
     def load_cluster_buckets(self, cluster=None):
@@ -600,14 +598,14 @@ class Lww(XDCRNewBaseTest):
             obj = src_lww.get(key='lww-0')
             if obj:
                 self.fail("Doc not deleted in src cluster using LWW")
-        except NotFoundError:
+        except DocumentNotFoundException:
             self.log.info("Doc deleted in src cluster using LWW as expected")
 
         try:
             obj = dest_lww.get(key='lww-0')
             if obj:
                 self.fail("Doc not deleted in target cluster using LWW")
-        except NotFoundError:
+        except DocumentNotFoundException:
             self.log.info("Doc deleted in target cluster using LWW as expected")
 
         # TODO - figure out how to verify results in this case
@@ -1345,14 +1343,14 @@ class Lww(XDCRNewBaseTest):
             obj = src_lww.get(key='lww-0')
             if obj:
                 self.fail("Doc not deleted in src cluster using LWW")
-        except NotFoundError:
+        except DocumentNotFoundException:
             self.log.info("Doc deleted in src cluster using LWW as expected")
 
         try:
             obj = dest_lww.get(key='lww-0')
             if obj:
                 self.fail("Doc not deleted in target cluster using LWW")
-        except NotFoundError:
+        except DocumentNotFoundException:
             self.log.info("Doc deleted in target cluster using LWW as expected")
 
         # TODO - figure out how to verify results in this case
