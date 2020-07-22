@@ -17,7 +17,7 @@ class RbacN1QL(QueryTests):
             self.inp_users = eval(eval(users))
         self.users = self.get_user_list()
         self.roles = self.get_user_role_list()
-        if self.bucket_name != "default":
+        if self.bucket_name != "default" and self.bucket_name != "bucket0":
             self.rest.create_bucket(bucket=self.bucket_name, ramQuotaMB=100)
             self.query_bucket = self.bucket_name
             self.run_cbq_query(query="CREATE PRIMARY INDEX ON `{0}`".format(self.bucket_name))
