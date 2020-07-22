@@ -1,6 +1,7 @@
 import os, time, datetime
 import os.path
 import uuid
+import json
 from remote.remote_util import RemoteMachineShellConnection
 from lib.mc_bin_client import MemcachedClient
 from memcached.helper.data_helper import MemcachedClientHelper
@@ -783,6 +784,7 @@ class DataCollector(object):
             Return: key, kv store name, status and value
         """
         conn = RemoteMachineShellConnection(server)
+        cluster_version = RestConnection(server).get_nodes_version()
         backup_data = {}
         status = False
         now = datetime.datetime.now()
@@ -809,52 +811,89 @@ class DataCollector(object):
             if not bucket_name or e:
                 return None, status
 
-            for i in range(0, 1024):
-                command = "{}cbriftdump{}".format(cli_command, cmd_ext)
-                command += " -f {}".format(objstore_provider.schema_prefix() + backupset.objstore_bucket + '/' if objstore_provider else '')
-                command += "{}/backup/{}/{}/data/index_{}.sqlite.0".format(backupset.directory, backup_name[0], bucket_name[0], i)
-                command += " | grep -A 8 'Key: {}' ".format(master_key)
+            if objstore_provider:
+                object_store_command = "{}".format(' --obj-staging-dir ' + backupset.objstore_staging_directory)
+                object_store_command += "{}".format(' --obj-access-key-id ' + backupset.objstore_access_key_id if backupset.objstore_access_key_id else '')
+                object_store_command += "{}".format(' --obj-cacert ' + backupset.objstore_cacert if backupset.objstore_cacert else '')
+                object_store_command += "{}".format(' --obj-endpoint ' + backupset.objstore_endpoint if backupset.objstore_endpoint else '')
+                object_store_command += "{}".format(' --obj-no-ssl-verify' if backupset.objstore_no_ssl_verify else '')
+                object_store_command += "{}".format(' --obj-region ' + backupset.objstore_region if backupset.objstore_region else '')
+                object_store_command += "{}".format(' --obj-secret-access-key ' + backupset.objstore_secret_access_key if backupset.objstore_secret_access_key else '')
+                object_store_command += "{}".format(' --s3-force-path-style' if objstore_provider.schema_prefix() == 's3://' else '')
 
-                if objstore_provider:
-                    command += "{}".format(' --obj-staging-dir ' + backupset.objstore_staging_directory)
-                    command += "{}".format(' --obj-access-key-id ' + backupset.objstore_access_key_id if backupset.objstore_access_key_id else '')
-                    command += "{}".format(' --obj-cacert ' + backupset.objstore_cacert if backupset.objstore_cacert else '')
-                    command += "{}".format(' --obj-endpoint ' + backupset.objstore_endpoint if backupset.objstore_endpoint else '')
-                    command += "{}".format(' --obj-no-ssl-verify' if backupset.objstore_no_ssl_verify else '')
-                    command += "{}".format(' --obj-region ' + backupset.objstore_region if backupset.objstore_region else '')
-                    command += "{}".format(' --obj-secret-access-key ' + backupset.objstore_secret_access_key if backupset.objstore_secret_access_key else '')
-                    command += "{}".format(' --s3-force-path-style' if objstore_provider.schema_prefix() == 's3://' else '')
+            if cluster_version[:3] >= "7.0":
+                command = "ls -tr --group-directories-first {}".format(backupset.objstore_staging_directory + '/' if objstore_provider else '')
+                command += "{}/{}/{}/{}/data | grep index".format(backupset.directory, backupset.name, backup_name[0], bucket_name[0])
+                data_files, e = conn.execute_command(command)
+                data_files = [x.replace('index_', '') for x in data_files]
+                data_files = [x.split('.')[0] for x in data_files]
+                for i in data_files:
+                    command = "{}cbriftdump{} -j ".format(cli_command, cmd_ext)
+                    command += " -f {}".format(objstore_provider.schema_prefix() + backupset.objstore_bucket + '/' if objstore_provider else '')
+                    command += "{}/backup/{}/{}/data/index_{}.sqlite.0".format(backupset.directory, backup_name[0], bucket_name[0], i)
 
-                command += " | grep -A 8 'Key: {}' ".format(master_key)
+                    if objstore_provider:
+                        command += object_store_command
+                    output, error = conn.execute_command(command, debug=False)
+                    if output:
+                        key_status = []
+                        key_ids = []
+                        key_value = []
+                        key_partition = i
+                        shards_with_data[bucket.name].append(i)
+                        for x in output:
+                            data_dumps = json.loads(x)
+                            key_value.append(bytes.fromhex(data_dumps['value']).decode('utf-8'))
+                            key_ids.append(data_dumps['key'])
+                            key_status.append(data_dumps['deleted'])
+                            for idx, key in enumerate(key_ids):
+                                backup_data[bucket.name][key] = \
+                                   {"KV store name":key_partition, "Status":key_status[idx],
+                                    "Value":key_value[idx]}
+                        status = True
+            else:
+                for i in range(0, 1024):
+                    command = "{}cbriftdump{}".format(cli_command, cmd_ext)
+                    command += " -f {}".format(objstore_provider.schema_prefix() + backupset.objstore_bucket + '/' if objstore_provider else '')
+                    command += "{}/backup/{}/{}/data/index_{}.sqlite.0".format(backupset.directory, backup_name[0], bucket_name[0], i)
 
-                output, error = conn.execute_command(command, debug=False)
-                if output:
-                    shards_with_data[bucket.name].append(i)
-                    """ remove empty element """
-                    output = [x.strip(' ') for x in output]
-                    """ remove '--' element """
-                    output = [ x for x in output if not "--" in x ]
-                    key_ids       =  [x.split(":")[1].strip(' ') for x in output[0::9]]
-                    key_partition =  [x.split(":")[1].strip(' ') for x in output[1::9]]
-                    key_status    =  [x.split(":")[1].strip(' ') for x in output[4::9]]
-                    key_value = []
-                    for x in output[8::9]:
-                        if x.split(":",1)[1].strip(' ').startswith("{"):
-                            key_value.append(x.split(":",1)[1].strip())
-                        else:
-                            key_value.append(x.split(":")[-1].strip(' '))
-                    for idx, key in enumerate(key_ids):
-                        backup_data[bucket.name][key] = \
-                           {"KV store name":key_partition[idx], "Status":key_status[idx],
-                            "Value":key_value[idx]}
-                    status = True
+                    if objstore_provider:
+                        command += object_store_command
+                    command += " | grep -A 8 'Key: {}' ".format(master_key)
+
+                    output, error = conn.execute_command(command, debug=False)
+                    if output:
+                        shards_with_data[bucket.name].append(i)
+                        """ remove empty element """
+                        output = [x.strip(' ') for x in output]
+                        """ remove '--' element """
+                        output = [ x for x in output if not "--" in x ]
+                        key_partition = i
+                        key_ids       =  [x.split(":")[1].strip(' ') for x in output[0::7]]
+                        key_status    =  [x.split(":")[1].strip(' ') for x in output[2::7]]
+                        key_value = []
+                        for x in output[5::7]:
+                            if x.split(":",1)[1].strip(' ').startswith("{"):
+                                key_value.append(x.split(":",1)[1].strip())
+                            else:
+                                key_value.append(x.split(":")[-1].strip(' '))
+                        for idx, key in enumerate(key_ids):
+                            backup_data[bucket.name][key] = \
+                               {"KV store name":key_partition, "Status":key_status[idx],
+                                "Value":key_value[idx]}
+                        status = True
 
             if not backup_data[bucket.name]:
                 print "Data base of bucket {0} is empty".format(bucket.name)
                 return  backup_data, status
-            print "---- Done extract data from backup files in backup repo of bucket {0}"\
-                                                                   .format(bucket.name)
-        print "---- shards with data in each bucket: {0}".format(shards_with_data)
+            print(("---- Done extract data from backup files in backup repo of bucket {0}"\
+                                                                   .format(bucket.name)))
+        if debug_logs:
+            print(("---- shards with data in each bucket: {0}".format(shards_with_data)))
+        else:
+            for bucket in buckets:
+                print(("---- total files with data in bucket {0} are {1}"\
+                           .format(bucket.name, len(shards_with_data[bucket.name]))))
         return backup_data, status
 
     def get_views_definition_from_backup_file(self, server, backup_dir, buckets):
