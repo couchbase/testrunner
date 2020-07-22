@@ -1613,9 +1613,8 @@ class QueryCollectionsDDLTests(QueryTests):
         # load document into collection
         try:
             self.run_cbq_query(
-                "INSERT INTO " + bucket_name + "." + scope_name + "." + collection_name + "(KEY, VALUE) VALUES ("
-                                                                                          "'id1', { '"
-                                                                                          "name' : 'name1' })")
+                "INSERT INTO "+keyspace_name+":" + bucket_name + "." + scope_name + "."
+                + collection_name + "(KEY, VALUE) VALUES ('id1', { 'name' : 'name1' })")
             result = self.run_cbq_query(f"select name from {keyspace_name}:{bucket_name}.{scope_name}.{collection_name}"
                                         f" use keys 'id1'")['results'][0]['name']
             self.assertEquals(result, "name1", "Insert and select results do not match!")
@@ -1813,14 +1812,14 @@ class QueryCollectionsDDLTests(QueryTests):
 
         self.collections_helper.delete_scope(bucket_name=bucket_name, scope_name=scope_name)
         result, _ = self.collections_helper.find_object_in_all_keyspaces(type="scope", name=scope_name,
-                                                                             bucket=bucket_name)
+                                                                             bucket=bucket_name, scope=scope_name)
         self.assertFalse(result, "Scope still exists in system:all_keyspaces after drop")
 
 
         result = self.collections_helper.create_scope(bucket_name=bucket_name, scope_name=scope_name)
         self.assertEquals(result, True, "Cannot re-create scope. Test is failed.")
         result, error = self.collections_helper.find_object_in_all_keyspaces(type="scope", name=scope_name,
-                                                                             bucket=bucket_name)
+                                                                             bucket=bucket_name, scope=scope_name)
         self.assertTrue(result, f"Scope cannmot be found in system:all_keyspaces after re-creation. Error: {error}")
 
 
@@ -1904,19 +1903,19 @@ class QueryCollectionsDDLTests(QueryTests):
         collection_name = "collection1"
         keyspace_name = "default"
 
-        self.cluster.create_standard_bucket(bucket_name, 11222, self.bucket_params)
+        rest_collections_helper = CollectionsN1QL(self.master)
 
+        self.cluster.create_standard_bucket(bucket_name, 11222, self.bucket_params)
         self.collections_helper.use_rest = False
         scope_created = self.collections_helper.create_scope(bucket_name=bucket_name, scope_name=scope_name)
         self.assertEquals(scope_created, True, "Cannot create scope via CBQ console")
-        result, error = self.collections_helper.find_object_in_all_keyspaces(type="scope", name=scope_name, bucket=bucket_name)
+        result, error = rest_collections_helper.find_object_in_all_keyspaces(type="scope", name=scope_name, bucket=bucket_name, scope=scope_name)
         self.assertTrue(result, f"Scope {scope_name}, created via CBQ cannot be found in system:keyspaces. Error: {error}")
 
         collection_created = self.collections_helper.create_collection(bucket_name=bucket_name, scope_name=scope_name,
                                                                        collection_name=collection_name)
         self.assertEquals(collection_created, True, "Cannot create collection via CBQ console")
 
-        rest_collections_helper = CollectionsN1QL(self.master)
 
         result, error = rest_collections_helper.find_object_in_all_keyspaces(type="collection", name=collection_name, bucket=bucket_name, scope=scope_name)
         self.assertTrue(result, f"Collection {collection_name}, created via CBQ cannot be found in system:all_keyspaces. Error: {error}")
@@ -1944,6 +1943,7 @@ class QueryCollectionsDDLTests(QueryTests):
             object_name = test["object_name"]
             object_bucket = test["object_container"]
             object_scope = test["object_scope"] if "object_scope" in test else None
+
 
             result, error = self.collections_helper.find_object_in_all_keyspaces(type=object_type,
                                                                name=object_name,
