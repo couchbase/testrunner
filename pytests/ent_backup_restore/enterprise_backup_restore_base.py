@@ -1516,7 +1516,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                                 print(("value of key in backup file  ", \
                                       restore_file_data[bucket.name][key]))
                                 max_display -= 1
-                        if pattern.search(restore_file_data[bucket.name][key]["Value"]):
+                        if pattern.search(str(restore_file_data[bucket.name][key]["Value"])):
                             regex_backup_data[bucket.name][key] = \
                                 restore_file_data[bucket.name][key]
                             key_in_file_match_regex += 1
@@ -1571,7 +1571,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                 if restore_file_data[bucket.name]:
                     try:
                         if restore_file_data[bucket.name][key]:
-                            if str(buckets_data[bucket.name][key]).replace(" ", "") \
+                            if buckets_data[bucket.name][key] \
                                     != restore_file_data[bucket.name][key]["Value"]:
                                 if count < 20:
                                     self.log.error("Data does not match at key {0}.\

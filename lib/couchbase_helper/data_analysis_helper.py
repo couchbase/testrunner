@@ -854,7 +854,10 @@ class DataCollector(object):
                         shards_with_data[bucket.name].append(i)
                         for x in output:
                             data_dumps = json.loads(x)
-                            key_value.append(bytes.fromhex(data_dumps['value']).decode('utf-8'))
+                            if type(data_dumps['value']) is str:
+                                key_value.append(bytes.fromhex(data_dumps['value']).decode('utf-8'))
+                            else:
+                                key_value.append(str(data_dumps['value']).replace("'", '"'))
                             key_ids.append(data_dumps['key'])
                             key_status.append(data_dumps['deleted'])
                             for idx, key in enumerate(key_ids):
