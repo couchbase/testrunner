@@ -904,7 +904,7 @@ class BaseSecondaryIndexingTests(QueryTests):
             for index_info in index_status.values():
                 for index_state in index_info.values():
                     if defer_build:
-                        if index_state["status"] == "Ready":
+                        if index_state["status"] == "Ready" or index_state["status"] == "Created":
                             check = True
                         else:
                             check = False
@@ -930,6 +930,16 @@ class BaseSecondaryIndexingTests(QueryTests):
         if timed_out:
             check = False
         return check
+
+    def get_indexes_not_online(self):
+        rest = RestConnection(self.master)
+        index_list = []
+        index_status = rest.get_index_status()
+        for index_info in index_status.values():
+            for k,v in index_info.items():
+                if v["status"] != "Ready":
+                    index_list.append(k)
+        return index_list
 
     def wait_until_specific_index_online(self, index_name='', timeout=600, defer_build=False):
         rest = RestConnection(self.master)

@@ -16,6 +16,8 @@ from couchbase_helper.document import View
 from couchbase_helper.documentgenerator import BlobGenerator
 from couchbase_helper.documentgenerator import DocumentGenerator
 from couchbase_helper.stats_tools import StatsCommon
+
+from lib.couchbase_helper.documentgenerator import SDKDataLoader
 from lib.ep_mc_bin_client import MemcachedClient
 from lib.mc_bin_client import MemcachedClient as MC_MemcachedClient
 from membase.api.exception import ServerUnavailableException
@@ -59,6 +61,7 @@ class BaseTestCase(unittest.TestCase):
         self.bucket_base_params = {'membase': {}}
         self.master = self.servers[0]
         self.upgrade_test = self.input.param("upgrade_test", False)
+
         self.indexManager = self.servers[0]
         if not hasattr(self, 'cluster'):
             self.cluster = Cluster()
@@ -1024,6 +1027,34 @@ class BaseTestCase(unittest.TestCase):
                 tasks.append(self.cluster.async_load_gen_docs(server, bucket, kv_gen, pause_secs=1,
                                                               timeout_secs=300))
         return tasks
+
+    def data_ops_javasdk_loader_in_batches(self, sdk_data_loader, batch_size):
+        start_document = sdk_data_loader.get_start_seq_num()
+        tot_num_items_in_collection = sdk_data_loader.get_num_ops()
+        batches = []
+        for i in range(start_document, tot_num_items_in_collection, batch_size):
+            if i + batch_size > start_document + tot_num_items_in_collection:
+                num_ops = tot_num_items_in_collection - i
+            else:
+                num_ops = batch_size
+
+            loader_batch = copy.deepcopy(sdk_data_loader)
+            loader_batch.set_num_ops(num_ops)
+            loader_batch.set_start_seq_num(i)
+            batches.append(loader_batch)
+
+        self.log.info("Number of batches : {0}".format(len(batches)))
+        self.sleep(10)
+        tasks = []
+        for bucket in self.buckets:
+            for batch in batches:
+                tasks.append(self.cluster.async_load_gen_docs(self.master, bucket, batch, pause_secs=1,
+                                                              timeout_secs=300))
+
+        self.log.info("done")
+
+        return tasks
+
 
     """Synchronously applys load generation to all bucekts in the cluster.
 

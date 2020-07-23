@@ -5693,7 +5693,7 @@ class SDKLoadDocumentsTask(Task):
         command = "java -jar java_sdk_client/collections/target/javaclient/javaclient.jar " \
                   "-i {0} -u {1} -p {2} -b {3} -s {4} -c {5} " \
                   "-n {6} -pc {7} -pu {8} -pd {9} -l {10} " \
-                  "-dsn {11} -dpx {12} -dt {13} -de {14} -ds {15} {16}".format(self.server.ip,
+                  "-dsn {11} -dpx {12} -dt {13} -de {14} -ds {15} -ac {16} {17}".format(self.server.ip,
                                                                                               self.params.username,
                                                                                               self.params.password,
                                                                                               self.bucket,
@@ -5709,8 +5709,10 @@ class SDKLoadDocumentsTask(Task):
                                                                                               self.params.json_template,
                                                                                               self.params.doc_expiry,
                                                                                               self.params.doc_size,
-                                                                                              self.redirect)
-        print(command)
+                                                                                              self.params.all_collections,
+                                                                                              self.redirect
+                                                                                        )
+        self.log.info(command)
         try:
             proc = subprocess.Popen(command, stdout=subprocess.PIPE, shell=True)
             out = proc.communicate(timeout=self.params.timeout)
