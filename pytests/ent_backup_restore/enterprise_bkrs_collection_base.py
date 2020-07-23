@@ -237,6 +237,8 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
         self.backupset.disable_views = self.input.param("disable-views", False)
         self.backupset.disable_gsi_indexes = self.input.param("disable-gsi-indexes", False)
         self.backupset.disable_ft_indexes = self.input.param("disable-ft-indexes", False)
+        self.backupset.disable_ft_alias = self.input.param("disable-ft-alias", False)
+        self.backupset.disable_analytics = self.input.param("disable-analytics", False)
         self.backupset.disable_data = self.input.param("disable-data", False)
         self.backupset.disable_conf_res_restriction = self.input.param("disable-conf-res-restriction", None)
         self.backupset.force_updates = self.input.param("force-updates", False)
@@ -279,6 +281,22 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
         self.backupset.backup_compressed = \
             self.input.param("backup-conpressed", False)
         self.backups = []
+
+        self.objstore_provider = None
+        provider = self.input.param("objstore_provider", None)
+        if provider == "s3":
+            self.objstore_provider = S3(self.backupset.objstore_access_key_id, self.backupset.objstore_bucket,
+                                        self.backupset.objstore_cacert, self.backupset.objstore_endpoint,
+                                        self.backupset.objstore_no_ssl_verify, self.backupset.objstore_region,
+                                        self.backupset.objstore_secret_access_key,
+                                        self.backupset.objstore_staging_directory)
+
+        # We run in a separate branch so when we add more providers the setup will be run by default
+        if provider:
+            # Override and use the same archive directory across platforms
+            self.backupset.directory = f"archive-{self.master.ip}"
+            self.objstore_provider.setup()
+
         self.validation_helper = BackupRestoreValidations(self.backupset,
                                                           self.cluster_to_backup,
                                                           self.cluster_to_restore,
@@ -286,7 +304,8 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
                                                           self.backup_validation_files_location,
                                                           self.backups,
                                                           self.num_items,
-                                                          self.vbuckets)
+                                                          self.vbuckets,
+                                                          self.objstore_provider)
         self.number_of_backups_taken = 0
         self.vbucket_seqno = []
         self.expires = self.input.param("expires", 0)
@@ -603,6 +622,10 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
             args += " --disable-gsi-indexes"
         if self.backupset.disable_ft_indexes:
             args += " --disable-ft-indexes"
+        if self.backupset.disable_ft_alias:
+            args += " --disable-ft-alias"
+        if self.backupset.disable_analytics:
+            args += " --disable-analytics"
         if self.backupset.disable_data:
             args += " --disable-data"
         if self.backupset.log_to_stdout:
@@ -797,7 +820,8 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
             self.validation_helper.store_latest(self.cluster_to_backup, self.buckets, self.number_of_backups_taken,
                                                 self.backup_validation_files_location)
             self.validation_helper.store_range_json(self.buckets, self.number_of_backups_taken,
-                                                    self.backup_validation_files_location)
+                                                    self.backup_validation_files_location,
+                                                    self.objstore_provider)
 
     def backup_restore(self):
         if self.restore_only:
@@ -2479,3 +2503,19 @@ class Backupset:
         self.collection_string = None
         self.load_to_collection = False
         self.load_scope_id = None
+        self.disable_ft_alias = False
+        self.disable_analytics = False
+        self.auto_create_buckets = False
+
+        # Common configuration which is to be shared accross cloud providers
+        self.objstore_access_key_id = ""
+        self.objstore_bucket = ""
+        self.objstore_cacert = ""
+        self.objstore_endpoint = ""
+        self.objstore_no_ssl_verify = False
+        self.objstore_region = ""
+        self.objstore_secret_access_key = ""
+        self.objstore_staging_directory = ""
+
+        # S3 specific configuration
+        self.s3_force_path_style = False
