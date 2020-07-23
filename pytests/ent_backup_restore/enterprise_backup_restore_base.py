@@ -1492,7 +1492,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         restore_file_data = bk_file_data
         regex_backup_data = {}
         if regex_pattern is not None:
-            pattern = re.compile("%s" % regex_pattern.replace(" ",""))
+            pattern = re.compile(regex_pattern)
             for bucket in self.buckets:
                 key_in_file_match_regex = 0
                 regex_backup_data[bucket.name] = {}
