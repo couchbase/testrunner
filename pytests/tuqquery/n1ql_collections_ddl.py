@@ -1588,6 +1588,8 @@ class QueryCollectionsDDLTests(QueryTests):
         self.cluster.create_standard_bucket(bucket_name, 11222, self.bucket_params)
 
         self.rest_client.create_scope_collection(bucket=bucket_name, scope=scope_name, collection=collection_name)
+        # Allow time for scope and collection to be reflected in manifest after creation
+        self.sleep(2)
         self.collections_helper.delete_collection(keyspace=keyspace_name, bucket_name=bucket_name,
                                                   scope_name=scope_name, collection_name=collection_name)
 
@@ -1609,6 +1611,9 @@ class QueryCollectionsDDLTests(QueryTests):
         self.collections_helper.create_scope(bucket_name=bucket_name, scope_name=scope_name)
         self.collections_helper.create_collection(bucket_name=bucket_name, scope_name=scope_name,
                                                   collection_name=collection_name)
+
+        #Allow time for scope and collection to be reflected in manifest after creation
+        self.sleep(2)
 
         # load document into collection
         try:
@@ -1734,6 +1739,10 @@ class QueryCollectionsDDLTests(QueryTests):
 
         self.cluster.create_standard_bucket(bucket_name, 11222, self.bucket_params)
         scope_created = self.cli_client.create_scope(bucket=bucket_name, scope=scope_name)
+
+        # Allow time for scope and collection to be reflected in manifest after creation
+        self.sleep(2)
+
         if scope_created:
             self.collections_helper.create_collection(bucket_name=bucket_name, scope_name=scope_name,
                                                       collection_name=collection_name)
@@ -1754,6 +1763,9 @@ class QueryCollectionsDDLTests(QueryTests):
 
         self.cluster.create_standard_bucket(bucket_name, 11222, self.bucket_params)
         self.rest_client.create_scope(bucket=bucket_name, scope=scope_name)
+
+        # Allow time for scope and collection to be reflected in manifest after creation
+        self.sleep(2)
 
         self.collections_helper.create_collection(bucket_name=bucket_name, scope_name=scope_name,
                                                   collection_name=collection_name)
