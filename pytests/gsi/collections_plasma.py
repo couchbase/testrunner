@@ -67,10 +67,13 @@ class PlasmaCollectionsTests(BaseSecondaryIndexingTests):
                                                     bucket=self.test_bucket)
         self.scopes = self.cli_rest.get_bucket_scopes(bucket=self.test_bucket)
         self.collections = list(set(self.cli_rest.get_bucket_collections(bucket=self.test_bucket)))
+        self.scopes.remove('_default')
+        self.collections.remove('_default')
         self.sleep(5)
         for s_item in self.scopes:
             for c_item in self.collections:
                 self.keyspace.append(f'default:{self.test_bucket}.{s_item}.{c_item}')
+        self.keyspace.append(f'default:{self.test_bucket}._default._default')
 
     def all_indexes_metadata(self, index_name_state=None, operation="create"):
         with self._lock_queue:
