@@ -143,9 +143,9 @@ CMDS = {
         "uninstall":
             "systemctl stop couchbase-server; " +
             "rpm -e couchbase-server; " +
-            "rm -rf " + DEFAULT_INSTALL_DIR["LINUX_DISTROS"] + "> /dev/null && echo 1 || echo 0; " +
-            "rm -rf " + DEFAULT_NONROOT_INSTALL_DIR["LINUX_DISTROS"] + "> /dev/null && echo 1 || echo 0; ",
-        "pre_install": None,
+            "rm -rf " + DEFAULT_INSTALL_DIR["LINUX_DISTROS"] + "; " +
+            "rm -rf " + DEFAULT_NONROOT_INSTALL_DIR["LINUX_DISTROS"] + " > /dev/null && echo 1 || echo 0",
+        "pre_install": "yes | yum remove `rpm -qa | grep couchbase`",
         "install": "yes | yum localinstall -y buildpath > /dev/null && echo 1 || echo 0",
         # "install": "yes | INSTALL_DONT_START_SERVER=1 yum localinstall -y buildpath",
         "suse_install": "rpm -i buildpath",
@@ -272,7 +272,7 @@ WAIT_TIMES = {
         "uninstall": (10, "Waiting {0}s for uninstall to complete on {1}..", 30),
         "install": (20, "Waiting {0}s for install to complete on {1}..", 100),
         "post_install": (10, "Waiting {0}s for couchbase-service to become active on {1}..", 60),
-        "pre_install": (10, "Waiting {0}s for couchbase-service to become active on {1}..", 60),
+        "pre_install": (20, "Waiting {0}s to remove previous yum repo on {1}..", 60),
         "init": (30, "Waiting {0}s for {1} to be initialized..", 300)
     }
 }

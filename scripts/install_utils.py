@@ -138,18 +138,21 @@ class NodeHelper:
         if self.actions_dict[self.info.deliverable_type]["pre_install"]:
             cmd = self.actions_dict[self.info.deliverable_type]["pre_install"]
             duration, event, timeout = install_constants.WAIT_TIMES[self.info.deliverable_type]["pre_install"]
-            if cmd is not None and "HDIUTIL_DETACH_ATTACH" in cmd:
-                start_time = time.time()
-                while time.time() < start_time + timeout:
-                    try:
-                        ret = hdiutil_attach(self.shell, self.build.path)
-                        if ret:
-                            break
-                        self.wait_for_completion(duration, event)
-                    except Exception as e:
-                        log.warning("Exception {0} occurred on {1}, retrying..".format(e, self.ip))
-                        self.wait_for_completion(duration, event)
-
+            if cmd is not None:
+                if "HDIUTIL_DETACH_ATTACH" in cmd:
+                    start_time = time.time()
+                    while time.time() < start_time + timeout:
+                        try:
+                            ret = hdiutil_attach(self.shell, self.build.path)
+                            if ret:
+                                break
+                            self.wait_for_completion(duration, event)
+                        except Exception as e:
+                            log.warning("Exception {0} occurred on {1}, retrying..".format(e, self.ip))
+                            self.wait_for_completion(duration, event)
+                else:
+                    self.shell.execute_command(cmd, debug=self.params["debug_logs"])
+                    self.wait_for_completion(duration, event)
 
     def install_cb(self):
         self.pre_install_cb()
@@ -458,8 +461,9 @@ def _parse_user_input():
                 params["url"] = value
             else:
                 log.warning('URL:{0} is not valid, will use version to locate build'.format(value))
-        if key == "type" or key == "edition" and value.lower() in install_constants.CB_EDITIONS:
-            params["cb_edition"] = value.lower()
+        if key == "type" or key == "edition":
+            if "community" in value.lower():
+                params["cb_edition"] = install_constants.CB_COMMUNITY
         if key == "timeout" and int(value) > 60:
             params["timeout"] = int(value)
         if key == "storage_mode":
