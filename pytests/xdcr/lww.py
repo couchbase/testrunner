@@ -1,4 +1,5 @@
 import zlib
+import json
 
 from couchbase_helper.documentgenerator import BlobGenerator, DocumentGenerator, SDKDataLoader
 from .xdcrnewbasetests import XDCRNewBaseTest, FloatingServers
@@ -206,11 +207,13 @@ class Lww(XDCRNewBaseTest):
             self.fail(str(ex))
 
     def _upsert(self, conn, doc_id, old_key, new_key, new_val):
-        obj = conn.get(key=doc_id)
+        obj = conn.get(doc_id)
         value = obj.value
+        if isinstance(value, str):
+            value = json.loads(value)
         value[new_key] = value.pop(old_key)
         value[new_key] = new_val
-        conn.upsert(key=doc_id, value=value)
+        conn.upsert(doc_id, value=value)
 
     def _kill_processes(self, crashed_nodes=[]):
         try:
@@ -239,6 +242,11 @@ class Lww(XDCRNewBaseTest):
     def _get_vbucket_id(self, key, num_vbuckets=1024):
         vbucket_id = ((zlib.crc32(key.encode()) >> 16) & 0x7FFF) % num_vbuckets
         return vbucket_id
+
+    def check_kv_exists_in_doc(self, kv, doc, msg):
+        if isinstance(doc, str):
+            doc = json.loads(doc)
+        self.assertGreaterEqual(doc.items(), kv.items(), msg)
 
     def test_lww_enable(self):
         src_conn = RestConnection(self.c1_cluster.get_master_node())
@@ -322,16 +330,16 @@ class Lww(XDCRNewBaseTest):
         self.sleep(10)
         self._wait_for_replication_to_catchup()
 
-        obj = src_lww.get(key='lww-0')
-        self.assertDictContainsSubset({'key2':'value2'}, obj.value, "Src doc did not win using LWW")
-        obj = dest_lww.get(key='lww-0')
-        self.assertDictContainsSubset({'key2':'value2'}, obj.value, "Src doc did not win using LWW")
+        obj = src_lww.get('lww-0')
+        self.check_kv_exists_in_doc({'key2':'value2'}, obj.value, "Src doc did not win using LWW")
+        obj = dest_lww.get('lww-0')
+        self.check_kv_exists_in_doc({'key2':'value2'}, obj.value, "Src doc did not win using LWW")
         self.log.info("Src doc won using LWW as expected")
 
-        obj = src_nolww.get(key='lww-0')
-        self.assertDictContainsSubset({'key2':'value2'}, obj.value, "Src doc did not win using LWW")
-        obj = dest_nolww.get(key='lww-0')
-        self.assertDictContainsSubset({'key1':'value1'}, obj.value, "Target doc did not win using Rev Id")
+        obj = src_nolww.get('lww-0')
+        self.check_kv_exists_in_doc({'key2':'value2'}, obj.value, "Src doc did not win using LWW")
+        obj = dest_nolww.get('lww-0')
+        self.check_kv_exists_in_doc({'key1':'value1'}, obj.value, "Target doc did not win using Rev Id")
         self.log.info("Target doc won using Rev Id as expected")
 
         self.verify_results(skip_verify_data=['nolww'], skip_verify_revid=['nolww'])
@@ -370,16 +378,16 @@ class Lww(XDCRNewBaseTest):
         self.c1_cluster.resume_all_replications_by_id()
         self._wait_for_replication_to_catchup()
 
-        obj = src_lww.get(key='lww-0')
-        self.assertDictContainsSubset({'key1':'value1'}, obj.value, "Target doc did not win using LWW")
-        obj = dest_lww.get(key='lww-0')
-        self.assertDictContainsSubset({'key2':'value2'}, obj.value, "Target doc did not win using LWW")
+        obj = src_lww.get('lww-0')
+        self.check_kv_exists_in_doc({'key1':'value1'}, obj.value, "Target doc did not win using LWW")
+        obj = dest_lww.get('lww-0')
+        self.check_kv_exists_in_doc({'key2':'value2'}, obj.value, "Target doc did not win using LWW")
         self.log.info("Target doc won using LWW as expected")
 
-        obj = src_nolww.get(key='lww-0')
-        self.assertDictContainsSubset({'key1':'value1'}, obj.value, "Src doc did not win using Rev Id")
-        obj = dest_nolww.get(key='lww-0')
-        self.assertDictContainsSubset({'key1':'value1'}, obj.value, "Src doc did not win using Rev Id")
+        obj = src_nolww.get('lww-0')
+        self.check_kv_exists_in_doc({'key1':'value1'}, obj.value, "Src doc did not win using Rev Id")
+        obj = dest_nolww.get('lww-0')
+        self.check_kv_exists_in_doc({'key1':'value1'}, obj.value, "Src doc did not win using Rev Id")
         self.log.info("Src doc won using Rev Id as expected")
 
         self.verify_results(skip_verify_data=['lww', 'nolww'], skip_verify_revid=['lww'])
@@ -434,16 +442,16 @@ class Lww(XDCRNewBaseTest):
         self.c2_cluster.resume_all_replications_by_id()
         self._wait_for_replication_to_catchup()
 
-        obj = src_lww.get(key='lww-0')
-        self.assertDictContainsSubset({'key2':'value2'}, obj.value, "Src doc did not win using LWW")
-        obj = dest_lww.get(key='lww-0')
-        self.assertDictContainsSubset({'key2':'value2'}, obj.value, "Src doc did not win using LWW")
+        obj = src_lww.get('lww-0')
+        self.check_kv_exists_in_doc({'key2':'value2'}, obj.value, "Src doc did not win using LWW")
+        obj = dest_lww.get('lww-0')
+        self.check_kv_exists_in_doc({'key2':'value2'}, obj.value, "Src doc did not win using LWW")
         self.log.info("Src doc won using LWW as expected")
 
-        obj = dest_nolww.get(key='lww-0')
-        self.assertDictContainsSubset({'key1':'value1'}, obj.value, "Target doc did not win using Rev Id")
-        obj = src_nolww.get(key='lww-0')
-        self.assertDictContainsSubset({'key1':'value1'}, obj.value, "Target doc did not win using Rev Id")
+        obj = dest_nolww.get('lww-0')
+        self.check_kv_exists_in_doc({'key1':'value1'}, obj.value, "Target doc did not win using Rev Id")
+        obj = src_nolww.get('lww-0')
+        self.check_kv_exists_in_doc({'key1':'value1'}, obj.value, "Target doc did not win using Rev Id")
         self.log.info("Target doc won using Rev Id as expected")
 
         self.verify_results(skip_verify_data=['nolww'])
@@ -498,16 +506,16 @@ class Lww(XDCRNewBaseTest):
         self.c2_cluster.resume_all_replications_by_id()
         self._wait_for_replication_to_catchup()
 
-        obj = src_lww.get(key='lww-0')
-        self.assertDictContainsSubset({'key2':'value2'}, obj.value, "Target doc did not win using LWW")
-        obj = dest_lww.get(key='lww-0')
-        self.assertDictContainsSubset({'key2':'value2'}, obj.value, "Target doc did not win using LWW")
+        obj = src_lww.get('lww-0')
+        self.check_kv_exists_in_doc({'key2':'value2'}, obj.value, "Target doc did not win using LWW")
+        obj = dest_lww.get('lww-0')
+        self.check_kv_exists_in_doc({'key2':'value2'}, obj.value, "Target doc did not win using LWW")
         self.log.info("Target doc won using LWW as expected")
 
-        obj = src_nolww.get(key='lww-0')
-        self.assertDictContainsSubset({'key1':'value1'}, obj.value, "Src doc did not win using Rev Id")
-        obj = dest_nolww.get(key='lww-0')
-        self.assertDictContainsSubset({'key1':'value1'}, obj.value, "Src doc did not win using Rev Id")
+        obj = src_nolww.get('lww-0')
+        self.check_kv_exists_in_doc({'key1':'value1'}, obj.value, "Src doc did not win using Rev Id")
+        obj = dest_nolww.get('lww-0')
+        self.check_kv_exists_in_doc({'key1':'value1'}, obj.value, "Src doc did not win using Rev Id")
         self.log.info("Src doc won using Rev Id as expected")
 
         self.verify_results(skip_verify_data=['lww', 'nolww'])
@@ -549,10 +557,10 @@ class Lww(XDCRNewBaseTest):
         self.c2_cluster.resume_all_replications_by_id()
         self._wait_for_replication_to_catchup()
 
-        obj = src_lww.get(key='lww-0')
-        self.assertDictContainsSubset({'key1':'value1'}, obj.value, "Source doc did not win using LWW")
-        obj = dest_lww.get(key='lww-0')
-        self.assertDictContainsSubset({'key1':'value1'}, obj.value, "Source doc did not win using LWW")
+        obj = src_lww.get('lww-0')
+        self.check_kv_exists_in_doc({'key1':'value1'}, obj.value, "Source doc did not win using LWW")
+        obj = dest_lww.get('lww-0')
+        self.check_kv_exists_in_doc({'key1':'value1'}, obj.value, "Source doc did not win using LWW")
         self.log.info("Source doc won using LWW as expected")
 
         self.verify_results(skip_verify_data=['lww'])
@@ -595,14 +603,14 @@ class Lww(XDCRNewBaseTest):
         self._wait_for_replication_to_catchup()
 
         try:
-            obj = src_lww.get(key='lww-0')
+            obj = src_lww.get('lww-0')
             if obj:
                 self.fail("Doc not deleted in src cluster using LWW")
         except DocumentNotFoundException:
             self.log.info("Doc deleted in src cluster using LWW as expected")
 
         try:
-            obj = dest_lww.get(key='lww-0')
+            obj = dest_lww.get('lww-0')
             if obj:
                 self.fail("Doc not deleted in target cluster using LWW")
         except DocumentNotFoundException:
@@ -688,10 +696,10 @@ class Lww(XDCRNewBaseTest):
         self.c2_cluster.resume_all_replications_by_id()
         self._wait_for_replication_to_catchup()
 
-        obj = src_def.get(key='lww-0')
-        self.assertDictContainsSubset({'key2':'value2'}, obj.value, "Doc with greater rev id did not win")
-        obj = dst_def.get(key='lww-0')
-        self.assertDictContainsSubset({'key2':'value2'}, obj.value, "Doc with greater rev id did not win")
+        obj = src_def.get('lww-0')
+        self.check_kv_exists_in_doc({'key2':'value2'}, obj.value, "Doc with greater rev id did not win")
+        obj = dst_def.get('lww-0')
+        self.check_kv_exists_in_doc({'key2':'value2'}, obj.value, "Doc with greater rev id did not win")
         self.log.info("Doc with greater rev id won as expected")
 
         self.verify_results(skip_verify_data=['default'])
@@ -744,16 +752,16 @@ class Lww(XDCRNewBaseTest):
         src_lww = self._get_python_sdk_client(self.c1_cluster.get_master_node().ip, 'lww', self.c1_cluster)
         src_nolww = self._get_python_sdk_client(self.c1_cluster.get_master_node().ip, 'nolww', self.c1_cluster)
 
-        obj = src_lww.get(key='lww-0')
-        self.assertDictContainsSubset({'key3':'value3'}, obj.value, "Src doc did not win using LWW")
-        obj = dest_lww.get(key='lww-0')
-        self.assertDictContainsSubset({'key3':'value3'}, obj.value, "Src doc did not win using LWW")
+        obj = src_lww.get('lww-0')
+        self.check_kv_exists_in_doc({'key3':'value3'}, obj.value, "Src doc did not win using LWW")
+        obj = dest_lww.get('lww-0')
+        self.check_kv_exists_in_doc({'key3':'value3'}, obj.value, "Src doc did not win using LWW")
         self.log.info("Src doc won using LWW as expected")
 
-        obj = src_nolww.get(key='lww-0')
-        self.assertDictContainsSubset({'key3':'value3'}, obj.value, "Target doc did not win using Rev Id")
-        obj = dest_nolww.get(key='lww-0')
-        self.assertDictContainsSubset({'key1':'value1'}, obj.value, "Target doc did not win using Rev Id")
+        obj = src_nolww.get('lww-0')
+        self.check_kv_exists_in_doc({'key3':'value3'}, obj.value, "Target doc did not win using Rev Id")
+        obj = dest_nolww.get('lww-0')
+        self.check_kv_exists_in_doc({'key1':'value1'}, obj.value, "Target doc did not win using Rev Id")
         self.log.info("Target doc won using Rev Id as expected")
 
         self.verify_results(skip_verify_data=['nolww'], skip_verify_revid=['nolww'])
@@ -810,16 +818,16 @@ class Lww(XDCRNewBaseTest):
         src_nolww = self._get_python_sdk_client(self.c1_cluster.get_master_node().ip, 'nolww', self.c1_cluster)
         self.sleep(10)
 
-        obj = src_lww.get(key='lww-0')
-        self.assertDictContainsSubset({'key3':'value3'}, obj.value, "Src doc did not win using LWW")
-        obj = dest_lww.get(key='lww-0')
-        self.assertDictContainsSubset({'key3':'value3'}, obj.value, "Src doc did not win using LWW")
+        obj = src_lww.get('lww-0')
+        self.check_kv_exists_in_doc({'key3':'value3'}, obj.value, "Src doc did not win using LWW")
+        obj = dest_lww.get('lww-0')
+        self.check_kv_exists_in_doc({'key3':'value3'}, obj.value, "Src doc did not win using LWW")
         self.log.info("Src doc won using LWW as expected")
 
-        obj = src_nolww.get(key='lww-0')
-        self.assertDictContainsSubset({'key3':'value3'}, obj.value, "Target doc did not win using Rev Id")
-        obj = dest_nolww.get(key='lww-0')
-        self.assertDictContainsSubset({'key1':'value1'}, obj.value, "Target doc did not win using Rev Id")
+        obj = src_nolww.get('lww-0')
+        self.check_kv_exists_in_doc({'key3':'value3'}, obj.value, "Target doc did not win using Rev Id")
+        obj = dest_nolww.get('lww-0')
+        self.check_kv_exists_in_doc({'key1':'value1'}, obj.value, "Target doc did not win using Rev Id")
         self.log.info("Target doc won using Rev Id as expected")
 
         self.verify_results(skip_verify_data=['nolww'], skip_verify_revid=['nolww'])
@@ -869,10 +877,10 @@ class Lww(XDCRNewBaseTest):
         dest_lww = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'lww', self.c2_cluster)
         self.sleep(10)
 
-        obj = src_lww.get(key='lww-0')
-        self.assertDictContainsSubset({'key1':'value1'}, obj.value, "Source doc did not win using LWW")
-        obj = dest_lww.get(key='lww-0')
-        self.assertDictContainsSubset({'key1':'value1'}, obj.value, "Source doc did not win using LWW")
+        obj = src_lww.get('lww-0')
+        self.check_kv_exists_in_doc({'key1':'value1'}, obj.value, "Source doc did not win using LWW")
+        obj = dest_lww.get('lww-0')
+        self.check_kv_exists_in_doc({'key1':'value1'}, obj.value, "Source doc did not win using LWW")
         self.log.info("Source doc won using LWW as expected")
 
         self.verify_results(skip_verify_data=['lww'])
@@ -922,10 +930,10 @@ class Lww(XDCRNewBaseTest):
         dest_lww = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'lww', self.c2_cluster)
         self.sleep(10)
 
-        obj = src_lww.get(key='lww-0')
-        self.assertDictContainsSubset({'key1':'value1'}, obj.value, "Source doc did not win using LWW")
-        obj = dest_lww.get(key='lww-0')
-        self.assertDictContainsSubset({'key1':'value1'}, obj.value, "Source doc did not win using LWW")
+        obj = src_lww.get('lww-0')
+        self.check_kv_exists_in_doc({'key1':'value1'}, obj.value, "Source doc did not win using LWW")
+        obj = dest_lww.get('lww-0')
+        self.check_kv_exists_in_doc({'key1':'value1'}, obj.value, "Source doc did not win using LWW")
         self.log.info("Source doc won using LWW as expected")
 
         self.verify_results(skip_verify_data=['lww'])
@@ -996,16 +1004,16 @@ class Lww(XDCRNewBaseTest):
         self.c2_cluster.resume_all_replications_by_id()
         self._wait_for_replication_to_catchup()
 
-        obj = src_lww.get(key='lww-0')
-        self.assertDictContainsSubset({'key4':'value4'}, obj.value, "Target doc did not win using LWW")
-        obj = dest_lww.get(key='lww-0')
-        self.assertDictContainsSubset({'key4':'value4'}, obj.value, "Target doc did not win using LWW")
+        obj = src_lww.get('lww-0')
+        self.check_kv_exists_in_doc({'key4':'value4'}, obj.value, "Target doc did not win using LWW")
+        obj = dest_lww.get('lww-0')
+        self.check_kv_exists_in_doc({'key4':'value4'}, obj.value, "Target doc did not win using LWW")
         self.log.info("Target doc won using LWW as expected")
 
-        obj = dest_nolww.get(key='lww-0')
-        self.assertDictContainsSubset({'key3':'value3'}, obj.value, "Src doc did not win using Rev Id")
-        obj = src_nolww.get(key='lww-0')
-        self.assertDictContainsSubset({'key3':'value3'}, obj.value, "Src doc did not win using Rev Id")
+        obj = dest_nolww.get('lww-0')
+        self.check_kv_exists_in_doc({'key3':'value3'}, obj.value, "Src doc did not win using Rev Id")
+        obj = src_nolww.get('lww-0')
+        self.check_kv_exists_in_doc({'key3':'value3'}, obj.value, "Src doc did not win using Rev Id")
         self.log.info("Src doc won using Rev Id as expected")
 
         self.verify_results(skip_verify_data=['lww', 'nolww'])
@@ -1209,16 +1217,16 @@ class Lww(XDCRNewBaseTest):
         self.c2_cluster.resume_all_replications_by_id()
         self._wait_for_replication_to_catchup()
 
-        obj = src_lww.get(key='lww-0')
-        self.assertDictContainsSubset({'key1':'value1'}, obj.value, "Target doc did not win using LWW")
-        obj = dest_lww.get(key='lww-0')
-        self.assertDictContainsSubset({'key1':'value1'}, obj.value, "Target doc did not win using LWW")
+        obj = src_lww.get('lww-0')
+        self.check_kv_exists_in_doc({'key1':'value1'}, obj.value, "Target doc did not win using LWW")
+        obj = dest_lww.get('lww-0')
+        self.check_kv_exists_in_doc({'key1':'value1'}, obj.value, "Target doc did not win using LWW")
         self.log.info("Target doc won using LWW as expected")
 
-        obj = dest_nolww.get(key='lww-0')
-        self.assertDictContainsSubset({'key1':'value1'}, obj.value, "Target doc did not win using Rev Id")
-        obj = src_nolww.get(key='lww-0')
-        self.assertDictContainsSubset({'key1':'value1'}, obj.value, "Target doc did not win using Rev Id")
+        obj = dest_nolww.get('lww-0')
+        self.check_kv_exists_in_doc({'key1':'value1'}, obj.value, "Target doc did not win using Rev Id")
+        obj = src_nolww.get('lww-0')
+        self.check_kv_exists_in_doc({'key1':'value1'}, obj.value, "Target doc did not win using Rev Id")
         self.log.info("Target doc won using Rev Id as expected")
 
         self.verify_results(skip_verify_data=['lww', 'nolww'])
@@ -1279,16 +1287,16 @@ class Lww(XDCRNewBaseTest):
         self.c2_cluster.resume_all_replications_by_id()
         self._wait_for_replication_to_catchup()
 
-        obj = src_lww.get(key='lww-0')
-        self.assertDictContainsSubset({'key1':'value1'}, obj.value, "Src doc did not win using LWW")
-        obj = dest_lww.get(key='lww-0')
-        self.assertDictContainsSubset({'key1':'value1'}, obj.value, "Src doc did not win using LWW")
+        obj = src_lww.get('lww-0')
+        self.check_kv_exists_in_doc({'key1':'value1'}, obj.value, "Src doc did not win using LWW")
+        obj = dest_lww.get('lww-0')
+        self.check_kv_exists_in_doc({'key1':'value1'}, obj.value, "Src doc did not win using LWW")
         self.log.info("Src doc won using LWW as expected")
 
-        obj = dest_nolww.get(key='lww-0')
-        self.assertDictContainsSubset({'key1':'value1'}, obj.value, "Src doc did not win using Rev Id")
-        obj = src_nolww.get(key='lww-0')
-        self.assertDictContainsSubset({'key1':'value1'}, obj.value, "Src doc did not win using Rev Id")
+        obj = dest_nolww.get('lww-0')
+        self.check_kv_exists_in_doc({'key1':'value1'}, obj.value, "Src doc did not win using Rev Id")
+        obj = src_nolww.get('lww-0')
+        self.check_kv_exists_in_doc({'key1':'value1'}, obj.value, "Src doc did not win using Rev Id")
         self.log.info("Src doc won using Rev Id as expected")
 
         self.verify_results(skip_verify_data=['lww', 'nolww'])
@@ -1340,14 +1348,14 @@ class Lww(XDCRNewBaseTest):
         self._wait_for_replication_to_catchup()
 
         try:
-            obj = src_lww.get(key='lww-0')
+            obj = src_lww.get('lww-0')
             if obj:
                 self.fail("Doc not deleted in src cluster using LWW")
         except DocumentNotFoundException:
             self.log.info("Doc deleted in src cluster using LWW as expected")
 
         try:
-            obj = dest_lww.get(key='lww-0')
+            obj = dest_lww.get('lww-0')
             if obj:
                 self.fail("Doc not deleted in target cluster using LWW")
         except DocumentNotFoundException:
@@ -1402,10 +1410,10 @@ class Lww(XDCRNewBaseTest):
         self.c2_cluster.resume_all_replications_by_id()
         self._wait_for_replication_to_catchup()
 
-        obj = src_lww.get(key='lww-0')
-        self.assertDictContainsSubset({'key1':'value1'}, obj.value, "Target doc did not win using LWW")
-        obj = dest_lww.get(key='lww-0')
-        self.assertDictContainsSubset({'key1':'value1'}, obj.value, "Target doc did not win using LWW")
+        obj = src_lww.get('lww-0')
+        self.check_kv_exists_in_doc({'key1':'value1'}, obj.value, "Target doc did not win using LWW")
+        obj = dest_lww.get('lww-0')
+        self.check_kv_exists_in_doc({'key1':'value1'}, obj.value, "Target doc did not win using LWW")
         self.log.info("Target doc won using LWW as expected")
 
         self.verify_results(skip_verify_data=['lww'])
@@ -2257,12 +2265,12 @@ class Lww(XDCRNewBaseTest):
 
         self._wait_for_replication_to_catchup()
 
-        obj = src_def.get(key='lww-0')
-        self.assertDictContainsSubset({'key2':'value2'}, obj.value, "C3 doc did not win using LWW")
-        obj = dest_def.get(key='lww-0')
-        self.assertDictContainsSubset({'key2':'value2'}, obj.value, "C3 doc did not win using LWW")
-        obj = c3_def.get(key='lww-0')
-        self.assertDictContainsSubset({'key2':'value2'}, obj.value, "C3 doc did not win using LWW")
+        obj = src_def.get('lww-0')
+        self.check_kv_exists_in_doc({'key2':'value2'}, obj.value, "C3 doc did not win using LWW")
+        obj = dest_def.get('lww-0')
+        self.check_kv_exists_in_doc({'key2':'value2'}, obj.value, "C3 doc did not win using LWW")
+        obj = c3_def.get('lww-0')
+        self.check_kv_exists_in_doc({'key2':'value2'}, obj.value, "C3 doc did not win using LWW")
         self.log.info("C3 doc won using LWW as expected")
 
         conn1 = RemoteMachineShellConnection(self.c1_cluster.get_master_node())
@@ -2366,8 +2374,8 @@ class Lww(XDCRNewBaseTest):
 
         self._wait_for_replication_to_catchup()
 
-        obj = dest_def.get(key='lww-0')
-        self.assertDictContainsSubset({'key1':'value1'}, obj.value, "C3 doc did not win using LWW")
+        obj = dest_def.get('lww-0')
+        self.check_kv_exists_in_doc({'key1':'value1'}, obj.value, "C3 doc did not win using LWW")
 
         conn1 = RemoteMachineShellConnection(self.c1_cluster.get_master_node())
         conn1.stop_couchbase()
@@ -2473,8 +2481,8 @@ class Lww(XDCRNewBaseTest):
         dest_lww = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'default', self.c2_cluster)
         self.sleep(10)
 
-        obj = dest_lww.get(key='lww-0')
-        self.assertDictContainsSubset({'key1':'value1'}, obj.value, "Target doc did not win using LWW")
+        obj = dest_lww.get('lww-0')
+        self.check_kv_exists_in_doc({'key1':'value1'}, obj.value, "Target doc did not win using LWW")
         self.log.info("Target doc won using LWW as expected")
 
         self.log.info("max_cas_c2_before: " + str(max_cas_c2_before))
@@ -2525,8 +2533,8 @@ class Lww(XDCRNewBaseTest):
         dest_lww = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'default', self.c2_cluster)
         self.sleep(10)
 
-        obj = dest_lww.get(key='lww-0')
-        self.assertDictContainsSubset({'key2':'value2'}, obj.value, "Src doc did not win using LWW")
+        obj = dest_lww.get('lww-0')
+        self.check_kv_exists_in_doc({'key2':'value2'}, obj.value, "Src doc did not win using LWW")
         self.log.info("Src doc won using LWW as expected")
 
         self.log.info("max_cas_c2_before: " + str(max_cas_c2_before))
@@ -2579,8 +2587,8 @@ class Lww(XDCRNewBaseTest):
         dest_lww = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'default', self.c2_cluster)
         self.sleep(10)
 
-        obj = dest_lww.get(key='lww-0')
-        self.assertDictContainsSubset({'key1':'value1'}, obj.value, "Target doc did not win using LWW")
+        obj = dest_lww.get('lww-0')
+        self.check_kv_exists_in_doc({'key1':'value1'}, obj.value, "Target doc did not win using LWW")
         self.log.info("Target doc won using LWW as expected")
 
         self.log.info("max_cas_c2_before: " + str(max_cas_c2_before))
@@ -2637,8 +2645,8 @@ class Lww(XDCRNewBaseTest):
         dest_lww = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'default', self.c2_cluster)
         self.sleep(10)
 
-        obj = dest_lww.get(key='lww-0')
-        self.assertDictContainsSubset({'key2':'value2'}, obj.value, "Src doc did not win using LWW")
+        obj = dest_lww.get('lww-0')
+        self.check_kv_exists_in_doc({'key2':'value2'}, obj.value, "Src doc did not win using LWW")
         self.log.info("Src doc won using LWW as expected")
 
         self.log.info("max_cas_c2_before: " + str(max_cas_c2_before))
@@ -2698,8 +2706,8 @@ class Lww(XDCRNewBaseTest):
         dest_lww = self._get_python_sdk_client(self.c2_cluster.get_master_node().ip, 'default', self.c2_cluster)
         self.sleep(10)
 
-        obj = dest_lww.get(key='lww-0')
-        self.assertDictContainsSubset({'key2':'value2'}, obj.value, "Target doc did not win using LWW")
+        obj = dest_lww.get('lww-0')
+        self.check_kv_exists_in_doc({'key2':'value2'}, obj.value, "Target doc did not win using LWW")
         self.log.info("Target doc won using LWW as expected")
 
         hlc_c2_2 = self._get_max_cas(node=self.c2_cluster.get_master_node(), bucket='default', vbucket_id=vbucket_id)
