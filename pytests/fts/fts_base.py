@@ -39,6 +39,7 @@ from security.ntonencryptionBase import ntonencryptionBase
 from lib.ep_mc_bin_client import MemcachedClient
 from lib.mc_bin_client import MemcachedClient as MC_MemcachedClient
 from security.SecretsMasterBase import SecretsMasterBase
+from lib.collection.collections_cli_client import CollectionsCLI
 
 
 class RenameNodeException(FTSException):
@@ -2127,7 +2128,7 @@ class CouchbaseCluster:
     def create_fts_index(self, name, source_type='couchbase',
                          source_name=None, index_type='fulltext-index',
                          index_params=None, plan_params=None,
-                         source_params=None, source_uuid=None):
+                         source_params=None, source_uuid=None, collection_index=False, type=None, analyzer="standard"):
         """Create fts index/alias
         @param node: Node on which index is created
         @param name: name of the index/alias
@@ -2145,6 +2146,9 @@ class CouchbaseCluster:
                                 INDEX_DEFAULTS.SOURCE_CB_PARAMS or
                                 INDEX_DEFAULTS.SOURCE_FILE_PARAMS
         @param source_uuid: UUID of the source, may not be used
+        @param collection_index: is collection index
+        @param type: type mapping for collection index
+        @analyzer: index analyzer
         """
         index = FTSIndex(
             self,
@@ -2157,6 +2161,15 @@ class CouchbaseCluster:
             source_params,
             source_uuid
         )
+        if collection_index:
+            index.add_type_mapping_to_index_definition(type=type, analyzer=analyzer)
+
+            doc_config = {}
+            doc_config['mode'] = 'scope.collection.type_field'
+            doc_config['type_field'] = "type"
+            index.index_definition['params']['doc_config'] = {}
+            index.index_definition['params']['doc_config'] = doc_config
+
         index.create()
         return index
 
@@ -2367,7 +2380,8 @@ class CouchbaseCluster:
 
     def async_load_all_buckets(self, num_items, exp=0,
                                kv_store=1, flag=0, only_store_hash=True,
-                               batch_size=1000, pause_secs=1, timeout_secs=30):
+                               batch_size=1000, pause_secs=1, timeout_secs=30, container_type='bucket',
+                               scope=None, collection=None):
         """Load data asynchronously on all buckets of the cluster.
         Function don't wait for load data to finish, return immidiately.
         @param num_items: number of items to load
@@ -2382,10 +2396,18 @@ class CouchbaseCluster:
         @return: task objects list
         """
         prefix = "%s-" % self.__name
-        self._kv_gen[OPS.CREATE] = JsonDocGenerator(prefix,
-                                                    encoding="utf-8",
-                                                    start=0,
-                                                    end=num_items)
+        if container_type == 'collection':
+            self._kv_gen[OPS.CREATE] = SDKDataLoader(num_ops=num_items, percent_create=100,
+                                                     percent_update=0, percent_delete=0,
+                                                     load_pattern="uniform", start_seq_num=1, key_prefix=prefix,
+                                                     key_suffix="",
+                                                     scope=scope, collection=collection, json_template="emp",
+                                                     start=0, end=0, op_type="create")
+        else:
+            self._kv_gen[OPS.CREATE] = JsonDocGenerator(prefix,
+                                                        encoding="utf-8",
+                                                        start=0,
+                                                        end=num_items)
         tasks = []
         for bucket in self.__buckets:
             gen = copy.deepcopy(self._kv_gen[OPS.CREATE])
@@ -2399,7 +2421,8 @@ class CouchbaseCluster:
 
     def load_all_buckets(self, num_items, value_size=512, exp=0,
                          kv_store=1, flag=0, only_store_hash=True,
-                         batch_size=1000, pause_secs=1, timeout_secs=30):
+                         batch_size=1000, pause_secs=1, timeout_secs=30,
+                         container_type='bucket', scope=None, collection=None):
         """Load data synchronously on all buckets. Function wait for
         load data to finish.
         @param num_items: number of items to load
@@ -2414,7 +2437,7 @@ class CouchbaseCluster:
         """
         tasks = self.async_load_all_buckets(
             num_items, exp, kv_store, flag, only_store_hash,
-            batch_size, pause_secs, timeout_secs)
+            batch_size, pause_secs, timeout_secs, container_type=container_type, scope=scope, collection=collection)
         for task in tasks:
             task.result()
 
@@ -3122,7 +3145,21 @@ class FTSBaseTest(unittest.TestCase):
         self.field_alias = self._input.param("field_alias", None)
         self.enable_secrets = self._input.param("enable_secrets", False)
         self.secret_password = self._input.param("secret_password", 'p@ssw0rd')
+        self.container_type = TestInputSingleton.input.param("container_type", "bucket")
+        self.scope = TestInputSingleton.input.param("scope", "scope1")
+        self.collection = TestInputSingleton.input.param("collection", "collection1")
+        use_hostanames = self._input.param("use_hostnames", False)
+        sdk_compression = self._input.param("sdk_compression", True)
 
+        self.master = self._input.servers[0]
+        first_node = copy.deepcopy(self.master)
+        self.cli_client = CollectionsCLI(self.master)
+
+        self._cb_cluster = CouchbaseCluster("C1",
+                                            [first_node],
+                                            self.log,
+                                            use_hostanames,
+                                            sdk_compression=sdk_compression)
         self.log.info(
             "==== FTSbasetests setup is started for test #{0} {1} ===="
                 .format(self.__case_number, self._testMethodName))
@@ -3304,6 +3341,9 @@ class FTSBaseTest(unittest.TestCase):
         self.__set_free_servers()
         if not no_buckets:
             self.__create_buckets()
+            if self.container_type == "collection":
+                for bucket in self._cb_cluster.get_buckets():
+                    self._create_collection(bucket=bucket.name, scope=self.scope, collection=self.collection)
         self._master = self._cb_cluster.get_master_node()
 
         # simply append to this list, any error from log we want to fail test on
@@ -3318,6 +3358,13 @@ class FTSBaseTest(unittest.TestCase):
             
         if self.ntonencrypt == 'enable':
             self.setup_nton_encryption()
+
+    def _create_collection(self, bucket=None, scope=None, collection=None):
+        if scope != '_default':
+            self.cli_client.create_scope(bucket=bucket, scope=scope)
+            self.sleep(10)
+        if collection != '_default':
+            self.cli_client.create_collection(bucket=bucket, scope=scope, collection=collection)
 
     def _enable_diag_eval_on_non_local_hosts(self):
         """
@@ -3583,7 +3630,8 @@ class FTSBaseTest(unittest.TestCase):
         if not num_items:
             num_items = self._num_items
         if not self._dgm_run:
-            self._cb_cluster.load_all_buckets(num_items, self._value_size)
+            self._cb_cluster.load_all_buckets(num_items, self._value_size, container_type=self.container_type,
+                                              scope=self.scope, collection=self.collection)
 
         else:
             self._cb_cluster.load_all_buckets_till_dgm(
@@ -3596,11 +3644,14 @@ class FTSBaseTest(unittest.TestCase):
         """
         if not num_keys:
             num_keys = self._num_items
-
-        gen = JsonDocGenerator("C1",
-                               encoding="utf-16",
-                               start=0,
-                               end=num_keys)
+        if self.container_type == 'bucket':
+            gen = JsonDocGenerator("C1",
+                                   encoding="utf-16",
+                                   start=0,
+                                   end=num_keys)
+        else:
+            self.populate_create_gen()
+            gen = self.create_gen
         self._cb_cluster.load_all_buckets_from_generator(gen)
 
     def load_wiki(self, num_keys=None, lang="EN", encoding="utf-8"):
@@ -3608,14 +3659,18 @@ class FTSBaseTest(unittest.TestCase):
         Loads the Wikipedia dump.
         Languages supported : EN(English)/ES(Spanish)/DE(German)/FR(French)
         """
+        self.dataset = "wiki"
         if not num_keys:
             num_keys = self._num_items
-
-        gen = WikiJSONGenerator("wiki",
-                                lang=lang,
-                                encoding=encoding,
-                                start=0,
-                                end=num_keys)
+        if self.container_type == "bucket":
+            gen = WikiJSONGenerator("wiki",
+                                    lang=lang,
+                                    encoding=encoding,
+                                    start=0,
+                                    end=num_keys)
+        else:
+            self.populate_create_gen()
+            gen = self.create_gen
         self._cb_cluster.load_all_buckets_from_generator(gen)
 
     def load_earthquakes(self, num_keys=None):
@@ -4092,7 +4147,7 @@ class FTSBaseTest(unittest.TestCase):
             return index.fts_queries
 
     def create_index(self, bucket, index_name, index_params=None,
-                     plan_params=None):
+                     plan_params=None, collection_index=False, type=None, analyzer="standard"):
         """
         Creates a default index given bucket, index_name and plan_params
         """
@@ -4105,7 +4160,10 @@ class FTSBaseTest(unittest.TestCase):
             name=index_name,
             source_name=bucket.name,
             index_params=index_params,
-            plan_params=plan_params)
+            plan_params=plan_params,
+            collection_index=collection_index,
+            type=type,
+            analyzer=analyzer)
         self.is_index_partitioned_balanced(index)
         return index
 
@@ -4114,12 +4172,14 @@ class FTSBaseTest(unittest.TestCase):
         Creates 'n' default indexes for all buckets.
         'n' is defined by 'index_per_bucket' test param.
         """
+        collection_index = self.container_type == 'collection'
+        type = None if self.container_type == 'bucket' else f"{self.scope}.{self.collection}"
         for bucket in self._cb_cluster.get_buckets():
             for count in range(self.index_per_bucket):
                 self.create_index(
                     bucket,
-                    "%s_index_%s" % (bucket.name, count + 1),
-                    plan_params=plan_params)
+                    f"{bucket.name}_index_{count + 1}",
+                    plan_params=plan_params, type=type, collection_index=collection_index)
 
     def create_alias(self, target_indexes, name=None, alias_def=None):
         """
@@ -4300,21 +4360,28 @@ class FTSBaseTest(unittest.TestCase):
         """
            Returns a generator depending on the dataset
         """
-        if dataset == "emp":
-            return JsonDocGenerator(name="emp",
-                                    encoding=encoding,
-                                    start=start,
-                                    end=start + num_items)
-        elif dataset == "wiki":
-            return WikiJSONGenerator(name="wiki",
-                                     lang=lang,
-                                     encoding=encoding,
-                                     start=start,
-                                     end=start + num_items)
-        elif dataset == "earthquakes":
-            return GeoSpatialDataLoader(name="earthquake",
+        if self.container_type == 'bucket':
+            if dataset == "emp":
+                return JsonDocGenerator(name="emp",
+                                        encoding=encoding,
                                         start=start,
                                         end=start + num_items)
+            elif dataset == "wiki":
+                return WikiJSONGenerator(name="wiki",
+                                         lang=lang,
+                                         encoding=encoding,
+                                         start=start,
+                                         end=start + num_items)
+            elif dataset == "earthquakes":
+                return GeoSpatialDataLoader(name="earthquake",
+                                            start=start,
+                                            end=start + num_items)
+        else:
+            return SDKDataLoader(num_ops = self._num_items, percent_create = 100,
+                                           percent_update=0, percent_delete=0, scope=self.scope,
+                                           collection=self.collection,
+                                           json_template=dataset,
+                                           start=start, end=start+num_items)
 
     def populate_create_gen(self):
         if self.dataset == "all":
@@ -4352,38 +4419,57 @@ class FTSBaseTest(unittest.TestCase):
 
     def populate_delete_gen(self):
         if self.dataset == "emp":
-            self.delete_gen = JsonDocGenerator(
-                self.create_gen.name,
-                op_type=OPS.DELETE,
-                encoding="utf-8",
-                start=int((self.create_gen.end)
-                          * (float)(100 - self._perc_del) / 100),
-                end=self.create_gen.end)
+            if self.container_type == 'collection':
+                self.delete_gen = copy.deepcopy(self.create_gen)
+                self.delete_gen.op_type = OPS.DELETE
+                self.delete_gen.encoding = "utf-8"
+                self.delete_gen.start = int((self.create_gen.end)
+                                            * (float)(100 - self._perc_del) / 100)
+                self.delete_gen.end = self.create_gen.end
+                self.delete_gen.delete()
+            else:
+                self.delete_gen = JsonDocGenerator(
+                    self.create_gen.name,
+                    op_type=OPS.DELETE,
+                    encoding="utf-8",
+                    start=int((self.create_gen.end)
+                              * (float)(100 - self._perc_del) / 100),
+                    end=self.create_gen.end)
         elif self.dataset == "wiki":
-            self.delete_gen = WikiJSONGenerator(name="wiki",
-                                                encoding="utf-8",
-                                                start=int((self.create_gen.end)
-                                                          * (float)(100 - self._perc_del) / 100),
-                                                end=self.create_gen.end,
-                                                op_type=OPS.DELETE)
-
+            if self.container_type == 'collection':
+                self.delete_gen = copy.deepcopy(self.create_gen)
+                self.delete_gen.op_type = OPS.DELETE
+                self.delete_gen.encoding = "utf-8"
+                self.delete_gen.start = int((self.create_gen.end)
+                                            * (float)(100 - self._perc_del) / 100)
+                self.delete_gen.end = self.create_gen.end
+            else:
+                self.delete_gen = WikiJSONGenerator(name="wiki",
+                                                    encoding="utf-8",
+                                                    start=int((self.create_gen.end)
+                                                              * (float)(100 - self._perc_del) / 100),
+                                                    end=self.create_gen.end,
+                                                    op_type=OPS.DELETE)
         elif self.dataset == "all":
-            self.delete_gen = []
-            self.delete_gen.append(JsonDocGenerator(
-                "emp",
-                op_type=OPS.DELETE,
-                encoding="utf-8",
-                start=int((self.create_gen[0].end)
-                          * (float)(100 - self._perc_del) / 100),
-                end=self.create_gen[0].end))
-            self.delete_gen.append(WikiJSONGenerator(name="wiki",
-                                                     encoding="utf-8",
-                                                     start=int((self.create_gen[1].end)
-                                                               * (float)(100 - self._perc_del) / 100),
-                                                     end=self.create_gen[1].end,
-                                                     op_type=OPS.DELETE))
+            if self.container_type == 'collection':
+                self.delete_gen = copy.deepcopy(self.create_gen)
+            else:
+                self.delete_gen = []
+                self.delete_gen.append(JsonDocGenerator(
+                    "emp",
+                    op_type=OPS.DELETE,
+                    encoding="utf-8",
+                    start=int((self.create_gen[0].end)
+                              * (float)(100 - self._perc_del) / 100),
+                    end=self.create_gen[0].end))
+                self.delete_gen.append(WikiJSONGenerator(name="wiki",
+                                                         encoding="utf-8",
+                                                         start=int((self.create_gen[1].end)
+                                                                   * (float)(100 - self._perc_del) / 100),
+                                                         end=self.create_gen[1].end,
+                                                         op_type=OPS.DELETE))
 
-    def load_data(self):
+    def load_data(self, generator=None):
         """
          Blocking call to load data to Couchbase and ES
         """
@@ -4392,12 +4478,12 @@ class FTSBaseTest(unittest.TestCase):
                 self._active_resident_ratio,
                 self.compare_es)
             return
-        load_tasks = self.async_load_data()
+        load_tasks = self.async_load_data(generator=generator)
         for task in load_tasks:
             task.result()
         self.log.info("Loading phase complete!")
 
-    def async_load_data(self):
+    def async_load_data(self, generator=None):
         """
          For use to run with parallel tasks like rebalance, failover etc
         """
@@ -4414,8 +4500,7 @@ class FTSBaseTest(unittest.TestCase):
                 load_tasks.append(self.es.async_bulk_load_ES(index_name='es_index',
                                                              gen=gen,
                                                              op_type='create'))
-        load_tasks += self._cb_cluster.async_load_all_buckets_from_generator(
-            self.create_gen)
+        load_tasks += self._cb_cluster.async_load_all_buckets_from_generator(self.create_gen)
         return load_tasks
 
     def run_query_and_compare(self, index=None, es_index_name=None, n1ql_executor=None):

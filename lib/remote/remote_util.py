@@ -4508,8 +4508,7 @@ class RemoteMachineShellConnection(KeepRefs):
             raise("Failed to get CA certificate from cluster.")
         return cert_file_location
 
-    def execute_cbworkloadgen(self, username, password, num_items, ratio, bucket,
-                                                     item_size, command_options):
+    def _get_cbworkloadgen_command(self):
         cbworkloadgen_command = "%scbworkloadgen" % (LINUX_COUCHBASE_BIN_PATH)
         if self.nonroot:
             cbworkloadgen_command = "/home/%s%scbworkloadgen" % (self.username,
@@ -4518,10 +4517,28 @@ class RemoteMachineShellConnection(KeepRefs):
 
         if self.info.distribution_type.lower() == 'mac':
             cbworkloadgen_command = "%scbworkloadgen" % (MAC_COUCHBASE_BIN_PATH)
-
         if self.info.type.lower() == 'windows':
             cbworkloadgen_command = "%scbworkloadgen.exe" % (WIN_COUCHBASE_BIN_PATH)
 
+        return cbworkloadgen_command
+
+    def execute_cbworkloadgen_collection(self, username, password, num_items, ratio, bucket,
+                                                     item_size, command_options, collection_id):
+        cbworkloadgen_command = self._get_cbworkloadgen_command()
+
+        command = "%s -n %s:%s -r %s -i %s -b %s -c %s -s %s %s -u %s -p %s" % (cbworkloadgen_command,
+                                                                          self.ip, self.port,
+                                                                          ratio, num_items, bucket,
+                                                                          collection_id,
+                                                                          item_size, command_options,
+                                                                          username, password)
+        output, error = self.execute_command(command)
+        self.log_command_output(output, error)
+        return output, error
+
+    def execute_cbworkloadgen(self, username, password, num_items, ratio, bucket,
+                                                     item_size, command_options):
+        cbworkloadgen_command = self._get_cbworkloadgen_command()
         command = "%s -n %s:%s -r %s -i %s -b %s -s %s %s -u %s -p %s" % (cbworkloadgen_command,
                                                                           self.ip, self.port,
                                                                           ratio, num_items, bucket,

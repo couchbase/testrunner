@@ -695,6 +695,18 @@ class RestConnection(object):
         status, content, header = self._http_request(api, 'GET', headers=headers)
         return status, content
 
+    def get_collection_uid(self, bucket, scope, collection):
+        status, content = self.get_collection(bucket)
+        json_content = json.loads(content)
+        if status:
+            for sc in json_content['scopes']:
+                if sc['name'] == scope:
+                    for coll in sc['collections']:
+                        if coll['name'] == collection:
+                            return coll['uid']
+
+        return -1
+
     def run_view(self, bucket, view, name):
         api = self.capiBaseUrl + '/%s/_design/%s/_view/%s' % (bucket, view, name)
         status, content, header = self._http_request(api, headers=self._create_capi_headers())

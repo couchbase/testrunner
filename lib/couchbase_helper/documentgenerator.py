@@ -652,14 +652,19 @@ class GeoSpatialDataLoader(KVGenerator):
 
 class SDKDataLoader(object):
     # type: (int, int, int, int, str, int, str, str, list, list, str, bool)
-    def __init__(self, num_ops, percent_create, percent_update=0, percent_delete=0,
+    def __init__(self, num_ops=0, percent_create=0, percent_update=0, percent_delete=0,
                  load_pattern="uniform", start_seq_num=1, key_prefix="doc_", key_suffix="_",
                  scope="_default", collection="default", json_template="Person", doc_expiry=0,
-                 doc_size=500, print_sdk_logs="info", username="Administrator", password="password", timeout=300, all_collections=False):
+                 doc_size=500, print_sdk_logs="info", username="Administrator", password="password", timeout=300,
+                 start=0, end=0, op_type="create", all_collections=False):
         self.num_ops = num_ops
         self.percent_create = percent_create
         self.percent_update = percent_update
         self.percent_delete = percent_delete
+        self.json_template = json_template
+        self.key_prefix = key_prefix
+        self.start = start
+        self.end = end if end > start else num_ops - 1
         self.load_pattern = load_pattern
         self.start_seq_num = start_seq_num
         self.key_prefix = key_prefix
@@ -673,7 +678,26 @@ class SDKDataLoader(object):
         self.username = username
         self.password = password
         self.timeout = timeout
+        self.fields_to_update = None
+        self.op_type = op_type
         self.all_collections = all_collections
+
+    def update(self, fields_to_update=None):
+        self.start_seq_num = self.start + 1
+        self.num_ops = self.end - self.start
+        self.percent_create = 0
+        self.percent_update = 100
+        self.percent_delete = 0
+        self.fields_to_update = fields_to_update
+        self.op_type = "update"
+
+    def delete(self):
+        self.start_seq_num = self.start + 1
+        self.num_ops = self.end - self.start
+        self.percent_create = 0
+        self.percent_update = 0
+        self.percent_delete = 100
+        self.op_type = "delete"
 
     def isGenerator(self):
         return False

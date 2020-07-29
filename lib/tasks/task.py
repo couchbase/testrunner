@@ -5690,29 +5690,23 @@ class SDKLoadDocumentsTask(Task):
 
     def execute(self, task_manager):
         import subprocess
-        command = "java -jar java_sdk_client/collections/target/javaclient/javaclient.jar " \
-                  "-i {0} -u {1} -p {2} -b {3} -s {4} -c {5} " \
-                  "-n {6} -pc {7} -pu {8} -pd {9} -l {10} " \
-                  "-dsn {11} -dpx {12} -dt {13} -de {14} -ds {15} -ac {16} {17}".format(self.server.ip,
-                                                                                              self.params.username,
-                                                                                              self.params.password,
-                                                                                              self.bucket,
-                                                                                              self.params.scope,
-                                                                                              self.params.collection,
-                                                                                              self.params.num_ops,
-                                                                                              self.params.percent_create,
-                                                                                              self.params.percent_update,
-                                                                                              self.params.percent_delete,
-                                                                                              self.params.load_pattern,
-                                                                                              self.params.start_seq_num,
-                                                                                              self.params.key_prefix,
-                                                                                              self.params.json_template,
-                                                                                              self.params.doc_expiry,
-                                                                                              self.params.doc_size,
-                                                                                              self.params.all_collections,
-                                                                                              self.redirect
-                                                                                        )
+        command = f"java -jar java_sdk_client/collections/target/javaclient/javaclient.jar " \
+                  f"-i {self.server.ip} -u {self.params.username} -p {self.params.password} -b {self.bucket} " \
+                  f"-s {self.params.scope} -c {self.params.collection} " \
+                  f"-n {self.params.num_ops} -pc {self.params.percent_create} -pu {self.params.percent_update} " \
+                  f"-pd {self.params.percent_delete} -l {self.params.load_pattern} " \
+                  f"-dsn {self.params.start_seq_num} -dpx {self.params.key_prefix} -dt {self.params.json_template} " \
+                  f"-de {self.params.doc_expiry} -ds {self.params.doc_size} -ac {self.params.all_collections} " \
+                  f"-st {self.params.start} -en {self.params.end}"
+
+        if self.params.op_type == "update":
+            arr_fields_to_update = eval(self.params.fields_to_update) if self.params.fields_to_update else ""
+            if len(arr_fields_to_update) > 0:
+                command = command + " -fu "
+                command = command + ",".join(arr_fields_to_update)
+        command = command + f" {self.redirect} "
         self.log.info(command)
+
         try:
             proc = subprocess.Popen(command, stdout=subprocess.PIPE, shell=True)
             out = proc.communicate(timeout=self.params.timeout)

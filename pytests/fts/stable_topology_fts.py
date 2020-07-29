@@ -13,6 +13,7 @@ from TestInput import TestInputSingleton
 from .fts_base import FTSBaseTest
 from lib.membase.api.exception import FTSException, ServerUnavailableException
 from lib.membase.api.rest_client import RestConnection
+from couchbase_helper.documentgenerator import SDKDataLoader
 
 
 class StableTopFTS(FTSBaseTest):
@@ -32,7 +33,7 @@ class StableTopFTS(FTSBaseTest):
 
     def create_simple_default_index(self):
         plan_params = self.construct_plan_params()
-        self.load_data()
+        self.load_data(generator=None)
         self.wait_till_items_in_bucket_equal(self._num_items//2)
         self.create_fts_indexes_all_buckets(plan_params=plan_params)
         if self._update or self._delete:
@@ -260,7 +261,9 @@ class StableTopFTS(FTSBaseTest):
         self.load_utf16_data()
         try:
             bucket = self._cb_cluster.get_bucket_by_name('default')
-            index = self.create_index(bucket, "default_index")
+            collection_index = self.container_type == 'collection'
+            type = None if self.container_type == 'bucket' else f"{self.scope}.{self.collection}"
+            index = self.create_index(bucket, "default_index", collection_index=collection_index, type=type)
             # an exception will most likely be thrown from waiting
             self.wait_for_indexing_complete()
             self.validate_index_count(
@@ -273,7 +276,9 @@ class StableTopFTS(FTSBaseTest):
     def create_simple_alias(self):
         self.load_data()
         bucket = self._cb_cluster.get_bucket_by_name('default')
-        index = self.create_index(bucket, "default_index")
+        collection_index = self.container_type == 'collection'
+        type = None if self.container_type == 'bucket' else f"{self.scope}.{self.collection}"
+        index = self.create_index(bucket, "default_index", collection_index=collection_index, type=type)
         self.wait_for_indexing_complete()
         self.validate_index_count(equal_bucket_doc_count=True)
         hits, _, _, _ = index.execute_query(self.sample_query,
@@ -354,7 +359,9 @@ class StableTopFTS(FTSBaseTest):
     def index_wiki(self):
         self.load_wiki(lang=self.lang)
         bucket = self._cb_cluster.get_bucket_by_name('default')
-        index = self.create_index(bucket, "wiki_index")
+        collection_index = self.container_type == 'collection'
+        type = None if self.container_type == 'bucket' else f"{self.scope}.{self.collection}"
+        index = self.create_index(bucket, "wiki_index", collection_index=collection_index, type=type)
         self.wait_for_indexing_complete()
         self.validate_index_count(equal_bucket_doc_count=True,
                                   zero_rows_ok=False)
@@ -403,7 +410,9 @@ class StableTopFTS(FTSBaseTest):
         index.delete()
         self.log.info("Recreating deleted index ...")
         bucket = self._cb_cluster.get_bucket_by_name('default')
-        self.create_index(bucket, "default_index")
+        collection_index = self.container_type == 'collection'
+        type = None if self.container_type == 'bucket' else f"{self.scope}.{self.collection}"
+        self.create_index(bucket, "default_index", collection_index=collection_index, type=type)
         self.wait_for_indexing_complete()
         hits2, _, _, _ = alias.execute_query(self.sample_query)
         self.log.info("Hits: {0}".format(hits2))
@@ -414,7 +423,9 @@ class StableTopFTS(FTSBaseTest):
     def create_alias_on_deleted_index(self):
         self.load_employee_dataset()
         bucket = self._cb_cluster.get_bucket_by_name('default')
-        index = self.create_index(bucket, "default_index")
+        collection_index = self.container_type == 'collection'
+        type = None if self.container_type == 'bucket' else f"{self.scope}.{self.collection}"
+        index = self.create_index(bucket, "default_index", collection_index=collection_index, type=type)
         self.wait_for_indexing_complete()
         from .fts_base import INDEX_DEFAULTS
         alias_def = INDEX_DEFAULTS.ALIAS_DEFINITION
@@ -1930,9 +1941,13 @@ class StableTopFTS(FTSBaseTest):
         :return: Nothing
         """
         self.load_data()
+        collection_index = self.container_type == 'collection'
+        type = None if self.container_type == 'bucket' else f"{self.scope}.{self.collection}"
         index = self._cb_cluster.create_fts_index(
             name='default_index',
             source_name='default',
+            collection_index=collection_index,
+            type=type,
             source_params={"includeXAttrs": True})
         self.is_index_partitioned_balanced(index)
         self.wait_for_indexing_complete()
@@ -2011,8 +2026,22 @@ class StableTopFTS(FTSBaseTest):
             authenticator = PasswordAuthenticator('Administrator', 'password')
             cluster.authenticate(authenticator)
             cb = cluster.open_bucket('default')
-            for key, value in list(dic.items()):
-                cb.upsert(key, value)
+            if self.container_type == 'bucket':
+                for key, value in list(dic.items()):
+                    cb.upsert(key, value)
+            else:
+                count = 1
+                for key, value in list(dic.items()):
+                    if not value:
+                        query = "insert into default:default." + self.scope + "." + self.collection + " (key,value) values ('key_" + str(
+                            count) + "', {'" + str(key) + "' : '" + str(value) + "'})"
+                    else:
+                        if isinstance(value, str):
+                            query = "insert into default:default."+self.scope+"."+self.collection+" (key,value) values ('key_"+str(count)+"', {'"+str(key)+"' : '"+str(value)+"'})"
+                        else:
+                            query = "insert into default:default."+self.scope+"."+self.collection+" (key,value) values ('key_"+str(count)+"', {'"+str(key)+"' : "+str(value)+"})"
+                    count += 1
+                    cb.n1ql_query(query).execute()
         except Exception as e:
             self.fail(e)
         self.wait_for_indexing_complete()
