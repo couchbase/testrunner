@@ -9,6 +9,7 @@ from .base_gsi import BaseSecondaryIndexingTests
 
 log = logging.getLogger(__name__)
 
+
 class SecondaryIndexDGMTests(BaseSecondaryIndexingTests):
     def setUp(self):
         super(SecondaryIndexDGMTests, self).setUp()
@@ -360,17 +361,6 @@ class SecondaryIndexDGMTests(BaseSecondaryIndexingTests):
                     if stats["MainStore"]["resident_ratio"] >= 1.0:
                         return False
         return True
-
-    def get_indexer_mem_quota(self):
-        """
-        Sets Indexer memory Quota
-        :param memQuota:
-        :return:
-        int indexer memory quota
-        """
-        rest = RestConnection(self.dgmServer)
-        content = rest.cluster_status()
-        return int(content['indexMemoryQuota'])
 
     def _run_tasks(self, tasks_list):
         for tasks in tasks_list:

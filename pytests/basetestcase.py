@@ -380,7 +380,7 @@ class BaseTestCase(unittest.TestCase):
                             we need to set bucket size to dgm setting """
                         self.bucket_size = self.quota
                     else:
-                        self.bucket_size = self._get_bucket_size(ram_available, \
+                        self.bucket_size = self._get_bucket_size(ram_available,
                                                                  self.total_buckets)
 
             self.bucket_base_params['membase']['non_ephemeral']['size'] = self.bucket_size
