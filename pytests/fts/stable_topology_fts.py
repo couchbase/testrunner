@@ -1680,8 +1680,8 @@ class StableTopFTS(FTSBaseTest):
             "default_index")
         self.wait_for_indexing_complete()
 
-        index.add_child_field_to_default_mapping("name", "text")
-        index.add_child_field_to_default_mapping("manages.reports", "text")
+        index.add_child_field_to_default_mapping("name", "text", analyzer="keyword")
+        index.add_child_field_to_default_mapping("manages.reports", "text", analyzer="keyword")
         index.index_definition['uuid'] = index.get_uuid()
         index.update()
         self.sleep(10)
