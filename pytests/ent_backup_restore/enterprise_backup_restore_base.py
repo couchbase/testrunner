@@ -658,7 +658,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
 
     def backup_restore(self):
         if self.restore_only:
-            self.backups.append("2020-06-22T11_00_58.431467623+01_00")
+            self.backups.append("2020-07-28T16_20_05.720270674-07_00")
         if self.vbuckets_filter_no_data:
             self.log.info("No data in backup repo as expected.")
             return
