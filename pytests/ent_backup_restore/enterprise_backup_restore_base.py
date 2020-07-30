@@ -1584,12 +1584,15 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                 self.fail("Buckets {0} did not persisted.".format(failed_persisted_bucket))
             count = 0
             key_count = 0
+            version = RestConnection(self.backupset.backup_host).get_nodes_version()
             for key in buckets_data[bucket.name]:
                 if restore_file_data[bucket.name]:
                     try:
                         if restore_file_data[bucket.name][key]:
-                            if buckets_data[bucket.name][key] \
-                                          != restore_file_data[bucket.name][key]["Value"]:
+                            bucket_data_value = buckets_data[bucket.name][key]
+                            if version[:3] <= "6.6":
+                                bucket_data_value = str(bucket_data_value.replace(" ", ""))
+                            if bucket_data_value != restore_file_data[bucket.name][key]["Value"]:
                                 if count < 20:
                                     self.log.error("Data does not match at key {0}.\
                                                 bucket: {1} != {2} file"\
