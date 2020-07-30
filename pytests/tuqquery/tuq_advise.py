@@ -520,3 +520,38 @@ class QueryAdviseTests(QueryTests):
         except Exception as e:
             self.log.info("Advise statement failed: {0}".format(e))
             self.fail()
+
+    def test_advice_collections(self):
+        try:
+            results_field = self.run_cbq_query(
+                query="ADVISE SELECT * FROM default:default.test.test1 b WHERE b.name = 'new hotel'", server=self.master)
+            self.assertEqual(results_field['results'][0]['advice']['adviseinfo']['recommended_indexes']['indexes'][0]['index_statement'], 'CREATE INDEX adv_name ON `default`:`default`.`test`.`test1`(`name`)')
+        except Exception as e:
+            self.log.info("Advise statement failed: {0}".format(e))
+            self.fail()
+
+    def test_advice_collections_fake(self):
+        try:
+            results_fake_field = self.run_cbq_query(
+                query="ADVISE SELECT * FROM default:default.fakescope.fakecollection b WHERE b.name = 'new hotel'",
+                server=self.master)
+            fake_field_indexes = self.get_index_statements(results_fake_field)
+            for index in fake_field_indexes:
+                self.assertEqual(index, 'CREATE INDEX adv_name ON `default`:`default`.`fakescope`.`fakecollection`(`name`)')
+        except Exception as e:
+            self.log.error("Advise statement failed: {0}".format(e))
+            self.fail()
+        self.assertTrue(len(fake_field_indexes) > 0, "No advise generated for an index with no created bucket!")
+
+    def test_advice_collections_query_context(self):
+        try:
+            results_fake_field = self.run_cbq_query(
+                query="ADVISE SELECT * FROM fakecollection b WHERE b.name = 'new hotel'",
+                server=self.master, query_context='default:default.fakescope')
+            fake_field_indexes = self.get_index_statements(results_fake_field)
+            for index in fake_field_indexes:
+                self.assertEqual(index, 'CREATE INDEX adv_name ON `default`:`default`.`fakescope`.`fakecollection`(`name`)')
+        except Exception as e:
+            self.log.error("Advise statement failed: {0}".format(e))
+            self.fail()
+        self.assertTrue(len(fake_field_indexes) > 0, "No advise generated for an index with no created bucket!")

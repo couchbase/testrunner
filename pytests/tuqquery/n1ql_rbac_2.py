@@ -9,20 +9,38 @@ import json
 
 
 class RbacN1QL(QueryTests):
+    def suite_setUp(self):
+        super(RbacN1QL, self).setUp()
 
     def setUp(self):
         super(RbacN1QL, self).setUp()
         users = TestInputSingleton.input.param("users", None)
         self.all_buckets = TestInputSingleton.input.param("all_buckets", False)
+        self.expect_failure = TestInputSingleton.input.param("expect_failure", False)
+
         self.inp_users = []
         if users:
             self.inp_users = eval(eval(users))
         self.users = self.get_user_list()
         self.roles = self.get_user_role_list()
-        if self.bucket_name != "default":
+        try:
+            self.run_cbq_query(query="CREATE scope default:default.{0}".format(self.scope))
+            self.sleep(10)
+            self.run_cbq_query(query="CREATE COLLECTION default:default.{0}.{1}".format(self.scope, self.collections[0]))
+            self.run_cbq_query(query="CREATE COLLECTION default:default.{0}.{1}".format(self.scope, self.collections[1]))
+            self.sleep(10)
+            self.run_cbq_query(query="CREATE PRIMARY INDEX ON default:default.{0}.{1}".format(self.scope, self.collections[0]))
+            self.run_cbq_query(query="CREATE PRIMARY INDEX ON default:default.{0}.{1}".format(self.scope, self.collections[1]))
+            self.sleep(20)
+        except Exception as e:
+            import pdb; pdb.set_trace()
+            self.log.info(str(e))
+        if self.bucket_name != "default" and self.bucket_name != "bucket0" and self.bucket_name != "default:default.test.test1":
             self.rest.create_bucket(bucket=self.bucket_name, ramQuotaMB=100)
             self.query_bucket = self.bucket_name
             self.run_cbq_query(query="CREATE PRIMARY INDEX ON `{0}`".format(self.bucket_name))
+        elif self.bucket_name == "default:default.test.test1":
+            self.query_bucket = self.bucket_name
         else:
             self.query_buckets = self.get_query_buckets(check_all_buckets=True)
             self.query_bucket = self.query_buckets[0]
@@ -30,17 +48,20 @@ class RbacN1QL(QueryTests):
     def tearDown(self):
         super(RbacN1QL, self).tearDown()
 
+    def suite_tearDown(self):
+        pass
+
     def test_select(self):
         self.create_users()
         # self.shell.execute_command("killall cbq-engine")
         self.grant_role()
         shell = RemoteMachineShellConnection(self.master)
-        cmd = "{4} -u {0}:{1} http://{2}:8093/query/service -d 'statement=SELECT * from `{3}` " \
+        cmd = "{4} -u {0}:{1} http://{2}:8093/query/service -d 'statement=SELECT * from {3} " \
               "LIMIT 10'".format(self.users[0]['id'], self.users[0]['password'], self.master.ip,
                                  self.query_bucket, self.curl_path)
         output, error = shell.execute_command(cmd)
         shell.log_command_output(output, error)
-        if "views_admin" in self.roles[0]['roles']:
+        if "views_admin" in self.roles[0]['roles'] or self.expect_failure:
             self.assertTrue(any("success" not in line for line in output), "Able to select from {0} as user {1}".
                             format(self.query_bucket, self.users[0]['id']))
             self.log.info("Query failed as expected")
@@ -235,7 +256,7 @@ class RbacN1QL(QueryTests):
         self.grant_role()
         shell = RemoteMachineShellConnection(self.master)
         cmd = "%s -u %s:%s http://%s:8093/query/service -d " \
-              "'statement=CREATE INDEX `age-index` ON `%s`(age) USING GSI'" % \
+              "'statement=CREATE INDEX `age-index` ON %s(age) USING GSI'" % \
               (self.curl_path, self.users[0]['id'], self.users[0]['password'], self.master.ip, self.query_bucket)
         output, error = shell.execute_command(cmd)
         shell.log_command_output(output, error)
@@ -248,7 +269,7 @@ class RbacN1QL(QueryTests):
                             format(self.query_bucket, self.users[0]['id']))
             self.log.info("Create Query executed successfully")
         cmd = "%s -u %s:%s http://%s:8093/query/service -d " \
-              "'statement=DROP INDEX `%s`.`age-index` USING GSI'" % \
+              "'statement=DROP INDEX %s.`age-index` USING GSI'" % \
               (self.curl_path, self.users[0]['id'], self.users[0]['password'], self.master.ip, self.query_bucket)
         output, error = shell.execute_command(cmd)
         shell.log_command_output(output, error)
@@ -317,7 +338,7 @@ class RbacN1QL(QueryTests):
         roles = ["select", "insert", "update", "delete"]
         assigned_role = self.get_user_role_list()[0]['roles']
         for role in roles:
-            self.query = 'grant {0} on `{1}` to {2}'.format(role, 'default', 'test')
+            self.query = 'grant {0} on `{1}` to {2}'.format(role, self.query_bucket, 'test')
             res = self.curl_with_roles(self.query)
             if (assigned_role == 'cluster_admin' or assigned_role == 'ro_admin' or assigned_role == 'bucket_full_access'
                     or assigned_role == 'bucket_admin' or assigned_role == 'views_admin' or assigned_role == 'replication_admin'
@@ -530,7 +551,10 @@ class RbacN1QL(QueryTests):
         for assignment in content:
             if assignment['id'] == user:
                 for item in assignment['roles']:
-                    if item['role'] == role:
+                    if item['role'] == role and not self.load_collections:
+                        found = True
+                        break
+                    elif item['role'] == role.split("(")[0].strip():
                         found = True
                         break
         self.assertTrue(found, "{0} not granted role {1} as expected".format(user, role))
@@ -542,7 +566,10 @@ class RbacN1QL(QueryTests):
         for assignment in content:
             if assignment['id'] == user:
                 for item in assignment['roles']:
-                    if item['role'] == role:
+                    if item['role'] == role and not self.load_collections:
+                        found = True
+                        break
+                    elif item['role'] == role.split("(")[0].strip():
                         found = True
                         break
         self.assertFalse(found, "{0} not revoked of role {1} as expected".format(user, role))
@@ -644,6 +671,27 @@ class RbacN1QL(QueryTests):
         self.assertTrue(any("success" in line for line in output), "Unable to insert into {0} as user {1}".
                         format(self.query_bucket, self.users[0]['id']))
         self.log.info("Query executed successfully")
+
+    def test_upsert_collections(self):
+        self.create_users()
+        #self.shell.execute_command("killall cbq-engine")
+        self.grant_role()
+        shell = RemoteMachineShellConnection(self.master)
+        cmd = "%s -u %s:%s http://%s:8093/query/service -d " \
+              "'statement=UPSERT INTO %s (KEY UUID(), VALUE _name)" \
+              " SELECT _name FROM %s _name WHERE name = \"old hotel\"'" % \
+              (self.curl_path, self.users[0]['id'], self.users[0]['password'], self.master.ip, self.query_bucket,
+               self.query_bucket)
+        output, error = shell.execute_command(cmd)
+        shell.log_command_output(output, error)
+        if self.expect_failure:
+            self.assertFalse(any("success" in line for line in output), "Upserted into {0} as user {1}".
+                        format(self.query_bucket, self.users[0]['id']))
+            self.log.info("Query Failed as expected")
+        else:
+            self.assertTrue(any("success" in line for line in output), "Unable to upsert into {0} as user {1}".
+                        format(self.query_bucket, self.users[0]['id']))
+            self.log.info("Query executed successfully")
 
     def test_upsert_nested_with_select_with_full_access(self):
         self.create_users()

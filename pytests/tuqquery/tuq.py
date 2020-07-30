@@ -124,9 +124,15 @@ class QueryTests(BaseTestCase):
         self.password = self.rest.password
         self.cover = self.input.param("cover", False)
         self.bucket_name = self.input.param("bucket_name", "default")
+        self.rbac_context = self.input.param("rbac_context", "")
         self.curl_path = "curl"
+        self.scope = self.input.param("scope", "test")
+        self.collections = self.input.param("collections", ["test1", "test2"])
         self.n1ql_certs_path = "/opt/couchbase/var/lib/couchbase/n1qlcerts"
         self.query_context = self.input.param("query_context", '')
+        self.load_collections = self.input.param("load_collections", False)
+        self.primary_index_collections = self.input.param("primary_index_collections", False)
+        self.use_advice = self.input.param("use_advice", False)
         if type.lower() == 'windows':
             self.path = testconstants.WIN_COUCHBASE_BIN_PATH
             self.curl_path = "%scurl" % self.path
@@ -209,6 +215,33 @@ class QueryTests(BaseTestCase):
             if self.testrunner_client == 'python_sdk':
                 from couchbase.cluster import Cluster
                 from couchbase.cluster import PasswordAuthenticator
+            if self.load_collections:
+                self.run_cbq_query(query="CREATE scope default:default.{0}".format(self.scope))
+                time.sleep(10)
+                self.run_cbq_query(query="CREATE COLLECTION default:default.{0}.{1}".format(self.scope, self.collections[0]))
+                self.run_cbq_query(query="CREATE COLLECTION default:default.{0}.{1}".format(self.scope, self.collections[1]))
+                time.sleep(10)
+                if not self.use_advice:
+                    self.run_cbq_query(query="CREATE INDEX idx1 on default:default.{0}.{1}(name)".format(self.scope, self.collections[0]))
+                    self.run_cbq_query(query="CREATE INDEX idx2 on default:default.{0}.{1}(name)".format(self.scope, self.collections[1]))
+                    self.run_cbq_query(query="CREATE INDEX idx3 on default:default.test.{1}(nested)".format(self.scope, self.collections[0]))
+                    self.run_cbq_query(query="CREATE INDEX idx4 on default:default.test.{1}(ALL numbers)".format(self.scope, self.collections[0]))
+                    if self.primary_index_collections:
+                        self.run_cbq_query(query="CREATE PRIMARY INDEX ON default:default.{0}.{1}".format(self.scope, self.collections[0]))
+                        self.run_cbq_query(query="CREATE PRIMARY INDEX ON default:default.{0}.{1}".format(self.scope, self.collections[1]))
+
+                    time.sleep(10)
+                self.run_cbq_query(
+                    query=('INSERT INTO default:default.{0}.{1}'.format(self.scope, self.collections[0]) + '(KEY, VALUE) VALUES ("key2", { "type" : "hotel", "name" : "new hotel" })'))
+                self.run_cbq_query(
+                    query=('INSERT INTO default:default.{0}.{1}'.format(self.scope, self.collections[0]) + '(KEY, VALUE) VALUES ("key1", { "type" : "hotel", "name" : "old hotel" })'))
+                self.run_cbq_query(
+                    query=('INSERT INTO default:default.{0}.{1}'.format(self.scope, self.collections[1]) + '(KEY, VALUE) VALUES ("key1", { "type" : "hotel", "name" : "new hotel" })'))
+                self.run_cbq_query(
+                    query=('INSERT INTO default:default.{0}.{1}'.format(self.scope, self.collections[0]) + ' (KEY, VALUE) VALUES ("key3", { "nested" : {"fields": "fake"}, "name" : "old hotel" })'))
+                self.run_cbq_query(
+                    query=('INSERT INTO default:default.{0}.{1}'.format(self.scope, self.collections[0]) + ' (KEY, VALUE) VALUES ("key4", { "numbers": [1,2,3,4] , "name" : "old hotel" })'))
+                time.sleep(20)
         except Exception as ex:
             self.log.error('SUITE SETUP FAILED')
             self.log.info(ex)
@@ -2531,19 +2564,19 @@ class QueryTests(BaseTestCase):
             for bucket in self.buckets:
                 list.append(bucket.name)
             names = ','.join(list)
-            self.query = "GRANT {0} on `{1}` to {2}".format(role, names, self.users[0]['id'])
+            self.query = "GRANT {0} on {1} to {2}".format(role, names, self.users[0]['id'])
             actual_result = self.run_cbq_query()
         elif "," in role:
             roles = role.split(",")
             for role in roles:
                 role1 = role.split("(")[0]
                 name = role.split("(")[1][:-1]
-                self.query = "GRANT {0} on `{1}` to {2}".format(role1, name, self.users[0]['id'])
+                self.query = "GRANT {0} on {1} to {2}".format(role1, name, self.users[0]['id'])
                 actual_result = self.run_cbq_query()
         elif "(" in role:
             role1 = role.split("(")[0]
             name = role.split("(")[1][:-1]
-            self.query = "GRANT {0} on `{1}` to {2}".format(role1, name, self.users[0]['id'])
+            self.query = "GRANT {0} on {1} to {2}".format(role1, name, self.users[0]['id'])
             actual_result = self.run_cbq_query()
         else:
             self.query = "GRANT {0} to {1}".format(role, self.users[0]['id'])
@@ -2556,7 +2589,12 @@ class QueryTests(BaseTestCase):
             role = self.roles[0]['roles']
             if self.all_buckets:
                 role += "(`*`)"
-        self.query = "REVOKE {0} FROM {1}".format(role, self.users[0]['id'])
+        if "(" in role:
+            role1 = role.split("(")[0]
+            name = role.split("(")[1][:-1]
+            self.query = "REVOKE {0} on {1} FROM {2}".format(role1, name, self.users[0]['id'])
+        else:
+            self.query = "REVOKE {0} FROM {1}".format(role, self.users[0]['id'])
         actual_result = self.run_cbq_query()
         msg = "Unable to revoke role {0} from {1}".format(role, self.users[0]['id'])
         self.assertTrue(actual_result['status'] == 'success', msg)
@@ -2584,6 +2622,10 @@ class QueryTests(BaseTestCase):
 
         if role in ["query_update(default)", "query_delete(default)", "query_insert(default)","query_insert({0})".format(self.bucket_name),"query_update({0})".format(self.bucket_name),"query_delete({0})".format(self.bucket_name)]:
             self.assertTrue(res['status'] == 'success')
+        elif 'test)' in role:
+            self.assertTrue(res['metrics']['resultCount'] == 2)
+        elif role in ['query_select(default:default)', 'query_select(default)'] and self.load_collections == True:
+            self.assertTrue(res['metrics']['resultCount'] == 3)
         elif role.startswith("query_") or role.startswith("select") or role in ["bucket_full_access(default)",
                                                                                 "query_delete(default)"]:
             self.assertTrue(res['metrics']['resultCount'] == 1)
@@ -2637,7 +2679,7 @@ class QueryTests(BaseTestCase):
         if role == "bucket_full_access(default)":
             self.assertTrue(res['status'] == 'stopped')
         elif role in ["select(default)", "query_select(default)", "select(standard_bucket0)",
-                      "query_select(standard_bucket0)","select({0})".format(self.bucket_name), "query_select({0})".format(self.bucket_name)]:
+                      "query_select(standard_bucket0)","select({0})".format(self.bucket_name), "query_select({0})".format(self.bucket_name),"select({0})".format(self.rbac_context), "query_select({0})".format(self.rbac_context)]:
             self.assertTrue(str(res).find("'code': 13014") != -1)
         elif role in ["insert(default)", "query_insert(default)", "query_update(default)", "query_delete(default)","insert(({0})".format(self.bucket_name), "query_insert({0})".format(self.bucket_name), "query_update({0})".format(self.bucket_name), "query_delete({0})".format(self.bucket_name)]:
             self.assertTrue(res['status'] == 'fatal')
@@ -2667,25 +2709,25 @@ class QueryTests(BaseTestCase):
         if role not in ["ro_admin", "replication_admin", "query_insert(default)", "query_delete(default)","query_insert({0})".format(self.bucket_name),"query_update({0})".format(self.bucket_name),"query_delete({0})".format(self.bucket_name),
                         "query_update(default)", "bucket_full_access(default)", "query_system_catalog",
                         "views_admin(default)"]:
-            self.query = "prepare `st1{0}` from select * from `{0}` union select * from `{0}` union select * from `{0}`".format(self.bucket_name)
+            self.query = "prepare `st1{0}` from select * from {0} union select * from {0} union select * from {0}".format(self.bucket_name)
             res = self.curl_with_roles(self.query)
             self.query = 'execute `st1{0}`'.format(self.bucket_name)
             res = self.curl_with_roles(self.query)
             if role in ["bucket_admin(standard_bucket0)", "views_admin(standard_bucket0)", "replication_admin"]:
                 self.assertTrue(str(res).find("'code': 4040") != -1)
-            elif role == "select(default)" or role == "query_select(default)":
+            elif role == "select(default)" or role == "query_select(default)" or role == "query_select({0})".format(self.bucket_name):
                 self.assertTrue(res['metrics']['resultCount'] == 0)
             else:
                 self.assertTrue(res['status'] == 'success')
 
             if role not in ["query_insert(default)", "query_delete(default)", "query_update(default)","query_insert({0})".format(self.bucket_name),"query_update({0})".format(self.bucket_name),"query_delete({0})".format(self.bucket_name)]:
-                self.query = "prepare `st2{0}` from select * from `{0}` union select * from " \
-                             "standard_bucket0 union select * from `{0}`".format(self.bucket_name)
+                self.query = "prepare `st2{0}` from select * from {0} union select * from " \
+                             "standard_bucket0 union select * from {0}".format(self.bucket_name)
                 res = self.curl_with_roles(self.query)
 
                 if role in ["bucket_admin(standard_bucket0)", "views_admin(standard_bucket0)",
                             "views_admin(default)", "views_admin", "bucket_admin(default)", "replication_admin",
-                            "query_system_catalog", "select(default)", "query_select(default)","select({0})".format(self.bucket_name), "query_select({0})".format(self.bucket_name)]:
+                            "query_system_catalog", "select(default)", "query_select(default)","select({0})".format(self.bucket_name), "query_select({0})".format(self.bucket_name),"query_select({0})".format(self.rbac_context)]:
                     self.assertTrue(str(res).find("'code': 13014") != -1)
                 else:
                     self.assertTrue(res['metrics']['resultCount'] > 0)
@@ -2694,7 +2736,7 @@ class QueryTests(BaseTestCase):
                 res = self.curl_with_roles(self.query)
                 if role in ["bucket_admin(standard_bucket0)", "views_admin(standard_bucket0)", "views_admin(default)",
                             "views_admin", "bucket_admin(default)", "replication_admin", "query_system_catalog",
-                            "select(default)", "query_select(default)","select({0})".format(self.bucket_name), "query_select({0})".format(self.bucket_name)]:
+                            "select(default)", "query_select(default)","select({0})".format(self.bucket_name), "query_select({0})".format(self.bucket_name),"query_select({0})".format(self.rbac_context)]:
                     self.assertTrue(str(res).find("'code': 4040") != -1)
                 else:
                     self.assertTrue(res['status'] == 'success')
@@ -2702,7 +2744,7 @@ class QueryTests(BaseTestCase):
                 self.query = 'select * from system:completed_requests'
                 res = self.curl_with_roles(self.query)
 
-                if role == "select(default)" or role == "query_select(default)" or role == "select({0})".format(self.bucket_name) or role == "query_select({0})".format(self.bucket_name):
+                if role == "select(default)" or role == "query_select(default)" or role == "select({0})".format(self.bucket_name) or role == "query_select({0})".format(self.bucket_name) or role == "query_select({0})".format(self.rbac_context):
                     self.assertTrue(str(res).find("'code': 13014") != -1)
                 elif role == "bucket_admin(standard_bucket0)":
                     self.assertTrue(res['metrics']['resultCount'] > 0)
@@ -2714,7 +2756,7 @@ class QueryTests(BaseTestCase):
             self.query = 'select * from system:prepareds'
             res = self.curl_with_roles(self.query)
 
-            if role == "select(default)" or role == "query_select(default)" or role == "select({0})".format(self.bucket_name) or role == "query_select({0})".format(self.bucket_name):
+            if role == "select(default)" or role == "query_select(default)" or role == "select({0})".format(self.bucket_name) or role == "query_select({0})".format(self.bucket_name) or role == "query_select({0})".format(self.rbac_context):
                 self.assertTrue(str(res).find("'code': 13014") != -1)
             else:
                 self.assertTrue(res['status'] == 'success')
@@ -2722,7 +2764,7 @@ class QueryTests(BaseTestCase):
             self.query = 'select * from system:active_requests'
             res = self.curl_with_roles(self.query)
 
-            if role == "select(default)" or role == "query_select(default)" or role == "select({0})".format(self.bucket_name) or role == "query_select({0})".format(self.bucket_name):
+            if role == "select(default)" or role == "query_select(default)" or role == "select({0})".format(self.bucket_name) or role == "query_select({0})".format(self.bucket_name) or role == "query_select({0})".format(self.rbac_context):
                 self.assertTrue(str(res).find("'code': 13014") != -1)
             else:
                 self.assertTrue(res['metrics']['resultCount'] > 0)
@@ -2736,8 +2778,12 @@ class QueryTests(BaseTestCase):
 
         if role == "views_admin(default)":
             self.assertTrue(res['status'] == 'success')
+        elif role in ['query_select(default:default)', 'query_select(default)'] and self.load_collections == True:
+            self.assertTrue(res['metrics']['resultCount'] == 3)
+        elif role in ["query_select({0})".format(self.rbac_context)]:
+            self.assertTrue(res['metrics']['resultCount'] == 2)
         elif role in ["bucket_admin(standard_bucket0)", "bucket_admin(default)", "select(default)",
-                      "query_select(default)", "query_select({0})".format(self.bucket_name), "select({0})".format(self.bucket_name)]:
+                      "query_select(default)", "query_select({0})".format(self.bucket_name), "query_select({0})".format(self.rbac_context),"select({0})".format(self.bucket_name)]:
             self.assertTrue(res['metrics']['resultCount'] == 1)
         elif role in ["query_insert(default)", "query_delete(default)", "query_update(default)","query_insert({0})".format(self.bucket_name),"query_update({0})".format(self.bucket_name),"query_delete({0})".format(self.bucket_name)]:
             self.assertTrue(res['metrics']['resultCount'] == 0)
@@ -2849,7 +2895,7 @@ class QueryTests(BaseTestCase):
         self.query = 'delete from system:completed_requests'
         res = self.curl_with_roles(self.query)
         role_list = ["query_delete(default)", "query_delete(standard_bucket0)", "delete(default)",
-                     "bucket_full_access(default)"]
+                     "bucket_full_access(default)", "query_delete({0})".format(self.bucket_name),"query_delete({0})".format(self.rbac_context)]
         self.assertNotEqual(res['status'], 'success') if role in role_list else self.assertTrue(
             res['status'] == 'success')
         try:
@@ -2857,7 +2903,7 @@ class QueryTests(BaseTestCase):
             res = self.curl_with_roles(self.query)
             self.assertTrue(res['status'] == 'stopped')
         except:
-            self.assertTrue(res['status'] == 'fatal')
+            self.assertTrue(res['status'] == 'fatal' or res['status'] == 'errors')
         if role not in role_list:
             self.query = 'delete from system:prepareds'
             res = self.curl_with_roles(self.query)

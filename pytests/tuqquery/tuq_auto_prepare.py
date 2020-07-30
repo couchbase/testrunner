@@ -557,3 +557,22 @@ class QueryAutoPrepareTests(QueryTests):
             reached = RestHelper(self.rest).rebalance_reached()
             self.assertTrue(reached, "rebalance failed, stuck or did not complete")
             rebalance.result()
+
+    def test_prepared_collection_query_context(self):
+        try:
+            self.run_cbq_query(query="PREPARE p1 AS SELECT * FROM test1 b WHERE b.name = 'old hotel'", query_context='default:default.test')
+            results = self.run_cbq_query(query="EXECUTE p1")
+            self.assertEqual(results['results'][0]['b'], {'name': 'old hotel', 'type': 'hotel'})
+        except Exception as e:
+            self.log.info("Prepared statement failed {0}".format(str(e)))
+        try:
+            results = self.run_cbq_query(query="EXECUTE p1", query_context='default.test')
+            self.fail()
+        except Exception as e:
+            self.assertTrue( "{'code': 4040, 'msg': 'No such prepared statement: p1, context: default.test'}" in str(e))
+        try:
+            results = self.run_cbq_query(query="EXECUTE p1", query_context='default.test2')
+            self.fail()
+        except Exception as e:
+            self.assertTrue("{'code': 4040, 'msg': 'No such prepared statement: p1, context: default.test2'}" in str(e))
+

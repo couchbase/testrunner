@@ -13,25 +13,6 @@ class QueryContextTests(QueryTests):
     def suite_setUp(self):
         super(QueryContextTests, self).suite_setUp()
         self.log.info("==============  QuerySanityTests suite_setup has started ==============")
-        self.run_cbq_query(query="CREATE scope default:default.test")
-        time.sleep(20)
-        self.run_cbq_query(query="CREATE COLLECTION default:default.test.test1")
-        self.run_cbq_query(query="CREATE COLLECTION default:default.test.test2")
-        time.sleep(20)
-        self.run_cbq_query(query="CREATE INDEX idx1 on default:default.test.test1(name)")
-        self.run_cbq_query(query="CREATE INDEX idx2 on default:default.test.test2(name)")
-        self.run_cbq_query(query="CREATE INDEX idx3 on default:default.test.test1(nested)")
-        self.run_cbq_query(query="CREATE INDEX idx4 on default:default.test.test1(ALL numbers)")
-
-        time.sleep(10)
-
-        self.run_cbq_query(query='INSERT INTO default:default.test.test1 (KEY, VALUE) VALUES ("key2", { "type" : "hotel", "name" : "new hotel" })')
-        self.run_cbq_query(query='INSERT INTO default:default.test.test1 (KEY, VALUE) VALUES ("key1", { "type" : "hotel", "name" : "old hotel" })')
-        self.run_cbq_query(query='INSERT INTO default:default.test.test2 (KEY, VALUE) VALUES ("key1", { "type" : "hotel", "name" : "new hotel" })')
-        self.run_cbq_query(query='INSERT INTO default:default.test.test1 (KEY, VALUE) VALUES ("key3", { "nested" : {"fields": "fake"}, "name" : "old hotel" })')
-        self.run_cbq_query(query='INSERT INTO default:default.test.test1 (KEY, VALUE) VALUES ("key4", { "numbers": [1,2,3,4] , "name" : "old hotel" })')
-        time.sleep(10)
-
         self.log.info("==============  QuerySanityTests suite_setup has completed ==============")
 
     def tearDown(self):

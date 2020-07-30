@@ -450,6 +450,22 @@ class AdvancedQueryTests(QueryTests):
                 o = self.execute_commands_inside(self.cbqpath, '', queries, '', '', bucket.name, '')
                 # Test neeeds to be finished
 
+    def test_query_context(self):
+        queries = ['\SET -query_context default.test;',
+                   'select name from test1 b where b.name="old hotel"']
+        o = self.execute_commands_inside(self.cbqpath, '', queries, '', '', 'default', '')
+        self.assertTrue('{"name": "old hotel"},{"name": "old hotel"},{"name": "old hotel"}' in o,
+                        "Results are incorrect : {0}".format(o))
+
+    def test_batch_queries(self):
+        queries = ['\SET -query_context default.test;',
+                   'select name from test1 b where b.name="old hotel";','select name from test2 b1 where b1.name="new hotel";']
+        o = self.execute_commands_inside(self.cbqpath, '', queries, '', '', 'default', '')
+        self.assertTrue('{"name": "old hotel"},{"name": "old hotel"},{"name": "old hotel"}' in o,
+                        "Results are incorrect : {0}".format(o))
+        self.assertTrue('{"name": "new hotel"}' in o,
+                        "Results are incorrect : {0}".format(o))
+
     def test_named_params(self):
         for server in self.servers:
             shell = RemoteMachineShellConnection(server)

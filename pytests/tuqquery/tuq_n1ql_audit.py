@@ -328,6 +328,108 @@ class QueryN1QLAuditTests(auditTest, QueryTests):
             if self.filter:
                 self.checkFilter(self.unauditedID, self.master)
 
+    def test_audit_create_scope_event(self):
+        query_type = self.input.param("ops", None)
+        user = self.master.rest_username
+        source = 'ns_server'
+
+        self.run_cbq_query(query="CREATE SCOPE default:default.test2")
+        self.sleep(10)
+        expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success',
+                            'isAdHoc': True,
+                            'name': 'CREATE SCOPE statement', 'real_userid': {'source': source, 'user': user},
+                            'statement': "CREATE SCOPE default:default.test2",
+                            'userAgent': 'Python-httplib2/0.13.1 (gzip)', 'id': self.eventID,
+                            'description': 'A N1QL CREATE SCOPE statement was executed'}
+
+        self.checkConfig(self.eventID, self.master, expected_results, n1ql_audit=True)
+
+    def test_audit_drop_scope_event(self):
+        query_type = self.input.param("ops", None)
+        user = self.master.rest_username
+        source = 'ns_server'
+        try:
+            self.run_cbq_query(query="CREATE SCOPE default:default.test2")
+            self.sleep(10)
+        except Exception as e:
+            self.log.info("scope already exists")
+        self.run_cbq_query(query="DROP SCOPE default:default.test2")
+        expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success',
+                            'isAdHoc': True,
+                            'name': 'DROP SCOPE statement', 'real_userid': {'source': source, 'user': user},
+                            'statement': "DROP SCOPE default:default.test2",
+                            'userAgent': 'Python-httplib2/0.13.1 (gzip)', 'id': self.eventID,
+                            'description': 'A N1QL DROP SCOPE statement was executed'}
+
+        self.checkConfig(self.eventID, self.master, expected_results, n1ql_audit=True)
+
+    def test_audit_create_collection_event(self):
+        query_type = self.input.param("ops", None)
+        user = self.master.rest_username
+        source = 'ns_server'
+        try:
+            self.run_cbq_query(query="CREATE SCOPE default:default.test2")
+            self.sleep(10)
+        except Exception as e:
+            self.log.info("scope already exists")
+        self.run_cbq_query(query="CREATE COLLECTION default:default.test2.test1")
+        self.sleep(10)
+        expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success',
+                            'isAdHoc': True,
+                            'name': 'CREATE COLLECTION statement', 'real_userid': {'source': source, 'user': user},
+                            'statement': "CREATE COLLECTION default:default.test2.test1",
+                            'userAgent': 'Python-httplib2/0.13.1 (gzip)', 'id': self.eventID,
+                            'description': 'A N1QL CREATE COLLECTION statement was executed'}
+
+        self.checkConfig(self.eventID, self.master, expected_results, n1ql_audit=True)
+
+    def test_audit_drop_collection_event(self):
+        query_type = self.input.param("ops", None)
+        user = self.master.rest_username
+        source = 'ns_server'
+        try:
+            self.run_cbq_query(query="CREATE SCOPE default:default.test2")
+            self.sleep(10)
+            self.run_cbq_query(query="CREATE COLLECTION default:default.test2.test1")
+            self.sleep(10)
+        except Exception as e:
+            self.log.info("scope/collection already exists")
+
+        self.run_cbq_query(query="DROP COLLECTION default:default.test2.test1")
+        self.sleep(10)
+        expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success',
+                            'isAdHoc': True,
+                            'name': 'DROP COLLECTION statement', 'real_userid': {'source': source, 'user': user},
+                            'statement': "DROP COLLECTION default:default.test2.test1",
+                            'userAgent': 'Python-httplib2/0.13.1 (gzip)', 'id': self.eventID,
+                            'description': 'A N1QL DROP COLLECTION statement was executed'}
+
+        self.checkConfig(self.eventID, self.master, expected_results, n1ql_audit=True)
+
+    def test_audit_query_context(self):
+        query_type = self.input.param("ops", None)
+        user = self.master.rest_username
+        source = 'ns_server'
+        self.run_cbq_query(query="CREATE SCOPE default:default.test")
+        self.sleep(10)
+        self.run_cbq_query(query="CREATE COLLECTION default:default.test.test1")
+        self.run_cbq_query(query="CREATE COLLECTION default:default.test.test2")
+        self.sleep(10)
+        self.run_cbq_query(query="CREATE INDEX idx1 on default:default.test.test1(name)")
+        self.sleep(10)
+        self.run_cbq_query(
+            query='INSERT INTO default:default.test.test1 (KEY, VALUE) VALUES ("key2", { "type" : "hotel", "name" : "old hotel" })')
+        self.sleep(10)
+        self.run_cbq_query(query="select name from test1 where name = 'old hotel'", query_context='default:default.test')
+        expected_results = {'node': '%s:%s' % (self.master.ip, self.master.port), 'status': 'success',
+                            'isAdHoc': True,
+                            'name': 'SELECT statement', 'real_userid': {'source': source, 'user': user},
+                            'statement': "select name from test1 where name = 'old hotel'",
+                            'userAgent': 'Python-httplib2/0.13.1 (gzip)', 'id': self.eventID,
+                            'description': 'A N1QL SELECT statement was executed', 'queryContext':'default:default.test' }
+
+        self.checkConfig(self.eventID, self.master, expected_results, n1ql_audit=True)
+
     def gen_vacant_prepared_name(self, prefix):
         vacant_prepared_name = "a"
         for i in range(1, 10000):

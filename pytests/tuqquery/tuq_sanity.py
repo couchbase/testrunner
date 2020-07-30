@@ -145,6 +145,13 @@ class QuerySanityTests(QueryTests):
                 self.query = "DROP INDEX %s ON %s USING VIEW" % (self.query_buckets[0], idx)
                 self.run_cbq_query()
 
+    def test_collections_meta_keyspace(self):
+        results = self.run_cbq_query(query='select meta(d) from default:default.test.test1 as d')
+        self.assertEqual(results['results'][0]['$1']['keyspace'], 'default:default.test.test1')
+
+    def test_collections_meta_query_context(self):
+        results = self.run_cbq_query(query='select meta(d) from test1 as d', query_context='default:default.test')
+        self.assertEqual(results['results'][0]['$1']['keyspace'], 'default:default.test.test1')
     ##############################################################################################
     #
     #   ALL
