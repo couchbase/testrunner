@@ -3889,12 +3889,12 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
 
         # Pause memcached to trigger the log message.
         cluster_client = RemoteMachineShellConnection(self.backupset.cluster_host)
-        cluster_client.pause_memcached(self.os_name, timesleep=65)
+        cluster_client.pause_memcached(self.os_name, timesleep=200)
         cluster_client.unpause_memcached(self.os_name)
         cluster_client.disconnect()
         backup_result.result(timeout=200)
 
-        expected_message = "Stream has been inactive for 60s"
+        expected_message = "timed out after 3m0s"
         command = "cat {}/logs/backup-*.log | grep '{}' "\
                          .format(self.backupset.directory, expected_message)
         output, _ = backup_client.execute_command(command)
