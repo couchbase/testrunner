@@ -3672,8 +3672,13 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
         command = "{0}/{1}".format(self.cli_command_location, cmd)
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
+        cluster_version = RestConnection(self.backupset.cluster_host).get_nodes_version()
         if not self._check_output("Index created", output):
-            err_msg = "cannot proceed due to rebalance in progress"
+            if cluster_version[:3] >= "7.0":
+                err_msg = "cannot proceed due to rebalance in progress"
+            else:
+                err_msg = 'Fail to create index due to rebalancing'
+
             if self._check_output(err_msg, output) or \
                     self._check_output(err_msg, error):
                 self.sleep(15, "wait for rebalance complete")
@@ -3759,6 +3764,8 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
                     self.log.info("Create fts index")
                     rest_fts.create_fts_index(index_name, index_definition)
                 except Exception as ex:
+                    if ex:
+                        print("\nException error: ", str(ex))
                     if not self._check_output(err_msg, str(ex)):
                         self.log.error("It should not create same name index")
                         self.fail(ex)
