@@ -1262,10 +1262,10 @@ class ImportExportTests(CliBaseTest):
                 self.log.info("Compare source data and bucket data")
                 for x in range(0, len(bucket_data)):
                     k = json.loads(bucket_data[x])
-                    if self.cb_version[:3] >= "7.0":
-                        bucket_data[x] = '{"name":"' + k["name"]+ '","age":' + str(k["age"]) + ',"index":' + str(k["index"]) + ',"body":"' + k["body"]+ '"}'
-                    else:
+                    if  '"index":"' in src_data[0]:
                         bucket_data[x] = '{"name":"' + k["name"]+ '","age":' + str(k["age"]) + ',"index":"' + str(k["index"]) + '","body":"' + k["body"]+ '"}'
+                    else:
+                        bucket_data[x] = '{"name":"' + k["name"]+ '","age":' + str(k["age"]) + ',"index":' + str(k["index"]) + ',"body":"' + k["body"]+ '"}'
                 if sorted(src_data) == sorted(bucket_data):
                     self.log.info("Import data match bucket data")
                     if os.path.exists("/tmp/%s" % self.master.ip):
