@@ -47,9 +47,11 @@ class StableTopFTS(FTSBaseTest):
         self.validate_index_count(equal_bucket_doc_count=True)
 
     def test_index_docvalues_option(self):
+        collection_index = self.container_type == 'collection'
+        type = None if self.container_type == 'bucket' else f"{self.scope}.{self.collection}"
         index = self.create_index(
             bucket=self._cb_cluster.get_bucket_by_name('default'),
-            index_name="custom_index")
+            index_name="custom_index", collection_index=collection_index, type=type)
         self.load_data()
         self.wait_for_indexing_complete()
         if float(self.get_zap_docvalue_disksize()) != float(0):
@@ -114,9 +116,12 @@ class StableTopFTS(FTSBaseTest):
         uses RQG
         """
         self.load_data()
+
+        collection_index = self.container_type == 'collection'
+        type = None if self.container_type == 'bucket' else f"{self.scope}.{self.collection}"
         index = self.create_index(
             self._cb_cluster.get_bucket_by_name('default'),
-            "default_index")
+            "default_index", collection_index=collection_index, type=type)
         self.wait_for_indexing_complete()
         if self._update or self._delete:
             self.async_perform_update_delete(self.upd_del_fields)
@@ -369,7 +374,9 @@ class StableTopFTS(FTSBaseTest):
     def delete_index_then_query(self):
         self.load_data()
         bucket = self._cb_cluster.get_bucket_by_name('default')
-        index = self.create_index(bucket, "default_index")
+        collection_index = self.container_type == 'collection'
+        type = None if self.container_type == 'bucket' else f"{self.scope}.{self.collection}"
+        index = self.create_index(bucket, "default_index", collection_index=collection_index, type=type)
         self._cb_cluster.delete_fts_index(index.name)
         try:
             hits2, _, _, _ = index.execute_query(self.sample_query)
@@ -381,7 +388,9 @@ class StableTopFTS(FTSBaseTest):
         count = 0
         self.load_data()
         bucket = self._cb_cluster.get_bucket_by_name('default')
-        index = self.create_index(bucket, "default_index")
+        collection_index = self.container_type == 'collection'
+        type = None if self.container_type == 'bucket' else f"{self.scope}.{self.collection}"
+        index = self.create_index(bucket, "default_index", collection_index=collection_index, type=type)
         self._cb_cluster.delete_bucket("default")
         self.sleep(20, "waiting for bucket deletion to be known by fts")
         try:
@@ -441,7 +450,9 @@ class StableTopFTS(FTSBaseTest):
     def edit_index_new_name(self):
         self.load_employee_dataset()
         bucket = self._cb_cluster.get_bucket_by_name('default')
-        index = self.create_index(bucket, 'sample_index')
+        collection_index = self.container_type == 'collection'
+        type = None if self.container_type == 'bucket' else f"{self.scope}.{self.collection}"
+        index = self.create_index(bucket, "sample_index", collection_index=collection_index, type=type)
         self.wait_for_indexing_complete()
         index.name = "new_index"
         try:
@@ -452,7 +463,9 @@ class StableTopFTS(FTSBaseTest):
     def edit_index(self):
         self.load_employee_dataset()
         bucket = self._cb_cluster.get_bucket_by_name('default')
-        index = self.create_index(bucket, 'sample_index')
+        collection_index = self.container_type == 'collection'
+        type = None if self.container_type == 'bucket' else f"{self.scope}.{self.collection}"
+        index = self.create_index(bucket, 'sample_index', collection_index=collection_index, type=type)
         self.wait_for_indexing_complete()
         #hits, _, _, _ = index.execute_query(self.sample_query)
         new_plan_param = {"maxPartitionsPerPIndex": 30}
@@ -472,7 +485,9 @@ class StableTopFTS(FTSBaseTest):
         rest = RestConnection(self._cb_cluster.get_random_fts_node())
         self.load_employee_dataset()
         bucket = self._cb_cluster.get_bucket_by_name('default')
-        index = self.create_index(bucket, 'sample_index')
+        collection_index = self.container_type == 'collection'
+        type = None if self.container_type == 'bucket' else f"{self.scope}.{self.collection}"
+        index = self.create_index(bucket, 'sample_index', collection_index=collection_index, type=type)
         # wait till half the keys are indexed
         self.wait_for_indexing_complete(self._num_items//2)
         status, stat_value = rest.get_fts_stats(index_name=index.name,
@@ -502,7 +517,9 @@ class StableTopFTS(FTSBaseTest):
         """
         self.load_employee_dataset()
         bucket = self._cb_cluster.get_bucket_by_name('default')
-        index = self.create_index(bucket, 'sample_index')
+        collection_index = self.container_type == 'collection'
+        type = None if self.container_type == 'bucket' else f"{self.scope}.{self.collection}"
+        index = self.create_index(bucket, 'sample_index', collection_index=collection_index, type=type)
         # wait till half the keys are indexed
         self.wait_for_indexing_complete(self._num_items//2)
         index.delete()
@@ -518,7 +535,9 @@ class StableTopFTS(FTSBaseTest):
     def edit_index_negative(self):
         self.load_employee_dataset()
         bucket = self._cb_cluster.get_bucket_by_name('default')
-        index = self.create_index(bucket, 'sample_index')
+        collection_index = self.container_type == 'collection'
+        type = None if self.container_type == 'bucket' else f"{self.scope}.{self.collection}"
+        index = self.create_index(bucket, 'sample_index', collection_index=collection_index, type=type)
         self.wait_for_indexing_complete()
         hits, _, _, _ = index.execute_query(self.sample_query)
         new_plan_param = {"maxPartitionsPerPIndex": 30}
@@ -689,9 +708,11 @@ class StableTopFTS(FTSBaseTest):
         turn off es validation
         goal is to make sure there are no fdb or cbft crashes
         """
+        collection_index = self.container_type == 'collection'
+        type = None if self.container_type == 'bucket' else f"{self.scope}.{self.collection}"
         index = self.create_index(
             bucket=self._cb_cluster.get_bucket_by_name('default'),
-            index_name="default_index")
+            index_name="default_index", collection_index=collection_index, type=type)
         self.load_data()
         self.generate_random_queries(index, self.num_queries, self.query_types)
         self.run_query_and_compare(index)
@@ -702,9 +723,11 @@ class StableTopFTS(FTSBaseTest):
         turn off es validation
         goal is to make sure there are no fdb or cbft crashes
         """
+        collection_index = self.container_type == 'collection'
+        type = None if self.container_type == 'bucket' else f"{self.scope}.{self.collection}"
         index = self.create_index(
             bucket=self._cb_cluster.get_bucket_by_name('default'),
-            index_name="default_index")
+            index_name="default_index", collection_index=collection_index, type=type)
         self.sleep(20)
         self.generate_random_queries(index, self.num_queries, self.query_types)
         from threading import Thread
@@ -1966,9 +1989,17 @@ class StableTopFTS(FTSBaseTest):
         """
         fts_ssl_port=18094
         import json, subprocess
-        idx = {"sourceName": "default",
-               "sourceType": "couchbase",
-               "type": "fulltext-index"}
+        if self.container_type == 'bucket':
+            idx = {"sourceName": "default",
+                   "sourceType": "couchbase",
+                   "type": "fulltext-index"}
+        else:
+            idx = {'type': 'fulltext-index',
+                   'params': {'mapping': {'default_mapping': {'properties': {}, 'dynamic': False, 'enabled': False},
+                                          'types': {self.scope+'.'+self.collection: {'default_analyzer': 'standard', 'dynamic': True, 'enabled': True}}
+                                          },
+                   'doc_config': {'mode': 'scope.collection.type_field', 'type_field': 'type'}},
+                   'sourceType': 'couchbase', 'sourceName': 'default'}
 
         qry = {"indexName": "default_index_1",
                  "query": {"field": "type", "match": "emp"},

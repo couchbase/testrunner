@@ -3575,7 +3575,6 @@ class FTSBaseTest(unittest.TestCase):
         bucket_size = self.__calculate_bucket_size(
             total_quota,
             num_buckets)
-
         bucket_type = TestInputSingleton.input.param("bucket_type", "membase")
         maxttl = TestInputSingleton.input.param("maxttl", None)
 
@@ -3719,7 +3718,7 @@ class FTSBaseTest(unittest.TestCase):
         if self._update:
             self.log.info("Updating keys @ {0} with expiry={1}".
                           format(self._cb_cluster.get_name(), self._expires))
-            self.populate_update_gen(fields_to_update)
+            self.populate_update_gen(fields_to_update, expiration=self._expires)
             if self.compare_es:
                 gen = copy.deepcopy(self.update_gen)
                 if not self._expires:
@@ -4395,18 +4394,14 @@ class FTSBaseTest(unittest.TestCase):
             self.create_gen = self.get_generator(
                 self.dataset, num_items=self._num_items)
 
-    def populate_update_gen(self, fields_to_update=None):
-        if self.dataset == "emp":
+    def populate_update_gen(self, fields_to_update=None, expiration=0):
+        if self.dataset in ["emp", "wiki"] :
             self.update_gen = copy.deepcopy(self.create_gen)
             self.update_gen.start = 0
             self.update_gen.end = int(self.create_gen.end *
                                       (float)(self._perc_upd) / 100)
+            self.update_gen.doc_expiry = expiration
             self.update_gen.update(fields_to_update=fields_to_update)
-        elif self.dataset == "wiki":
-            self.update_gen = copy.deepcopy(self.create_gen)
-            self.update_gen.start = 0
-            self.update_gen.end = int(self.create_gen.end *
-                                      (float)(self._perc_upd) / 100)
         elif self.dataset == "all":
             self.update_gen = []
             self.update_gen = copy.deepcopy(self.create_gen)
@@ -4416,6 +4411,7 @@ class FTSBaseTest(unittest.TestCase):
                                                (float)(self._perc_upd) / 100)
                 if self.update_gen[itr].name == "emp":
                     self.update_gen[itr].update(fields_to_update=fields_to_update)
+                self.update_gen[itr].doc_expiry = expiration
 
     def populate_delete_gen(self):
         if self.dataset == "emp":
