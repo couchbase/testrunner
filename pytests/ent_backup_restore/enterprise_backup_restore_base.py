@@ -1856,13 +1856,13 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             if isinstance(word_check, list):
                 for ele in word_check:
                     for x in output:
-                        if ele.lower() in x.lower():
+                        if ele.lower() in str(x.lower()):
                             self.log.info("Found '{0} in CLI output".format(ele))
                             found = True
                             break
             elif isinstance(word_check, str):
                 for x in output:
-                    if word_check.lower() in x.lower():
+                    if word_check.lower() in str(x.lower()):
                         self.log.info("Found '{0}' in CLI output".format(word_check))
                         found = True
                         break
@@ -2996,13 +2996,13 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
             if isinstance(word_check, list):
                 for ele in word_check:
                     for x in output:
-                        if ele.lower() in x.lower():
+                        if ele.lower() in str(x.lower()):
                             self.log.info("Found '{0}' in CLI output".format(ele))
                             found = True
                             break
             elif isinstance(word_check, str):
                 for x in output:
-                    if word_check.lower() in x.lower():
+                    if word_check.lower() in str(x.lower()):
                         self.log.info("Found '{0}' in CLI output".format(word_check))
                         found = True
                         break
@@ -3677,7 +3677,8 @@ class EnterpriseBackupMergeBase(EnterpriseBackupRestoreBase):
             if cluster_version[:3] >= "7.0":
                 err_msg = "cannot proceed due to rebalance in progress"
             else:
-                err_msg = 'Fail to create index due to rebalancing'
+                err_msg = ['Fail to create index due to rebalancing',
+                           'Indexer Cannot Process Create Index - Rebalance In Progress']
 
             if self._check_output(err_msg, output) or \
                     self._check_output(err_msg, error):
