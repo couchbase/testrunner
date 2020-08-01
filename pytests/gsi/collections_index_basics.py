@@ -14,6 +14,8 @@ from concurrent.futures import ThreadPoolExecutor
 from couchbase_helper.documentgenerator import SDKDataLoader
 from couchbase_helper.query_definitions import QueryDefinition
 from .base_gsi import BaseSecondaryIndexingTests
+from collection.collections_rest_client import CollectionsRest
+from collection.collections_stats import CollectionsStats
 
 
 class CollectionsIndexBasics(BaseSecondaryIndexingTests):
@@ -21,13 +23,22 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
         super(CollectionsIndexBasics, self).setUp()
         self.log.info("==============  CollectionsIndexBasics setup has started ==============")
         self.rest.delete_all_buckets()
-        self.bucket_params = self._create_bucket_params(server=self.master, size=self.bucket_size,
+        self.num_scopes = self.input.param("num_scopes", 1)
+        self.num_collections = self.input.param("num_collections", 1)
+        self.test_bucket = self.input.param('test_bucket', 'test_bucket')
+        self.bucket_params = self._create_bucket_params(server=self.master, size=100,
                                                         replicas=self.num_replicas, bucket_type=self.bucket_type,
                                                         enable_replica_index=self.enable_replica_index,
                                                         eviction_policy=self.eviction_policy, lww=self.lww)
         self.cluster.create_standard_bucket(name=self.test_bucket, port=11222,
                                             bucket_params=self.bucket_params)
         self.buckets = self.rest.get_buckets()
+        self.cli_rest = CollectionsRest(self.master)
+        self.stat = CollectionsStats(self.master)
+        self.scope_prefix = 'test_scope'
+        self.collection_prefix = 'test_collection'
+        self.run_cbq_query = self.n1ql_helper.run_cbq_query
+        self.num_of_docs_per_collection = 1000
         self.log.info("==============  CollectionsIndexBasics setup has completed ==============")
 
     def tearDown(self):
@@ -41,8 +52,45 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
     def suite_setUp(self):
         pass
 
+    def _prepare_collection_for_indexing(self, num_scopes=1, num_collections=1, num_of_docs_per_collection=1000,
+                                         skip_defaults=True, indexes_before_load=False, json_template="Person"):
+        self.namespace = []
+        pre_load_idx_pri = None
+        pre_load_idx_gsi = None
+        self.cli_rest.create_scope_collection_count(scope_num=num_scopes, collection_num=num_collections,
+                                                    scope_prefix=self.scope_prefix,
+                                                    collection_prefix=self.collection_prefix,
+                                                    bucket=self.test_bucket)
+        self.scopes = self.cli_rest.get_bucket_scopes(bucket=self.test_bucket)
+        self.collections = self.cli_rest.get_bucket_collections(bucket=self.test_bucket)
+        self.sleep(10, "Allowing time after collection creation")
+
+        if skip_defaults:
+            self.scopes.remove('_default')
+            self.collections.remove('_default')
+        if num_of_docs_per_collection > 0:
+            for s_item in self.scopes:
+                for c_item in self.collections:
+                    self.namespace.append(f'default:{self.test_bucket}.{s_item}.{c_item}')
+                    if indexes_before_load:
+                        pre_load_idx_pri = QueryDefinition(index_name='pre_load_idx_pri')
+                        pre_load_idx_gsi = QueryDefinition(index_name='pre_load_idx_gsi', index_fields=['firstname'])
+                        query = pre_load_idx_pri.generate_primary_index_create_query(namespace=self.namespace[0])
+                        self.run_cbq_query(query=query)
+                        query = pre_load_idx_gsi.generate_index_create_query(namespace=self.namespace[0])
+                        self.run_cbq_query(query=query)
+                    self.gen_create = SDKDataLoader(num_ops=num_of_docs_per_collection, percent_create=100,
+                                                    percent_update=0, percent_delete=0, scope=s_item,
+                                                    collection=c_item, json_template=json_template)
+                    self._load_all_buckets(self.master, self.gen_create)
+                    # gens_load = self.generate_docs(self.docs_per_day)
+                    # self.load(gens_load, flag=self.item_flag, verify_data=False, batch_size=self.batch_size,
+                    # collection=f"{s_item}.{c_item}")
+
+        return pre_load_idx_pri, pre_load_idx_gsi
+
     def test_create_primary_index_for_collections(self):
-        self.prepare_collection_for_indexing()
+        self._prepare_collection_for_indexing()
         collection_namespace = self.namespace[0]
         query_gen_1 = QueryDefinition(index_name='`#primary`')
         query_gen_2 = QueryDefinition(index_name='name_primary_idx')
@@ -87,7 +135,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
             self.run_cbq_query(query=query_2)
 
     def test_gsi_for_collection(self):
-        pre_load_idx_pri, pre_load_idx_gsi = self.prepare_collection_for_indexing(indexes_before_load=True)
+        pre_load_idx_pri, pre_load_idx_gsi = self._prepare_collection_for_indexing(indexes_before_load=True)
         collection_namespace = self.namespace[0]
 
         query_gen = QueryDefinition(index_name='idx', index_fields=['age'])
@@ -231,7 +279,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
             self.run_cbq_query(query=query)
 
     def test_multiple_indexes_on_same_field(self):
-        self.prepare_collection_for_indexing()
+        self._prepare_collection_for_indexing()
         collection_namespace = self.namespace[0]
         primary_gen = QueryDefinition(index_name='`#primary`')
         query_gen = QueryDefinition(index_name='idx', index_fields=['age'])
@@ -288,7 +336,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
                                                        get_all_nodes=True)
         if len(index_nodes) < 2:
             self.fail("Need at least 2 index nodes to run this test")
-        self.prepare_collection_for_indexing()
+        self._prepare_collection_for_indexing()
         collection_namespace = self.namespace[0]
 
         # index creation with num replica
@@ -336,7 +384,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
             self.run_cbq_query(query=query)
 
     def test_gsi_array_indexes(self):
-        self.prepare_collection_for_indexing(json_template="Employee")
+        self._prepare_collection_for_indexing(json_template="Employee")
         collection_namespace = self.namespace[0]
         primary_gen = QueryDefinition(index_name='`#primary`')
         doc_count = self.run_cbq_query(query=f'select count(*) from {collection_namespace}')['results'][0]['$1']
@@ -412,7 +460,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
             self.run_cbq_query(query=query)
 
     def test_index_partitioning(self):
-        self.prepare_collection_for_indexing(json_template="Employee")
+        self._prepare_collection_for_indexing(json_template="Employee")
         collection_namespace = self.namespace[0]
         arr_index = "arr_index"
         primary_gen = QueryDefinition(index_name='`#primary`')
@@ -498,7 +546,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
             self.run_cbq_query(query=query)
 
     def test_partial_indexes(self):
-        self.prepare_collection_for_indexing(json_template="Employee")
+        self._prepare_collection_for_indexing(json_template="Employee")
         collection_namespace = self.namespace[0]
         arr_index = "arr_index"
         primary_gen = QueryDefinition(index_name='`#primary`')
@@ -556,7 +604,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
         for item in range(num_combo):
             scope = f"{scope_prefix}_{item}"
             collection = f"{collection_prefix}_{item}"
-            self.collection_rest.create_scope_collection(bucket=self.test_bucket, scope=scope, collection=collection)
+            self.cli_rest.create_scope_collection(bucket=self.test_bucket, scope=scope, collection=collection)
             col_namespace = f"default:{self.test_bucket}.{scope}.{collection}"
             collection_namespaces.append(col_namespace)
             self.gen_create = SDKDataLoader(num_ops=1000, percent_create=100,
@@ -581,7 +629,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
                                  f'index {arr_index} is not used.')
                 query = index_gen.generate_index_drop_query(namespace=col_namespace)
                 self.run_cbq_query(query=query)
-                self.collection_rest.delete_scope_collection(bucket=bucket, scope=scope, collection=collection)
+                self.cli_rest.delete_scope_collection(bucket=bucket, scope=scope, collection=collection)
             except Exception as err:
                 query = index_gen.generate_index_drop_query(namespace=col_namespace)
                 self.run_cbq_query(query=query)
@@ -593,7 +641,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
         collection_namespaces = []
         for item in range(num_scope):
             scope = f"scope_{item}"
-            self.collection_rest.create_scope_collection(bucket=self.test_bucket, scope=scope, collection=collection)
+            self.cli_rest.create_scope_collection(bucket=self.test_bucket, scope=scope, collection=collection)
             collection_namespaces.append(f"default:{self.test_bucket}.{scope}.{collection}")
             self.gen_create = SDKDataLoader(num_ops=1000, percent_create=100,
                                             percent_update=0, percent_delete=0, scope=scope, collection=collection)
@@ -617,7 +665,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
                                  f'index {arr_index} is not used.')
                 query = index_gen.generate_index_drop_query(namespace=col_namespace)
                 self.run_cbq_query(query=query)
-                self.collection_rest.delete_scope_collection(bucket=bucket, scope=scope, collection=collection)
+                self.cli_rest.delete_scope_collection(bucket=bucket, scope=scope, collection=collection)
             except Exception as err:
                 query = index_gen.generate_index_drop_query(namespace=col_namespace)
                 self.run_cbq_query(query=query)
@@ -627,10 +675,10 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
         num_collection = 2
         scope = 'test_scope'
         collection_namespaces = []
-        self.collection_rest.create_scope(bucket=self.test_bucket, scope=scope)
+        self.cli_rest.create_scope(bucket=self.test_bucket, scope=scope)
         for item in range(num_collection):
             collection = f"collection_{item}"
-            self.collection_rest.create_collection(bucket=self.test_bucket, scope=scope, collection=collection)
+            self.cli_rest.create_collection(bucket=self.test_bucket, scope=scope, collection=collection)
             collection_namespaces.append(f"default:{self.test_bucket}.{scope}.{collection}")
             self.gen_create = SDKDataLoader(num_ops=1000, percent_create=100,
                                             percent_update=0, percent_delete=0, scope=scope, collection=collection)
@@ -654,7 +702,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
                                  f'index {arr_index} is not used.')
                 query = index_gen.generate_index_drop_query(namespace=col_namespace)
                 self.run_cbq_query(query=query)
-                self.collection_rest.delete_collection(bucket=bucket, scope=scope, collection=collection)
+                self.cli_rest.delete_collection(bucket=bucket, scope=scope, collection=collection)
             except Exception as err:
                 query = index_gen.generate_index_drop_query(namespace=col_namespace)
                 self.run_cbq_query(query=query)
@@ -667,7 +715,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
         arr_index = 'arr_index'
         index_gen = QueryDefinition(index_name=arr_index, index_fields=['age'])
         primary_gen = QueryDefinition(index_name='`#primary`')
-        self.collection_rest.create_scope_collection(bucket=self.test_bucket, scope=scope, collection=collection)
+        self.cli_rest.create_scope_collection(bucket=self.test_bucket, scope=scope, collection=collection)
         collection_namespace = f"default:{self.test_bucket}.{scope}.{collection}"
         self.gen_create = SDKDataLoader(num_ops=10000, percent_create=100,
                                         percent_update=0, percent_delete=0, scope=scope, collection=collection)
@@ -706,17 +754,17 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
         # dropping colB and then creating index arr_index_2
         namespace = f"default:{self.test_bucket}.{scope}.{col_a}"
         try:
-            self.collection_rest.create_scope_collection(bucket=self.test_bucket, scope=scope,
-                                                         collection=col_a)
+            self.cli_rest.create_scope_collection(bucket=self.test_bucket, scope=scope,
+                                                  collection=col_a)
             self.sleep(5)
             query = primary_gen.generate_primary_index_create_query(namespace=namespace)
             self.run_cbq_query(query=query)
             query = index_gen_1.generate_index_create_query(namespace=namespace, defer_build=True)
             self.run_cbq_query(query=query)
-            self.collection_rest.create_collection(bucket=self.test_bucket, scope=scope, collection=col_b)
+            self.cli_rest.create_collection(bucket=self.test_bucket, scope=scope, collection=col_b)
             query = index_gen_1.generate_build_query(namespace=namespace)
             self.run_cbq_query(query=query)
-            self.collection_rest.delete_collection(bucket=self.test_bucket, scope=scope, collection=col_b)
+            self.cli_rest.delete_collection(bucket=self.test_bucket,scope=scope, collection=col_b)
             self.wait_until_indexes_online(defer_build=True)
             self.sleep(5)
             query = index_gen_2.generate_index_create_query(namespace=namespace)
@@ -728,17 +776,17 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
             self.run_cbq_query(query=query)
             query = index_gen_2.generate_index_drop_query(namespace=namespace)
             self.run_cbq_query(query=query)
-            self.collection_rest.delete_scope_collection(bucket=self.test_bucket, scope=scope, collection=col_a)
+            self.cli_rest.delete_scope_collection(bucket=self.test_bucket, scope=scope, collection=col_a)
 
             # Trying with loaded collection
-            self.collection_rest.create_scope_collection(bucket=self.test_bucket, scope=scope, collection=col_a)
+            self.cli_rest.create_scope_collection(bucket=self.test_bucket, scope=scope, collection=col_a)
             self.gen_create = SDKDataLoader(num_ops=1000, percent_create=100, percent_update=0, percent_delete=0,
                                             scope=scope, collection=col_a)
             self._load_all_buckets(self.master, self.gen_create)
-            self.collection_rest.create_collection(bucket=self.test_bucket, scope=scope, collection=col_b)
+            self.cli_rest.create_collection(bucket=self.test_bucket, scope=scope, collection=col_b)
             query = index_gen_1.generate_index_create_query(namespace=namespace, defer_build=True)
             self.run_cbq_query(query=query)
-            self.collection_rest.delete_collection(bucket=self.test_bucket, scope=scope, collection=col_b)
+            self.cli_rest.delete_collection(bucket=self.test_bucket,scope=scope, collection=col_b)
             query = index_gen_1.generate_build_query(namespace=namespace)
             self.run_cbq_query(query=query)
             self.wait_until_indexes_online(defer_build=True)
@@ -751,7 +799,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
             self.run_cbq_query(query=query)
             query = index_gen_2.generate_index_drop_query(namespace=namespace)
             self.run_cbq_query(query=query)
-            self.collection_rest.delete_scope_collection(bucket=self.test_bucket, scope=scope, collection=col_a)
+            self.cli_rest.delete_scope_collection(bucket=self.test_bucket, scope=scope, collection=col_a)
         except Exception as err:
             self.log.error(str(err))
             query = index_gen_1.generate_index_drop_query(namespace=namespace)
@@ -761,7 +809,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
             self.fail()
 
     def test_indexes_with_deferred_build(self):
-        self.prepare_collection_for_indexing()
+        self._prepare_collection_for_indexing()
         collection_namespace = self.namespace[0]
         index_gen_1 = QueryDefinition(index_name='idx_1', index_fields=['age'])
         index_gen_2 = QueryDefinition(index_name='idx_2', index_fields=['city'])
@@ -852,7 +900,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
             self.skipTest("DGM can be achieved only for plasma")
         dgm_server = self.get_nodes_from_services_map(service_type="index")
         self.get_dgm_for_plasma(indexer_nodes=[dgm_server])
-        self.prepare_collection_for_indexing(num_of_docs_per_collection=10 ** 5)
+        self._prepare_collection_for_indexing(num_of_docs_per_collection=10 ** 5)
         collection_namespace = self.namespace[0]
         index_gen = QueryDefinition(index_name='idx', index_fields=['age', 'city', 'firstName', 'country'])
         try:
@@ -881,7 +929,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
                     self.sleep(1)
                     task_2 = executor.submit(self.run_cbq_query, drop_query)
                     self.log.info(task_2.result())
-                    task_1.result()
+                    results = task_1.result()
             except Exception as err:
                 err_msg = 'No index available on keyspace test_collection_1 that matches your query.' \
                           ' Use CREATE INDEX or CREATE PRIMARY INDEX to create an index, or check that your' \
@@ -896,8 +944,8 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
     def test_drop_indexes_scenarios(self):
         scope = 'test_scope'
         collection = 'test_collection'
-        self.prepare_collection_for_indexing()
-        self.collection_rest.create_scope_collection(bucket=self.test_bucket, scope=scope, collection=collection)
+        self._prepare_collection_for_indexing()
+        self.cli_rest.create_scope_collection(bucket=self.test_bucket, scope=scope, collection=collection)
         index_gen = QueryDefinition(index_name='idx', index_fields=['age'])
 
         collection_namespace = f'default:{self.test_bucket}.{scope}.{collection}'
@@ -964,7 +1012,8 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
                 self.run_cbq_query(query)
             self.wait_until_indexes_online(defer_build=self.defer_build)
 
-            query = f'ALTER INDEX idx on {collection_namespace_2} WITH {{"action":"drop_replica","replicaId": 1}}'
+            query = f'ALTER INDEX idx on {collection_namespace_2} ' \
+                                f' WITH {{"action":"drop_replica","replicaId": 1}}'
             self.run_cbq_query(query=query)
 
             result = self.run_cbq_query(system_indexes_query)['results']
@@ -978,7 +1027,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
 
     def test_create_negative_scenarios(self):
         # Checking for duplicate index names
-        self.prepare_collection_for_indexing()
+        self._prepare_collection_for_indexing()
         collection_namespace = self.namespace[0]
         index_gen_1 = QueryDefinition(index_name='idx', index_fields=['age'])
         index_gen_2 = QueryDefinition(index_name='idx', index_fields=['city'])
@@ -1035,7 +1084,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
         # index on dropped collection
         _, keyspace = collection_namespace.split(':')
         bucket, scope, collection = keyspace.split('.')
-        self.collection_rest.delete_collection(bucket=bucket, scope=scope, collection=collection)
+        self.cli_rest.delete_collection(bucket=bucket, scope=scope, collection=collection)
         try:
             query = index_gen.generate_index_create_query(namespace=collection_namespace)
             self.run_cbq_query(query=query)
@@ -1045,7 +1094,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
 
     def test_drop_negative_scenarios(self):
         # dropping an already dropped index
-        self.prepare_collection_for_indexing(num_of_docs_per_collection=9 * 10 ** 4)
+        self._prepare_collection_for_indexing(num_of_docs_per_collection=9 * 10 ** 4)
         collection_namespace = self.namespace[0]
         index_gen = QueryDefinition(index_name='idx', index_fields=['age'])
         system_indexes_query = "Select * from system:indexes"
@@ -1089,7 +1138,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
         # self.assertEqual(len(result), 0, "Index didn't drop during index creation phase ")
 
     def test_build_scenarios(self):
-        self.prepare_collection_for_indexing()
+        self._prepare_collection_for_indexing()
         collection_namespace = self.namespace[0]
         index_gen_list = []
         num_index = 5

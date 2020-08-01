@@ -8,11 +8,7 @@ from couchbase_helper.tuq_generators import TuqGenerators
 from lib.membase.helper.cluster_helper import ClusterOperationHelper
 from lib.remote.remote_util import RemoteMachineShellConnection
 from membase.api.rest_client import RestConnection
-from couchbase_helper.documentgenerator import SDKDataLoader
-from couchbase_helper.query_definitions import QueryDefinition
-from collection.collections_rest_client import CollectionsRest
-from collection.collections_stats import CollectionsStats
-from collection.collections_cli_client import CollectionsCLI
+
 from .newtuq import QueryTests
 
 log = logging.getLogger(__name__)
@@ -41,19 +37,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.use_rest = self.input.param("use_rest", False)
         self.plasma_dgm = self.input.param("plasma_dgm", False)
         self.bucket_name = self.input.param("bucket_name", "default")
-        self.num_scopes = self.input.param("num_scopes", 1)
-        self.num_collections = self.input.param("num_collections", 1)
-        self.test_bucket = self.input.param('test_bucket', 'test_bucket')
-        self.enable_dgm = self.input.param('enable_dgm', False)
         self.rest = RestConnection(self.master)
-        self.buckets = self.rest.get_buckets()
-        self.collection_rest = CollectionsRest(self.master)
-        self.collection_cli = CollectionsCLI(self.master)
-        self.stat = CollectionsStats(self.master)
-        self.scope_prefix = self.input.param('scope_prefix', 'test_scope')
-        self.collection_prefix = self.input.param('collection_prefix', 'test_collection')
-        self.run_cbq_query = self.n1ql_helper.run_cbq_query
-        self.num_of_docs_per_collection = self.input.param('num_of_docs_per_collection', 1000)
         self.deploy_node_info = None
         if not self.use_rest:
             query_definition_generator = SQLDefinitionGenerator()
@@ -1087,47 +1071,3 @@ class BaseSecondaryIndexingTests(QueryTests):
         # wait till node is ready after warmup
         ClusterOperationHelper.wait_for_ns_servers_or_assert([node], self,
                                                              wait_if_warmup=True)
-
-    def prepare_collection_for_indexing(self, num_scopes=1, num_collections=1, num_of_docs_per_collection=1000,
-                                        skip_defaults=True, indexes_before_load=False, json_template="Person"):
-        self.namespace = []
-        pre_load_idx_pri = None
-        pre_load_idx_gsi = None
-        self.collection_rest.create_scope_collection_count(scope_num=num_scopes, collection_num=num_collections,
-                                                           scope_prefix=self.scope_prefix,
-                                                           collection_prefix=self.collection_prefix,
-                                                           bucket=self.test_bucket)
-        self.scopes = self.collection_rest.get_bucket_scopes(bucket=self.test_bucket)
-        self.collections = self.collection_rest.get_bucket_collections(bucket=self.test_bucket)
-        self.sleep(10, "Allowing time after collection creation")
-
-        if skip_defaults:
-            self.scopes.remove('_default')
-            self.collections.remove('_default')
-        if num_of_docs_per_collection > 0:
-            for s_item in self.scopes:
-                for c_item in self.collections:
-                    self.namespace.append(f'default:{self.test_bucket}.{s_item}.{c_item}')
-                    if indexes_before_load:
-                        pre_load_idx_pri = QueryDefinition(index_name='pre_load_idx_pri')
-                        pre_load_idx_gsi = QueryDefinition(index_name='pre_load_idx_gsi', index_fields=['firstName'])
-                        query = pre_load_idx_pri.generate_primary_index_create_query(namespace=self.namespace[0])
-                        self.run_cbq_query(query=query)
-                        query = pre_load_idx_gsi.generate_index_create_query(namespace=self.namespace[0])
-                        self.run_cbq_query(query=query)
-                    self.gen_create = SDKDataLoader(num_ops=num_of_docs_per_collection, percent_create=100,
-                                                    percent_update=0, percent_delete=0, scope=s_item,
-                                                    collection=c_item, json_template=json_template)
-                    self._load_all_buckets(self.master, self.gen_create)
-        return pre_load_idx_pri, pre_load_idx_gsi
-
-    def get_indexer_mem_quota(self, indexer_node=None):
-        """
-        Get Indexer memory Quota
-        :param indexer_node:
-        """
-        if not indexer_node:
-            indexer_node = self.get_nodes_from_services_map(service_type="index")
-        rest = RestConnection(indexer_node)
-        content = rest.cluster_status()
-        return int(content['indexMemoryQuota'])
