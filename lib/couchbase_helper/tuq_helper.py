@@ -262,7 +262,8 @@ class N1QLHelper():
                 query_params['timeout'] = timeout
             if verbose:
                 self.log.info('RUN QUERY %s' % query)
-            result = RestConnection(server).query_tool(query, self.n1ql_port, query_params=query_params, is_prepared = is_prepared, verbose = verbose)
+            result = RestConnection(server).query_tool(query, self.n1ql_port, query_params=query_params,
+                                                       is_prepared=is_prepared, verbose=verbose, timeout=timeout)
         else:
             shell = RemoteMachineShellConnection(server)
             cmd = f"{testconstants.LINUX_COUCHBASE_BIN_PATH}/cbq  -engine=http://{server.ip}:8093/ -u {rest.username} -p {rest.password} "

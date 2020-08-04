@@ -679,6 +679,7 @@ class RestConnection(object):
 
     def delete_scope(self, bucket, scope):
         api = self.baseUrl + 'pools/default/buckets/%s/collections/%s' % (bucket, scope)
+        print(f'Executing DELETE on: {api}')
         headers = self._create_headers()
         status, content, header = self._http_request(api, 'DELETE', headers=headers)
         return status
@@ -3642,9 +3643,10 @@ class RestConnection(object):
 
     def query_tool(self, query, port=8093, timeout=1300, query_params={}, is_prepared=False, named_prepare=None,
                    verbose = True, encoded_plan=None, servers=None):
+        if timeout is None:
+            timeout = 1300
         key = 'prepared' if is_prepared else 'statement'
         headers = None
-        content=""
         prepared = json.dumps(query)
         if is_prepared:
             if named_prepare and encoded_plan:
