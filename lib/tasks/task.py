@@ -436,7 +436,7 @@ class BucketDeleteTask(Task):
 
 
 class CollectionCreateTask(Task):
-    def __init__(self, server, bucket, scope, collection, params):
+    def __init__(self, server, bucket, scope, collection, params=None):
         Task.__init__(self, "collection_create_task")
         self.server = server
         self.bucket_name = bucket
@@ -502,7 +502,7 @@ class CollectionDeleteTask(Task):
 
 
 class ScopeCollectionCreateTask(Task):
-    def __init__(self, server, bucket, scope, collection, params):
+    def __init__(self, server, bucket, scope, collection, params=None):
         Task.__init__(self, "collection_create_task")
         self.server = server
         self.bucket_name = bucket
@@ -568,7 +568,7 @@ class ScopeCollectionDeleteTask(Task):
 
 
 class ScopeCreateTask(Task):
-    def __init__(self, server, bucket, scope, params):
+    def __init__(self, server, bucket, scope, params=None):
         Task.__init__(self, "scope_create_task")
         self.server = server
         self.bucket_name = bucket

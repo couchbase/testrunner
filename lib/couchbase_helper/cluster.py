@@ -107,12 +107,12 @@ class Cluster(object):
         self.task_manager.schedule(_task)
         return _task
 
-    def async_create_collection(self, server, bucket_name, scope_name, collection_name, collection_params):
+    def async_create_collection(self, server, bucket_name, scope_name, collection_name, collection_params=None):
         _task = CollectionCreateTask(server, bucket_name, scope_name, collection_name, collection_params)
         self.task_manager.schedule(_task)
         return _task
 
-    def async_create_scope_collection(self, server, bucket_name, scope_name, collection_name, collection_params):
+    def async_create_scope_collection(self, server, bucket_name, scope_name, collection_name, collection_params=None):
         _task = ScopeCollectionCreateTask(server, bucket_name, scope_name, collection_name, collection_params)
         self.task_manager.schedule(_task)
         return _task

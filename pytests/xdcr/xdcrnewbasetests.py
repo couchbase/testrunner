@@ -219,6 +219,32 @@ class GO_XDCR_AUDIT_EVENT_ID:
     DEFAULT_SETT = 16391
     IND_SETT = 16392
 
+class BUCKET_COLLECTIONS_DENSITY:
+    low = {"num_scopes": 1, "num_collections_per_scope": 1, "num_docs_per_collection": 1000}
+    medium = {"num_scopes": 5, "num_collections_per_scope": 10, "num_docs_per_collection": 1000}
+    high = {"num_scopes": 10, "num_collections_per_scope": 20, "num_docs_per_collection": 1000}
+    random = {"num_scopes": random.randint(1, 100), "num_collections_per_scope": random.randint(1, 1000),
+              "num_docs_per_collection": random.randint(0, 10000)}
+
+    def __init__(self, density):
+        self.density = None
+        if density == "low":
+            self.density = self.low
+        if density == "medium":
+            self.density = self.medium
+        if density == "high":
+            self.density = self.high
+        if density == "random":
+            self.density = self.random
+
+    def get_num_scopes(self):
+        return self.density["num_scopes"]
+
+    def get_num_collections(self):
+        return self.density["num_collections_per_scope"]
+
+    def get_num_docs(self):
+        return self.density["num_docs_per_collection"]
 
 class NodeHelper:
     _log = logger.Logger.get_logger()
@@ -1054,7 +1080,7 @@ class XDCReplication:
 class CouchbaseCluster:
 
     def __init__(self, name, nodes, log, use_hostname=False, sdk_compression=True,
-                 use_java_sdk=False, scope_num=2, collection_num=2):
+                 use_java_sdk=False, scope_num=0, collection_num=0):
         """
         @param name: Couchbase cluster name. e.g C1, C2 to distinguish in logs.
         @param nodes: list of server objects (read from ini file).
@@ -1358,8 +1384,12 @@ class CouchbaseCluster:
                                                      bucket_priority=bucket_priority,
                                                      lww=lww, maxttl=maxttl,
                                                      bucket_storage=bucket_storage)
-            bucket_tasks.append(self.__clusterop.async_create_sasl_bucket(name=name, password='password',
-                                                                          bucket_params=sasl_params))
+            self.__clusterop.async_create_sasl_bucket(name=name, password='password',
+                                                                          bucket_params=sasl_params)
+
+            if self.scope_num or self.collection_num:
+                bucket_tasks.append(CollectionsRest(self.__master_node).async_create_scope_collection(
+                    self.scope_num, self.collection_num, name))
 
             self.__buckets.append(
                 Bucket(
@@ -1401,9 +1431,12 @@ class CouchbaseCluster:
                 maxttl=maxttl,
                 bucket_storage=bucket_storage)
 
-            bucket_tasks.append(self.__clusterop.async_create_standard_bucket(name=name, port=STANDARD_BUCKET_PORT+i,
-                                                                              bucket_params=standard_params))
+            self.__clusterop.async_create_standard_bucket(name=name, port=STANDARD_BUCKET_PORT+i,
+                                                                              bucket_params=standard_params)
 
+            if self.scope_num or self.collection_num:
+                bucket_tasks.append(CollectionsRest(self.__master_node).async_create_scope_collection(
+                    self.scope_num, self.collection_num, name))
 
             self.__buckets.append(
                 Bucket(
@@ -1460,11 +1493,9 @@ class CouchbaseCluster:
                 bucket_storage=bucket_storage
             ))
 
-        if self.use_java_sdk:
-            node = self.__master_node
-            for bucket in RestConnection(node).get_buckets():
-                CollectionsRest(node).async_create_scope_collection(
-                    self.scope_num, self.collection_num, bucket)
+        if self.scope_num or self.collection_num:
+            CollectionsRest(self.__master_node).async_create_scope_collection(
+                self.scope_num, self.collection_num, BUCKET_NAME.DEFAULT)
 
     def get_buckets(self):
         return self.__buckets
@@ -2769,8 +2800,13 @@ class XDCRNewBaseTest(unittest.TestCase):
                                 None)))
 
     def __setup_for_test(self):
-        use_hostanames = self._input.param("use_hostnames", False)
+        use_hostnames = self._input.param("use_hostnames", False)
         sdk_compression = self._input.param("sdk_compression", True)
+        collection_density = self._input.param("collection_density", "low")
+        scope_num = BUCKET_COLLECTIONS_DENSITY(collection_density).get_num_scopes()
+        collection_num = BUCKET_COLLECTIONS_DENSITY(collection_density).get_num_collections()
+        if scope_num or collection_num:
+            self._num_items = BUCKET_COLLECTIONS_DENSITY(collection_density).get_num_docs()
         counter = 1
         for _, nodes in self._input.clusters.items():
             cluster_nodes = copy.deepcopy(nodes)
@@ -2779,9 +2815,9 @@ class XDCRNewBaseTest(unittest.TestCase):
             self.__cb_clusters.append(
                 CouchbaseCluster(
                     "C%s" % counter, cluster_nodes,
-                    self.log, use_hostanames, sdk_compression=sdk_compression,
-                    use_java_sdk=self._use_java_sdk, scope_num=self._scope_num,
-                    collection_num=self._collection_num))
+                    self.log, use_hostnames, sdk_compression=sdk_compression,
+                    use_java_sdk=self._use_java_sdk, scope_num=scope_num,
+                    collection_num=collection_num))
             counter += 1
 
         self.__cleanup_previous()
@@ -2895,8 +2931,6 @@ class XDCRNewBaseTest(unittest.TestCase):
         if self._use_java_sdk:
             self.log.info("Building docker image with java sdk client")
             JavaSdkSetup()
-        self._scope_num = self._input.param("scope_num", 2)
-        self._collection_num = self._input.param("collection_num", 2)
 
     def __initialize_error_count_dict(self):
         """
