@@ -41,7 +41,10 @@ class QuerySkipRangeScanTests(QueryTests):
             spans = plan["~children"][0]["~children"][0]['spans'][0]['range']
             self.assertEqual(spans, check_data)
         if check_type == "index":
-            index = plan["~children"][0]['index']
+            try:
+                index = plan["~children"][0]['index']
+            except Exception as e:
+                index = plan["~children"][0]['scans'][0]['index']
             self.assertEqual(index, check_data)
         if check_type == "join_index":
             index = plan["~children"][2]['~child']['~children'][0]['~child']['~children'][0]['index']
@@ -308,7 +311,7 @@ class QuerySkipRangeScanTests(QueryTests):
         spans_1a = [{u'low': u'null', u'inclusion': 0}]
         spans_1b = [{u'high': u'(`d1`.`join_yr`)', u'low': u'(`d1`.`join_yr`)', u'inclusion': 3}]
 
-        queries["a"] = {"indexes": [self.primary_index_def, index_1a, index_1b], "queries": [query_1],
+        queries["a"] = {"indexes": [self.primary_index_def, index_1a], "queries": [query_1],
                         "asserts": [self.plan_verifier("index", "idx1", 0),
                                     self.plan_verifier("join_index", "idx1", 0),
                                     self.plan_verifier("spans", spans_1a, 0),
@@ -355,7 +358,7 @@ class QuerySkipRangeScanTests(QueryTests):
         spans_4a = [{u'low': u'null', u'inclusion': 0}]
         spans_4b = [{u'high': u'(`d1`.`join_yr`)', u'low': u'(`d1`.`join_yr`)', u'inclusion': 3}]
 
-        queries["d"] = {"indexes": [self.primary_index_def, index_4a, index_4b], "queries": [query_4],
+        queries["d"] = {"indexes": [self.primary_index_def, index_4b], "queries": [query_4],
                         "asserts": [self.plan_verifier("index", "idx2", 0),
                                     self.plan_verifier("join_index", "idx2", 0),
                                     self.plan_verifier("spans", spans_4a, 0),
@@ -369,7 +372,7 @@ class QuerySkipRangeScanTests(QueryTests):
                     'using': self.index_type.lower(), 'is_primary': False}
         index_5c = {'name': 'idx3', 'bucket': 'default', 'fields': [("join_yr", 0), ("join_day", 1)], 'state': 'online',
                     'using': self.index_type.lower(), 'is_primary': False}
-        spans_5a = [{u'low': u'null', u'inclusion': 0}]
+        spans_5a = [{u'inclusion': 0, u'low': u'null'}, {u'inclusion': 0, u'low': u'null'}]
         spans_5b = [{u'high': u'(`d1`.`join_yr`)', u'low': u'(`d1`.`join_yr`)', u'inclusion': 3}]
 
         queries["e"] = {"indexes": [self.primary_index_def, index_5a, index_5b, index_5c], "queries": [query_5],
@@ -388,7 +391,7 @@ class QuerySkipRangeScanTests(QueryTests):
                     'using': self.index_type.lower(), 'is_primary': False}
         index_6d = {'name': 'idx4', 'bucket': 'default', 'fields': [("join_yr", 0), ("join_day", 1), ("join_mo", 2)], 'state': 'online',
                     'using': self.index_type.lower(), 'is_primary': False}
-        spans_6a = [{u'low': u'null', u'inclusion': 0}]
+        spans_6a = [{u'inclusion': 0, u'low': u'null'}, {u'inclusion': 0, u'low': u'null'}]
         spans_6b = [{u'high': u'(`d1`.`join_yr`)', u'low': u'(`d1`.`join_yr`)', u'inclusion': 3}]
 
         queries["f"] = {"indexes": [self.primary_index_def, index_6a, index_6b, index_6c, index_6d], "queries": [query_6],
@@ -396,7 +399,6 @@ class QuerySkipRangeScanTests(QueryTests):
                                     self.plan_verifier("join_index", "idx3", 0),
                                     self.plan_verifier("spans", spans_6a, 0),
                                     self.plan_verifier("join_spans", spans_6b, 0)]}
-
         self.query_runner(queries)
 
     # this test will fail until MB-31203 is fixed
@@ -438,11 +440,11 @@ class QuerySkipRangeScanTests(QueryTests):
 
         query_5 = "explain select * from default where join_yr > 2010 and join_day > 1"
         queries["e"] = {"indexes": [self.primary_index_def, index_3, index_5], "queries": [query_5],
-                        "asserts": [self.plan_verifier("index", "idx3", 0)]}
+                        "asserts": [self.plan_verifier("index", "idx5", 0)]}
 
         query_6 = "explain select * from default where join_yr > 2010 and join_day > 1"
         queries["f"] = {"indexes": [self.primary_index_def, index_4, index_5], "queries": [query_6],
-                        "asserts": [self.plan_verifier("index", "idx4", 0)]}
+                        "asserts": [self.plan_verifier("index", "idx5", 0)]}
 
         query_6 = "explain select * from default where join_yr > 2010 and join_day > 1"
         queries["g"] = {"indexes": [self.primary_index_def, index_6, index_7], "queries": [query_6],
