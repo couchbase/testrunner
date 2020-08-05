@@ -2522,8 +2522,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.log.info("Delete Application : {0}".format(body['appname']))
         return content1
 
-    def _verify_backup_events_definition(self, bk_fxn):
-        backup_path = self.backupset.directory + "/backup/{0}/".format(self.backups[0])
+    def _verify_backup_events_definition(self, bk_fxn, backup_index=0):
+        backup_path = self.backupset.directory + "/backup/{0}/".format(self.backups[backup_index])
         events_file_name = "events.json"
         bk_file_events_dir = "/tmp/backup_events{0}/".format(self.master.ip)
         bk_file_events_path = bk_file_events_dir + events_file_name

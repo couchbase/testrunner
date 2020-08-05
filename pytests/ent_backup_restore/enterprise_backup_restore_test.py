@@ -3776,10 +3776,12 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
     def test_cbbackupmgr_with_eventing(self):
         """
             Create backup cluster with saslbucket (default_bucket=False).
+            Backup cluster (backup_before_eventing=True for MB-34077)
             Create events
             Backup cluster
             Create restore cluster
             Restore data back to restore cluster
+            Check if metadata restored (backup_before_eventing=True)
             Verify events restored back
         """
         if "5.5" > self.cb_version[:3]:
@@ -3795,6 +3797,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.create_functions_buckets = self.input.param('create_functions_buckets', True)
         self.docs_per_day = self.input.param("doc-per-day", 1)
         self.use_memory_manager = self.input.param('use_memory_manager', True)
+        self.backup_before_eventing = self.input.param('backup_before_eventing', False)
         bucket_params = self._create_bucket_params(server=self.master, size=128,
                                                        replicas=self.num_replicas)
         self.cluster.create_standard_bucket(name=self.src_bucket_name, port=STANDARD_BUCKET_PORT + 1,
@@ -3803,6 +3806,9 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.src_bucket = RestConnection(self.master).get_buckets()
         self.cluster.create_standard_bucket(name=self.dst_bucket_name, port=STANDARD_BUCKET_PORT + 1,
                                                 bucket_params=bucket_params)
+        self.backup_create()
+        if (self.backup_before_eventing):
+            self.backup_cluster()
         self.cluster.create_standard_bucket(name=self.metadata_bucket_name, port=STANDARD_BUCKET_PORT + 1,
                                                 bucket_params=bucket_params)
         self.buckets = RestConnection(self.master).get_buckets()
@@ -3823,20 +3829,32 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         try:
             self.deploy_function(body)
             bk_events_created = True
-            self.backup_create()
             self.backup_cluster()
             rest_bk = RestConnection(self.backupset.cluster_host)
             bk_fxn = rest_bk.get_all_functions()
+
+            backup_index = 0
+
+            if self.backup_before_eventing:
+                backup_index = 1
+                self.backupset.start = 1
+                self.backupset.end = 2
+
             if bk_fxn != "":
-                self._verify_backup_events_definition(json.loads(bk_fxn))
+                self._verify_backup_events_definition(json.loads(bk_fxn), backup_index = backup_index)
+
             self.backup_restore()
+
             rest_rs = RestConnection(self.backupset.restore_cluster_host)
+
+            if self.backup_before_eventing:
+                self.assertTrue('metadata' in [bucket.name for bucket in rest_rs.get_buckets()])
+
             self.bkrs_resume_function(body, rest_rs)
             rs_events_created = True
             #self._verify_restore_events_definition(bk_fxn)
         except Exception as e:
             self.fail(e)
-
         finally:
             master_nodes = [self.backupset.cluster_host,
                             self.backupset.restore_cluster_host]
