@@ -7,7 +7,11 @@ from .xdcrnewbasetests import NodeHelper
 from membase.api.rest_client import RestConnection
 from testconstants import STANDARD_BUCKET_PORT
 from remote.remote_util import RemoteMachineShellConnection
-from couchbase.exceptions import DocumentNotFoundException
+try:
+    from couchbase.exceptions import DocumentNotFoundException
+except:
+    from couchbase.exceptions import NotFoundError as DocumentNotFoundException
+
 from couchbase.bucket import Bucket
 from couchbase_helper.cluster import Cluster
 from membase.helper.cluster_helper import ClusterOperationHelper
