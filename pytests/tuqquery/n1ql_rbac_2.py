@@ -33,7 +33,6 @@ class RbacN1QL(QueryTests):
             self.run_cbq_query(query="CREATE PRIMARY INDEX ON default:default.{0}.{1}".format(self.scope, self.collections[1]))
             self.sleep(20)
         except Exception as e:
-            import pdb; pdb.set_trace()
             self.log.info(str(e))
         if self.bucket_name != "default" and self.bucket_name != "bucket0" and self.bucket_name != "default:default.test.test1":
             self.rest.create_bucket(bucket=self.bucket_name, ramQuotaMB=100)
