@@ -28,12 +28,12 @@ class Lww(XDCRNewBaseTest):
         self.cluster = Cluster()
         self.c1_cluster = self.get_cb_cluster_by_name('C1')
         self.c2_cluster = self.get_cb_cluster_by_name('C2')
-
-        self.skip_ntp = self._input.param("skip_ntp", False)
         self.clean_backup = self._input.param("clean_backup", False)
         self.bucketType = self._input.param("bucket_type", "membase")
         self.evictionPolicy = self._input.param("eviction_policy", "valueOnly")
-
+        self._scope_num = self._input.param("scope_num", 2)
+        self._collection_num = self._input.param("collection_num", 2)
+        self.skip_ntp = self._input.param("skip_ntp", False)
         if not self.skip_ntp:
             self._enable_ntp_and_sync()
 
@@ -162,7 +162,7 @@ class Lww(XDCRNewBaseTest):
                                        proxyPort=proxyPort, bucketType=self.bucketType, evictionPolicy=self.evictionPolicy)
 
         self.sleep(10)
-        if self._use_java_sdk:
+        if self._scope_num or self._collection_num:
             self._create_collections(self.c1_cluster.get_master_node())
             self._create_collections(self.c2_cluster.get_master_node())
 
