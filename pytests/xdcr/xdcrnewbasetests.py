@@ -1375,7 +1375,6 @@ class CouchbaseCluster:
         @param bucket_priority: high/low etc.
         @param lww: conflict_resolution_type.
         """
-        bucket_tasks = []
         for i in range(num_buckets):
             name = "sasl_bucket_" + str(i + 1)
             sasl_params = self._create_bucket_params(server=self.__master_node, password='password',
@@ -1385,12 +1384,7 @@ class CouchbaseCluster:
                                                      lww=lww, maxttl=maxttl,
                                                      bucket_storage=bucket_storage)
             self.__clusterop.async_create_sasl_bucket(name=name, password='password',
-                                                                          bucket_params=sasl_params)
-
-            if self.scope_num or self.collection_num:
-                bucket_tasks.append(CollectionsRest(self.__master_node).async_create_scope_collection(
-                    self.scope_num, self.collection_num, name))
-
+                                                      bucket_params=sasl_params)
             self.__buckets.append(
                 Bucket(
                     name=name, authType="sasl", saslPassword="password",
@@ -1401,9 +1395,9 @@ class CouchbaseCluster:
                     maxttl=maxttl,
                     bucket_storage=bucket_storage
                 ))
-
-        for task in bucket_tasks:
-            task.result()
+            if self.scope_num or self.collection_num:
+                CollectionsRest(self.__master_node).async_create_scope_collection(
+                    self.scope_num, self.collection_num, name)
 
     def create_standard_buckets(
             self, bucket_size, num_buckets=1, num_replicas=1,
@@ -1418,7 +1412,6 @@ class CouchbaseCluster:
         @param bucket_priority: high/low etc.
         @param lww: conflict_resolution_type.
         """
-        bucket_tasks = []
         for i in range(num_buckets):
             name = "standard_bucket_" + str(i + 1)
             standard_params = self._create_bucket_params(
@@ -1430,14 +1423,8 @@ class CouchbaseCluster:
                 lww=lww,
                 maxttl=maxttl,
                 bucket_storage=bucket_storage)
-
-            self.__clusterop.async_create_standard_bucket(name=name, port=STANDARD_BUCKET_PORT+i,
-                                                                              bucket_params=standard_params)
-
-            if self.scope_num or self.collection_num:
-                bucket_tasks.append(CollectionsRest(self.__master_node).async_create_scope_collection(
-                    self.scope_num, self.collection_num, name))
-
+            self.__clusterop.async_create_standard_bucket(name=name, port=STANDARD_BUCKET_PORT + i,
+                                                          bucket_params=standard_params)
             self.__buckets.append(
                 Bucket(
                     name=name,
@@ -1452,9 +1439,9 @@ class CouchbaseCluster:
                     maxttl=maxttl,
                     bucket_storage=bucket_storage
                 ))
-
-        for task in bucket_tasks:
-            task.result()
+            if self.scope_num or self.collection_num:
+                CollectionsRest(self.__master_node).async_create_scope_collection(
+                    self.scope_num, self.collection_num, name)
 
     def create_default_bucket(
             self, bucket_size, num_replicas=1,
@@ -1492,7 +1479,6 @@ class CouchbaseCluster:
                 maxttl=maxttl,
                 bucket_storage=bucket_storage
             ))
-
         if self.scope_num or self.collection_num:
             CollectionsRest(self.__master_node).async_create_scope_collection(
                 self.scope_num, self.collection_num, BUCKET_NAME.DEFAULT)
@@ -2799,6 +2785,20 @@ class XDCRNewBaseTest(unittest.TestCase):
                                 "log_level",
                                 None)))
 
+    def __add_user(self, id="cbadminbucket", name="cbadminbucket", password="password", roles="admin"):
+        for i in range(1, len(self.__cb_clusters) + 1):
+            self.log.info("Adding user: {} with roles: {}".format(name, roles))
+            # Add built-in user
+            testuser = [{'id': id, 'name': name, 'password': password}]
+            self.log
+            RbacBase().create_user_source(testuser, 'builtin',
+                                          self.get_cb_cluster_by_name('C' + str(i)).get_master_node())
+            # Assign role to user
+            role_list = [{'id': id, 'name': name, 'roles': roles}]
+            RbacBase().add_user_role(role_list,
+                                     RestConnection(self.get_cb_cluster_by_name('C' + str(i)).get_master_node()),
+                                     'builtin')
+
     def __setup_for_test(self):
         use_hostnames = self._input.param("use_hostnames", False)
         sdk_compression = self._input.param("sdk_compression", True)
@@ -2823,19 +2823,12 @@ class XDCRNewBaseTest(unittest.TestCase):
         self.__cleanup_previous()
         self.__init_clusters()
 
-        for i in range(1, len(self.__cb_clusters) + 1):
-            # Add built-in user to C1
-            testuser = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'password': 'password'}]
-            RbacBase().create_user_source(testuser, 'builtin',
-                                          self.get_cb_cluster_by_name('C' + str(i)).get_master_node())
-
-
-            # Assign user to role
-            role_list = [{'id': 'cbadminbucket', 'name': 'cbadminbucket', 'roles': 'admin'}]
-            RbacBase().add_user_role(role_list,
-                                     RestConnection(self.get_cb_cluster_by_name('C' + str(i)).get_master_node()),
-                                     'builtin')
-
+        self.builtin_user_id = self._input.param("builtin_user_id", "cbadminbucket")
+        self.builtin_user_name = self._input.param("builtin_user_name", "cbadminbucket")
+        self.builtin_user_password = self._input.param("builtin_user_password", "password")
+        self.builtin_user_roles = self._input.param("builtin_user_roles", "admin")
+        self.__add_user(self.builtin_user_id, self.builtin_user_name,
+                        self.builtin_user_password, self.builtin_user_roles)
 
         self.__set_free_servers()
         if str(self.__class__).find('upgradeXDCR') == -1 and str(self.__class__).find('lww') == -1:
@@ -3000,30 +2993,6 @@ class XDCRNewBaseTest(unittest.TestCase):
 
     def get_cluster_op(self):
         return self.__cluster_op
-
-    def add_built_in_server_user(self, testuser=None, rolelist=None, node=None):
-        """
-           From spock, couchbase server is built with some users that handles
-           some specific task such as:
-               cbadminbucket
-           Default added user is cbadminbucket with admin role
-        """
-        if testuser is None:
-            testuser = [{'id': 'cbadminbucket', 'name': 'cbadminbucket',
-                                                'password': 'password'}]
-        if rolelist is None:
-            rolelist = [{'id': 'cbadminbucket', 'name': 'cbadminbucket',
-                                                      'roles': 'admin'}]
-        if node is None:
-            node = self.master
-
-        self.log.info("**** add built-in '%s' user to node %s ****" % (testuser[0]["name"],
-                                                                       node.ip))
-        RbacBase().create_user_source(testuser, 'builtin', node)
-
-        self.log.info("**** add '%s' role to '%s' user ****" % (rolelist[0]["roles"],
-                                                                testuser[0]["name"]))
-        RbacBase().add_user_role(rolelist, RestConnection(node), 'builtin')
 
     def get_cb_cluster_by_name(self, name):
         """Return couchbase cluster object for given name.

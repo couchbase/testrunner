@@ -596,34 +596,44 @@ class RestConnection(object):
             raise Exception("unable to get random document/key for bucket %s" % (bucket))
         return json_parsed
 
-    def create_scope(self, bucket, scope, params=None):
+    def create_scope(self, bucket, scope, params=None, num_retries=3):
         api = self.baseUrl + 'pools/default/buckets/%s/collections' % (bucket)
         body = {'name': scope}
         if params:
             body.update(params)
         params = urllib.parse.urlencode(body)
         headers = self._create_headers()
-        status, content, header = self._http_request(api, 'POST', params=params, headers=headers)
-        log.info("{0} with params: {1}".format(api, params))
-        if status:
-            json_parsed = json.loads(content)
-            log.info("Scope created {}->{} {}".format(bucket, scope, json_parsed))
+        while num_retries > 0:
+            status, content, header = self._http_request(api, 'POST', params=params, headers=headers)
+            log.info("{0} with params: {1}".format(api, params))
+            if status:
+                json_parsed = json.loads(content)
+                log.info("Scope created {}->{} {}".format(bucket, scope, json_parsed))
+                break
+            else:
+                time.sleep(10)
+                num_retries -= 1
         else:
             raise Exception("Create scope failed : status:{0},content:{1}".format(status, content))
         return status
 
-    def create_collection(self, bucket, scope, collection, params=None):
+    def create_collection(self, bucket, scope, collection, params=None, num_retries=3):
         api = self.baseUrl + 'pools/default/buckets/%s/collections/%s' % (bucket, scope)
         body = {'name': collection}
         if params:
             body.update(params)
         params = urllib.parse.urlencode(body)
         headers = self._create_headers()
-        status, content, header = self._http_request(api, 'POST', params=params, headers=headers)
-        log.info("{0} with params: {1}".format(api, params))
-        if status:
-            json_parsed = json.loads(content)
-            log.info("Collection created {}->{}->{} manifest:{}".format(bucket, scope, collection, json_parsed))
+        while num_retries > 0:
+            status, content, header = self._http_request(api, 'POST', params=params, headers=headers)
+            log.info("{0} with params: {1}".format(api, params))
+            if status:
+                json_parsed = json.loads(content)
+                log.info("Collection created {}->{}->{} manifest:{}".format(bucket, scope, collection, json_parsed))
+                break
+            else:
+                time.sleep(10)
+                num_retries -= 1
         else:
             raise Exception("Create collection failed : status:{0},content:{1}".format(status, content))
         return status
