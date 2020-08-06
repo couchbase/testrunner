@@ -4395,13 +4395,18 @@ class FTSBaseTest(unittest.TestCase):
                 self.dataset, num_items=self._num_items)
 
     def populate_update_gen(self, fields_to_update=None, expiration=0):
-        if self.dataset in ["emp", "wiki"] :
+        if self.dataset == "emp":
             self.update_gen = copy.deepcopy(self.create_gen)
             self.update_gen.start = 0
             self.update_gen.end = int(self.create_gen.end *
                                       (float)(self._perc_upd) / 100)
             self.update_gen.doc_expiry = expiration
             self.update_gen.update(fields_to_update=fields_to_update)
+        elif self.dataset == "wiki":
+            self.update_gen = copy.deepcopy(self.create_gen)
+            self.update_gen.start = 0
+            self.update_gen.end = int(self.create_gen.end *
+                                      (float)(self._perc_upd) / 100)
         elif self.dataset == "all":
             self.update_gen = []
             self.update_gen = copy.deepcopy(self.create_gen)

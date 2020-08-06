@@ -189,7 +189,7 @@ class ElasticSearchBase(object):
         self.http = httplib2.Http
 
     def _http_request(self, api, method='GET', params='', headers=None,
-                      timeout=120):
+                      timeout=600):
         if not headers:
             headers = {'Content-Type': 'application/json',
                        'Accept': '*/*'}
