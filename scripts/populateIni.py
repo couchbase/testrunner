@@ -23,7 +23,6 @@ def main():
     options, args = parser.parse_args()
 
     print('the ini file is', options.inifile)
-
     servers = []
     if options.servers:
         if not options.servers.startswith('['):
@@ -62,10 +61,20 @@ def main():
              addPoolServers.pop(0)
 
           if options.os == 'windows':
-              if 'root' in data[i]:
+              if 'username:root' in data[i]:
                   data[i] = data[i].replace('root', 'Administrator')
               if 'password:couchbase' in data[i]:
                   data[i] = data[i].replace('couchbase', 'Membase123')
+
+          if 'es_ssh_username:root' in data[i]:
+              data[i] = data[i].replace('es_ssh_username:root', 'username:root')
+          if 'es_ssh_password:couchbase' in data[i]:
+              data[i] = data[i].replace('es_ssh_password:couchbase', 'password:couchbase')
+
+          if 'es_ssh_username:Administrator' in data[i]:
+              data[i] = data[i].replace('es_ssh_username:Administrator', 'username:root')
+          if 'es_ssh_password:Membase123' in data[i]:
+              data[i] = data[i].replace('es_ssh_password:Membase123', 'password:couchbase')
 
           if options.replaceValue:
               for oldnew in options.replaceValue.split(','):
