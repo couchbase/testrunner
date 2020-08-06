@@ -159,6 +159,7 @@ class RackzoneTests(RackzoneBaseTest):
         serverInfo = self.servers[0]
         rest = RestConnection(serverInfo)
         zones = []
+        shutdown_nodes = []
         zones.append("Group 1")
         nodes_in_zone = {}
         nodes_in_zone["Group 1"] = [serverInfo.ip]
@@ -205,7 +206,6 @@ class RackzoneTests(RackzoneBaseTest):
             self._verify_replica_distribution_in_zones(nodes_in_zone, "tap")
 
             """ Simulate entire nodes down in zone(s) by killing erlang process"""
-            shutdown_nodes = []
             if self.shutdown_zone >= 1 and self.zone >=2:
                 self.log.info("Start to shutdown nodes in zone to failover")
                 for down_zone in range(1, self.shutdown_zone + 1):
