@@ -12,7 +12,7 @@ from membase.api.rest_client import RestConnection, Bucket
 from membase.api.exception import ServerUnavailableException
 from remote.remote_util import RemoteMachineShellConnection
 from remote.remote_util import RemoteUtilHelper
-from testconstants import STANDARD_BUCKET_PORT
+from testconstants import STANDARD_BUCKET_PORT, WIN_COUCHBASE_LOGS_PATH
 from couchbase_helper.document import View
 from membase.helper.cluster_helper import ClusterOperationHelper
 from couchbase_helper.stats_tools import StatsCommon
@@ -428,14 +428,15 @@ class NodeHelper:
         """
         if not log_name:
             log_name = "goxdcr.log"
-        if not goxdcr_log:
-            goxdcr_log = NodeHelper.get_goxdcr_log_dir(server)\
-                     + '/' + log_name + '*'
         shell = RemoteMachineShellConnection(server)
         info = shell.extract_remote_info().type.lower()
         if info == "windows":
+            goxdcr_log = WIN_COUCHBASE_LOGS_PATH + log_name + '*'
             cmd = "grep "
         else:
+            if not goxdcr_log:
+                goxdcr_log = NodeHelper.get_goxdcr_log_dir(server) \
+                             + '/' + log_name + '*'
             cmd = "zgrep "
         cmd += "\"{0}\" {1}".format(search_str, goxdcr_log)
         iter = 0
