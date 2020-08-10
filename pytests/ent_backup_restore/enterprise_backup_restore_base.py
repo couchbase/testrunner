@@ -1397,7 +1397,29 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             if not ready:
                 self.fail("Server failed to start")
 
-    def backup_merge(self):
+    def _check_output_in_backup_logs(self, words, at_start = False, lines_before = 0, lines_after = 0):
+        """ Checks if a word is present in the backup logs.
+
+        Args:
+            words: A word or list words to find in the backup logs.
+            at_start: Check for the word at the start of a line only.
+            lines_before: The number of lines to display before the match.
+            lines_after: The number of lines to display after the match.
+
+        Returns:
+            A tuple (True if found, the matches output, remote shell error)
+        """
+        remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
+        words = "|".join(words) if isinstance(words, list) else words
+        caret = '^' if at_start else ''
+
+        output, error = remote_client.execute_command(
+                    f"cat {self.backupset.directory}/logs/backup-*.log | grep '{caret}{words}' -B {lines_before} -A {lines_after}"
+        )
+
+        return self._check_output(words, output), output, error
+
+    def backup_merge(self, check_for_panic = False):
         self.log.info("backups before merge: " + str(self.backups))
         self.log.info("number_of_backups_taken before merge: " \
                       + str(self.number_of_backups_taken))
@@ -1432,6 +1454,14 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         elif not output:
             self.log.info("process cbbackupmge may be killed")
             return False, [], "cbbackupmgr may be killed"
+        elif check_for_panic:
+            found_panic, output, error = \
+                    self._check_output_in_backup_logs("panic", at_start = True, lines_after = 12)
+
+            if found_panic:
+                self.log.error("Found word 'panic' in backup logs")
+                return False, output, "Panic found in backup logs:\n" + "\n".join(output)
+
         del self.backups[self.backupset.start - 1:self.backupset.end]
         command = (
             f"ls -tr {self.backupset.objstore_staging_directory + '/' if self.objstore_provider else ''}"

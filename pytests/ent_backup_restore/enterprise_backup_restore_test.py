@@ -2093,7 +2093,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.log.info("Initial number of backups matched")
         self.backupset.start = randrange(1, self.backupset.number_of_backups)
         self.backupset.end = randrange(self.backupset.start + 1, self.backupset.number_of_backups + 1)
-        status, output, message = self.backup_merge()
+        status, output, message = self.backup_merge(check_for_panic=True)
         if not status:
             self.fail(message)
         status, output, message = self.backup_list()
@@ -2111,9 +2111,14 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
                 if self.debug_logs:
                     print("backup name ", backup_name)
                     print("backup set  ", self.backups)
+                backup_count += 1
                 if backup_name in self.backups:
-                    backup_count += 1
                     self.log.info("{0} matched in info command output".format(backup_name))
+                else:
+                    self.fail("Didn't expect backup date {0} from the info command output" \
+                              " to be in self.backups (the list of exepected backup dates" \
+                              " after a merge)".format(backup_name))
+
         self.assertEqual(backup_count, len(self.backups), "Merged number of backups did not match")
         self.log.info("Merged number of backups matched")
 
