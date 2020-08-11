@@ -23,17 +23,18 @@ class RbacN1QL(QueryTests):
             self.inp_users = eval(eval(users))
         self.users = self.get_user_list()
         self.roles = self.get_user_role_list()
-        try:
-            self.run_cbq_query(query="CREATE scope default:default.{0}".format(self.scope))
-            self.sleep(10)
-            self.run_cbq_query(query="CREATE COLLECTION default:default.{0}.{1}".format(self.scope, self.collections[0]))
-            self.run_cbq_query(query="CREATE COLLECTION default:default.{0}.{1}".format(self.scope, self.collections[1]))
-            self.sleep(10)
-            self.run_cbq_query(query="CREATE PRIMARY INDEX ON default:default.{0}.{1}".format(self.scope, self.collections[0]))
-            self.run_cbq_query(query="CREATE PRIMARY INDEX ON default:default.{0}.{1}".format(self.scope, self.collections[1]))
-            self.sleep(20)
-        except Exception as e:
-            self.log.info(str(e))
+        if self.load_collections:
+            try:
+                self.run_cbq_query(query="CREATE scope default:default.{0}".format(self.scope))
+                self.sleep(10)
+                self.run_cbq_query(query="CREATE COLLECTION default:default.{0}.{1}".format(self.scope, self.collections[0]))
+                self.run_cbq_query(query="CREATE COLLECTION default:default.{0}.{1}".format(self.scope, self.collections[1]))
+                self.sleep(10)
+                self.run_cbq_query(query="CREATE PRIMARY INDEX ON default:default.{0}.{1}".format(self.scope, self.collections[0]))
+                self.run_cbq_query(query="CREATE PRIMARY INDEX ON default:default.{0}.{1}".format(self.scope, self.collections[1]))
+                self.sleep(20)
+            except Exception as e:
+                self.log.info(str(e))
         if self.bucket_name != "default" and self.bucket_name != "bucket0" and self.bucket_name != "default:default.test.test1":
             self.rest.create_bucket(bucket=self.bucket_name, ramQuotaMB=100)
             self.query_bucket = self.bucket_name
