@@ -3864,11 +3864,11 @@ class XDCRNewBaseTest(unittest.TestCase):
         """
         skip_key_validation = self._input.param("skip_key_validation", False)
         skip_meta_validation = self._input.param("skip_meta_validation", True)
-        skip_mirroring_validation = self._input.param("skip_mirroring_validation", True)
-        skip_collection_key_validation = self._input.param("skip_collection_key_validation", True)
+        skip_implicit_mapping_validation = True
+        skip_collection_key_validation = True
         if self._use_java_sdk:
-            skip_mirroring_validation = False
-            skip_collection_key_validation = False
+            skip_implicit_mapping_validation = self._input.param("skip_implicit_mapping_validation", False)
+            skip_collection_key_validation = self._input.param("skip_collection_key_validation", False)
             skip_key_validation = True
         src_dcp_queue_drained = False
         dest_dcp_queue_drained = False
@@ -3905,7 +3905,7 @@ class XDCRNewBaseTest(unittest.TestCase):
                 except Exception as e:
                     # just log any exception thrown, do not fail test
                     self.log.error(e)
-                if not skip_mirroring_validation :
+                if not skip_implicit_mapping_validation :
                     self.verify_mapping(src_cluster.get_master_node(), dest_cluster.get_master_node())
                 if not skip_collection_key_validation:
                     self.verify_collection_doc_count(src_cluster, dest_cluster)

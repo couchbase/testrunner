@@ -484,6 +484,7 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
         RestConnection(self.src_master).start_replication(REPLICATION_TYPE.CONTINUOUS,
             'default',
             "remote_cluster_%s-%s" % (self.src_cluster.get_name(), self.dest_cluster.get_name()))
+        self.src_cluster.set_global_checkpt_interval(60)
         self.key_counter = 0
         self.keys_loaded = []
         if self.was_pre_rep_successful():

@@ -141,7 +141,7 @@ class Lww(XDCRNewBaseTest):
             self.c1_cluster.add_bucket(ramQuotaMB=ramQuotaMB, bucket=bucket, authType=authType,
                                        saslPassword=saslPassword, replicaNumber=replicaNumber,
                                        proxyPort=proxyPort, bucketType=self.bucketType, evictionPolicy=self.evictionPolicy)
-
+            self._create_collections(bucket, self.c1_cluster.get_master_node())
         if not skip_dst:
             dst_rest = RestConnection(self.c2_cluster.get_master_node())
             if dst_lww:
@@ -160,14 +160,11 @@ class Lww(XDCRNewBaseTest):
             self.c2_cluster.add_bucket(ramQuotaMB=ramQuotaMB, bucket=bucket, authType=authType,
                                        saslPassword=saslPassword, replicaNumber=replicaNumber,
                                        proxyPort=proxyPort, bucketType=self.bucketType, evictionPolicy=self.evictionPolicy)
+            self._create_collections(bucket, self.c2_cluster.get_master_node())
 
-        self.sleep(10)
+    def _create_collections(self, bucket, node):
         if self._scope_num or self._collection_num:
-            self._create_collections(self.c1_cluster.get_master_node())
-            self._create_collections(self.c2_cluster.get_master_node())
-
-    def _create_collections(self, node):
-        for bucket in RestConnection(node).get_buckets():
+            self.sleep(timeout=10,message="Waiting for bucket creation to complete")
             CollectionsRest(node).async_create_scope_collection(
                 self._scope_num, self._collection_num, bucket)
 
