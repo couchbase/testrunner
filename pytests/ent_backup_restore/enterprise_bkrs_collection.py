@@ -90,8 +90,10 @@ class EnterpriseBackupRestoreCollectionTest(EnterpriseBackupRestoreCollectionBas
         self.log.info("*** done to load items to all buckets")
         self.ops_type = self.input.param("ops-type", "update")
         self.expected_error = self.input.param("expected_error", None)
-        self.create_scope_cluster_host()
-        self.create_collection_cluster_host(self.backupset.col_per_scope)
+        if self.create_scopes and not self.buckets_only:
+                self.create_scope_cluster_host()
+        if self.create_collections and not self.buckets_only and not self.scopes_only:
+            self.create_collection_cluster_host(self.backupset.col_per_scope)
         backup_scopes = self.get_bucket_scope_cluster_host()
         scopes_id = []
         for scope in backup_scopes:
@@ -108,6 +110,11 @@ class EnterpriseBackupRestoreCollectionTest(EnterpriseBackupRestoreCollectionBas
             self.log.info("Enabling auto failover on " + str(self.backupset.cluster_host))
             rest_conn = RestConnection(self.backupset.cluster_host)
             rest_conn.update_autofailover_settings(self.auto_failover, self.auto_failover_timeout)
+        if self.drop_scopes:
+            self.delete_scope_cluster_host()
+        else:
+            self.delete_collection_cluster_host()
+
         self.backup_create_validate()
         for i in range(1, self.backupset.number_of_backups + 1):
             if self.ops_type == "update":
@@ -171,9 +178,27 @@ class EnterpriseBackupRestoreCollectionTest(EnterpriseBackupRestoreCollectionBas
                 else:
                     end = randrange(start, self.backupset.number_of_backups + 1)
             restored["{0}/{1}".format(start, end)] = ""
-        restore_scopes = self.get_bucket_scope_restore_cluster_host()
-        restore_collections = self.get_bucket_collection_restore_cluster_host()
-        self.verify_collections_in_restore_cluster_host()
+        if not self.drop_scopes:
+            restore_scopes = self.get_bucket_scope_restore_cluster_host()
+            if not self.drop_collections:
+                restore_collections = self.get_bucket_collection_restore_cluster_host()
+                self.verify_collections_in_restore_cluster_host()
+            else:
+                try:
+                    restore_collections = self.get_bucket_collection_restore_cluster_host()
+                    if restore_collections:
+                        self.fail("Restore should not restore delete collection")
+                except Exception as e:
+                    if e:
+                        print("Exception: ", str(e))
+        else:
+            try:
+                restore_scopes = self.get_bucket_scope_restore_cluster_host()
+                if restore_scopes:
+                    self.fail("Restore should not restore delete scopes")
+            except Exception as e:
+                if e:
+                    print("Exception: ", str(e))
 
     def test_backup_merge_collection_sanity(self):
         """
@@ -297,6 +322,89 @@ class EnterpriseBackupRestoreCollectionTest(EnterpriseBackupRestoreCollectionBas
             scopes = self.get_bucket_scope_cluster_host()
             collections = self.get_bucket_collection_cluster_host()
             self.backup_info_validate(scopes, collections)
+
+    def test_restore_with_auto_create_buckets(self):
+        """
+           Restore cluster with --auto-create-buckets option
+        """
+        self.active_resident_threshold = 100
+        self.load_all_buckets(self.backupset.cluster_host)
+        self.log.info("*** done to load items to all buckets")
+        self.ops_type = self.input.param("ops-type", "update")
+        self.expected_error = self.input.param("expected_error", None)
+        if self.create_scopes and not self.buckets_only:
+                self.create_scope_cluster_host()
+        if self.create_collections and not self.buckets_only and not self.scopes_only:
+            self.create_collection_cluster_host(self.backupset.col_per_scope)
+        backup_scopes = self.get_bucket_scope_cluster_host()
+        scopes_id = []
+        for scope in backup_scopes:
+            if scope == "_default":
+                continue
+            scopes_id.append(self.get_scopes_id_cluster_host(scope))
+        """ remove null and empty element """
+        scopes_id = [i for i in scopes_id if i]
+        backup_collections = self.get_bucket_collection_cluster_host()
+        col_stats = self.get_collection_stats_cluster_host()
+        for backup_scope in backup_scopes:
+            bk_scope_id = self.get_scopes_id_cluster_host(backup_scope)
+
+        self.backup_create_validate()
+        for i in range(1, self.backupset.number_of_backups + 1):
+            if self.ops_type == "update":
+                self.log.info("*** start to update items in all buckets")
+                col_cmd = ""
+                if self.backupset.load_to_collection:
+                    self.backupset.load_scope_id = choice(scopes_id)
+                    col_cmd = " -c {0} ".format(self.backupset.load_scope_id)
+                self.load_all_buckets(self.backupset.cluster_host, ratio=0.1,
+                                                     command_options=col_cmd)
+                self.log.info("*** done update items in all buckets")
+            self.sleep(10)
+            self.log.info("*** start to validate backup cluster")
+            self.backup_cluster_validate()
+        self.targetMaster = True
+        start = randrange(1, self.backupset.number_of_backups + 1)
+        if start == self.backupset.number_of_backups:
+            end = start
+        else:
+            end = randrange(start, self.backupset.number_of_backups + 1)
+        self.log.info("*** start to restore cluster")
+        restored = {"{0}/{1}".format(start, end): ""}
+        for i in range(1, self.backupset.number_of_backups + 1):
+            if self.reset_restore_cluster:
+                self.log.info("*** start to reset cluster")
+                self.backup_reset_clusters(self.cluster_to_restore)
+                if self.same_cluster:
+                    self._initialize_nodes(Cluster(), self.servers[:self.nodes_init])
+                else:
+                    shell = RemoteMachineShellConnection(self.backupset.restore_cluster_host)
+                    shell.enable_diag_eval_on_non_local_hosts()
+                    shell.disconnect()
+                    rest = RestConnection(self.backupset.restore_cluster_host)
+                    rest.force_eject_node()
+                    rest.init_node()
+                self.log.info("Done reset cluster")
+            self.sleep(10)
+
+            """ Add built-in user cbadminbucket to second cluster """
+            self.add_built_in_server_user(node=self.input.clusters[0][:self.nodes_init][0])
+
+            self.backupset.start = start
+            self.backupset.end = end
+            self.log.info("*** start restore validation")
+            data_map_collection = []
+            for scope in backup_scopes:
+                if "default" in scope:
+                    continue
+                data_map_collection.append(self.buckets[0].name + "." + scope + "=" + \
+                                           self.buckets[0].name + "." + scope)
+            self.bucket_map_collection = ",".join(data_map_collection)
+            self.backup_restore_validate(compare_uuid=False,
+                                         seqno_compare_function=">=",
+                                         expected_error=self.expected_error)
+
+
 
     def _kill_cbbackupmgr(self):
         """

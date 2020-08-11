@@ -94,7 +94,18 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
         self.use_cli = self.input.param("use_cli", False)
         self.num_items = self.input.param("items", 1000)
         self.value_size = self.input.param("value_size", 512)
-
+        self.non_ascii_name = self.input.param("non_ascii_name", None)
+        self.create_scopes = self.input.param("create_scopes", True)
+        self.create_collections = self.input.param("create_collections", True)
+        self.buckets_only = self.input.param("buckets_only", False)
+        self.scopes_only = self.input.param("scopes_only", False)
+        self.collections_only = self.input.param("collections_only", False)
+        self.drop_scopes = self.input.param("drop_scopes", False)
+        self.drop_collections = self.input.param("drop_collections", False)
+        self.backupset.auto_create_buckets = self.input.param("auto_create_buckets", False)
+        self.backupset.create_restore_buckets = self.input.param("create_restore_buckets", True)
+        self.backupset.exist_scopes_in_restore_buckets = self.input.param("exist_scopes_in_restore_buckets", False)
+        self.backupset.exist_collections_in_restore_buckets = self.input.param("exist_collections_in_restore_buckets", False)
 
         self.debug_logs = self.input.param("debug-logs", False)
         self.show_bk_list = self.input.param("show_bk_list", True)
@@ -426,19 +437,25 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
     def create_scope_cluster_host(self, num_scope=2):
         bucket_name = self.buckets[0].name
         for x in range(num_scope):
+            scope_name = "scope{0}".format(x)
+            if self.non_ascii_name:
+                scope_name = self.non_ascii_name + str(x)
             if self.use_rest:
-                self.rest_bk.create_scope(bucket=bucket_name, scope="scope{0}".format(x),
+                self.rest_bk.create_scope(bucket=bucket_name, scope=scope_name,
                                               params=None)
             else:
-                self.cli_bk.create_scope(bucket=bucket_name, scope="scope{0}".format(x))
+                self.cli_bk.create_scope(bucket=bucket_name, scope=scope_name)
 
     def delete_scope_cluster_host(self, num_scope=2):
         bucket_name = self.buckets[0].name
         for x in range(num_scope):
+            scope_name = "scope{0}".format(x)
+            if self.non_ascii_name:
+                scope_name = self.non_ascii_name + str(x)
             if self.use_rest:
-                self.rest_bk.delete_scope("scope{0}".format(x), bucket=bucket_name)
+                self.rest_bk.delete_scope(bucket_name, scope_name)
             else:
-                self.cli_bk.delete_scope("scope{0}".format(x), bucket=bucket_name)
+                self.cli_bk.delete_scope(scope_name, bucket=bucket_name)
 
     def create_collection_cluster_host(self, num_collection=1):
         bucket_name = self.buckets[0].name
@@ -468,11 +485,14 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
     def create_scope_collection_cluster_host(self, num_scope_collection=2):
         bucket_name = self.buckets[0].name
         for x in range(num_collection):
+            scope_name = "scope{0}".format(x)
+            if self.non_ascii_name:
+                scope_name = self.non_ascii_name + str(x)
             if self.use_rest:
-                self.rest_bk.create_scope_collection(bucket_name, "scope{0}".format(x),
+                self.rest_bk.create_scope_collection(bucket_name, scope_name,
                                                      "mycollection{0}".format(x))
             else:
-                self.cli_bk.create_scope_collection(bucket_name, "scope{0}".format(x),
+                self.cli_bk.create_scope_collection(bucket_name, scope_name,
                                                     "mycollection{0}".format(x))
 
     def get_bucket_scope_cluster_host(self):
@@ -486,19 +506,25 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
     def create_scope_restore_cluster_host(self, num_scope=2):
         bucket_name = self.buckets[0].name
         for x in range(num_scope):
+            scope_name = "scope{0}".format(x)
+            if self.non_ascii_name:
+                scope_name = self.non_ascii_name + str(x)
             if self.use_rest:
-                self.rest_rs.create_scope(bucket=bucket_name, scope="scope{0}".format(x),
+                self.rest_rs.create_scope(bucket=bucket_name, scope=scope_name,
                                               params=None)
             else:
-                self.cli_rs.create_collection(bucket=bucket_name, scope="scope{0}".format(x))
+                self.cli_rs.create_collection(bucket=bucket_name, scope=scope_name)
 
     def delete_scope_restore_cluster_host(self, num_scope=2):
         bucket_name = self.buckets[0].name
         for x in range(num_scope):
+            scope_name = "scope{0}".format(x)
+            if self.non_ascii_name:
+                scope_name = self.non_ascii_name + str(x)
             if self.use_rest:
-                self.rest_rs.delete_scope("scope{0}".format(x), bucket=bucket_name)
+                self.rest_rs.delete_scope(scope_name, bucket=bucket_name)
             else:
-                self.cli_rs.delete_scope("scope{0}".format(x), bucket=bucket_name)
+                self.cli_rs.delete_scope(scope_name, bucket=bucket_name)
 
     def create_collection_restore_cluster_host(self, num_collection=1):
         bucket_name = self.buckets[0].name
@@ -572,13 +598,16 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
                 self.fail("Scope {0} failed to restore".format(restore_scope))
 
     def verify_collections_in_restore_cluster_host(self):
+        if self.buckets_only or self.scopes_only:
+            return
         backup_collections = self.get_bucket_collection_cluster_host()
         restore_collections = self.get_bucket_collection_restore_cluster_host()
         for restore_collection in restore_collections:
             if restore_collection in backup_collections:
                 self.log.info("Collection {0} restored".format(restore_collection))
             else:
-                self.fail("Collection {0} failed to restore".format(restore_collection))
+                if not self.drop_collections:
+                    self.fail("Collection {0} failed to restore".format(restore_collection))
 
     def get_collection_stats_cluster_host(self):
         bucket = self.buckets[0]
@@ -896,6 +925,8 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
         if self.backupset.disable_conf_res_restriction is not None:
             args += " --disable-conf-res-restriction {0}".format(
                 self.backupset.disable_conf_res_restriction)
+        if self.backupset.auto_create_buckets:
+            args += " --auto-create-buckets "
         filter_chars = {"star": "*", "dot": "."}
         if self.backupset.filter_keys:
             for key in filter_chars:
@@ -951,7 +982,8 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
             reset_cluster_count = 0
             for bucket in self.buckets:
                 bucket_name = bucket.name
-                if not rest_helper.bucket_exists(bucket_name):
+                if not rest_helper.bucket_exists(bucket_name) and \
+                    self.backupset.create_restore_buckets:
                     if self.backupset.map_buckets is None:
                         self.log.info("Creating bucket {0} in restore host {1}"
                                       .format(bucket_name,
@@ -1022,20 +1054,26 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
                     bucket_ready = rest_helper.vbucket_map_ready(bucket_name)
                     if not bucket_ready:
                         self.fail("Bucket {0} not created after 120 seconds.".format(bucket_name))
-                count = 0
-                bucket_status = rest_conn.get_bucket_status(bucket_name)
-                while bucket_status == "warmup":
-                    self.sleep(5, "wait for bucket is up")
+                if self.backupset.create_restore_buckets:
+                    count = 0
                     bucket_status = rest_conn.get_bucket_status(bucket_name)
+                    while bucket_status == "warmup":
+                        self.sleep(5, "wait for bucket is up")
+                        bucket_status = rest_conn.get_bucket_status(bucket_name)
+                        count += 1
+                        if count == 15:
+                            raise Exception("Bucket does not ready after 30 seconds")
+                    if has_index_node:
+                        self.sleep(15, "wait for index service ready")
+                    buckets.append("%s=%s" % (bucket.name, bucket_name))
                     count += 1
-                    if count == 15:
-                        raise Exception("Bucket does not ready after 30 seconds")
-                if has_index_node:
-                    self.sleep(15, "wait for index service ready")
-                buckets.append("%s=%s" % (bucket.name, bucket_name))
-                count += 1
-                reset_cluster_count += 1
-            bucket_maps = ",".join(buckets)
+                    reset_cluster_count += 1
+                    if self.backupset.exist_scopes_in_restore_buckets:
+                        self.create_scope_restore_cluster_host()
+                    if self.backupset.exist_collections_in_restore_buckets:
+                        self.create_collection_restore_cluster_host()
+            if self.backupset.create_restore_buckets:
+                bucket_maps = ",".join(buckets)
         if self.backupset.map_buckets:
             args += " --map-data %s " % bucket_maps
         user_env = ""
@@ -1081,7 +1119,7 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
                 args += " --replace-ttl-with {0}".format(self.replace_ttl_with)
             else:
                 args += " --replace-ttl {0}".format(self.replace_ttl)
-        if self.backupset.map_data_collection:
+        if self.backupset.map_data_collection and not self.buckets_only:
             args += " --map-data %s " % self.bucket_map_collection
         command = "{3} {2} {0}/cbbackupmgr {1}".format(self.cli_command_location, args,
                                                        password_env, user_env)
@@ -2506,6 +2544,9 @@ class Backupset:
         self.disable_ft_alias = False
         self.disable_analytics = False
         self.auto_create_buckets = False
+        self.create_restore_buckets = True
+        self.exist_scopes_in_restore_buckets = False
+        self.exist_collections_in_restore_buckets = False
 
         # Common configuration which is to be shared accross cloud providers
         self.objstore_access_key_id = ""
