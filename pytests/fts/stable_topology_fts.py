@@ -391,7 +391,10 @@ class StableTopFTS(FTSBaseTest):
         collection_index = self.container_type == 'collection'
         type = None if self.container_type == 'bucket' else f"{self.scope}.{self.collection}"
         index = self.create_index(bucket, "default_index", collection_index=collection_index, type=type)
-        self._cb_cluster.delete_bucket("default")
+        if self.container_type == "bucket":
+            self._cb_cluster.delete_bucket("default")
+        else:
+            self._drop_collection(bucket=bucket, scope=self.scope, collection=self.collection)
         self.sleep(20, "waiting for bucket deletion to be known by fts")
         try:
             count = index.get_indexed_doc_count()
@@ -573,9 +576,11 @@ class StableTopFTS(FTSBaseTest):
          uses RQG for custom mapping
         """
         # create a custom map, disable default map
+        collection_index = self.container_type == 'collection'
+        type = None if self.container_type == 'bucket' else f"{self.scope}.{self.collection}"
         index = self.create_index(
             bucket=self._cb_cluster.get_bucket_by_name('default'),
-            index_name="custom_index")
+            index_name="custom_index", collection_index=collection_index, type=type)
         if self.es:
             self.create_es_index_mapping(index.es_custom_map,
                                          index.index_definition)
@@ -902,25 +907,44 @@ class StableTopFTS(FTSBaseTest):
     def test_facets(self):
         field_indexed = self._input.param("field_indexed", True)
         self.load_data()
+        collection_index = self.container_type == 'collection'
+        type = None if self.container_type == 'bucket' else f"{self.scope}.{self.collection}"
         index = self.create_index(
             self._cb_cluster.get_bucket_by_name('default'),
-            "default_index")
+            "default_index", collection_index=collection_index, type=type)
         self.wait_for_indexing_complete()
-        index.add_child_field_to_default_mapping(field_name="type",
-                                                 field_type="text",
-                                                 field_alias="type",
-                                                 analyzer="keyword")
-        if field_indexed:
-            index.add_child_field_to_default_mapping(field_name="dept",
-                                                 field_type="text",
-                                                 field_alias="dept",
-                                                 analyzer="keyword")
-            index.add_child_field_to_default_mapping(field_name="salary",
-                                                 field_type="number",
-                                                 field_alias="salary")
-            index.add_child_field_to_default_mapping(field_name="join_date",
-                                                 field_type="datetime",
-                                                 field_alias="join_date")
+        if self.container_type == 'bucket':
+            index.add_child_field_to_default_mapping(field_name="type",
+                                                     field_type="text",
+                                                     field_alias="type",
+                                                     analyzer="keyword")
+            if field_indexed:
+                index.add_child_field_to_default_mapping(field_name="dept",
+                                                     field_type="text",
+                                                     field_alias="dept",
+                                                     analyzer="keyword")
+                index.add_child_field_to_default_mapping(field_name="salary",
+                                                     field_type="number",
+                                                     field_alias="salary")
+                index.add_child_field_to_default_mapping(field_name="join_date",
+                                                     field_type="datetime",
+                                                     field_alias="join_date")
+        else:
+            index.add_child_field_to_default_collection_mapping(field_name="type",
+                                                     field_type="text",
+                                                     field_alias="type",
+                                                     analyzer="keyword", scope=self.scope, collection=self.collection)
+            if field_indexed:
+                index.add_child_field_to_default_collection_mapping(field_name="dept",
+                                                     field_type="text",
+                                                     field_alias="dept",
+                                                     analyzer="keyword", scope=self.scope, collection=self.collection)
+                index.add_child_field_to_default_collection_mapping(field_name="salary",
+                                                     field_type="number",
+                                                     field_alias="salary", scope=self.scope, collection=self.collection)
+                index.add_child_field_to_default_collection_mapping(field_name="join_date",
+                                                     field_type="datetime",
+                                                     field_alias="join_date", scope=self.scope, collection=self.collection)
         index.index_definition['uuid'] = index.get_uuid()
         index.update()
         self.sleep(5)
@@ -949,25 +973,44 @@ class StableTopFTS(FTSBaseTest):
     def test_facets_during_index(self):
         field_indexed = self._input.param("field_indexed", True)
         self.load_data()
+        collection_index = self.container_type == 'collection'
+        type = None if self.container_type == 'bucket' else f"{self.scope}.{self.collection}"
         index = self.create_index(
             self._cb_cluster.get_bucket_by_name('default'),
-            "default_index")
+            "default_index", collection_index=collection_index, type=type)
         self.sleep(5)
-        index.add_child_field_to_default_mapping(field_name="type",
-                                                 field_type="text",
-                                                 field_alias="type",
-                                                 analyzer="keyword")
-        if field_indexed:
-            index.add_child_field_to_default_mapping(field_name="dept",
+        if self.container_type == 'bucket':
+            index.add_child_field_to_default_mapping(field_name="type",
                                                      field_type="text",
-                                                     field_alias="dept",
+                                                     field_alias="type",
                                                      analyzer="keyword")
-            index.add_child_field_to_default_mapping(field_name="salary",
-                                                     field_type="number",
-                                                     field_alias="salary")
-            index.add_child_field_to_default_mapping(field_name="join_date",
-                                                     field_type="datetime",
-                                                     field_alias="join_date")
+            if field_indexed:
+                index.add_child_field_to_default_mapping(field_name="dept",
+                                                         field_type="text",
+                                                         field_alias="dept",
+                                                         analyzer="keyword")
+                index.add_child_field_to_default_mapping(field_name="salary",
+                                                         field_type="number",
+                                                         field_alias="salary")
+                index.add_child_field_to_default_mapping(field_name="join_date",
+                                                         field_type="datetime",
+                                                         field_alias="join_date")
+        else:
+            index.add_child_field_to_default_collection_mapping(field_name="type",
+                                                     field_type="text",
+                                                     field_alias="type",
+                                                     analyzer="keyword", scope=self.scope, collection=self.collection)
+            if field_indexed:
+                index.add_child_field_to_default_collection_mapping(field_name="dept",
+                                                         field_type="text",
+                                                         field_alias="dept",
+                                                         analyzer="keyword", scope=self.scope, collection=self.collection)
+                index.add_child_field_to_default_collection_mapping(field_name="salary",
+                                                         field_type="number",
+                                                         field_alias="salary", scope=self.scope, collection=self.collection)
+                index.add_child_field_to_default_collection_mapping(field_name="join_date",
+                                                         field_type="datetime",
+                                                         field_alias="join_date", scope=self.scope, collection=self.collection)
         index.index_definition['uuid'] = index.get_uuid()
         index.update()
 
@@ -1190,9 +1233,11 @@ class StableTopFTS(FTSBaseTest):
     def test_sorting_of_results(self):
         self.load_data()
         self.wait_till_items_in_bucket_equal(self._num_items//2)
+        collection_index = self.container_type == 'collection'
+        type = None if self.container_type == 'bucket' else f"{self.scope}.{self.collection}"
         index = self.create_index(
             self._cb_cluster.get_bucket_by_name('default'),
-            "default_index")
+            "default_index", collection_index=collection_index, type=type)
         self.wait_for_indexing_complete()
 
         zero_results_ok = True
@@ -1229,9 +1274,11 @@ class StableTopFTS(FTSBaseTest):
     def test_sorting_of_results_during_indexing(self):
         self.load_data()
         self.wait_till_items_in_bucket_equal(self._num_items//2)
+        collection_index = self.container_type == 'collection'
+        type = None if self.container_type == 'bucket' else f"{self.scope}.{self.collection}"
         index = self.create_index(
             self._cb_cluster.get_bucket_by_name('default'),
-            "default_index")
+            "default_index", collection_index=collection_index, type=type)
         #self.wait_for_indexing_complete()
 
         self.sleep(5)
@@ -1262,14 +1309,23 @@ class StableTopFTS(FTSBaseTest):
 
     def test_sorting_of_results_on_non_indexed_fields(self):
         self.load_data()
+        collection_index = self.container_type == 'collection'
+        type = None if self.container_type == 'bucket' else f"{self.scope}.{self.collection}"
         index = self.create_index(
             self._cb_cluster.get_bucket_by_name('default'),
-            "default_index")
+            "default_index", collection_index=collection_index, type=type)
         self.wait_for_indexing_complete()
-        index.add_child_field_to_default_mapping(field_name="name",
-                                                 field_type="text",
-                                                 field_alias="name",
-                                                 analyzer="en")
+        if self.container_type == 'bucket':
+            index.add_child_field_to_default_mapping(field_name="name",
+                                                     field_type="text",
+                                                     field_alias="name",
+                                                     analyzer="en")
+        else:
+            index.add_child_field_to_default_collection_mapping(field_name="name",
+                                                                field_type="text",
+                                                                field_alias="name",
+                                                                analyzer="en", scope=self.scope,
+                                                                collection=self.collection)
         index.index_definition['uuid'] = index.get_uuid()
         index.update()
         self.sleep(5)
@@ -1970,7 +2026,7 @@ class StableTopFTS(FTSBaseTest):
             name='default_index',
             source_name='default',
             collection_index=collection_index,
-            type=type,
+            _type=type,
             source_params={"includeXAttrs": True})
         self.is_index_partitioned_balanced(index)
         self.wait_for_indexing_complete()
@@ -2468,3 +2524,68 @@ class StableTopFTS(FTSBaseTest):
         except Exception as err:
             self.log.error(err)
             self.fail("Testcase failed: " + str(err))
+
+    def test_drop_index_container(self):
+        rest = RestConnection(self._cb_cluster.get_random_fts_node())
+
+        drop_container = self._input.param("drop_container")
+        drop_name = self._input.param("drop_name")
+        plan_params = self.construct_plan_params()
+
+        self.load_data(generator=None)
+        self.wait_till_items_in_bucket_equal(self._num_items//2)
+        self.create_fts_indexes_all_buckets(plan_params=plan_params)
+        self.wait_for_indexing_complete()
+        self.validate_index_count(equal_bucket_doc_count=True)
+
+        if drop_container == 'collection':
+            self.cli_client.delete_collection(scope=self.scope, collection=drop_name)
+        elif drop_container == 'scope':
+            self.cli_client.delete_scope(scope=drop_name)
+        else:
+            self._cb_cluster.delete_bucket("default")
+        self.sleep(20)
+
+        for idx in self._cb_cluster.get_indexes():
+            status,dfn = rest.get_fts_index_definition(idx.name)
+            self.assertEqual(status, False, "FTS index was not dropped after kv container drop.")
+            self._cb_cluster.get_indexes().remove(idx)
+
+
+    def test_create_drop_index(self):
+        self.load_data(generator=None)
+        self.wait_till_items_in_bucket_equal(self._num_items//2)
+        plan_params = self.construct_plan_params()
+        self.create_fts_indexes_all_buckets(plan_params=plan_params)
+        self.wait_for_indexing_complete()
+        self.validate_index_count(equal_bucket_doc_count=True)
+
+        for idx in self._cb_cluster.get_indexes():
+            idx.delete()
+
+        self.assertEqual(len(self._cb_cluster.get_indexes()), 0, "FTS index cannot be deleted.")
+
+    def test_create_index_missed_container_negative(self):
+        missed_collection = 'missed_collection'
+        missed_scope = 'missed_scope'
+
+        _types = [f"{self.scope}.{missed_collection}",
+                  f"_default.{missed_collection}",
+                  f"{missed_scope}._default",
+                  f"{missed_scope}.{self.collection}",
+                  f"{missed_scope}.{missed_collection}"]
+
+        self.load_data()
+        collection_index = True
+        for _type in _types:
+            try:
+                index = self._cb_cluster.create_fts_index(
+                    name='default_index',
+                    source_name='default',
+                    collection_index=collection_index,
+                    _type=_type,
+                    source_params={"includeXAttrs": True})
+                self.fail(f"FTS index is successfully created basing on non-existent kv container: {_type}")
+            except Exception as e:
+                self.log.info("Expected exception happened during fts index creation on missed kv container.")
+

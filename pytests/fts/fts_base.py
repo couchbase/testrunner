@@ -787,6 +787,53 @@ class FTSIndex:
             self.index_definition['params']['mapping']['default_mapping'] \
                 ['properties'][fields.pop()] = field_maps.pop()
 
+    def add_child_field_to_default_collection_mapping(self, field_name, field_type,
+                                           field_alias=None, analyzer=None, scope=None, collection=None):
+        """
+        This method will add a field mapping to a default mapping
+        """
+        fields = str.split(field_name, '.')
+        nesting_level = len(fields)
+
+        child_map = {}
+        child_map['dynamic'] = False
+        child_map['enabled'] = True
+        child_map['properties'] = {}
+
+        child_field = {}
+        child_field['dynamic'] = False
+        child_field['enabled'] = True
+        if not field_alias:
+            field_alias = fields[len(fields) - 1]
+        child_field['fields'] = [
+            {
+                "analyzer": analyzer,
+                "include_in_all": True,
+                "include_term_vectors": True,
+                "index": True,
+                "name": field_alias,
+                "store": True,
+                "type": field_type
+            }
+        ]
+
+        field_maps = []
+        field_maps.append(child_field)
+
+        if nesting_level > 1:
+            for x in range(0, nesting_level - 1):
+                field = fields.pop()
+                # Do a deepcopy of child_map into field_map since we dont
+                # want to have child_map altered because of changes on field_map
+                field_map = copy.deepcopy(child_map)
+                field_map['properties'][field] = field_maps.pop()
+                field_maps.append(field_map)
+
+        map = {}
+        if 'properties' not in self.index_definition['params']['mapping']['types'][f'{scope}.{collection}']:
+            self.index_definition['params']['mapping']['types'][f'{scope}.{collection}']['properties'] = {}
+        self.index_definition['params']['mapping']['types'][f'{scope}.{collection}']['properties'][fields.pop()] = field_maps.pop()
+
     def add_analyzer_to_existing_field_map(self, field_name, field_type,
                                            field_alias=None, analyzer=None):
         """
@@ -2129,7 +2176,7 @@ class CouchbaseCluster:
     def create_fts_index(self, name, source_type='couchbase',
                          source_name=None, index_type='fulltext-index',
                          index_params=None, plan_params=None,
-                         source_params=None, source_uuid=None, collection_index=False, type=None, analyzer="standard"):
+                         source_params=None, source_uuid=None, collection_index=False, _type=None, analyzer="standard"):
         """Create fts index/alias
         @param node: Node on which index is created
         @param name: name of the index/alias
@@ -2163,7 +2210,11 @@ class CouchbaseCluster:
             source_uuid
         )
         if collection_index:
-            index.add_type_mapping_to_index_definition(type=type, analyzer=analyzer)
+            if type(_type) is list:
+                for typ in _type:
+                    index.add_type_mapping_to_index_definition(type=typ, analyzer=analyzer)
+            else:
+                index.add_type_mapping_to_index_definition(type=_type, analyzer=analyzer)
 
             doc_config = {}
             doc_config['mode'] = 'scope.collection.type_field'
@@ -3148,7 +3199,9 @@ class FTSBaseTest(unittest.TestCase):
         self.secret_password = self._input.param("secret_password", 'p@ssw0rd')
         self.container_type = TestInputSingleton.input.param("container_type", "bucket")
         self.scope = TestInputSingleton.input.param("scope", "scope1")
-        self.collection = TestInputSingleton.input.param("collection", "collection1")
+        self.collection = str(TestInputSingleton.input.param("collection", "collection1"))
+        if self.collection.startswith("["):
+            self.collection = eval(self.collection)
         use_hostanames = self._input.param("use_hostnames", False)
         sdk_compression = self._input.param("sdk_compression", True)
 
@@ -3349,7 +3402,11 @@ class FTSBaseTest(unittest.TestCase):
             self.__create_buckets()
             if self.container_type == "collection":
                 for bucket in self._cb_cluster.get_buckets():
-                    self._create_collection(bucket=bucket.name, scope=self.scope, collection=self.collection)
+                    if type(self.collection) is list:
+                        for c in self.collection:
+                            self._create_collection(bucket=bucket.name, scope=self.scope, collection=c)
+                    else:
+                        self._create_collection(bucket=bucket.name, scope=self.scope, collection=self.collection)
         self._master = self._cb_cluster.get_master_node()
 
         # simply append to this list, any error from log we want to fail test on
@@ -3367,10 +3424,15 @@ class FTSBaseTest(unittest.TestCase):
 
     def _create_collection(self, bucket=None, scope=None, collection=None):
         if scope != '_default':
-            self.cli_client.create_scope(bucket=bucket, scope=scope)
-            self.sleep(10)
+            stdout,_,_ = self.cli_client.get_bucket_scopes(bucket=bucket)
+            if scope not in stdout:
+                self.cli_client.create_scope(bucket=bucket, scope=scope)
+                self.sleep(10)
         if collection != '_default':
             self.cli_client.create_collection(bucket=bucket, scope=scope, collection=collection)
+
+    def _drop_collection(self, bucket=None, scope=None, collection=None):
+        self.cli_client.delete_collection(bucket=bucket, scope=scope, collection=collection)
 
     def _enable_diag_eval_on_non_local_hosts(self):
         """
@@ -4167,7 +4229,7 @@ class FTSBaseTest(unittest.TestCase):
             index_params=index_params,
             plan_params=plan_params,
             collection_index=collection_index,
-            type=type,
+            _type=type,
             analyzer=analyzer)
         self.is_index_partitioned_balanced(index)
         return index
@@ -4177,14 +4239,22 @@ class FTSBaseTest(unittest.TestCase):
         Creates 'n' default indexes for all buckets.
         'n' is defined by 'index_per_bucket' test param.
         """
-        collection_index = self.container_type == 'collection'
-        type = None if self.container_type == 'bucket' else f"{self.scope}.{self.collection}"
         for bucket in self._cb_cluster.get_buckets():
+            collection_index = self.container_type == 'collection'
+            if self.container_type == 'bucket':
+                tp = None
+            else:
+                if type(self.collection) is list:
+                    tp = []
+                    for c in self.collection:
+                        tp.append(f"{self.scope}.{c}")
+                else:
+                    tp = f"{self.scope}.{self.collection}"
             for count in range(self.index_per_bucket):
                 self.create_index(
                     bucket,
                     f"{bucket.name}_index_{count + 1}",
-                    plan_params=plan_params, type=type, collection_index=collection_index)
+                    plan_params=plan_params, type=tp, collection_index=collection_index)
 
     def create_alias(self, target_indexes, name=None, alias_def=None):
         """

@@ -5688,11 +5688,11 @@ class SDKLoadDocumentsTask(Task):
             #stderr
             self.redirect = "2>/dev/null"
 
-    def execute(self, task_manager):
+    def execute_for_collection(self, task_manager, collection):
         import subprocess
         command = f"java -jar java_sdk_client/collections/target/javaclient/javaclient.jar " \
                   f"-i {self.server.ip} -u {self.params.username} -p {self.params.password} -b {self.bucket} " \
-                  f"-s {self.params.scope} -c {self.params.collection} " \
+                  f"-s {self.params.scope} -c {collection} " \
                   f"-n {self.params.num_ops} -pc {self.params.percent_create} -pu {self.params.percent_update} " \
                   f"-pd {self.params.percent_delete} -l {self.params.load_pattern} " \
                   f"-dsn {self.params.start_seq_num} -dpx {self.params.key_prefix} -dt {self.params.json_template} " \
@@ -5706,7 +5706,6 @@ class SDKLoadDocumentsTask(Task):
                 command = command + ",".join(arr_fields_to_update)
         command = command + f" {self.redirect} "
         self.log.info(command)
-
         try:
             proc = subprocess.Popen(command, stdout=subprocess.PIPE, shell=True)
             out = proc.communicate(timeout=self.params.timeout)
@@ -5719,6 +5718,14 @@ class SDKLoadDocumentsTask(Task):
         proc.terminate()
         self.state = FINISHED
         self.set_result(True)
+
+    def execute(self, task_manager):
+        import subprocess
+        if type(self.params.collection) is list:
+            for c in self.params.collection:
+                self.execute_for_collection(task_manager, c)
+        else:
+            self.execute_for_collection(task_manager, self.params.collection)
 
     def check(self, task_manager):
         self.set_result(True)
