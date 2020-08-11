@@ -1885,6 +1885,15 @@ class RestConnection(object):
             json_parsed = json.loads(content)
         return json_parsed
 
+    def get_indexes_count(self):
+        indexes_count = {}
+        index_map = self.get_index_storage_stats()
+        for bucket, indexes in index_map.items():
+            for index, stats in indexes.items():
+                indexes_count[index] = stats["MainStore"]["count"]
+
+        return indexes_count
+
     def get_index_storage_stats(self, timeout=120, index_map=None):
         api = self.index_baseUrl + 'stats/storage'
         status, content, header = self._http_request(api, timeout=timeout)

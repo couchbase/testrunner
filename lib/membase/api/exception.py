@@ -145,6 +145,11 @@ class AutoFailoverException(MembaseHttpException):
         self._message = message
 
 
+class NodesFailureException(MembaseHttpException):
+    def __init__(self, message):
+        self._message = message
+
+
 class InjectFailureException(MembaseHttpException):
     def __init__(self, message):
         self.message = message

@@ -169,6 +169,21 @@ class N1QLHelper():
             if index['using'] != 'fts':
                 self.wait_for_index_drop(bucket, index_name)
 
+    def drop_all_indexes_on_keyspace(self, bucket=None, leave_primary=True):
+        current_indexes = self.get_parsed_indexes_online()
+        if bucket is not None:
+            current_indexes = [index for index in current_indexes if index['bucket'] == bucket]
+        if leave_primary:
+            current_indexes = [index for index in current_indexes if index['is_primary'] is False]
+        for index in current_indexes:
+            keyspace = index['keyspace']
+            index_name = index['name']
+            self.run_cbq_query("drop index %s ON %s" % (index_name, keyspace))
+        for index in current_indexes:
+            bucket = index['bucket']
+            index_name = index['name']
+            self.wait_for_index_drop(bucket, index_name)
+
     def wait_for_index_drop(self, bucket_name, index_name, fields_set=None, using=None):
         self.with_retry(lambda: self.is_index_present(bucket_name, index_name, fields_set=fields_set, using=using, status="any"), eval=False, delay=1, tries=30)
 
@@ -297,6 +312,22 @@ class N1QLHelper():
                             'bucket': i['indexes']['keyspace_id'],
                             'fields': frozenset([(key.replace('`', '').replace('(', '').replace(')', '').replace('meta.id', 'meta().id'), j)
                                                  for j, key in enumerate(i['indexes']['index_key'], 0)]),
+                            'state': i['indexes']['state'],
+                            'using': i['indexes']['using'],
+                            'where': i['indexes'].get('condition', ''),
+                            'is_primary': i['indexes'].get('is_primary', False)} for i in query_response['results']]
+        return current_indexes
+
+    def get_parsed_indexes_online(self):
+        query_response = self.run_cbq_query("SELECT * FROM system:indexes")
+        current_indexes = [{'name': i['indexes']['name'],
+                            'keyspace': i['indexes']['namespace_id'] + ":" + i['indexes']['bucket_id'] + "." +
+                            i['indexes']['scope_id'] + "." +
+                            i['indexes']['keyspace_id'],
+                            'bucket': i['indexes']['keyspace_id'],
+                            'fields': frozenset([(key.replace('`', '').replace('(', '').replace(')', '').replace(
+                                'meta.id', 'meta().id'), j)
+                                for j, key in enumerate(i['indexes']['index_key'], 0)]),
                             'state': i['indexes']['state'],
                             'using': i['indexes']['using'],
                             'where': i['indexes'].get('condition', ''),

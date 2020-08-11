@@ -909,6 +909,14 @@ class BaseSecondaryIndexingTests(QueryTests):
                     is_cluster_healthy = True
         return is_cluster_healthy
 
+    def get_server_indexes_count(self):
+        server_index_count = {}
+        for server in self.servers:
+            rest = RestConnection(server)
+            server_index_count.update(rest.get_indexes_count())
+
+        return server_index_count
+
     def wait_until_indexes_online(self, timeout=600, defer_build=False, check_paused_index=False):
         rest = RestConnection(self.master)
         init_time = time.time()

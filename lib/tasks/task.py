@@ -28,7 +28,7 @@ from membase.api.exception import N1QLQueryException, DropIndexException, Create
     DesignDocCreationException, QueryViewException, ReadDocumentException, RebalanceFailedException, \
     GetBucketInfoFailed, CompactViewFailed, SetViewInfoNotFound, FailoverFailedException, \
     ServerUnavailableException, BucketFlushFailed, CBRecoveryFailedException, BucketCompactionException, \
-    AutoFailoverException
+    AutoFailoverException,NodesFailureException
 from membase.api.rest_client import RestConnection, Bucket, RestHelper
 from membase.helper.bucket_helper import BucketOperationHelper
 from memcacheConstants import ERR_NOT_FOUND, NotFoundError
@@ -5194,6 +5194,326 @@ class CBASQueryExecuteTask(Task):
         except Exception as e:
             self.state = FINISHED
             self.set_unexpected_exception(e)
+
+
+class NodesFailureTask(Task):
+    def __init__(self, master, servers_to_fail, failure_type, timeout,
+                 pause=0, timeout_buffer=3, disk_timeout=0, disk_location=None, disk_size=5000, failure_timeout=60):
+        Task.__init__(self, "NodesFailureTask")
+        self.master = master
+        self.servers_to_fail = servers_to_fail
+        self.num_servers_to_fail = self.servers_to_fail.__len__()
+        self.itr = 0
+        self.failure_type = failure_type
+        self.timeout = timeout
+        self.failure_timeout = failure_timeout
+        self.pause = pause
+        self.start_time = 0
+        self.timeout_buffer = timeout_buffer
+        self.current_failure_node = self.servers_to_fail[0]
+        self.max_time_to_wait_for_failover = self.timeout + \
+                                             self.timeout_buffer + 60
+        self.disk_timeout = disk_timeout
+        self.disk_location = disk_location
+        self.disk_size = disk_size
+        self.taskmanager = None
+        self.rebalance_in_progress = False
+
+    def execute(self, task_manager):
+        self.taskmanager = task_manager
+        rest = RestConnection(self.master)
+        if rest._rebalance_progress_status() == "running":
+            self.rebalance_in_progress = True
+        while self.has_next() and not self.done():
+            next(self)
+            if self.pause > 0 and self.pause > self.timeout:
+                self.check(task_manager)
+        if self.pause == 0 or 0 < self.pause < self.timeout:
+            self.check(task_manager)
+        self.state = FINISHED
+        self.set_result(True)
+
+    def check(self, task_manager):
+        rest = RestConnection(self.master)
+        max_timeout = self.timeout + self.timeout_buffer + self.disk_timeout
+        if self.start_time == 0:
+            message = "Did not inject failure in the system."
+            rest.print_UI_logs(10)
+            self.log.error(message)
+            self.state = FINISHED
+            self.set_result(False)
+            self.set_exception(NodesFailureException(message))
+
+    def has_next(self):
+        return self.itr < self.num_servers_to_fail
+
+    def __next__(self):
+        if self.pause != 0:
+            time.sleep(self.pause)
+            if self.pause > self.timeout and self.itr != 0:
+                rest = RestConnection(self.master)
+                status = rest.reset_autofailover()
+                self._rebalance()
+                if not status:
+                    self.state = FINISHED
+                    self.set_result(False)
+                    self.set_exception(Exception("Reset of autofailover "
+                                                 "count failed"))
+        self.current_failure_node = self.servers_to_fail[self.itr]
+        self.log.info("before failure time: {}".format(time.ctime(time.time())))
+        if self.failure_type == "enable_firewall":
+            self._enable_disable_firewall(self.current_failure_node, self.failure_timeout)
+        elif self.failure_type == "disable_firewall":
+            self._disable_firewall(self.current_failure_node)
+        elif self.failure_type == "restart_couchbase":
+            self._restart_couchbase_server(self.current_failure_node)
+        elif self.failure_type == "stop_couchbase":
+            self._stop_couchbase_server(self.current_failure_node)
+        elif self.failure_type == "start_couchbase":
+            self._start_couchbase_server(self.current_failure_node)
+        elif self.failure_type == "restart_network":
+            self._stop_restart_network(self.current_failure_node,
+                                       self.timeout + self.timeout_buffer + 30)
+        elif self.failure_type == "restart_machine":
+            self._restart_machine(self.current_failure_node)
+        elif self.failure_type == "stop_memcached":
+            self._stop_memcached(self.current_failure_node)
+        elif self.failure_type == "start_memcached":
+            self._start_memcached(self.current_failure_node)
+        elif self.failure_type == "network_split":
+            self._block_incoming_network_from_node(self.servers_to_fail[0],
+                                                   self.servers_to_fail[
+                                                       self.itr + 1])
+            self.itr += 1
+        elif self.failure_type == "disk_failure":
+            self._fail_recover_disk_failure(self.current_failure_node, self.failure_timeout)
+        elif self.failure_type == "disk_full":
+            self._disk_full_recover_failure(self.current_failure_node, self.failure_timeout)
+        elif self.failure_type == "recover_disk_failure":
+            self._recover_disk(self.current_failure_node)
+        elif self.failure_type == "recover_disk_full_failure":
+            self._recover_disk_full_failure(self.current_failure_node)
+        self.log.info("Start time = {}".format(time.ctime(self.start_time)))
+        self.itr += 1
+
+    def _enable_disable_firewall(self, node, recover_time):
+        self._enable_firewall(node)
+        time.sleep(recover_time)
+        self._disable_firewall(node)
+
+    def _enable_firewall(self, node):
+        node_failure_timer = self.failure_timers[self.itr]
+        time.sleep(1)
+        RemoteUtilHelper.enable_firewall(node)
+        self.log.info("Enabled firewall on {}".format(node))
+        node_failure_timer.result()
+        self.start_time = node_failure_timer.start_time
+
+    def _disable_firewall(self, node):
+        shell = RemoteMachineShellConnection(node)
+        shell.disable_firewall()
+
+    def _restart_couchbase_server(self, node):
+        node_failure_timer = self.failure_timers[self.itr]
+        time.sleep(1)
+        shell = RemoteMachineShellConnection(node)
+        shell.restart_couchbase()
+        shell.disconnect()
+        self.log.info("Restarted the couchbase server on {}".format(node))
+        node_failure_timer.result()
+        self.start_time = node_failure_timer.start_time
+
+    def _stop_couchbase_server(self, node):
+        node_failure_timer = self.failure_timers[self.itr]
+        time.sleep(1)
+        shell = RemoteMachineShellConnection(node)
+        shell.stop_couchbase()
+        shell.disconnect()
+        self.log.info("Stopped the couchbase server on {}".format(node))
+        node_failure_timer.result()
+        self.start_time = node_failure_timer.start_time
+
+    def _start_couchbase_server(self, node):
+        shell = RemoteMachineShellConnection(node)
+        shell.start_couchbase()
+        shell.disconnect()
+        self.log.info("Started the couchbase server on {}".format(node))
+
+    def _stop_restart_network(self, node, stop_time):
+        node_failure_timer = self.failure_timers[self.itr]
+        time.sleep(1)
+        shell = RemoteMachineShellConnection(node)
+        shell.stop_network(stop_time)
+        shell.disconnect()
+        self.log.info("Stopped the network for {0} sec and restarted the "
+                      "network on {1}".format(stop_time, node))
+        node_failure_timer.result()
+        self.start_time = node_failure_timer.start_time
+
+    def _restart_machine(self, node):
+        node_failure_timer = self.failure_timers[self.itr]
+        time.sleep(1)
+        shell = RemoteMachineShellConnection(node)
+        command = "/sbin/reboot"
+        shell.execute_command(command=command)
+        node_failure_timer.result()
+        self.start_time = node_failure_timer.start_time
+
+    def _stop_memcached(self, node):
+        node_failure_timer = self.failure_timers[self.itr]
+        time.sleep(1)
+        shell = RemoteMachineShellConnection(node)
+        o, r = shell.stop_memcached()
+        self.log.info("Killed memcached. {0} {1}".format(o, r))
+        node_failure_timer.result()
+        self.start_time = node_failure_timer.start_time
+
+    def _start_memcached(self, node):
+        shell = RemoteMachineShellConnection(node)
+        o, r = shell.start_memcached()
+        self.log.info("Started back memcached. {0} {1}".format(o, r))
+        shell.disconnect()
+
+    def _block_incoming_network_from_node(self, node1, node2):
+        shell = RemoteMachineShellConnection(node1)
+        self.log.info("Adding {0} into iptables rules on {1}".format(
+            node1.ip, node2.ip))
+        command = "iptables -A INPUT -s {0} -j DROP".format(node2.ip)
+        shell.execute_command(command)
+        self.start_time = time.time()
+
+    def _fail_recover_disk_failure(self, node, recover_time):
+        self._fail_disk(node)
+        time.sleep(recover_time)
+        self._recover_disk(node)
+
+    def _fail_disk(self, node):
+        shell = RemoteMachineShellConnection(node)
+        output, error = shell.unmount_partition(self.disk_location)
+        success = True
+        if output:
+            for line in output:
+                if self.disk_location in line:
+                    success = False
+        if success:
+            self.log.info("Unmounted disk at location : {0} on {1}".format(self.disk_location, node.ip))
+            self.start_time = time.time()
+        else:
+            self.log.info("Could not fail the disk at {0} on {1}".format(self.disk_location, node.ip))
+            self.state = FINISHED
+            self.set_exception(Exception("Could not fail the disk at {0} on {1}".format(self.disk_location, node.ip)))
+            self.set_result(False)
+
+    def _recover_disk(self, node):
+        shell = RemoteMachineShellConnection(node)
+        o, r = shell.mount_partition(self.disk_location)
+        for line in o:
+            if self.disk_location in line:
+                self.log.info("Mounted disk at location : {0} on {1}".format(self.disk_location, node.ip))
+                return
+        self.set_exception(Exception("Could not mount disk at location {0} on {1}".format(self.disk_location, node.ip)))
+        raise Exception()
+
+    def _disk_full_recover_failure(self, node, recover_time):
+        self._disk_full_failure(node)
+        time.sleep(recover_time)
+        self._recover_disk_full_failure(node)
+
+    def _disk_full_failure(self, node):
+        shell = RemoteMachineShellConnection(node)
+        output, error = shell.fill_disk_space(self.disk_location, self.disk_size)
+        success = False
+        if output:
+            for line in output:
+                if self.disk_location in line:
+                    if "0 100% {0}".format(self.disk_location) in line:
+                        success = True
+        if success:
+            self.log.info("Filled up disk Space at {0} on {1}".format(self.disk_location, node.ip))
+            self.start_time = time.time()
+        else:
+            self.log.info("Could not fill the disk at {0} on {1}".format(self.disk_location, node.ip))
+            #self.state = FINISHED
+            #self.set_exception(Exception("Could not fill the disk at {0} on {1}".format(self.disk_location, node.ip)))
+
+    def _recover_disk_full_failure(self, node):
+        shell = RemoteMachineShellConnection(node)
+        delete_file = "{0}/disk-quota.ext3".format(self.disk_location)
+        output, error = shell.execute_command("rm -f {0}".format(delete_file))
+        self.log.info(output)
+        if error:
+            self.log.info(error)
+
+    def _check_for_autofailover_initiation(self, failed_over_node):
+        rest = RestConnection(self.master)
+        ui_logs = rest.get_logs(10)
+        ui_logs_text = [t["text"] for t in ui_logs]
+        ui_logs_time = [t["serverTime"] for t in ui_logs]
+        expected_log = "Starting failing over ['ns_1@{}']".format(
+            failed_over_node.ip)
+        if expected_log in ui_logs_text:
+            failed_over_time = ui_logs_time[ui_logs_text.index(expected_log)]
+            return True, failed_over_time
+        return False, None
+
+    def _wait_for_autofailover_initiation(self, timeout):
+        autofailover_initated = False
+        while time.time() < timeout + self.start_time:
+            autofailover_initated, failed_over_time = \
+                self._check_for_autofailover_initiation(
+                    self.current_failure_node)
+            if autofailover_initated:
+                end_time = self._get_mktime_from_server_time(failed_over_time)
+                time_taken = end_time - self.start_time
+                return autofailover_initated, time_taken
+        return autofailover_initated, -1
+
+    def _get_mktime_from_server_time(self, server_time):
+        time_format = "%Y-%m-%dT%H:%M:%S"
+        server_time = server_time.split('.')[0]
+        mk_time = time.mktime(time.strptime(server_time, time_format))
+        return mk_time
+
+    def _rebalance(self):
+        rest = RestConnection(self.master)
+        nodes = rest.node_statuses()
+        rest.rebalance(otpNodes=[node.id for node in nodes])
+        rebalance_progress = rest.monitorRebalance()
+        if not rebalance_progress:
+            self.set_result(False)
+            self.state = FINISHED
+            self.set_exception(Exception("Failed to rebalance after failover"))
+
+    def _check_if_rebalance_in_progress(self, timeout):
+        rest = RestConnection(self.master)
+        end_time = time.time() + timeout
+        while time.time() < end_time:
+            try:
+                rebalance_status, progress = \
+                    rest._rebalance_status_and_progress()
+                if rebalance_status == "running":
+                    continue
+                elif rebalance_status is None and progress == 100:
+                    return False, -1
+            except RebalanceFailedException:
+                ui_logs = rest.get_logs(10)
+                ui_logs_text = [t["text"] for t in ui_logs]
+                ui_logs_time = [t["serverTime"] for t in ui_logs]
+                rebalace_failure_log = "Rebalance exited with reason"
+                for ui_log in ui_logs_text:
+                    if rebalace_failure_log in ui_log:
+                        rebalance_failure_time = ui_logs_time[
+                            ui_logs_text.index(ui_log)]
+                        failover_log = "Could not automatically fail over " \
+                                       "node ('ns_1@{}'). Rebalance is " \
+                                       "running.".format(
+                            self.current_failure_node.ip)
+                        if failover_log in ui_logs_text:
+                            return True, self._get_mktime_from_server_time(
+                                rebalance_failure_time)
+                        else:
+                            return False, -2
+        return False, -3
 
 
 class AutoFailoverNodesFailureTask(Task):
