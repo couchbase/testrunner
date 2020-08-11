@@ -40,6 +40,7 @@ from lib.ep_mc_bin_client import MemcachedClient
 from lib.mc_bin_client import MemcachedClient as MC_MemcachedClient
 from security.SecretsMasterBase import SecretsMasterBase
 from lib.collection.collections_cli_client import CollectionsCLI
+from scripts.java_sdk_setup import JavaSdkSetup
 
 
 class RenameNodeException(FTSException):
@@ -3166,6 +3167,11 @@ class FTSBaseTest(unittest.TestCase):
 
         # workaround for MB-16794
         # self.sleep(30, "working around MB-16794")
+
+        self.java_sdk_client = self._input.param("java_sdk_client", False)
+        if self.java_sdk_client:
+            self.log.info("Building docker image with java sdk client")
+            JavaSdkSetup()
 
         self.__setup_for_test()
 
