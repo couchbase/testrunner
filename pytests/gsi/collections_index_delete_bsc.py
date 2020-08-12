@@ -87,7 +87,7 @@ class CollectionsIndexDeleteBSC(BaseSecondaryIndexingTests):
         bucket, scope, collection = keyspace.split('.')
         try:
             with ThreadPoolExecutor() as executor:
-                task1 = executor.submit(self.run_cbq_query, query=query, timeout=30)
+                task1 = executor.submit(self.run_cbq_query, query=query, rest_timeout=30)
                 self.sleep(5)
                 task2 = executor.submit(self.delete_bucket_scope_collection, server=self.servers[0],
                                         delete_item=self.item_to_delete, bucket=bucket, scope=scope,
@@ -136,10 +136,10 @@ class CollectionsIndexDeleteBSC(BaseSecondaryIndexingTests):
             query4 = f'select age, country from {collection_namespace} where age > 10 and age < 60 ' \
                      f'and country like "S%"'
             with ThreadPoolExecutor() as executor:
-                task1 = executor.submit(self.run_cbq_query, query=query1, timeout=30)
-                task2 = executor.submit(self.run_cbq_query, query=query2, timeout=30)
-                task3 = executor.submit(self.run_cbq_query, query=query3, timeout=30)
-                task4 = executor.submit(self.run_cbq_query, query=query4, timeout=30)
+                task1 = executor.submit(self.run_cbq_query, query=query1, rest_timeout=30)
+                task2 = executor.submit(self.run_cbq_query, query=query2, rest_timeout=30)
+                task3 = executor.submit(self.run_cbq_query, query=query3, rest_timeout=30)
+                task4 = executor.submit(self.run_cbq_query, query=query4, rest_timeout=30)
                 self.sleep(1)
                 task5 = executor.submit(self.delete_bucket_scope_collection, server=self.servers[0],
                                         delete_item=self.item_to_delete, bucket=bucket, scope=scope,

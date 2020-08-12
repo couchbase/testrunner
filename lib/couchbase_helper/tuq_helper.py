@@ -225,7 +225,7 @@ class N1QLHelper():
             return False
 
     def run_cbq_query(self, query=None, min_output_size=10, server=None, query_params={}, is_prepared=False,
-                      scan_consistency=None, scan_vector=None, verbose=True, timeout=None):
+                      scan_consistency=None, scan_vector=None, verbose=True, timeout=None, rest_timeout=None):
         if query is None:
             query = self.query
         if server is None:
@@ -263,7 +263,7 @@ class N1QLHelper():
             if verbose:
                 self.log.info('RUN QUERY %s' % query)
             result = RestConnection(server).query_tool(query, self.n1ql_port, query_params=query_params,
-                                                       is_prepared=is_prepared, verbose=verbose, timeout=timeout)
+                                                       is_prepared=is_prepared, verbose=verbose, timeout=rest_timeout)
         else:
             shell = RemoteMachineShellConnection(server)
             cmd = f"{testconstants.LINUX_COUCHBASE_BIN_PATH}/cbq  -engine=http://{server.ip}:8093/ -u {rest.username} -p {rest.password} "
