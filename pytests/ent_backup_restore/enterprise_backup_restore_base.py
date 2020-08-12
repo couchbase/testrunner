@@ -1069,12 +1069,14 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             f" --json"
         )
 
+        version = RestConnection(self.backupset.backup_host).get_nodes_version()
+
         if self.backupset.backup_list_name:
             args += " --repo {0}".format(self.backupset.backup_list_name)
         if self.backupset.backup_incr_backup:
             args += " --backup {0}".format(self.backupset.backup_incr_backup)
         if self.backupset.bucket_backup:
-            args += " --bucket {0}".format(self.backupset.bucket_backup)
+            args += f" {'--collection-string' if int(version[0]) >= 7 else '--bucket'} {self.backupset.bucket_backup}"
         remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
         command = "{0}/cbbackupmgr {1}".format(self.cli_command_location, args)
         output, error = remote_client.execute_command(command)
