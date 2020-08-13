@@ -124,7 +124,7 @@ class EventingBaseTest(QueryHelperTests):
                                   timer_worker_pool_size=3, worker_count=3, processing_status=True,
                                   cpp_worker_thread_count=1, multi_dst_bucket=False, execution_timeout=20,
                                   data_chan_size=10000, worker_queue_cap=100000, deadline_timeout=62,
-                                  language_compatibility='6.5.0',hostpath=None,validate_ssl=False):
+                                  language_compatibility='6.5.0',hostpath=None,validate_ssl=False,src_binding=False):
         body = {}
         body['appname'] = appname
         script_dir = os.path.dirname(__file__)
@@ -134,7 +134,13 @@ class EventingBaseTest(QueryHelperTests):
         fh.close()
         body['depcfg'] = {}
         body['depcfg']['buckets'] = []
-        body['depcfg']['buckets'].append({"alias": "dst_bucket", "bucket_name": self.dst_bucket_name,"access": "rw"})
+        if src_binding:
+            body['depcfg']['buckets'].append(
+                {"alias": "dst_bucket", "bucket_name": self.dst_bucket_name, "access": "rw"})
+            body['depcfg']['buckets'].append(
+                {"alias": "src_bucket", "bucket_name": self.src_bucket_name, "access": "r"})
+        else:
+            body['depcfg']['buckets'].append({"alias": "dst_bucket", "bucket_name": self.dst_bucket_name,"access": "rw"})
         if multi_dst_bucket:
             body['depcfg']['buckets'].append({"alias": self.dst_bucket_name1, "bucket_name": self.dst_bucket_name1})
         body['depcfg']['metadata_bucket'] = self.metadata_bucket_name
@@ -407,10 +413,6 @@ class EventingBaseTest(QueryHelperTests):
             body['settings'].pop('dcp_stream_boundary')
         log.info("Settings after deleting dcp_stream_boundary : {0}".format(body['settings']))
         self.refresh_rest_server()
-        #body['settings']['dcp_stream_boundary'] = "from_prior"
-        # save the function so that it is visible in UI
-        #content = self.rest.save_function(body['appname'], body)
-        # undeploy the function
         content1 = self.rest.set_settings_for_function(body['appname'], body['settings'])
         log.info("Resume Application : {0}".format(body['appname']))
         if wait_for_resume:
@@ -714,8 +716,8 @@ class EventingBaseTest(QueryHelperTests):
 
     def check_eventing_rebalance(self):
         status=self.rest.get_eventing_rebalance_status()
-        self.log.info("Eventing rebalance status: {}".format(status))
-        if status=="true":
+        #self.log.info("Eventing rebalance status: {}".format(status))
+        if status.decode()=="true":
             return True
         else:
             return False
@@ -863,6 +865,12 @@ class EventingBaseTest(QueryHelperTests):
         self.log.info(result_set['results'])
         self.log.info("===============================================================================================")
 
+    def wait_for_failover(self):
+        self.log.info("Waiting for internal failover to start ....")
+        failover_started=False
+        while not failover_started:
+            failover_started=self.check_eventing_rebalance()
+        self.log.info("Failover started")
 
 
 
