@@ -1336,6 +1336,15 @@ class RemoteMachineShellConnection(KeepRefs):
     def file_exists(self, remotepath, filename, pause_time=30):
         sftp = self._ssh_client.open_sftp()
         try:
+            if "Program" in remotepath:
+                if "Program\\" in remotepath:
+                    remotepath = remotepath.replace("Program\\", "Program")
+                output, _ = self.execute_command("cat '{0}{1}'".format(remotepath, filename))
+                if output and output[0]:
+                    return True
+                else:
+                    return False
+
             filenames = sftp.listdir_attr(remotepath)
             for name in filenames:
                 if filename in name.filename and int(name.st_size) > 0:
@@ -3590,6 +3599,8 @@ class RemoteMachineShellConnection(KeepRefs):
     def get_domain(self, win_info=None):
         if win_info:
             o, _ = self.execute_batch_command('ipconfig')
+            """ remove empty element """
+            o = list(filter(None, o))
             suffix_dns_row = [row for row in o if row.find(" Connection-specific DNS Suffix") != -1 and \
                              len(row.split(':')[1]) > 1]
             if suffix_dns_row ==[]:
@@ -3778,7 +3789,7 @@ class RemoteMachineShellConnection(KeepRefs):
             if self.info.type.lower() == 'windows':
                 o, r = self.execute_command("net start couchbaseserver")
                 self.log_command_output(o, r)
-                self.sleep(1, "Waiting for 1 secs to start...on " + self.info.ip)
+                self.sleep(5, "Waiting for 5 secs to start...on " + self.info.ip)
                 running = self.is_couchbase_running()
                 retry=retry+1
             if self.info.type.lower() == "linux":
