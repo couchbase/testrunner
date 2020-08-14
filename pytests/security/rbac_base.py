@@ -49,12 +49,15 @@ class RbacBase:
             final_roles = ""
             userid = user_role['id']
             username = user_role['name']
-            user_role_param = user_role['roles'].split(":")
+            user_role_param = user_role['roles'].split("]:")
             if len(user_role_param) == 1:
                 final_roles = user_role_param[0]
             else:
                 for role in user_role_param:
-                    final_roles = role + "," + final_roles
+                    if ']' not in role and '[' in role:
+                        final_roles = role + "]," + final_roles
+                    else:
+                        final_roles = role + "," + final_roles
             payload="name="+username+"&roles="+final_roles
             if self.source == "ldap":
                 response = rest.set_user_roles(userid, payload)
