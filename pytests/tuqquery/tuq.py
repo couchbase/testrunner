@@ -37,6 +37,7 @@ from fts.random_query_generator.rand_query_gen import FTSFlexQueryGenerator
 from pytests.fts.fts_base import FTSIndex
 from pytests.fts.random_query_generator.rand_query_gen import DATASET
 from pytests.fts.fts_base import CouchbaseCluster
+from collection.collections_n1ql_client import CollectionsN1QL
 
 JOIN_INNER = "INNER"
 JOIN_LEFT = "LEFT"
@@ -196,6 +197,7 @@ class QueryTests(BaseTestCase):
         self.log.info("==============  QueryTests suite_setup has started ==============")
         try:
             os = self.shell.extract_remote_info().type.lower()
+            self.collections_helper = CollectionsN1QL(self.master)
             # if os != 'windows':
             # self.sleep(10, 'sleep before load')
             if not self.skip_load:
@@ -216,11 +218,12 @@ class QueryTests(BaseTestCase):
                 from couchbase.cluster import Cluster
                 from couchbase.cluster import PasswordAuthenticator
             if self.load_collections:
-                self.run_cbq_query(query="CREATE scope default:default.{0}".format(self.scope))
-                time.sleep(10)
-                self.run_cbq_query(query="CREATE COLLECTION default:default.{0}.{1}".format(self.scope, self.collections[0]))
-                self.run_cbq_query(query="CREATE COLLECTION default:default.{0}.{1}".format(self.scope, self.collections[1]))
-                time.sleep(10)
+                self.collections_helper.create_scope(bucket_name="default",scope_name=self.scope)
+                self.collections_helper.create_collection(bucket_name="default",scope_name=self.scope,collection_name=self.collections[0])
+                self.collections_helper.create_collection(bucket_name="default",scope_name=self.scope,collection_name=self.collections[1])
+                #self.run_cbq_query(query="CREATE scope default:default.{0}".format(self.scope))
+                #self.run_cbq_query(query="CREATE COLLECTION default:default.{0}.{1}".format(self.scope, self.collections[0]))
+                #self.run_cbq_query(query="CREATE COLLECTION default:default.{0}.{1}".format(self.scope, self.collections[1]))
                 if not self.use_advice:
                     self.run_cbq_query(query="CREATE INDEX idx1 on default:default.{0}.{1}(name)".format(self.scope, self.collections[0]))
                     self.run_cbq_query(query="CREATE INDEX idx2 on default:default.{0}.{1}(name)".format(self.scope, self.collections[1]))
@@ -229,8 +232,8 @@ class QueryTests(BaseTestCase):
                     if self.primary_index_collections:
                         self.run_cbq_query(query="CREATE PRIMARY INDEX ON default:default.{0}.{1}".format(self.scope, self.collections[0]))
                         self.run_cbq_query(query="CREATE PRIMARY INDEX ON default:default.{0}.{1}".format(self.scope, self.collections[1]))
-
-                    time.sleep(10)
+                    self.sleep(5)
+                    self.wait_for_all_indexes_online()
                 self.run_cbq_query(
                     query=('INSERT INTO default:default.{0}.{1}'.format(self.scope, self.collections[0]) + '(KEY, VALUE) VALUES ("key2", { "type" : "hotel", "name" : "new hotel" })'))
                 self.run_cbq_query(
