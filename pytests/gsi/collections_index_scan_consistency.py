@@ -48,7 +48,7 @@ class CollectionsIndexScanConsistency(BaseSecondaryIndexingTests):
         """
         num_of_docs = 10 ** 5
         self.prepare_collection_for_indexing(num_of_docs_per_collection=num_of_docs)
-        collection_namespace = self.namespace[0]
+        collection_namespace = self.namespaces[0]
         _, keyspace = collection_namespace.split(':')
         bucket, scope, collection = keyspace.split('.')
         index_gen = QueryDefinition(index_name='idx', index_fields=['age', 'country', 'city'])
@@ -103,7 +103,7 @@ class CollectionsIndexScanConsistency(BaseSecondaryIndexingTests):
         cluster = Cluster(f'couchbase://{self.master.ip}', ClusterOptions(PasswordAuthenticator('username', 'password')))
 
         self.prepare_collection_for_indexing(num_of_docs_per_collection=num_of_docs)
-        collection_namespace = self.namespace[0]
+        collection_namespace = self.namespaces[0]
 
         _, keyspace = collection_namespace.split(':')
         bucket, scope, collection = keyspace.split('.')

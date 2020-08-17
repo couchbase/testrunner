@@ -960,7 +960,7 @@ class BaseSecondaryIndexingTests(QueryTests):
         index_list = []
         index_status = rest.get_index_status()
         for index_info in index_status.values():
-            for k,v in index_info.items():
+            for k, v in index_info.items():
                 if v["status"] != "Ready":
                     index_list.append(k)
         return index_list
@@ -1097,36 +1097,35 @@ class BaseSecondaryIndexingTests(QueryTests):
                                                              wait_if_warmup=True)
 
     def prepare_collection_for_indexing(self, num_scopes=1, num_collections=1, num_of_docs_per_collection=1000,
-                                        skip_defaults=True, indexes_before_load=False, json_template="Person"):
-        self.namespace = []
+                                        indexes_before_load=False, json_template="Person"):
+        self.namespaces = []
         pre_load_idx_pri = None
         pre_load_idx_gsi = None
         self.collection_rest.create_scope_collection_count(scope_num=num_scopes, collection_num=num_collections,
                                                            scope_prefix=self.scope_prefix,
                                                            collection_prefix=self.collection_prefix,
                                                            bucket=self.test_bucket)
-        self.scopes = self.collection_rest.get_bucket_scopes(bucket=self.test_bucket)
-        self.collections = self.collection_rest.get_bucket_collections(bucket=self.test_bucket)
+        scopes = [f'{self.scope_prefix}_{scope_num + 1}' for scope_num in range(num_scopes)]
         self.sleep(10, "Allowing time after collection creation")
 
-        if skip_defaults:
-            self.scopes.remove('_default')
-            self.collections.remove('_default')
         if num_of_docs_per_collection > 0:
-            for s_item in self.scopes:
-                for c_item in self.collections:
-                    self.namespace.append(f'default:{self.test_bucket}.{s_item}.{c_item}')
+            for s_item in scopes:
+                collections = [f'{self.collection_prefix}_{coll_num + 1}' for coll_num in range(num_collections)]
+                for c_item in collections:
+                    self.namespaces.append(f'default:{self.test_bucket}.{s_item}.{c_item}')
                     if indexes_before_load:
                         pre_load_idx_pri = QueryDefinition(index_name='pre_load_idx_pri')
                         pre_load_idx_gsi = QueryDefinition(index_name='pre_load_idx_gsi', index_fields=['firstName'])
-                        query = pre_load_idx_pri.generate_primary_index_create_query(namespace=self.namespace[0])
+                        query = pre_load_idx_pri.generate_primary_index_create_query(namespace=self.namespaces[0])
                         self.run_cbq_query(query=query)
-                        query = pre_load_idx_gsi.generate_index_create_query(namespace=self.namespace[0])
+                        query = pre_load_idx_gsi.generate_index_create_query(namespace=self.namespaces[0])
                         self.run_cbq_query(query=query)
                     self.gen_create = SDKDataLoader(num_ops=num_of_docs_per_collection, percent_create=100,
                                                     percent_update=0, percent_delete=0, scope=s_item,
                                                     collection=c_item, json_template=json_template)
-                    self._load_all_buckets(self.master, self.gen_create)
+                    tasks = self.data_ops_javasdk_loader_in_batches(sdk_data_loader=self.gen_create, batch_size=10 ** 5)
+                    for task in tasks:
+                        task.result()
         return pre_load_idx_pri, pre_load_idx_gsi
 
     def get_indexer_mem_quota(self, indexer_node=None):

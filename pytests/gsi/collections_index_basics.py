@@ -43,7 +43,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
 
     def test_create_primary_index_for_collections(self):
         self.prepare_collection_for_indexing()
-        collection_namespace = self.namespace[0]
+        collection_namespace = self.namespaces[0]
         query_gen_1 = QueryDefinition(index_name='`#primary`')
         query_gen_2 = QueryDefinition(index_name='name_primary_idx')
         # preparing index
@@ -88,7 +88,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
 
     def test_gsi_for_collection(self):
         pre_load_idx_pri, pre_load_idx_gsi = self.prepare_collection_for_indexing(indexes_before_load=True)
-        collection_namespace = self.namespace[0]
+        collection_namespace = self.namespaces[0]
 
         query_gen = QueryDefinition(index_name='idx', index_fields=['age'])
         indx_gen = QueryDefinition(index_name='meta_idx', index_fields=['meta().expiration'])
@@ -232,7 +232,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
 
     def test_multiple_indexes_on_same_field(self):
         self.prepare_collection_for_indexing()
-        collection_namespace = self.namespace[0]
+        collection_namespace = self.namespaces[0]
         primary_gen = QueryDefinition(index_name='`#primary`')
         query_gen = QueryDefinition(index_name='idx', index_fields=['age'])
         query_gen_copy = QueryDefinition(index_name='idx_copy', index_fields=['age'])
@@ -289,7 +289,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
         if len(index_nodes) < 2:
             self.fail("Need at least 2 index nodes to run this test")
         self.prepare_collection_for_indexing()
-        collection_namespace = self.namespace[0]
+        collection_namespace = self.namespaces[0]
 
         # index creation with num replica
         index_gen = QueryDefinition(index_name='idx', index_fields=['age'])
@@ -337,7 +337,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
 
     def test_gsi_array_indexes(self):
         self.prepare_collection_for_indexing(json_template="Employee")
-        collection_namespace = self.namespace[0]
+        collection_namespace = self.namespaces[0]
         primary_gen = QueryDefinition(index_name='`#primary`')
         doc_count = self.run_cbq_query(query=f'select count(*) from {collection_namespace}')['results'][0]['$1']
         arr_index = "arr_index"
@@ -413,7 +413,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
 
     def test_index_partitioning(self):
         self.prepare_collection_for_indexing(json_template="Employee")
-        collection_namespace = self.namespace[0]
+        collection_namespace = self.namespaces[0]
         arr_index = "arr_index"
         primary_gen = QueryDefinition(index_name='`#primary`')
         index_gen = QueryDefinition(index_name=arr_index, index_fields=['join_mo', 'join_day'],
@@ -499,7 +499,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
 
     def test_partial_indexes(self):
         self.prepare_collection_for_indexing(json_template="Employee")
-        collection_namespace = self.namespace[0]
+        collection_namespace = self.namespaces[0]
         arr_index = "arr_index"
         primary_gen = QueryDefinition(index_name='`#primary`')
         index_gen = QueryDefinition(index_name=arr_index, index_fields=['join_mo', 'join_day'])
@@ -762,7 +762,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
 
     def test_indexes_with_deferred_build(self):
         self.prepare_collection_for_indexing()
-        collection_namespace = self.namespace[0]
+        collection_namespace = self.namespaces[0]
         index_gen_1 = QueryDefinition(index_name='idx_1', index_fields=['age'])
         index_gen_2 = QueryDefinition(index_name='idx_2', index_fields=['city'])
         index_gen_3 = QueryDefinition(index_name='idx_3', index_fields=['city', 'age'])
@@ -853,7 +853,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
         dgm_server = self.get_nodes_from_services_map(service_type="index")
         self.get_dgm_for_plasma(indexer_nodes=[dgm_server])
         self.prepare_collection_for_indexing(num_of_docs_per_collection=10 ** 5)
-        collection_namespace = self.namespace[0]
+        collection_namespace = self.namespaces[0]
         index_gen = QueryDefinition(index_name='idx', index_fields=['age', 'city', 'firstName', 'country'])
         try:
             query = index_gen.generate_index_create_query(namespace=collection_namespace,
@@ -901,7 +901,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
         index_gen = QueryDefinition(index_name='idx', index_fields=['age'])
 
         collection_namespace = f'default:{self.test_bucket}.{scope}.{collection}'
-        collection_namespace_2 = self.namespace[0]
+        collection_namespace_2 = self.namespaces[0]
 
         system_indexes_query = "Select * from system:indexes"
 
@@ -979,7 +979,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
     def test_create_negative_scenarios(self):
         # Checking for duplicate index names
         self.prepare_collection_for_indexing()
-        collection_namespace = self.namespace[0]
+        collection_namespace = self.namespaces[0]
         index_gen_1 = QueryDefinition(index_name='idx', index_fields=['age'])
         index_gen_2 = QueryDefinition(index_name='idx', index_fields=['city'])
         try:
@@ -1046,7 +1046,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
     def test_drop_negative_scenarios(self):
         # dropping an already dropped index
         self.prepare_collection_for_indexing(num_of_docs_per_collection=9 * 10 ** 4)
-        collection_namespace = self.namespace[0]
+        collection_namespace = self.namespaces[0]
         index_gen = QueryDefinition(index_name='idx', index_fields=['age'])
         system_indexes_query = "Select * from system:indexes"
         try:
@@ -1090,7 +1090,7 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
 
     def test_build_scenarios(self):
         self.prepare_collection_for_indexing()
-        collection_namespace = self.namespace[0]
+        collection_namespace = self.namespaces[0]
         index_gen_list = []
         num_index = 5
         for item in range(num_index):
