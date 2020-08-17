@@ -56,12 +56,12 @@ class EventingFailover(EventingBaseTest):
         if force_disable_new_orchestration:
             self.rest.diag_eval("ns_config:set(force_disable_new_orchestration, true).")
         ##index is required for delete operation through n1ql
-        # self.n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
-        # self.n1ql_helper = N1QLHelper(shell=self.shell, max_verify=self.max_verify, buckets=self.buckets,
-        #                               item_flag=self.item_flag, n1ql_port=self.n1ql_port,
-        #                               full_docs_list=self.full_docs_list, log=self.log, input=self.input,
-        #                               master=self.master, use_rest=True)
-        # self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
+        self.n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
+        self.n1ql_helper = N1QLHelper(shell=self.shell, max_verify=self.max_verify, buckets=self.buckets,
+                                      item_flag=self.item_flag, n1ql_port=self.n1ql_port,
+                                      full_docs_list=self.full_docs_list, log=self.log, input=self.input,
+                                      master=self.master, use_rest=True)
+        self.n1ql_helper.create_primary_index(using_gsi=True, server=self.n1ql_node)
 
 
     def tearDown(self):
