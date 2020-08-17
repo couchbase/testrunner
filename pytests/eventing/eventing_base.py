@@ -23,11 +23,11 @@ log = logging.getLogger()
 class EventingBaseTest(QueryHelperTests):
     panic_count = 0
     ## added to ignore error
-    def suite_setUp(self):
-        pass
-
-    def suite_tearDown(self):
-        pass
+    # def suite_setUp(self):
+    #     pass
+    #
+    # def suite_tearDown(self):
+    #     pass
 
 
     def setUp(self):

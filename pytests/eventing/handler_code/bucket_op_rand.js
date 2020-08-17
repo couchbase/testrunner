@@ -4,6 +4,7 @@ function OnUpdate(doc, meta) {
         var time_rand = random_gen();
         dst_bucket[meta.id + time_rand] = doc;
     } catch(e) {
+        log(e);
         //var time_rand = random_gen();
         //dst_bucket[meta.id + time_rand] = doc;
     }
