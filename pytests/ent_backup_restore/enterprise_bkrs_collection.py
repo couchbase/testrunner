@@ -121,7 +121,10 @@ class EnterpriseBackupRestoreCollectionTest(EnterpriseBackupRestoreCollectionBas
                 self.log.info("*** start to update items in all buckets")
                 col_cmd = ""
                 if self.backupset.load_to_collection:
-                    self.backupset.load_scope_id = choice(scopes_id)
+                    if len(scopes_id) > 1:
+                        self.backupset.load_scope_id = choice(scopes_id)
+                    else:
+                        self.backupset.load_scope_id = scopes_id[0]
                     col_cmd = " -c {0} ".format(self.backupset.load_scope_id)
                 self.load_all_buckets(self.backupset.cluster_host, ratio=0.1,
                                                      command_options=col_cmd)

@@ -602,12 +602,12 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
             return
         backup_collections = self.get_bucket_collection_cluster_host()
         restore_collections = self.get_bucket_collection_restore_cluster_host()
-        for restore_collection in restore_collections:
-            if restore_collection in backup_collections:
-                self.log.info("Collection {0} restored".format(restore_collection))
+        for backup_collection in backup_collections:
+            if backup_collection in restore_collections:
+                self.log.info("Collection {0} restored".format(backup_collection))
             else:
                 if not self.drop_collections:
-                    self.fail("Collection {0} failed to restore".format(restore_collection))
+                    self.fail("Collection {0} failed to restore".format(backup_collection))
 
     def get_collection_stats_cluster_host(self):
         bucket = self.buckets[0]

@@ -24,7 +24,6 @@ class DirectoryStructureValidations(BackupRestoreValidationBase):
         remote_client.disconnect()
         current_path = self.backupset.directory
         parent_path = self.backupset.name
-        current_backup = 1
         directory_structure = {self.backupset.name: {}}
         backups = {}
         for out in output:
@@ -44,10 +43,9 @@ class DirectoryStructureValidations(BackupRestoreValidationBase):
                 obj = obj[parent]
             if split[0].startswith("d"):
                 if re.match("\d{4}-\d{2}-\d{2}T", split[-1]):
-                    backup = "backup{0}".format(current_backup)
+                    backup = "backup"
                     backups[split[-1]] = backup
                     split[-1] = backup
-                    current_backup += 1
                 obj[split[-1]] = {}
             else:
                 obj[split[-1]] = split[-1]
