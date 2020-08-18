@@ -3,6 +3,7 @@
 import copy
 import json
 import random
+import time
 from threading import Thread
 
 import Geohash
@@ -10,6 +11,8 @@ from membase.helper.cluster_helper import ClusterOperationHelper
 from remote.remote_util import RemoteMachineShellConnection
 
 from TestInput import TestInputSingleton
+from tasks.task import ESRunQueryCompare
+from tasks.taskmanager import TaskManager
 from lib.testconstants import FUZZY_FTS_SMALL_DATASET, FUZZY_FTS_LARGE_DATASET
 from .fts_base import FTSBaseTest, INDEX_DEFAULTS, QUERY, download_from_s3
 from lib.membase.api.exception import FTSException, ServerUnavailableException
@@ -2590,53 +2593,55 @@ class StableTopFTS(FTSBaseTest):
             except Exception as e:
                 self.log.info("Expected exception happened during fts index creation on missed kv container.")
 
-    def test_score_none_fuzzy(self):
+    def prepare_for_score_none_fuzzy(self):
         fuzzy_dataset_size = self._input.param("fuzzy_dataset_size", "small")
         index_params = {}
         data_json = ""
-        default_query = {}
         dataset = ""
-        expected_hits = 0
         if "small" in fuzzy_dataset_size:
             data_json = "fuzzy_small_dataset.json"
             dataset = FUZZY_FTS_SMALL_DATASET
             index_params = INDEX_DEFAULTS.FUZZY_SMALL_INDEX_MAPPING
-            default_query = QUERY.FUZZY_SMALL_INDEX_QUERY
+            self.query = QUERY.FUZZY_SMALL_INDEX_QUERY
         if "large" in fuzzy_dataset_size:
             data_json = "fuzzy_large_dataset.json"
             dataset = FUZZY_FTS_LARGE_DATASET
             index_params = INDEX_DEFAULTS.FUZZY_LARGE_INDEX_MAPPING
-            default_query = QUERY.FUZZY_LARGE_INDEX_QUERY
+            self.query = QUERY.FUZZY_LARGE_INDEX_QUERY
 
         download_from_s3(dataset, "/tmp/" + data_json)
 
         self.cbimport_data(data_json_path="/tmp/" + data_json, server=self._cb_cluster.get_master_node())
+        self.sleep(10)
 
-        self._cb_cluster.create_fts_index(name="fuzzy_index",
+        self.fts_index = self._cb_cluster.create_fts_index(name="fuzzy_index",
                                           source_name="default",
                                           index_params=index_params)
         self.wait_for_indexing_complete()
 
+    def test_score_none_fuzzy(self):
+
+        self.prepare_for_score_none_fuzzy()
+        expected_hits = 0
         try:
             for index in self._cb_cluster.get_indexes():
-                expected_hits, contents, _, _ = index.execute_query(query=default_query,
+                expected_hits, contents, _, _ = index.execute_query(query=self.query,
                                                                     zero_results_ok=False,
-                                                                    expected_hits=expected_hits,
                                                                     return_raw_hits=True)
+                self.log.info("Hits: %s" % expected_hits)
         except Exception as err:
             self.log.error(err)
             self.fail("Testcase failed: " + str(err))
 
         try:
             for index in self._cb_cluster.get_indexes():
-                hits, contents, _, _ = index.execute_query(query=default_query,
+                hits, contents, _, _ = index.execute_query(query=self.query,
                                                            zero_results_ok=False,
                                                            expected_hits=expected_hits,
                                                            return_raw_hits=True,
                                                            score="none")
 
                 self.log.info("Hits: %s" % hits)
-                self.log.info("Content: %s" % contents)
                 result = True
                 if hits == expected_hits:
                     for doc in contents:
@@ -2654,3 +2659,31 @@ class StableTopFTS(FTSBaseTest):
         except Exception as err:
             self.log.error(err)
             self.fail("Testcase failed: " + str(err))
+
+    def test_mem_utilization_score_none_fuzzy(self):
+        self.prepare_for_score_none_fuzzy()
+
+        self.sleep(60, "Waiting for 1 min before before collecting mem_usage")
+
+        fts_nodes_mem_usage = self.get_fts_ram_used()
+        self.log.info("fts_nodes_mem_usage: {0}".format(fts_nodes_mem_usage))
+
+        self.fts_index.fts_queries.append(self.query)
+        self.start_task_managers(10)
+        for count in range(2000):
+            for task_manager in self.task_managers:
+                task_manager.schedule(ESRunQueryCompare(self.fts_index,
+                                                        self.es,
+                                                        query_index=0))
+        self.sleep(600)
+
+        self.shutdown_task_managers()
+
+        self.sleep(60, "Waiting for 1 min before checking cpu utilization/mem_high again")
+
+        mem_high = False
+        for node in fts_nodes_mem_usage:
+            mem_high = mem_high or self.check_if_fts_ram_usage_high(node["nodeip"], 1.4*float(node["mem_usage"]))
+
+        if mem_high:
+            self.fail("CPU utilization or memory usage found to be high")

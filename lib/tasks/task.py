@@ -1593,6 +1593,7 @@ class ESRunQueryCompare(Task):
         self.passed = True
         self.es_index_name = es_index_name or "es_index"
         self.n1ql_executor = n1ql_executor
+        self.score = TestInputSingleton.input.param("score",'')
 
     def check(self, task_manager):
         self.state = FINISHED
@@ -1608,7 +1609,7 @@ class ESRunQueryCompare(Task):
                           % str(self.query_index + 1))
             try:
                 fts_hits, fts_doc_ids, fts_time, fts_status = \
-                    self.run_fts_query(self.fts_query)
+                    self.run_fts_query(self.fts_query, self.score)
                 self.log.info("Status: %s" % fts_status)
                 if fts_hits < 0:
                     self.passed = False
@@ -1737,8 +1738,8 @@ class ESRunQueryCompare(Task):
             self.set_exception(e)
             self.state = FINISHED
 
-    def run_fts_query(self, query):
-        return self.fts_index.execute_query(query)
+    def run_fts_query(self, query, score=''):
+        return self.fts_index.execute_query(query, score=score)
 
     def run_es_query(self, query):
         return self.es.search(index_name=self.es_index_name, query=query)

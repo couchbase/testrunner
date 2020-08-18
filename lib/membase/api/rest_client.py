@@ -2369,7 +2369,7 @@ class RestConnection(object):
                         stats[stat_name] = samples[stat_name][last_sample]
         return stats
 
-    def get_fts_stats(self, index_name, bucket_name, stat_name):
+    def get_fts_stats(self, index_name=None, bucket_name=None, stat_name=None):
         """
         List of fts stats available as of 03/16/2017 -
         default:default_idx3:avg_queries_latency: 0,
@@ -2415,14 +2415,17 @@ class RestConnection(object):
         while attempts < 5:
             status, content, header = self._http_request(api)
             json_parsed = json.loads(content)
-            key = bucket_name+':'+index_name+':'+stat_name
+            if bucket_name is None and index_name is None:
+                key = stat_name
+            else:
+                key = bucket_name+':'+index_name+':'+stat_name
             if key in json_parsed:
                 return status, json_parsed[key]
             attempts += 1
             log.info("Stat {0} not available yet".format(stat_name))
             time.sleep(1)
-        log.error("ERROR: Stat {0} error on {1} on bucket {2}: {3}".
-                  format(stat_name, index_name, bucket_name, e))
+        log.error("ERROR: Stat {0} error on {1} on bucket {2}".
+                  format(stat_name, index_name, bucket_name))
 
     def get_bucket_status(self, bucket):
         if not bucket:
