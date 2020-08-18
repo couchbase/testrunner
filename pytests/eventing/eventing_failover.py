@@ -153,10 +153,10 @@ class EventingFailover(EventingBaseTest):
                                                 self.buckets[0].kvs[1], 'create', compression=self.sdk_compression)
         # fail over the eventing node
         fail_over_task = self.cluster.async_failover([self.master], failover_nodes=[eventing_server[1]], graceful=False)
-        body = self.create_save_function_body(self.function_name+"1", self.handler_code)
+        body1 = self.create_save_function_body(self.function_name+"1", self.handler_code)
         self.wait_for_failover()
         try:
-            self.deploy_function(body)
+            self.deploy_function(body1)
         except Exception as e:
             self.log.info(str(e))
             if "ERR_REBALANCE_OR_FAILOVER_ONGOING" not in str(e):
@@ -178,6 +178,7 @@ class EventingFailover(EventingBaseTest):
         task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
                                                 self.buckets[0].kvs[1], 'create', compression=self.sdk_compression)
         self.deploy_function(body,wait_for_bootstrap=False)
+        self.sleep(3)
         # fail over the eventing node
         fail_over_task = self.cluster.async_failover([self.master], failover_nodes=[eventing_server[1]], graceful=False)
         self.wait_for_failover()

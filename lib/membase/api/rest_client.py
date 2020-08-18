@@ -5022,6 +5022,32 @@ class RestConnection(object):
             raise Exception(content)
         return content
 
+    '''
+             update eventing config
+    '''
+    def update_eventing_config(self,body):
+        authorization = self.get_authorization(self.username, self.password)
+        url = "_p/event/api/v1/config"
+        api = self.baseUrl + url
+        headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
+        status, content, header = self._http_request(api, 'POST', headers=headers, params=body)
+        if not status:
+            raise Exception(content)
+        return content
+
+    '''
+                GET eventing config
+    '''
+    def get_eventing_config(self):
+        authorization = self.get_authorization(self.username, self.password)
+        url = "_p/event/api/v1/config"
+        api = self.baseUrl + url
+        headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
+        status, content, header = self._http_request(api, 'GET', headers=headers, params='')
+        if not status:
+            raise Exception(content)
+        return content
+
 
     '''
           Get eventing rebalance status
