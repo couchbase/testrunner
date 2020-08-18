@@ -116,8 +116,8 @@ class EventingFailover(EventingBaseTest):
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True,
                                          expected_duplicate=True)
         # do a recovery and rebalance
-        self.rest.set_recovery_type('ns_1@' + eventing_server.ip, "full")
-        self.rest.add_back_node('ns_1@' + eventing_server.ip)
+        self.rest.set_recovery_type('ns_1@' + eventing_server[1].ip, "full")
+        self.rest.add_back_node('ns_1@' + eventing_server[1].ip)
         self.undeploy_and_delete_function(body)
 
     def test_vb_shuffle_during_failover_rebalance(self):
@@ -131,8 +131,8 @@ class EventingFailover(EventingBaseTest):
         fail_over_task = self.cluster.async_failover([self.master], failover_nodes=[eventing_server[1]], graceful=False)
         fail_over_task.result()
         # do a recovery and rebalance
-        self.rest.set_recovery_type('ns_1@' + eventing_server.ip, "full")
-        self.rest.add_back_node('ns_1@' + eventing_server.ip)
+        self.rest.set_recovery_type('ns_1@' + eventing_server[1].ip, "full")
+        self.rest.add_back_node('ns_1@' + eventing_server[1].ip)
         rebalance = self.cluster.rebalance(self.servers[:self.nodes_init], [], [])
         task.result()
         if self.is_sbm:
