@@ -26,6 +26,7 @@ from memcached.helper.data_helper import MemcachedClientHelper
 from TestInput import TestInputSingleton
 from scripts.collect_server_info import cbcollectRunner
 from couchbase_helper.documentgenerator import *
+from tasks.taskmanager import TaskManager
 
 from couchbase_helper.documentgenerator import JsonDocGenerator
 from lib.membase.api.exception import FTSException
@@ -61,8 +62,8 @@ def raise_if(cond, ex):
 def download_from_s3(source, dest):
     print( "Downloading from {0}...".
            format(source))
-    import urllib.request, urllib.parse, urllib.error
-    urllib.request.URLopener().retrieve(
+    import urllib
+    urllib.URLopener().retrieve(
         source,
         dest)
     print("Download complete!")
@@ -3807,6 +3808,34 @@ class FTSBaseTest(unittest.TestCase):
             if not shell._check_output("successfully", output):
                 self.fail("Failed to execute command")
 
+    def get_fts_ram_used(self):
+        fts_ram_used = []
+        for node in self._cb_cluster.get_fts_nodes():
+            status, fts_node_ram_used = RestConnection(node).get_fts_stats(stat_name="num_bytes_used_ram")
+            fts_ram_used.append({"nodeip": node.ip, "mem_usage": fts_node_ram_used})
+        return fts_ram_used
+
+    def check_if_fts_ram_usage_high(self, nodeip, threshold):
+        mem_high = False
+        for node in self._cb_cluster.get_fts_nodes():
+            if nodeip in node.ip:
+                status, fts_node_ram_used = RestConnection(node).get_fts_stats(stat_name="num_bytes_used_ram")
+                self.log.info("Ram used on node: {0} is {1} and threshold is {2}".format(nodeip,
+                                                                                         fts_node_ram_used, threshold))
+                if float(fts_node_ram_used) > threshold:
+                    mem_high = True
+        return mem_high
+
+    def start_task_managers(self, num):
+        self.task_managers = []
+        for count in range(num):
+            task_manager = TaskManager("task_manager{0}".format(count))
+            task_manager.start()
+            self.task_managers.append(task_manager)
+
+    def shutdown_task_managers(self):
+        for manager in self.task_managers:
+            manager.shutdown(True)
 
     def load_employee_dataset(self, num_items=None):
         """
