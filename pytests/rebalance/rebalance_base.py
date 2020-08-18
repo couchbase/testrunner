@@ -179,3 +179,13 @@ class RebalanceBaseTest(BaseTestCase):
                         format(actual_failover_count, expected_failover_count))
         self.log.info(
             "{0} nodes failed over as expected in {1} seconds".format(actual_failover_count, time_end - time_start))
+
+    def get_failover_count(self):
+        rest = RestConnection(self.master)
+        cluster_status = rest.cluster_status()
+        failover_count = 0
+        # check for inactiveFailed
+        for node in cluster_status['nodes']:
+            if node['clusterMembership'] == "inactiveFailed":
+                failover_count += 1
+        return failover_count
