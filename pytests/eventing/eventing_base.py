@@ -291,8 +291,9 @@ class EventingBaseTest(QueryHelperTests):
                 log.debug("Full Stats for Node {0} is \n{1} ".format(eventing_node.ip, json.dumps(full_out,
                                                                                                 sort_keys=True,
                                                                                                 indent=4)))
-            self.print_document_count_via_index(bucket)
-            self.print_timer_alarm_context()
+            if not expected_duplicate:
+                self.print_document_count_via_index(bucket)
+                self.print_timer_alarm_context()
             if stats_dst["curr_items"] < expected_dcp_mutations:
                 self.skip_metabucket_check=True
                 if self.print_app_log:
@@ -874,13 +875,22 @@ class EventingBaseTest(QueryHelperTests):
         failover_started=False
         count =0
         ### wait for 5 min max
-        while not failover_started and count < 300000:
+        while not failover_started:
             failover_started=self.check_eventing_rebalance()
             count=count+1
-        if count >=300000:
-            raise Exception("Failover not started even after waiting for long")
+            self.sleep(1,"checking for failover...")
+            if count >=300:
+                raise Exception("Failover not started even after waiting for long")
         self.log.info("Failover started")
 
+
+    def enable_disable_vb_distribution(self,enable=True):
+        if enable:
+            body = "{\"auto_redistribute_vbs_on_failover\": true}"
+        else:
+            body = "{\"auto_redistribute_vbs_on_failover\": false}"
+        self.rest.update_eventing_config(body)
+        self.log.info(self.rest.get_eventing_config())
 
 
 
