@@ -10,7 +10,8 @@ from membase.helper.cluster_helper import ClusterOperationHelper
 from remote.remote_util import RemoteMachineShellConnection
 
 from TestInput import TestInputSingleton
-from fts_base import FTSBaseTest
+from lib.testconstants import FUZZY_FTS_SMALL_DATASET, FUZZY_FTS_LARGE_DATASET
+from fts_base import FTSBaseTest, INDEX_DEFAULTS, QUERY, download_from_s3
 from lib.membase.api.exception import FTSException, ServerUnavailableException
 from lib.membase.api.rest_client import RestConnection
 
@@ -2407,3 +2408,68 @@ class StableTopFTS(FTSBaseTest):
         except Exception as err:
             self.log.error(err)
             self.fail("Testcase failed: " + err.message)
+
+    def test_score_none_fuzzy(self):
+        fuzzy_dataset_size = self._input.param("fuzzy_dataset_size", "small")
+        index_params = {}
+        data_json = ""
+        default_query = {}
+        dataset = ""
+        expected_hits = 0
+        if "small" in fuzzy_dataset_size:
+            data_json = "fuzzy_small_dataset.json"
+            dataset = FUZZY_FTS_SMALL_DATASET
+            index_params = INDEX_DEFAULTS.FUZZY_SMALL_INDEX_MAPPING
+            default_query = QUERY.FUZZY_SMALL_INDEX_QUERY
+        if "large" in fuzzy_dataset_size:
+            data_json = "fuzzy_large_dataset.json"
+            dataset = FUZZY_FTS_LARGE_DATASET
+            index_params = INDEX_DEFAULTS.FUZZY_LARGE_INDEX_MAPPING
+            default_query = QUERY.FUZZY_LARGE_INDEX_QUERY
+
+        download_from_s3(dataset, "/tmp/" + data_json)
+
+        self.cbimport_data(data_json_path="/tmp/" + data_json, server=self._cb_cluster.get_master_node())
+
+        self._cb_cluster.create_fts_index(name="fuzzy_index",
+                                          source_name="default",
+                                          index_params=index_params)
+        self.wait_for_indexing_complete()
+
+        try:
+            for index in self._cb_cluster.get_indexes():
+                expected_hits, contents, _, _ = index.execute_query(query=default_query,
+                                                                    zero_results_ok=False,
+                                                                    expected_hits=expected_hits,
+                                                                    return_raw_hits=True)
+        except Exception as err:
+            self.log.error(err)
+            self.fail("Testcase failed: " + str(err))
+
+        try:
+            for index in self._cb_cluster.get_indexes():
+                hits, contents, _, _ = index.execute_query(query=default_query,
+                                                           zero_results_ok=False,
+                                                           expected_hits=expected_hits,
+                                                           return_raw_hits=True,
+                                                           score="none")
+
+                self.log.info("Hits: %s" % hits)
+                self.log.info("Content: %s" % contents)
+                result = True
+                if hits == expected_hits:
+                    for doc in contents:
+                        # Check if the score of the doc is 0.
+                        if "score" in doc:
+                            self.assertEqual(doc["score"], 0, "Score is not 0 for doc {0}".format(doc["id"]))
+                        else:
+                            self.fail("Score key not present in search results for doc {0}".format(doc["id"]))
+                    if not result:
+                        self.fail(
+                            "Testcase failed. Actual results do not match expected.")
+                else:
+                    self.fail("No. of hits not matching expected hits. Hits = {0}, Expected Hits = {1}".format(hits,
+                                                                                                               expected_hits))
+        except Exception as err:
+            self.log.error(err)
+            self.fail("Testcase failed: " + str(err))

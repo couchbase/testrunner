@@ -58,6 +58,16 @@ def raise_if(cond, ex):
         raise ex
 
 
+def download_from_s3(source, dest):
+    print( "Downloading from {0}...".
+           format(source))
+    import urllib.request, urllib.parse, urllib.error
+    urllib.request.URLopener().retrieve(
+        source,
+        dest)
+    print("Download complete!")
+
+
 class OPS:
     CREATE = "create"
     UPDATE = "update"
@@ -156,6 +166,165 @@ class INDEX_DEFAULTS:
         "planParams": {}
     }
 
+    FUZZY_SMALL_INDEX_MAPPING = {
+        "analysis": {},
+        "default_analyzer": "standard",
+        "default_datetime_parser": "dateTimeOptional",
+        "default_field": "_all",
+        "default_mapping": {
+            "dynamic": False,
+            "enabled": True,
+            "properties": {
+                "entity": {
+                    "dynamic": False,
+                    "enabled": True,
+                    "properties": {
+                        "country": {
+                            "dynamic": False,
+                            "enabled": True,
+                            "properties": {
+                                "countryCode": {
+                                    "dynamic": False,
+                                    "enabled": True,
+                                    "fields": [
+                                        {
+                                            "include_in_all": True,
+                                            "include_term_vectors": True,
+                                            "index": True,
+                                            "name": "countryCode",
+                                            "store": True,
+                                            "type": "text"
+                                        }
+                                    ]
+                                },
+                                "subdiv": {
+                                    "dynamic": False,
+                                    "enabled": True,
+                                    "fields": [
+                                        {
+                                            "include_in_all": True,
+                                            "include_term_vectors": True,
+                                            "index": True,
+                                            "name": "subdiv",
+                                            "store": True,
+                                            "type": "text"
+                                        }
+                                    ]
+                                }
+                            }
+                        },
+                        "state": {
+                            "dynamic": False,
+                            "enabled": True,
+                            "fields": [
+                                {
+                                    "docvalues": True,
+                                    "include_in_all": True,
+                                    "include_term_vectors": True,
+                                    "index": True,
+                                    "name": "state",
+                                    "type": "text"
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "default_type": "_default",
+        "docvalues_dynamic": True,
+        "index_dynamic": True,
+        "store_dynamic": False,
+        "type_field": "_type"
+
+    }
+
+    FUZZY_LARGE_INDEX_MAPPING = {
+        "analysis": {},
+        "default_analyzer": "standard",
+        "default_datetime_parser": "dateTimeOptional",
+        "default_field": "_all",
+        "default_mapping": {
+            "dynamic": False,
+            "enabled": True,
+            "properties": {
+                "class": {
+                    "dynamic": False,
+                    "enabled": True,
+                    "fields": [
+                        {
+                            "docvalues": True,
+                            "include_in_all": True,
+                            "include_term_vectors": True,
+                            "index": True,
+                            "name": "class",
+                            "type": "text"
+                        }
+                    ]
+                },
+                "entity": {
+                    "dynamic": False,
+                    "enabled": True,
+                    "properties": {
+                        "country": {
+                            "dynamic": False,
+                            "enabled": True,
+                            "properties": {
+                                "countryCode": {
+                                    "dynamic": False,
+                                    "enabled": True,
+                                    "fields": [
+                                        {
+                                            "include_in_all": True,
+                                            "include_term_vectors": True,
+                                            "index": True,
+                                            "name": "countryCode",
+                                            "store": True,
+                                            "type": "text"
+                                        }
+                                    ]
+                                },
+                                "subdiv": {
+                                    "dynamic": False,
+                                    "enabled": True,
+                                    "fields": [
+                                        {
+                                            "include_in_all": True,
+                                            "include_term_vectors": True,
+                                            "index": True,
+                                            "name": "subdiv",
+                                            "store": True,
+                                            "type": "text"
+                                        }
+                                    ]
+                                }
+                            }
+                        },
+                        "state": {
+                            "dynamic": False,
+                            "enabled": True,
+                            "fields": [
+                                {
+                                    "docvalues": True,
+                                    "include_in_all": True,
+                                    "include_term_vectors": True,
+                                    "index": True,
+                                    "name": "state",
+                                    "type": "text"
+                                }
+                            ]
+                        }
+                    }
+                }
+            }
+        },
+        "default_type": "_default",
+        "docvalues_dynamic": True,
+        "index_dynamic": True,
+        "store_dynamic": False,
+        "type_field": "_type"
+    }
+
 
 class QUERY:
     JSON = {
@@ -174,6 +343,78 @@ class QUERY:
             # it's better to get rid of hardcoding
         }
     }
+
+    FUZZY_LARGE_INDEX_QUERY = {
+        "must": {
+            "conjuncts": [
+                {
+                    "field": "class",
+                    "match": "clearancesnapshot"
+                },
+                {
+                    "field": "entity.state",
+                    "match": "SALLED",
+                    "fuzziness": 1
+                },
+                {
+                    "field": "entity.country.subdiv",
+                    "match": "XY",
+                    "fuzziness": 2
+                },
+                {
+                    "disjuncts": [
+                        {
+                            "field": "entity.country.countryCode",
+                            "match": "CD",
+                            "fuzziness": 1
+                        },
+                        {
+                            "field": "entity.country.countryCode",
+                            "match": "HI",
+                            "fuzziness": 1
+                        },
+                        {
+                            "field": "entity.country.countryCode",
+                            "match": "NY",
+                            "fuzziness": 2
+                        }
+                    ]
+                }
+            ]
+        }
+    }
+
+    FUZZY_SMALL_INDEX_QUERY = {
+        "must": {
+            "conjuncts": [
+                {
+                    "field": "entity.state",
+                    "match": "SALLED",
+                    "fuzziness": 1
+                },
+                {
+                    "field": "entity.country.subdiv",
+                    "match": "XY",
+                    "fuzziness": 1
+                },
+                {
+                    "disjuncts": [
+                        {
+                            "field": "entity.country.countryCode",
+                            "match": "CD",
+                            "fuzziness": 1
+                        },
+                        {
+                            "field": "entity.country.countryCode",
+                            "match": "HI",
+                            "fuzziness": 1
+                        }
+                    ]
+                }
+            ]
+        }
+    }
+
 
 
 # Event Definition:
@@ -3529,6 +3770,43 @@ class FTSBaseTest(unittest.TestCase):
                           -d '["{1}"]'""".format(server.ip, bucketName))
         shell.disconnect()
         self.sleep(20)
+
+    def cbimport_data(self, data_json_path, server, format="json"):
+
+        from lib.remote.remote_util import RemoteMachineShellConnection
+        shell = RemoteMachineShellConnection(server)
+
+        self.im_path = "/tmp/import/"
+        self.log.info("copy import file from local to remote")
+        shell.execute_command("rm -rf  %s " % self.im_path)
+        shell.execute_command("mkdir  -p %s " % self.im_path)
+        if data_json_path is not None:
+            src_file = data_json_path
+        else:
+            self.fail("Need import_file param")
+        des_file = self.im_path + data_json_path.split("/")[-1]
+        shell.copy_file_local_to_remote(src_file, des_file)
+
+        import_method = self._input.param("import_method", "file://")
+        format_flag = self._input.param("format_flag", "-f")
+        format_type = self._input.param("format_type", "list")
+        key_gen = self._input.param("key_gen", "%key%")
+        cli_command_path = self._input.param("cli_command_path", "/opt/couchbase/bin/")
+        for bucket in self._cb_cluster.get_buckets():
+            """ ./cbimport json -c 12.11.10.132 -u Administrator -p password
+            -b default -d file:///tmp/export/default -f list -g key::%index%  """
+            imp_cmd_str = "%s%s %s -c %s -u %s -p %s -b %s -d %s%s %s %s -g %s" \
+                          % (cli_command_path, "cbimport", format,
+                             server.ip, self._input.membase_settings.rest_username,
+                             self._input.membase_settings.rest_password, bucket.name,
+                             import_method, des_file,
+                             format_flag, format_type, key_gen)
+            output, error = shell.execute_command(imp_cmd_str)
+            self.log.info("Output from execute command %s " % output)
+            """ Json `file:///root/json_list` imported to `http://host:8091` successfully """
+            if not shell._check_output("successfully", output):
+                self.fail("Failed to execute command")
+
 
     def load_employee_dataset(self, num_items=None):
         """
