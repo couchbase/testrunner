@@ -555,3 +555,48 @@ class QueryAdviseTests(QueryTests):
             self.log.error("Advise statement failed: {0}".format(e))
             self.fail()
         self.assertTrue(len(fake_field_indexes) > 0, "No advise generated for an index with no created bucket!")
+
+    def test_advise_merge_fake_collections(self):
+        try:
+            results_fake_field = self.run_cbq_query(
+                query="ADVISE MERGE INTO default:default.fake.fakecollection  USING [ {'id':'21728', 'vacancy': true} , {'id':'21730', 'vacancy': true} ] s ON fakecollection.id || 123 = s.id WHEN MATCHED THEN UPDATE SET fakecollection.old_vacancy = fakecollection.vacancy, fakecollection.vacancy = s.vacancy RETURNING meta(fakecollection).id",
+                server=self.master)
+            fake_field_indexes = self.get_index_statements(results_fake_field)
+            for fake_indexes in fake_field_indexes:
+                self.assertTrue("`default`:`default`.`fake`.`fakecollection`" in fake_indexes and '`id`||123' in fake_indexes, "Index generated does not contain the correct fields: {0}".format(fake_indexes))
+        except Exception as e:
+            self.log.error("Advise statement failed: {0}".format(e))
+            self.fail()
+        self.assertTrue(len(fake_field_indexes) > 0, "No advise generated for an index with no created bucket!")
+
+    # Test an advise on a subquery
+    def test_advise_subquery_collections(self):
+        try:
+            results_field = self.run_cbq_query(
+                query="advise select t3.type from (select t2.type from fakecollection t2 where t2.type = 'airline') t3".format(self.bucket_name), query_context="default:default.fakescope", server=self.master)
+            self.assertEqual(results_field['results'][0]['advice']['adviseinfo']['recommended_indexes']['covering_indexes'][0]['index_statement'], 'CREATE INDEX adv_type ON `default`:`default`.`fakescope`.`fakecollection`(`type`)')
+        except Exception as e:
+            self.log.info("Advise statement failed: {0}".format(e))
+            self.fail()
+
+    def test_advise_context_join(self):
+        results = self.run_cbq_query(query='advise select * from default:default.test.test1 t1 INNER JOIN test2 t2 ON t1.name = t2.name where t1.name = "new hotel"', query_context='default:default.test2')
+        for result in results['results'][0]['advice']['adviseinfo']['recommended_indexes']['indexes']:
+            self.assertTrue('CREATE INDEX adv_name ON `default`:`default`.`test2`.`test2`(`name`)' in str(result) or 'CREATE INDEX adv_name ON `default`:`default`.`test`.`test1`(`name`)' in str(result), "Correct index not being recommended {0}".format(result))
+        results2 = self.run_cbq_query(query='advise select * from default:default.test.test1 t1 INNER JOIN test2 t2 ON t1.name = t2.name where t1.name = "new hotel"', query_context='default:default.test')
+        for result in results2['results'][0]['advice']['adviseinfo']['recommended_indexes']['indexes']:
+            self.assertTrue("CREATE INDEX adv_name ON `default`:`default`.`test`.`test2`(`name`)" in str(result) or "CREATE INDEX adv_name ON `default`:`default`.`test`.`test1`(`name`)" in str(result), "Correct index not being recommended {0}".format(result))
+
+    def test_advise_join_full_path(self):
+        results = self.run_cbq_query(
+            query='advise select * from default:default.test.test1 t1 INNER JOIN default:default.test2.test2 t2 ON t1.name = t2.name where t1.name = "new hotel"')
+        for result in results['results'][0]['advice']['adviseinfo']['recommended_indexes']['indexes']:
+            self.assertTrue('CREATE INDEX adv_name ON `default`:`default`.`test2`.`test2`(`name`)' in str(
+                result) or 'CREATE INDEX adv_name ON `default`:`default`.`test`.`test1`(`name`)' in str(result),
+                            "Correct index not being recommended {0}".format(result))
+
+    def test_advise_context_switch(self):
+        results = self.run_cbq_query(query='advise select * from test1 where name = "new hotel"', query_context='default:default.test')
+        self.assertEqual(results['results'][0]['advice']['adviseinfo']['recommended_indexes']['indexes'][0]['index_statement'], 'CREATE INDEX adv_name ON `default`:`default`.`test`.`test1`(`name`)')
+        results = self.run_cbq_query(query='advise select * from test1 where name = "new hotel"', query_context='default:default.test2')
+        self.assertEqual(results['results'][0]['advice']['adviseinfo']['recommended_indexes']['indexes'][0]['index_statement'], 'CREATE INDEX adv_name ON `default`:`default`.`test2`.`test1`(`name`)')
