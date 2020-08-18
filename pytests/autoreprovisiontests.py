@@ -735,7 +735,7 @@ class AutoReprovisionTests(unittest.TestCase):
             created = BucketOperationHelper.create_multiple_buckets(
                 self.master, self.replicas, howmany=num_buckets,
                 bucketType=bucketType, evictionPolicy=evictionPolicy,
-                storageBackend=self.bucket_storage)
+                bucket_storage=self.bucket_storage)
             self.assertTrue(created, "unable to create multiple buckets")
 
         buckets = rest.get_buckets()
