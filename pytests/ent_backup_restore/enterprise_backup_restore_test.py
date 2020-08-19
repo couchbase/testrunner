@@ -4472,3 +4472,323 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         finally:
             client.execute_command("rm -rf {0}/backup".format(self.tmp_path))
             client.disconnect()
+
+
+    def test_info_backup_merge_remove(self, cluster, no_of_backups):
+        """ Test Scenario: Create Buckets, Load Documents, Take 'no_of_backups' backups, Merge and Remove a Bucket
+
+        This function creates a scenario in which:
+
+        1. Buckets are created and loaded with documents.
+        2. A variable number of Backups >=6 are taken.
+        3. Backups 2 to 4 are merged.
+        4. The 2nd last bucket from the end is removed.
+
+        Args:
+            cluster list: A list of 'ServerInfo' that form a cluster to backup.
+            no_of_backups (int): The number of backups to perform.
+        """
+        # Add built-in user cbadminbucket to backup cluster
+        self.add_built_in_server_user(node=self.backupset.cluster_host)
+
+        # Assemble cluster if more than 1 node in cluster
+        if len(cluster) > 1:
+            self.cluster.async_rebalance(cluster, cluster[1:], []).result()
+
+        # Create buckets
+        no_of_buckets, bucket_ram_quota = 3, 256
+        rest_connection = RestConnection(self.backupset.cluster_host)
+        buckets = ["bucket{}".format(bucket_no) for bucket_no in range(0, no_of_buckets)]
+        for bucket in buckets:
+            rest_connection.create_bucket(bucket=bucket, ramQuotaMB=bucket_ram_quota)
+        self.buckets = rest_connection.get_buckets()
+
+        # Load documents
+        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
+        self._load_all_buckets(self.backupset.cluster_host, gen, "create", 0)
+
+        # Take 'no_of_backups' backups
+        self.backup_create()
+        self._take_n_backups(n=no_of_backups)
+
+        # Merge
+        self.backupset.start, self.backupset.end = 2, 4
+        self.backup_merge()
+
+        # Delete a bucket
+        self.backup_remove(self.backups.pop(-2), verify_cluster_stats=False)
+
+    def test_info_after_backup_merge_remove(self):
+        """ CBQE-5475: Test cbbackupmgr info comprehensively after performing backup, merge and remove
+
+        Test params:
+        flag_depth   = [0,1,2,3]
+        check_tabular= [True, False]
+        check_all_flag = [True, False]
+
+        Comprehensive test: flag_depth=3,check_tabular=True,check_all_flag=True
+
+        Scenario:
+        Perform backup, merge and remove to mutate info output.
+
+        Cases tested:
+        flag_depth>=0: --archive,
+        flag_depth>=1: --archive --repo
+        flag_depth>=2: --archive --repo --backup
+        flag_depth>=3: --archive --repo --backup --collection-string in version>7.0/--bucket in version<=6.6
+
+        Output types tested for each of the previous cases:
+        check_tabular>=False: using --json flag (Checks JSON output)
+        check_tabular = True:    no --json flag (Parses tabular output to reflect JSON output)
+
+        State of all flag:
+        check_all_flag>=False:
+            using --all flag (e.g. for --archive --all checks all repos in archive, backups in repos, buckets in backups)
+        check_all_flag = True:
+            --all flag (e.g. for --archive checks contents of archive only)
+
+        Total number of cases: 4 (cases) * 2 (output types) * 2 (all flag state) = 16
+        """
+        import os
+        import pprint
+        import itertools
+        import parse_cbbackupmgr_info as parse_info
+
+        pp = pprint.PrettyPrinter(indent=4)
+
+        # Params
+        flag_depth = self.input.param('flag_depth', 3)
+        check_tabular = self.input.param('check_tabular', True)
+        check_all_flag = self.input.param('check_all_flag', True)
+
+        # The minimum number of backups is 6
+        min_backups = 6
+        no_of_backups = max(self.backupset.number_of_backups, min_backups)
+        if self.backupset.number_of_backups < min_backups:
+            self.log.warn("number_of_backups increased from {} to {}".format(self.backupset.number_of_backups, min_backups))
+
+        # Select backup cluster
+        cluster, self.backupset.cluster_host = self.backupset.restore_cluster, self.backupset.restore_cluster_host
+
+        # Create Buckets, Load Documents, Take n backups, Merge and Remove a Bucket
+        self.test_info_backup_merge_remove(cluster, no_of_backups)
+
+        # Create lists of expected output from the info command
+        types = set(['FULL', 'MERGE - FULL', 'MERGE - INCR', 'INCR'])
+        expected_archs = [os.path.basename(self.backupset.directory)]
+        expected_repos = [self.backupset.name]
+        expected_backs = {self.backupset.name: self.backups}
+        expected_bucks = [bucket.name for bucket in self.buckets]
+
+
+        def check_arch(arch, tabular=False):
+            """ Checks the archive dictionary.
+
+            Args:
+                arch (dict): A dictionary containing archive information.
+
+            Returns:
+                list: A list containing the repositories in the archive.
+
+            """
+            expected_keys = [u'archive_uuid', u'name', u'repos']
+            self.assertTrue(set(expected_keys).issubset(arch.keys()))
+
+            archive_uuid, name, repos = [arch[key] for key in expected_keys]
+
+            # Check archive name is correct
+            self.assertTrue(name in expected_archs)
+
+            # Check repos names are correct
+            self.assertEqual(set(expected_repos), set(repo['name'] for repo in repos))
+            # Check repo size is > 0
+            self.assertTrue(all(repo['size'] > 0 for repo in repos))
+            # Check backup sizes are correct
+            self.assertTrue(all(repo['count'] == len(expected_backs[repo['name']]) for repo in repos))
+
+            return repos
+
+
+        def check_repo(repo, tabular=False):
+            """ Checks the repository dictionary.
+
+            Args:
+                repo (dict): A dictionary containing repository information.
+
+            Returns:
+                list: A list containing the backups in the repository.
+
+            """
+            expected_keys = [u'count', u'backups', u'name', u'size']
+            self.assertTrue(set(expected_keys).issubset(repo.keys()))
+
+            count, backups, name, size = [repo[key] for key in expected_keys]
+
+            # Check repo name is correct
+            self.assertTrue(name in expected_repos)
+            # Check repo size is greater than 0
+            self.assertTrue(size > 0)
+
+            # Check number of backups is correct
+            self.assertEqual(len(backups), len(expected_backs[name]))
+            # Check backup names
+            self.assertEqual(set(backup['date'] for backup in backups), set(expected_backs[name]))
+            # Check backup types
+            self.assertTrue(set(backup['type'] for backup in backups).issubset(types))
+            # Check complete status
+            self.assertTrue(all(backup['complete'] for backup in backups))
+
+            return backups
+
+
+        def check_back(backup, tabular=False):
+            """ Checks the backup dictionary.
+
+            Args:
+                backup (dict): A dictionary containing backup information.
+
+            Returns:
+                list: A list containing the buckets in the backup.
+            """
+            expected_keys = [u'complete', u'fts_alias', u'buckets',
+                    u'source_cluster_uuid', u'source', u'date', u'type', u'events', u'size']
+            self.assertTrue(set(expected_keys).issubset(backup.keys()))
+
+            complete, fts_alias, buckets, source_cluster_uuid, source, date, _type_, events, size = \
+                    [backup[key] for key in expected_keys]
+
+            # Check backup name is correct
+            self.assertTrue(date in self.backups)
+            # Check backup size is greater than 0
+            self.assertTrue(size > 0)
+            # Check type exists
+            self.assertTrue(_type_ in types)
+
+            # Check bucket names
+            self.assertEqual(set(bucket['name'] for bucket in buckets), set(expected_bucks))
+            # Check bucket sizes
+            self.assertTrue(all(bucket['size'] >= 0 for bucket in buckets))
+            # Check items are equal to self.num_items
+            self.assertTrue(all(bucket['items'] in [0, self.num_items] for bucket in buckets))
+
+            return buckets
+
+        def check_buck(bucket, tabular=False):
+            """ Checks the bucket dictionary.
+
+            Args:
+                bucket (dict): A dictionary containing bucket information.
+
+            Returns:
+                None
+
+            """
+            expected_keys = [u'index_count', u'views_count', u'items', u'mutations',
+                             u'tombstones', u'fts_count', u'analytics_count', u'size', u'name']
+            self.assertTrue(set(expected_keys).issubset(bucket.keys()))
+
+            index_count, views_count, items, mutations, tombstones, fts_count, \
+            analytics_count, size, name = [bucket[key] for key in expected_keys]
+
+            # Check bucket name
+            self.assertTrue(name in expected_bucks)
+            # Check bucket size
+            self.assertTrue(size >= 0)
+            # Check bucket items
+            self.assertTrue(items in [0, self.num_items])
+
+        def print_tree(tree):
+            if self.debug_logs:
+                pp.pprint(tree)
+
+        def parse_output(use_json, output):
+            """ Parses the JSON/Tabular output into a Python dictionary
+
+            Args:
+                use_json (bool): If True expects JSON output to parse. Otherwise, expects tabular data to parse.
+                output   (list): JSON or Tabular data to parse into a dictionary.
+
+            Returns:
+                dict: A dictionary containing the parsed output.
+
+            """
+            return json.loads(output[0]) if use_json else parse_info.construct_tree(output)
+
+        try:
+            # Configure initial flags
+            json_options, all_flag_options = [True], [False]
+
+            # Enable tabular output tests
+            if check_tabular:
+                json_options.append(False)
+
+            # Enable all flag tests
+            if check_all_flag:
+                all_flag_options.append(True)
+
+            def output_logs(flag_depth, use_json, all_flag):
+                """ Outputs flags tested in current test case."""
+                use_json = "--json" if use_json else ""
+                all_flag = "--all" if all_flag else ""
+                flags = " ".join(["--archive", "--repo", "--backup", "--bucket"][: flag_depth + 1])
+                self.log.info("---")
+                self.log.info(f"Testing Flags: {flags} {use_json} {all_flag}")
+                self.log.info("---")
+
+            # Perform tests
+            for use_json, all_flag in itertools.product(json_options, all_flag_options):
+                output_logs(0, use_json, all_flag)
+
+                # cbbackupmgr info --archive
+                arch = parse_output(use_json, self.get_backup_info(json=use_json, all_flag=all_flag))
+                print_tree(arch)
+                repos = check_arch(arch)
+
+                if all_flag:
+                    [check_buck(buck) for repo in repos for back in check_repo(repo) for buck in check_back(back)]
+
+                if flag_depth < 1:
+                    continue
+
+                output_logs(1, use_json, all_flag)
+
+                # cbbackupmgr info --archive --repo
+                for repo_name in expected_repos:
+                    repo = parse_output(use_json, self.get_backup_info(json=use_json, repo=repo_name, all_flag=all_flag))
+                    print_tree(repo)
+                    backs = check_repo(repo)
+
+                    if all_flag:
+                        [check_buck(buck) for back in backs for buck in check_back(back)]
+
+                if flag_depth < 2:
+                    continue
+
+                output_logs(2, use_json, all_flag)
+
+                # cbbackupmgr info --archive --repo --backup
+                for repo_name in expected_repos:
+                    for back_name in expected_backs[repo_name]:
+                        back = parse_output(use_json, self.get_backup_info(json=use_json, repo=repo_name, backup=back_name, all_flag=all_flag))
+                        print_tree(back)
+                        bucks = check_back(back)
+
+                        if all_flag:
+                            [check_buck(buck) for buck in bucks]
+
+                if flag_depth < 3:
+                    continue
+
+                output_logs(3, use_json, all_flag)
+
+                # cbbackupmgr info --archive --repo --backup --bucket
+                for repo_name in expected_repos:
+                    for back_name in expected_backs[repo_name]:
+                        for buck_name in expected_bucks:
+                            buck = parse_output(use_json, self.get_backup_info(json=use_json, repo=repo_name,
+                                                backup=back_name, collection_string=buck_name, all_flag=all_flag))
+                            print_tree(buck)
+                            check_buck(buck)
+
+        except Exception as e:
+            self.fail(str(e))

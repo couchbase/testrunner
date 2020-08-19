@@ -1088,6 +1088,53 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         else:
             return True, output, "Backup list obtained"
 
+    def get_backup_info(self, repo=None, backup=None, collection_string=None, json=False, all_flag=False):
+        """ Get output from cbbackupmgr info
+
+        The parent arguments for each child argument must be provided (e.g. --backup requires --repo to be set).
+
+        Args:
+            repo (str): Repository name.
+            backup (str): Backup name.
+            collection_string (str): The collection_string or bucket name.
+            json (bool): If true passes the --json flag.
+            all_flag (bool): If true passes the --all flag.
+
+        Returns:
+            list: The output lines emitted from 'cbbackupmgr info'.
+
+        """
+        args = (
+            f"info --archive {self.backupset.directory}"
+        )
+
+        version = RestConnection(self.backupset.backup_host).get_nodes_version()
+
+        if repo:
+            args += f" --repo {repo}"
+        if repo and backup:
+            args += f" --backup {backup}"
+        if repo and backup and collection_string:
+            args += f" {'--collection-string' if int(version[0]) >= 7 else '--bucket'} {collection_string}"
+        if json:
+            args += " --json"
+        if all_flag:
+            args += " --all"
+
+        remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
+        command = f"{self.cli_command_location}/cbbackupmgr {args}"
+        output, error = remote_client.execute_command(command)
+
+        if self.debug_logs:
+            remote_client.log_command_output(output, error)
+
+        remote_client.disconnect()
+
+        if error:
+            self.fail("Getting backup info failed.")
+
+        return output
+
     def backup_compact(self):
         args = "compact --archive {0} --repo {1} --backup {2}".format(self.backupset.directory, self.backupset.name,
                                                                       self.backups[self.backupset.backup_to_compact])
@@ -1101,7 +1148,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
             return True, output, "Compaction of backup success"
         remote_client.disconnect()
 
-    def backup_remove(self, backup_range=None):
+    def backup_remove(self, backup_range=None, verify_cluster_stats=True):
         args = (
             f"remove --archive {self.objstore_provider.schema_prefix() + self.backupset.objstore_bucket + '/' if self.objstore_provider else ''}{self.backupset.directory}"
             f" --repo {self.backupset.name}"
@@ -1116,7 +1163,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         output, error = remote_client.execute_command(command)
         remote_client.log_command_output(output, error)
         remote_client.disconnect()
-        self.verify_cluster_stats()
+        if verify_cluster_stats:
+            self.verify_cluster_stats()
         if error:
             return False, error, "Removing backup failed."
         elif "failed" in " ".join(output):
