@@ -172,25 +172,37 @@ class EventingFailover(EventingBaseTest):
         self.undeploy_and_delete_function(body)
 
     def test_lifecycle_and_failover(self):
+        bucket_params = self._create_bucket_params(server=self.server, size=self.bucket_size, replicas=self.replicas)
+        self.cluster.create_standard_bucket(name=self.dst_bucket_name1, port=STANDARD_BUCKET_PORT + 1,
+                                            bucket_params=bucket_params)
         eventing_server = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
         body = self.create_save_function_body(self.function_name, self.handler_code)
         # load some data
         task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
                                                 self.buckets[0].kvs[1], 'create', compression=self.sdk_compression)
-        self.deploy_function(body,wait_for_bootstrap=False)
-        self.sleep(3)
+        self.deploy_function(body)
+        body1 = self.create_save_function_body(self.function_name + "1", self.handler_code)
+        del body1['depcfg']['buckets'][0]
+        body1['depcfg']['buckets'].append({"alias": "dst_bucket", "bucket_name": self.dst_bucket_name1, "access": "rw"})
+        self.rest.create_function(body1['appname'], body1)
+        self.deploy_function(body1,wait_for_bootstrap=False)
         # fail over the eventing node
         fail_over_task = self.cluster.async_failover([self.master], failover_nodes=[eventing_server[1]], graceful=False)
         self.wait_for_failover()
         fail_over_task.result()
         task.result()
+        self.wait_for_handler_state(body1['appname'],"deployed")
         if self.is_sbm:
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2, skip_stats_validation=True,
                                          expected_duplicate=True)
+            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2, skip_stats_validation=True,
+                                         expected_duplicate=True,bucket=self.dst_bucket_name1)
         else:
             self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True,
                                          expected_duplicate=True)
-        self.undeploy_and_delete_function(body)
+            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 , skip_stats_validation=True,
+                                         expected_duplicate=True,bucket=self.dst_bucket_name1)
+        self.undeploy_delete_all_functions()
 
     def test_multiple_eventing_failover_with_failover_running(self):
         eventing_server = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
@@ -331,7 +343,33 @@ class EventingFailover(EventingBaseTest):
         while self.check_eventing_rebalance():
             pass
         self.resume_function(body1)
-        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 , skip_stats_validation=True)
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 , skip_stats_validation=True,
+                                     expected_duplicate=True)
         self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 , bucket=self.dst_bucket_name1,
-                                     skip_stats_validation=True)
+                                     skip_stats_validation=True,expected_duplicate=True)
         self.undeploy_delete_all_functions()
+
+
+    def test_vb_shuffle_disable(self):
+        self.enable_disable_vb_distribution(enable=False)
+        eventing_server = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
+        body = self.create_save_function_body(self.function_name, self.handler_code)
+        self.deploy_function(body)
+        # load some data
+        task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
+                                                self.buckets[0].kvs[1], 'create', compression=self.sdk_compression)
+        # fail over the eventing node
+        fail_over_task = self.cluster.async_failover([self.master], failover_nodes=[eventing_server[1]], graceful=False)
+        try:
+            self.wait_for_failover()
+            self.fail("Failover triggered when auto_redistribute_vbs_on_failover is False")
+        except Exception as e:
+            if "Failover not started even after waiting for long"  not in str(e):
+                self.fail("Incorrect error {}".format(e))
+        task.result()
+        fail_over_task.result()
+        stats_dst = self.rest.get_bucket_stats(self.dst_bucket_name)
+        self.log.info("documents in destination bucket {}".format(stats_dst["curr_items"]))
+        if stats_dst["curr_items"] < self.docs_per_day * 2016:
+            pass
+        self.undeploy_and_delete_function(body)
