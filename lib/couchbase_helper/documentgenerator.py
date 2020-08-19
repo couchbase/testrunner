@@ -655,7 +655,7 @@ class SDKDataLoader(object):
     def __init__(self, num_ops=0, percent_create=0, percent_update=0, percent_delete=0,
                  load_pattern="uniform", start_seq_num=1, key_prefix="doc_", key_suffix="_",
                  scope="_default", collection="default", json_template="Person", doc_expiry=0,
-                 doc_size=500, print_sdk_logs="info", username="Administrator", password="password", timeout=300,
+                 doc_size=500, get_sdk_logs=False, username="Administrator", password="password", timeout=1000,
                  start=0, end=0, op_type="create", all_collections=False):
         self.num_ops = num_ops
         self.percent_create = percent_create
@@ -674,13 +674,14 @@ class SDKDataLoader(object):
         self.json_template = json_template
         self.doc_expiry = doc_expiry
         self.doc_size = doc_size
-        self.print_sdk_logs = print_sdk_logs
+        self.get_sdk_logs = get_sdk_logs
         self.username = username
         self.password = password
         self.timeout = timeout
         self.fields_to_update = None
         self.op_type = op_type
         self.all_collections = all_collections
+        self.results = None
 
     def update(self, fields_to_update=None):
         self.start_seq_num = self.start + 1
@@ -713,6 +714,12 @@ class SDKDataLoader(object):
 
     def set_start_seq_num(self, start_seq_num):
         self.start_seq_num = start_seq_num
+
+    def get_sdk_results(self):
+        return self.results
+
+    def set_sdk_results(self, results):
+        self.results = results
 
 class NapaDataLoader(KVGenerator):
 

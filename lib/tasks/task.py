@@ -6000,35 +6000,30 @@ class SDKLoadDocumentsTask(Task):
             self.bucket = bucket.name
         else:
             self.bucket = bucket
-        self.params = sdk_docloader
-        if self.params.print_sdk_logs == "debug":
-            #stdout + stderr
-            self.redirect = ">/dev/null"
-        else:
-            #stderr
-            self.redirect = "2>/dev/null"
+        self.sdk_docloader = sdk_docloader
 
-    def execute_for_collection(self, task_manager, collection):
+    def execute_for_collection(self, collection):
         import subprocess
         command = f"java -jar java_sdk_client/collections/target/javaclient/javaclient.jar " \
-                  f"-i {self.server.ip} -u {self.params.username} -p {self.params.password} -b {self.bucket} " \
-                  f"-s {self.params.scope} -c {collection} " \
-                  f"-n {self.params.num_ops} -pc {self.params.percent_create} -pu {self.params.percent_update} " \
-                  f"-pd {self.params.percent_delete} -l {self.params.load_pattern} " \
-                  f"-dsn {self.params.start_seq_num} -dpx {self.params.key_prefix} -dt {self.params.json_template} " \
-                  f"-de {self.params.doc_expiry} -ds {self.params.doc_size} -ac {self.params.all_collections} " \
-                  f"-st {self.params.start} -en {self.params.end}"
-
-        if self.params.op_type == "update":
-            arr_fields_to_update = eval(self.params.fields_to_update) if self.params.fields_to_update else ""
+                  f"-i {self.server.ip} -u {self.sdk_docloader.username} -p {self.sdk_docloader.password} -b {self.bucket} " \
+                  f"-s {self.sdk_docloader.scope} -c {collection} " \
+                  f"-n {self.sdk_docloader.num_ops} -pc {self.sdk_docloader.percent_create} -pu {self.sdk_docloader.percent_update} " \
+                  f"-pd {self.sdk_docloader.percent_delete} -l {self.sdk_docloader.load_pattern} " \
+                  f"-dsn {self.sdk_docloader.start_seq_num} -dpx {self.sdk_docloader.key_prefix} -dt {self.sdk_docloader.json_template} " \
+                  f"-de {self.sdk_docloader.doc_expiry} -ds {self.sdk_docloader.doc_size} -ac {self.sdk_docloader.all_collections} " \
+                  f"-st {self.sdk_docloader.start} -en {self.sdk_docloader.end}"
+        self.log.info(command)
+        if self.sdk_docloader.op_type == "update":
+            arr_fields_to_update = eval(self.sdk_docloader.fields_to_update) if self.sdk_docloader.fields_to_update else ""
             if len(arr_fields_to_update) > 0:
                 command = command + " -fu "
                 command = command + ",".join(arr_fields_to_update)
-        command = command + f" {self.redirect} "
-        self.log.info(command)
         try:
             proc = subprocess.Popen(command, stdout=subprocess.PIPE, shell=True)
-            out = proc.communicate(timeout=self.params.timeout)
+            out = proc.communicate(timeout=self.sdk_docloader.timeout)
+            if self.sdk_docloader.get_sdk_logs:
+                self.sdk_docloader.set_sdk_results(out)
+                self.log.info(out[0].decode("utf-8"))
             if proc.returncode != 0:
                 raise Exception("Exception in java sdk client to {}:{}\n{}".format(self.server.ip, self.bucket, out))
         except Exception as e:
@@ -6040,12 +6035,12 @@ class SDKLoadDocumentsTask(Task):
         self.set_result(True)
 
     def execute(self, task_manager):
-        import subprocess
-        if type(self.params.collection) is list:
-            for c in self.params.collection:
-                self.execute_for_collection(task_manager, c)
+        if type(self.sdk_docloader.collection) is list:
+            for c in self.sdk_docloader.collection:
+                self.execute_for_collection(c)
         else:
-            self.execute_for_collection(task_manager, self.params.collection)
+            self.execute_for_collection(self.sdk_docloader.collection)
+        self.check(task_manager)
 
     def check(self, task_manager):
         self.set_result(True)

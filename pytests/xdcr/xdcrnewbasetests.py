@@ -1106,6 +1106,7 @@ class CouchbaseCluster:
         self.__kv_gen = {}
         self.sdk_compression = sdk_compression
         self.use_java_sdk = use_java_sdk
+        self.gen = None
         self.scope_num = scope_num
         self.collection_num = collection_num
 
@@ -1562,8 +1563,8 @@ class CouchbaseCluster:
             seed,
             value_size,
             end=num_items)
-        gen = copy.deepcopy(self.__kv_gen[OPS.CREATE])
-        task = self.__clusterop.async_load_gen_docs(self.__master_node, bucket.name, gen,
+        self.gen = copy.deepcopy(self.__kv_gen[OPS.CREATE])
+        task = self.__clusterop.async_load_gen_docs(self.__master_node, bucket.name, self.gen,
                                                     bucket.kvs[kv_store],OPS.CREATE, exp,
                                                     flag, only_store_hash, batch_size, pause_secs,
                                                     timeout_secs, compression=self.sdk_compression)
@@ -1607,10 +1608,10 @@ class CouchbaseCluster:
         @return: task objects list
         """
         if self.use_java_sdk:
-            gen = SDKDataLoader(num_ops=num_items, percent_create=100)
+            self.gen = SDKDataLoader(num_ops=num_items, percent_create=100, timeout=num_items)
         else:
             seed = "%s-key-" % self.__name
-            gen = self.__kv_gen[
+            self.gen = self.__kv_gen[
                 OPS.CREATE] = BlobGenerator(
                 seed,
                 seed,
@@ -1621,7 +1622,7 @@ class CouchbaseCluster:
         for bucket in self.__buckets:
             tasks.append(
                 self.__clusterop.async_load_gen_docs(
-                    self.__master_node, bucket.name, gen, bucket.kvs[kv_store],
+                    self.__master_node, bucket.name, self.gen, bucket.kvs[kv_store],
                     OPS.CREATE, exp, flag, only_store_hash, batch_size,
                     pause_secs, timeout_secs, compression=self.sdk_compression)
             )
@@ -1647,6 +1648,8 @@ class CouchbaseCluster:
             batch_size, pause_secs, timeout_secs)
         for task in tasks:
             task.result()
+        if self.use_java_sdk and self.gen.get_sdk_logs:
+            print(self.gen.get_sdk_results())
 
     def load_all_buckets_from_generator(self, kv_gen, ops=OPS.CREATE, exp=0,
                                         kv_store=1, flag=0, only_store_hash=True,
