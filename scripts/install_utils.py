@@ -339,6 +339,8 @@ class NodeHelper:
                                              services=self.get_services())
 
                 if "index" in self.get_services():
+                    if params["cb_edition"] == install_constants.CB_COMMUNITY:
+                        params["storage_mode"] = "forestdb"
                     self.rest.set_indexer_storage_mode(storageMode=params["storage_mode"])
 
                 self.rest.init_cluster(username=self.node.rest_username,
