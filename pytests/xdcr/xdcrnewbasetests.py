@@ -3025,6 +3025,30 @@ class XDCRNewBaseTest(unittest.TestCase):
     def get_cluster_op(self):
         return self.__cluster_op
 
+    def add_built_in_server_user(self, testuser=None, rolelist=None, node=None):
+        """
+           From spock, couchbase server is built with some users that handles
+           some specific task such as:
+               cbadminbucket
+           Default added user is cbadminbucket with admin role
+        """
+        if testuser is None:
+            testuser = [{'id': 'cbadminbucket', 'name': 'cbadminbucket',
+                                                'password': 'password'}]
+        if rolelist is None:
+            rolelist = [{'id': 'cbadminbucket', 'name': 'cbadminbucket',
+                                                      'roles': 'admin'}]
+        if node is None:
+            node = self.master
+
+        self.log.info("**** add built-in '%s' user to node %s ****" % (testuser[0]["name"],
+                                                                       node.ip))
+        RbacBase().create_user_source(testuser, 'builtin', node)
+
+        self.log.info("**** add '%s' role to '%s' user ****" % (rolelist[0]["roles"],
+                                                                testuser[0]["name"]))
+        RbacBase().add_user_role(rolelist, RestConnection(node), 'builtin')
+
     def get_cb_cluster_by_name(self, name):
         """Return couchbase cluster object for given name.
         @return: CouchbaseCluster object
