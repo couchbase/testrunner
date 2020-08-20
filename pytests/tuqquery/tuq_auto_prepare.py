@@ -16,6 +16,29 @@ class QueryAutoPrepareTests(QueryTests):
     def suite_setUp(self):
         super(QueryAutoPrepareTests, self).suite_setUp()
         self.log.info("==============  QueryAutoPrepareTests suite_setup has started ==============")
+        if self.load_collections:
+            self.run_cbq_query(query='CREATE INDEX idx on default(name)')
+            self.sleep(5)
+            self.wait_for_all_indexes_online()
+            self.collections_helper.create_scope(bucket_name="default", scope_name="test2")
+            self.collections_helper.create_collection(bucket_name="default", scope_name="test2",
+                                                      collection_name=self.collections[0])
+            self.collections_helper.create_collection(bucket_name="default", scope_name="test2",
+                                                      collection_name=self.collections[1])
+            self.run_cbq_query(
+                query="CREATE INDEX idx1 on default:default.test2.{0}(name)".format(self.collections[0]))
+            self.run_cbq_query(
+                query="CREATE INDEX idx2 on default:default.test2.{0}(name)".format(self.collections[1]))
+            self.sleep(5)
+            self.wait_for_all_indexes_online()
+            self.run_cbq_query(
+                query=('INSERT INTO default:default.test2.{0}'.format(self.collections[
+                    1]) + '(KEY, VALUE) VALUES ("key1", { "type" : "hotel", "name" : "old hotel" })'))
+            self.run_cbq_query(
+                query=('INSERT INTO default:default.test2.{0}'.format(self.collections[1]) + '(KEY, VALUE) VALUES ("key2", { "type" : "hotel", "name" : "new hotel" })'))
+            self.run_cbq_query(
+                query=('INSERT INTO default:default.test2.{0}'.format(self.collections[1]) + '(KEY, VALUE) VALUES ("key3", { "type" : "hotel", "name" : "new hotel" })'))
+            self.sleep(20)
         self.log.info("==============  QueryAutoPrepareTests suite_setup has completed ==============")
         self.log_config_info()
 
@@ -575,4 +598,138 @@ class QueryAutoPrepareTests(QueryTests):
             self.fail()
         except Exception as e:
             self.assertTrue("{'code': 4040, 'msg': 'No such prepared statement: p1, context: default.test2'}" in str(e))
+
+    def test_prepared_collection_query_context_switch(self):
+        try:
+            self.run_cbq_query(query="PREPARE p1 AS SELECT * FROM test1 b WHERE b.name = 'old hotel'", query_context='default:default.test')
+            results = self.run_cbq_query(query="EXECUTE p1")
+            self.assertEqual(results['results'][0]['b'], {'name': 'old hotel', 'type': 'hotel'})
+            self.run_cbq_query(query="PREPARE p2 AS SELECT * FROM test1 b WHERE b.name = 'old hotel'", query_context='default:default.test2')
+            results = self.run_cbq_query(query="EXECUTE p2")
+            self.assertEqual(results['results'], [])
+        except Exception as e:
+            self.log.info("Prepared statement failed {0}".format(str(e)))
+            self.fail()
+        try:
+            results = self.run_cbq_query(query="EXECUTE p1", query_context='default.test')
+            self.fail()
+        except Exception as e:
+            self.assertTrue("{'code': 4040, 'msg': 'No such prepared statement: p1, context: default.test'}" in str(e))
+        try:
+            results = self.run_cbq_query(query="EXECUTE p1", query_context='default.test2')
+            self.fail()
+        except Exception as e:
+            self.assertTrue("{'code': 4040, 'msg': 'No such prepared statement: p1, context: default.test2'}" in str(e))
+        try:
+            results = self.run_cbq_query(query="EXECUTE p2", query_context='default.test')
+            self.fail()
+        except Exception as e:
+            self.assertTrue("{'code': 4040, 'msg': 'No such prepared statement: p2, context: default.test'}" in str(e))
+        try:
+            results = self.run_cbq_query(query="EXECUTE p2", query_context='default.test2')
+            self.fail()
+        except Exception as e:
+            self.assertTrue("{'code': 4040, 'msg': 'No such prepared statement: p2, context: default.test2'}" in str(e))
+
+    def test_prepared_context_join(self):
+        results = self.run_cbq_query(query='PREPARE p1 as select * from default:default.test.test1 t1 INNER JOIN test2 t2 ON t1.name = t2.name where t1.name = "new hotel"', query_context='default:default.test2')
+        results = self.run_cbq_query(query="EXECUTE p1")
+        self.assertEqual(results['results'][0], {'t1': {'name': 'new hotel', 'type': 'hotel'}, 't2': {'name': 'new hotel', 'type': 'hotel'}}, {'t1': {'name': 'new hotel', 'type': 'hotel'}, 't2': {'name': 'new hotel', 'type': 'hotel'}})
+
+        results2 = self.run_cbq_query(query='PREPARE p2 as select * from default:default.test.test1 t1 INNER JOIN test2 t2 ON t1.name = t2.name where t1.name = "new hotel"', query_context='default:default.test')
+        results2 = self.run_cbq_query(query="EXECUTE p2")
+        self.assertEqual(results2['results'][0], {'t1': {'name': 'new hotel', 'type': 'hotel'}, 't2': {'name': 'new hotel', 'type': 'hotel'}})
+
+        try:
+            results = self.run_cbq_query(query="EXECUTE p1", query_context='default.test')
+            self.fail()
+        except Exception as e:
+            self.assertTrue("{'code': 4040, 'msg': 'No such prepared statement: p1, context: default.test'}" in str(e))
+        try:
+            results = self.run_cbq_query(query="EXECUTE p1", query_context='default.test2')
+            self.fail()
+        except Exception as e:
+            self.assertTrue("{'code': 4040, 'msg': 'No such prepared statement: p1, context: default.test2'}" in str(e))
+        try:
+            results = self.run_cbq_query(query="EXECUTE p2", query_context='default.test')
+            self.fail()
+        except Exception as e:
+            self.assertTrue("{'code': 4040, 'msg': 'No such prepared statement: p2, context: default.test'}" in str(e))
+        try:
+            results = self.run_cbq_query(query="EXECUTE p2", query_context='default.test2')
+            self.fail()
+        except Exception as e:
+            self.assertTrue("{'code': 4040, 'msg': 'No such prepared statement: p2, context: default.test2'}" in str(e))
+
+    def test_prepared_join_full_path(self):
+        results = self.run_cbq_query(
+            query='PREPARE p1 as select * from default:default.test.test1 t1 INNER JOIN default:default.test2.test2 t2 ON t1.name = t2.name where t1.name = "new hotel"')
+        results = self.run_cbq_query(query="EXECUTE p1")
+        self.assertEqual(results['results'][0], {'t1': {'name': 'new hotel', 'type': 'hotel'}, 't2': {'name': 'new hotel', 'type': 'hotel'}}, {'t1': {'name': 'new hotel', 'type': 'hotel'}, 't2': {'name': 'new hotel', 'type': 'hotel'}})
+        try:
+            results = self.run_cbq_query(query="EXECUTE p1", query_context='default.test')
+            self.fail()
+        except Exception as e:
+            self.assertTrue("{'code': 4040, 'msg': 'No such prepared statement: p1, context: default.test'}" in str(e))
+
+    def test_prepared_context_bucket_scope(self):
+        results = self.run_cbq_query(query='PREPARE p1 as select * from test1 where name = "new hotel"', query_context='default.test')
+        results = self.run_cbq_query(query="EXECUTE p1")
+        self.assertEqual(results['results'][0],{'test1': {'name': 'new hotel', 'type': 'hotel'}})
+        try:
+            results = self.run_cbq_query(query="EXECUTE p1", query_context='default:default.test')
+            self.fail()
+        except Exception as e:
+            self.assertTrue("{'code': 4040, 'msg': 'No such prepared statement: p1, context: default:default.test'}" in str(e))
+
+    def test_prepared_context_name_bucket_scope(self):
+        results = self.run_cbq_query(query='PREPARE p1 as select * from test1 where name = "new hotel"', query_context='default:default.test')
+        results = self.run_cbq_query(query="EXECUTE p1")
+        self.assertEqual(results['results'][0],{'test1': {'name': 'new hotel', 'type': 'hotel'}})
+        try:
+            results = self.run_cbq_query(query="EXECUTE p1", query_context='default.test')
+            self.fail()
+        except Exception as e:
+            self.assertTrue("{'code': 4040, 'msg': 'No such prepared statement: p1, context: default.test'}" in str(e))
+
+    def test_prepared_context_namespace(self):
+        results = self.run_cbq_query(query='PREPARE p1 as select * from default.test.test1 where name = "new hotel"', query_context='default:')
+        results = self.run_cbq_query(query="EXECUTE p1")
+        self.assertEqual(results['results'][0], {'test1': {'name': 'new hotel', 'type': 'hotel'}})
+        try:
+            results = self.run_cbq_query(query="EXECUTE p1", query_context='default.test')
+            self.fail()
+        except Exception as e:
+            self.assertTrue("{'code': 4040, 'msg': 'No such prepared statement: p1, context: default.test'}" in str(e))
+
+    def test_prepared_context_semicolon_bucket_scope(self):
+        results = self.run_cbq_query(query='PREPARE p1 as select * from test1 where name = "new hotel"', query_context=':default.test')
+        results = self.run_cbq_query(query="EXECUTE p1")
+        self.assertEqual(results['results'][0], {'test1': {'name': 'new hotel', 'type': 'hotel'}})
+        try:
+            results = self.run_cbq_query(query="EXECUTE p1", query_context='default.test')
+            self.fail()
+        except Exception as e:
+            self.assertTrue("{'code': 4040, 'msg': 'No such prepared statement: p1, context: default.test'}" in str(e))
+
+    def test_prepared_default(self):
+        results = self.run_cbq_query(query='PREPARE p1 as select * from default:default where name = "employee-9"')
+        results = self.run_cbq_query(query="EXECUTE p1")
+        self.assertEqual(results['metrics']['resultCount'], 72)
+        try:
+            results = self.run_cbq_query(query="EXECUTE p1", query_context='default.test')
+            self.assertEqual(results['metrics']['resultCount'], 72)
+        except Exception as e:
+            self.log.error(str(e))
+            self.fail()
+    def test_prepared_default_full_path(self):
+        results = self.run_cbq_query(query='PREPARE p1 as select * from default:default.test.test1 where name = "new hotel"')
+        results = self.run_cbq_query(query="EXECUTE p1")
+        self.assertEqual(results['results'][0], {'test1': {'name': 'new hotel', 'type': 'hotel'}})
+        try:
+            results = self.run_cbq_query(query="EXECUTE p1", query_context='default.test')
+            self.assertEqual(results['results'][0], {'test1': {'name': 'new hotel', 'type': 'hotel'}})
+        except Exception as e:
+            self.log.error(str(e))
+            self.fail()
 
