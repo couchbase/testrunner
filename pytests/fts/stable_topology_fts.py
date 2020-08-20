@@ -2683,7 +2683,7 @@ class StableTopFTS(FTSBaseTest):
 
         mem_high = False
         for node in fts_nodes_mem_usage:
-            mem_high = mem_high or self.check_if_fts_ram_usage_high(node["nodeip"], 1.4*float(node["mem_usage"]))
+            mem_high = mem_high or self.check_if_fts_ram_usage_high(node["nodeip"], 2.0*float(node["mem_usage"]))
 
         if mem_high:
             self.fail("CPU utilization or memory usage found to be high")
