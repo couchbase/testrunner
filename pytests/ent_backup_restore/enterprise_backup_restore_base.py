@@ -1551,6 +1551,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                                 print(("value of key in backup file  ", \
                                       restore_file_data[bucket.name][key]))
                                 max_display -= 1
+                        if " " in restore_file_data[bucket.name][key]["Value"] and " " in regex_pattern:
+                            pattern = re.compile(regex_pattern)
                         if pattern.search(str(restore_file_data[bucket.name][key]["Value"])):
                             regex_backup_data[bucket.name][key] = \
                                 restore_file_data[bucket.name][key]
