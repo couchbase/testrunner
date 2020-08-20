@@ -718,7 +718,6 @@ class DataCollector(object):
         """ Helper method to translate cbtransfer per line data into key: value pairs"""
         bucketMap = {}
         revIdIndex = 5
-        dataInCSV = [ x for x in dataInCSV if not "\n" in x ]
         for value in dataInCSV:
             values = value.split(",")
             try:
