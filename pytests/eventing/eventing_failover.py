@@ -271,9 +271,10 @@ class EventingFailover(EventingBaseTest):
         self.wait_for_failover()
         fail_over_task.result()
         task.result()
-        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 , skip_stats_validation=True)
+        self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 , skip_stats_validation=True,
+                                     expected_duplicate=True)
         self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 , bucket=self.dst_bucket_name1,
-                                     skip_stats_validation=True)
+                                     skip_stats_validation=True,expected_duplicate=True)
         self.undeploy_delete_all_functions()
 
 
