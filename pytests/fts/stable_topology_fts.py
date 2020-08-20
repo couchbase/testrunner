@@ -51,8 +51,7 @@ class StableTopFTS(FTSBaseTest):
         self.validate_index_count(equal_bucket_doc_count=True)
 
     def test_index_docvalues_option(self):
-        collection_index = self.container_type == 'collection'
-        type = None if self.container_type == 'bucket' else f"{self.scope}.{self.collection}"
+        collection_index, type = self.define_index_parameters_collection_related()
         index = self.create_index(
             bucket=self._cb_cluster.get_bucket_by_name('default'),
             index_name="custom_index", collection_index=collection_index, type=type)
@@ -121,8 +120,7 @@ class StableTopFTS(FTSBaseTest):
         """
         self.load_data()
 
-        collection_index = self.container_type == 'collection'
-        type = None if self.container_type == 'bucket' else f"{self.scope}.{self.collection}"
+        collection_index, type = self.define_index_parameters_collection_related()
         index = self.create_index(
             self._cb_cluster.get_bucket_by_name('default'),
             "default_index", collection_index=collection_index, type=type)
@@ -270,8 +268,7 @@ class StableTopFTS(FTSBaseTest):
         self.load_utf16_data()
         try:
             bucket = self._cb_cluster.get_bucket_by_name('default')
-            collection_index = self.container_type == 'collection'
-            type = None if self.container_type == 'bucket' else f"{self.scope}.{self.collection}"
+            collection_index, type = self.define_index_parameters_collection_related()
             index = self.create_index(bucket, "default_index", collection_index=collection_index, type=type)
             # an exception will most likely be thrown from waiting
             self.wait_for_indexing_complete()
@@ -285,8 +282,7 @@ class StableTopFTS(FTSBaseTest):
     def create_simple_alias(self):
         self.load_data()
         bucket = self._cb_cluster.get_bucket_by_name('default')
-        collection_index = self.container_type == 'collection'
-        type = None if self.container_type == 'bucket' else f"{self.scope}.{self.collection}"
+        collection_index, type = self.define_index_parameters_collection_related()
         index = self.create_index(bucket, "default_index", collection_index=collection_index, type=type)
         self.wait_for_indexing_complete()
         self.validate_index_count(equal_bucket_doc_count=True)
@@ -368,8 +364,7 @@ class StableTopFTS(FTSBaseTest):
     def index_wiki(self):
         self.load_wiki(lang=self.lang)
         bucket = self._cb_cluster.get_bucket_by_name('default')
-        collection_index = self.container_type == 'collection'
-        type = None if self.container_type == 'bucket' else f"{self.scope}.{self.collection}"
+        collection_index, type = self.define_index_parameters_collection_related()
         index = self.create_index(bucket, "wiki_index", collection_index=collection_index, type=type)
         self.wait_for_indexing_complete()
         self.validate_index_count(equal_bucket_doc_count=True,
@@ -378,8 +373,7 @@ class StableTopFTS(FTSBaseTest):
     def delete_index_then_query(self):
         self.load_data()
         bucket = self._cb_cluster.get_bucket_by_name('default')
-        collection_index = self.container_type == 'collection'
-        type = None if self.container_type == 'bucket' else f"{self.scope}.{self.collection}"
+        collection_index, type = self.define_index_parameters_collection_related()
         index = self.create_index(bucket, "default_index", collection_index=collection_index, type=type)
         self._cb_cluster.delete_fts_index(index.name)
         try:
@@ -392,8 +386,7 @@ class StableTopFTS(FTSBaseTest):
         count = 0
         self.load_data()
         bucket = self._cb_cluster.get_bucket_by_name('default')
-        collection_index = self.container_type == 'collection'
-        type = None if self.container_type == 'bucket' else f"{self.scope}.{self.collection}"
+        collection_index, type = self.define_index_parameters_collection_related()
         index = self.create_index(bucket, "default_index", collection_index=collection_index, type=type)
         if self.container_type == "bucket":
             self._cb_cluster.delete_bucket("default")
@@ -426,8 +419,7 @@ class StableTopFTS(FTSBaseTest):
         index.delete()
         self.log.info("Recreating deleted index ...")
         bucket = self._cb_cluster.get_bucket_by_name('default')
-        collection_index = self.container_type == 'collection'
-        type = None if self.container_type == 'bucket' else f"{self.scope}.{self.collection}"
+        collection_index, type = self.define_index_parameters_collection_related()
         self.create_index(bucket, "default_index", collection_index=collection_index, type=type)
         self.wait_for_indexing_complete()
         hits2, _, _, _ = alias.execute_query(self.sample_query)
@@ -439,8 +431,7 @@ class StableTopFTS(FTSBaseTest):
     def create_alias_on_deleted_index(self):
         self.load_employee_dataset()
         bucket = self._cb_cluster.get_bucket_by_name('default')
-        collection_index = self.container_type == 'collection'
-        type = None if self.container_type == 'bucket' else f"{self.scope}.{self.collection}"
+        collection_index, type = self.define_index_parameters_collection_related()
         index = self.create_index(bucket, "default_index", collection_index=collection_index, type=type)
         self.wait_for_indexing_complete()
         from .fts_base import INDEX_DEFAULTS
@@ -457,8 +448,7 @@ class StableTopFTS(FTSBaseTest):
     def edit_index_new_name(self):
         self.load_employee_dataset()
         bucket = self._cb_cluster.get_bucket_by_name('default')
-        collection_index = self.container_type == 'collection'
-        type = None if self.container_type == 'bucket' else f"{self.scope}.{self.collection}"
+        collection_index, type = self.define_index_parameters_collection_related()
         index = self.create_index(bucket, "sample_index", collection_index=collection_index, type=type)
         self.wait_for_indexing_complete()
         index.name = "new_index"
@@ -470,8 +460,7 @@ class StableTopFTS(FTSBaseTest):
     def edit_index(self):
         self.load_employee_dataset()
         bucket = self._cb_cluster.get_bucket_by_name('default')
-        collection_index = self.container_type == 'collection'
-        type = None if self.container_type == 'bucket' else f"{self.scope}.{self.collection}"
+        collection_index, type = self.define_index_parameters_collection_related()
         index = self.create_index(bucket, 'sample_index', collection_index=collection_index, type=type)
         self.wait_for_indexing_complete()
         #hits, _, _, _ = index.execute_query(self.sample_query)
@@ -492,8 +481,7 @@ class StableTopFTS(FTSBaseTest):
         rest = RestConnection(self._cb_cluster.get_random_fts_node())
         self.load_employee_dataset()
         bucket = self._cb_cluster.get_bucket_by_name('default')
-        collection_index = self.container_type == 'collection'
-        type = None if self.container_type == 'bucket' else f"{self.scope}.{self.collection}"
+        collection_index, type = self.define_index_parameters_collection_related()
         index = self.create_index(bucket, 'sample_index', collection_index=collection_index, type=type)
         # wait till half the keys are indexed
         self.wait_for_indexing_complete(self._num_items//2)
@@ -524,8 +512,7 @@ class StableTopFTS(FTSBaseTest):
         """
         self.load_employee_dataset()
         bucket = self._cb_cluster.get_bucket_by_name('default')
-        collection_index = self.container_type == 'collection'
-        type = None if self.container_type == 'bucket' else f"{self.scope}.{self.collection}"
+        collection_index, type = self.define_index_parameters_collection_related()
         index = self.create_index(bucket, 'sample_index', collection_index=collection_index, type=type)
         # wait till half the keys are indexed
         self.wait_for_indexing_complete(self._num_items//2)
@@ -542,8 +529,7 @@ class StableTopFTS(FTSBaseTest):
     def edit_index_negative(self):
         self.load_employee_dataset()
         bucket = self._cb_cluster.get_bucket_by_name('default')
-        collection_index = self.container_type == 'collection'
-        type = None if self.container_type == 'bucket' else f"{self.scope}.{self.collection}"
+        collection_index, type = self.define_index_parameters_collection_related()
         index = self.create_index(bucket, 'sample_index', collection_index=collection_index, type=type)
         self.wait_for_indexing_complete()
         hits, _, _, _ = index.execute_query(self.sample_query)
@@ -580,8 +566,7 @@ class StableTopFTS(FTSBaseTest):
          uses RQG for custom mapping
         """
         # create a custom map, disable default map
-        collection_index = self.container_type == 'collection'
-        type = None if self.container_type == 'bucket' else f"{self.scope}.{self.collection}"
+        collection_index, type = self.define_index_parameters_collection_related()
         index = self.create_index(
             bucket=self._cb_cluster.get_bucket_by_name('default'),
             index_name="custom_index", collection_index=collection_index, type=type)
@@ -717,8 +702,7 @@ class StableTopFTS(FTSBaseTest):
         turn off es validation
         goal is to make sure there are no fdb or cbft crashes
         """
-        collection_index = self.container_type == 'collection'
-        type = None if self.container_type == 'bucket' else f"{self.scope}.{self.collection}"
+        collection_index, type = self.define_index_parameters_collection_related()
         index = self.create_index(
             bucket=self._cb_cluster.get_bucket_by_name('default'),
             index_name="default_index", collection_index=collection_index, type=type)
@@ -732,8 +716,7 @@ class StableTopFTS(FTSBaseTest):
         turn off es validation
         goal is to make sure there are no fdb or cbft crashes
         """
-        collection_index = self.container_type == 'collection'
-        type = None if self.container_type == 'bucket' else f"{self.scope}.{self.collection}"
+        collection_index, type = self.define_index_parameters_collection_related()
         index = self.create_index(
             bucket=self._cb_cluster.get_bucket_by_name('default'),
             index_name="default_index", collection_index=collection_index, type=type)
@@ -911,8 +894,7 @@ class StableTopFTS(FTSBaseTest):
     def test_facets(self):
         field_indexed = self._input.param("field_indexed", True)
         self.load_data()
-        collection_index = self.container_type == 'collection'
-        type = None if self.container_type == 'bucket' else f"{self.scope}.{self.collection}"
+        collection_index, type = self.define_index_parameters_collection_related()
         index = self.create_index(
             self._cb_cluster.get_bucket_by_name('default'),
             "default_index", collection_index=collection_index, type=type)
@@ -977,8 +959,7 @@ class StableTopFTS(FTSBaseTest):
     def test_facets_during_index(self):
         field_indexed = self._input.param("field_indexed", True)
         self.load_data()
-        collection_index = self.container_type == 'collection'
-        type = None if self.container_type == 'bucket' else f"{self.scope}.{self.collection}"
+        collection_index, type = self.define_index_parameters_collection_related()
         index = self.create_index(
             self._cb_cluster.get_bucket_by_name('default'),
             "default_index", collection_index=collection_index, type=type)
@@ -1237,8 +1218,7 @@ class StableTopFTS(FTSBaseTest):
     def test_sorting_of_results(self):
         self.load_data()
         self.wait_till_items_in_bucket_equal(self._num_items//2)
-        collection_index = self.container_type == 'collection'
-        type = None if self.container_type == 'bucket' else f"{self.scope}.{self.collection}"
+        collection_index, type = self.define_index_parameters_collection_related()
         index = self.create_index(
             self._cb_cluster.get_bucket_by_name('default'),
             "default_index", collection_index=collection_index, type=type)
@@ -1278,8 +1258,7 @@ class StableTopFTS(FTSBaseTest):
     def test_sorting_of_results_during_indexing(self):
         self.load_data()
         self.wait_till_items_in_bucket_equal(self._num_items//2)
-        collection_index = self.container_type == 'collection'
-        type = None if self.container_type == 'bucket' else f"{self.scope}.{self.collection}"
+        collection_index, type = self.define_index_parameters_collection_related()
         index = self.create_index(
             self._cb_cluster.get_bucket_by_name('default'),
             "default_index", collection_index=collection_index, type=type)
@@ -1313,8 +1292,7 @@ class StableTopFTS(FTSBaseTest):
 
     def test_sorting_of_results_on_non_indexed_fields(self):
         self.load_data()
-        collection_index = self.container_type == 'collection'
-        type = None if self.container_type == 'bucket' else f"{self.scope}.{self.collection}"
+        collection_index, type = self.define_index_parameters_collection_related()
         index = self.create_index(
             self._cb_cluster.get_bucket_by_name('default'),
             "default_index", collection_index=collection_index, type=type)
@@ -2024,8 +2002,7 @@ class StableTopFTS(FTSBaseTest):
         :return: Nothing
         """
         self.load_data()
-        collection_index = self.container_type == 'collection'
-        type = None if self.container_type == 'bucket' else f"{self.scope}.{self.collection}"
+        collection_index, type = self.define_index_parameters_collection_related()
         index = self._cb_cluster.create_fts_index(
             name='default_index',
             source_name='default',

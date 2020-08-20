@@ -4551,21 +4551,25 @@ class FTSBaseTest(unittest.TestCase):
         'n' is defined by 'index_per_bucket' test param.
         """
         for bucket in self._cb_cluster.get_buckets():
-            collection_index = self.container_type == 'collection'
-            if self.container_type == 'bucket':
-                tp = None
-            else:
-                if type(self.collection) is list:
-                    tp = []
-                    for c in self.collection:
-                        tp.append(f"{self.scope}.{c}")
-                else:
-                    tp = f"{self.scope}.{self.collection}"
+            collection_index, tp = self.define_index_parameters_collection_related()
             for count in range(self.index_per_bucket):
                 self.create_index(
                     bucket,
                     f"{bucket.name}_index_{count + 1}",
                     plan_params=plan_params, type=tp, collection_index=collection_index)
+
+    def define_index_parameters_collection_related(self):
+        collection_index = self.container_type == 'collection'
+        if self.container_type == 'bucket':
+            _type = None
+        else:
+            if type(self.collection) is list:
+                _type = []
+                for c in self.collection:
+                    _type.append(f"{self.scope}.{c}")
+            else:
+                _type = f"{self.scope}.{self.collection}"
+        return collection_index, _type
 
     def create_alias(self, target_indexes, name=None, alias_def=None):
         """
@@ -5084,3 +5088,4 @@ class FTSBaseTest(unittest.TestCase):
                     if counter > 20:
                         self.log.info("Exiting load sleep loop after 21s")
                         return
+

@@ -733,9 +733,13 @@ class MovingTopFTS(FTSBaseTest):
     """ Topology change during querying"""
 
     def create_index_generate_queries(self):
+        collection_index, _type =  self.define_index_parameters_collection_related()
         index = self.create_index(
             self._cb_cluster.get_bucket_by_name('default'),
-            "default_index")
+            "default_index",
+            collection_index=collection_index,
+            type=_type
+        )
         self.load_data()
         self.wait_for_indexing_complete()
         self.generate_random_queries(index, self.num_queries, self.query_types)
@@ -1249,8 +1253,8 @@ class MovingTopFTS(FTSBaseTest):
         bucket = self._cb_cluster.get_bucket_by_name("default")
 
         self._cb_cluster.flush_buckets([bucket])
-
-        index = self.create_index(bucket, "default_index")
+        collection_index, _type = self.define_index_parameters_collection_related()
+        index = self.create_index(bucket, "default_index", collection_index=collection_index, type=_type)
         self.load_data()
         self.wait_for_indexing_complete()
 

@@ -288,8 +288,7 @@ class RbacFTS(FTSBaseTest):
         for user in self.users:
             for bucket in self._cb_cluster.get_buckets():
                 try:
-                    collection_index = self.container_type == 'collection'
-                    type = None if self.container_type == 'bucket' else f"{self.scope}.{self.collection}"
+                    collection_index, type = self.define_index_parameters_collection_related()
                     index = self.create_index_with_credentials(
                         username= user['id'],
                         password=user['password'],
@@ -345,9 +344,7 @@ class RbacFTS(FTSBaseTest):
         self.show_user_permissions()
         for user in self.users:
             for bucket in self._cb_cluster.get_buckets():
-                collection_index = self.container_type == 'collection'
-                _type = None if self.container_type == 'bucket' else f"{self.scope}.{self.collection}"
-
+                collection_index, _type = self.define_index_parameters_collection_related()
                 index = self.create_index_with_credentials(
                     username= user['id'],
                     password=user['password'],
@@ -409,9 +406,7 @@ class RbacFTS(FTSBaseTest):
             for bucket in self._cb_cluster.get_buckets():
                 # creating an index
                 try:
-                    collection_index = self.container_type == 'collection'
-                    _type = None if self.container_type == 'bucket' else f"{self.scope}.{self.collection}"
-
+                    collection_index, _type = self.define_index_parameters_collection_related()
                     self.create_index_with_credentials(
                         username= user['id'],
                         password=user['password'],
@@ -428,16 +423,7 @@ class RbacFTS(FTSBaseTest):
                 # creating an alias
                 try:
                     self.log.info("Creating index as administrator...")
-                    collection_index = self.container_type == 'collection'
-                    if self.container_type == 'bucket':
-                        _type = None
-                    else:
-                        if type(self.collection) is list:
-                            _type = []
-                            for c in self.collection:
-                                _type.append(f"{self.scope}.{c}")
-                        else:
-                            _type = f"{self.scope}.{self.collection}"
+                    collection_index, _type = self.define_index_parameters_collection_related()
                     index = self.create_index_with_credentials(
                         username='Administrator',
                         password='password',
@@ -511,9 +497,7 @@ class RbacFTS(FTSBaseTest):
         indexes = []
 
         # create indexes for those buckets for which the user is fts admin
-        collection_index = self.container_type == 'collection'
-        _type = None if self.container_type == 'bucket' else f"{self.scope}.{self.collection}"
-
+        collection_index, _type = self.define_index_parameters_collection_related()
         def_index = self.create_index_with_credentials(
             username='willSmith',
             password='password2',
@@ -582,9 +566,7 @@ class RbacFTS(FTSBaseTest):
         self.assign_role()
         self.show_user_permissions()
 
-        collection_index = self.container_type == 'collection'
-        _type = None if self.container_type == 'bucket' else f"{self.scope}.{self.collection}"
-
+        collection_index, _type = self.define_index_parameters_collection_related()
 
         # create indexes for those buckets for which the user is fts admin
         def_index = self.create_index_with_credentials(
@@ -623,4 +605,58 @@ class RbacFTS(FTSBaseTest):
         except Exception as e:
             self.fail("User with permissions is unable to change the "
                       "index source bucket %s" %e)
+
+    def test_fts_searcher_permissions_multi_collection_index(self):
+        """
+        Tests if an 'fts_searcher' is able to create index, alias (negative test)
+        and if he can get an index count and is able to run a query on a
+        pre-existing index (positive case)
+        """
+        self.load_data()
+        self.create_users()
+        self.assign_role()
+
+        for user in self.users:
+            for bucket in self._cb_cluster.get_buckets():
+                collection_index, _type = self.define_index_parameters_collection_related()
+                index = self._cb_cluster.create_fts_index(
+                    name=f'{bucket.name}_index',
+                    source_name=bucket.name,
+                    collection_index=collection_index,
+                    _type=_type)
+                try:
+                    self.query_index_with_credentials(
+                        index=index,
+                        username=user['id'],
+                        password=user['password'])
+                except Exception as e:
+                    self.fail(f"The user failed to query fts index {user['id']}")
+
+    def test_fts_searcher_permissions_multi_collection_index_negative(self):
+        """
+        Tests if an 'fts_searcher' is able to create index, alias (negative test)
+        and if he can get an index count and is able to run a query on a
+        pre-existing index (positive case)
+        """
+        self.load_data()
+        self.create_users()
+        self.assign_role()
+        self.show_user_permissions()
+
+        for user in self.users:
+            for bucket in self._cb_cluster.get_buckets():
+                collection_index, _type = self.define_index_parameters_collection_related()
+                index = self._cb_cluster.create_fts_index(
+                    name=f'{bucket.name}_index',
+                    source_name=    bucket.name,
+                    collection_index=collection_index,
+                    _type=_type)
+                try:
+                    self.query_index_with_credentials(
+                        index=index,
+                        username=user['id'],
+                        password=user['password'])
+                    self.fail(f"The user successfully queried fts index {user['id']}")
+                except Exception as e:
+                    pass
 
