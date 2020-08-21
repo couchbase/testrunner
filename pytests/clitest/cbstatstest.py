@@ -55,7 +55,10 @@ class cbstatsTests(CliBaseTest):
             keys_map = {}
             for i in range(1, self.num_items + 1):
                 vb_id = i - len(bucket_info.vbuckets) * int(i // len(bucket_info.vbuckets))
-                mc_conn.set("test_docs-%s" % i, 0, 0, json.dumps('{ "test" : "test"}').encode("ascii", "ignore"), vb_id)
+                try:
+                    mc_conn.set("test_docs-%s" % i, 0, 0, json.dumps('{ "test" : "test"}').encode("ascii", "ignore"), vb_id)
+                except Exception:
+                    continue
                 keys_map["test_docs-%s" % i] = vb_id
             for key, vb_id in keys_map.items():
                 output, error = self.shell.execute_cbstats(self.buckets[0], self.command, key, vb_id)
