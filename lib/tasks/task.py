@@ -1580,7 +1580,8 @@ class ESBulkLoadGeneratorTask(Task):
 
 
 class ESRunQueryCompare(Task):
-    def __init__(self, fts_index, es_instance, query_index, es_index_name=None, n1ql_executor=None):
+    def __init__(self, fts_index, es_instance, query_index, es_index_name=None, n1ql_executor=None,
+                 use_collections=False):
         Task.__init__(self, "Query_runner_task")
         self.fts_index = fts_index
         self.fts_query = fts_index.fts_queries[query_index]
@@ -1594,6 +1595,7 @@ class ESRunQueryCompare(Task):
         self.es_index_name = es_index_name or "es_index"
         self.n1ql_executor = n1ql_executor
         self.score = TestInputSingleton.input.param("score",'')
+        self.use_collections = use_collections
 
     def check(self, task_manager):
         self.state = FINISHED
@@ -1684,8 +1686,12 @@ class ESRunQueryCompare(Task):
                 geo_strings = ['"field": "geo"']
                 if any(geo_str in str(json.dumps(self.fts_query)) for geo_str in geo_strings):
                     query_type = 'earthquake'
+                if self.use_collections:
+                    kv_container = "default:default.scope1.collection1"
+                else:
+                    kv_container = "default"
 
-                n1ql_query = "select meta().id from default where type='" + str(
+                n1ql_query = f"select meta().id from {kv_container} where type='" + str(
                     query_type) + "' and search(default, " + str(
                     json.dumps(self.fts_query)) + ")"
                 self.log.info("Running N1QL query: " + str(n1ql_query))

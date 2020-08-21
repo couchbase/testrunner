@@ -2467,8 +2467,10 @@ class CouchbaseCluster:
         index.create()
         return index
 
-    def create_fts_index_wait_for_completion(self, sample_index_name_1, sample_bucket_name):
-        fts_idx = self.create_fts_index(name=sample_index_name_1, source_name=sample_bucket_name)
+    def create_fts_index_wait_for_completion(self, sample_index_name_1, sample_bucket_name,
+                                             collection_index=False, _type=None):
+        fts_idx = self.create_fts_index(name=sample_index_name_1, source_name=sample_bucket_name,
+                                        collection_index=collection_index, _type=_type)
 
         indexed_doc_count = 0
         self.__log.info(RestConnection(self.get_master_node()).get_buckets_itemCount()[sample_bucket_name])
@@ -3017,7 +3019,8 @@ class CouchbaseCluster:
             )
         return tasks
 
-    def async_run_fts_query_compare(self, fts_index, es, query_index, es_index_name=None, n1ql_executor=None):
+    def async_run_fts_query_compare(self, fts_index, es, query_index, es_index_name=None, n1ql_executor=None,
+                                    use_collections=False):
         """
         Asynchronously run query against FTS and ES and compare result
         note: every task runs a single query
@@ -3026,7 +3029,8 @@ class CouchbaseCluster:
                                                             es_instance=es,
                                                             query_index=query_index,
                                                             es_index_name=es_index_name,
-                                                            n1ql_executor=n1ql_executor)
+                                                            n1ql_executor=n1ql_executor,
+                                                            use_collections=use_collections)
         return task
 
     def run_expiry_pager(self, val=10):
@@ -4887,7 +4891,7 @@ class FTSBaseTest(unittest.TestCase):
         load_tasks += self._cb_cluster.async_load_all_buckets_from_generator(self.create_gen)
         return load_tasks
 
-    def run_query_and_compare(self, index=None, es_index_name=None, n1ql_executor=None):
+    def run_query_and_compare(self, index=None, es_index_name=None, n1ql_executor=None, use_collections=False):
         """
         Runs every fts query and es_query and compares them as a single task
         Runs as many tasks as there are queries
@@ -4901,7 +4905,8 @@ class FTSBaseTest(unittest.TestCase):
                 es=self.es,
                 es_index_name=es_index_name,
                 query_index=count,
-                n1ql_executor=n1ql_executor))
+                n1ql_executor=n1ql_executor,
+                use_collections=use_collections))
 
         num_queries = len(tasks)
 
