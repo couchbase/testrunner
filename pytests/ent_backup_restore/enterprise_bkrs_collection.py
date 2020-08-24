@@ -103,7 +103,9 @@ class EnterpriseBackupRestoreCollectionTest(EnterpriseBackupRestoreCollectionBas
         for scope in backup_scopes:
             if scope == "_default":
                 continue
+            self.log.info("get scope id of scope: {0}".format(scope))
             scopes_id.append(self.get_scopes_id_cluster_host(scope))
+        self.log.info("scope id in backup cluster: {0}".format(scopes_id))
         """ remove null and empty element """
         scopes_id = [i for i in scopes_id if i]
         backup_collections = self.get_bucket_collection_cluster_host()
@@ -128,7 +130,17 @@ class EnterpriseBackupRestoreCollectionTest(EnterpriseBackupRestoreCollectionBas
                     if len(scopes_id) > 1:
                         self.backupset.load_scope_id = choice(scopes_id)
                     else:
-                        self.backupset.load_scope_id = scopes_id[0]
+                        if scopes_id:
+                            self.backupset.load_scope_id = scopes_id[0]
+                        else:
+                            self.log.info("scopes Id: {0}.  Let get scopes again.".format(scopes_id))
+                            bk_scopes = self.get_bucket_scope_cluster_host()
+                            for scope in bk_scopes:
+                                if scope == "_default" or not scope:
+                                    continue
+                                 self.log.info("get scope id of scope: {0}".format(scope))
+                                 scopes_id.append(self.get_scopes_id_cluster_host(scope))
+                            self.backupset.load_scope_id = scopes_id[0]
                     col_cmd = " -c {0} ".format(self.backupset.load_scope_id)
                 self.load_all_buckets(self.backupset.cluster_host, ratio=0.1,
                                                      command_options=col_cmd)
