@@ -2450,6 +2450,7 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
         if len(self.input.clusters[0]) > 1:
             if not bk_cluster_services:
                 bk_cluster_services = bk_cluster_services.append(self.input.clusters[0][1].services)
+            self.sleep(12, "time needs for index service is up (MB-39859)")
             rest_rs.add_node(self.input.clusters[0][1].rest_username,
                              self.input.clusters[0][1].rest_password,
                              self.input.clusters[0][1].ip, services=bk_cluster_services[0])
