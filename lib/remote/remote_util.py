@@ -4414,7 +4414,7 @@ class RemoteMachineShellConnection(KeepRefs):
                                                              keyname, vbid)
 
 
-        output, error = self.execute_command(command)
+        output, error = self.execute_command(command=command, debug=False)
         if print_results:
             self.log_command_output(output, error)
         return output, error

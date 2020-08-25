@@ -225,6 +225,11 @@ class Cluster(object):
         self.task_manager.schedule(_task)
         return _task
 
+    def async_verify_collection_doc_count(self, src_server, dest_server, bucket, mapping):
+        _task = VerifyCollectionDocCountTask(src_server, dest_server, bucket, mapping)
+        self.task_manager.schedule(_task)
+        return _task
+
     def async_run_fts_query_compare(self, fts_index, es_instance, query_index,
                                     es_index_name=None, n1ql_executor=None, use_collections=False):
         _task = ESRunQueryCompare(fts_index,

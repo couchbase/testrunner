@@ -69,7 +69,7 @@ class CollectionsStats(object):
                     count += id_counts[id]
         return count
 
-    def get_collection_item_count(self, bucket, scope, collection, node=None):
+    def get_collection_item_count(self, bucket, scope, collection, node=None, cbstats=None):
         count = 0
         if not node:
             nodes = [self.node]
@@ -78,7 +78,8 @@ class CollectionsStats(object):
         else:
             nodes = [node]
         for node in nodes:
-            cbstats, _ = RemoteMachineShellConnection(node).execute_cbstats(bucket, "collections",
+            if not cbstats:
+                cbstats, _ = RemoteMachineShellConnection(node).execute_cbstats(bucket, "collections",
                                                                             cbadmin_user="Administrator")
             collection_id = self.get_collection_id(bucket, scope, collection, cbstats)
             id_counts = {}

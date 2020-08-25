@@ -223,11 +223,11 @@ class XDCRCheckpointUnitTest(XDCRNewBaseTest):
     def was_pre_rep_successful(self):
         self.sleep(30)
         node = self.get_active_vb0_node(self.dest_master)
-        success = self.get_pre_replicate_call_history(node)
-        if success > self.num_successful_prereps_so_far :
+        total_commit_calls = self.get_pre_replicate_call_history(node)
+        if total_commit_calls > self.num_successful_prereps_so_far :
             self.log.info("_pre_replicate was successful: last recorded success :{0} , now :{1}".
-                          format(self.num_successful_prereps_so_far, success))
-            self.num_successful_prereps_so_far = success
+                          format(self.num_successful_prereps_so_far, total_commit_calls))
+            self.num_successful_prereps_so_far = total_commit_calls
             return True
         elif total_commit_calls == self.num_successful_prereps_so_far:
             self.log.error("ERROR: Pre-replication did NOT happen!")

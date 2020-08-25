@@ -1,6 +1,6 @@
 from .xdcrnewbasetests import XDCRNewBaseTest
 from membase.api.rest_client import RestConnection
-import time
+import random
 
 
 class XDCRCollectionsTests(XDCRNewBaseTest):
@@ -31,17 +31,17 @@ class XDCRCollectionsTests(XDCRNewBaseTest):
 
         drop_default_scope = self._input.param("drop_default_scope", None)
         drop_default_collection = self._input.param("drop_default_collection", None)
-        colMappingRules = self._input.param("colMappingRules", None)
-        collectionsExplicitMapping = self._input.param("collectionsExplicitMapping", None)
-        collectionsMigrationMode = self._input.param("collectionsMigrationMode", None)
-        collectionsMirroringMode = self._input.param("collectionsMirroringMode", None)
+        mapping_rules = self._input.param("mapping_rules", None)
+        explicit_mapping = self._input.param("explicit_mapping", None)
+        migration_mode = self._input.param("migration_mode", None)
+        mirroring_mode = self._input.param("mirroring_mode", None)
         new_scope = self._input.param("new_scope", None)
         new_collection = self._input.param("new_collection", None)
         new_scope_collection = self._input.param("new_scope_collection", None)
         drop_recreate_scope = self._input.param("drop_recreate_scope", None)
         drop_recreate_collection = self._input.param("drop_recreate_collection", None)
 
-        initial_xdcr = self._input.param("initial_xdcr", False)
+        initial_xdcr = random.choice([True, False])
         if initial_xdcr:
             self.load_and_setup_xdcr()
         else:
@@ -56,7 +56,6 @@ class XDCRCollectionsTests(XDCRNewBaseTest):
         if drop_default_collection:
             for cluster in self.get_cluster_objects_for_input(drop_default_collection):
                 for bucket in RestConnection(cluster.get_master_node()).get_buckets():
-                    print("Deleting default collection in {}:{}".format(cluster, bucket))
                     tasks.append(cluster.get_cluster().async_delete_collection(cluster.get_master_node(),
                                                                                bucket, self.DEFAULT_SCOPE,
                                                                                self.DEFAULT_COLLECTION))
@@ -108,6 +107,32 @@ class XDCRCollectionsTests(XDCRNewBaseTest):
                                                                                bucket, self.NEW_SCOPE,
                                                                                self.NEW_COLLECTION
                                                                                ))
+        if explicit_mapping:
+            for cluster in self.get_cluster_objects_for_input(explicit_mapping):
+                if True in cluster.get_xdcr_param("collectionsExplicitMapping"):
+                    self.fail("collectionsExplicitMapping is true, expected to be false by default")
+                self.log.info("collectionsExplicitMapping is false as expected")
+
+        if mapping_rules:
+            for cluster in self.get_cluster_objects_for_input(mapping_rules):
+                rules = cluster.get_xdcr_param("colMappingRules")
+                for rule in rules:
+                    if rule:
+                        self.fail("colMappingRules is expected to be empty by default but it is {0}".format(rules))
+                self.log.info("colMappingRules is empty as expected")
+
+        if migration_mode:
+            for cluster in self.get_cluster_objects_for_input(migration_mode):
+                if True in cluster.get_xdcr_param("collectionsMigrationMode"):
+                    self.fail("collectionsMigrationMode is true, expected to be false by default")
+                self.log.info("collectionsMigrationMode is false as expected")
+
+        if mirroring_mode:
+            for cluster in self.get_cluster_objects_for_input(mirroring_mode):
+                if True in cluster.get_xdcr_param("collectionsMirroringMode"):
+                    self.fail("collectionsMirroringMode is true, expected to be false by default")
+                self.log.info("collectionsMirroringMode is false as expected")
+
         for task in tasks:
             task.result()
         self.perform_update_delete()

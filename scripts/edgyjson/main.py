@@ -9,7 +9,7 @@ import traceback
 from couchbase.cluster import Cluster
 
 import couchbase.subdocument as SD
-from couchbase.exceptions import CouchbaseTransientError
+from couchbase.exceptions import CouchbaseTransientException
 
 from .constants import Constants as constants
 from .ValueGenerator import ValueGenerator
@@ -46,24 +46,26 @@ class JSONDoc(object):
 
     def uploadDoc(self):
         # connect to cb cluster
+        cb = None
+        connection = "couchbase://" + self.server
+        if "ip6" in self.server or self.server.startswith("["):
+            connection = connection + "?ipv6=allow"
         try:
             from couchbase.cluster import PasswordAuthenticator
-            connection = "couchbase://" + self.server
-            if "ip6" in self.server or self.server.startswith("["):
-                connection = connection+"?ipv6=allow"
             cluster = Cluster(connection)
             authenticator = PasswordAuthenticator(self.username, self.password)
             cluster.authenticate(authenticator)
             cb = cluster.open_bucket(self.bucket)
             cb.timeout = 100
-        except ImportError:
+        except Exception:
             from couchbase.cluster import ClusterOptions
             from couchbase_core.cluster import PasswordAuthenticator
-            cluster = Cluster(self.connection_string, ClusterOptions(
-                PasswordAuthenticator(self.bucket, 'password')))
+            cluster = Cluster(connection, ClusterOptions(
+                PasswordAuthenticator(self.username, self.password)))
             cb = cluster.bucket(self.bucket).default_collection()
-        except Exception as e:
-            logging.error("Connection error\n" + traceback.format_exc())
+        finally:
+            if not cb:
+                logging.error("Connection error\n" + traceback.format_exc())
         json_docs = {}
         for i in range(self.startseqnum, self.startseqnum + self.num_docs):
             self.createContent()
@@ -91,7 +93,7 @@ class JSONDoc(object):
                 cb.upsert_multi(batch)
                 num_completed += len(batch)
                 batches.pop()
-            except CouchbaseTransientError as e:
+            except CouchbaseTransientException as e:
                 logging.error(e)
                 ok, fail = e.split_results()
                 new_batch = {}

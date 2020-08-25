@@ -143,6 +143,10 @@ class REPL_PARAM:
     PRIORITY = "priority"
     DESIRED_LATENCY = "desiredLatency"
     COMPRESSION_TYPE = "compressionType"
+    EXPLICIT_MAPPING = "collectionsExplicitMapping"
+    MAPPING_RULES = "colMappingRules"
+    MIGRATION_MODE = "collectionsMigrationMode"
+    MIRRORING_MODE = "collectionsMirroringMode"
 
 
 class TEST_XDCR_PARAM:
@@ -161,6 +165,10 @@ class TEST_XDCR_PARAM:
     PRIORITY = "priority"
     DESIRED_LATENCY = "desired_latency"
     COMPRESSION_TYPE = "compression_type"
+    EXPLICIT_MAPPING = "explicit_mapping"
+    MAPPING_RULES = "mapping_rules"
+    MIGRATION_MODE = "migration_mode"
+    MIRRORING_MODE = "mirroring_mode"
 
     @staticmethod
     def get_test_to_create_repl_param_map():
@@ -179,7 +187,11 @@ class TEST_XDCR_PARAM:
             TEST_XDCR_PARAM.LOG_LEVEL: REPL_PARAM.LOG_LEVEL,
             TEST_XDCR_PARAM.PRIORITY: REPL_PARAM.PRIORITY,
             TEST_XDCR_PARAM.DESIRED_LATENCY: REPL_PARAM.DESIRED_LATENCY,
-            TEST_XDCR_PARAM.COMPRESSION_TYPE: REPL_PARAM.COMPRESSION_TYPE
+            TEST_XDCR_PARAM.COMPRESSION_TYPE: REPL_PARAM.COMPRESSION_TYPE,
+            TEST_XDCR_PARAM.EXPLICIT_MAPPING: REPL_PARAM.EXPLICIT_MAPPING,
+            TEST_XDCR_PARAM.MAPPING_RULES: REPL_PARAM.MAPPING_RULES,
+            TEST_XDCR_PARAM.MIGRATION_MODE: REPL_PARAM.MIGRATION_MODE,
+            TEST_XDCR_PARAM.MIRRORING_MODE: REPL_PARAM.MIRRORING_MODE
         }
 
 
@@ -839,17 +851,20 @@ class XDCReplication:
                 dict(list(zip(argument_split[::2], argument_split[1::2])))
             )
         if 'filter_expression' in self.__test_xdcr_params:
-            if len(self.__test_xdcr_params['filter_expression']) > 0:
-                ex = self.__test_xdcr_params['filter_expression']
+            ex = self.__test_xdcr_params['filter_expression']
+            if len(ex) > 0:
                 if ex.startswith("random"):
-                    ex = self.__get_random_filter(ex)
+                    self.__test_xdcr_params['filter_expression'] = self.__get_random_filter(ex)
                 masked_input = {"comma": ',', "star": '*', "dot": '.', "equals": '=', "{": '', "}": '', "colon": ':'}
-                #need_to_encode = ['+']
                 for _ in masked_input:
-                    self.__test_xdcr_params['filter_expression'] = self.__test_xdcr_params['filter_expression'].replace(_, masked_input[_])
-                #for _ in need_to_encode:
-                #    self.__test_xdcr_params['filter_expression'] = self.__test_xdcr_params['filter_expression'] \
-                #        .replace(_, urllib.quote_plus(_))
+                    self.__test_xdcr_params['filter_expression'] = self.__test_xdcr_params['filter_expression'].replace(
+                        _, masked_input[_])
+        if "mapping_rules" in self.__test_xdcr_params:
+            masked_input = {"comma": ',', "colon": ':', "quote": '"'}
+            for _ in masked_input:
+                self.__test_xdcr_params['mapping_rules'] = self.__test_xdcr_params[
+                    'mapping_rules'].replace(
+                    _, masked_input[_])
 
     def __convert_test_to_xdcr_params(self):
         xdcr_params = {}
@@ -1109,6 +1124,9 @@ class CouchbaseCluster:
         self.gen = None
         self.scope_num = scope_num
         self.collection_num = collection_num
+        self.collection_support = False
+        if RestConnection(self.__master_node).check_cluster_compatibility("7.0"):
+            self.collection_support = True
 
     def __str__(self):
         return "Couchbase Cluster: %s, Master Ip: %s" % (
@@ -1397,7 +1415,7 @@ class CouchbaseCluster:
                     maxttl=maxttl,
                     bucket_storage=bucket_storage
                 ))
-            if self.scope_num or self.collection_num:
+            if self.collection_support and (self.scope_num or self.collection_num):
                 CollectionsRest(self.__master_node).async_create_scope_collection(
                     self.scope_num, self.collection_num, name)
 
@@ -1441,7 +1459,7 @@ class CouchbaseCluster:
                     maxttl=maxttl,
                     bucket_storage=bucket_storage
                 ))
-            if self.scope_num or self.collection_num:
+            if self.collection_support and (self.scope_num or self.collection_num):
                 CollectionsRest(self.__master_node).async_create_scope_collection(
                     self.scope_num, self.collection_num, name)
 
@@ -1481,7 +1499,7 @@ class CouchbaseCluster:
                 maxttl=maxttl,
                 bucket_storage=bucket_storage
             ))
-        if self.scope_num or self.collection_num:
+        if self.collection_support and (self.scope_num or self.collection_num):
             CollectionsRest(self.__master_node).async_create_scope_collection(
                 self.scope_num, self.collection_num, BUCKET_NAME.DEFAULT)
 
@@ -1556,14 +1574,15 @@ class CouchbaseCluster:
         @param timeout_secs: timeout
         @return: task object
         """
-        seed = "%s-key-" % self.__name
-        self.__kv_gen[
-            OPS.CREATE] = BlobGenerator(
-            seed,
-            seed,
-            value_size,
-            end=num_items)
-        self.gen = copy.deepcopy(self.__kv_gen[OPS.CREATE])
+        if not self.gen:
+            seed = "%s-key-" % self.__name
+            self.__kv_gen[
+                OPS.CREATE] = BlobGenerator(
+                seed,
+                seed,
+                value_size,
+                end=num_items)
+            self.gen = copy.deepcopy(self.__kv_gen[OPS.CREATE])
         task = self.__clusterop.async_load_gen_docs(self.__master_node, bucket.name, self.gen,
                                                     bucket.kvs[kv_store],OPS.CREATE, exp,
                                                     flag, only_store_hash, batch_size, pause_secs,
@@ -1608,7 +1627,8 @@ class CouchbaseCluster:
         @return: task objects list
         """
         if self.use_java_sdk:
-            self.gen = SDKDataLoader(num_ops=num_items, percent_create=100, timeout=num_items)
+            self.gen = SDKDataLoader(num_ops=num_items, percent_create=100, percent_update=0,
+                                    percent_delete=0, all_collections=True)
         else:
             seed = "%s-key-" % self.__name
             self.gen = self.__kv_gen[
@@ -1649,7 +1669,7 @@ class CouchbaseCluster:
         for task in tasks:
             task.result()
         if self.use_java_sdk and self.gen.get_sdk_logs:
-            print(self.gen.get_sdk_results())
+            self.log.info(self.gen.get_sdk_results())
 
     def load_all_buckets_from_generator(self, kv_gen, ops=OPS.CREATE, exp=0,
                                         kv_store=1, flag=0, only_store_hash=True,
@@ -1785,7 +1805,7 @@ class CouchbaseCluster:
                 end=end)
 
     def async_update_delete(
-            self, op_type, perc=30, expiration=0, kv_store=1):
+            self, op_type, perc=30, expiration=0, kv_store=1, num_items=1000):
         """Perform update/delete operation on all buckets. Function don't wait
         operation to finish.
         @param op_type: OPS.CREATE/OPS.UPDATE/OPS.DELETE
@@ -1839,7 +1859,6 @@ class CouchbaseCluster:
 
             self.__log.info("At bucket '{0}' @ {1}: operation: {2}, key range {3} - {4}".
                        format(bucket.name, self.__name, op_type, gen.start, gen.end))
-
             tasks.append(
                 self.__clusterop.async_load_gen_docs(
                     self.__master_node,
@@ -1853,17 +1872,14 @@ class CouchbaseCluster:
             )
         else:
             for bucket in self.__buckets:
-                num_items = CollectionsStats(self.__master_node).\
-                    get_collection_item_count(bucket, "_default", "default")
                 gen = SDKDataLoader(num_ops=num_items, percent_create=0, percent_update=30,
-                                    percent_delete=30)
+                                    percent_delete=30, all_collections=True)
                 tasks.append(
                     self.__clusterop.async_load_gen_docs(
                         self.__master_node,
                         bucket.name,
                         gen)
                 )
-
         return tasks
 
     def update_delete_data(
@@ -2307,6 +2323,17 @@ class CouchbaseCluster:
             NodeHelper.do_a_warm_up(node)
 
         NodeHelper.wait_warmup_completed(self.__nodes, bucket_names)
+
+    def get_xdcr_param(self, param):
+        values = []
+        for remote_ref in self.get_remote_clusters():
+            for repl in remote_ref.get_replications():
+                src_bucket = repl.get_src_bucket()
+                dst_bucket = repl.get_dest_bucket()
+                value = RestConnection(self.__master_node).get_xdcr_param(src_bucket.name, dst_bucket.name, param)
+                print("{} is {} for {}".format(param, value, remote_ref))
+                values.append(value)
+        return values
 
     def set_xdcr_param(self, param, value):
         """Set Replication parameter on couchbase server:
@@ -2806,6 +2833,7 @@ class XDCRNewBaseTest(unittest.TestCase):
     def __setup_for_test(self):
         use_hostnames = self._input.param("use_hostnames", False)
         sdk_compression = self._input.param("sdk_compression", True)
+
         collection_density = self._input.param("collection_density", "low")
         scope_num = BUCKET_COLLECTIONS_DENSITY(collection_density).get_num_scopes()
         collection_num = BUCKET_COLLECTIONS_DENSITY(collection_density).get_num_collections()
@@ -2926,7 +2954,6 @@ class XDCRNewBaseTest(unittest.TestCase):
         self._replicator_all_buckets = self._input.param("replicator_all_buckets", False)
         self._use_java_sdk = self._input.param("java_sdk_client", False)
         if self._use_java_sdk:
-            self.log.info("Building docker image with java sdk client")
             JavaSdkSetup()
 
     def __initialize_error_count_dict(self):
@@ -3349,7 +3376,8 @@ class XDCRNewBaseTest(unittest.TestCase):
             tasks.extend(cb_cluster.async_update_delete(
                 OPS.UPDATE,
                 perc=self._perc_upd,
-                expiration=self._expires))
+                expiration=self._expires,
+                num_items=self._num_items))
 
         [task.result() for task in tasks]
         if tasks:
@@ -3363,7 +3391,9 @@ class XDCRNewBaseTest(unittest.TestCase):
             tasks.extend(
                 cb_cluster.async_update_delete(
                     OPS.DELETE,
-                    perc=self._perc_del))
+                    perc=self._perc_del,
+                    expiration=self._expires,
+                    num_items=self._num_items))
 
         [task.result() for task in tasks]
         if tasks:
@@ -3405,7 +3435,6 @@ class XDCRNewBaseTest(unittest.TestCase):
     def setup_xdcr(self):
         self.set_xdcr_topology()
         self.setup_all_replications()
-
         if self._checkpoint_interval != 1800:
             for cluster in self.__cb_clusters:
                 cluster.set_global_checkpt_interval(self._checkpoint_interval)
@@ -3803,57 +3832,28 @@ class XDCRNewBaseTest(unittest.TestCase):
             return True
         return False
 
-    def verify_mapping(self, src_master, dest_master):
-        src_rest = CollectionsRest(src_master)
-        dest_rest = CollectionsRest(dest_master)
-        src_scopes = []
-        dest_scopes = []
-        #Assuming implicit mapping
-        for bucket in RestConnection(src_master).get_buckets():
-            src_scopes = src_rest.get_bucket_scopes(bucket)
-            dest_scopes = dest_rest.get_bucket_scopes(bucket)
-            if self._check_lists_match(src_scopes, dest_scopes):
-                self.log.info("Scope mapping verified for bucket {}. On src: {}, On dest {}"
-                              .format(bucket, src_scopes, dest_scopes))
+    def verify_collection_doc_count(self, replications, timeout=1200):
+        tasks = []
+        mapping = {}
+        for repl in replications:
+            src_bucket = repl.get_src_bucket()
+            if repl.get_xdcr_setting('collectionsExplicitMapping'):
+                mapping = repl.get_xdcr_setting('colMappingRules')
             else:
-                self.fail("Scope mapping not as expected for bucket {}. On src: {}, On dest {}"
-                          .format(bucket, src_scopes, dest_scopes))
-            for scope in src_scopes:
-                src_collections = src_rest.get_scope_collections(bucket, scope)
-                dest_collections = dest_rest.get_scope_collections(bucket, scope)
-                if self._check_lists_match(src_collections, dest_collections):
-                    self.log.info("Collection mapping verified for bucket {} -> scope {}. On src: {}, On dest {}"
-                                  .format(bucket, scope, src_collections, dest_collections))
-                else:
-                    self.log.warning("Collection mapping not as expected for bucket {} -> scope {}. On src: {}, On dest {}"
-                                     .format(bucket, scope, src_collections, dest_collections))
-
-
-    def verify_collection_doc_count(self, src, dest):
-        src_rest = CollectionsRest(src.get_master_node())
-        src_stat = CollectionsStats(src.get_master_node())
-        dest_stat = CollectionsStats(dest.get_master_node())
-        # Assuming implicit mapping
-        for bucket in RestConnection(src.get_master_node()).get_buckets():
-            src_scopes = src_rest.get_bucket_scopes(bucket)
-            for scope in src_scopes:
-                src_collections = src_rest.get_scope_collections(bucket, scope)
-                for collection in src_collections:
-                    src_count = src_stat.get_collection_item_count(bucket, scope, collection,
-                                                                   src.get_nodes())
-                    dest_count = dest_stat.get_collection_item_count(bucket, scope, collection,
-                                                                     dest.get_nodes())
-                    if src_count == dest_count:
-                        self.log.info("Collection item count on src {} = dest {} for "
-                                      "bucket {}->scope {}-> collection {}"
-                                      .format(src_count, dest_count, bucket, scope,
-                                              collection))
-                    else:
-                        self.fail("Collection item count on src {} != dest {} for "
-                                      "bucket {}->scope {}-> collection {}"
-                                      .format(src_count, dest_count, bucket, scope,
-                                              collection))
-
+                src_rest = CollectionsRest(repl.get_src_cluster().get_master_node())
+                src_scopes = src_rest.get_bucket_scopes(src_bucket)
+                for scope in src_scopes:
+                    src_collections = src_rest.get_scope_collections(src_bucket, scope)
+                    for collection in src_collections:
+                        map_exp = '"' + scope + ':' + collection + '"'
+                        mapping[map_exp] = map_exp
+            task_info = self.__cluster_op.async_verify_collection_doc_count(
+                repl.get_src_cluster(),
+                repl.get_dest_cluster(),
+                src_bucket, mapping)
+            tasks.append(task_info)
+        for task in tasks:
+            task.result(timeout)
 
     def verify_results(self, skip_verify_data=[], skip_verify_revid=[]):
         """Verify data between each couchbase and remote clusters.
@@ -3867,10 +3867,10 @@ class XDCRNewBaseTest(unittest.TestCase):
         """
         skip_key_validation = self._input.param("skip_key_validation", False)
         skip_meta_validation = self._input.param("skip_meta_validation", True)
-        skip_implicit_mapping_validation = True
+        #skip_implicit_mapping_validation = True
         skip_collection_key_validation = True
         if self._use_java_sdk:
-            skip_implicit_mapping_validation = self._input.param("skip_implicit_mapping_validation", False)
+            #skip_implicit_mapping_validation = self._input.param("skip_implicit_mapping_validation", False)
             skip_collection_key_validation = self._input.param("skip_collection_key_validation", False)
             skip_key_validation = True
         src_dcp_queue_drained = False
@@ -3908,10 +3908,10 @@ class XDCRNewBaseTest(unittest.TestCase):
                 except Exception as e:
                     # just log any exception thrown, do not fail test
                     self.log.error(e)
-                if not skip_implicit_mapping_validation :
-                    self.verify_mapping(src_cluster.get_master_node(), dest_cluster.get_master_node())
+                #if not skip_implicit_mapping_validation :
+                #    self.verify_mapping(src_cluster.get_master_node(), dest_cluster.get_master_node())
                 if not skip_collection_key_validation:
-                    self.verify_collection_doc_count(src_cluster, dest_cluster)
+                    self.verify_collection_doc_count(remote_cluster_ref.get_replications())
                 if not skip_key_validation:
                     try:
                         if len(src_cluster.get_nodes()) > 1:
