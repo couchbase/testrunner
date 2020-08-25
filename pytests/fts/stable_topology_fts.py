@@ -473,6 +473,20 @@ class StableTopFTS(FTSBaseTest):
         _, defn = index.get_index_defn()
         self.log.info(defn['indexDef'])
 
+    def test_metrics_endpoint_availability(self):
+        fts_node = self._cb_cluster.get_random_fts_node()
+        endpoint = self._input.param("endpoint", None)
+
+        self.load_data()
+        bucket = self._cb_cluster.get_bucket_by_name('default')
+        collection_index, tp = self.define_index_parameters_collection_related()
+        index = self.create_index(bucket, "default_index", collection_index=collection_index, type=tp)
+        self.wait_for_indexing_complete(self._num_items//2)
+
+        rest = RestConnection(self._cb_cluster.get_random_fts_node())
+        status, content = rest.get_rest_endpoint_data(endpoint, ip=fts_node.ip, port=fts_node.fts_port)
+        self.assertTrue(status, f"Endpoint {endpoint} is not accessible.")
+
     def update_index_during_large_indexing(self):
         """
             MB-22410 - Updating index with a large dirty write queue

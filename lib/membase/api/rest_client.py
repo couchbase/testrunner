@@ -694,6 +694,15 @@ class RestConnection(object):
         status, content, header = self._http_request(api, 'DELETE', headers=headers)
         return status
 
+    def get_rest_endpoint_data(self, endpoint=None, ip=None, port=None):
+        endpoint_base_url = "http://{0}:{1}/".format(ip, port)
+        api = str(endpoint_base_url) + str(endpoint)
+        print(f'Executing GET on: {api}')
+        headers = self._create_headers()
+        status, content, header = self._http_request(api, 'GET', headers=headers)
+        return status, content
+
+
     def delete_collection(self, bucket, scope, collection):
         api = self.baseUrl + 'pools/default/buckets/%s/collections/%s/%s' % (bucket, scope, collection)
         headers = self._create_headers()

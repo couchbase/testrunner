@@ -610,6 +610,34 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
 
         self._remove_all_fts_indexes()
 
+    def move_data_from_bucket_to_collection(self, bucket="default", scope='scope1', collection='collection1'):
+        query = f"INSERT INTO default:`{bucket}`.{scope}.{collection} (KEY UUID(), VALUE _vals) SELECT _vals FROM `{bucket}` _vals"
+        self.run_cbq_query(query)
+        query = f"delete from `{bucket}`"
+        self.run_cbq_query(query)
+
+    def test_n1ql_syntax_select_from_let_collection(self):
+        self.cbcluster = CouchbaseCluster(name='cluster', nodes=self.servers, log=self.log)
+        rest = self.get_rest_client(self.servers[0].rest_username, self.servers[0].rest_password)
+        rest.create_scope(bucket='beer-sample', scope='scope1')
+        rest.create_collection(bucket='beer-sample', scope='scope1', collection='collection1')
+        self.move_data_from_bucket_to_collection(bucket="beer-sample", scope='scope1', collection='collection1')
+
+        self._create_fts_index(index_name="idx_beer_sample_fts", doc_count=7303, source_name=self.sample_bucket,
+                               collection_index=True, _type="scope1.collection1")
+
+        n1ql_query = "select meta().id from {0} let res=true where search({1}, {{\"query\":{{\"field\": \"state\", " \
+                     "\"match\":\"California\"}},\"size\":10000}})=res".format("default:`beer-sample`.scope1.collection1",
+                                                                               "`beer-sample`.scope1.collection1")
+        fts_request = {"query": {"field": "state", "match": "California"}, "size": 10000}
+        n1ql_results = self.run_cbq_query(n1ql_query)['results']
+        total_hits, hits, took, status = rest.run_fts_query(index_name="idx_beer_sample_fts",
+                                                            query_json=fts_request)
+        comparison_results = self._compare_n1ql_results_against_fts(n1ql_results, hits)
+        self.assertEqual(comparison_results, "OK", comparison_results)
+
+        self._remove_all_fts_indexes()
+
     def test_n1ql_syntax_select_from_2_buckets(self):
         self.cbcluster = CouchbaseCluster(name='cluster', nodes=self.servers, log=self.log)
         self._create_fts_index(index_name="idx_beer_sample_fts", doc_count=7303, source_name=self.sample_bucket)
@@ -1380,10 +1408,12 @@ class N1qlFTSIntegrationPhase2Test(QueryTests):
             self.wait_for_all_indexes_online()
             self.sleep(10, "wait after indexes are online")
 
-    def _create_fts_index(self, index_name='', doc_count=0, source_name='', poll_interval=10, num_retries=30):
+    def _create_fts_index(self, index_name='', doc_count=0, source_name='', poll_interval=10, num_retries=30,
+                          collection_index=False, _type=None):
         fts_index_type = self.input.param("fts_index_type", "scorch")
 
-        fts_index = self.cbcluster.create_fts_index(name=index_name, source_name=source_name)
+        fts_index = self.cbcluster.create_fts_index(name=index_name, source_name=source_name,
+                                                    collection_index=collection_index, _type=_type)
         if fts_index_type == 'upside_down':
             fts_index.update_index_to_upside_down()
         else:
