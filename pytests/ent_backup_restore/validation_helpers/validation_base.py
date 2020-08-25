@@ -72,24 +72,32 @@ class BackupRestoreValidationBase:
                 if key not in extra:
                     extra[key] = []
                 extra[key].append(actual[key])
-        for expected_key in expected.keys():
+        """ from 7.0, there are 2 keys with value None """
+        keys_with_value_none = ["exclude_buckets", "include_buckets"]
+        for expected_key in list(expected.keys()):
             if expected_key in actual:
+                if expected_key in keys_with_value_none:
+                    continue
                 if not isinstance(expected[expected_key], dict) and not isinstance(expected[expected_key], list):
-                    if unicode(expected[expected_key]) != unicode(actual[expected_key]):
+                    if str(expected[expected_key]) != str(actual[expected_key]):
                         is_equal = False
                         if expected_key not in not_equal:
                             not_equal[expected_key] = {"expected": [], "actual": []}
                         not_equal[expected_key]["expected"].append(expected[expected_key])
                         not_equal[expected_key]["actual"].append(actual[expected_key])
                 elif isinstance(expected[expected_key], list):
-                    expected_list = expected[expected_key]
-                    actual_list = actual[expected_key]
-                    if set(expected_list) != set(actual_list):
+                    if actual[expected_key] and isinstance(actual[expected_key][0], dict):
+                        expected_data = expected[expected_key]
+                        actual_data = actual[expected_key]
+                    else:
+                        expected_data = set(expected[expected_key])
+                        actual_data = set(actual[expected_key])
+                    if expected_data != actual_data:
                         is_equal = False
                         if expected_key not in not_equal:
                             not_equal[expected_key] = {"expected": [], "actual": []}
-                        not_equal[expected_key]["expected"].extend(expected_list)
-                        not_equal[expected_key]["actual"].extend(actual_list)
+                        not_equal[expected_key]["expected"].extend(expected[expected_key])
+                        not_equal[expected_key]["actual"].extend(actual[expected_key])
                 elif isinstance(expected[expected_key], dict):
                     return BackupRestoreValidationBase.compare_dictionary(expected[expected_key], actual[expected_key],
                                                                           is_equal, not_equal, extra, not_present)
@@ -137,7 +145,7 @@ class BackupRestoreValidationBase:
         info, complete_map = data_collector.collect_data(servers, buckets, userId=servers[0].rest_username,
                                                          password=servers[0].rest_password, perNode=False,
                                                          getReplica=get_replica, mode=mode)
-        for bucket in complete_map.keys():
+        for bucket in list(complete_map.keys()):
             file_name = "{0}-{1}-{2}-{3}.json".format(bucket, "key_value", backup_type, backup_num)
             file_path = os.path.join(backup_validation_path, file_name)
             data = complete_map[bucket]
@@ -171,14 +179,14 @@ class BackupRestoreValidationBase:
         info, complete_map = data_collector.collect_data(servers, buckets, userId=servers[0].rest_username,
                                                          password=servers[0].rest_password, perNode=False,
                                                          mode=mode)
-        for bucket in complete_map.keys():
+        for bucket in list(complete_map.keys()):
             file_name = "{0}-{1}-{2}.json".format(bucket, "keys", backup_num)
             file_path = os.path.join(backup_validation_path, file_name)
-            keys = complete_map[bucket].keys()
+            keys = list(complete_map[bucket].keys())
             with open(file_path, 'w') as f:
                 json.dump({"keys": keys}, f)
 
-    def store_range_json(self, buckets, backup_num, backup_validation_path, merge=False):
+    def store_range_json(self, buckets, backup_num, backup_validation_path, objstore_provider, merge=False):
         rest_conn = RestConnection(self.backupset.cluster_host)
         shell = RemoteMachineShellConnection(self.backupset.backup_host)
         for bucket in buckets:
@@ -186,15 +194,23 @@ class BackupRestoreValidationBase:
             bucket_uuid = bucket_stats["uuid"]
             from_file_name = self.backupset.directory + "/" + self.backupset.name + "/" + \
                              self.backups[backup_num - 1] + "/" + bucket.name + "-" + bucket_uuid + "/" + "range.json"
+
+            if self.objstore_provider:
+                output = self.objstore_provider.get_json_object(from_file_name)
+            else:
+                output, error = shell.execute_command("cat " + from_file_name)
+                output = [x.strip(' ') for x in output]
+                if output:
+                    output = " ".join(output)
+
             if merge:
                 to_file_name = "{0}-{1}-{2}.json".format(bucket, "range", "merge")
             else:
                 to_file_name = "{0}-{1}-{2}.json".format(bucket, "range", backup_num)
+
             to_file_path = os.path.join(backup_validation_path, to_file_name)
-            output, error = shell.execute_command("cat " + from_file_name)
-            output = [x.strip(' ') for x in output]
-            if output:
-                output = " ".join(output)
+
             with open(to_file_path, 'w') as f:
                 json.dump(output, f)
+
         shell.disconnect()

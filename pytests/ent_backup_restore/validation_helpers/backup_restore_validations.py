@@ -13,7 +13,7 @@ from remote.remote_util import RemoteMachineShellConnection
 class BackupRestoreValidations(BackupRestoreValidationBase):
     def __init__(self, backupset, cluster, restore_cluster, bucket,
                  backup_validation_path, backups, num_items,
-                 vbuckets):
+                 vbuckets, objstore_provider):
         BackupRestoreValidationBase.__init__(self)
         self.backupset = backupset
         self.cluster = cluster
@@ -23,6 +23,7 @@ class BackupRestoreValidations(BackupRestoreValidationBase):
         self.backups = backups
         self.num_items = num_items
         self.vbuckets = vbuckets
+        self.objstore_provider = objstore_provider
         self.log = logger.Logger.get_logger()
 
     def validate_backup_create(self):
@@ -31,17 +32,31 @@ class BackupRestoreValidations(BackupRestoreValidationBase):
         Validates the backup metadata using backup-meta.json
         :return: status and message
         """
-        remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
-        info = remote_client.extract_remote_info().type.lower()
-        if info == 'linux' or info == 'mac':
-            command = "ls -R {0}/{1}".format(self.backupset.directory, self.backupset.name)
-            o, e = remote_client.execute_command(command)
-        elif info == 'windows':
-            o = remote_client.list_files("{0}/{1}".format(self.backupset.directory, self.backupset.name))
-        if not o and len(o) != 2 and o[1] != "backup-meta.json":
-            return False, "Backup create did not create backup-meta file."
-        remote_client.disconnect()
-        files_validations = BackupRestoreFilesValidations(self.backupset)
+        if self.objstore_provider:
+            keys = self.objstore_provider.list_objects()
+
+            # We expect to have seen three files created
+            # .backup
+            # logs/backup-0.log
+            # repo/backup-meta.json
+            if len(keys) != 3:
+                return False, "config did not create the expected number of files"
+
+            if "{0}/{1}/backup-meta.json".format(self.backupset.directory, self.backupset.name) not in keys:
+                return False, "config did not create the backup-meta.json file"
+        else:
+            remote_client = RemoteMachineShellConnection(self.backupset.backup_host)
+            info = remote_client.extract_remote_info().type.lower()
+            if info == 'linux' or info == 'mac':
+                command = "ls -R {0}/{1}".format(self.backupset.directory, self.backupset.name)
+                o, e = remote_client.execute_command(command)
+            elif info == 'windows':
+                o = remote_client.list_files("{0}/{1}".format(self.backupset.directory, self.backupset.name))
+            if not o and len(o) != 2 and o[1] != "backup-meta.json":
+                return False, "Backup create did not create backup-meta file."
+            remote_client.disconnect()
+
+        files_validations = BackupRestoreFilesValidations(self.backupset, self.objstore_provider)
         status, msg = files_validations.validate_backup_meta_json()
         if status:
             msg += "\nBackup create validation success."
@@ -88,7 +103,7 @@ class BackupRestoreValidations(BackupRestoreValidationBase):
                 try:
                     with open(kv_file_path, 'r') as f:
                         backedup_kv = json.load(f)
-                except Exception, e:
+                except Exception as e:
                     raise e
             data_collector = DataCollector()
             info, restored_data = data_collector.collect_data(self.restore_cluster,
@@ -131,62 +146,144 @@ class BackupRestoreValidations(BackupRestoreValidationBase):
         :param output: list command output
         :return: status and message
 
-        TODO: this function validates list command output for 1 backup / 1 bucket only
+        TODO: this function validates list command output for 1 backup // 1 bucket only
          - need to be enhanced for multiple backups
         """
         backup_name = False
         bucket_name = False
         backup_folder_timestamp = False
         items_count = False
-        shard_count = False
+        bk_type = ["FULL"]
         items = 0
-        for line in output:
-            if self.backupset.name in line:
-                backup_name = True
-            if str(self.buckets[0].name) in line:
-                bucket_name = True
-            if self.backups[0] in line:
-                backup_folder_timestamp = True
-            if "+ data" in line:
-                split = line.split(" ")
-                split = [s for s in split if s]
-                if int(split[1]) == self.num_items:
-                    items_count = True
-            if "shard" in line.lower():
-                split = line.split(" ")
-                split = [s for s in split if s]
-                items += int(split[1])
-        if items == self.num_items:
-            shard_count = True
+        if output and output[0]:
+            bk_info = json.loads(output[0])
+            bk_name = bk_info["name"]
+            bk_info = bk_info["repos"]
+        else:
+            return False, "No output content"
+
+        self.log.info("list is deprecated from 7.0.0.  Use `info` instead")
+        if self.backupset.name in bk_name: #bk_info[0]["backups"][0]["date"]:
+            backup_name = True
+        if str(self.buckets[0].name) in bk_info[0]["backups"][0]["buckets"][0]["name"]:
+            bucket_name = True
+        if self.backups[0] in bk_info[0]["backups"][0]["date"]:
+            backup_folder_timestamp = True
+        if self.num_items == bk_info[0]["backups"][0]["buckets"][0]["items"]:
+            items_count = True
         if not backup_name:
-            return False, "Expected Backup name not found in list command output"
+            return False, "Expected Backup name not found in info command output"
         if not bucket_name:
-            return False, "Expected Bucket name not found in list command output"
+            return False, "Expected Bucket name not found in info command output"
         if not backup_folder_timestamp:
-            return False, "Expected folder timestamp not found in list command output"
+            return False, "Expected folder timestamp not found in info command output"
         if not items_count:
-            return False, "Items count mismatch in list command output"
-        if not shard_count:
-            return False, "Shard count mismatch in list command output"
-        return True, "List command validation success"
+            return False, "Items count mismatch in info command output"
+        if bk_info[0]["backups"][0]["type"] not in bk_type:
+            return False, "Backup complete does not have value"
+        if not bk_info[0]["backups"][0]["complete"]:
+            return False, "Backup type is not in info command output"
+        return True, "Info command validation success"
+
+    def validate_backup_info(self, output, scopes=None, collections=None,
+                                         num_backup=1, bucket_items=None):
+        """
+        Validates info command output with --all and without --all
+        :param output: info command output
+        :return: status and message
+        """
+        backup_name = False
+        bucket_name = False
+        backup_folder_timestamp = False
+        items_count = False
+        first_backup_full = False
+        after_first_backup_incr = False
+        bk_type = ["FULL"]
+        items = 0
+        if output and output[0]:
+            if self.backupset.info_to_json:
+                bk_info = json.loads(output[0])
+            else:
+                """ remove empty element """
+                output = list(filter(None, output))
+                """ remove space in element """
+                output = [x.replace(' ', '') for x in output]
+            bk_name = bk_info["name"]
+            bk_scopes = bk_info["backups"][0]["buckets"][0]["scopes"]
+        else:
+            return False, "No output content"
+
+        if self.backupset.name in bk_name:
+            backup_name = True
+        for idx, val in enumerate(bk_info["backups"]):
+            if self.backups[idx] in bk_info["backups"][idx]["date"]:
+                backup_folder_timestamp = True
+            if self.num_items == bk_info["backups"][idx]["buckets"][0]["items"]:
+                items_count = True
+            if idx == 0:
+                if bk_info["backups"][idx]["type"] == "FULL":
+                    first_backup_full = True
+            if idx > 0:
+                if bk_info["backups"][idx]["type"] == "INCR":
+                    after_first_backup_incr = True
+            if idx > len(self.buckets) - 1:
+                continue
+            elif str(self.buckets[idx].name) in bk_info["backups"][idx]["buckets"][0]["name"]:
+                bucket_name = True
+
+        if scopes:
+            for scope_id in bk_scopes:
+                if bk_scopes[scope_id]["name"] not in scopes:
+                    return False, "scope {0} not in backup repo"\
+                                   .format(bk_scopes[scope_id]["name"])
+                if collections:
+                    for collection in list(bk_scopes[scope_id]["collections"].values()):
+                        if collection["name"] not in collections:
+                            raise("collection not in backup")
+                    if self.backupset.load_to_collection:
+                        if str(self.backupset.load_scope_id[2:]) in list(bk_scopes[scope_id]["collections"].keys()):
+                            self.log.info("check items in collection")
+                            if bk_scopes[scope_id]["collections"][str(self.backupset.load_scope_id[2:])]["mutations"] != self.num_items:
+                                raise("collection items not in backup")
+
+        if not backup_name:
+            return False, "Expected Backup name not found in info command output"
+        if not bucket_name:
+            return False, "Expected Bucket name not found in info command output"
+        if not backup_folder_timestamp:
+            return False, "Expected folder timestamp not found in info command output"
+        if not items_count:
+            return False, "Items count mismatch in info command output"
+        if not first_backup_full:
+            return False, "First backup is not a full backup"
+        if len(bk_info["backups"]) >= 2 and not after_first_backup_incr:
+            return False, "second backup is not a incr backup"
+        if not bk_info["backups"][0]["complete"]:
+            return False, "Backup type is not in info command output"
+        return True, "Info command validation success"
+
 
     def validate_compact_lists(self, output_before_compact, output_after_compact, is_approx=False):
         size_match = True
-        for line1, line2 in zip(output_before_compact, output_after_compact):
-            split1 = line1.split(" ")
-            split1 = [s for s in split1 if s]
-            split2 = line2.split(" ")
-            split2 = [s for s in split2 if s]
-            size1 = self._convert_to_kb(split1[0], is_approx)
-            size2 = self._convert_to_kb(split2[0], is_approx)
-            if is_approx:
-                if size1 != size2:
-                    size_match = False
-                    break
-            else:
-                if size1 < size2:
-                    size_match = False
-                    break
+        if output_before_compact and output_before_compact[0]:
+            output_before_compact = json.loads(output_before_compact[0])
+            output_before_compact = output_before_compact["repos"]
+        else:
+            return False, "No output_before_compact content"
+
+        if output_after_compact and output_after_compact[0]:
+            output_after_compact = json.loads(output_after_compact[0])
+            output_after_compact = output_after_compact["repos"]
+        else:
+            return False, "No output_after_compact content"
+        size1 = output_before_compact[0]["size"]
+        size2 = output_after_compact[0]["size"]
+        if is_approx:
+            if size1 != size2:
+                size_match = False
+        else:
+            if size1 < size2:
+                size_match = False
         if not size_match:
             return False, "Size comparison failed after compact - before: {0} after: {1}".format(line1, line2)
         return True, "Compact command validation success"
@@ -238,7 +335,7 @@ class BackupRestoreValidations(BackupRestoreValidationBase):
                     with open(start_file_path, 'r') as f:
                         start_json = json.load(f)
                         start_json = json.loads(start_json)
-                except Exception, e:
+                except Exception as e:
                     raise e
             end_file_name = "{0}-{1}-{2}.json".format(bucket.name, "range", self.backupset.end)
             end_file_path = os.path.join(self.backup_validation_path, end_file_name)
@@ -248,7 +345,7 @@ class BackupRestoreValidations(BackupRestoreValidationBase):
                     with open(end_file_path, 'r') as f:
                         end_json = json.load(f)
                         end_json = json.loads(end_json)
-                except Exception, e:
+                except Exception as e:
                     raise e
             merge_file_name = "{0}-{1}-{2}.json".format(bucket.name, "range", "merge")
             merge_file_path = os.path.join(self.backup_validation_path, merge_file_name)
@@ -258,7 +355,7 @@ class BackupRestoreValidations(BackupRestoreValidationBase):
                     with open(merge_file_path, 'r') as f:
                         merge_json_str = json.load(f)
                         merge_json = json.loads(merge_json_str)
-                except Exception, e:
+                except Exception as e:
                     raise e
 
             if not start_json or not end_json or not merge_json:
