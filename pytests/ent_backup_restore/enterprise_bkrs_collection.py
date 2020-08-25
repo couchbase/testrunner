@@ -138,8 +138,8 @@ class EnterpriseBackupRestoreCollectionTest(EnterpriseBackupRestoreCollectionBas
                             for scope in bk_scopes:
                                 if scope == "_default" or not scope:
                                     continue
-                                 self.log.info("get scope id of scope: {0}".format(scope))
-                                 scopes_id.append(self.get_scopes_id_cluster_host(scope))
+                                self.log.info("get scope id of scope: {0}".format(scope))
+                                scopes_id.append(self.get_scopes_id_cluster_host(scope))
                             self.backupset.load_scope_id = scopes_id[0]
                     col_cmd = " -c {0} ".format(self.backupset.load_scope_id)
                 self.load_all_buckets(self.backupset.cluster_host, ratio=0.1,
