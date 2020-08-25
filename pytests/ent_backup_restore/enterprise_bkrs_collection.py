@@ -423,8 +423,6 @@ class EnterpriseBackupRestoreCollectionTest(EnterpriseBackupRestoreCollectionBas
                                          seqno_compare_function=">=",
                                          expected_error=self.expected_error)
 
-
-
     def _kill_cbbackupmgr(self):
         """
             kill all cbbackupmgr processes

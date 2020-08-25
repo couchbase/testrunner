@@ -102,10 +102,25 @@ class EnterpriseBackupRestoreCollectionBase(BaseTestCase):
         self.collections_only = self.input.param("collections_only", False)
         self.drop_scopes = self.input.param("drop_scopes", False)
         self.drop_collections = self.input.param("drop_collections", False)
+        self.check_scopes = self.input.param("check_scopes", False)
+        self.check_scopes_details = self.input.param("check_scopes_details", False)
+        self.check_collections = self.input.param("check_collections", False)
+        self.check_collections_details = self.input.param("check_collections_details", False)
+        self.check_collection_enable = self.input.param("check_collection_enable", True)
+        self.json_output = self.input.param("json_output", False)
+        self.load_json_format = self.input.param("load_json_format", False)
+        self.load_to_scopes = self.input.param("load_to_scopes", False)
+        self.load_to_collections = self.input.param("load_to_collections", False)
+        self.load_to_default_scopes = self.input.param("load_to_scopes", False)
+        self.cbwg_no_value_in_col_flag = self.input.param("cbwg_no_value_in_col_flag", False)
+        self.cbwg_invalid_value_in_col_flag = self.input.param("cbwg_invalid_value_in_col_flag", False)
+        self.load_to_default_collections = self.input.param("load_to_collections", False)
         self.backupset.auto_create_buckets = self.input.param("auto_create_buckets", False)
         self.backupset.create_restore_buckets = self.input.param("create_restore_buckets", True)
         self.backupset.exist_scopes_in_restore_buckets = self.input.param("exist_scopes_in_restore_buckets", False)
         self.backupset.exist_collections_in_restore_buckets = self.input.param("exist_collections_in_restore_buckets", False)
+        self.backupset.custom_scopes = self.input.param("custom_scopes", False)
+        self.backupset.custom_collections = self.input.param("custom_collections", False)
 
         self.debug_logs = self.input.param("debug-logs", False)
         self.show_bk_list = self.input.param("show_bk_list", True)
@@ -2548,6 +2563,8 @@ class Backupset:
         self.create_restore_buckets = True
         self.exist_scopes_in_restore_buckets = False
         self.exist_collections_in_restore_buckets = False
+        self.custom_scopes = False
+        self.custom_collections = False
 
         # Common configuration which is to be shared accross cloud providers
         self.objstore_access_key_id = ""

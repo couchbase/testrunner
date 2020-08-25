@@ -43,9 +43,9 @@ class CollectionsStats(object):
         scope_id = self.get_scope_id(bucket, scope, cbstats)
         for stat in cbstats:
             stat = stat.replace(' ', '')
-            if ":name:" + collection in stat:
-                if stat.split(":")[0] == scope_id:
-                    return stat.split(":name:")[0]
+            if ":name:" + collection in str(stat):
+                if stat.split(":")[0] == scope_id.strip():
+                    return stat.split(":name:")[0].split(":")[1]
         return None
 
     def get_scope_item_count(self, bucket, scope, node=None):

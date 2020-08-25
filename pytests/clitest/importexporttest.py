@@ -780,6 +780,109 @@ class ImportExportTests(CliBaseTest):
         options = {"load_doc": False, "docs": "1000"}
         return self._common_imex_test("import", options)
 
+    def test_export_with_collection(self):
+        """
+        1. Creates specified bucket on the cluster and loads it with given number of items
+        2. Export data and validates it
+        """
+        if self.custom_scopes:
+            self.create_scope()
+        if self.custom_collections:
+            self.create_collection(self.col_per_scope)
+        scopes = self.get_bucket_scope()
+        scopes_id = {}
+        for scope in scopes:
+            if scope == "_default" and self.custom_scopes:
+                scopes.remove(scope)
+                continue
+            scopes_id[scope] = (self.get_scopes_id(scope))
+        """ get collection stats """
+        collections, error = self.get_collection_names()
+        url_format = ""
+        secure_port = ""
+        secure_conn = ""
+        if self.secure_conn:
+            # bin_path, cert_path, user, password, server_cert
+            cacert = self.shell.get_cluster_certificate_info(self.cli_command_path,
+                                                             self.tmp_path_raw,
+                                                             "Administrator",
+                                                             "password",
+                                                             self.master)
+            secure_port = "1"
+            url_format = "s"
+            if not self.no_cacert:
+                secure_conn = "--cacert %s" % cacert
+            if self.no_ssl_verify:
+                secure_conn = "--no-ssl-verify"
+        col_cmd = " -j "
+        self.load_scope_name = None
+        if self.load_to_collection:
+            self.load_scope_name = scopes[0]
+            for collection in collections:
+                if self.load_scope_name in collection:
+                  self.collection_id = self.get_collections_id(self.load_scope_name, collection)
+            col_cmd += " -c {0}".format(self.collection_id)
+        self.sleep(10)
+        self.load_all_buckets(self.master, ratio=0.1,
+                                             command_options=col_cmd)
+        shell = RemoteMachineShellConnection(self.master)
+        if self.relative_path:
+            export_file = "~/export{0}/".format(self.master.ip) + "default"
+            shell.execute_command("rm -rf ~/export{0}".format(self.master.ip))
+            shell.execute_command("mkdir ~/export{0}".format(self.master.ip))
+        else:
+            shell.execute_command("rm -rf {0}export{1}".format(self.tmp_path, self.master.ip))
+            shell.execute_command("mkdir {0}export{1}".format(self.tmp_path, self.master.ip))
+            export_file = self.tmp_path + "export{0}/".format(self.master.ip) + "default"
+        ex_cmd_str = "%scbexport%s %s -c http%s://%s:%s8091 -u Administrator -p password " \
+                                  " -b %s -f %s %s -o %s -t 4"\
+                                  % (self.cli_command_path, self.cmd_ext,
+                                     self.imex_type, url_format, self.master.ip, secure_port,
+                                     "default", self.format_type, secure_conn, export_file)
+        if self.custom_scopes:
+            ex_cmd_str += " --scope-field {0}".format(self.load_scope_name)
+        output, error = shell.execute_command(ex_cmd_str)
+        if not self._check_output("successfully", output):
+            if self.should_fail:
+                self.log.info("Test failed as expected")
+                return
+            elif self.no_cacert:
+                self.log.info("Test failed as expected")
+                return
+            else:
+                self.fail("Failed to export data.")
+        if self.load_to_collection:
+            output, error = shell.execute_command("cat {0} | grep {1}".format(export_file,
+                                                                          self.load_scope_name))
+            if not self._check_output(self.load_scope_name, output):
+                self.fail("Failed to export collection data")
+
+        if self.custom_scopes:
+            if self.custom_collections and not self._check_output("scope", output):
+                raise("Failed to export scope")
+            else:
+                self.log.info("Found scope in export file")
+        if self.custom_collections:
+            if not self._check_output("collection", output):
+                raise("Failed to export collection")
+            else:
+                self.log.info("Found collection in export file")
+
+    def test_import_with_collection(self):
+        """
+        1. Creates specified bucket on the cluster
+        2. Import data and validates it
+        """
+        if self.custom_scopes:
+            self.create_scope()
+        if self.custom_collections:
+            self.create_collection(self.col_per_scope)
+        self.import_file = self.input.param("import_file", None)
+        options = {"load_doc": False, "docs": "1000"}
+        self._common_imex_test("import", options)
+        scopes = self.get_bucket_scope()
+
+
     def _common_imex_test(self, cmd, options):
         username = self.input.param("username", None)
         password = self.input.param("password", None)
@@ -1064,6 +1167,8 @@ class ImportExportTests(CliBaseTest):
                                           limit_lines, skip_lines,
                                           omit_empty, infer_types,
                                           secure_conn, json_invalid_errors_file)
+                    if self.custom_scopes and self.custom_collections:
+                        imp_cmd_str += " --scope-collection-exp scope1.mycollection_scope1_0 "
                     print(("\ncommand format: ", imp_cmd_str))
                     if self.dgm_run and self.active_resident_threshold:
                         """ disable auto compaction so that bucket could

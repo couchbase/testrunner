@@ -4389,7 +4389,7 @@ class RemoteMachineShellConnection(KeepRefs):
     def execute_cbstats(self, bucket, command, keyname="", vbid=0,
                                       cbadmin_user="cbadminbucket",
                                       cbadmin_password="password",
-                                      print_results=False):
+                                      print_results=False, options=""):
         cbstat_command = "%scbstats" % (LINUX_COUCHBASE_BIN_PATH)
         if self.nonroot:
             cbstat_command = "/home/%s%scbstats" % (self.username,
@@ -4401,17 +4401,19 @@ class RemoteMachineShellConnection(KeepRefs):
             cbstat_command = "%scbstats" % (MAC_COUCHBASE_BIN_PATH)
 
         if command != "key" and command != "raw":
-            command = "%s %s:11210 %s -u %s -p %s -b %s " % (cbstat_command,
+            command = "%s %s:11210 %s -u %s -p %s -b %s %s " % (cbstat_command,
                                                              self.ip, command,
                                                              cbadmin_user,
                                                              cbadmin_password,
-                                                             bucket.name)
+                                                             bucket.name,
+                                                             options)
         else:
-            command = "%s %s:11210 %s -u %s -p %s %s %s " % (cbstat_command,
+            command = "%s %s:11210 %s -u %s -p %s %s %s %s " % (cbstat_command,
                                                              self.ip, command,
                                                              cbadmin_user,
                                                              cbadmin_password,
-                                                             keyname, vbid)
+                                                             keyname, vbid,
+                                                             options)
 
 
         output, error = self.execute_command(command=command, debug=False)
