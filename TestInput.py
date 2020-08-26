@@ -66,7 +66,7 @@ class TestInput(object):
             return TestInput._parse_param(self.cbbackupmgr[name])
         if len(args) == 1:
             return args[0]
-        raise Exception(f"Parameter '{name}' must be set in the test configuration")
+        raise Exception("Parameter '{}' must be set in the test configuration".format(name))
 
     @staticmethod
     def _parse_param(value):

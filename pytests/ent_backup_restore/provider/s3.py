@@ -12,7 +12,7 @@ class S3(provider.Provider):
         """Create a new S3 provider which allows interaction with S3 masked behind the common 'Provider' interface. All
         required parameters should be those parsed from the ini.
         """
-        super().__init__(access_key_id, bucket, endpoint, region, secret_access_key, staging_directory)
+        super(S3, self).__init__(access_key_id, bucket, endpoint, region, secret_access_key, staging_directory)
 
         # boto3 will raise an exception if given an empty string as the endpoint_url so we must construct a kwargs
         # dictionary and conditionally populate it.

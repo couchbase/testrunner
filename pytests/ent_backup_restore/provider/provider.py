@@ -4,6 +4,7 @@ import abc
 
 class Provider():
     __metaclass__ = abc.ABCMeta
+
     def __init__(self, access_key_id, bucket, endpoint, region, secret_access_key, staging_directory):
         """Instantiate a new 'Provider' object. Should only be created by implementing super classes. Defines all the
         required shared functionality between cloud providers.

@@ -230,6 +230,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.backupset.disable_views = self.input.param("disable-views", False)
         self.backupset.disable_gsi_indexes = self.input.param("disable-gsi-indexes", False)
         self.backupset.disable_ft_indexes = self.input.param("disable-ft-indexes", False)
+        self.backupset.disable_ft_alias = self.input.param("disable-ft-alias", False)
+        self.backupset.disable_analytics = self.input.param("disable-analytics", False)
         self.backupset.disable_data = self.input.param("disable-data", False)
         self.backupset.disable_conf_res_restriction = self.input.param("disable-conf-res-restriction", None)
         self.backupset.force_updates = self.input.param("force-updates", False)
@@ -295,7 +297,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         self.backupset.s3_force_path_style = self.input.cbbackupmgr_param('s3_force_path_style', False)
 
         # The setup/teardown is provider specific, this is hidden behind the 'Provider' abstract class
-        provider = self.input.param("objstore_provider", "")
+        self.objstore_provider = None
+        provider = self.input.param("objstore_provider", None)
         if provider == "s3":
             self.objstore_provider = S3(self.backupset.objstore_access_key_id, self.backupset.objstore_bucket,
                                         self.backupset.objstore_endpoint, self.backupset.objstore_region,
@@ -304,6 +307,9 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
 
         # We run in a separate branch so when we add more providers the setup will be run by default
         if provider:
+            self.objstore_provider.setup()
+
+            self.backupset.directory = "archive-{}".format(self.master.ip)
             self.objstore_provider.setup()
 
         self.validation_helper = BackupRestoreValidations(self.backupset,
@@ -413,7 +419,8 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
                     self.fail(e)
 
     def backup_create(self, del_old_backup=True):
-        args= "--repo {} ".format(self.backupset.name)
+        args = "config --archive {}{} ".format(self.objstore_provider.schema_prefix() + self.backupset.objstore_bucket + '/' if self.objstore_provider else '', self.backupset.directory)
+        args += "--repo {} ".format(self.backupset.name)
         args += "{} ".format('--obj-staging-dir ' + self.backupset.objstore_staging_directory if self.objstore_provider else '')
         args += "{} ".format('--obj-endpoint ' + self.backupset.objstore_endpoint if self.objstore_provider and self.backupset.objstore_endpoint else '')
         args += "{} ".format('--obj-region ' + self.backupset.objstore_region if self.objstore_provider and self.backupset.objstore_region else '')
@@ -978,7 +985,7 @@ class EnterpriseBackupRestoreBase(BaseTestCase):
         bk_dir = "{}{}".format(self.backupset.objstore_staging_directory + '/' if self.objstore_provider else '', self.backupset.directory)
         if ipv6_raw_ip:
             bk_dir = bk_raw_ipv6_dir
-        command = "grep 'Transfer plan finished successfully' " + bk_dir + \
+        command = "grep 'Restore completed successfully' " + bk_dir + \
                   "/logs/{0}".format(bk_log_file_name)
         output, error = remote_client.execute_command(command)
         if self.debug_logs:
