@@ -83,15 +83,6 @@ class EventingBucket(EventingBaseTest):
                                                                        bucket_params=bucket_params))
         for task in tasks:
             task.result()
-        n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
-        n1ql_helper = N1QLHelper(shell=self.shell, max_verify=self.max_verify, buckets=self.buckets,
-                                      item_flag=self.item_flag, n1ql_port=self.n1ql_port,
-                                      full_docs_list=self.full_docs_list, log=self.log, input=self.input,
-                                      master=self.master, use_rest=True)
-        for bucket in self.buckets:
-            if bucket.name != "metadata":
-                query="CREATE PRIMARY INDEX ON %s " % bucket.name
-                n1ql_helper.run_cbq_query(query=query, server=n1ql_node)
         try:
             # load data
             self.load(self.gens_load, buckets=self.src_bucket, flag=self.item_flag, verify_data=False,
@@ -485,24 +476,6 @@ class EventingBucket(EventingBaseTest):
         self.verify_eventing_results(self.function_name, 2016*self.docs_per_day, skip_stats_validation=True)
         countMap = self.get_buckets_itemCount()
         finalDoc=countMap["metadata"]
-        if(initalDoc !=finalDoc):
-            n1ql_node = self.get_nodes_from_services_map(service_type="n1ql")
-            n1ql_helper = N1QLHelper(shell=self.shell, max_verify=self.max_verify, buckets=self.buckets,
-                                          item_flag=self.item_flag, n1ql_port=self.n1ql_port,
-                                          full_docs_list=self.full_docs_list, log=self.log, input=self.input,
-                                          master=self.master, use_rest=True)
-            n1ql_helper.create_primary_index(using_gsi=True, server=n1ql_node)
-            query1="select meta().id from metadata where meta().id not like 'eventing::%::vb::%'" \
-                  " and meta().id not like 'eventing::%:rt:%' and meta().id not like 'eventing::%:sp'"
-            result1=n1ql_helper.run_cbq_query(query=query1, server=n1ql_node)
-            print(result1)
-            query2="select meta().id from metadata where meta().id like 'eventing::%:sp' and sta != stp"
-            result2 = n1ql_helper.run_cbq_query(query=query2, server=n1ql_node)
-            print(result2)
-            query3="select meta().id from meta where meta().id like 'eventing::%:rt:%'"
-            result3=n1ql_helper.run_cbq_query(query=query3, server=n1ql_node)
-            print(result3)
-            self.fail("initial doc in metadata {} is not equals to final doc in metadata {}".format(initalDoc, finalDoc))
         self.undeploy_and_delete_function(body)
 
     #MB-30973

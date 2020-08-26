@@ -8,7 +8,11 @@ function OnUpdate(doc, meta) {
 function OnDelete(meta) {
     var context = {docID : meta.id};
     try{
+    while(true){
     var cancelled=cancelTimer(timerCallback,meta.id);
+    if(cancelled)
+        break;
+    }
     log("is timer cancelled:",cancelled," for:",meta.id);
     if(cancelled){
             try{
