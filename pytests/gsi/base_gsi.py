@@ -46,7 +46,6 @@ class BaseSecondaryIndexingTests(QueryTests):
         self.test_bucket = self.input.param('test_bucket', 'test_bucket')
         self.enable_dgm = self.input.param('enable_dgm', False)
         self.rest = RestConnection(self.master)
-        self.buckets = self.rest.get_buckets()
         self.collection_rest = CollectionsRest(self.master)
         self.collection_cli = CollectionsCLI(self.master)
         self.stat = CollectionsStats(self.master)
