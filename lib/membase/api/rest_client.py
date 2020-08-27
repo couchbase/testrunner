@@ -4753,7 +4753,7 @@ class RestConnection(object):
                 GET eventing config
     '''
     def get_eventing_config(self):
-        authorization = self.get_authorization(self.username, self.password)
+        authorization = base64.encodestring('%s:%s' % (self.username, self.password))
         url = "_p/event/api/v1/config"
         api = self.baseUrl + url
         headers = {'Content-type': 'application/json', 'Authorization': 'Basic %s' % authorization}
