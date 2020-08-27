@@ -221,9 +221,6 @@ class QueryTests(BaseTestCase):
                 self.collections_helper.create_scope(bucket_name="default",scope_name=self.scope)
                 self.collections_helper.create_collection(bucket_name="default",scope_name=self.scope,collection_name=self.collections[0])
                 self.collections_helper.create_collection(bucket_name="default",scope_name=self.scope,collection_name=self.collections[1])
-                #self.run_cbq_query(query="CREATE scope default:default.{0}".format(self.scope))
-                #self.run_cbq_query(query="CREATE COLLECTION default:default.{0}.{1}".format(self.scope, self.collections[0]))
-                #self.run_cbq_query(query="CREATE COLLECTION default:default.{0}.{1}".format(self.scope, self.collections[1]))
                 if not self.use_advice:
                     self.run_cbq_query(query="CREATE INDEX idx1 on default:default.{0}.{1}(name)".format(self.scope, self.collections[0]))
                     self.run_cbq_query(query="CREATE INDEX idx2 on default:default.{0}.{1}(name)".format(self.scope, self.collections[1]))

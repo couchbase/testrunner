@@ -457,6 +457,25 @@ class AdvancedQueryTests(QueryTests):
         self.assertTrue('{"name": "old hotel"},{"name": "old hotel"},{"name": "old hotel"}' in o,
                         "Results are incorrect : {0}".format(o))
 
+    def test_query_collection(self):
+        queries = ['select name from default:default.test.test1 b where b.name="old hotel"']
+        o = self.execute_commands_inside(self.cbqpath, '', queries, '', '', 'default', '')
+        self.assertTrue('{"name": "old hotel"},{"name": "old hotel"},{"name": "old hotel"}' in o,
+                        "Results are incorrect : {0}".format(o))
+
+    def test_context_join(self):
+        queries = ['\SET -query_context default:default.test;',
+                   'select * from default:default.test.test1 t1 INNER JOIN test2 t2 ON t1.name = t2.name where t1.name = "new hotel"']
+        o = self.execute_commands_inside(self.cbqpath, '', queries, '', '', 'default', '')
+        self.assertTrue('{"t1": {"name": "new hotel","type": "hotel"},"t2": {"name": "new hotel","type": "hotel"}}' in o,
+                        "Results are incorrect : {0}".format(o))
+
+    def test_ddl_collections(self):
+        queries = ['\SET -query_context default:default.test;',
+                   'INSERT INTO {0}'.format(self.collections[0]) + '(KEY, VALUE) VALUES ("key10", { "type" : "hotel", "name" : "new hotel" })']
+        o = self.execute_commands_inside(self.cbqpath, '', queries, '', '', 'default', '')
+        self.assertTrue('"mutationCount": 1' in o)
+
     def test_batch_queries(self):
         queries = ['\SET -query_context default.test;',
                    'select name from test1 b where b.name="old hotel";','select name from test2 b1 where b1.name="new hotel";']
