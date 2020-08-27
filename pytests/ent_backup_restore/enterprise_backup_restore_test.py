@@ -3727,6 +3727,44 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         self.assertTrue("Backup Repository `backup` not found" in output[-1], "Expected error message not thrown")
         self.log.info("Expected error message thrown")
 
+    def test_backup_logs_for_keywords(self):
+        """
+        Inspired by CBQE-6034.
+
+        1. Perform a Backup.
+        2. Scan backup logs for bad keywords.
+
+        Keywords:
+        1. CBQE-6034/MB-41131 - Check cbbackupmgr's build version/hash set correctly at build time 
+        by scanning for 'cbbackupmgr version Unknown' in the logs.
+        2. Scan for 'panic' in the logs.
+        """
+        # Populate the default bucket on self.master with documents
+        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
+        self._load_all_buckets(self.master, gen, "create", 0)
+
+        # Create backup archive and repository.
+        self.backup_create()
+
+        # Perform backup.
+        self.backup_cluster()
+
+        # Keywords to fail on (Keyword: str, at_start: bool, lines_before: int, lines_after: int)
+        bad_keywords = [
+                ("cbbackupmgr version Unknown", False, 0,  0), # Checks cbbackupmgr build version/hash set correctly at build time
+                (                      "panic",  True, 0, 12)  # Checks for the panic keyword at start of sentence
+        ]
+
+        # Scan logs for keywords in bad_keywords
+        for keyword, at_start, lines_before, lines_after in bad_keywords:
+
+            found, output, error = \
+                    self._check_output_in_backup_logs(keyword, at_start = at_start, lines_before = lines_before, lines_after = lines_after)
+
+            if found:
+                self.fail(f"Found bad keyword(s) '{keyword}' in backup logs:\n" + "\n".join(output))
+
+
     """ cbbackup restore enhancement only from vulcan """
     def test_cbbackupmgr_collect_logs(self):
         """
