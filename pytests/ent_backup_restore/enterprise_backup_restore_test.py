@@ -4144,18 +4144,6 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         if len(cluster) > 1:
             self.cluster.async_rebalance(cluster, cluster[1:], []).result()
 
-        # Create buckets
-        no_of_buckets, bucket_ram_quota = 3, 256
-        rest_connection = RestConnection(self.backupset.cluster_host)
-        buckets = ["bucket{}".format(bucket_no) for bucket_no in range(0, no_of_buckets)]
-        for bucket in buckets:
-            rest_connection.create_bucket(bucket=bucket, ramQuotaMB=bucket_ram_quota)
-        self.buckets = rest_connection.get_buckets()
-
-        # Load documents
-        gen = BlobGenerator("ent-backup", "ent-backup-", self.value_size, end=self.num_items)
-        self._load_all_buckets(self.backupset.cluster_host, gen, "create", 0)
-
         # Take 'no_of_backups' backups
         self.backup_create()
         self._take_n_backups(n=no_of_backups)
@@ -4172,11 +4160,13 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
         """ CBQE-5475: Test cbbackupmgr info comprehensively after performing backup, merge and remove
 
         Test params:
-        flag_depth   = [0,1,2,3]
-        check_tabular= [True, False]
+        flag_depth     = [0,1,2,3]
+        check_tabular  = [True, False]
         check_all_flag = [True, False]
+        dgm_run        = [True, False]
+        sasl_buckets  >= 1
 
-        Comprehensive test: flag_depth=3,check_tabular=True,check_all_flag=True
+        Comprehensive test: flag_depth=3,check_tabular=True,check_all_flag=True,dgm_run=True,sasl_buckets=2
 
         Scenario:
         Perform backup, merge and remove to mutate info output.
@@ -4218,7 +4208,7 @@ class EnterpriseBackupRestoreTest(EnterpriseBackupRestoreBase, NewUpgradeBaseTes
             self.log.warn("number_of_backups increased from {} to {}".format(self.backupset.number_of_backups, min_backups))
 
         # Select backup cluster
-        cluster, self.backupset.cluster_host = self.backupset.restore_cluster, self.backupset.restore_cluster_host
+        cluster = [self.backupset.cluster_host]
 
         # Create Buckets, Load Documents, Take n backups, Merge and Remove a Bucket
         self.test_info_backup_merge_remove(cluster, no_of_backups)
