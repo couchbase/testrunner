@@ -469,6 +469,75 @@ class CollectionCreateTask(Task):
         task_manager.schedule(self)
 
 
+class ConcurrentIndexCreateTask(Task):
+    def __init__(self, server, bucket, scope, collection, query_definitions=None, IndexTrackingObject=None,
+                 n1ql_helper=None, num_indexes=1, defer_build="", itr=0):
+        Task.__init__(self, "collection_create_task")
+        self.server = server
+        self.bucket_name = bucket
+        self.scope_name = scope
+        self.collection_name = collection
+        self.query_definitions = query_definitions
+        self.test_fail = False
+        self.index_tracking_obj = IndexTrackingObject
+        self.n1ql_helper=n1ql_helper
+        self.num_indexes = num_indexes
+        self.defer_build = defer_build
+        self.itr = itr
+
+    def execute(self, task_manager):
+        try:
+            RestConnection(self.server)
+        except ServerUnavailableException as error:
+            self.state = FINISHED
+            self.set_exception(error)
+            return
+        try:
+            itr = self.itr
+            while itr < (self.num_indexes + self.itr):
+                for query_def in self.query_definitions:
+                    if itr >= (self.num_indexes + self.itr):
+                        break
+                    if "primary" not in query_def.groups:
+                        index_name = query_def.get_index_name()
+                        index_name = index_name + str(itr)
+                        query_def.update_index_name(index_name)
+                        if self.defer_build == "":
+                            defer_build = random.choice([True, False])
+                        else:
+                            defer_build = None
+                        index_meta = {"name": query_def.get_index_name(), "query_def": query_def,
+                                      "defer_build": defer_build}
+                        query = query_def.generate_index_create_query(use_gsi_for_secondary=True, gsi_type="plasma",
+                                                                      defer_build=defer_build)
+                        try:
+                            # create index
+                            self.n1ql_helper.run_cbq_query(query=query, server=self.server)
+                            self.index_tracking_obj.all_indexes_metadata(index_meta=index_meta, operation="create",
+                                                                          defer_build=defer_build)
+                        except Exception as err:
+                            if "Build Already In Progress" not in str(err) and "Timeout 1ms exceeded" not in str(err):
+                                error_map = {"query": query, "error": str(err)}
+                                self.index_tracking_obj.update_errors(error_map)
+                            else:
+                                self.index_tracking_obj.all_indexes_metadata(index_meta=index_meta, operation="create",
+                                                                              defer_build=defer_build)
+
+                        itr += 1
+            self.state = CHECKING
+            task_manager.schedule(self)
+
+        # catch and set all unexpected exceptions
+        except Exception as e:
+            self.state = FINISHED
+            self.set_unexpected_exception(e)
+            task_manager.schedule(self)
+
+    def check(self, task_manager):
+        self.set_result(True)
+        self.state = FINISHED
+        task_manager.schedule(self)
+
 class CollectionDeleteTask(Task):
     def __init__(self, server, bucket, scope, collection):
         Task.__init__(self, "collection_delete_task")

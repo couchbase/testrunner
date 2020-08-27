@@ -231,6 +231,22 @@ class BaseSecondaryIndexingTests(QueryTests):
                 if index_create_info in self.memory_create_list:
                     self.memory_create_list.remove(index_create_info)
 
+    def get_size_of_metastore_file(self):
+        indexer_nodes = self.get_nodes_from_services_map(
+            service_type="index", get_all_nodes=True)
+        metastore_size_on_nodes = []
+        for node in indexer_nodes:
+            data_dir = RestConnection(node).get_index_path()
+            shell = RemoteMachineShellConnection(node)
+            metastore_size, err = shell.execute_command(
+                "find {0}/@2i -name MetadataStore.[0-9]* | xargs du -sb|awk '{{print $1}}'".
+                    format(data_dir))
+
+            metastore_size = metastore_size[0]
+            metastore_size_on_nodes.append({"nodeip": node.ip, "metastore_size": metastore_size})
+
+        return metastore_size_on_nodes
+
     def async_multi_drop_index(self, buckets=None, query_definitions=None):
         if not buckets:
             buckets = self.buckets
@@ -953,6 +969,20 @@ class BaseSecondaryIndexingTests(QueryTests):
         if timed_out:
             check = False
         return check
+
+    def check_if_index_created(self, index, defer_build=False):
+        index_created = False
+        rest = RestConnection(self.master)
+        index_status = rest.get_index_status()
+        for index_info in index_status.values():
+            for k, v in index_info.items():
+                if defer_build:
+                    if k == index and v["status"] == "Created":
+                        index_created = True
+                else:
+                    if k == index and v["status"] == "Ready":
+                        index_created = True
+        return index_created
 
     def get_indexes_not_online(self):
         rest = RestConnection(self.master)
