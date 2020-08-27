@@ -374,3 +374,47 @@ class EventingFailover(EventingBaseTest):
         if stats_dst["curr_items"] < self.docs_per_day * 2016:
             pass
         self.undeploy_and_delete_function(body)
+
+    def test_vb_shuffle_during_failover_producer_kill(self):
+        eventing_server = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
+        body = self.create_save_function_body(self.function_name, self.handler_code)
+        self.deploy_function(body)
+        # load some data
+        task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
+                                                self.buckets[0].kvs[1], 'create', compression=self.sdk_compression)
+        # fail over the eventing node
+        fail_over_task = self.cluster.async_failover([self.master], failover_nodes=[eventing_server[1]], graceful=False)
+        self.wait_for_failover()
+        self.kill_producer(eventing_server[0])
+        task.result()
+        fail_over_task.result()
+        self.sleep(10)
+        if self.is_sbm:
+            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2, skip_stats_validation=True,
+                                         expected_duplicate=True)
+        else:
+            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True,
+                                         expected_duplicate=True)
+        self.undeploy_and_delete_function(body)
+
+    def test_vb_shuffle_during_failover_consumer_kill(self):
+        eventing_server = self.get_nodes_from_services_map(service_type="eventing", get_all_nodes=True)
+        body = self.create_save_function_body(self.function_name, self.handler_code)
+        self.deploy_function(body)
+        # load some data
+        task = self.cluster.async_load_gen_docs(self.master, self.src_bucket_name, self.gens_load,
+                                                self.buckets[0].kvs[1], 'create', compression=self.sdk_compression)
+        # fail over the eventing node
+        fail_over_task = self.cluster.async_failover([self.master], failover_nodes=[eventing_server[1]], graceful=False)
+        self.wait_for_failover()
+        self.kill_consumer(eventing_server[0])
+        task.result()
+        fail_over_task.result()
+        self.sleep(10)
+        if self.is_sbm:
+            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016 * 2, skip_stats_validation=True,
+                                         expected_duplicate=True)
+        else:
+            self.verify_eventing_results(self.function_name, self.docs_per_day * 2016, skip_stats_validation=True,
+                                         expected_duplicate=True)
+        self.undeploy_and_delete_function(body)
