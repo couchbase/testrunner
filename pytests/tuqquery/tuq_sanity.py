@@ -152,6 +152,50 @@ class QuerySanityTests(QueryTests):
     def test_collections_meta_query_context(self):
         results = self.run_cbq_query(query='select meta(d) from test1 as d', query_context='default:default.test')
         self.assertEqual(results['results'][0]['$1']['keyspace'], 'default:default.test.test1')
+
+    def test_collections_meta_keyspace_full(self):
+        results = self.run_cbq_query(query='select meta(default.test.test1) from default:default.test.test1')
+        self.assertEqual(results['results'][0]['$1']['keyspace'], 'default:default.test.test1')
+        results = self.run_cbq_query(query='select meta(default:default.test.test1) from default:default.test.test1')
+        self.assertEqual(results['results'][0]['$1']['keyspace'], 'default:default.test.test1')
+
+    def test_collections_meta_id(self):
+        results = self.run_cbq_query(query='select meta(d).id from default:default.test.test1 as d')
+        self.assertEqual(results['results'], [{'id': 'key1'}, {'id': 'key2'}, {'id': 'key3'}, {'id': 'key4'}])
+        results = self.run_cbq_query(query='select meta(d).id from test1 as d', query_context='default:default.test')
+        self.assertEqual(results['results'], [{'id': 'key1'}, {'id': 'key2'}, {'id': 'key3'}, {'id': 'key4'}])
+
+    def test_collections_meta_id_full_path(self):
+        results = self.run_cbq_query(query='select meta(default.test.test1).id from default:default.test.test1')
+        self.assertEqual(results['results'], [{'id': 'key1'}, {'id': 'key2'}, {'id': 'key3'}, {'id': 'key4'}])
+        results = self.run_cbq_query(query='select meta(default:default.test.test1).id from default:default.test.test1')
+        self.assertEqual(results['results'], [{'id': 'key1'}, {'id': 'key2'}, {'id': 'key3'}, {'id': 'key4'}])
+
+
+    def test_collections_meta_cas(self):
+        results = self.run_cbq_query(query='select meta(d).cas from default:default.test.test1 as d')
+        self.assertEqual(results['metrics']['resultCount'], 4)
+        results = self.run_cbq_query(query='select meta(d).cas from test1 as d', query_context='default:default.test')
+        self.assertEqual(results['metrics']['resultCount'], 4)
+
+    def test_collections_meta_cas_full(self):
+        results = self.run_cbq_query(query='select meta(default.test.test1).cas from default:default.test.test1')
+        self.assertEqual(results['metrics']['resultCount'], 4)
+        results = self.run_cbq_query(query='select meta(default:default.test.test1).cas from default:default.test.test1')
+        self.assertEqual(results['metrics']['resultCount'], 4)
+
+    def test_collections_meta_expiration(self):
+        results = self.run_cbq_query(query='select meta(d).expiration from default:default.test.test1 as d')
+        self.assertEqual(results['results'], [{'expiration': 0}, {'expiration': 0}, {'expiration': 0}, {'expiration': 0}])
+        results = self.run_cbq_query(query='select meta(d).expiration from test1 as d', query_context='default:default.test')
+        self.assertEqual(results['results'], [{'expiration': 0}, {'expiration': 0}, {'expiration': 0}, {'expiration': 0}])
+
+    def test_collections_meta_expiration_full(self):
+        results = self.run_cbq_query(query='select meta(default.test.test1).expiration from default:default.test.test1')
+        self.assertEqual(results['results'], [{'expiration': 0}, {'expiration': 0}, {'expiration': 0}, {'expiration': 0}])
+        results = self.run_cbq_query(query='select meta(default:default.test.test1).expiration from default:default.test.test1')
+        self.assertEqual(results['results'], [{'expiration': 0}, {'expiration': 0}, {'expiration': 0}, {'expiration': 0}])
+
     ##############################################################################################
     #
     #   ALL
