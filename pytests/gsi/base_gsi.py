@@ -924,9 +924,9 @@ class BaseSecondaryIndexingTests(QueryTests):
                     is_cluster_healthy = True
         return is_cluster_healthy
 
-    def get_server_indexes_count(self):
+    def get_server_indexes_count(self, index_nodes):
         server_index_count = {}
-        for server in self.servers:
+        for server in index_nodes:
             rest = RestConnection(server)
             server_index_count.update(rest.get_indexes_count())
 

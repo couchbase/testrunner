@@ -53,7 +53,7 @@ class ConCurIndexOps(BaseSecondaryIndexingTests):
             elif operation is "delete" and defer_build:
                 try:
                     index = self.all_indexes_state["defer_build"].\
-                        pop(random.randint(0, len(self.all_indexes_state["defer_build"])))
+                        pop(random.randrange(len(self.all_indexes_state["defer_build"])))
                 except Exception as e:
                     index = None
                 if index is not None:
@@ -62,7 +62,7 @@ class ConCurIndexOps(BaseSecondaryIndexingTests):
             elif operation is "delete":
                 try:
                     index = self.all_indexes_state["created"].\
-                        pop(random.randint(0, len(self.all_indexes_state["created"])))
+                        pop(random.randrange(len(self.all_indexes_state["created"])))
                 except Exception as e:
                     index = None
                 if index is not None:
@@ -70,20 +70,22 @@ class ConCurIndexOps(BaseSecondaryIndexingTests):
                 return index
             elif operation is "scan":
                 try:
-                    index = self.all_indexes_state["created"][random.randint(0, len(self.all_indexes_state))]
+                    index = random.choice(self.all_indexes_state["created"])
                 except Exception as e:
                     index = None
                 return index
             elif operation is "build":
                 try:
-                    index = self.all_indexes_state["defer_build"].pop(random.randint(0, len(self.all_indexes_state)))
+                    index = self.all_indexes_state["defer_build"].\
+                        pop(random.randrange(len(self.all_indexes_state["defer_build"])))
                 except Exception as e:
                     index = None
                 return index
 
     def build_complete_add_to_create(self, index):
-        if index is not None:
-            self.all_indexes_state["created"].append(index)
+        with self._lock_queue:
+            if index is not None:
+                self.all_indexes_state["created"].append(index)
 
 class PlasmaCollectionsTests(BaseSecondaryIndexingTests):
     def setUp(self):
@@ -123,12 +125,6 @@ class PlasmaCollectionsTests(BaseSecondaryIndexingTests):
         self.all_collections = self.input.param("all_collections", False)
         self.dataset_template = self.input.param("dataset_template", "Employee")
         self.num_of_indexes = self.input.param("num_of_indexes", 1000)
-        self.system_failure_task_manager = TaskManager(
-            "system_failure_detector_thread")
-        self.system_failure_task_manager.start()
-        self.index_create_task_manager = TaskManager(
-            "index_create_task_manager")
-        self.index_create_task_manager.start()
         self.index_ops_obj = ConCurIndexOps()
         self.compact_sleep_duration = self.input.param("compact_sleep_duration", 300)
 
@@ -209,7 +205,7 @@ class PlasmaCollectionsTests(BaseSecondaryIndexingTests):
                                                                                scope_name + "_"
                                                                                + collection_name,
                                                              keyspace=collection_keyspace)
-                server = self.get_nodes_from_services_map(service_type="n1ql")
+                server = random.choice(self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=True))
                 index_create_task = ConcurrentIndexCreateTask(server, self.test_bucket, scope_name,
                                           collection_name, query_definitions,
                                           self.index_ops_obj, self.n1ql_helper, num_indexes_collection, defer_build, itr)
@@ -226,7 +222,7 @@ class PlasmaCollectionsTests(BaseSecondaryIndexingTests):
                 query_def = index_to_build["query_def"]
                 build_query = query_def.generate_build_query(namespace=query_def.keyspace)
                 try:
-                    server = self.get_nodes_from_services_map(service_type="n1ql")
+                    server = random.choice(self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=True))
                     self.run_cbq_query(query=build_query, server=server)
                     self.index_ops_obj.build_complete_add_to_create(index_to_build)
                 except Exception as err:
@@ -245,7 +241,7 @@ class PlasmaCollectionsTests(BaseSecondaryIndexingTests):
                 query_def = index_to_scan["query_def"]
                 query = query_def.generate_query(bucket=query_def.keyspace)
                 try:
-                    server = self.get_nodes_from_services_map(service_type="n1ql")
+                    server = random.choice(self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=True))
                     self.run_cbq_query(query=query, server=server)
                 except Exception as err:
                     error_map = {"query": query, "error": str(err)}
@@ -262,7 +258,7 @@ class PlasmaCollectionsTests(BaseSecondaryIndexingTests):
                 query_def = index_to_delete["query_def"]
                 drop_query = query_def.generate_index_drop_query(namespace=query_def.keyspace)
                 try:
-                    server = self.get_nodes_from_services_map(service_type="n1ql")
+                    server = random.choice(self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=True))
                     self.run_cbq_query(query=drop_query, server=server)
                 except Exception as err:
                     error_map = {"query": drop_query, "error": str(err)}
@@ -285,10 +281,10 @@ class PlasmaCollectionsTests(BaseSecondaryIndexingTests):
         self.sleep(10)
         self.failure_iteration = 1
         while self.run_tasks:
-            indexes_count_before = self.get_server_indexes_count()
-            server_to_fail = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+            index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+            indexes_count_before = self.get_server_indexes_count(index_nodes)
             self.index_ops_obj.update_ignore_failure_flag(True)
-            system_failure_task = NodesFailureTask(self.master, server_to_fail, self.system_failure, 300, 0, False, 3,
+            system_failure_task = NodesFailureTask(self.master, index_nodes, self.system_failure, 300, 0, False, 3,
                                                    disk_location="/data")
             self.system_failure_task_manager.schedule(system_failure_task)
             try:
@@ -300,7 +296,7 @@ class PlasmaCollectionsTests(BaseSecondaryIndexingTests):
             self.index_ops_obj.update_ignore_failure_flag(False)
             self.sleep(150, "wait for 2.5 mins more before collecting index count")
 
-            indexes_count_after = self.get_server_indexes_count()
+            indexes_count_after = self.get_server_indexes_count(index_nodes)
             self.compare_indexes_count(indexes_count_before, indexes_count_after)
             print(indexes_count_before)
             print(indexes_count_after)
@@ -337,7 +333,7 @@ class PlasmaCollectionsTests(BaseSecondaryIndexingTests):
         self.log.info(f'Number of autocompaction of fdb : {num_compaction_per_node}')
 
         for v in num_compaction_per_node.values():
-            if v < 2:
+            if v < 1:
                 self.test_fail = True
 
 
@@ -346,6 +342,9 @@ class PlasmaCollectionsTests(BaseSecondaryIndexingTests):
     def test_sharding_create_drop_indexes(self):
         self.test_fail = False
         self.errors = []
+        self.index_create_task_manager = TaskManager(
+            "index_create_task_manager")
+        self.index_create_task_manager.start()
         self._prepare_collection_for_indexing(num_scopes=self.num_scopes, num_collections=self.num_collections)
         sdk_data_loader = SDKDataLoader(start_seq_num=self.start_doc, num_ops=self.num_items_in_collection,
                                         percent_create=self.percent_create,
@@ -389,6 +388,8 @@ class PlasmaCollectionsTests(BaseSecondaryIndexingTests):
         for task in self.tasks:
             task.join()
 
+        self.index_create_task_manager.shutdown(True)
+
         self.verify_index_ops_obj()
 
         if self.index_ops_obj.get_errors():
@@ -397,6 +398,12 @@ class PlasmaCollectionsTests(BaseSecondaryIndexingTests):
     def test_system_failure_create_drop_indexes(self):
         self.test_fail = False
         self.errors = []
+        self.index_create_task_manager = TaskManager(
+            "index_create_task_manager")
+        self.index_create_task_manager.start()
+        self.system_failure_task_manager = TaskManager(
+            "system_failure_detector_thread")
+        self.system_failure_task_manager.start()
         self._prepare_collection_for_indexing(num_scopes=self.num_scopes, num_collections=self.num_collections)
         self.run_tasks = True
 
@@ -444,6 +451,9 @@ class PlasmaCollectionsTests(BaseSecondaryIndexingTests):
         for task in self.tasks:
             task.join()
 
+        self.index_create_task_manager.shutdown(True)
+        self.system_failure_task_manager.shutdown(True)
+
         self.verify_index_ops_obj()
 
         self.n1ql_helper.drop_all_indexes_on_keyspace()
@@ -454,6 +464,9 @@ class PlasmaCollectionsTests(BaseSecondaryIndexingTests):
     def test_autocompaction_forestdb(self):
         self.run_tasks = True
         self.test_fail = False
+        self.index_create_task_manager = TaskManager(
+            "index_create_task_manager")
+        self.index_create_task_manager.start()
         indexer_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
         for indexer_node in indexer_nodes:
             rest = RestConnection(indexer_node)
@@ -494,6 +507,8 @@ class PlasmaCollectionsTests(BaseSecondaryIndexingTests):
 
         for task in self.tasks:
             task.join()
+
+        self.index_create_task_manager.shutdown(True)
 
         if self.test_fail:
             self.fail("Auto compaction did not trigger for expected number of times")

@@ -1039,9 +1039,9 @@ class RemoteMachineShellConnection(KeepRefs):
                 self.log_command_output(output, error)
                 self.connect_with_user(user=self.username)
                 return
-            output, error = self.execute_command(command_1, debug=False)
+            output, error = self.execute_command(command_1)
             self.log_command_output(output, error, debug=False)
-            output, error = self.execute_command(command_2, debug=False)
+            output, error = self.execute_command(command_2)
             self.log_command_output(output, error, debug=False)
             self.connect_with_user(user=self.username)
 
