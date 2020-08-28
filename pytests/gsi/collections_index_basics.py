@@ -8,12 +8,15 @@ __created_on__ = "26/05/20 2:13 pm"
 
 """
 import random
+import string
 
 from concurrent.futures import ThreadPoolExecutor
 
 from couchbase_helper.documentgenerator import SDKDataLoader
 from couchbase_helper.query_definitions import QueryDefinition
 from .base_gsi import BaseSecondaryIndexingTests
+
+from collections import defaultdict
 
 
 class CollectionsIndexBasics(BaseSecondaryIndexingTests):
@@ -1120,3 +1123,117 @@ class CollectionsIndexBasics(BaseSecondaryIndexingTests):
             self.wait_until_indexes_online()
         except Exception as err:
             self.fail(str(err))
+
+    def test_build_multiple_index_concurrently_across_collections(self):
+        num_docs = 1000
+        self.prepare_collection_for_indexing(num_scopes=5, num_collections=2, num_of_docs_per_collection=num_docs)
+        index_gen_list = []
+        for item, namespace in enumerate(self.namespaces):
+            idx_name = f'idx_{item}'
+            index_gen = QueryDefinition(index_name=idx_name, index_fields=['age', 'city'])
+            query = index_gen.generate_index_create_query(namespace=namespace, defer_build=True)
+            self.run_cbq_query(query=query)
+            index_gen_list.append(index_gen)
+
+        with ThreadPoolExecutor() as executor:
+            for index_gen, namespace in zip(index_gen_list, self.namespaces):
+                query = index_gen.generate_build_query(namespace=namespace)
+                executor.submit(self.run_cbq_query, query=query)
+        self.wait_until_indexes_online(timeout=600, defer_build=True)
+
+        for namespace in self.namespaces:
+            query = f'select count(age) from {namespace} where age >= 0'
+            result = self.run_cbq_query(query=query)['results'][0]['$1']
+            self.assertEqual(num_docs, result, "Doc count not matching")
+
+    # def test_large_value_in_metadata_store(self):
+    #     '''
+    #     keeping it as a placeholder
+    #     Will cover it in volume or system test. after that will remove it from here.
+    #     '''
+    #     buckets_list = []
+    #     collection_namespaces_list = []
+    #     self.rest.delete_bucket(bucket=self.test_bucket)
+    #     num_docs = 10
+    #     task_list = []
+    #
+    #     namespaces_dict = {}
+    #     with ThreadPoolExecutor() as executor:
+    #         for item in range(10):
+    #             bucket_name = f'bucket_{item}_'
+    #             bucket_name = bucket_name + "".join(random.choices(string.ascii_letters + string.digits,
+    #                                                                k=100 - len(bucket_name)))
+    #             self.test_bucket = bucket_name
+    #             buckets_list.append(self.test_bucket)
+    #             executor.submit(self.cluster.create_standard_bucket, name=self.test_bucket, port=11222,
+    #                             bucket_params=self.bucket_params)
+    #             if item > 5:
+    #                 self.sleep(10)
+    #             namespaces_dict[bucket_name] = {}
+    #
+    #     with ThreadPoolExecutor() as executor:
+    #         for bucket_name in namespaces_dict:
+    #             scope_tasks = []
+    #             for item in range(10):
+    #                 scope = f"test_scope_{item}_"
+    #                 scope = scope + "".join(random.choices(string.ascii_letters + string.digits, k=30 - len(scope)))
+    #                 task = executor.submit(self.collection_cli.create_scope, bucket=bucket_name, scope=scope)
+    #                 namespaces_dict[bucket_name][scope] = []
+    #                 scope_tasks.append(task)
+    #             for task in scope_tasks:
+    #                 task.result()
+    #     self.sleep(10)
+    #     with ThreadPoolExecutor() as executor:
+    #         for bucket_name in namespaces_dict:
+    #             for scope in namespaces_dict[bucket_name]:
+    #                 collection_tasks = []
+    #                 for item in range(10):
+    #                     collection = f'test_collection_{item}_'
+    #                     collection = collection + "".join(random.choices(string.ascii_letters + string.digits,
+    #                                                                      k=30 - len(collection)))
+    #                     task = executor.submit(self.collection_cli.create_collection, bucket=bucket_name,
+    #                                            scope=scope, collection=collection)
+    #                     collection_namespace = f'default:{bucket_name}.{scope}.{collection}'
+    #                     collection_namespaces_list.append(collection_namespace)
+    #                     collection_tasks.append(task)
+    #                     namespaces_dict[bucket_name][scope].append(collection)
+    #                 for task in collection_tasks:
+    #                     task.result()
+    #                 self.log.info(f"Created collection no.: {len(collection_namespaces_list)}")
+    #     self.sleep(10, "Giving some time after collections creation")
+    #
+    #     batch_size = 5
+    #     try:
+    #         for batch in range(0, len(collection_namespaces_list), batch_size):
+    #             for namespace in collection_namespaces_list[batch: batch+batch_size]:
+    #                 _, keyspace = namespace.split(':')
+    #                 bucket, scope, collection = keyspace.split('.')
+    #                 gen_create = SDKDataLoader(num_ops=num_docs, percent_create=100,
+    #                                            percent_update=0, percent_delete=0, scope=scope,
+    #                                            collection=collection, json_template='Person')
+    #                 task = self.cluster.async_load_gen_docs(server=self.master, generator=gen_create,
+    #                                                         bucket=bucket,
+    #                                                         scope=scope, collection=collection)
+    #                 task_list.append(task)
+    #             for task in task_list:
+    #                 task.result()
+    #             self.sleep(15, f"Giving some time after batch: {collection_namespaces_list[batch: batch+batch_size]}")
+    #     except Exception as err:
+    #         self.fail(f"Failed to load data to Collections. Exception occurred:{err}")
+    #
+    #     index_gen_list = []
+    #     for item, namespace in enumerate(collection_namespaces_list):
+    #         idx_name = f'idx_{item}'
+    #         index_gen = QueryDefinition(index_name=idx_name, index_fields=['age', 'city'])
+    #         query = index_gen.generate_index_create_query(namespace=namespace, defer_build=self.defer_build)
+    #         self.run_cbq_query(query=query)
+    #         index_gen_list.append(index_gen)
+    #         self.wait_until_indexes_online()
+    #
+    #     for namespace in collection_namespaces_list:
+    #         query = f'select count(age) from {namespace} where age >= 0'
+    #         result = self.run_cbq_query(query=query)['results'][0]['$1']
+    #         self.assertEqual(num_docs, result, "Doc count not matching")
+    #
+    #     index_info = self.rest.get_indexer_metadata()['status']
+    #     self.assertEqual(len(index_info), 10 * 6)
