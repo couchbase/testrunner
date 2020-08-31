@@ -21,7 +21,9 @@ class ConCurIndexOps(BaseSecondaryIndexingTests):
         self.test_fail = False
         self._lock_queue = threading.Lock()
         self.errors_lock_queue = threading.Lock()
+        self.create_index_lock = threading.Lock()
         self.ignore_failure = False
+        self.stop_create_index = False
 
     def update_errors(self, error_map):
         with self.errors_lock_queue:
@@ -31,6 +33,14 @@ class ConCurIndexOps(BaseSecondaryIndexingTests):
     def update_ignore_failure_flag(self, flag):
         with self.errors_lock_queue:
             self.ignore_failure = flag
+
+    def update_stop_create_index(self, flag):
+        with self.create_index_lock:
+            self.stop_create_index = flag
+
+    def get_stop_create_index(self):
+        with self.create_index_lock:
+            return self.stop_create_index
 
     def get_errors(self):
         return self.errors
@@ -54,19 +64,17 @@ class ConCurIndexOps(BaseSecondaryIndexingTests):
                 try:
                     index = self.all_indexes_state["defer_build"].\
                         pop(random.randrange(len(self.all_indexes_state["defer_build"])))
+                    self.all_indexes_state["deleted"].append(index)
                 except Exception as e:
                     index = None
-                if index is not None:
-                    self.all_indexes_state["deleted"].append(index)
                 return index
             elif operation is "delete":
                 try:
                     index = self.all_indexes_state["created"].\
                         pop(random.randrange(len(self.all_indexes_state["created"])))
+                    self.all_indexes_state["deleted"].append(index)
                 except Exception as e:
                     index = None
-                if index is not None:
-                    self.all_indexes_state["deleted"].append(index)
                 return index
             elif operation is "scan":
                 try:
@@ -159,35 +167,34 @@ class PlasmaCollectionsTests(BaseSecondaryIndexingTests):
     def check_if_indexes_created(self, index_list, defer_build=False):
         indexes_not_created = []
         for index in index_list:
-            index_created = self.check_if_index_created(index["name"], defer_build)
+            index_created, status = self.check_if_index_created(index["name"], defer_build)
             if not index_created:
-                indexes_not_created.append(index["name"])
+                indexes_not_created.append({"name": index["name"], "status": status})
         return indexes_not_created
 
     def check_if_indexes_deleted(self, index_list):
         indexes_not_deleted = []
         for index in index_list:
-            index_created = self.check_if_index_created(index["name"])
+            index_created, status = self.check_if_index_created(index["name"])
             if index_created:
-                indexes_not_deleted.append(index["name"])
+                indexes_not_deleted.append({"name": index["name"], "status": status})
         return indexes_not_deleted
 
     def verify_index_ops_obj(self):
         indexes_not_created = self.check_if_indexes_created(self.index_ops_obj.get_create_index_list())
         if indexes_not_created:
-            self.index_ops_obj.fail = True
             self.index_ops_obj.update_errors(f'Expected Created indexes {indexes_not_created} found to be not created')
             self.log.info(f'Expected Created indexes {indexes_not_created} found to be not created')
         indexes_not_deleted = self.check_if_indexes_deleted(self.index_ops_obj.get_delete_index_list())
         if indexes_not_deleted:
-            self.index_ops_obj.fail = True
             self.index_ops_obj.update_errors(f'Expected Deleted indexes {indexes_not_deleted} found to be not deleted')
             self.log.info(f'Expected Deleted indexes {indexes_not_deleted} found to be not deleted')
         indexes_not_defer_build = self.check_if_indexes_created(index_list=self.index_ops_obj.get_defer_index_list(), defer_build=True)
         if indexes_not_defer_build:
-            self.index_ops_obj.fail = True
-            self.index_ops_obj.update_errors(f'Expected Deleted indexes {indexes_not_defer_build} found to be not deleted')
-            self.log.info(f'Expected Deleted indexes {indexes_not_defer_build} found to be not in defer_build state')
+            self.index_ops_obj.update_errors(f'Expected defer build indexes {indexes_not_defer_build} '
+                                             f'found to be not in defer_build state')
+            self.log.info(f'Expected defer build indexes {indexes_not_defer_build} '
+                          f'found to be not in defer_build state')
 
     def create_indexes(self, num=0, defer_build=False, itr=0):
         query_definition_generator = SQLDefinitionGenerator()
@@ -210,7 +217,7 @@ class PlasmaCollectionsTests(BaseSecondaryIndexingTests):
                                           collection_name, query_definitions,
                                           self.index_ops_obj, self.n1ql_helper, num_indexes_collection, defer_build, itr)
                 self.index_create_task_manager.schedule(index_create_task)
-                index_create_task.result()
+                #index_create_task.result()
         self.log.info(threading.currentThread().getName() + " Completed")
 
     def build_indexes(self):
@@ -238,14 +245,16 @@ class PlasmaCollectionsTests(BaseSecondaryIndexingTests):
         while self.run_tasks:
             index_to_scan = self.index_ops_obj.all_indexes_metadata(operation="scan")
             if index_to_scan:
+                self.log.info(f'Processing index: {index_to_scan["name"]}')
                 query_def = index_to_scan["query_def"]
                 query = query_def.generate_query(bucket=query_def.keyspace)
                 try:
                     server = random.choice(self.get_nodes_from_services_map(service_type="n1ql", get_all_nodes=True))
                     self.run_cbq_query(query=query, server=server)
                 except Exception as err:
-                    error_map = {"query": query, "error": str(err)}
-                    self.index_ops_obj.update_errors(error_map)
+                    if "No index available on keyspace" not in str(err):
+                        error_map = {"query": query, "error": str(err)}
+                        self.index_ops_obj.update_errors(error_map)
         self.log.info(threading.currentThread().getName() + " Completed")
 
     def drop_indexes(self, drop_sleep):
@@ -282,24 +291,25 @@ class PlasmaCollectionsTests(BaseSecondaryIndexingTests):
         self.failure_iteration = 1
         while self.run_tasks:
             index_nodes = self.get_nodes_from_services_map(service_type="index", get_all_nodes=True)
+            disk_location = RestConnection(index_nodes[0]).get_index_path()
             indexes_count_before = self.get_server_indexes_count(index_nodes)
             self.index_ops_obj.update_ignore_failure_flag(True)
             system_failure_task = NodesFailureTask(self.master, index_nodes, self.system_failure, 300, 0, False, 3,
-                                                   disk_location="/data")
+                                                   disk_location=disk_location)
             self.system_failure_task_manager.schedule(system_failure_task)
             try:
                 system_failure_task.result()
             except Exception as e:
                 self.log.info("Exception: {}".format(e))
 
-            self.sleep(150, "wait for 2.5 mins after system failure for service to recover")
+            self.sleep(300, "wait for 2.5 mins after system failure for service to recover")
             self.index_ops_obj.update_ignore_failure_flag(False)
             self.sleep(150, "wait for 2.5 mins more before collecting index count")
 
             indexes_count_after = self.get_server_indexes_count(index_nodes)
             self.compare_indexes_count(indexes_count_before, indexes_count_after)
-            print(indexes_count_before)
-            print(indexes_count_after)
+            self.log.info(indexes_count_before)
+            self.log.info(indexes_count_after)
 
             self.failure_iteration += 1
 
@@ -385,10 +395,13 @@ class PlasmaCollectionsTests(BaseSecondaryIndexingTests):
 
         self.run_tasks = False
 
+        self.index_ops_obj.update_stop_create_index(True)
+        self.index_create_task_manager.shutdown(True)
+
         for task in self.tasks:
             task.join()
 
-        self.index_create_task_manager.shutdown(True)
+        self.sleep(10, "sleep for 10 secs before validation as indexStatus API needs some time for update")
 
         self.verify_index_ops_obj()
 
@@ -448,11 +461,14 @@ class PlasmaCollectionsTests(BaseSecondaryIndexingTests):
 
         self.run_tasks = False
 
+        self.index_ops_obj.update_stop_create_index(True)
+        self.index_create_task_manager.shutdown(True)
+        self.system_failure_task_manager.shutdown(True)
+
         for task in self.tasks:
             task.join()
 
-        self.index_create_task_manager.shutdown(True)
-        self.system_failure_task_manager.shutdown(True)
+        self.sleep(5, "sleep for 5 secs before validation")
 
         self.verify_index_ops_obj()
 
@@ -508,7 +524,9 @@ class PlasmaCollectionsTests(BaseSecondaryIndexingTests):
         for task in self.tasks:
             task.join()
 
+        self.index_ops_obj.update_stop_create_index(True)
         self.index_create_task_manager.shutdown(True)
+
 
         if self.test_fail:
             self.fail("Auto compaction did not trigger for expected number of times")

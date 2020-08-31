@@ -494,21 +494,22 @@ class ConcurrentIndexCreateTask(Task):
             return
         try:
             itr = self.itr
-            while itr < (self.num_indexes + self.itr):
+            while itr < (self.num_indexes + self.itr) and not self.index_tracking_obj.get_stop_create_index():
                 for query_def in self.query_definitions:
                     if itr >= (self.num_indexes + self.itr):
                         break
                     if "primary" not in query_def.groups:
-                        index_name = query_def.get_index_name()
+                        query_def_copy = copy.deepcopy(query_def)
+                        index_name = query_def_copy.get_index_name()
                         index_name = index_name + str(itr)
-                        query_def.update_index_name(index_name)
+                        query_def_copy.update_index_name(index_name)
                         if self.defer_build == "":
                             defer_build = random.choice([True, False])
                         else:
                             defer_build = None
-                        index_meta = {"name": query_def.get_index_name(), "query_def": query_def,
+                        index_meta = {"name": query_def_copy.get_index_name(), "query_def": query_def_copy,
                                       "defer_build": defer_build}
-                        query = query_def.generate_index_create_query(use_gsi_for_secondary=True, gsi_type="plasma",
+                        query = query_def_copy.generate_index_create_query(use_gsi_for_secondary=True, gsi_type="plasma",
                                                                       defer_build=defer_build)
                         try:
                             # create index
@@ -5336,6 +5337,7 @@ class NodesFailureTask(Task):
                     self.set_exception(Exception("Reset of autofailover "
                                                  "count failed"))
         self.current_failure_node = self.servers_to_fail[self.itr]
+        self.start_time = time.time()
         self.log.info("before failure time: {}".format(time.ctime(time.time())))
         if self.failure_type == "enable_firewall":
             self._enable_disable_firewall(self.current_failure_node, self.failure_timeout)
@@ -5378,26 +5380,18 @@ class NodesFailureTask(Task):
         self._disable_firewall(node)
 
     def _enable_firewall(self, node):
-        node_failure_timer = self.failure_timers[self.itr]
-        time.sleep(1)
         RemoteUtilHelper.enable_firewall(node)
         self.log.info("Enabled firewall on {}".format(node))
-        node_failure_timer.result()
-        self.start_time = node_failure_timer.start_time
 
     def _disable_firewall(self, node):
         shell = RemoteMachineShellConnection(node)
         shell.disable_firewall()
 
     def _restart_couchbase_server(self, node):
-        node_failure_timer = self.failure_timers[self.itr]
-        time.sleep(1)
         shell = RemoteMachineShellConnection(node)
         shell.restart_couchbase()
         shell.disconnect()
         self.log.info("Restarted the couchbase server on {}".format(node))
-        node_failure_timer.result()
-        self.start_time = node_failure_timer.start_time
 
     def _stop_couchbase_server(self, node):
         node_failure_timer = self.failure_timers[self.itr]
@@ -5416,24 +5410,16 @@ class NodesFailureTask(Task):
         self.log.info("Started the couchbase server on {}".format(node))
 
     def _stop_restart_network(self, node, stop_time):
-        node_failure_timer = self.failure_timers[self.itr]
-        time.sleep(1)
         shell = RemoteMachineShellConnection(node)
         shell.stop_network(stop_time)
         shell.disconnect()
         self.log.info("Stopped the network for {0} sec and restarted the "
                       "network on {1}".format(stop_time, node))
-        node_failure_timer.result()
-        self.start_time = node_failure_timer.start_time
 
     def _restart_machine(self, node):
-        node_failure_timer = self.failure_timers[self.itr]
-        time.sleep(1)
         shell = RemoteMachineShellConnection(node)
         command = "/sbin/reboot"
         shell.execute_command(command=command)
-        node_failure_timer.result()
-        self.start_time = node_failure_timer.start_time
 
     def _stop_memcached(self, node):
         node_failure_timer = self.failure_timers[self.itr]

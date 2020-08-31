@@ -972,17 +972,19 @@ class BaseSecondaryIndexingTests(QueryTests):
 
     def check_if_index_created(self, index, defer_build=False):
         index_created = False
+        status = None
         rest = RestConnection(self.master)
         index_status = rest.get_index_status()
         for index_info in index_status.values():
             for k, v in index_info.items():
-                if defer_build:
-                    if k == index and v["status"] == "Created":
+                if k == index:
+                    status = v["status"]
+                    if defer_build and status == "Created":
                         index_created = True
-                else:
-                    if k == index and v["status"] == "Ready":
+                    elif status == "Ready":
                         index_created = True
-        return index_created
+
+        return index_created, status
 
     def get_indexes_not_online(self):
         rest = RestConnection(self.master)
