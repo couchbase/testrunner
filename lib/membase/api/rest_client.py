@@ -1917,7 +1917,7 @@ class RestConnection(object):
         index_storage_stats = {}
         for index_stats in json_parsed:
             bucket = index_stats["Index"].split(":")[0]
-            index_name = index_stats["Index"].split(":")[1]
+            index_name = index_stats["Index"].split(":")[-1]
             if not bucket in list(index_storage_stats.keys()):
                 index_storage_stats[bucket] = {}
             index_storage_stats[bucket][index_name] = index_stats["Stats"]

@@ -5393,14 +5393,14 @@ class NodesFailureTask(Task):
         elif self.failure_type == "disable_firewall":
             self._disable_firewall(self.current_failure_node)
         elif self.failure_type == "restart_couchbase":
-            self._restart_couchbase_server(self.current_failure_node)
+            self._restart_couchbase_server(self.current_failure_node, self.failure_timeout)
         elif self.failure_type == "stop_couchbase":
             self._stop_couchbase_server(self.current_failure_node)
         elif self.failure_type == "start_couchbase":
             self._start_couchbase_server(self.current_failure_node)
         elif self.failure_type == "restart_network":
             self._stop_restart_network(self.current_failure_node,
-                                       self.timeout + self.timeout_buffer + 30)
+                                       self.failure_timeout)
         elif self.failure_type == "restart_machine":
             self._restart_machine(self.current_failure_node)
         elif self.failure_type == "stop_memcached":
@@ -5436,11 +5436,12 @@ class NodesFailureTask(Task):
         shell = RemoteMachineShellConnection(node)
         shell.disable_firewall()
 
-    def _restart_couchbase_server(self, node):
+    def _restart_couchbase_server(self, node, failure_timeout):
         shell = RemoteMachineShellConnection(node)
         shell.restart_couchbase()
         shell.disconnect()
         self.log.info("Restarted the couchbase server on {}".format(node))
+        time.sleep(failure_timeout)
 
     def _stop_couchbase_server(self, node):
         node_failure_timer = self.failure_timers[self.itr]
