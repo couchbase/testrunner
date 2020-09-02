@@ -9,7 +9,11 @@ import traceback
 from couchbase.cluster import Cluster
 
 import couchbase.subdocument as SD
-from couchbase.exceptions import CouchbaseTransientException
+
+try:
+    from couchbase.exceptions import CouchbaseTransientError as CouchbaseTransientException
+except ImportError:
+    from couchbase.exceptions import CouchbaseTransientException
 
 from .constants import Constants as constants
 from .ValueGenerator import ValueGenerator

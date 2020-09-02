@@ -18,6 +18,7 @@ class XDCRAdvFilterTests(XDCRNewBaseTest):
         self.src_rest = RestConnection(self.src_master)
         self.dest_rest = RestConnection(self.dest_master)
         initial_xdcr = random.choice([True, False])
+        self.load_xattrs = self._input.param("load_xattrs", False)
         self.skip_validation = self._input.param("ok_if_random_filter_invalid", False)
         try:
             if initial_xdcr:
@@ -56,7 +57,7 @@ class XDCRAdvFilterTests(XDCRNewBaseTest):
             JSONDoc(server=server, username="Administrator", password="password",
                     bucket=bucket, startseqnum=random.randrange(1, 10000000, 1),
                     randkey=False, encoding="utf-8",
-                    num_docs=num_docs, template="query.json", xattrs=True)
+                    num_docs=num_docs, template="query.json", xattrs=self.load_xattrs)
             self.sleep(30, "Waiting for docs to be loaded")
         except Exception as e:
             self.fail(
