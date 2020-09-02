@@ -2,6 +2,9 @@ from ent_backup_restore.enterprise_backup_restore_base import EnterpriseBackupRe
 from lib.backup_service_client.configuration import Configuration
 from lib.backup_service_client.api_client import ApiClient
 from lib.backup_service_client.api.plan_api import PlanApi
+from lib.backup_service_client.api.repository_api import RepositoryApi
+from lib.backup_service_client.api.active_repository_api import ActiveRepositoryApi
+from lib.backup_service_client.models.body3 import Body3
 
 class BackupServiceBase(EnterpriseBackupRestoreBase):
     def preamble(self):
@@ -20,6 +23,8 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
 
         # Rest API Sub-APIs
         self.plan_api = PlanApi(self.api_client)
+        self.repository_api = RepositoryApi(self.api_client)
+        self.active_repository_api = ActiveRepositoryApi(self.api_client)
 
         # Backup Service Constants
         self.default_plans = ["_hourly_backups", "_daily_backups"]
@@ -41,6 +46,17 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
             if plan.name not in self.default_plans:
                 self.plan_api.plan_name_delete(plan.name)
 
+    def delete_all_repositories(self):
+        """ Deletes all repositories.
+
+        Archives all repos and then deletes the archived repos using the Rest API.
+        """
+        for repo in self.repository_api.cluster_self_repository_state_get('active'):
+            self.active_repository_api.cluster_self_repository_active_id_archive_post(repo.id, body=Body3(id=repo.id))
+
+        for repo in self.repository_api.cluster_self_repository_state_get('archived'):
+            self.repository_api.cluster_self_repository_state_id_delete('archived', repo.id)
+
     def tearDown(self):
         """ Tears down.
 
@@ -48,5 +64,6 @@ class BackupServiceBase(EnterpriseBackupRestoreBase):
         2. Deletes all plans.
         """
         self.preamble()
+        self.delete_all_repositories()
         self.delete_all_plans()
         super().tearDown()
