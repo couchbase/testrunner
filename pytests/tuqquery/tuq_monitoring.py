@@ -14,6 +14,7 @@ class QueryMonitoringTests(QueryTests):
         self.threadFailure = False
         self.run_cbq_query('delete from system:completed_requests')
         self.run_cbq_query('delete from system:prepareds')
+        self.use_query_context = self.input.param("use_query_context", False)
         self.rest.set_completed_requests_collection_duration(self.master, 1000)
         self.rest.set_completed_requests_max_entries(self.master, 4000)
         self.query_buckets = self.get_query_buckets(check_all_buckets=True)
@@ -86,6 +87,53 @@ class QueryMonitoringTests(QueryTests):
                                     % (self.servers[1].ip, self.servers[1].port))
         self.assertEqual(result['metrics']['resultCount'], 0)
 
+    def test_collections_completed_request_full_path(self):
+        self.run_cbq_query(query="CREATE PRIMARY INDEX ON default:default.test.test1")
+        self.run_cbq_query(query="DROP PRIMARY INDEX on default:default.test.test1")
+        results = self.run_cbq_query(query="select * from system:completed_requests")
+        self.assertEqual(results['metrics']['resultCount'], 1)
+        self.assertEqual(results['results'][0]['completed_requests']['statement'], 'CREATE PRIMARY INDEX ON default:default.test.test1')
+
+    def test_collections_completed_request_query_context(self):
+        self.run_cbq_query(query="CREATE PRIMARY INDEX ON test1", query_context="default:default.test")
+        self.run_cbq_query(query="DROP PRIMARY INDEX on default:default.test.test1")
+        results = self.run_cbq_query(query="select * from system:completed_requests")
+        self.assertEqual(results['metrics']['resultCount'], 1)
+        self.assertEqual(results['results'][0]['completed_requests']['statement'], 'CREATE PRIMARY INDEX ON test1')
+        self.assertEqual(results['results'][0]['completed_requests']['queryContext'], 'default:default.test')
+
+    def test_collections_active_request_full_path(self):
+        e = threading.Event()
+        t51 = threading.Thread(name='run_second_query', target=self.run_parallel_query_collections)
+        t51.start()
+        e.set()
+        results = self.run_cbq_query(query="SELECT * from system:active_requests")
+        try:
+            if results['results'][0]['active_requests']['statement'] == 'CREATE PRIMARY INDEX on default:default.test.test2' or results['results'][1]['active_requests']['statement'] == 'CREATE PRIMARY INDEX on default:default.test.test2':
+                self.assertTrue(True)
+            else:
+                self.fail("Could not find the correct statement {0}".format(results))
+        finally:
+            t51.join()
+            self.run_cbq_query(query="DROP PRIMARY INDEX on default:default.test.test2")
+
+    def test_collections_active_request_query_context(self):
+        e = threading.Event()
+        t51 = threading.Thread(name='run_second_query', target=self.run_parallel_query_collections)
+        t51.start()
+        e.set()
+        results = self.run_cbq_query(query="SELECT * from system:active_requests")
+        try:
+            if results['results'][0]['active_requests']['statement'] == 'CREATE PRIMARY INDEX on test2' or results['results'][1]['active_requests']['statement'] == 'CREATE PRIMARY INDEX on test2':
+                if results['results'][0]['active_requests']['queryContext'] == 'default:default.test' or results['results'][1]['active_requests']['queryContext'] == 'default:default.test':
+                    self.assertTrue(True)
+            else:
+                self.fail("Could not find the correct statement {0}".format(results))
+        finally:
+            t51.join()
+            self.run_cbq_query(query="DROP PRIMARY INDEX on default:default.test.test2")
+
+
     ##############################################################################################
     #
     #   Monitoring Helper Functions
@@ -98,6 +146,12 @@ class QueryMonitoringTests(QueryTests):
             0] + " d JOIN " + self.query_buckets[0] + " def ON KEYS d.name) union (select * from " + self.query_buckets[
                     0] + ")"
         self.run_cbq_query(query, server=server)
+
+    def run_parallel_query_collections(self):
+        if self.use_query_context:
+            self.run_cbq_query(query="CREATE PRIMARY INDEX on test2", query_context="default:default.test")
+        else:
+            self.run_cbq_query(query="CREATE PRIMARY INDEX on default:default.test.test2")
 
     '''Run basic cluster monitoring checks (outlined in the helper function) by executing 2 queries in parallel, must be
        run with a sufficient number of docs to be an effective test (docs-per-day >=3).'''
