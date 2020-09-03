@@ -47,7 +47,6 @@ class BackupRestoreFilesValidations(BackupRestoreValidationBase):
         if self.backupset.exclude_buckets:
             exclude_data = {}
             exclude_data["bucket"] = self.backupset.exclude_buckets[0]
-            exclude_data["level"] = 1
             expected_meta_json["exclude_data"].append(exclude_data)
         if self.backupset.disable_ft_alias:
             expected_meta_json['disable_ft_alias'] = True
