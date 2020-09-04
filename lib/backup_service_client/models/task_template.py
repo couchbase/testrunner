@@ -80,7 +80,7 @@ class TaskTemplate(object):
         :param name: The name of this TaskTemplate.  # noqa: E501
         :type: str
         """
-        if name is None:
+        if False and name is None:
             raise ValueError("Invalid value for `name`, must not be `None`")  # noqa: E501
 
         self._name = name
@@ -103,10 +103,10 @@ class TaskTemplate(object):
         :param task_type: The task_type of this TaskTemplate.  # noqa: E501
         :type: str
         """
-        if task_type is None:
+        if False and task_type is None:
             raise ValueError("Invalid value for `task_type`, must not be `None`")  # noqa: E501
         allowed_values = ["BACKUP", "MERGE"]  # noqa: E501
-        if task_type not in allowed_values:
+        if False and task_type not in allowed_values:
             raise ValueError(
                 "Invalid value for `task_type` ({0}), must be one of {1}"  # noqa: E501
                 .format(task_type, allowed_values)
@@ -132,7 +132,7 @@ class TaskTemplate(object):
         :param schedule: The schedule of this TaskTemplate.  # noqa: E501
         :type: TaskTemplateSchedule
         """
-        if schedule is None:
+        if False and schedule is None:
             raise ValueError("Invalid value for `schedule`, must not be `None`")  # noqa: E501
 
         self._schedule = schedule

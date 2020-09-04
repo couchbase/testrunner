@@ -78,10 +78,10 @@ class TaskTemplateSchedule(object):
         :param job_type: The job_type of this TaskTemplateSchedule.  # noqa: E501
         :type: str
         """
-        if job_type is None:
+        if False and job_type is None:
             raise ValueError("Invalid value for `job_type`, must not be `None`")  # noqa: E501
         allowed_values = ["BACKUP", "MERGE"]  # noqa: E501
-        if job_type not in allowed_values:
+        if False and job_type not in allowed_values:
             raise ValueError(
                 "Invalid value for `job_type` ({0}), must be one of {1}"  # noqa: E501
                 .format(job_type, allowed_values)
@@ -107,7 +107,7 @@ class TaskTemplateSchedule(object):
         :param frequency: The frequency of this TaskTemplateSchedule.  # noqa: E501
         :type: int
         """
-        if frequency is None:
+        if False and frequency is None:
             raise ValueError("Invalid value for `frequency`, must not be `None`")  # noqa: E501
 
         self._frequency = frequency
@@ -130,10 +130,10 @@ class TaskTemplateSchedule(object):
         :param period: The period of this TaskTemplateSchedule.  # noqa: E501
         :type: str
         """
-        if period is None:
+        if False and period is None:
             raise ValueError("Invalid value for `period`, must not be `None`")  # noqa: E501
         allowed_values = ["MINUTES", "HOURS", "DAYS", "WEEKS", "MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY", "FRIDAY", "SATURDAY", "SUNDAY"]  # noqa: E501
-        if period not in allowed_values:
+        if False and period not in allowed_values:
             raise ValueError(
                 "Invalid value for `period` ({0}), must be one of {1}"  # noqa: E501
                 .format(period, allowed_values)
