@@ -296,6 +296,7 @@ class EventingSanity(EventingBaseTest):
                   batch_size=self.batch_size)
         body = self.create_save_function_body(self.function_name, "handler_code/cancel_timer.js")
         body['depcfg']['buckets'].append({"alias": self.dst_bucket_name1, "bucket_name": self.dst_bucket_name1})
+        self.rest.create_function(body['appname'], body)
         self.deploy_function(body)
         # print timer context and alarm
         self.print_timer_alarm_context()

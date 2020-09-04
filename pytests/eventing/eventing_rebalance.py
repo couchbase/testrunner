@@ -1106,6 +1106,7 @@ class EventingRebalance(EventingBaseTest):
         # this is required to deploy multiple functions at the same time
         del body1['depcfg']['buckets'][0]
         body1['depcfg']['buckets'].append({"alias": self.dst_bucket_name1, "bucket_name": self.dst_bucket_name1})
+        self.rest.create_function(body1['appname'], body1)
         self.deploy_function(body1)
         # do a swap rebalance
         self.rest.add_node(self.master.rest_username, self.master.rest_password,
